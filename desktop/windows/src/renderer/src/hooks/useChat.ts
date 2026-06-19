@@ -32,6 +32,8 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the floating overlay.
   send: (text: string) => Promise<void>
+  /** Upload an audio file to /v2/voice-messages and stream the response. */
+  sendAudio: (file: File) => Promise<void>
   /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
   reset: () => void
 }
@@ -382,6 +384,91 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
+  // Upload an audio file to /v2/voice-messages, stream the SSE response.
+  // The endpoint first yields `message: <base64_json>` with the transcript,
+  // then streams the AI reply as `data: <chunk>` lines.
+  const sendAudio = async (file: File): Promise<void> => {
+    if (sendingRef.current) return
+    sendingRef.current = true
+    const userMsgId = crypto.randomUUID()
+    const assistantId = crypto.randomUUID()
+    const baseHistory = history
+    // Show filename initially; updated to the transcript when the message: line arrives.
+    setHistory((h) => [
+      ...h,
+      { id: userMsgId, role: 'user', content: `[Audio: ${file.name}]` },
+      { id: assistantId, role: 'assistant', content: '' }
+    ])
+    setSending(true)
+    let userText = `[Audio: ${file.name}]`
+    let assistantText = ''
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const form = new FormData()
+      form.append('files', file)
+      const res = await fetch(`${OMI_BASE}/v2/voice-messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+        body: form
+      })
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line) continue
+          if (line.startsWith('message:')) {
+            try {
+              const payload = JSON.parse(atob(line.slice('message:'.length).trim())) as { text?: string }
+              if (payload.text) {
+                userText = payload.text
+                setHistory((h) => {
+                  const next = [...h]
+                  const ui = next.findIndex((m) => m.id === userMsgId)
+                  if (ui >= 0) next[ui] = { ...next[ui], content: userText }
+                  return next
+                })
+              }
+            } catch { /* ignore malformed */ }
+            continue
+          }
+          if (line.startsWith('done:')) continue
+          const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
+          if (content.startsWith('think:')) continue
+          const chunk = content.replace(/__CRLF__/g, '\n')
+          assistantText += chunk
+          setHistory((h) => {
+            const next = [...h]
+            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+            return next
+          })
+        }
+      }
+    } catch (e) {
+      assistantText = `Error: ${(e as Error).message}`
+      setHistory((h) => {
+        const next = [...h]
+        next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+        return next
+      })
+    } finally {
+      sendingRef.current = false
+      setSending(false)
+      const thread: ChatMsg[] = [
+        ...baseHistory,
+        { id: userMsgId, role: 'user', content: userText },
+        { id: assistantId, role: 'assistant', content: assistantText }
+      ]
+      await persistChat(thread)
+    }
+  }
+
   // Start a fresh thread: drop the history and forget the persisted-conversation
   // id so the next send creates a new local conversation. A reply still streaming
   // when this is called will keep writing into the (now-empty) history — Esc-reset
@@ -399,5 +486,5 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  return { history, sending, send, reset }
+  return { history, sending, send, sendAudio, reset }
 }

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check } from 'lucide-react'
+import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, UserRound } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
+
+type Person = { id: string; name: string }
 
 type ServerConversation = {
   id: string
@@ -115,6 +117,12 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const [reprocessing, setReprocessing] = useState(false)
   const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Speaker assignment — people from /v1/users/people, picker state
+  const [people, setPeople] = useState<Person[]>([])
+  const [activePicker, setActivePicker] = useState<string | null>(null) // rawLabel with picker open
+  const [newPersonName, setNewPersonName] = useState('')
+  const [assigningLabel, setAssigningLabel] = useState<string | null>(null)
+
   const fetchServer = async (idStr: string): Promise<Display | null> => {
     const r = await omiApi.get<ServerConversation>(`/v1/conversations/${idStr}`)
     return mapServer(r.data)
@@ -169,6 +177,13 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     setError(null)
     setDisplay(null)
     load(id, isLocal)
+    // Fetch people for speaker assignment on cloud conversations only.
+    if (!isLocal) {
+      omiApi.get<Person[]>('/v1/users/people').then((r) => {
+        const list = Array.isArray(r.data) ? r.data : []
+        setPeople(list.filter((p) => p.id && p.name))
+      }).catch(() => { /* non-fatal */ })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -295,6 +310,55 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       toast('Reprocess failed', { tone: 'error', body: (e as Error).message })
     } finally {
       setReprocessing(false)
+    }
+  }
+
+  // Assign all segments with rawLabel to a person. speaker_id in the URL is
+  // the integer extracted from SPEAKER_XX (backend field: segment.speaker_id: int).
+  const assignSpeaker = async (rawLabel: string, person: Person): Promise<void> => {
+    if (!id || assigningLabel) return
+    const speakerInt = parseInt(rawLabel.replace(/^SPEAKER_0*/, '') || '0', 10)
+    setAssigningLabel(rawLabel)
+    setActivePicker(null)
+    try {
+      await omiApi.patch(
+        `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
+        null,
+        { params: { assign_type: 'person_id', value: person.id } }
+      )
+      setDisplay((d) =>
+        d ? { ...d, personNames: { ...d.personNames, [person.id]: person.name } } : d
+      )
+      // Update local segments so every occurrence of this speaker shows the name.
+      setDisplay((d) =>
+        d && d.segments
+          ? {
+              ...d,
+              segments: d.segments.map((s) =>
+                s.speaker === rawLabel ? { ...s, person_id: person.id } : s
+              )
+            }
+          : d
+      )
+      toast(`Assigned ${rawLabel} → ${person.name}`, { tone: 'info' })
+    } catch (e) {
+      toast('Assignment failed', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setAssigningLabel(null)
+    }
+  }
+
+  const getOrCreatePerson = async (name: string): Promise<Person | null> => {
+    const trimmed = name.trim()
+    if (!trimmed) return null
+    try {
+      const r = await omiApi.post<Person>('/v1/users/people', { name: trimmed })
+      const p = r.data
+      setPeople((prev) => (prev.find((x) => x.id === p.id) ? prev : [...prev, p]))
+      return p
+    } catch (e) {
+      toast('Could not create person', { tone: 'error', body: (e as Error).message })
+      return null
     }
   }
 
@@ -458,16 +522,84 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                     const rawLabel = s.speaker || 'speaker'
                     const personName = s.person_id ? display.personNames[s.person_id] : undefined
                     const displayLabel = personName || rawLabel.replace(/^SPEAKER_/, 'S')
+                    const isCloudConv = !display.isLocal
+                    const isPickerOpen = activePicker === rawLabel
+                    const isAssigning = assigningLabel === rawLabel
                     return (
                       <li key={i} className="flex gap-3 animate-fade-in">
-                        <span
-                          className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
-                            rawLabel
-                          )}`}
-                          title={personName ? rawLabel : undefined}
-                        >
-                          {displayLabel}
-                        </span>
+                        <div className="relative shrink-0 self-start">
+                          {isCloudConv ? (
+                            <button
+                              onClick={() => setActivePicker(isPickerOpen ? null : rawLabel)}
+                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-opacity ${speakerColor(rawLabel)} ${isAssigning ? 'opacity-50' : 'hover:opacity-80'}`}
+                              title={personName ? `${rawLabel} — click to reassign` : 'Click to assign a person'}
+                            >
+                              {isAssigning ? (
+                                <Loader2 className="inline h-2.5 w-2.5 animate-spin" />
+                              ) : (
+                                displayLabel
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(rawLabel)}`}
+                              title={personName ? rawLabel : undefined}
+                            >
+                              {displayLabel}
+                            </span>
+                          )}
+                          {isPickerOpen && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => { setActivePicker(null); setNewPersonName('') }} />
+                              <div className="absolute left-0 top-full z-20 mt-1 min-w-[180px] rounded-xl border border-white/10 bg-[#1a1a1a]/95 py-1 shadow-xl backdrop-blur-md">
+                                {people.length > 0 && (
+                                  <div className="max-h-36 overflow-y-auto">
+                                    {people.map((p) => (
+                                      <button
+                                        key={p.id}
+                                        onClick={() => void assignSpeaker(rawLabel, p)}
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-white/80 hover:bg-white/8 hover:text-white"
+                                      >
+                                        <UserRound className="h-3 w-3 shrink-0 text-white/40" />
+                                        {p.name}
+                                        {personName === p.name && <Check className="ml-auto h-3 w-3 text-emerald-400" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {people.length > 0 && <div className="mx-3 my-1 border-t border-white/10" />}
+                                <div className="px-2 py-1.5">
+                                  <input
+                                    autoFocus={people.length === 0}
+                                    value={newPersonName}
+                                    onChange={(e) => setNewPersonName(e.target.value)}
+                                    onKeyDown={async (e) => {
+                                      if (e.key === 'Enter') {
+                                        const p = await getOrCreatePerson(newPersonName)
+                                        if (p) { setNewPersonName(''); await assignSpeaker(rawLabel, p) }
+                                      } else if (e.key === 'Escape') {
+                                        setActivePicker(null); setNewPersonName('')
+                                      }
+                                    }}
+                                    placeholder="New person name…"
+                                    className="w-full rounded-lg bg-white/8 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:outline-none"
+                                  />
+                                </div>
+                                {newPersonName.trim() && (
+                                  <button
+                                    onClick={async () => {
+                                      const p = await getOrCreatePerson(newPersonName)
+                                      if (p) { setNewPersonName(''); await assignSpeaker(rawLabel, p) }
+                                    }}
+                                    className="mx-2 mb-1 w-[calc(100%-16px)] rounded-lg bg-white/10 py-1 text-sm text-white hover:bg-white/20"
+                                  >
+                                    Create &amp; assign "{newPersonName.trim()}"
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
                           {s.start != null && (
                             <div className="text-[10px] font-mono text-white/35">

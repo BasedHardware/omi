@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, Paperclip } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/AppStateProvider'
@@ -38,12 +38,34 @@ function ChatBar(props: {
   value: string
   onChange: (v: string) => void
   onSend: () => void
+  onAudio: (file: File) => void
   sending: boolean
 }): React.JSX.Element {
+  const fileRef = useRef<HTMLInputElement>(null)
   // Solid (no backdrop-blur): a blurred bar re-rasterizes every frame during the
   // bar's slide, which made that transition feel laggy.
   return (
     <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[color:var(--surface)] px-3 py-1.5">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) props.onAudio(f)
+          e.target.value = ''
+        }}
+      />
+      <button
+        disabled={props.sending}
+        onClick={() => fileRef.current?.click()}
+        aria-label="Attach audio"
+        title="Attach audio file"
+        className="shrink-0 rounded-xl p-2 text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:opacity-40"
+      >
+        <Paperclip className="h-4 w-4" />
+      </button>
       <input
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
@@ -121,6 +143,11 @@ export function Home(): React.JSX.Element {
     if (!text.trim() || chat.sending) return
     setInput('')
     void chat.send(text)
+  }
+
+  const handleAudio = (file: File): void => {
+    if (chat.sending) return
+    void chat.sendAudio(file)
   }
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
@@ -345,7 +372,7 @@ export function Home(): React.JSX.Element {
       {/* Chat bar — rides to the bottom via the spacer collapse. */}
       <div className="py-3">
         <div className="fade-in-slow mx-auto max-w-4xl">
-          <ChatBar value={input} onChange={setInput} onSend={handleSend} sending={chat.sending} />
+          <ChatBar value={input} onChange={setInput} onSend={handleSend} onAudio={handleAudio} sending={chat.sending} />
         </div>
       </div>
 
