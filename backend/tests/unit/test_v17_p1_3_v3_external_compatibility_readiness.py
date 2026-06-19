@@ -195,6 +195,30 @@ def test_v3_readiness_pins_oracle_implementation_shape_and_unsafe_approaches():
     assert "apply_5000_first_page_override_to_v17_cursor" in unsafe
 
 
+def test_v3_readiness_links_pure_decision_service_proof_without_rollout_claims():
+    root = Path(__file__).resolve().parents[2]
+    module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
+    report = module.build_report(execute=True)
+
+    proof = report["decision_service_proof"]
+    assert proof["service"] == "backend/utils/memory/v17_v3_compatibility.py"
+    assert proof["test"] == "backend/tests/unit/test_v17_v3_compatibility.py"
+    assert proof["runtime_wired"] is False
+    assert proof["production_rollout_approved"] is False
+    assert proof["external_calls"] == []
+    assert proof["covered_defaults"] == [
+        "non_enrolled_legacy_primary",
+        "enrolled_missing_malformed_uid_mismatch_unsupported_timeout_fail_closed_503",
+        "no_default_memory_grant_privacy_consent_deny_403_product_overridable",
+        "enabled_empty_projection_returns_200_empty_list_no_legacy_fallback",
+        "write_convergence_or_projection_not_ready_fail_closed",
+        "archive_default_unavailable",
+        "list_memorydb_body_header_only_metadata",
+        "signed_opaque_keyset_generation_bound_cursor_no_offset_no_5000_override",
+        "unsafe_legacy_fallback_after_enrolled_error_or_v17_write_state_not_exposed",
+    ]
+
+
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
     module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
@@ -208,6 +232,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "gap_count": 7,
         "decision_state_count": 8,
         "product_dependency_count": 5,
+        "decision_service_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -221,7 +246,10 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_v17_p1_3_v3_external_compatibility_readiness.py" in test_sh
+    assert "test_v17_v3_compatibility.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
+    assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
+    assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc

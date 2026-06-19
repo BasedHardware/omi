@@ -381,6 +381,25 @@ UNSAFE_APPROACHES_TO_AVOID = [
     "treat_readiness_scripts_or_unit_counts_as_production_evidence",
 ]
 
+DECISION_SERVICE_PROOF = {
+    "service": "backend/utils/memory/v17_v3_compatibility.py",
+    "test": "backend/tests/unit/test_v17_v3_compatibility.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "non_enrolled_legacy_primary",
+        "enrolled_missing_malformed_uid_mismatch_unsupported_timeout_fail_closed_503",
+        "no_default_memory_grant_privacy_consent_deny_403_product_overridable",
+        "enabled_empty_projection_returns_200_empty_list_no_legacy_fallback",
+        "write_convergence_or_projection_not_ready_fail_closed",
+        "archive_default_unavailable",
+        "list_memorydb_body_header_only_metadata",
+        "signed_opaque_keyset_generation_bound_cursor_no_offset_no_5000_override",
+        "unsafe_legacy_fallback_after_enrolled_error_or_v17_write_state_not_exposed",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -406,6 +425,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "irreducible_product_api_decisions": IRREDUCIBLE_PRODUCT_API_DECISIONS,
         "oracle_implementation_shape": ORACLE_IMPLEMENTATION_SHAPE,
         "unsafe_approaches_to_avoid": UNSAFE_APPROACHES_TO_AVOID,
+        "decision_service_proof": DECISION_SERVICE_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -420,6 +440,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "gap_count": len(REMAINING_GAPS),
             "decision_state_count": len(RUNTIME_DECISION_MATRIX),
             "product_dependency_count": len(PRODUCT_DECISION_DEPENDENCIES),
+            "decision_service_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
