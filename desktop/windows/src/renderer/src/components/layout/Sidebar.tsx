@@ -6,6 +6,7 @@ import {
   ListChecks,
   LayoutGrid,
   History,
+  Brain,
   Monitor,
   Mic,
   PanelLeftClose,
@@ -20,6 +21,7 @@ import type { RewindSettings } from '../../../../shared/types'
 const navItems = [
   { label: 'Home', to: '/home', Icon: House },
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
+  { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
   { label: 'Rewind', to: '/rewind', Icon: History },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid }
