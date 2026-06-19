@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from models.v17_memory_contracts import (
     DurableMemoryPatch,
@@ -28,10 +28,79 @@ except Exception as exc:
 logger = logging.getLogger(__name__)
 
 _QUOTE_WRAPPER_RE = re.compile(r"^\s*User\s+(said|mentioned|stated|talked about|noted)\s+['\"]", re.IGNORECASE)
+_CONTROL_FIELDS = {
+    "patch_id",
+    "idempotency_key",
+    "packet_id",
+    "run_id",
+    "observed_head_commit_id",
+    "new_memory_id",
+    "evidence_refs",
+}
 
 
-class DurableMemoryPatches(BaseModel):
-    patches: List[DurableMemoryPatch] = Field(default_factory=list)
+class DurableMemoryPatchProposal(BaseModel):
+    """Untrusted LLM proposal schema.
+
+    The model proposes memory semantics only. Server-owned IDs, run metadata,
+    provenance records, and evidence refs are resolved after validation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: DurablePatchDecision
+    result_status: LifecycleState
+    evidence_ids: List[str] = Field(default_factory=list)
+    target_memory_id: Optional[str] = None
+    memory_text: Optional[str] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    supersedes: List[str] = Field(default_factory=list)
+    rationale: Optional[str] = None
+    confidence: str = "medium"
+    relationship_to_user: str = "unclear"
+    subject_entity_id: Optional[str] = None
+    subject_label: Optional[str] = None
+    aboutness: str = "unclear"
+
+    @model_validator(mode="after")
+    def validate_proposal_contract(self):
+        if (
+            self.decision
+            in {
+                DurablePatchDecision.merge,
+                DurablePatchDecision.update,
+                DurablePatchDecision.add_evidence,
+                DurablePatchDecision.skip_duplicate,
+            }
+            and not self.target_memory_id
+        ):
+            raise ValueError("target_memory_id is required for merge/update/add_evidence/skip_duplicate decisions")
+        if self.decision == DurablePatchDecision.add and not self.memory_text:
+            raise ValueError("add proposals require memory_text")
+        if self.result_status in {LifecycleState.active, LifecycleState.review} and not self.evidence_ids:
+            raise ValueError("active/review proposals require canonical evidence_ids")
+        if self.confidence not in {"high", "medium", "low"}:
+            raise ValueError("confidence must be high, medium, or low")
+        if self.relationship_to_user not in {
+            "self",
+            "owned_work",
+            "adopted",
+            "asking_about",
+            "encountered",
+            "other_speaker",
+            "unclear",
+        }:
+            raise ValueError("invalid relationship_to_user")
+        if self.aboutness not in {"primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"}:
+            raise ValueError("invalid aboutness")
+        return self
+
+
+class DurableMemoryPatchProposals(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    patches: List[DurableMemoryPatchProposal] = Field(default_factory=list)
 
 
 class SynthesisStatus(str, Enum):
@@ -63,7 +132,7 @@ class DurableMemorySynthesisResult(BaseModel):
     patches: List[DurableMemoryPatch] = Field(default_factory=list)
     outcomes: List[CandidateOutcome] = Field(default_factory=list)
     error_code: Optional[str] = None
-    cursor_may_advance: bool = False
+    synthesis_terminal: bool = False
 
 
 durable_memory_patch_prompt = ChatPromptTemplate.from_messages(
@@ -73,19 +142,19 @@ durable_memory_patch_prompt = ChatPromptTemplate.from_messages(
             """
 You are Omi Layer 2 durable memory synthesis.
 
-Input contains one L2 evidence packet, automatically retrieved existing memories, and bounded replayed custom-search context. Emit durable_memory_patch.v1 objects only.
+Input contains one L2 evidence packet, automatically retrieved existing memories, and bounded replayed custom-search context. Emit durable_memory_patch_proposal.v1 objects only.
 
 Choose one of: add, add_evidence, update, merge, keep_both, skip_duplicate, context_only, reject, review.
 
 Rules:
+- Emit proposal semantics only. NEVER emit patch_id, idempotency_key, packet_id, run_id, observed_head_commit_id, new_memory_id, or evidence_refs.
 - Use retrieved/custom-search memory context before choosing add vs add_evidence/update/merge/skip_duplicate.
 - target_memory_id is mandatory for merge, update, add_evidence, and skip_duplicate.
-- Active or review outputs require exact evidence_ids and/or evidence_refs with direct quotes.
+- Active or review outputs require exact canonical evidence_ids from the packet.
 - Reject quote-wrapper cards like "User said/mentioned/stated ..."; rewrite into a durable abstraction or reject/review.
 - Reject raw fragments, unsupported claims, wrong-subject claims, and secrets.
 - Custom search results are context only; they are not primary evidence for new claims unless linked to durable evidence.
-- Preserve observed_head_commit_id exactly.
-- Preserve attribution fields on every patch: confidence, relationship_to_user, subject_entity_id, subject_label, and aboutness.
+- Preserve attribution fields on every proposal: confidence, relationship_to_user, subject_entity_id, subject_label, and aboutness.
 
 PROMOTION RUBRIC:
 - Promote to active when a Future agent/user would benefit from remembering this, it is stable or meaningfully recurring, it is about the primary user, user-owned work, a close relationship, or an entity the user cares about, and it has direct source evidence.
@@ -94,7 +163,7 @@ PROMOTION RUBRIC:
 - Use reject for unsupported, transient, generic, wrong-subject, media/story narration, or conversational activity facts.
 - Do not rewrite unidentified non-primary speaker facts as user facts; set relationship_to_user=other_speaker or unclear and choose review/context_only/reject unless the user tie is explicit.
 
-DRIFT GUARD: This production prompt and durable_memory_patch.v1 schema are the source of truth for benchmark L2 decisions. Benchmark runners may package evidence and export reports, but must call this product synthesizer for L2 memory decisions.
+DRIFT GUARD: This production prompt and durable_memory_patch_proposal.v1 schema are the source of truth for benchmark L2 decisions. Benchmark runners may package evidence and export reports, but must call this product synthesizer for L2 memory decisions.
 
 Return JSON matching:
 {format_instructions}
@@ -136,19 +205,24 @@ def _is_quote_wrapper(memory_text: Optional[str]) -> bool:
 def _logical_patch_payload(patch: DurableMemoryPatch, packet: Dict[str, Any]) -> Dict[str, Any]:
     """Server-owned logical operation fingerprint.
 
-    The LLM is not trusted to choose control identifiers. The fingerprint is stable across
-    observed-head changes and output order, but still includes the semantic operation body.
+    Observed head and output index are execution context, not operation identity.
+    The payload includes every field that affects persistent memory state.
     """
     return {
         "packet_id": patch.packet_id or packet.get("packet_id"),
         "decision": patch.decision.value,
+        "result_status": patch.result_status.value,
         "target_memory_id": patch.target_memory_id,
+        "new_memory_id": patch.new_memory_id,
         "memory_text": patch.memory_text,
         "evidence_ids": sorted(patch.evidence_ids or []),
         "predicate": patch.predicate,
         "arguments": patch.arguments,
+        "supersedes": sorted(patch.supersedes or []),
+        "confidence": patch.confidence,
         "relationship_to_user": patch.relationship_to_user,
         "subject_entity_id": patch.subject_entity_id,
+        "subject_label": patch.subject_label,
         "aboutness": patch.aboutness,
     }
 
@@ -158,10 +232,13 @@ def _with_server_control_ids(
 ) -> DurableMemoryPatch:
     payload = _logical_patch_payload(patch, packet)
     idempotency_key = deterministic_contract_id("v17-durable-patch-idempotency", payload)
-    patch_id = deterministic_contract_id(
-        "v17-durable-patch",
-        {**payload, "observed_head_commit_id": observed_head_commit_id or "unknown"},
-    )
+    patch_id = deterministic_contract_id("v17-durable-patch", payload)
+    new_memory_id = patch.new_memory_id
+    if patch.decision in {DurablePatchDecision.add, DurablePatchDecision.keep_both} and not patch.target_memory_id:
+        new_memory_id = patch.new_memory_id or "mem_" + patch_id[:32]
+        payload = {**payload, "new_memory_id": new_memory_id}
+        idempotency_key = deterministic_contract_id("v17-durable-patch-idempotency", payload)
+        patch_id = deterministic_contract_id("v17-durable-patch", payload)
     return patch.model_copy(
         update={
             "patch_id": patch_id,
@@ -169,6 +246,7 @@ def _with_server_control_ids(
             "observed_head_commit_id": observed_head_commit_id,
             "packet_id": patch.packet_id or packet.get("packet_id"),
             "run_id": patch.run_id or packet.get("run_id") or "v17_l2_patch_synthesizer",
+            "new_memory_id": new_memory_id,
         }
     )
 
@@ -184,12 +262,7 @@ def _valid_non_quote_wrapper_patches(patches: List[DurableMemoryPatch]) -> List[
 
 
 def _with_production_safety_guards(patches: List[DurableMemoryPatch]) -> List[DurableMemoryPatch]:
-    """Apply deterministic active-memory guardrails after LLM synthesis.
-
-    L1 remains the broad searchable archive. L2 active memory should not promote
-    third-party/encountered facts or uncertain subject attribution as stable user
-    profile memory just because the model emitted an active patch.
-    """
+    """Apply deterministic active-memory guardrails after LLM synthesis."""
     guarded: List[DurableMemoryPatch] = []
     for patch in patches:
         if patch.result_status not in {LifecycleState.active, LifecycleState.review}:
@@ -203,7 +276,7 @@ def _with_production_safety_guards(patches: List[DurableMemoryPatch]) -> List[Du
                         "result_status": LifecycleState.context_only,
                         "memory_text": None,
                         "rationale": (patch.rationale or "")
-                        + " Deterministic guard: third-party/encountered facts stay in L1/context, not active durable memory.",
+                        + " Deterministic guard: third-party/encountered facts stay in Short-term/Archive context, not active Long-term memory.",
                     }
                 )
             )
@@ -263,6 +336,14 @@ def _packet_evidence_ids(packet: Dict[str, Any]) -> set[str]:
     return ids
 
 
+def _retrieved_memory_ids(packet: Dict[str, Any]) -> set[str]:
+    ids = set()
+    for memory in packet.get("retrieved_memory_context") or []:
+        if isinstance(memory, dict) and memory.get("memory_id"):
+            ids.add(memory["memory_id"])
+    return ids
+
+
 def _raw_payload_from_response_text(text: str) -> Dict[str, Any]:
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -274,6 +355,34 @@ def _raw_payload_from_response_text(text: str) -> Dict[str, Any]:
     return payload
 
 
+def _proposal_to_patch(
+    proposal: DurableMemoryPatchProposal, packet: Dict[str, Any], observed_head_commit_id: Optional[str]
+) -> DurableMemoryPatch:
+    return DurableMemoryPatch(
+        patch_id="server_pending",
+        packet_id=packet.get("packet_id") or "unknown_packet",
+        run_id=packet.get("run_id") or "v17_l2_patch_synthesizer",
+        observed_head_commit_id=observed_head_commit_id,
+        idempotency_key="server_pending",
+        decision=proposal.decision,
+        result_status=proposal.result_status,
+        evidence_ids=proposal.evidence_ids,
+        evidence_refs=[],
+        target_memory_id=proposal.target_memory_id,
+        new_memory_id=None,
+        memory_text=proposal.memory_text,
+        predicate=proposal.predicate,
+        arguments=proposal.arguments,
+        supersedes=proposal.supersedes,
+        rationale=proposal.rationale,
+        confidence=proposal.confidence,  # type: ignore[arg-type]
+        relationship_to_user=proposal.relationship_to_user,  # type: ignore[arg-type]
+        subject_entity_id=proposal.subject_entity_id,
+        subject_label=proposal.subject_label,
+        aboutness=proposal.aboutness,  # type: ignore[arg-type]
+    )
+
+
 def synthesize_durable_memory_patch_result(
     *,
     packet: Dict[str, Any],
@@ -281,7 +390,7 @@ def synthesize_durable_memory_patch_result(
     observed_head_commit_id: Optional[str],
     llm=None,
 ) -> DurableMemorySynthesisResult:
-    parser = PydanticOutputParser(pydantic_object=DurableMemoryPatches)
+    parser = PydanticOutputParser(pydantic_object=DurableMemoryPatchProposals)
     messages = durable_memory_patch_prompt.format_messages(
         observed_head_commit_id=observed_head_commit_id or "unknown",
         packet_json=_canonical_json(packet),
@@ -297,7 +406,7 @@ def synthesize_durable_memory_patch_result(
         return DurableMemorySynthesisResult(
             status=SynthesisStatus.retryable_failure,
             error_code="missing_llm_client",
-            cursor_may_advance=False,
+            synthesis_terminal=False,
         )
 
     try:
@@ -307,7 +416,7 @@ def synthesize_durable_memory_patch_result(
         return DurableMemorySynthesisResult(
             status=SynthesisStatus.retryable_failure,
             error_code="provider_error",
-            cursor_may_advance=False,
+            synthesis_terminal=False,
         )
 
     try:
@@ -315,80 +424,107 @@ def synthesize_durable_memory_patch_result(
     except Exception as exc:
         logger.error("Error parsing V17 durable patch payload: %s", type(exc).__name__)
         return DurableMemorySynthesisResult(
-            status=SynthesisStatus.permanent_failure,
+            status=SynthesisStatus.retryable_failure,
             error_code="parse_error",
-            cursor_may_advance=False,
+            synthesis_terminal=False,
         )
 
-    allowed_evidence = _packet_evidence_ids(packet)
     raw_patches = raw_payload.get("patches", [])
     if not isinstance(raw_patches, list):
         return DurableMemorySynthesisResult(
-            status=SynthesisStatus.permanent_failure,
+            status=SynthesisStatus.retryable_failure,
             error_code="patches_not_list",
-            cursor_may_advance=False,
+            synthesis_terminal=False,
+        )
+    if not raw_patches:
+        return DurableMemorySynthesisResult(
+            status=SynthesisStatus.retryable_failure,
+            error_code="empty_output_without_explicit_noop",
+            synthesis_terminal=False,
         )
 
+    allowed_evidence = _packet_evidence_ids(packet)
+    allowed_memory_ids = _retrieved_memory_ids(packet)
     patches: List[DurableMemoryPatch] = []
     outcomes: List[CandidateOutcome] = []
+
     for index, raw_patch in enumerate(raw_patches):
         if not isinstance(raw_patch, dict):
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="not_object")
             )
             continue
-        if raw_patch.get("patch_id") or raw_patch.get("idempotency_key"):
+        if _CONTROL_FIELDS.intersection(raw_patch.keys()):
             outcomes.append(
                 CandidateOutcome(
                     index=index, status=CandidateOutcomeStatus.invalid, reason_code="untrusted_control_field"
                 )
             )
             continue
-        candidate_payload = dict(raw_patch)
-        candidate_payload["patch_id"] = "server_pending"
-        candidate_payload["idempotency_key"] = "server_pending"
-        candidate_payload["packet_id"] = candidate_payload.get("packet_id") or packet.get("packet_id")
-        candidate_payload["run_id"] = (
-            candidate_payload.get("run_id") or packet.get("run_id") or "v17_l2_patch_synthesizer"
-        )
-        candidate_payload["observed_head_commit_id"] = observed_head_commit_id
         try:
-            patch = DurableMemoryPatch(**candidate_payload)
+            proposal = DurableMemoryPatchProposal(**raw_patch)
         except ValidationError:
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")
             )
             continue
-        evidence_ids = set(patch.evidence_ids or [])
-        if evidence_ids and allowed_evidence and not evidence_ids.issubset(allowed_evidence):
+
+        evidence_ids = set(proposal.evidence_ids or [])
+        if not evidence_ids.issubset(allowed_evidence):
             outcomes.append(
                 CandidateOutcome(
                     index=index,
                     status=CandidateOutcomeStatus.invalid,
                     reason_code="evidence_not_in_packet",
-                    evidence_ids=patch.evidence_ids,
+                    evidence_ids=proposal.evidence_ids,
                 )
             )
             continue
-        patch = _with_server_control_ids(patch, packet, observed_head_commit_id)
-        patch = _with_production_safety_guards([patch])[0]
-        if _is_quote_wrapper(patch.memory_text):
+        memory_refs = {proposal.target_memory_id, *proposal.supersedes} - {None, ""}
+        if memory_refs and not memory_refs.issubset(allowed_memory_ids):
             outcomes.append(
                 CandidateOutcome(
-                    index=index,
-                    status=CandidateOutcomeStatus.reject,
-                    reason_code="quote_wrapper_quality_guard",
-                    patch_id=patch.patch_id,
-                    evidence_ids=patch.evidence_ids,
+                    index=index, status=CandidateOutcomeStatus.invalid, reason_code="memory_ref_not_authorized"
                 )
+            )
+            continue
+
+        try:
+            patch = _proposal_to_patch(proposal, packet, observed_head_commit_id)
+            patch = _with_production_safety_guards([patch])[0]
+            if _is_quote_wrapper(patch.memory_text):
+                outcomes.append(
+                    CandidateOutcome(
+                        index=index,
+                        status=CandidateOutcomeStatus.reject,
+                        reason_code="quote_wrapper_quality_guard",
+                        evidence_ids=patch.evidence_ids,
+                    )
+                )
+                continue
+            patch = _with_server_control_ids(patch, packet, observed_head_commit_id)
+            patch = DurableMemoryPatch(**patch.model_dump())
+        except ValidationError:
+            outcomes.append(
+                CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")
             )
             continue
         patches.append(patch)
         outcomes.append(_candidate_outcome_for_patch(index, patch))
 
     invalid_count = sum(1 for outcome in outcomes if outcome.status == CandidateOutcomeStatus.invalid)
-    status = SynthesisStatus.partial if patches and invalid_count else SynthesisStatus.success
-    return DurableMemorySynthesisResult(status=status, patches=patches, outcomes=outcomes, cursor_may_advance=True)
+    if patches and invalid_count:
+        status = SynthesisStatus.partial
+    elif patches or any(outcome.status != CandidateOutcomeStatus.invalid for outcome in outcomes):
+        status = SynthesisStatus.success
+    else:
+        status = SynthesisStatus.retryable_failure
+    return DurableMemorySynthesisResult(
+        status=status,
+        patches=patches,
+        outcomes=outcomes,
+        synthesis_terminal=status != SynthesisStatus.retryable_failure,
+    )
 
 
 def synthesize_durable_memory_patches(
@@ -404,6 +540,8 @@ def synthesize_durable_memory_patches(
         observed_head_commit_id=observed_head_commit_id,
         llm=llm,
     )
-    if result.status in {SynthesisStatus.retryable_failure, SynthesisStatus.permanent_failure}:
-        logger.error("Error synthesizing V17 durable patches: %s", result.error_code)
+    if result.status != SynthesisStatus.success and result.status != SynthesisStatus.partial:
+        raise RuntimeError(
+            f"V17 durable synthesis did not reach terminal success: {result.error_code or result.status.value}"
+        )
     return result.patches

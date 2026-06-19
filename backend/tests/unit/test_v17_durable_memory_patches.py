@@ -1,9 +1,15 @@
 import json
 
+import pytest
 from langchain_core.messages import AIMessage
 
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
-from utils.llm.durable_memory_patches import synthesize_durable_memory_patches
+from utils.llm.durable_memory_patches import (
+    CandidateOutcomeStatus,
+    SynthesisStatus,
+    synthesize_durable_memory_patch_result,
+    synthesize_durable_memory_patches,
+)
 
 
 class FakeLLM:
@@ -37,15 +43,9 @@ def _packet():
 
 def _patch(decision, **overrides):
     payload = {
-        "patch_id": "",
-        "packet_id": "pkt_auto_memory",
-        "run_id": "v17_test_run",
-        "observed_head_commit_id": "head_1",
-        "idempotency_key": "",
         "decision": decision,
         "result_status": "active" if decision in {"add", "add_evidence", "update", "merge", "keep_both"} else "review",
         "evidence_ids": ["ev_1"],
-        "evidence_refs": [{"evidence_id": "ev_1", "quote": "I want automatic memory capture."}],
         "memory_text": "User prefers automatic memory capture.",
         "predicate": "prefers",
         "arguments": {"object": "automatic memory capture"},
@@ -90,25 +90,29 @@ def test_l2_patch_synthesizer_covers_all_patch_decisions_with_mocked_llm():
 
 
 def test_l2_patch_synthesizer_requires_target_memory_ids_for_existing_memory_decisions():
-    result = synthesize_durable_memory_patches(
+    result = synthesize_durable_memory_patch_result(
         packet=_packet(),
         custom_search_artifact={"search_results": []},
         observed_head_commit_id="head_1",
         llm=FakeLLM({"patches": [_patch("merge", target_memory_id=None)]}),
     )
 
-    assert result == []
+    assert result.status == SynthesisStatus.retryable_failure
+    assert result.outcomes[0].status == CandidateOutcomeStatus.invalid
+    assert result.outcomes[0].reason_code == "validation_error"
 
 
 def test_l2_patch_synthesizer_rejects_quote_wrapper_card():
-    result = synthesize_durable_memory_patches(
+    result = synthesize_durable_memory_patch_result(
         packet=_packet(),
         custom_search_artifact={"search_results": []},
         observed_head_commit_id="head_1",
         llm=FakeLLM({"patches": [_patch("add", memory_text='User said "I want automatic memory capture."')]}),
     )
 
-    assert result == []
+    assert result.status == SynthesisStatus.success
+    assert result.patches == []
+    assert result.outcomes[0].status == CandidateOutcomeStatus.reject
 
 
 def test_l2_patch_synthesizer_prompt_includes_existing_memory_context_for_merge_update_skip():
@@ -207,3 +211,13 @@ def test_l2_patch_safety_guard_routes_unclear_active_memory_to_review():
 
     assert result[0].result_status.value == "review"
     assert result[0].decision.value == "review"
+
+
+def test_compatibility_wrapper_raises_on_retryable_failure():
+    with pytest.raises(RuntimeError):
+        synthesize_durable_memory_patches(
+            packet=_packet(),
+            custom_search_artifact={"search_results": []},
+            observed_head_commit_id="head_1",
+            llm=FakeLLM({"patches": []}),
+        )

@@ -1,6 +1,7 @@
 import json
 
 from langchain_core.messages import AIMessage
+from pydantic import ValidationError
 
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, MemoryTier, SourceBackedMemoryCandidate
 from utils.llm.durable_memory_patches import (
@@ -44,15 +45,9 @@ def _packet():
 
 def _patch(decision, **overrides):
     payload = {
-        "patch_id": "",
-        "packet_id": "pkt_auto_memory",
-        "run_id": "v17_test_run",
-        "observed_head_commit_id": "head_1",
-        "idempotency_key": "",
         "decision": decision,
         "result_status": "active" if decision in {"add", "add_evidence", "update", "merge", "keep_both"} else "review",
         "evidence_ids": ["ev_1"],
-        "evidence_refs": [{"evidence_id": "ev_1", "quote": "I want automatic memory capture."}],
         "memory_text": "User prefers automatic memory capture.",
         "predicate": "prefers",
         "arguments": {"object": "automatic memory capture"},
@@ -85,6 +80,39 @@ def test_source_backed_candidate_defaults_to_short_term_not_archive():
     assert candidate.default_access_candidate is True
 
 
+def test_source_backed_candidate_blocks_default_access_for_secret_risks_and_naive_times():
+    candidate = SourceBackedMemoryCandidate(
+        candidate_id="cand_secret",
+        user_id="u1",
+        source_id="conv1",
+        source_type="conversation",
+        source_version="v1",
+        text="The API key is sk-...",
+        evidence_ids=["ev_1"],
+        risk_flags=["credential"],
+        captured_at="2026-06-19T00:00:00+00:00",
+        expires_at="2026-07-19T00:00:00+00:00",
+    )
+    assert candidate.default_access_candidate is False
+
+    try:
+        SourceBackedMemoryCandidate(
+            candidate_id="cand_bad_time",
+            user_id="u1",
+            source_id="conv1",
+            source_type="conversation",
+            source_version="v1",
+            text="User wants automatic memory capture.",
+            evidence_ids=["ev_1"],
+            captured_at="2026-06-19T00:00:00",
+            expires_at="2026-07-19T00:00:00",
+        )
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("naive timestamps must be rejected")
+
+
 def test_synthesis_result_reports_provider_failure_without_empty_list_semantics():
     result = synthesize_durable_memory_patch_result(
         packet=_packet(),
@@ -96,7 +124,19 @@ def test_synthesis_result_reports_provider_failure_without_empty_list_semantics(
     assert result.status == SynthesisStatus.retryable_failure
     assert result.patches == []
     assert result.error_code == "provider_error"
-    assert result.cursor_may_advance is False
+    assert result.synthesis_terminal is False
+
+
+def test_empty_output_without_explicit_noop_is_retryable():
+    result = synthesize_durable_memory_patch_result(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=FakeLLM({"patches": []}),
+    )
+    assert result.status == SynthesisStatus.retryable_failure
+    assert result.error_code == "empty_output_without_explicit_noop"
+    assert result.synthesis_terminal is False
 
 
 def test_synthesis_result_validates_each_candidate_independently_and_records_invalid_outcome():
@@ -112,7 +152,7 @@ def test_synthesis_result_validates_each_candidate_independently_and_records_inv
     assert result.outcomes[0].status == CandidateOutcomeStatus.proposed
     assert result.outcomes[1].status == CandidateOutcomeStatus.invalid
     assert result.outcomes[1].reason_code == "validation_error"
-    assert result.cursor_may_advance is True
+    assert result.synthesis_terminal is True
 
 
 def test_quote_wrapper_becomes_audited_reject_not_silent_drop():
@@ -127,10 +167,10 @@ def test_quote_wrapper_becomes_audited_reject_not_silent_drop():
     assert result.patches == []
     assert result.outcomes[0].status == CandidateOutcomeStatus.reject
     assert result.outcomes[0].reason_code == "quote_wrapper_quality_guard"
-    assert result.cursor_may_advance is True
+    assert result.synthesis_terminal is True
 
 
-def test_model_supplied_control_fields_are_rejected():
+def test_model_supplied_control_fields_are_rejected_and_all_invalid_retries():
     result = synthesize_durable_memory_patch_result(
         packet=_packet(),
         custom_search_artifact={"search_results": []},
@@ -138,7 +178,7 @@ def test_model_supplied_control_fields_are_rejected():
         llm=FakeLLM({"patches": [_patch("add", patch_id="evil", idempotency_key="reuse_me")]}),
     )
 
-    assert result.status == SynthesisStatus.success
+    assert result.status == SynthesisStatus.retryable_failure
     assert result.patches == []
     assert result.outcomes[0].status == CandidateOutcomeStatus.invalid
     assert result.outcomes[0].reason_code == "untrusted_control_field"
@@ -171,6 +211,19 @@ def test_evidence_ids_must_belong_to_packet():
         llm=FakeLLM({"patches": [_patch("add", evidence_ids=["ev_missing"])]}),
     )
 
+    assert result.status == SynthesisStatus.retryable_failure
     assert result.patches == []
     assert result.outcomes[0].status == CandidateOutcomeStatus.invalid
     assert result.outcomes[0].reason_code == "evidence_not_in_packet"
+
+
+def test_target_memory_must_be_same_user_retrieved_context():
+    result = synthesize_durable_memory_patch_result(
+        packet=_packet(),
+        custom_search_artifact={"search_results": []},
+        observed_head_commit_id="head_1",
+        llm=FakeLLM({"patches": [_patch("update", target_memory_id="mem_other")]}),
+    )
+
+    assert result.status == SynthesisStatus.retryable_failure
+    assert result.outcomes[0].reason_code == "memory_ref_not_authorized"

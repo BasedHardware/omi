@@ -1,11 +1,10 @@
 import hashlib
 import json
 from enum import Enum
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, AwareDatetime, BaseModel, Field, field_validator, model_validator
 
 from models.v17_product_memory import MemoryTier
 
@@ -308,8 +307,8 @@ class SourceBackedMemoryCandidate(BaseModel):
     text: str
     evidence_ids: List[str] = Field(default_factory=list)
     source_refs: List[Dict[str, Any]] = Field(default_factory=list)
-    captured_at: datetime
-    expires_at: datetime
+    captured_at: AwareDatetime
+    expires_at: AwareDatetime
     initial_tier: MemoryTier = MemoryTier.short_term
     archive_id: Optional[str] = None
     default_access_candidate: bool = True
@@ -326,12 +325,13 @@ class SourceBackedMemoryCandidate(BaseModel):
 
     @model_validator(mode="after")
     def validate_candidate_tier(self):
+        normalized_risks = {flag.lower().strip() for flag in self.risk_flags if flag and flag.strip()}
         if self.initial_tier == MemoryTier.archive:
             self.default_access_candidate = False
         else:
             self.initial_tier = MemoryTier.short_term
-            self.default_access_candidate = True
             self.archive_id = None
+            self.default_access_candidate = not bool(normalized_risks.intersection(_SECRET_RISK_FLAGS))
         if self.expires_at <= self.captured_at:
             raise ValueError("expires_at must be after captured_at")
         return self
