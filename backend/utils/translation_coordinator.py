@@ -25,7 +25,7 @@ from utils.translation import (
     set_negative_cache,
     TranslationService,
 )
-from utils.executors import sync_executor, run_blocking
+from utils.executors import db_executor, sync_executor, run_blocking
 from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language
 
 logger = logging.getLogger(__name__)
@@ -201,9 +201,7 @@ class TranslationCoordinator:
             if state.committed_text and not text.startswith(state.committed_text):
                 # Check if the new merged text was already translated (Redis cache)
                 text_hash = hashlib.md5(text.encode()).hexdigest()
-                redis_cached = await run_blocking(
-                    sync_executor, get_cached_translation, text_hash, self.target_language
-                )
+                redis_cached = await run_blocking(db_executor, get_cached_translation, text_hash, self.target_language)
                 if redis_cached:
                     # Found in Redis — adopt as committed, skip re-translation
                     translated_text = redis_cached['text']

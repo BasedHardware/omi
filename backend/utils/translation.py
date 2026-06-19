@@ -424,10 +424,23 @@ def _should_merge(prev: str, nxt: str) -> bool:
     if len(nxt_body) <= 15 and nxt and nxt[0].islower():
         return True
 
-    # Prev ends with a short abbreviation-like token (≤ 6 char body before punctuation)
+    # Prev ends with a known abbreviation pattern (short token + period)
+    # Only merge if prev looks like an abbreviation (Dr., Mr., U.S., etc.)
+    # NOT for generic short sentences like "Sí." or "OK." followed by real text
     prev_body = prev.rstrip('.!?。！؟ ')
     if len(prev_body) <= 6:
-        return True
+        # Must look like an abbreviation: single uppercase letter(s), title prefix,
+        # latin abbrev, or version/decimal pattern
+        is_abbrev_like = (
+            prev_body.isupper()
+            and len(prev_body) <= 3  # U.S., UK, Dr
+            or prev_body in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
+            or prev_body in ('etc', 'vs')  # Latin abbrevs
+            or prev_body[0].isupper()
+            and prev_body[1:].isdigit()  # v2, V3
+        )
+        if not is_abbrev_like:
+            return False
 
     return False
 
@@ -625,7 +638,12 @@ class TranslationService:
         full_text_results = {}
         for unit_id, text in units:
             text_hash = hashlib.md5(text.encode()).hexdigest()
-            # Check memory LRU first (cheapest)
+            # Check negative cache first — skip if previously determined
+            # to not need translation (e.g., same source/target language)
+            if get_negative_cache(text_hash, dest_language):
+                full_text_results[unit_id] = (text, dest_language)
+                continue
+            # Check memory LRU next (cheapest positive cache)
             lru_hit = self._check_memory_cache(text_hash, dest_language)
             if lru_hit:
                 full_text_results[unit_id] = lru_hit
@@ -644,9 +662,12 @@ class TranslationService:
             return [(uid, *full_text_results[uid]) for uid, _ in units]
 
         # Phase 0: Split each unit's text into sentences (only for cache-miss units)
+        # Units that hit full-text cache in Phase -1 skip sentence splitting entirely.
         # unit_sentences[i] = list of (sentence_text, sentence_hash) for unit i
         unit_sentences = []
         for unit_id, text in units:
+            if unit_id in full_text_results:
+                continue  # Already have a full-text cache hit — no need to split
             sentences = split_into_sentences(text)
             hashed = [(s, hashlib.md5(s.encode()).hexdigest()) for s in sentences]
             unit_sentences.append((unit_id, text, hashed))
@@ -729,6 +750,13 @@ class TranslationService:
 
         # Phase 3: Reassemble per-unit results from sentence translations
         results = []
+        # First, emit any units that hit the full-text cache in Phase -1
+        # (they were skipped during Phase 0 sentence splitting)
+        for unit_id, _ in units:
+            if unit_id in full_text_results and unit_id not in (uid for uid, _, _ in unit_sentences):
+                trans, det = full_text_results[unit_id]
+                results.append((unit_id, trans, det))
+
         for unit_idx, (unit_id, original_text, sentences) in enumerate(unit_sentences):
             if not sentences:
                 results.append((unit_id, original_text, ''))

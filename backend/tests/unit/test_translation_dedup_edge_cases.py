@@ -13,6 +13,7 @@ Covers bot-identified correctness gaps:
 
 from __future__ import annotations
 
+import os
 import re
 import unittest
 
@@ -175,7 +176,9 @@ class TestStructuralCodePaths(unittest.TestCase):
     """Verify that bot-identified code paths exist and are correctly structured."""
 
     def setUp(self):
-        self.pr_root = "/tmp/omi-pr"
+        # Derive repo root from this test file's location, works in any checkout
+        # Test file lives at backend/tests/unit/<this_file> → go up 3 dirs
+        self.pr_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
     def _read_source(self, filepath: str) -> str | None:
         try:
