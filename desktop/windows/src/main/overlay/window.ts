@@ -41,7 +41,12 @@ export function createOverlayWindow(): BrowserWindow {
     // shortcut / Esc only. titleBarStyle 'hidden' keeps the window frame, so Win11
     // still rounds the corners and the Mica/acrylic material renders.
     titleBarStyle: 'hidden',
-    resizable: false,
+    resizable: true,
+    // Lock width to the CSS layout width (zoom layer is 480px × 0.7 = 336px).
+    // Height is content-driven by the tween, but can also be manually dragged.
+    minWidth: OVERLAY_WIDTH,
+    maxWidth: OVERLAY_WIDTH,
+    minHeight: 80,
     skipTaskbar: true,
     alwaysOnTop: true,
     hasShadow: true,

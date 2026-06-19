@@ -12,8 +12,39 @@ import './overlay.css'
  *  region (-webkit-app-region: drag); the handle just signals that it's movable. */
 function DragHandle(): React.JSX.Element {
   return (
-    <div className="overlay-drag flex h-6 items-center justify-center">
-      <div className="h-1 w-8 rounded-full bg-neutral-600/60" />
+    <div className="overlay-drag flex h-7 items-center justify-center">
+      <div className="h-[3px] w-10 rounded-full bg-neutral-500/60" />
+    </div>
+  )
+}
+
+/** Active-agent indicator — a single "Omi" pill matching the macOS agent pills
+ *  row. No real agent VM backend on Windows, so this is the default agent only. */
+function OmiPill(): React.JSX.Element {
+  return (
+    <div className="overlay-no-drag flex items-center pb-0.5">
+      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] px-2 py-0.5">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" />
+        <span className="text-[10px] font-medium leading-none text-neutral-400">Omi</span>
+      </div>
+    </div>
+  )
+}
+
+/** Bottom-right resize grip — mirrors macOS FloatingControlBarView's
+ *  ResizeHandleView. Visual affordance only; actual resize is native (the window
+ *  is resizable with width locked to OVERLAY_WIDTH). */
+function ResizeGrip(): React.JSX.Element {
+  return (
+    <div
+      aria-hidden
+      className="overlay-no-drag pointer-events-none absolute bottom-1 right-1.5 opacity-20"
+    >
+      <svg viewBox="0 0 10 10" width="12" height="12" fill="white">
+        <circle cx="9" cy="9" r="1.2" />
+        <circle cx="5.5" cy="9" r="1.2" />
+        <circle cx="9" cy="5.5" r="1.2" />
+      </svg>
     </div>
   )
 }
@@ -180,6 +211,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             last flex child) gets shrunk/clipped and looks like it disappears after a
             send. Pinning it means the history above shrinks/scrolls instead. */}
         <div className="overlay-no-drag flex shrink-0 flex-col gap-2">
+          <OmiPill />
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
@@ -227,6 +259,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
           <div className="px-1 text-[11px] text-red-400">Voice: {ptt.error}</div>
         )}
       </div>
+      <ResizeGrip />
     </div>
   )
 }

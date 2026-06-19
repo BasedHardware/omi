@@ -93,11 +93,12 @@
 |-------|--------|
 | **macOS source** | `Sources/FloatingControlBar/FloatingControlBarWindow.swift`, `Sources/FloatingControlBar/FloatingControlBarView.swift`, `Sources/FloatingControlBar/AgentPillsWindow.swift` |
 | **Windows source** | `src/main/overlay/window.ts`, `src/renderer/src/components/overlay/OverlayApp.tsx`, `src/renderer/src/components/overlay/Waveform.tsx` |
-| **Status** | 🟡 Partial |
-| **Visual gap** | Windows has Acrylic/Mica DWM backdrop and waveform visualization — good start. Missing: resize handle, agent selection pills, voice-playback animation for AI responses. macOS bar is horizontally oriented and visually distinct; Windows is a bottom-right corner panel. |
-| **Functional gap** | Missing agent pill selection overlay. macOS has PTT with both mic and system audio waveforms; Windows PTT uses mic only. macOS supports dragging/resizing the floating window; Windows does not expose a resize handle. |
-| **Proposed fix** | (1) Add a drag handle at the top of the overlay panel (already has `-webkit-app-region: drag` pattern, just needs UI). (2) Add a resize handle div on the bottom or corner. (3) Render agent pills as a small horizontal list above the input. |
-| **Priority** | P1 |
+| **Status** | 🟡 Partial → improved (Batch 7) |
+| **Visual gap** | Windows has Acrylic/Mica DWM backdrop and waveform visualization. Missing: hover-expand behavior (macOS collapses to a 14px breathing pill at rest, expands on hover; Windows always shows the full panel). macOS has separate agent pill floating window for background agents. |
+| **Improvements (Batch 7)** | (1) **Drag handle** — made more visible (h-7, 3px bar, 40px wide, 60% opacity). (2) **Resize** — window is now `resizable: true` with `minWidth/maxWidth` locked to 336px and `minHeight: 80`; the bottom edge can be dragged to make the window taller or shorter. (3) **Resize grip** — 3-dot SVG grip at bottom-right mirrors macOS `ResizeHandleView`. (4) **Agent pill** — "Omi" pill with green status dot above the input row, matching the visual style of macOS `AgentPillsRowView`; no real agent VM backend on Windows so this shows the default agent only. |
+| **Remaining gaps** | Agent VM backend (spawn/track agents, follow-ups) not on Windows. macOS hover-compact behavior not implemented. Voice-playback animation for AI audio responses missing. PTT uses mic only (macOS uses system audio too). |
+| **Test status** | `npm run typecheck` ✅ · `npm run build:win` ✅ · Drag works (CSS `-webkit-app-region: drag`) · Resize functional (native OS resize, width locked) · Input/buttons clickable (`overlay-no-drag`) · Waveform and PTT unchanged · Entrance/exit animations preserved |
+| **Priority** | P1 — IMPROVED |
 
 ---
 
