@@ -211,6 +211,7 @@ struct DashboardPage: View {
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+    @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
     private var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -234,9 +235,15 @@ struct DashboardPage: View {
     }
 
     var body: some View {
-        redesignedHome
+        Group {
+            if useLegacyHomeDesign {
+                legacyHome
+            } else {
+                redesignedHome
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(HomePalette.paper)
+        .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
         .sheet(item: $citedConversation) { conversation in
             ConversationDetailView(
                 conversation: conversation,
@@ -284,6 +291,80 @@ struct DashboardPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
             syncCaptureState()
         }
+    }
+
+    private var legacyHome: some View {
+        VStack(spacing: 0) {
+            dashboardWidgets
+
+            ChatMessagesView(
+                messages: chatProvider.messages,
+                isSending: chatProvider.isSending,
+                hasMoreMessages: chatProvider.hasMoreMessages,
+                isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
+                isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
+                    && !chatProvider.isClearing,
+                app: selectedApp,
+                onLoadMore: { await chatProvider.loadMoreMessages() },
+                onRate: { messageId, rating in
+                    Task { await chatProvider.rateMessage(messageId, rating: rating) }
+                },
+                onCitationTap: { citation in
+                    handleCitationTap(citation)
+                },
+                sessionsLoadError: chatProvider.sessionsLoadError,
+                onRetry: { Task { await chatProvider.retryLoad() } },
+                welcomeContent: { dashboardChatWelcome }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.08),
+                        .init(color: .black, location: 0.92),
+                        .init(color: .clear, location: 1.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+
+            ChatInputView(
+                onSend: { text in
+                    AnalyticsManager.shared.chatMessageSent(
+                        messageLength: text.count,
+                        hasContext: selectedApp != nil,
+                        source: "dashboard_chat"
+                    )
+                    Task { await chatProvider.sendMessage(text) }
+                },
+                onFollowUp: { text in
+                    Task { await chatProvider.sendFollowUp(text) }
+                },
+                onStop: {
+                    chatProvider.stopAgent()
+                },
+                isSending: chatProvider.isSending,
+                isStopping: chatProvider.isStopping,
+                placeholder: "Ask omi anything",
+                mode: $chatProvider.chatMode,
+                inputText: $chatProvider.draftText,
+                attachments: $chatProvider.pendingAttachments,
+                onAttachmentsAdded: { urls in
+                    let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+                    chatProvider.addAttachments(toAdd)
+                },
+                onAttachmentRemoved: { id in
+                    chatProvider.removePendingAttachment(id: id)
+                }
+            )
+            .padding(.horizontal, 30)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.clear)
     }
 
     // MARK: - Redesigned Home
