@@ -162,6 +162,10 @@ class AddAppProvider extends ChangeNotifier {
 
   Future prepareUpdate(App app) async {
     setIsLoading(true);
+    // Reset all form state first. The provider is reused across the add/update flows,
+    // and prepareUpdate only seeds optional fields (integration, scopes, prompts) when
+    // present on the app — without this, leftover values would read as false "changes".
+    clear();
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
