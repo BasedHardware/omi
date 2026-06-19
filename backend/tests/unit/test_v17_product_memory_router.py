@@ -198,8 +198,17 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
     db_client = _FirestoreFake(
         {
-            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [stale_short_term, archive, fresh_short_term, long_term]
+            'users/u1/memory_control/state': {
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True}},
+            },
+            **{
+                f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+                for item in [stale_short_term, archive, fresh_short_term, long_term]
+            },
         }
     )
     monkeypatch.setattr(v17_memory_product, "db", db_client)
@@ -207,6 +216,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 
     response = v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
 
+    assert db_client.document_paths == ['users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['uid'] == 'u1'
@@ -219,6 +229,56 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
     assert response['policy']['app_has_default_memory_grant'] is True
     assert response['policy']['archive_capability'] is False
     assert response['archive_default_visible'] is False
+
+
+def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
+    cases = [
+        ({}, 'missing_rollout_state'),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'off',
+                    'grants': {'omi_chat': {'default_memory': True}},
+                }
+            },
+            'v17_reads_disabled',
+        ),
+        (
+            {'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
+            'malformed_rollout_state',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {}},
+                }
+            },
+            'missing_chat_default_memory_grant',
+        ),
+    ]
+    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
+
+    for docs, expected_reason in cases:
+        db_client = _FirestoreFake(docs)
+        monkeypatch.setattr(v17_memory_product, "db", db_client)
+        try:
+            v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+        except _HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail['read_decision'] == 'DENY_MEMORY'
+            assert exc.detail['fallback_reason'] == expected_reason
+        else:
+            raise AssertionError(f'expected product search to fail closed for {expected_reason}')
+
+        assert db_client.document_paths == ['users/u1/memory_control/state']
+        assert db_client.collection_paths == []
+
+    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):

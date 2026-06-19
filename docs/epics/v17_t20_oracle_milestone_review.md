@@ -84,6 +84,30 @@ Oracle affirmed the foundation that vector candidates hydrate through authoritat
 
 ## Not-run / not-claimed caveats preserved
 
+## Follow-up implementation slices after Oracle review
+
+### 2026-06-19 — first narrow P0-1/P0-2 fix slice
+
+Implemented a small local code slice after this review, without changing the production rollout verdict:
+
+- Added shared explicit `V17ReadDecision` semantics in `backend/utils/memory/v17_default_read_rollout.py`: `USE_V17`, `USE_LEGACY_SAFE`, `DENY_MEMORY`, and `SHADOW_ONLY`.
+- Classified missing, malformed, uid-mismatched, disabled, unsupported, and no-default-memory-grant control states as `DENY_MEMORY` for default V17 reads instead of silently implying legacy fallback.
+- Added an explicit `legacy_safe_v17_default_read_rollout_decision(...)` constructor for callers that are intentionally legacy-safe by policy, so safe legacy behavior is opt-in rather than derived from bad V17 control state.
+- Classified shadow-enabled/read-disabled granted state as `SHADOW_ONLY`.
+- Applied the explicit decision to product `/v17/memory/search` and `/v17/memory/vector/search`: both require persisted server-owned Omi-chat rollout/grant state to return `USE_V17` before any `users/{uid}/memory_items` or vector read; non-`USE_V17` returns 403 with rollout observability.
+- Kept Archive default-unavailable. The existing Archive product route remains explicit-query-only and is **not** yet persisted/server-authorized; that part of P0-1 remains open.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing explicit decision type, GREEN focused tests, full `pytest tests/unit/test_v17_*.py -q` (`175 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+Remaining P0-1/P0-2 work:
+
+- Add persisted/server-authorized Archive capability plus explicit Archive query before Archive reads; do not treat client `include_archive=true` as sufficient.
+- Continue converting legacy-fallback callers to explicit `USE_LEGACY_SAFE` only where reconciliation/projection/generation policy proves it safe; otherwise deny or shadow.
+- Add the global emergency kill switch independent of per-user Firestore reads.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
+## Not-run / not-claimed caveats preserved
+
 - Oracle review has now run and is recorded here, but it blocks production rollout.
 - Real Pinecone validation was **not** run.
 - Real Firestore/cloud validation was **not** run.

@@ -1,6 +1,8 @@
 from config.v17_memory import PASSED, V17Mode, V17StageGate
 from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
     build_v17_default_read_rollout_audit_events,
+    legacy_safe_v17_default_read_rollout_decision,
     render_v17_default_read_rollout_metrics,
     read_v17_default_read_rollout,
     read_v17_default_read_rollout_decisions,
@@ -82,6 +84,8 @@ def test_shared_rollout_helper_reads_memory_control_state_for_mcp_and_developer_
     assert developer_decision.app_has_default_memory_grant is True
     assert mcp_decision.archive_capability is False
     assert developer_decision.archive_capability is False
+    assert mcp_decision.read_decision == V17ReadDecision.USE_V17
+    assert developer_decision.read_decision == V17ReadDecision.USE_V17
     assert mcp_decision.v17_default_mcp_enabled is True
     assert developer_decision.v17_default_developer_enabled is True
 
@@ -90,18 +94,21 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
     missing = _FirestoreFake()
     missing_decision = read_v17_default_read_rollout(uid='u1', db_client=missing, consumer='mcp')
     assert missing_decision.v17_default_mcp_enabled is False
+    assert missing_decision.read_decision == V17ReadDecision.DENY_MEMORY
     assert missing_decision.fallback_reason == 'missing_rollout_state'
     assert missing.collection_paths == []
 
     malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
     malformed_decision = read_v17_default_read_rollout(uid='u1', db_client=malformed, consumer='developer_api')
     assert malformed_decision.v17_default_developer_enabled is False
+    assert malformed_decision.read_decision == V17ReadDecision.DENY_MEMORY
     assert malformed_decision.fallback_reason == 'malformed_rollout_state'
     assert malformed.collection_paths == []
 
     uid_mismatch = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc(uid='other')})
     uid_mismatch_decision = read_v17_default_read_rollout(uid='u1', db_client=uid_mismatch, consumer='mcp')
     assert uid_mismatch_decision.v17_default_mcp_enabled is False
+    assert uid_mismatch_decision.read_decision == V17ReadDecision.DENY_MEMORY
     assert uid_mismatch_decision.fallback_reason == 'uid_mismatch'
     assert uid_mismatch.collection_paths == []
 
@@ -112,8 +119,30 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
     assert no_grant_decision.rollout_capabilities.v17_reads_enabled is True
     assert no_grant_decision.app_has_default_memory_grant is False
     assert no_grant_decision.v17_default_developer_enabled is False
+    assert no_grant_decision.read_decision == V17ReadDecision.DENY_MEMORY
     assert no_grant_decision.fallback_reason == 'missing_developer_default_memory_grant'
     assert no_grant.collection_paths == []
+
+
+def test_shared_rollout_helper_distinguishes_shadow_only_and_explicit_legacy_safe_decisions():
+    shadow_doc = _enabled_rollout_doc() | {
+        'mode': V17Mode.shadow.value,
+        'fallback_projection_ready': False,
+        'stage_gates': {V17StageGate.shadow.value: PASSED},
+        'grants': {'mcp': {'default_memory': True}},
+    }
+    db_client = _FirestoreFake({'users/u1/memory_control/state': shadow_doc})
+
+    shadow_decision = read_v17_default_read_rollout(uid='u1', db_client=db_client, consumer='mcp')
+    legacy_safe_decision = legacy_safe_v17_default_read_rollout_decision(
+        uid='u1', source_path='legacy/users/u1/memories', consumer='mcp', reason='explicit_legacy_endpoint'
+    )
+
+    assert shadow_decision.read_decision == V17ReadDecision.SHADOW_ONLY
+    assert shadow_decision.v17_default_enabled is False
+    assert shadow_decision.fallback_reason == 'shadow_only'
+    assert legacy_safe_decision.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert legacy_safe_decision.fallback_reason == 'explicit_legacy_endpoint'
 
 
 def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_memory_item_reads():
@@ -139,6 +168,7 @@ def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_me
                 'consumer': 'mcp',
                 'enabled': True,
                 'outcome': 'enabled',
+                'read_decision': 'USE_V17',
                 'fallback_reason': None,
                 'default_memory_grant': True,
                 'v17_reads_enabled': True,
@@ -151,6 +181,7 @@ def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_me
                 'consumer': 'developer_api',
                 'enabled': False,
                 'outcome': 'fallback',
+                'read_decision': 'DENY_MEMORY',
                 'fallback_reason': 'missing_developer_default_memory_grant',
                 'default_memory_grant': False,
                 'v17_reads_enabled': True,
@@ -163,6 +194,7 @@ def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_me
                 'consumer': 'omi_chat',
                 'enabled': True,
                 'outcome': 'enabled',
+                'read_decision': 'USE_V17',
                 'fallback_reason': None,
                 'default_memory_grant': True,
                 'v17_reads_enabled': True,

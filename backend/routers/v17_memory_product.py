@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database._client import db
 from models.v17_product_memory import MemoryAccessPolicy
 from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
     build_v17_default_read_rollout_observability,
     read_v17_default_read_rollout,
 )
@@ -71,6 +72,11 @@ def search_v17_product_memory(
     """
 
     _validate_search_pagination(limit, offset)
+    rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
+    rollout_observability = build_v17_default_read_rollout_observability(rollout)
+    if rollout.read_decision != V17ReadDecision.USE_V17:
+        raise HTTPException(status_code=403, detail=rollout_observability)
+
     policy = _default_omi_chat_policy()
     try:
         response = fetch_default_product_memory_search(
@@ -86,6 +92,7 @@ def search_v17_product_memory(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     response['policy'] = _policy_payload(policy)
+    response['rollout'] = rollout_observability
     response['archive_default_visible'] = False
     return response
 
@@ -109,7 +116,7 @@ def search_v17_vector_memory(
     _validate_vector_limit(limit)
     rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
-    if not rollout.v17_default_enabled:
+    if rollout.read_decision != V17ReadDecision.USE_V17:
         raise HTTPException(status_code=403, detail=rollout_observability)
 
     policy = _default_omi_chat_policy()

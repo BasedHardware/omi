@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Iterable, Optional
 
 from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
@@ -19,6 +20,13 @@ _LOW_CARDINALITY_FALLBACK_REASON_BUCKETS = {
 }
 
 
+class V17ReadDecision(str, Enum):
+    USE_V17 = 'USE_V17'
+    USE_LEGACY_SAFE = 'USE_LEGACY_SAFE'
+    DENY_MEMORY = 'DENY_MEMORY'
+    SHADOW_ONLY = 'SHADOW_ONLY'
+
+
 @dataclass(frozen=True)
 class V17DefaultReadRolloutDecision:
     uid: str
@@ -28,6 +36,21 @@ class V17DefaultReadRolloutDecision:
     app_has_default_memory_grant: bool
     archive_capability: bool = False
     reason: str = 'ok'
+    explicit_read_decision: V17ReadDecision | None = None
+
+    @property
+    def read_decision(self) -> V17ReadDecision:
+        if self.explicit_read_decision is not None:
+            return self.explicit_read_decision
+        if self.v17_default_enabled:
+            return V17ReadDecision.USE_V17
+        if (
+            self.rollout_capabilities.shadow_artifacts_enabled
+            and not self.rollout_capabilities.v17_reads_enabled
+            and self.app_has_default_memory_grant
+        ):
+            return V17ReadDecision.SHADOW_ONLY
+        return V17ReadDecision.DENY_MEMORY
 
     @property
     def v17_default_enabled(self) -> bool:
@@ -57,6 +80,10 @@ class V17DefaultReadRolloutDecision:
     def fallback_reason(self) -> Optional[str]:
         if self.v17_default_enabled:
             return None
+        if self.read_decision == V17ReadDecision.SHADOW_ONLY:
+            return 'shadow_only'
+        if self.read_decision == V17ReadDecision.USE_LEGACY_SAFE:
+            return self.reason
         if self.reason != 'ok':
             return self.reason
         if not self.rollout_capabilities.v17_reads_enabled:
@@ -85,6 +112,36 @@ def disabled_v17_default_read_rollout_decision(
         app_has_default_memory_grant=False,
         archive_capability=False,
         reason=reason,
+        explicit_read_decision=V17ReadDecision.DENY_MEMORY,
+    )
+
+
+def legacy_safe_v17_default_read_rollout_decision(
+    *, uid: str, source_path: str, consumer: str, reason: str
+) -> V17DefaultReadRolloutDecision:
+    """Mark an explicit legacy-only endpoint/caller as safe by policy.
+
+    This is intentionally opt-in: malformed/missing/no-grant V17 control state
+    must not be interpreted as a safe legacy downgrade for default V17 reads.
+    """
+
+    return V17DefaultReadRolloutDecision(
+        uid=uid,
+        source_path=source_path,
+        consumer=consumer,
+        rollout_capabilities=V17Capabilities(
+            uid=uid,
+            mode=V17Mode.off,
+            legacy_only=True,
+            shadow_artifacts_enabled=False,
+            v17_writes_enabled=False,
+            v17_reads_enabled=False,
+            legacy_reads_authoritative=True,
+        ),
+        app_has_default_memory_grant=False,
+        archive_capability=False,
+        reason=reason,
+        explicit_read_decision=V17ReadDecision.USE_LEGACY_SAFE,
     )
 
 
@@ -216,6 +273,7 @@ def build_v17_default_read_rollout_observability(decision: V17DefaultReadRollout
         'consumer': decision.consumer,
         'enabled': decision.v17_default_enabled,
         'reason': reason,
+        'read_decision': decision.read_decision.value,
         'mode': capabilities.mode.value,
         'v17_reads_enabled': capabilities.v17_reads_enabled,
         'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
@@ -241,6 +299,7 @@ def build_v17_default_read_rollout_audit_event(decision: V17DefaultReadRolloutDe
         'consumer': decision.consumer,
         'enabled': enabled,
         'outcome': 'enabled' if enabled else 'fallback',
+        'read_decision': decision.read_decision.value,
         'fallback_reason': decision.fallback_reason,
         'default_memory_grant': decision.app_has_default_memory_grant,
         'v17_reads_enabled': decision.rollout_capabilities.v17_reads_enabled,
