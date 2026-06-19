@@ -14,6 +14,7 @@ const WINNER_MEMORY_ID = 'memory-from-attempt-a';
 const LOSER_MEMORY_ID = 'memory-from-attempt-b';
 const WINNER_OUTBOX_ID = 'outbox-from-attempt-a';
 const LOSER_OUTBOX_ID = 'outbox-from-attempt-b';
+const MAX_CONTENTION_ROUNDS = 3;
 
 function documentName(path) {
   return `projects/${PROJECT_ID}/databases/(default)/documents/${path}`;
@@ -142,6 +143,35 @@ async function seedInitialV17ApplyState() {
   ]);
 }
 
+async function assertNoAttemptDocsWerePartiallyCommitted() {
+  const control = await getDocument(CONTROL_PATH);
+  const operation = await getDocument(OPERATION_PATH);
+  assert.equal(control.head_commit_id, 'base-commit', 'double-aborted contention round left control head unchanged');
+  assert.equal(control.commit_sequence, 0, 'double-aborted contention round left control sequence unchanged');
+  assert.equal(operation.status, 'pending', 'double-aborted contention round left operation pending');
+  assert.equal(operation.committed_sequence, null, 'double-aborted contention round did not store replay sequence');
+  assert.deepEqual(
+    operation.committed_memory_item_ids,
+    [],
+    'double-aborted contention round did not store replay memory IDs',
+  );
+  assert.deepEqual(
+    operation.committed_outbox_event_ids,
+    [],
+    'double-aborted contention round did not store replay outbox IDs',
+  );
+  for (const path of [
+    `${ROOT}/memory_commits/${WINNER_COMMIT_ID}`,
+    `${ROOT}/memory_commits/${LOSER_COMMIT_ID}`,
+    `${ROOT}/memory_items/${WINNER_MEMORY_ID}`,
+    `${ROOT}/memory_items/${LOSER_MEMORY_ID}`,
+    `${ROOT}/memory_outbox/${WINNER_OUTBOX_ID}`,
+    `${ROOT}/memory_outbox/${LOSER_OUTBOX_ID}`,
+  ]) {
+    assert.equal(await getDocument(path), null, `double-aborted contention round did not write ${path}`);
+  }
+}
+
 function attemptWrites({ commitId, memoryId, outboxId }) {
   return [
     updateWrite(OPERATION_PATH, {
@@ -189,9 +219,7 @@ function attemptWrites({ commitId, memoryId, outboxId }) {
   ];
 }
 
-async function assertConcurrentTransactionContentionSerializesV17Apply() {
-  await seedInitialV17ApplyState();
-
+async function runContentionRound() {
   const attemptA = await beginTransaction();
   const attemptB = await beginTransaction();
 
@@ -214,15 +242,41 @@ async function assertConcurrentTransactionContentionSerializesV17Apply() {
       [200, 409],
     ),
   ]);
-  const statuses = [commitA.status, commitB.status].sort();
-  assert.deepEqual(statuses, [200, 409], 'exactly one concurrent apply transaction commits');
+  return { commitA, commitB };
+}
 
-  const winningIds = commitA.status === 200
-    ? { commitId: WINNER_COMMIT_ID, memoryId: WINNER_MEMORY_ID, outboxId: WINNER_OUTBOX_ID }
-    : { commitId: LOSER_COMMIT_ID, memoryId: LOSER_MEMORY_ID, outboxId: LOSER_OUTBOX_ID };
-  const losingIds = commitA.status === 200
-    ? { commitId: LOSER_COMMIT_ID, memoryId: LOSER_MEMORY_ID, outboxId: LOSER_OUTBOX_ID }
-    : { commitId: WINNER_COMMIT_ID, memoryId: WINNER_MEMORY_ID, outboxId: WINNER_OUTBOX_ID };
+async function assertConcurrentTransactionContentionSerializesV17Apply() {
+  await seedInitialV17ApplyState();
+
+  let commitA;
+  let commitB;
+  for (let round = 1; round <= MAX_CONTENTION_ROUNDS; round += 1) {
+    ({ commitA, commitB } = await runContentionRound());
+    const statuses = [commitA.status, commitB.status].sort();
+    if (statuses[0] === 200 && statuses[1] === 409) {
+      break;
+    }
+    assert.deepEqual(
+      statuses,
+      [409, 409],
+      `unexpected contention result in round ${round}; expected one commit or clean double-abort`,
+    );
+    assert.notEqual(round, MAX_CONTENTION_ROUNDS, 'contention never produced a serialized commit before retry limit');
+    await assertNoAttemptDocsWerePartiallyCommitted();
+  }
+
+  assert.ok(commitA && commitB, 'contention produced commit responses');
+  const statuses = [commitA.status, commitB.status].sort();
+  assert.deepEqual(statuses, [200, 409], 'exactly one concurrent apply transaction commits after bounded retry');
+
+  const winningIds =
+    commitA.status === 200
+      ? { commitId: WINNER_COMMIT_ID, memoryId: WINNER_MEMORY_ID, outboxId: WINNER_OUTBOX_ID }
+      : { commitId: LOSER_COMMIT_ID, memoryId: LOSER_MEMORY_ID, outboxId: LOSER_OUTBOX_ID };
+  const losingIds =
+    commitA.status === 200
+      ? { commitId: LOSER_COMMIT_ID, memoryId: LOSER_MEMORY_ID, outboxId: LOSER_OUTBOX_ID }
+      : { commitId: WINNER_COMMIT_ID, memoryId: WINNER_MEMORY_ID, outboxId: WINNER_OUTBOX_ID };
 
   const retry = await beginTransaction();
   const retryRead = await batchGet([CONTROL_PATH, OPERATION_PATH], retry);

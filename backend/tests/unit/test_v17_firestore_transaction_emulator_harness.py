@@ -20,6 +20,9 @@ def test_v17_firestore_transaction_emulator_harness_is_wired() -> None:
     assert ":commit" in script
     assert ":batchGet" in script
     assert "assertConcurrentTransactionContentionSerializesV17Apply" in script
+    assert "MAX_CONTENTION_ROUNDS" in script
+    assert "assertNoAttemptDocsWerePartiallyCommitted" in script
+    assert "exactly one concurrent apply transaction commits after bounded retry" in script
     assert "memory_control/state" in script
     assert "memory_operations" in script
     assert "memory_items" in script
