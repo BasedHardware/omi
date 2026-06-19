@@ -30,6 +30,7 @@ struct DesktopHomeView: View {
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
+  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -495,7 +496,7 @@ struct DesktopHomeView: View {
   }
 
   private var showsPrimarySidebar: Bool {
-    false
+    useLegacyHomeDesign && !hideSidebar
   }
 
   private var currentAppStateLabel: String {
@@ -520,6 +521,9 @@ struct DesktopHomeView: View {
       selectedTabIndex: selectedIndex,
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
+      usesLegacyHomeDesign: useLegacyHomeDesign,
+      showsPrimarySidebar: showsPrimarySidebar,
+      isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
       isRestoringAuth: authState.isRestoringAuth,
@@ -631,18 +635,30 @@ struct DesktopHomeView: View {
       // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
       // tracking system still tries to evaluate them during window key state changes.
       if isInSettings {
-        SettingsSidebar(
-          selectedSection: $selectedSettingsSection,
-          highlightedSettingId: $highlightedSettingId,
-          onBack: {
-            withAnimation(.easeInOut(duration: 0.2)) {
-              selectedIndex =
-                previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
-                ? SidebarNavItem.dashboard.rawValue
-                : previousIndexBeforeSettings
-            }
+        ZStack {
+          if showsPrimarySidebar {
+            SidebarView(
+              selectedIndex: $selectedIndex,
+              isCollapsed: $isSidebarCollapsed,
+              appState: appState
+            )
+            .opacity(0)
+            .allowsHitTesting(false)
           }
-        )
+
+          SettingsSidebar(
+            selectedSection: $selectedSettingsSection,
+            highlightedSettingId: $highlightedSettingId,
+            onBack: {
+              withAnimation(.easeInOut(duration: 0.2)) {
+                selectedIndex =
+                  previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
+                  ? SidebarNavItem.dashboard.rawValue
+                  : previousIndexBeforeSettings
+              }
+            }
+          )
+        }
         .fixedSize(horizontal: true, vertical: false)
         .clipped()
       } else if showsPrimarySidebar {
@@ -686,7 +702,7 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          if selectedIndex != SidebarNavItem.dashboard.rawValue {
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
             PageChromeBar(
               onHome: {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -838,7 +854,13 @@ struct DesktopHomeView: View {
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
     }
+    .onChange(of: useLegacyHomeDesign) { _, newValue in
+      withAnimation(.easeInOut(duration: 0.2)) {
+        isSidebarCollapsed = !newValue
+      }
+    }
     .onAppear {
+      isSidebarCollapsed = !useLegacyHomeDesign
       updateStoreActivity(for: selectedIndex)
       // Restore window width if the user quit with task chat panel open.
       // The chat panel is never open on startup (showChatPanel defaults to false),
