@@ -535,6 +535,22 @@ ROUTE_PLANNER_PROOF = {
     ],
 }
 
+ROUTE_SIGNATURE_INTEGRATION_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_route_signature_integration.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_route_signature_integration.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "static_ast_source_inspection_of_memories_router_no_fastapi_import",
+        "pins_get_post_delete_v3_route_signatures_and_body_models",
+        "pins_current_legacy_get_post_delete_db_vector_paths_no_cutover_claim",
+        "maps_get_limit_offset_to_request_adapter_contract_with_offset_v17_blocked",
+        "identifies_future_query_to_request_adapter_to_route_planner_to_response_adapter_seam",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -568,6 +584,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "response_adapter_proof": RESPONSE_ADAPTER_PROOF,
         "request_adapter_proof": REQUEST_ADAPTER_PROOF,
         "route_planner_proof": ROUTE_PLANNER_PROOF,
+        "route_signature_integration_proof": ROUTE_SIGNATURE_INTEGRATION_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -590,6 +607,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "response_adapter_proof_present": True,
             "request_adapter_proof_present": True,
             "route_planner_proof_present": True,
+            "route_signature_integration_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

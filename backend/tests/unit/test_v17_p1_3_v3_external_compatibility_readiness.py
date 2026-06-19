@@ -367,6 +367,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "response_adapter_proof_present": True,
         "request_adapter_proof_present": True,
         "route_planner_proof_present": True,
+        "route_signature_integration_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -388,6 +389,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_v3_response_adapter.py" in test_sh
     assert "test_v17_v3_request_adapter.py" in test_sh
     assert "test_v17_v3_route_planner.py" in test_sh
+    assert "test_v17_p1_3_v3_route_signature_integration.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in ticket_doc
@@ -397,6 +399,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_response_adapter.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_request_adapter.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_route_planner.py" in ticket_doc
+    assert "v17_p1_3_v3_route_signature_integration.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
@@ -407,4 +410,5 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_response_adapter.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_request_adapter.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_route_planner.py" in oracle_doc
+    assert "v17_p1_3_v3_route_signature_integration.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc
