@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+from models.v17_memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
 from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
 
@@ -91,18 +91,22 @@ def _stored_item(item):
     return item.model_dump(mode='json')
 
 
-def _hit(item, *, score, projection_commit_id='projection-1'):
-    return SearchVectorHit(
-        memory_id=item.memory_id,
-        score=score,
-        projection_commit_id=projection_commit_id,
-        vector_updated_at=item.updated_at + timedelta(minutes=1),
-        uid=item.uid,
-        account_generation=item.account_generation,
-        item_revision=item.item_revision,
-        source_commit_id=item.source_commit_id,
-        content_hash=item.content_hash,
-    )
+def _hit(item, *, score, projection_commit_id='projection-1', vector_id=None, **overrides):
+    data = {
+        'memory_id': item.memory_id,
+        'score': score,
+        'projection_commit_id': projection_commit_id,
+        'vector_updated_at': item.updated_at + timedelta(minutes=1),
+        'uid': item.uid,
+        'account_generation': item.account_generation,
+        'item_revision': item.item_revision,
+        'source_commit_id': item.source_commit_id,
+        'content_hash': item.content_hash,
+    }
+    if vector_id is not None:
+        data['vector_id'] = vector_id
+    data.update(overrides)
+    return SearchVectorHit(**data)
 
 
 def test_default_v17_vector_search_hydrates_authoritative_items_and_filters_stale_short_term_and_archive():
@@ -153,6 +157,35 @@ def test_default_v17_vector_search_hydrates_authoritative_items_and_filters_stal
     assert response['decisions']['archive'] == 'access_denied'
     assert response['vector_rejected_count'] == 2
     assert response['archive_default_visible'] is False
+
+
+def test_default_v17_vector_search_rejects_missing_freshness_fence_before_vector_query_or_repair_callback():
+    vector_calls = []
+    repair_batches = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(hits=[], rejected_count=0)
+
+    try:
+        fetch_default_v17_vector_memory_search(
+            uid='u1',
+            query='coffee',
+            db_client=_FirestoreFake(),
+            policy=MemoryAccessPolicy.for_omi_chat(),
+            vector_query=fake_vector_query,
+            repair_purge_callback=lambda candidates: repair_batches.append(candidates),
+            limit=5,
+            required_projection_commit_id='',
+            required_account_generation=0,
+        )
+    except ValueError as exc:
+        assert str(exc) == 'required_projection_commit_id is required'
+    else:
+        raise AssertionError('expected missing projection fence to fail closed')
+
+    assert vector_calls == []
+    assert repair_batches == []
 
 
 def test_default_v17_vector_search_rejects_hits_missing_mandatory_freshness_fence_fields():
@@ -211,6 +244,64 @@ def test_default_v17_vector_search_rejects_vectors_from_purged_account_generatio
 
     assert response['items'] == []
     assert response['decisions'] == {'stale-generation': 'stale_vector'}
+
+
+def test_default_v17_vector_search_dispatches_repair_purge_candidates_for_hydration_rejects():
+    now = datetime.now(timezone.utc)
+    missing_authoritative = _memory_item('missing-authoritative', tier=MemoryTier.long_term, now=now)
+    stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
+    missing_metadata = _memory_item('missing-metadata', tier=MemoryTier.long_term, now=now)
+    old_generation = _memory_item('old-generation', tier=MemoryTier.long_term, now=now, account_generation=1)
+    valid = _memory_item('valid', tier=MemoryTier.long_term, now=now)
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [stale_projection, missing_metadata, old_generation, valid]
+        }
+    )
+    repair_batches = []
+
+    def fake_vector_query(uid, query, *, mode, limit):
+        return _VectorCandidateResult(
+            hits=[
+                _hit(missing_authoritative, score=0.99, vector_id='v17mem:missing-authoritative'),
+                _hit(
+                    stale_projection,
+                    score=0.98,
+                    vector_id='v17mem:stale-projection',
+                    projection_commit_id='projection-old',
+                ),
+                _hit(missing_metadata, score=0.97, vector_id='v17mem:missing-metadata', uid=None),
+                _hit(old_generation, score=0.96, vector_id='v17mem:old-generation'),
+                _hit(valid, score=0.95, vector_id='v17mem:valid'),
+            ],
+            rejected_count=0,
+        )
+
+    response = fetch_default_v17_vector_memory_search(
+        uid='u1',
+        query='coffee',
+        db_client=db_client,
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        vector_query=fake_vector_query,
+        repair_purge_callback=lambda candidates: repair_batches.append(candidates),
+        limit=5,
+        required_projection_commit_id='projection-1',
+        required_account_generation=0,
+    )
+
+    assert [item['memory_id'] for item in response['items']] == ['valid']
+    assert repair_batches == [response['repair_purge_candidates']]
+    assert response['repair_purge_candidate_count'] == 4
+    assert [
+        (candidate['vector_id'], candidate['memory_id'], candidate['reason']) for candidate in repair_batches[0]
+    ] == [
+        ('v17mem:missing-authoritative', 'missing-authoritative', VectorRepairPurgeReason.missing_authoritative_item),
+        ('v17mem:stale-projection', 'stale-projection', VectorRepairPurgeReason.stale_projection_commit),
+        ('v17mem:missing-metadata', 'missing-metadata', VectorRepairPurgeReason.missing_vector_freshness_metadata),
+        ('v17mem:old-generation', 'old-generation', VectorRepairPurgeReason.stale_account_generation),
+    ]
+    assert 'valid' not in {candidate['memory_id'] for candidate in repair_batches[0]}
 
 
 def test_default_v17_vector_search_preserves_vector_ranking_after_authoritative_filtering():

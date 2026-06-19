@@ -86,6 +86,7 @@ def parse_v17_search_vector_hit(match: Dict[str, Any]) -> ParsedV17VectorHit:
         vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
         score = float(match.get("score", 0.0))
         hit = SearchVectorHit(
+            vector_id=_optional_match_id(match),
             memory_id=memory_id,
             score=score,
             projection_commit_id=projection_commit_id,
@@ -117,6 +118,15 @@ def _base_v17_filter(uid: str, tier_filter: Dict[str, Any]) -> Dict[str, Any]:
             {"restricted_sensitivity": {"$eq": False}},
         ]
     }
+
+
+def _optional_match_id(match: Dict[str, Any]) -> Optional[str]:
+    value = match.get("id")
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("id")
+    return value
 
 
 def _required_str(metadata: Dict[str, Any], key: str) -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 try:
     from database.vector_db import query_v17_memory_vector_candidates
@@ -22,6 +22,7 @@ def fetch_default_v17_vector_memory_search(
     db_client,
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
+    repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     limit: int = DEFAULT_V17_VECTOR_SEARCH_LIMIT,
     required_projection_commit_id: str,
     required_account_generation: int,
@@ -56,6 +57,9 @@ def fetch_default_v17_vector_memory_search(
         required_projection_commit_id=required_projection_commit_id,
         required_account_generation=required_account_generation,
     )
+    repair_purge_candidates = list(gateway_result.repair_purge_candidates)
+    if repair_purge_candidates and repair_purge_callback is not None:
+        repair_purge_callback(repair_purge_candidates)
     return {
         'uid': uid,
         'query': query,
@@ -69,6 +73,8 @@ def fetch_default_v17_vector_memory_search(
         'returned_count': len(gateway_result.results),
         'limit': bounded_limit,
         'vector_rejected_count': int(getattr(candidate_result, 'rejected_count', 0)),
+        'repair_purge_candidate_count': len(repair_purge_candidates),
+        'repair_purge_candidates': repair_purge_candidates,
         'archive_default_visible': False,
     }
 

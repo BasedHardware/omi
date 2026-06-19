@@ -318,6 +318,26 @@ This closes only the first narrow P0-4 freshness/account-generation seam. Remain
 - Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 stale vector repair/purge candidate seam
+
+Continued Oracle P0-4 with a narrow fake-injectable repair/purge seam for hydration-rejected vector IDs, without claiming real Pinecone/Firestore deletion or changing the production rollout verdict:
+
+- Added `VectorRepairPurgeReason` taxonomy and `SearchVectorHit.vector_id` plumbing so Pinecone match IDs can be carried through candidate hydration.
+- `hydrate_and_filter_vector_hits(...)` now returns `repair_purge_candidates` for stale-ID conditions found after authoritative hydration: missing authoritative item, stale projection commit, missing vector freshness metadata, stale account generation, cross-user metadata, stale item revision, stale source commit, stale content hash, and stale vector timestamp.
+- `fetch_default_v17_vector_memory_search(...)` accepts an optional fake-injectable `repair_purge_callback` and dispatches one batch after hydration only when repair/purge candidates exist. Returned memory results are still only hydrated valid `memory_items`; access-policy rejects such as stale Short-term or Archive default denial are not purge candidates.
+- Missing freshness-fence paths still fail before vector query, `memory_items` reads, or repair callbacks.
+- This is an outbox/worker contract seam only. No real Pinecone delete, Firestore repair collection write, tombstone-precedence worker, shared-`ns2` proof, benchmark, or production approval is claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `VectorRepairPurgeReason`, GREEN vector-service seam tests (`6 passed`), focused V17 vector/caller regression (`78 passed`), full `pytest tests/unit/test_v17_*.py -q` (`208 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the fake-injectable stale-ID repair/purge candidate dispatch seam. Remaining P0-4/P0 work:
+
+- Wire candidates to a durable Firestore outbox and real Pinecone delete/repair worker with idempotency, tombstone precedence, and retry/error telemetry.
+- Prove actual stale IDs are deleted or repaired against Pinecone/Firestore/emulator or cloud fixtures, including missing authoritative items, stale projection/revision/content/source, old account generation, and duplicate physical vector IDs.
+- Prove shared `ns2` isolation; add vector overfetch/refill/budgets/central telemetry and app/key/scope authorization.
+- Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
