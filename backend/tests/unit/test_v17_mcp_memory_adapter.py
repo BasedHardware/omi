@@ -1,18 +1,33 @@
 from datetime import datetime, timedelta, timezone
 
-from config.v17_memory import V17Capabilities, V17Mode
+from config.v17_memory import PASSED, V17Capabilities, V17Mode, V17StageGate
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.mcp_memories import search_v17_default_mcp_memories
+from utils.mcp_memories import read_v17_mcp_default_memory_rollout, search_v17_default_mcp_memories
 
 
 class _Snapshot:
-    def __init__(self, data=None):
+    def __init__(self, data=None, *, exists=True):
         self._data = data
+        self.exists = exists
 
     def to_dict(self):
-        return dict(self._data or {})
+        if self._data is None:
+            return None
+        return dict(self._data)
+
+
+class _DocumentRef:
+    def __init__(self, db_client, path):
+        self._db_client = db_client
+        self.path = path
+
+    def get(self):
+        self._db_client.document_get_paths.append(self.path)
+        if self.path not in self._db_client.docs:
+            return _Snapshot(None, exists=False)
+        return _Snapshot(self._db_client.docs[self.path], exists=True)
 
 
 class _CollectionRef:
@@ -34,10 +49,16 @@ class _FirestoreFake:
     def __init__(self, docs=None):
         self.docs = docs or {}
         self.collection_paths = []
+        self.document_paths = []
+        self.document_get_paths = []
 
     def collection(self, path):
         self.collection_paths.append(path)
         return _CollectionRef(self, path)
+
+    def document(self, path):
+        self.document_paths.append(path)
+        return _DocumentRef(self, path)
 
 
 def _read_capabilities(uid='u1', *, enabled=True):
@@ -95,6 +116,63 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
 
 def _stored_item(item):
     return item.model_dump(mode='json')
+
+
+def _enabled_rollout_doc(uid='u1'):
+    return {
+        'uid': uid,
+        'mode': V17Mode.read.value,
+        'mode_epoch': 7,
+        'cutover_epoch': 7,
+        'account_generation': 3,
+        'fallback_projection_ready': True,
+        'persistent_v17_writes_started': True,
+        'writes_blocked': False,
+        'stage_gates': {
+            V17StageGate.shadow.value: PASSED,
+            V17StageGate.write.value: PASSED,
+            V17StageGate.read.value: PASSED,
+        },
+        'grants': {
+            'mcp': {
+                'default_memory': True,
+                'archive': True,
+            }
+        },
+    }
+
+
+def test_mcp_default_v17_rollout_reader_derives_capability_and_default_grant_from_memory_control_state():
+    db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+
+    decision = read_v17_mcp_default_memory_rollout(uid='u1', db_client=db_client)
+
+    assert db_client.document_get_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == []
+    assert decision.rollout_capabilities.v17_reads_enabled is True
+    assert decision.app_has_default_memory_grant is True
+    assert decision.archive_capability is False
+    assert decision.source_path == 'users/u1/memory_control/state'
+
+
+def test_mcp_default_v17_rollout_reader_fails_closed_for_missing_malformed_or_missing_grant_without_memory_reads():
+    missing = _FirestoreFake()
+    assert read_v17_mcp_default_memory_rollout(uid='u1', db_client=missing).v17_default_mcp_enabled is False
+    assert missing.document_get_paths == ['users/u1/memory_control/state']
+    assert missing.collection_paths == []
+
+    malformed = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}})
+    malformed_decision = read_v17_mcp_default_memory_rollout(uid='u1', db_client=malformed)
+    assert malformed_decision.v17_default_mcp_enabled is False
+    assert malformed_decision.app_has_default_memory_grant is False
+    assert malformed.collection_paths == []
+
+    no_grant = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc() | {'grants': {'mcp': {}}}})
+    no_grant_decision = read_v17_mcp_default_memory_rollout(uid='u1', db_client=no_grant)
+    assert no_grant_decision.rollout_capabilities.v17_reads_enabled is True
+    assert no_grant_decision.app_has_default_memory_grant is False
+    assert no_grant_decision.v17_default_mcp_enabled is False
+    assert no_grant.collection_paths == []
 
 
 def test_mcp_default_v17_memory_adapter_uses_product_search_when_read_rollout_enabled():

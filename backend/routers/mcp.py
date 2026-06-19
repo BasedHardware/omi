@@ -14,7 +14,6 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
-from config.v17_memory import V17RolloutConfig
 from database._client import db
 
 # from database.redis_db import get_filter_category_items
@@ -37,6 +36,7 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    read_v17_mcp_default_memory_rollout,
     search_v17_default_mcp_memories,
 )
 import database.mcp_api_key as mcp_api_key_db
@@ -157,13 +157,14 @@ def search_memories(
 ):
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
+    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
     v17_results = search_v17_default_mcp_memories(
         uid=uid,
         query=query,
         limit=limit,
         db_client=db,
-        rollout_capabilities=V17RolloutConfig.from_env().for_user(uid),
-        app_has_default_memory_grant=True,
+        rollout_capabilities=v17_rollout.rollout_capabilities,
+        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
     )
     if v17_results is not None:
         return v17_results

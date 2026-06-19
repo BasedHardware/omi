@@ -1,7 +1,9 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from config.v17_memory import V17Capabilities
+from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
+from database.v17_collections import V17Collections
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
 
@@ -20,6 +22,92 @@ ACTIVITY_PREFIXES = (
     'distracted on ',
     'viewing ',
 )
+
+
+@dataclass(frozen=True)
+class V17McpDefaultMemoryRolloutDecision:
+    uid: str
+    source_path: str
+    rollout_capabilities: V17Capabilities
+    app_has_default_memory_grant: bool
+    archive_capability: bool = False
+    reason: str = 'ok'
+
+    @property
+    def v17_default_mcp_enabled(self) -> bool:
+        return self.rollout_capabilities.v17_reads_enabled and self.app_has_default_memory_grant
+
+
+def _disabled_v17_mcp_rollout_decision(uid: str, source_path: str, reason: str) -> V17McpDefaultMemoryRolloutDecision:
+    return V17McpDefaultMemoryRolloutDecision(
+        uid=uid,
+        source_path=source_path,
+        rollout_capabilities=V17Capabilities(
+            uid=uid,
+            mode=V17Mode.off,
+            legacy_only=True,
+            shadow_artifacts_enabled=False,
+            v17_writes_enabled=False,
+            v17_reads_enabled=False,
+            legacy_reads_authoritative=True,
+        ),
+        app_has_default_memory_grant=False,
+        archive_capability=False,
+        reason=reason,
+    )
+
+
+def _mcp_default_memory_grant_enabled(data: dict) -> bool:
+    grants = data.get('grants')
+    if isinstance(grants, dict):
+        mcp_grants = grants.get('mcp')
+        if isinstance(mcp_grants, dict) and mcp_grants.get('default_memory') is True:
+            return True
+    return data.get('mcp_default_memory_grant') is True
+
+
+def read_v17_mcp_default_memory_rollout(*, uid: str, db_client) -> V17McpDefaultMemoryRolloutDecision:
+    """Read server-owned V17 MCP default-memory rollout state.
+
+    The authoritative per-user document is `users/{uid}/memory_control/state`.
+    Missing, malformed, or grant-less docs fail closed to legacy MCP search before
+    any `users/{uid}/memory_items` read. Archive is deliberately not derived here:
+    the MCP default search path always keeps `archive_capability=False`.
+    """
+
+    source_path = V17Collections(uid=uid).memory_control_state
+    try:
+        snapshot = db_client.document(source_path).get()
+        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
+        if not isinstance(data, dict):
+            return _disabled_v17_mcp_rollout_decision(uid, source_path, 'missing_rollout_state')
+        if data.get('uid', uid) != uid:
+            return _disabled_v17_mcp_rollout_decision(uid, source_path, 'uid_mismatch')
+
+        state = V17RolloutState(
+            uid=uid,
+            mode=data.get('mode', V17Mode.off.value),
+            mode_epoch=int(data.get('mode_epoch', 0) or 0),
+            cutover_epoch=int(data.get('cutover_epoch', 0) or 0),
+            account_generation=int(data.get('account_generation', 0) or 0),
+            last_reconciled_legacy_revision=data.get('last_reconciled_legacy_revision'),
+            fallback_projection_ready=data.get('fallback_projection_ready') is True,
+            persistent_v17_writes_started=data.get('persistent_v17_writes_started') is True,
+            decommission_reconciled=data.get('decommission_reconciled') is True,
+            writes_blocked=data.get('writes_blocked') is True,
+            stage_gates=data.get('stage_gates') or {},
+        )
+        capabilities = decide_v17_capabilities(uid, state.mode, state)
+        return V17McpDefaultMemoryRolloutDecision(
+            uid=uid,
+            source_path=source_path,
+            rollout_capabilities=capabilities,
+            app_has_default_memory_grant=_mcp_default_memory_grant_enabled(data),
+            archive_capability=False,
+            reason='ok',
+        )
+    except (TypeError, ValueError, AttributeError):
+        return _disabled_v17_mcp_rollout_decision(uid, source_path, 'malformed_rollout_state')
 
 
 def parse_mcp_datetime(value: Optional[str], field_name: str) -> Optional[datetime]:
