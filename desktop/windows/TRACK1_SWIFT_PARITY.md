@@ -79,11 +79,11 @@
 |-------|--------|
 | **macOS source** | `Sources/MainWindow/Pages/ChatPage.swift`, `Sources/MainWindow/Components/ChatMessagesView.swift`, `Sources/MainWindow/Components/ChatInputView.swift`, `Sources/Chat/CitationCardView.swift`, `Sources/Chat/SelectableMarkdown.swift` |
 | **Windows source** | `src/renderer/src/pages/Home.tsx`, `src/renderer/src/components/chat/ChatMessages.tsx` |
-| **Status** | 🟡 Partial |
-| **Visual gap** | macOS renders a dedicated full-page chat view. Windows merges chat with home/dashboard widgets; the chat bar collapses the widget area on first message. macOS has selectable markdown with syntax highlighting; Windows streams plain text. |
-| **Functional gap** | Missing: citation cards (inline source links on AI responses), audio attachment support, proper markdown rendering with syntax highlighting. |
-| **Proposed fix** | (1) Separate Chat into its own route/page rather than merged with Home. (2) Add a citation card component that renders source links beneath AI messages. (3) Add a markdown renderer (react-markdown or similar) for AI message content. |
-| **Priority** | P1 |
+| **Status** | 🟡 Partial → improved (Batch 5) |
+| **Visual gap** | macOS renders a dedicated full-page chat view. Windows merges chat with home/dashboard widgets; the chat bar collapses the widget area on first message. |
+| **Functional gap** | **Improved (Batch 5):** `Markdown.tsx` now renders headings with proper size hierarchy (h1/h2/h3), code blocks with language label + monospace font + dark background, accent-colored links (`--accent` color), and bold/italic/inline code. Chat thread is now text-selectable (overrides global `user-select:none`). Avatar alignment changed to `items-start` for taller messages. Message spacing improved (`space-y-3`). Streaming and reveal animation preserved. **Remaining gaps:** citation cards (no citation data exists in `ChatMsg` type — the API does not return source references at `/v2/messages`; this is a backend gap, not a frontend gap), audio attachment support. |
+| **Proposed fix** | (1) Citation cards require backend to return source metadata in the message stream — document as remaining gap. (2) Future: separate Chat into its own route if desired. |
+| **Priority** | P1 — IMPROVED |
 
 ---
 
@@ -352,7 +352,7 @@
 | App Shell / Sidebar Nav | 🟡 Partial | P0 |
 | Onboarding | 🟡 Partial | P2 |
 | Login / Auth | ✅ Works | — |
-| Chat / AI Conversation | 🟡 Partial | P1 |
+| Chat / AI Conversation | 🟡 Partial (improved) | P1 — IMPROVED |
 | Floating Overlay | 🟡 Partial | P1 |
 | Recording / Listening UI | 🟡 Partial (improved) | P1 — IMPROVED |
 | Conversation History | 🟡 Partial | P1 |

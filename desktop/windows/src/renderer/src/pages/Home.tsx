@@ -273,11 +273,11 @@ export function Home(): React.JSX.Element {
       <div
         ref={chatScrollRef}
         onScroll={onThreadScroll}
-        className="min-h-0 overflow-y-auto"
+        className="min-h-0 overflow-y-auto select-text"
         style={{ WebkitMaskImage: mask, maskImage: mask }}
       >
         <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-          <div className="mt-auto space-y-2 pb-2">
+          <div className="mt-auto space-y-3 pb-2">
             {started && showThread ? (
               windowed.map((m, i) => {
                 const isUser = m.role === 'user'
@@ -285,7 +285,7 @@ export function Home(): React.JSX.Element {
                 return (
                   <div
                     key={m.id ?? `${windowStart}-${i}`}
-                    className={cn('flex items-end gap-2.5', isUser && 'flex-row-reverse')}
+                    className={cn('flex items-start gap-2.5', isUser && 'flex-row-reverse')}
                   >
                     {isUser ? (
                       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/10">

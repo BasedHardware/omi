@@ -10,6 +10,9 @@
 // italic so `**x**` matches bold, not two italics.
 const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\([^)]+\))/g
 
+const MONO =
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace'
+
 function renderInline(text: string): React.ReactNode[] {
   return text.split(INLINE).map((part, i) => {
     if (!part) return null
@@ -17,7 +20,11 @@ function renderInline(text: string): React.ReactNode[] {
       return <strong key={i}>{part.slice(2, -2)}</strong>
     if (part.startsWith('`') && part.endsWith('`'))
       return (
-        <code key={i} className="rounded bg-white/10 px-1 py-0.5 text-[0.85em]">
+        <code
+          key={i}
+          className="rounded bg-white/10 px-1 py-0.5 text-[0.82em]"
+          style={{ fontFamily: MONO }}
+        >
           {part.slice(1, -1)}
         </code>
       )
@@ -37,7 +44,14 @@ function renderInline(text: string): React.ReactNode[] {
       const href = link[2].trim()
       if (/^(https?:|mailto:)/i.test(href))
         return (
-          <a key={i} href={href} target="_blank" rel="noreferrer" className="underline">
+          <a
+            key={i}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-[color:var(--accent)]/50 hover:decoration-[color:var(--accent)]"
+            style={{ color: 'var(--accent)', filter: 'brightness(1.5)' }}
+          >
             {link[1]}
           </a>
         )
@@ -62,22 +76,46 @@ export function Markdown({ text }: { text: string }): React.JSX.Element {
     const line = lines[i]
 
     if (FENCE.test(line.trim())) {
+      // Extract optional language label from the opening fence (e.g. ```python)
+      const lang = line.trim().slice(3).trim() || null
       const buf: string[] = []
       i++
       while (i < lines.length && !FENCE.test(lines[i].trim())) buf.push(lines[i++])
       i++ // consume closing fence
       blocks.push(
-        <pre key={key++} className="my-2 overflow-x-auto rounded bg-white/10 p-3 text-[0.85em]">
-          <code>{buf.join('\n')}</code>
-        </pre>
+        <div
+          key={key++}
+          className="my-2.5 overflow-hidden rounded-lg border border-white/10 select-text"
+        >
+          {lang && (
+            <div className="flex items-center border-b border-white/10 bg-white/[0.04] px-3 py-1.5">
+              <span className="text-[10px] text-white/40" style={{ fontFamily: MONO }}>
+                {lang}
+              </span>
+            </div>
+          )}
+          <pre
+            className="overflow-x-auto bg-white/[0.06] p-3 text-[0.8125em] leading-relaxed"
+            style={{ fontFamily: MONO }}
+          >
+            <code>{buf.join('\n')}</code>
+          </pre>
+        </div>
       )
       continue
     }
 
     const h = HEADING.exec(line)
     if (h) {
+      const level = h[1].length
+      const cls =
+        level === 1
+          ? 'mb-1 mt-3 text-base font-semibold text-white'
+          : level === 2
+            ? 'mb-0.5 mt-2.5 text-sm font-semibold text-white'
+            : 'mb-0.5 mt-2 text-sm font-medium text-white/90'
       blocks.push(
-        <p key={key++} className="mb-1 mt-2 font-semibold">
+        <p key={key++} className={cls}>
           {renderInline(h[2])}
         </p>
       )
