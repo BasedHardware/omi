@@ -2,7 +2,9 @@
   "scripts": {
     "test:v17-firestore-rules:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs\"",
     "test:v17-firestore-transactions:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_transaction_emulator_test.mjs\"",
-    "test:v17-firestore-python-apply:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"python3 backend/scripts/v17_firestore_python_apply_emulator_test.py\""
+    "test:v17-firestore-python-apply:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"python3 backend/scripts/v17_firestore_python_apply_emulator_test.py\"",
+    "test:v17-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"python3 backend/scripts/v17_vector_repair_outbox_emulator_test.py\"",
+    "test:v17-vector-repair-outbox-rules:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs\""
   },
   "dependencies": {
     "expo-file-system": "^18.0.12",

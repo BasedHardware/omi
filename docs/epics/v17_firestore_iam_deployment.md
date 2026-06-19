@@ -1,6 +1,6 @@
 # V17 Firestore IAM and Service Account Deployment Gate
 
-**Status:** documentation/static guard only. This is **not a cloud IAM validation** and does not claim that production IAM was inspected or changed. It makes the V17 production write-gate assumptions explicit until they can be validated against the real Firebase project and emulator.
+**Status:** local Firebase emulator gate now exists for V17 vector repair outbox persistence and client-rule denial, but this is **not a cloud IAM validation** and does not claim that production IAM was inspected or changed. It makes the V17 production write-gate assumptions explicit until they can be validated against the real Firebase project.
 
 ## Boundary
 
@@ -44,15 +44,35 @@ Before enabling V17 writes for any production user:
    - `V17_MODE=read`: superset of write; V17 read service authoritative for whitelisted users only after read/vector gates pass.
 6. Confirm account deletion/source tombstone generation fences and rollback compatibility projection are healthy before widening the allowlist.
 
-## Emulator validation prerequisites
+## Emulator validation gate
 
-Real Security Rules validation must be added once the local/CI environment has:
+Local Firebase emulator validation is now wired for the V17 vector repair/purge outbox writer:
 
-- Firebase CLI (`firebase`)
+```bash
+npm run test:v17-vector-repair-outbox:emulator
+npm run test:v17-vector-repair-outbox-rules:emulator
+```
+
+Prerequisites:
+
+- Firebase CLI (`firebase`) / `firebase-tools`
 - Java runtime (`java`) for the Firebase emulator
-- npm is not sufficient by itself
+- npm dependencies installed from the repository root (`npm install` when `node_modules` is absent)
+- Python backend dependencies including `google-cloud-firestore`
 
-Target emulator coverage: signed-in client reads/writes to every protected V17 collection are denied, while backend/Admin SDK access is exercised outside client rules. Record exact emulator commands and outputs in `v17_memory_implementation_tickets.md` when this becomes available.
+What this gate proves locally:
+
+- Backend/Admin-context writer path persists deterministic `vector_repair_purge` records at `users/{uid}/memory_outbox/{record_id}`.
+- Repeating the same stale-vector observation performs an idempotent `.set(...)` to the same stable document with the same `record_id`/`idempotency_key`.
+- New records retain the pending retry contract: `status=pending`, `attempt_count=0`, `last_error=null`.
+- Write failures are not silently swallowed by `write_v17_vector_repair_purge_outbox_records(...)`; exceptions propagate to the caller for route/worker telemetry and retry/dead-letter handling.
+- Signed-in client SDK direct read/create/update/delete on `memory_outbox` and the other protected V17 collections is denied by Firestore Security Rules; backend/Admin SDK access is required and bypasses client rules through IAM.
+
+What this gate does **not** prove:
+
+- Production cloud IAM/service-account bindings or deployed Security Rules in any real Firebase project.
+- Pinecone delete/repair behavior, tombstone precedence, duplicate stale-vector removal, retry/dead-letter workers, or central low-cardinality telemetry.
+- Shared `ns2` isolation or vector benchmark/cutover readiness.
 
 ## Rollback notes
 
@@ -69,4 +89,10 @@ cd backend
 pytest tests/unit/test_v17_firestore_security_rules.py tests/unit/test_v17_firestore_iam_deployment_doc.py -q
 ```
 
-Cloud IAM, deployed Security Rules, and Firebase emulator validation remain future gates until the required tools and production/project access are available.
+Cloud IAM and deployed Security Rules remain future gates until production project access is available. Local Firebase emulator validation is available through:
+
+```bash
+npm run test:v17-vector-repair-outbox:emulator
+npm run test:v17-vector-repair-outbox-rules:emulator
+cd backend && pytest tests/unit/test_v17_firestore_security_rules.py tests/unit/test_v17_firestore_iam_deployment_doc.py tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -q
+```

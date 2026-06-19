@@ -381,6 +381,27 @@ This closes only the fake-backed/server-flagged writer wiring seam for one produ
 - Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 Firestore emulator validation gate for vector repair outbox
+
+Continued Oracle P0-4 by adding and running a local Firebase emulator validation gate for V17 vector repair outbox persistence, without changing the production rollout verdict:
+
+- Added `backend/scripts/v17_vector_repair_outbox_emulator_test.py` and `npm run test:v17-vector-repair-outbox:emulator`.
+- The emulator harness uses the real Python Firestore client against `FIRESTORE_EMULATOR_HOST`, builds a deterministic `vector_repair_purge` outbox record, writes it twice through `write_v17_vector_repair_purge_outbox_records(...)`, and verifies the stable `users/{uid}/memory_outbox/{record_id}` document with unchanged `record_id`/`idempotency_key`.
+- The harness verifies the initial retry contract (`status="pending"`, `attempt_count=0`, `last_error=None`) and proves writer failure is explicit by asserting a failing document `.set(...)` exception propagates.
+- Added `npm run test:v17-vector-repair-outbox-rules:emulator` as the explicit rules-side companion command for the existing Security Rules emulator harness, which denies signed-in client direct read/create/update/delete on `memory_outbox` and other protected V17 collections. Backend/Admin context remains required; direct client writes are not assumed.
+- Updated `docs/epics/v17_firestore_iam_deployment.md` with exact commands, prerequisites, pass/fail criteria, IAM/rules assumptions, non-claims, and remaining worker/Pinecone/shared-namespace gates.
+- This is local emulator evidence only. It is **not** production cloud IAM validation, not deployed Security Rules validation, not a Pinecone delete/repair worker, not tombstone precedence proof, not shared-`ns2` proof, and not production approval.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED harness test (`1 failed`), GREEN harness test (`1 passed`), real Firestore emulator outbox persistence command exit 0 with idempotent path `users/v17-vector-repair-outbox-emulator-user/memory_outbox/v17vrp_a9f8abf2b6c7f8409d23f3bc63de76cf`, real rules emulator command exit 0 with client-denial PASS, plus focused/regression/async outputs from this commit.
+
+This closes only the local emulator validation subpoint for outbox persistence semantics and client-rule denial. Remaining P0-4/P0 work:
+
+- Validate production cloud IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
+- Implement the real idempotent Pinecone delete/repair worker with tombstone precedence, duplicate stale-ID proof, retries, dead-lettering, and low-cardinality error telemetry.
+- Prove shared `ns2` isolation; add vector overfetch/refill/budgets/central telemetry and app/key/scope authorization.
+- Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
