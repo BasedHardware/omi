@@ -124,7 +124,7 @@ def test_operation_verifies_server_computed_id_and_rejects_blank_terminal_fields
         MemoryOperation(**broken)
 
     with pytest.raises(ValidationError, match="committed_head"):
-        operation.mark_committed("")
+        operation.mark_committed("", committed_sequence=1)
 
 
 def test_operation_terminal_statuses_do_not_reopen_with_unvalidated_model_copy():
@@ -138,7 +138,7 @@ def test_operation_terminal_statuses_do_not_reopen_with_unvalidated_model_copy()
         account_generation=1,
         source_generation=1,
     )
-    committed = operation.mark_committed("commit_1")
+    committed = operation.mark_committed("commit_1", committed_sequence=1)
 
     with pytest.raises(ValueError, match="terminal"):
         committed.mark_retryable("should_not_reopen")

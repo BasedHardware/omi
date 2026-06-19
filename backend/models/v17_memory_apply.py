@@ -294,10 +294,15 @@ def apply_long_term_patch_transaction(
         )
     commit_id = control_state.next_commit_id(operation.operation_id)
     next_control = control_state.advance_head(commit_id)
-    committed_operation = operation.mark_committed(commit_id)
     if patch.decision == "skip_duplicate" or patch.decision.value == "skip_duplicate":
         outbox_events = _barrier_outbox_events(
             operation=operation, control_state=control_state, commit_id=commit_id, sequence=next_control.commit_sequence
+        )
+        committed_operation = operation.mark_committed(
+            commit_id,
+            committed_sequence=next_control.commit_sequence,
+            committed_memory_item_ids=[],
+            committed_outbox_event_ids=[event.event_id for event in outbox_events],
         )
         return ApplyResult(
             status=ApplyStatus.committed,
@@ -325,6 +330,12 @@ def apply_long_term_patch_transaction(
         )
         for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
     ]
+    committed_operation = operation.mark_committed(
+        commit_id,
+        committed_sequence=next_control.commit_sequence,
+        committed_memory_item_ids=[memory_item.memory_id],
+        committed_outbox_event_ids=[event.event_id for event in outbox_events],
+    )
     return ApplyResult(
         status=ApplyStatus.committed,
         control_state=next_control,

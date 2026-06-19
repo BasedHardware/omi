@@ -113,6 +113,9 @@ class MemoryOperation(BaseModel):
     source_generation: int
     observed_head_commit_id: Optional[str] = None
     committed_head_commit_id: Optional[str] = None
+    committed_sequence: Optional[int] = None
+    committed_memory_item_ids: List[str] = Field(default_factory=list)
+    committed_outbox_event_ids: List[str] = Field(default_factory=list)
     attempt_count: int = 0
     error_code: Optional[str] = None
     untrusted_proposed_operation_id: Optional[str] = None
@@ -186,6 +189,13 @@ class MemoryOperation(BaseModel):
             raise ValueError("generation and attempt counts must be nonnegative")
         return value
 
+    @field_validator("committed_sequence")
+    @classmethod
+    def validate_optional_nonnegative(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value < 0:
+            raise ValueError("committed_sequence must be nonnegative")
+        return value
+
     @field_validator("created_at", "updated_at")
     @classmethod
     def validate_timezone(cls, value: datetime) -> datetime:
@@ -214,6 +224,8 @@ class MemoryOperation(BaseModel):
             raise ValueError("logical_payload_digest does not match canonical logical payload")
         if self.status == MemoryOperationStatus.committed and not self.committed_head_commit_id:
             raise ValueError("committed operations require committed_head_commit_id")
+        if self.status == MemoryOperationStatus.committed and self.committed_sequence is None:
+            raise ValueError("committed operations require committed_sequence")
         if (
             self.status in {MemoryOperationStatus.retryable_failure, MemoryOperationStatus.permanent_failure}
             and not self.error_code
@@ -237,10 +249,20 @@ class MemoryOperation(BaseModel):
             error_code=error_code,
         )
 
-    def mark_committed(self, committed_head_commit_id: str) -> "MemoryOperation":
+    def mark_committed(
+        self,
+        committed_head_commit_id: str,
+        *,
+        committed_sequence: int,
+        committed_memory_item_ids: Optional[List[str]] = None,
+        committed_outbox_event_ids: Optional[List[str]] = None,
+    ) -> "MemoryOperation":
         return self._transition(
             status=MemoryOperationStatus.committed,
             committed_head_commit_id=committed_head_commit_id,
+            committed_sequence=committed_sequence,
+            committed_memory_item_ids=committed_memory_item_ids or [],
+            committed_outbox_event_ids=committed_outbox_event_ids or [],
             error_code=None,
         )
 

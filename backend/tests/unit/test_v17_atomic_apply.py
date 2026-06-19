@@ -111,13 +111,33 @@ def test_apply_rejects_deleted_or_purged_sources_before_memory_creation():
     assert result.outbox_events == []
 
 
+def test_new_commit_persists_replay_metadata_on_committed_operation():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    operation = _operation()
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=_patch())
+
+    assert result.status == ApplyStatus.committed
+    assert result.operation.committed_sequence == result.control_state.commit_sequence
+    assert result.operation.committed_memory_item_ids == [result.memory_items[0].memory_id]
+    assert result.operation.committed_outbox_event_ids == [event.event_id for event in result.outbox_events]
+
+
 def test_apply_is_idempotent_when_operation_already_committed():
     control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
-    committed = _operation().mark_committed("head1")
+    committed = _operation().mark_committed(
+        "head1",
+        committed_sequence=7,
+        committed_memory_item_ids=["mem_existing"],
+        committed_outbox_event_ids=["evt_projection", "evt_vector"],
+    )
 
     result = apply_long_term_patch_transaction(control_state=control, operation=committed, patch_payload=_patch())
 
     assert result.status == ApplyStatus.idempotent_skip
+    assert result.operation.committed_sequence == 7
+    assert result.operation.committed_memory_item_ids == ["mem_existing"]
+    assert result.operation.committed_outbox_event_ids == ["evt_projection", "evt_vector"]
     assert result.memory_items == []
     assert result.outbox_events == []
 
@@ -139,7 +159,7 @@ def test_control_state_rejects_blank_gap_or_backwards_projection_watermark():
 
 def test_committed_operation_with_different_patch_payload_is_payload_mismatch_not_idempotent():
     control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
-    committed = _operation().mark_committed("head1")
+    committed = _operation().mark_committed("head1", committed_sequence=1)
     different_patch = _patch(memory_text="User prefers verbose updates.")
 
     result = apply_long_term_patch_transaction(
