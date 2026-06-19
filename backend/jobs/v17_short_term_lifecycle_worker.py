@@ -174,7 +174,7 @@ def _coerce_dispositions(
     return dict(dispositions or {})
 
 
-def fetch_short_term_memory_items_firestore(*, uid: str, db_client) -> List[V17MemoryItem]:
+def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optional[int] = None) -> List[V17MemoryItem]:
     """Fetch authoritative Short-term V17 memory_items for a user.
 
     The lifecycle runner only evaluates `memory_items` in the Short-term tier;
@@ -184,9 +184,11 @@ def fetch_short_term_memory_items_firestore(*, uid: str, db_client) -> List[V17M
 
     if not uid or not uid.strip():
         raise ValueError('short-term lifecycle firestore fetch uid must be non-empty')
+    if limit is not None and limit <= 0:
+        raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
-    collection = db_client.collection(V17Collections(uid=uid).memory_items)
-    snapshots = collection.where('tier', '==', MemoryTier.short_term.value).stream()
+    query = db_client.collection(V17Collections(uid=uid).memory_items).where('tier', '==', MemoryTier.short_term.value)
+    snapshots = query.stream()
     items: List[V17MemoryItem] = []
     for snapshot in snapshots:
         item = V17MemoryItem(**(snapshot.to_dict() or {}))
@@ -194,7 +196,10 @@ def fetch_short_term_memory_items_firestore(*, uid: str, db_client) -> List[V17M
             raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
         if item.tier == MemoryTier.short_term:
             items.append(item)
-    return sorted(items, key=lambda item: item.memory_id)
+    items = sorted(items, key=lambda item: item.memory_id)
+    if limit is not None:
+        return items[:limit]
+    return items
 
 
 def run_short_term_lifecycle_firestore(
@@ -203,12 +208,13 @@ def run_short_term_lifecycle_firestore(
     db_client,
     run_id: str,
     now: Optional[datetime] = None,
+    limit: Optional[int] = None,
     dispositions: Optional[Mapping[str, ShortTermDisposition | str]] = None,
 ) -> ShortTermLifecycleWorkerReport:
     """Concrete Firestore lifecycle runner for authoritative Short-term items."""
 
     current_time = _current_time(now)
-    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client)
+    items = fetch_short_term_memory_items_firestore(uid=uid, db_client=db_client, limit=limit)
     store = FirestoreShortTermLifecycleTransitionStore(db_client=db_client, now=current_time)
     return process_short_term_lifecycle_items(
         items,

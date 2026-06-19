@@ -32,13 +32,22 @@ class _DocumentRef:
 
 
 class _CollectionRef:
-    def __init__(self, db_client, path, filters=None):
+    def __init__(self, db_client, path, filters=None, limit_count=None):
         self._db_client = db_client
         self.path = path
         self._filters = list(filters or [])
+        self._limit_count = limit_count
 
     def where(self, field_path, op_string, value):
-        return _CollectionRef(self._db_client, self.path, [*self._filters, (field_path, op_string, value)])
+        return _CollectionRef(
+            self._db_client,
+            self.path,
+            [*self._filters, (field_path, op_string, value)],
+            limit_count=self._limit_count,
+        )
+
+    def limit(self, limit_count):
+        return _CollectionRef(self._db_client, self.path, self._filters, limit_count=limit_count)
 
     def stream(self):
         prefix = f'{self.path}/'
@@ -48,6 +57,8 @@ class _CollectionRef:
                 continue
             if all(self._matches(data, field_path, op_string, value) for field_path, op_string, value in self._filters):
                 snapshots.append(_Snapshot(data))
+        if self._limit_count is not None:
+            snapshots = snapshots[: self._limit_count]
         return snapshots
 
     def _matches(self, data, field_path, op_string, value):
@@ -236,6 +247,31 @@ def test_fetch_short_term_memory_items_firestore_queries_authoritative_short_ter
 
     assert [item.memory_id for item in items] == ['fresh-short-term', 'stale-short-term']
     assert all(item.tier == MemoryTier.short_term for item in items)
+
+
+def test_fetch_short_term_memory_items_firestore_applies_bounded_limit_before_runner_persistence():
+    db_client = _FirestoreFake()
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    stale_a = _memory_item('a-stale-short-term', captured_at=now - timedelta(days=45))
+    stale_b = _memory_item('b-stale-short-term', captured_at=now - timedelta(days=45))
+    db_client.docs = {
+        f'users/u1/memory_items/{stale_a.memory_id}': _stored_item(stale_a),
+        f'users/u1/memory_items/{stale_b.memory_id}': _stored_item(stale_b),
+    }
+
+    report = run_short_term_lifecycle_firestore(uid='u1', db_client=db_client, now=now, run_id='runner-1', limit=1)
+
+    transition_docs = {
+        path: payload
+        for path, payload in db_client.docs.items()
+        if path.startswith('users/u1/short_term_lifecycle_transitions/')
+    }
+    assert report.created_count == 1
+    assert len(transition_docs) == 1
+    [payload] = transition_docs.values()
+    assert payload['memory_item_id'] == 'a-stale-short-term'
+    assert payload['default_access_allowed'] is False
+    assert payload['archive_default_visible'] is False
 
 
 def test_concrete_firestore_lifecycle_runner_persists_only_required_short_term_transitions_idempotently():

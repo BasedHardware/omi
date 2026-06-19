@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 os.environ.setdefault(
@@ -23,6 +24,13 @@ class _APIRouter:
     def get(self, path, **kwargs):
         def decorator(func):
             self.routes.append(("GET", path, kwargs, func))
+            return func
+
+        return decorator
+
+    def post(self, path, **kwargs):
+        def decorator(func):
+            self.routes.append(("POST", path, kwargs, func))
             return func
 
         return decorator
@@ -61,6 +69,11 @@ def _report(uid="u1"):
 def test_admin_router_registers_concrete_v17_admin_report_route():
     assert any(
         method == "GET" and path == "/v17/admin/users/{uid}/non-active-route-report"
+        for method, path, _kwargs, _func in v17_memory_admin.router.routes
+    )
+
+    assert any(
+        method == "POST" and path == "/v17/admin/users/{uid}/short-term-lifecycle/run"
         for method, path, _kwargs, _func in v17_memory_admin.router.routes
     )
 
@@ -108,3 +121,75 @@ def test_admin_endpoint_rejects_missing_or_invalid_admin_key(monkeypatch):
         raise AssertionError("expected admin auth failure")
 
     v17_memory_admin.fetch_non_active_route_audit_report.assert_not_called()
+
+
+def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    calls = []
+
+    class _Report:
+        created_records = [MagicMock(), MagicMock()]
+        existing_records = [MagicMock()]
+        skipped_memory_ids = ["fresh-short-term"]
+        created_count = 2
+        existing_count = 1
+        skipped_count = 1
+
+    def fake_run(*, uid, db_client, run_id, now=None, limit=None, dispositions=None):
+        calls.append((uid, db_client, run_id, now, limit, dispositions))
+        return _Report()
+
+    monkeypatch.setattr(v17_memory_admin, "run_short_term_lifecycle_firestore", fake_run)
+
+    response = v17_memory_admin.post_v17_short_term_lifecycle_run(
+        "u1",
+        run_id="manual-run-1",
+        evaluated_at="2026-06-19T12:00:00+00:00",
+        limit=25,
+        secret_key="secret",
+    )
+
+    assert calls == [
+        (
+            "u1",
+            v17_memory_admin.db,
+            "manual-run-1",
+            datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
+            25,
+            None,
+        )
+    ]
+    assert response == {
+        "uid": "u1",
+        "run_id": "manual-run-1",
+        "evaluated_at": "2026-06-19T12:00:00+00:00",
+        "evaluated_count": 4,
+        "created_count": 2,
+        "existing_count": 1,
+        "skipped_count": 1,
+        "transition_count": 3,
+        "skipped_memory_ids": ["fresh-short-term"],
+        "default_access_allowed": False,
+        "archive_default_visible": False,
+    }
+
+
+def test_admin_endpoint_rejects_invalid_short_term_lifecycle_inputs(monkeypatch):
+    os.environ["ADMIN_KEY"] = "secret"
+    fake_run = MagicMock()
+    monkeypatch.setattr(v17_memory_admin, "run_short_term_lifecycle_firestore", fake_run)
+
+    for kwargs in (
+        {"run_id": "", "limit": 25, "evaluated_at": None},
+        {"run_id": "run-1", "limit": 0, "evaluated_at": None},
+        {"run_id": "run-1", "limit": 1001, "evaluated_at": None},
+        {"run_id": "run-1", "limit": 25, "evaluated_at": "not-a-date"},
+    ):
+        try:
+            v17_memory_admin.post_v17_short_term_lifecycle_run("u1", secret_key="secret", **kwargs)
+        except _HTTPException as exc:
+            assert exc.status_code == 400
+        else:
+            raise AssertionError(f"expected invalid input failure for {kwargs}")
+
+    fake_run.assert_not_called()
