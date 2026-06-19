@@ -120,7 +120,11 @@ def _enabled_rollout_doc(uid="u1"):
             V17StageGate.write.value: PASSED,
             V17StageGate.read.value: PASSED,
         },
-        "grants": {"mcp": {"default_memory": True, "archive": True}},
+        "grants": {
+            "mcp": {"default_memory": True, "archive": True},
+            "developer_api": {"default_memory": True, "archive": True},
+            "omi_chat": {"default_memory": True, "archive": True},
+        },
     }
 
 
@@ -141,7 +145,7 @@ def test_admin_router_registers_concrete_v17_admin_report_route():
     )
 
 
-def test_admin_read_rollout_decision_endpoint_reports_enabled_policy_without_memory_item_reads(monkeypatch):
+def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_without_memory_item_reads(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
     monkeypatch.setattr(v17_memory_admin, "db", db_client)
@@ -150,53 +154,86 @@ def test_admin_read_rollout_decision_endpoint_reports_enabled_policy_without_mem
 
     assert db_client.document_get_paths == ["users/u1/memory_control/state"]
     assert db_client.collection_paths == []
-    assert response == {
-        "uid": "u1",
-        "source_path": "users/u1/memory_control/state",
-        "enabled": True,
-        "reason": "ok",
-        "mode": "read",
-        "v17_reads_enabled": True,
-        "legacy_reads_authoritative": False,
-        "mcp_default_memory_grant": True,
-        "archive_default_visible": False,
-        "archive_capability": False,
-        "fallback_reason": None,
-        "grants": {"mcp_default_memory": True},
-        "capabilities": {
-            "legacy_only": False,
-            "shadow_artifacts_enabled": True,
-            "v17_writes_enabled": True,
+    assert response["uid"] == "u1"
+    assert response["source_path"] == "users/u1/memory_control/state"
+    assert response["archive_default_visible"] is False
+    assert response["archive_capability"] is False
+    assert sorted(response["consumers"]) == ["developer_api", "mcp", "omi_chat"]
+    for consumer in ("mcp", "developer_api", "omi_chat"):
+        decision = response["consumers"][consumer]
+        assert decision == {
+            "consumer": consumer,
+            "enabled": True,
+            "reason": "ok",
+            "mode": "read",
             "v17_reads_enabled": True,
             "legacy_reads_authoritative": False,
-        },
-    }
+            "default_memory_grant": True,
+            "archive_default_visible": False,
+            "archive_capability": False,
+            "fallback_reason": None,
+            "capabilities": {
+                "legacy_only": False,
+                "shadow_artifacts_enabled": True,
+                "v17_writes_enabled": True,
+                "v17_reads_enabled": True,
+                "legacy_reads_authoritative": False,
+            },
+        }
 
 
-def test_admin_read_rollout_decision_endpoint_fails_closed_for_missing_malformed_uid_mismatch_and_no_grant(monkeypatch):
+def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_missing_malformed_uid_mismatch_and_no_grants(
+    monkeypatch,
+):
     os.environ["ADMIN_KEY"] = "secret"
     cases = [
-        ({}, "missing_rollout_state"),
+        (
+            {},
+            {
+                "mcp": "missing_rollout_state",
+                "developer_api": "missing_rollout_state",
+                "omi_chat": "missing_rollout_state",
+            },
+        ),
         (
             {"users/u1/memory_control/state": {"uid": "u1", "mode": "read", "stage_gates": "bad"}},
-            "malformed_rollout_state",
+            {
+                "mcp": "malformed_rollout_state",
+                "developer_api": "malformed_rollout_state",
+                "omi_chat": "malformed_rollout_state",
+            },
         ),
-        ({"users/u1/memory_control/state": _enabled_rollout_doc(uid="other")}, "uid_mismatch"),
         (
-            {"users/u1/memory_control/state": _enabled_rollout_doc() | {"grants": {"mcp": {}}}},
-            "missing_mcp_default_memory_grant",
+            {"users/u1/memory_control/state": _enabled_rollout_doc(uid="other")},
+            {"mcp": "uid_mismatch", "developer_api": "uid_mismatch", "omi_chat": "uid_mismatch"},
+        ),
+        (
+            {
+                "users/u1/memory_control/state": _enabled_rollout_doc()
+                | {"grants": {"mcp": {}, "developer_api": {}, "omi_chat": {}}}
+            },
+            {
+                "mcp": "missing_mcp_default_memory_grant",
+                "developer_api": "missing_developer_default_memory_grant",
+                "omi_chat": "missing_chat_default_memory_grant",
+            },
         ),
     ]
 
-    for docs, reason in cases:
+    for docs, expected_reasons in cases:
         db_client = _FirestoreFake(docs)
         monkeypatch.setattr(v17_memory_admin, "db", db_client)
 
         response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
 
-        assert response["enabled"] is False
-        assert response["reason"] == reason
-        assert response["fallback_reason"] == reason
+        for consumer, reason in expected_reasons.items():
+            decision = response["consumers"][consumer]
+            assert decision["enabled"] is False
+            assert decision["reason"] == reason
+            assert decision["fallback_reason"] == reason
+            assert decision["default_memory_grant"] is False
+            assert decision["archive_default_visible"] is False
+            assert decision["archive_capability"] is False
         assert response["archive_default_visible"] is False
         assert response["archive_capability"] is False
         assert db_client.document_get_paths == ["users/u1/memory_control/state"]

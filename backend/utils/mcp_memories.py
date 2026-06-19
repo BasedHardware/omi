@@ -3,7 +3,11 @@ from typing import Callable, Optional
 
 from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
-from utils.memory.v17_default_read_rollout import V17DefaultReadRolloutDecision, read_v17_default_read_rollout
+from utils.memory.v17_default_read_rollout import (
+    V17DefaultReadRolloutDecision,
+    build_v17_default_read_rollout_observability,
+    read_v17_default_read_rollout,
+)
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
 
 ACTIVITY_TAGS = {
@@ -29,29 +33,21 @@ V17McpDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
 def build_v17_mcp_default_memory_rollout_observability(
     decision: V17McpDefaultMemoryRolloutDecision,
 ) -> dict:
-    capabilities = decision.rollout_capabilities
-    fallback_reason = decision.fallback_reason
-    reason = fallback_reason or decision.reason
+    observability = build_v17_default_read_rollout_observability(decision)
     return {
         'uid': decision.uid,
         'source_path': decision.source_path,
         'enabled': decision.v17_default_mcp_enabled,
-        'reason': reason,
-        'mode': capabilities.mode.value,
-        'v17_reads_enabled': capabilities.v17_reads_enabled,
-        'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
-        'mcp_default_memory_grant': decision.app_has_default_memory_grant,
-        'archive_default_visible': False,
-        'archive_capability': decision.archive_capability,
-        'fallback_reason': fallback_reason,
-        'grants': {'mcp_default_memory': decision.app_has_default_memory_grant},
-        'capabilities': {
-            'legacy_only': capabilities.legacy_only,
-            'shadow_artifacts_enabled': capabilities.shadow_artifacts_enabled,
-            'v17_writes_enabled': capabilities.v17_writes_enabled,
-            'v17_reads_enabled': capabilities.v17_reads_enabled,
-            'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
-        },
+        'reason': observability['reason'],
+        'mode': observability['mode'],
+        'v17_reads_enabled': observability['v17_reads_enabled'],
+        'legacy_reads_authoritative': observability['legacy_reads_authoritative'],
+        'mcp_default_memory_grant': observability['default_memory_grant'],
+        'archive_default_visible': observability['archive_default_visible'],
+        'archive_capability': observability['archive_capability'],
+        'fallback_reason': observability['fallback_reason'],
+        'grants': {'mcp_default_memory': observability['default_memory_grant']},
+        'capabilities': observability['capabilities'],
     }
 
 

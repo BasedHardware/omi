@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
 from database.v17_collections import V17Collections
 
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
+DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
 
 
 @dataclass(frozen=True)
@@ -165,3 +166,73 @@ def read_v17_default_read_rollout(*, uid: str, db_client, consumer: str) -> V17D
             uid=uid, source_path=source_path, consumer=consumer, reason='malformed_rollout_state'
         )
     return normalize_v17_default_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
+
+
+def _read_v17_default_rollout_state_doc(*, uid: str, db_client):
+    source_path = V17Collections(uid=uid).memory_control_state
+    try:
+        snapshot = db_client.document(source_path).get()
+        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
+    except (TypeError, ValueError, AttributeError):
+        return source_path, None, 'malformed_rollout_state'
+    return source_path, data, None
+
+
+def read_v17_default_read_rollout_decisions(
+    *, uid: str, db_client, consumers: Iterable[str] = DEFAULT_READ_OBSERVABILITY_CONSUMERS
+) -> dict[str, V17DefaultReadRolloutDecision]:
+    """Read one rollout state doc and derive per-consumer default-read decisions."""
+
+    source_path, data, read_error = _read_v17_default_rollout_state_doc(uid=uid, db_client=db_client)
+    decisions = {}
+    for consumer in consumers:
+        if read_error is not None:
+            decisions[consumer] = disabled_v17_default_read_rollout_decision(
+                uid=uid, source_path=source_path, consumer=consumer, reason=read_error
+            )
+        else:
+            decisions[consumer] = normalize_v17_default_read_rollout_decision(
+                uid=uid, source_path=source_path, consumer=consumer, data=data
+            )
+    return decisions
+
+
+def build_v17_default_read_rollout_observability(decision: V17DefaultReadRolloutDecision) -> dict:
+    capabilities = decision.rollout_capabilities
+    fallback_reason = decision.fallback_reason
+    reason = fallback_reason or decision.reason
+    return {
+        'consumer': decision.consumer,
+        'enabled': decision.v17_default_enabled,
+        'reason': reason,
+        'mode': capabilities.mode.value,
+        'v17_reads_enabled': capabilities.v17_reads_enabled,
+        'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
+        'default_memory_grant': decision.app_has_default_memory_grant,
+        'archive_default_visible': False,
+        'archive_capability': decision.archive_capability,
+        'fallback_reason': fallback_reason,
+        'capabilities': {
+            'legacy_only': capabilities.legacy_only,
+            'shadow_artifacts_enabled': capabilities.shadow_artifacts_enabled,
+            'v17_writes_enabled': capabilities.v17_writes_enabled,
+            'v17_reads_enabled': capabilities.v17_reads_enabled,
+            'legacy_reads_authoritative': capabilities.legacy_reads_authoritative,
+        },
+    }
+
+
+def build_v17_default_read_rollout_observability_report(
+    decisions: dict[str, V17DefaultReadRolloutDecision],
+) -> dict:
+    source_path = next(iter(decisions.values())).source_path if decisions else ''
+    uid = next(iter(decisions.values())).uid if decisions else ''
+    return {
+        'uid': uid,
+        'source_path': source_path,
+        'archive_default_visible': False,
+        'archive_capability': False,
+        'consumers': {
+            consumer: build_v17_default_read_rollout_observability(decision) for consumer, decision in decisions.items()
+        },
+    }

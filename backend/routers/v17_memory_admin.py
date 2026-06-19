@@ -7,7 +7,10 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from database._client import db
 from jobs.v17_short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
 from utils.memory.v17_non_active_route_report import fetch_non_active_route_audit_report
-from utils.mcp_memories import build_v17_mcp_default_memory_rollout_observability, read_v17_mcp_default_memory_rollout
+from utils.memory.v17_default_read_rollout import (
+    build_v17_default_read_rollout_observability_report,
+    read_v17_default_read_rollout_decisions,
+)
 
 router = APIRouter()
 
@@ -66,14 +69,14 @@ def _short_term_lifecycle_response(
 def get_v17_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     """Inspect the server-owned V17 default read rollout decision for one user.
 
-    Reads only `users/{uid}/memory_control/state` through the shared MCP rollout
-    decision helper used by the default MCP caller. It never queries
+    Reads only `users/{uid}/memory_control/state` through the shared default-read
+    rollout helper used by MCP, developer API, and chat callers. It never queries
     `users/{uid}/memory_items`, and Archive remains default-invisible.
     """
 
     _require_admin_key(secret_key)
-    decision = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    return build_v17_mcp_default_memory_rollout_observability(decision)
+    decisions = read_v17_default_read_rollout_decisions(uid=uid, db_client=db)
+    return build_v17_default_read_rollout_observability_report(decisions)
 
 
 @router.get('/v17/admin/users/{uid}/non-active-route-report', tags=['admin', 'v17'])
