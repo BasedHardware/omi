@@ -47,6 +47,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   private var hasStartedRealPlayback = false
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
+
+  /// QueryTracer for the in-flight query, handed in by the floating-bar window.
+  /// Used to bracket the `tts_start` span (first real chunk → first audio out).
+  var tracer: QueryTracer?
   private let speechSynthesizer = AVSpeechSynthesizer()
 
   private override init() {}
@@ -130,6 +134,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     // Cancel filler and stop filler audio when first real chunk is ready
     if !hasStartedRealPlayback && text.count > 0 {
       hasStartedRealPlayback = true
+      tracer?.begin("tts_start")
       fillerTask?.cancel()
       fillerTask = nil
       audioPlayer?.stop()
@@ -342,6 +347,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       player.prepareToPlay()
       player.play()
       audioPlayer = player
+      tracer?.end("tts_start")
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
       log(
@@ -358,6 +364,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     utterance.volume = 1.0
     utterance.voice = preferredSystemVoice()
     speechSynthesizer.speak(utterance)
+    tracer?.end("tts_start")
   }
 
   nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
@@ -375,6 +382,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     fillerTask = nil
     if clearMode {
       currentMode = nil
+      // Drop the tracer only on full teardown. interruptCurrentResponse uses
+      // clearMode:false and runs just before the next query assigns a fresh
+      // tracer, so clearing there would discard the live one.
+      tracer = nil
     }
     streamedText = ""
     bufferedText = ""

@@ -16,12 +16,6 @@ struct SettingsSearchItem: Identifiable {
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
-    // Device
-    SettingsSearchItem(
-      name: "Device", subtitle: "Pair and manage your Bluetooth device",
-      keywords: ["device", "bluetooth", "ble", "pair", "pairing", "scan", "connect", "friend"],
-      section: .device, icon: "antenna.radiowaves.left.and.right", settingId: "device.pairing"),
-
     // General
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
@@ -330,7 +324,6 @@ struct SettingsSidebar: View {
   private let iconWidth: CGFloat = 20
   private let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
-    .device,
     .rewind,
     .transcription,
     .notifications,
@@ -515,7 +508,6 @@ struct SettingsSidebarItem: View {
   private var icon: String {
     switch section {
     case .general: return "gearshape"
-    case .device: return "antenna.radiowaves.left.and.right"
     case .rewind: return "clock.arrow.circlepath"
     case .transcription: return "waveform"
     case .notifications: return "bell"

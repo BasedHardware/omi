@@ -3791,6 +3791,10 @@ extension Notification.Name {
   /// (userInfo: ["destination": rawValue]) — for headless e2e inspection.
   static let desktopAutomationOpenExportRequested = Notification.Name(
     "desktopAutomationOpenExportRequested")
+  /// Posted to open an import connector sheet from Home or automation
+  /// (userInfo: ["connector": ImportConnector.id]).
+  static let desktopAutomationOpenImportRequested = Notification.Name(
+    "desktopAutomationOpenImportRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

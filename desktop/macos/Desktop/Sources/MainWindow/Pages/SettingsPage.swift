@@ -271,7 +271,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
-  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.gptRealtime2.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -303,7 +303,6 @@ struct SettingsContentView: View {
 
   enum SettingsSection: String, CaseIterable {
     case general = "General"
-    case device = "Device"
     case rewind = "Rewind"
     case transcription = "Transcription"
     case notifications = "Notifications"
@@ -452,8 +451,6 @@ struct SettingsContentView: View {
         switch selectedSection {
         case .general:
           generalSection
-        case .device:
-          DeviceSettingsPage()
         case .rewind:
           rewindSection
         case .transcription:
@@ -1644,7 +1641,6 @@ struct SettingsContentView: View {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
-              trackingItem("Device connection status")
               trackingItem("Transcript processing events")
               trackingItem("Conversation creation and updates")
               trackingItem("Memory extraction events")
@@ -3420,6 +3416,10 @@ struct SettingsContentView: View {
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
               }
+              // The picker writes @AppStorage directly (bypassing the RealtimeOmniSettings
+              // setter), so post the change ourselves — this is what re-warms the realtime
+              // hub on the newly selected provider (and is a no-op for unchanged providers).
+              NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
             }
           }
 

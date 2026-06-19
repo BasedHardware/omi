@@ -67,6 +67,7 @@ pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
 pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
 pub const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
+pub const REALTIME_SESSIONS_SUBCOLLECTION: &str = "realtime_sessions";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
@@ -400,6 +401,60 @@ impl FirestoreService {
         }).sum();
 
         Ok(total)
+    }
+
+    /// Record a minted realtime session for out-of-band billing reconciliation.
+    ///
+    /// The realtime WS is client↔provider direct, so the backend never sees the
+    /// minutes/tokens inline. This persists a NON-SECRET record of each minted session
+    /// (the doc id is a hash of the token via `document_id_from_seed`; the token itself
+    /// is never stored) so a reconciliation job can later attribute provider usage to
+    /// the user and write the cost into the llm_usage ledger via
+    /// `record_llm_usage(.., "realtime")`. `status` starts "minted"; the reconciler
+    /// flips it to "reconciled".
+    pub async fn record_realtime_session(
+        &self,
+        uid: &str,
+        token: &str,
+        provider: &str,
+        model: &str,
+        expires_at: &str,
+        max_minutes: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let session_id = document_id_from_seed(token);
+        let url = format!(
+            "{}/{}/{}/{}/{}",
+            self.base_url(),
+            USERS_COLLECTION,
+            uid,
+            REALTIME_SESSIONS_SUBCOLLECTION,
+            session_id
+        );
+        let minted_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let doc = json!({
+            "fields": {
+                "provider":    { "stringValue": provider },
+                "model":       { "stringValue": model },
+                "status":      { "stringValue": "minted" },
+                "minted_at":   { "timestampValue": minted_at },
+                "expires_at":  { "stringValue": expires_at },
+                "max_minutes": { "integerValue": max_minutes.to_string() },
+            }
+        });
+        let response = self
+            .build_request(reqwest::Method::PATCH, &url)
+            .await?
+            .json(&doc)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Firestore realtime-session write error: {}",
+                response.text().await?
+            )
+            .into());
+        }
+        Ok(())
     }
 
     // =========================================================================

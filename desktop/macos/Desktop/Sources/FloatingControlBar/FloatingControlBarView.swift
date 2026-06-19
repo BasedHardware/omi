@@ -360,12 +360,8 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 8) {
-            // Pulsing mic icon
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-                .scaleEffect(state.isVoiceListening ? 1.2 : 1.0)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: state.isVoiceListening)
+            // Playful realtime mic waveform (replaces the old pulsing red dot)
+            VoiceWaveformBars(isActive: state.isVoiceListening)
 
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)

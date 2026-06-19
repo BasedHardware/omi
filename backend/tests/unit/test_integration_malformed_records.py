@@ -16,6 +16,50 @@ from unittest.mock import MagicMock, patch
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+_MODELS_DIR = os.path.join(_BACKEND_DIR, 'models')
+_MODELS_DIR_PREFIX = _MODELS_DIR + os.sep
+
+
+def _is_real_model_module(module):
+    module_file = getattr(module, '__file__', None)
+    if isinstance(module_file, str):
+        return os.path.abspath(module_file).startswith(_MODELS_DIR_PREFIX)
+
+    module_paths = getattr(module, '__path__', None)
+    if not module_paths:
+        return False
+
+    try:
+        return any(os.path.abspath(str(path)) == _MODELS_DIR for path in module_paths)
+    except TypeError:
+        return False
+
+
+def _remove_model_stub(module_name):
+    module = sys.modules.pop(module_name, None)
+    if module is None or '.' not in module_name:
+        return
+
+    parent_name, child_name = module_name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, types.ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+def _restore_real_model_modules():
+    if _BACKEND_DIR not in sys.path:
+        sys.path.insert(0, _BACKEND_DIR)
+
+    for module_name in list(sys.modules):
+        if module_name != 'models' and not module_name.startswith('models.'):
+            continue
+        if not _is_real_model_module(sys.modules[module_name]):
+            _remove_model_stub(module_name)
+
+
+_restore_real_model_modules()
+
 _STUB = (
     'database',
     'utils',

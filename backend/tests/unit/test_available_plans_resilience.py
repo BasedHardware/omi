@@ -121,6 +121,7 @@ sys.modules.pop("utils.subscription", None)
 
 for _name in [
     "utils.fair_use",
+    "utils.byok",
     "utils.notifications",
     "utils.apps",
     "utils.stripe",
@@ -132,6 +133,10 @@ for _name in [
     sys.modules[_name] = _m
 
 sys.modules["utils.fair_use"].clear_fair_use_on_upgrade = MagicMock()
+
+_byok_mod = sys.modules["utils.byok"]
+_byok_mod.get_byok_key = MagicMock(return_value=None)
+_byok_mod.get_byok_keys = MagicMock(return_value={})
 
 _notif_mod = sys.modules["utils.notifications"]
 _notif_mod.send_notification = MagicMock()
@@ -155,7 +160,24 @@ _endpoints_mod.get_current_user_uid_no_byok_validation = lambda: "test-user"
 # Ensure utils.other has endpoints attr for `from utils.other import endpoints`
 sys.modules["utils.other"].endpoints = _endpoints_mod
 
-# Stripe — use real module but we'll mock Price.retrieve per-test
+_stripe_mod = types.ModuleType("stripe")
+_stripe_mod.Price = types.SimpleNamespace(retrieve=MagicMock())
+_stripe_mod.Subscription = types.SimpleNamespace(retrieve=MagicMock(), modify=MagicMock(), cancel=MagicMock())
+_stripe_mod.SubscriptionSchedule = types.SimpleNamespace(
+    list=MagicMock(), create=MagicMock(), modify=MagicMock(), release=MagicMock()
+)
+_stripe_mod.PromotionCode = types.SimpleNamespace(list=MagicMock())
+_stripe_mod.checkout = types.SimpleNamespace(Session=type("Session", (), {"create": MagicMock()}))
+_stripe_mod.billing_portal = types.SimpleNamespace(Session=types.SimpleNamespace(create=MagicMock()))
+_stripe_mod.Webhook = types.SimpleNamespace(construct_event=MagicMock())
+_stripe_mod.error = types.SimpleNamespace(
+    StripeError=Exception,
+    InvalidRequestError=Exception,
+    SignatureVerificationError=Exception,
+)
+sys.modules["stripe"] = _stripe_mod
+
+# Import the stubbed module so tests and payment.py share the same object.
 import stripe
 
 stripe.api_key = "sk_test_fake"

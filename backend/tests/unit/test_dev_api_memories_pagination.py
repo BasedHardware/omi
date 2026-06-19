@@ -8,6 +8,7 @@ failed). The handler now validates each record and skips+logs invalid ones, mirr
 
 import os
 import sys
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,8 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 class _AutoMockModule(ModuleType):
     def __getattr__(self, name):
@@ -25,6 +28,46 @@ class _AutoMockModule(ModuleType):
         mock = MagicMock()
         setattr(self, name, mock)
         return mock
+
+
+def _ensure_package_path(name: str, path: Path) -> ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
 
 
 _stubs = [
@@ -79,10 +122,16 @@ for _mod_name in _stubs:
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = _AutoMockModule(_mod_name)
 
+sys.modules['database._client'].document_id_from_seed = MagicMock(return_value='memory-id')
+sys.modules['database.vector_db'].upsert_memory_vectors_batch = MagicMock()
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
-# utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins.
-_endpoints = ModuleType('utils.other.endpoints')
+# utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins
+# without replacing an existing stub that another test may inspect later.
+_endpoints = sys.modules.get('utils.other.endpoints')
+if _endpoints is None:
+    _endpoints = ModuleType('utils.other.endpoints')
+    sys.modules['utils.other.endpoints'] = _endpoints
 
 
 def _fake_get_current_user_uid():  # pragma: no cover - dependency stand-in
@@ -93,10 +142,26 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
     return dependency
 
 
-_endpoints.get_current_user_uid = _fake_get_current_user_uid
-_endpoints.with_rate_limit = _fake_with_rate_limit
-_endpoints.get_user = MagicMock()
-sys.modules['utils.other.endpoints'] = _endpoints
+if not hasattr(_endpoints, 'get_current_user_uid'):
+    _endpoints.get_current_user_uid = _fake_get_current_user_uid
+if not hasattr(_endpoints, 'with_rate_limit'):
+    _endpoints.with_rate_limit = _fake_with_rate_limit
+if not hasattr(_endpoints, 'get_user'):
+    _endpoints.get_user = MagicMock()
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("routers", BACKEND_DIR / "routers")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
+_drop_stale_module("models.conversation_enums", BACKEND_DIR / "models" / "conversation_enums.py")
+_drop_stale_module("models.dev_api_key", BACKEND_DIR / "models" / "dev_api_key.py")
+_drop_stale_module("models.folder", BACKEND_DIR / "models" / "folder.py")
+_drop_stale_module("models.geolocation", BACKEND_DIR / "models" / "geolocation.py")
+_drop_stale_module("models.memories", BACKEND_DIR / "models" / "memories.py")
+_drop_stale_module("models.transcript_segment", BACKEND_DIR / "models" / "transcript_segment.py")
+_drop_stale_module("routers.developer", BACKEND_DIR / "routers" / "developer.py")
+_drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conversations" / "render.py")
 
 from datetime import datetime, timezone  # noqa: E402
 

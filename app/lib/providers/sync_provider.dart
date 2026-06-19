@@ -254,6 +254,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
     return sorted;
   }
+
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
   SyncMethod? get currentSyncMethod => _syncState.syncMethod;

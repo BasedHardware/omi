@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - NSHostingView sizingOptions access
@@ -12,6 +13,9 @@ private protocol HostingSizingConfigurable: AnyObject {
 extension NSHostingView: HostingSizingConfigurable {}
 
 struct DesktopHomeView: View {
+  private let minimumWindowWidth: CGFloat = 1200
+  private let minimumWindowHeight: CGFloat = 680
+
   @StateObject private var appState = AppState()
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
@@ -22,7 +26,7 @@ struct DesktopHomeView: View {
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
     return SidebarNavItem.dashboard.rawValue
   }()
-  @State private var isSidebarCollapsed: Bool = false
+  @State private var isSidebarCollapsed: Bool = true
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
@@ -362,7 +366,7 @@ struct DesktopHomeView: View {
       }
     }
     .background(OmiColors.backgroundPrimary)
-    .frame(minWidth: 900, minHeight: 600)
+    .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
     .preferredColorScheme(.dark)
     .tint(OmiColors.purplePrimary)
     .onAppear {
@@ -375,17 +379,7 @@ struct DesktopHomeView: View {
       // which traverses the ENTIRE view tree (~200 samples per window per trigger).
       // Removing .minSize from sizingOptions prevents this full-tree traversal.
       // The window's min size is enforced at the AppKit level instead.
-      DispatchQueue.main.async {
-        for window in NSApp.windows {
-          if window.title.lowercased().hasPrefix("omi") {
-            window.appearance = NSAppearance(named: .darkAqua)
-            window.minSize = NSSize(width: 900, height: 600)
-            // Remove .minSize from hosting view's sizingOptions.
-            // Search contentView itself + all descendants.
-            Self.disableMinSizeComputation(in: window)
-          }
-        }
-      }
+      enforceMainWindowMinimumSize()
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
@@ -402,6 +396,7 @@ struct DesktopHomeView: View {
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
+      enforceMainWindowMinimumSize()
       reportAutomationState()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification))
@@ -411,6 +406,32 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
       notification in
       handleAutomationNavigation(notification)
+    }
+  }
+
+  private func enforceMainWindowMinimumSize() {
+    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    DispatchQueue.main.async {
+      for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentMinSize = minimumContentSize
+        window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
+
+        let currentContentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
+        let widthDelta = max(0, minimumContentSize.width - currentContentSize.width)
+        let heightDelta = max(0, minimumContentSize.height - currentContentSize.height)
+        if widthDelta > 0 || heightDelta > 0 {
+          var frame = window.frame
+          frame.size.width += widthDelta
+          frame.size.height += heightDelta
+          frame.origin.y -= heightDelta
+          window.setFrame(frame, display: true, animate: false)
+        }
+
+        // Remove .minSize from hosting view's sizingOptions.
+        // Search contentView itself + all descendants.
+        Self.disableMinSizeComputation(in: window)
+      }
     }
   }
 
@@ -448,10 +469,10 @@ struct DesktopHomeView: View {
   private func redirectIfPageHidden() {
     // Tier 0 or tier 6+ shows everything — no redirect needed
     guard currentTierLevel > 0 && currentTierLevel < 6 else { return }
-    // Don't redirect from settings/permissions/device/help pages
+    // Don't redirect from settings/permissions/help pages
     let nonMainPages: Set<Int> = [
       SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue,
-      SidebarNavItem.device.rawValue, SidebarNavItem.help.rawValue,
+      SidebarNavItem.help.rawValue,
     ]
     guard !nonMainPages.contains(selectedIndex) else { return }
 
@@ -471,6 +492,10 @@ struct DesktopHomeView: View {
   /// Whether to hide the sidebar (rewind mode)
   private var hideSidebar: Bool {
     OMIApp.launchMode == .rewind
+  }
+
+  private var showsPrimarySidebar: Bool {
+    false
   }
 
   private var currentAppStateLabel: String {
@@ -564,8 +589,6 @@ struct DesktopHomeView: View {
       return .settings
     case "permissions":
       return .permissions
-    case "device":
-      return .device
     case "help":
       return .help
     default:
@@ -607,31 +630,37 @@ struct DesktopHomeView: View {
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
       // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
       // tracking system still tries to evaluate them during window key state changes.
-      ZStack {
-        if !hideSidebar {
-          SidebarView(
-            selectedIndex: $selectedIndex,
-            isCollapsed: $isSidebarCollapsed,
-            appState: appState
-          )
-          .opacity(isInSettings ? 0 : 1)
-          .allowsHitTesting(!isInSettings)
-        }
-
-        if isInSettings {
-          SettingsSidebar(
-            selectedSection: $selectedSettingsSection,
-            highlightedSettingId: $highlightedSettingId,
-            onBack: {
-              withAnimation(.easeInOut(duration: 0.2)) {
-                selectedIndex = previousIndexBeforeSettings
-              }
+      if isInSettings {
+        SettingsSidebar(
+          selectedSection: $selectedSettingsSection,
+          highlightedSettingId: $highlightedSettingId,
+          onBack: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+              selectedIndex =
+                previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
+                ? SidebarNavItem.dashboard.rawValue
+                : previousIndexBeforeSettings
             }
-          )
+          }
+        )
+        .fixedSize(horizontal: true, vertical: false)
+        .clipped()
+      } else if showsPrimarySidebar {
+        ZStack {
+          if showsPrimarySidebar {
+            SidebarView(
+              selectedIndex: $selectedIndex,
+              isCollapsed: $isSidebarCollapsed,
+              appState: appState
+            )
+            .opacity(isInSettings ? 0 : 1)
+            .allowsHitTesting(!isInSettings)
+          }
+
         }
+        .fixedSize(horizontal: true, vertical: false)
+        .clipped()
       }
-      .fixedSize(horizontal: true, vertical: false)
-      .clipped()
 
       // Main content area with rounded container
       ZStack {
@@ -656,17 +685,32 @@ struct DesktopHomeView: View {
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
-        PageContentView(
-          selectedIndex: selectedIndex,
-          appState: appState,
-          viewModelContainer: viewModelContainer,
-          selectedSettingsSection: $selectedSettingsSection,
-          highlightedSettingId: $highlightedSettingId,
-          selectedTabIndex: $selectedIndex
-        )
-        .id(selectedIndex)
-        .transition(.opacity.combined(with: .move(edge: .trailing)))
-        .animation(.easeInOut(duration: 0.2), value: selectedIndex)
+        VStack(spacing: 0) {
+          if selectedIndex != SidebarNavItem.dashboard.rawValue {
+            PageChromeBar(
+              onHome: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                  selectedIndex = SidebarNavItem.dashboard.rawValue
+                }
+              }
+            )
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+          }
+
+          PageContentView(
+            selectedIndex: selectedIndex,
+            appState: appState,
+            viewModelContainer: viewModelContainer,
+            selectedSettingsSection: $selectedSettingsSection,
+            highlightedSettingId: $highlightedSettingId,
+            selectedTabIndex: $selectedIndex
+          )
+          .id(selectedIndex)
+          .transition(.opacity.combined(with: .move(edge: .trailing)))
+          .animation(.easeInOut(duration: 0.2), value: selectedIndex)
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
@@ -724,12 +768,8 @@ struct DesktopHomeView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-      // Set the section directly and navigate to settings. Without this the
-      // settings pane opens on whatever section was last selected (General),
-      // leaving no path to reach Device pairing from the device widget (#5917).
-      selectedSettingsSection = .device
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
+      if let url = URL(string: "https://www.omi.me") {
+        NSWorkspace.shared.open(url)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
@@ -808,6 +848,52 @@ struct DesktopHomeView: View {
   }
 }
 
+private struct PageChromeBar: View {
+  let onHome: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
+      Spacer()
+    }
+    .frame(height: 34)
+  }
+}
+
+private struct PageChromeButton: View {
+  let title: String
+  let systemImage: String
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 7) {
+        Image(systemName: systemImage)
+          .scaledFont(size: 12, weight: .semibold)
+        Text(title)
+          .scaledFont(size: 12, weight: .semibold)
+      }
+      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, 11)
+      .padding(.vertical, 7)
+      .background(
+        Capsule(style: .continuous)
+          .fill(.ultraThinMaterial)
+      )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
+  }
+}
+
 /// Dismissible top banner shown when a Neo (unlimited) user opens the desktop app.
 /// Neo is a mobile/web plan with no desktop access; the CTA routes to Settings →
 /// Plan & Usage where the existing Operator upgrade flow lives.
@@ -877,6 +963,7 @@ private struct PageContentView: View {
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
           selectedIndex: $selectedTabIndex)
       case 1:
         ConversationsPageHost(appState: appState)
@@ -908,8 +995,6 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
-      case 11:
-        DeviceSettingsPage()
       case 12:
         HelpPage()
       default:
@@ -918,6 +1003,7 @@ private struct PageContentView: View {
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
           selectedIndex: $selectedTabIndex)
       }
     }

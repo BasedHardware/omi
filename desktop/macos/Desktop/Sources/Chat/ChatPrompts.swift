@@ -1369,6 +1369,24 @@ struct ChatPrompts {
 /// Helper class to build prompts with template variables
 struct ChatPromptBuilder {
 
+    /// Shared formatter — `DateFormatter` is expensive to construct, and
+    /// `currentDatetimeString` is on the per-query hot path. Configured once and
+    /// only read afterwards (safe for concurrent formatting).
+    private static let datetimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        f.timeZone = .current
+        return f
+    }()
+
+    /// Human-readable "now" in the user's timezone ("yyyy-MM-dd HH:mm:ss").
+    /// Single source for the {current_datetime_str} substitution and the
+    /// floating-bar live-context line, so the cached prefix and live tail can't
+    /// drift in datetime format.
+    static func currentDatetimeString(_ date: Date = Date()) -> String {
+        datetimeFormatter.string(from: date)
+    }
+
     /// Build a system prompt with the given variables
     static func build(
         template: String,
@@ -1390,15 +1408,11 @@ struct ChatPromptBuilder {
         pluginInfo: String = "",
         citedInstruction: String = ""
     ) -> String {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        dateFormatter.timeZone = TimeZone.current
-
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.timeZone = TimeZone.current
 
         let now = Date()
-        let datetime = currentDatetime ?? dateFormatter.string(from: now)
+        let datetime = currentDatetime ?? currentDatetimeString(now)
         let datetimeISO = currentDatetimeISO ?? isoFormatter.string(from: now)
         let utcFormatter = DateFormatter()
         utcFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
@@ -1438,11 +1452,13 @@ struct ChatPromptBuilder {
         goalSection: String = "",
         tasksSection: String = "",
         aiProfileSection: String = "",
-        databaseSchema: String = ""
+        databaseSchema: String = "",
+        currentDatetime: String? = nil
     ) -> String {
         var prompt = build(
             template: ChatPrompts.desktopChat,
             userName: userName,
+            currentDatetime: currentDatetime,
             memoriesSection: memoriesSection,
             goalSection: goalSection
         )
