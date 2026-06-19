@@ -11,7 +11,9 @@ from langchain_core.runnables import RunnableConfig
 
 import database.memories as memory_db
 import database.vector_db as vector_db
+from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.v17_chat_memory_adapter import search_v17_default_chat_memories_text
 from utils.retrieval.hybrid import rrf_rerank
 import logging
 
@@ -262,6 +264,16 @@ def search_memories_tool(
 
     # Cap limit at 20
     limit = min(limit, 20)
+
+    v17_default_memories = search_v17_default_chat_memories_text(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=firestore_db,
+    )
+    if v17_default_memories is not None:
+        logger.info("✅ search_memories_tool - using V17 default chat memory results")
+        return v17_default_memories
 
     try:
         # Over-fetch then rerank: pull more vector candidates than we need so the

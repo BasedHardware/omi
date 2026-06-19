@@ -4,7 +4,7 @@ from typing import Optional
 from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
 from database.v17_collections import V17Collections
 
-SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api'}
+SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 
 
 @dataclass(frozen=True)
@@ -30,9 +30,15 @@ class V17DefaultReadRolloutDecision:
         return self.consumer == 'developer_api' and self.v17_default_enabled
 
     @property
+    def v17_default_chat_enabled(self) -> bool:
+        return self.consumer == 'omi_chat' and self.v17_default_enabled
+
+    @property
     def grant_reason_key(self) -> str:
         if self.consumer == 'developer_api':
             return 'developer'
+        if self.consumer == 'omi_chat':
+            return 'chat'
         return self.consumer
 
     @property
@@ -73,7 +79,12 @@ def disabled_v17_default_read_rollout_decision(
 def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
     grants = data.get('grants')
     if isinstance(grants, dict):
-        grant_keys = ['developer', 'developer_api'] if consumer == 'developer_api' else [consumer]
+        if consumer == 'developer_api':
+            grant_keys = ['developer', 'developer_api']
+        elif consumer == 'omi_chat':
+            grant_keys = ['omi_chat', 'chat']
+        else:
+            grant_keys = [consumer]
         for grant_key in grant_keys:
             consumer_grants = grants.get(grant_key)
             if isinstance(consumer_grants, dict) and consumer_grants.get('default_memory') is True:
@@ -83,6 +94,8 @@ def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
         return data.get('mcp_default_memory_grant') is True
     if consumer == 'developer_api':
         return data.get('developer_default_memory_grant') is True
+    if consumer == 'omi_chat':
+        return data.get('omi_chat_default_memory_grant') is True or data.get('chat_default_memory_grant') is True
     return False
 
 

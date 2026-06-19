@@ -40,6 +40,7 @@ pytest tests/unit/test_short_term_lifecycle.py -v
 pytest tests/unit/test_v17_product_memory_items.py -v
 pytest tests/unit/test_v17_product_memory_read_service.py -v
 pytest tests/unit/test_v17_default_read_rollout_decision.py -v
+pytest tests/unit/test_v17_chat_memory_adapter.py -v
 pytest tests/unit/test_v17_developer_memory_adapter.py -v
 pytest tests/unit/test_v17_mcp_memory_adapter.py -v
 pytest tests/unit/test_v17_product_memory_router.py -v
