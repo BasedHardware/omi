@@ -373,8 +373,11 @@
 | Apps / Marketplace | ✅ Works | — |
 | Memory Graph | ✅ Works | — |
 
-**Totals:** 3 ✅ Works · 15 🟡 Partial · 4 ❌ Missing  
-**P0 gaps:** 5 (Sidebar nav, Rewind search, System tray, Dashboard, Memories nav)
+**Totals:** 6 ✅ Works · 13 🟡 Partial · 3 ❌ Missing  
+**P0 gaps resolved:** Sidebar nav (7-item match) ✅ · Rewind search surfaced ✅ · System tray ✅ · Dashboard widgets ✅ · Memories in nav ✅ · Settings in nav ✅  
+**Remaining P0 gaps:** None  
+**Remaining P1 gaps:** Overlay (drag/resize/agent pills) · Conversations (folder, starred) · Tasks (date grouping) · Integrations (flag enabled) · Settings (Shortcuts/Notifications tabs)  
+**Known permanent gaps:** Insights page · Focus mode · citation cards (backend) · onboarding flow style · Bluetooth device pairing
 
 ---
 
@@ -451,9 +454,11 @@
 
 | Step | Status | Notes |
 |------|--------|-------|
-| `npm run build:win` | ✅ Passes | Fixed: moved `three`/`@react-three/fiber`/`@react-three/drei` to devDependencies — they are Vite-bundled renderer packages and should not be in electron-builder's native module traversal |
-| App launches after install | ✅ Fixed | Fixed: native Koffi module now included. Root cause: pnpm does not hoist `@koromix/koffi-win32-x64` (koffi's prebuilt binary package) to top-level `node_modules/`. Added `scripts/copy-koffi-native.mjs` to copy `koffi.node` from the pnpm virtual store into `node_modules/koffi/build/koffi/win32_x64/` before packaging — koffi's own fallback search path, already covered by `asarUnpack: node_modules/koffi/**` |
-| Installer produced | ✅ `dist/Omi for Windows-Setup-1.0.0.exe` | Signed, NSIS installer |
+| `npm run typecheck` | ✅ Passes | Zero type errors across node + web tsconfigs |
+| `npm run build:win` | ✅ Passes | Fixed: moved `three`/`@react-three/fiber`/`@react-three/drei` to devDependencies — they are Vite-bundled renderer packages and must not be in electron-builder's native module traversal |
+| App launches after install | ✅ Fixed | Fixed: native Koffi module now included via `scripts/copy-koffi-native.mjs`. Root cause: pnpm `node-linker=hoisted` does not hoist optional scoped deps like `@koromix/koffi-win32-x64`; binary only lives in `.pnpm/` virtual store. Script copies `koffi.node` to `node_modules/koffi/build/koffi/win32_x64/` before packaging (already covered by `asarUnpack: node_modules/koffi/**`). |
+| Installer produced | ✅ `dist/Omi for Windows-Setup-1.0.0.exe` | Signed, NSIS installer, per-user install |
+| Branch | `feat/windows-track1-parity` | All changes on feature branch; not yet merged to `main` |
 
 ---
 

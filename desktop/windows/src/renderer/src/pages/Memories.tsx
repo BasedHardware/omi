@@ -231,7 +231,7 @@ export function Memories(): React.JSX.Element {
                 className="input-field resize-none"
               />
               <div className="mt-3 flex items-center justify-end gap-2">
-                <span className="mr-auto text-xs text-white/35">⌘/Ctrl + Enter to save</span>
+                <span className="mr-auto text-xs text-white/35">Ctrl+Enter to save</span>
                 <button onClick={closeCompose} className="btn-ghost px-3 py-2" disabled={saving}>
                   Cancel
                 </button>
