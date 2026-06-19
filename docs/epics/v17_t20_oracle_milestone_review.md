@@ -402,6 +402,29 @@ This closes only the local emulator validation subpoint for outbox persistence s
 - Produce real cloud/Pinecone/Firestore/benchmark evidence before production read/vector cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 first idempotent vector repair/purge outbox worker seam
+
+Continued Oracle P0-4 with the first narrow pure worker seam for prepared `vector_repair_purge` outbox records, without changing the production rollout verdict:
+
+- Added `backend/database/v17_vector_repair_outbox_worker.py` with `process_v17_vector_repair_purge_outbox_records(...)`.
+- The seam is fake-injectable: it accepts an authoritative item loader, vector deleter, vector repairer, and outbox updater, and does not import/call Pinecone directly.
+- Idempotency semantics are explicit for this seam: terminal/leased statuses (`completed`, `dead_letter`, `in_progress`) and duplicate same-batch `idempotency_key` records are skipped before side effects; pending records are patched to `in_progress` before the injected vector action and `completed` after success.
+- Tombstone/delete precedence is explicit: missing authoritative items, `reason=missing_authoritative_item`, deleted/tombstoned/purged authoritative items, and missing/tombstoned/purged source state choose vector delete; live authoritative stale projection/revision/source/content records choose repair.
+- Failure handling is deterministic: injected delete/repair exceptions are converted to retry/dead-letter patches with incremented `attempt_count`, `last_error`, and `status=pending|dead_letter` based on `max_attempts`.
+- Added `backend/tests/unit/test_v17_vector_repair_outbox_worker.py` covering missing item delete, live item repair, tombstone precedence delete, terminal/in-progress/duplicate idempotency skips, and retry/dead-letter failure handling; added the test file to `backend/test.sh`.
+- This remains a worker seam only. It does **not** start production background execution, claim real Pinecone delete/upsert, prove duplicate physical stale-ID removal in Pinecone, validate production cloud IAM/deployed rules, prove shared `ns2`, or approve rollout.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing worker module (`ModuleNotFoundError`), GREEN worker tests (`5 passed`), focused vector/outbox/product regression (`31 passed`), full `pytest tests/unit/test_v17_*.py -q` (`219 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the first fake-injectable worker decision/idempotency/retry seam. Remaining P0-4/P0 work:
+
+- Validate production cloud IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
+- Add a real leased Firestore reader/ack writer for `users/{uid}/memory_outbox/*` and Cloud Run/Tasks scheduling semantics.
+- Implement injected real Pinecone delete/upsert repair functions and prove duplicate stale-ID removal with Pinecone data, including tombstoned/deleted/missing authoritative items.
+- Add central low-cardinality telemetry/alerts for worker attempts, action counts, retry/dead-letter reasons, latency, and stale-vector rates.
+- Prove shared `ns2` isolation; add overfetch/refill/budgets, app/key/scope auth, and real benchmark/cloud evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
