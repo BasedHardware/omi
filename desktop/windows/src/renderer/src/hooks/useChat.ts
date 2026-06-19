@@ -9,7 +9,13 @@ import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
-export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
+export type ChatCitation = { id: string; title: string; emoji?: string; created_at?: string }
+export type ChatMsg = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  citations?: ChatCitation[]
+}
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
@@ -275,8 +281,32 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // action items", "Searching memories") — those aren't part of the reply,
       // so drop them — and (b) encodes reply newlines as the literal token
       // `__CRLF__` so they survive single-line SSE framing; restore those.
+      // (c) The `done:` line carries a base64-encoded ResponseMessage JSON with
+      // the `memories` field — cited conversations for citation cards.
+      let citationsFromDone: ChatCitation[] = []
+      const parseDone = (line: string): void => {
+        try {
+          const b64 = line.slice('done:'.length).trim()
+          if (!b64) return
+          const json = JSON.parse(atob(b64)) as {
+            memories?: { id: string; structured: { title: string; emoji: string }; created_at?: string }[]
+          }
+          citationsFromDone = (json.memories ?? []).map((m) => ({
+            id: m.id,
+            title: m.structured?.title ?? m.id,
+            emoji: m.structured?.emoji || undefined,
+            created_at: m.created_at
+          }))
+        } catch {
+          /* malformed done payload — ignore */
+        }
+      }
       const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:')) return null
+        if (!line) return null
+        if (line.startsWith('done:')) {
+          parseDone(line)
+          return null
+        }
         const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
         if (content.startsWith('think:')) return null
         return content.replace(/__CRLF__/g, '\n')
@@ -324,6 +354,17 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+      }
+      // Attach citations from the done: payload to the final assistant message.
+      if (citationsFromDone.length > 0) {
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = {
+            ...next[next.length - 1],
+            citations: citationsFromDone
+          }
           return next
         })
       }

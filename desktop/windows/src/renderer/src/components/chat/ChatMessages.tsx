@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ChatMsg } from '../../hooks/useChat'
+import { Link } from 'react-router-dom'
+import type { ChatMsg, ChatCitation } from '../../hooks/useChat'
 import { Markdown } from '../Markdown'
 
 // Smooth text reveal, decoupled from SSE chunk sizes so a reply streams in evenly
@@ -47,6 +48,35 @@ const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = 
   }
 }
 
+function CitationCards({
+  citations,
+  variant
+}: {
+  citations: ChatCitation[]
+  variant: 'main' | 'overlay'
+}): React.JSX.Element {
+  return (
+    <div className={`mt-2 space-y-1.5 ${variant === 'overlay' ? 'max-w-[80%]' : 'max-w-[85%]'}`}>
+      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-white/35">
+        <span>Sources</span>
+      </p>
+      {citations.map((c) => (
+        <Link
+          key={c.id}
+          to={`/conversations/${c.id}`}
+          className="flex items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-left transition-colors hover:bg-white/[0.08]"
+        >
+          {c.emoji && <span className="text-base leading-none">{c.emoji}</span>}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[11px] font-medium leading-none text-white/80">{c.title}</p>
+          </div>
+          <span className="shrink-0 text-[10px] text-white/25">›</span>
+        </Link>
+      ))}
+    </div>
+  )
+}
+
 /**
  * Shared chat message list used by both the main window (Home) and the overlay.
  * Owns bubble styling (per `variant`), markdown rendering, and the smooth reveal
@@ -67,17 +97,22 @@ export function ChatMessages({
       {messages.map((m, i) => {
         const isLast = i === messages.length - 1
         return (
-          <div key={m.id ?? i} className={m.role === 'user' ? cls.user : cls.assistant}>
-            {m.role === 'assistant' ? (
-              m.content ? (
-                <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
-              ) : sending ? (
-                '…'
+          <div key={m.id ?? i} className="flex flex-col">
+            <div className={m.role === 'user' ? cls.user : cls.assistant}>
+              {m.role === 'assistant' ? (
+                m.content ? (
+                  <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
+                ) : sending ? (
+                  '…'
+                ) : (
+                  ''
+                )
               ) : (
-                ''
-              )
-            ) : (
-              <div className="whitespace-pre-wrap">{m.content}</div>
+                <div className="whitespace-pre-wrap">{m.content}</div>
+              )}
+            </div>
+            {m.role === 'assistant' && m.citations && m.citations.length > 0 && (
+              <CitationCards citations={m.citations} variant={variant} />
             )}
           </div>
         )

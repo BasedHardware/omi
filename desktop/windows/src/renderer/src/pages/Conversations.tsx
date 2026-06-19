@@ -9,7 +9,8 @@ import {
   CheckSquare,
   Check,
   MessageSquare,
-  Radio
+  Radio,
+  Star
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import {
@@ -32,6 +33,7 @@ type CloudConversation = {
   created_at?: string
   finished_at?: string
   status?: string
+  starred?: boolean
   transcript_segments?: { text: string }[]
   structured?: {
     title?: string | null
@@ -83,7 +85,7 @@ function ConversationSkeleton(): React.JSX.Element {
   )
 }
 
-type FilterKind = 'all' | 'chat' | 'recording'
+type FilterKind = 'all' | 'chat' | 'recording' | 'starred'
 
 export function Conversations(): React.JSX.Element {
   const navigate = useNavigate()
@@ -116,6 +118,7 @@ export function Conversations(): React.JSX.Element {
           subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
           preview: c.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
           source: 'cloud',
+          starred: c.starred ?? false,
           sortAt: created
         })
       }
@@ -179,9 +182,22 @@ export function Conversations(): React.JSX.Element {
     })
   }, [])
 
+  const toggleStar = async (id: string, current: boolean): Promise<void> => {
+    const next = !current
+    // Optimistic update
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, starred: next } : r)))
+    try {
+      await omiApi.patch(`/v1/conversations/${id}/starred`, null, { params: { starred: next } })
+    } catch {
+      // Revert on failure
+      setRows((rs) => rs.map((r) => (r.id === id ? { ...r, starred: current } : r)))
+    }
+  }
+
   const filtered = rows.filter((r) => {
     if (filter === 'chat' && r.localKind !== 'chat') return false
     if (filter === 'recording' && r.localKind !== 'recording') return false
+    if (filter === 'starred' && !r.starred) return false
     if (query.trim()) {
       const q = query.trim().toLowerCase()
       return (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
@@ -281,38 +297,27 @@ export function Conversations(): React.JSX.Element {
         </div>
 
         <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'all'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter('chat')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'chat'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Chats
-          </button>
-          <button
-            onClick={() => setFilter('recording')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'recording'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />
-            Recordings
-          </button>
+          {(
+            [
+              { id: 'all', label: 'All', Icon: null },
+              { id: 'starred', label: 'Starred', Icon: Star },
+              { id: 'chat', label: 'Chats', Icon: MessageSquare },
+              { id: 'recording', label: 'Recordings', Icon: Radio }
+            ] as const
+          ).map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => setFilter(id)}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                filter === id
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+              }`}
+            >
+              {Icon && <Icon className="h-3.5 w-3.5" />}
+              {label}
+            </button>
+          ))}
         </div>
 
         <button
@@ -378,12 +383,20 @@ export function Conversations(): React.JSX.Element {
         )}
         {!loading && filtered.length === 0 && (
           <EmptyState
-            icon={GanttChartSquare}
-            title={query || filter !== 'all' ? 'No matching conversations' : 'No conversations yet'}
+            icon={filter === 'starred' ? Star : GanttChartSquare}
+            title={
+              filter === 'starred' && !query
+                ? 'No starred conversations'
+                : query || filter !== 'all'
+                  ? 'No matching conversations'
+                  : 'No conversations yet'
+            }
             description={
-              query || filter !== 'all'
-                ? 'Try a different search or filter.'
-                : 'Start a recording to capture audio and screen context. Your conversations will appear here.'
+              filter === 'starred' && !query
+                ? 'Star a conversation to find it quickly. Hover a row and click the star icon.'
+                : query || filter !== 'all'
+                  ? 'Try a different search or filter.'
+                  : 'Start a recording to capture audio and screen context. Your conversations will appear here.'
             }
             action={
               query || filter !== 'all' ? undefined : (
@@ -440,30 +453,48 @@ export function Conversations(): React.JSX.Element {
                       ) : null}
                     </button>
                   ) : (
-                    <Link
-                      to={`/conversations/${r.id}`}
-                      className="surface-card-interactive block p-5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="font-display text-lg font-semibold leading-tight text-text-primary">
-                          {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                          {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                        </div>
-                        {r.localKind === 'chat' ? (
-                          <span className="badge shrink-0">Chat</span>
-                        ) : (
-                          r.source === 'local' && (
-                            <span className="badge-warning shrink-0">Not synced</span>
-                          )
-                        )}
-                      </div>
-                      {r.subtitle && (
-                        <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
+                    <div className="surface-card-interactive group relative block">
+                      {r.source === 'cloud' && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            void toggleStar(r.id, r.starred ?? false)
+                          }}
+                          title={r.starred ? 'Unstar' : 'Star'}
+                          className={`absolute right-3 top-3 rounded-md p-1.5 transition-all ${
+                            r.starred
+                              ? 'text-amber-400'
+                              : 'text-white/0 group-hover:text-white/35 hover:!text-white/70'
+                          }`}
+                        >
+                          <Star
+                            className="h-3.5 w-3.5"
+                            fill={r.starred ? 'currentColor' : 'none'}
+                          />
+                        </button>
                       )}
-                      <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
-                        {r.preview}
-                      </p>
-                    </Link>
+                      <Link to={`/conversations/${r.id}`} className="block p-5">
+                        <div className="flex items-start justify-between gap-3 pr-6">
+                          <div className="font-display text-lg font-semibold leading-tight text-text-primary">
+                            {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
+                            {r.title || <span className="italic text-text-tertiary">loading…</span>}
+                          </div>
+                          {r.localKind === 'chat' ? (
+                            <span className="badge shrink-0">Chat</span>
+                          ) : (
+                            r.source === 'local' && (
+                              <span className="badge-warning shrink-0">Not synced</span>
+                            )
+                          )}
+                        </div>
+                        {r.subtitle && (
+                          <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
+                        )}
+                        <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
+                          {r.preview}
+                        </p>
+                      </Link>
+                    </div>
                   )}
                 </li>
               )
