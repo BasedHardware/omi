@@ -342,6 +342,7 @@ IRREDUCIBLE_PRODUCT_API_DECISIONS = [
 
 ORACLE_IMPLEMENTATION_SHAPE = {
     "decision_service": "backend/utils/memory/v17_v3_compatibility.py",
+    "request_adapter": "backend/utils/memory/v17_v3_request_adapter.py",
     "read_service": "backend/utils/memory/v17_v3_memory_read_service.py",
     "response_adapter": "backend/utils/memory/v17_v3_response_adapter.py",
     "projection_service": "backend/database/v17_v3_compatibility_projection.py",
@@ -496,6 +497,25 @@ RESPONSE_ADAPTER_PROOF = {
     ],
 }
 
+REQUEST_ADAPTER_PROOF = {
+    "service": "backend/utils/memory/v17_v3_request_adapter.py",
+    "test": "backend/tests/unit/test_v17_v3_request_adapter.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "pure_local_query_parameter_to_read_service_request_contract",
+        "legacy_limit_offset_preserved_as_legacy_primary_only",
+        "v17_cursor_mode_disallows_offset_and_5000_first_page_override",
+        "v17_limit_bounds_validated_without_expanding_to_5000",
+        "category_filter_state_bound_into_filter_hash_and_cursor_binding",
+        "unsupported_filters_fail_closed_no_silent_legacy_fallback",
+        "include_archive_default_false_unavailable_explicit_archive_blocked_for_v3_default",
+        "source_and_read_mode_bounded_to_v17_compatibility_projection",
+        "no_fastapi_dependency_route_wiring_external_calls_or_mutations",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -527,6 +547,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "memory_read_service_proof": MEMORY_READ_SERVICE_PROOF,
         "write_convergence_proof": WRITE_CONVERGENCE_PROOF,
         "response_adapter_proof": RESPONSE_ADAPTER_PROOF,
+        "request_adapter_proof": REQUEST_ADAPTER_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -547,6 +568,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "memory_read_service_proof_present": True,
             "write_convergence_proof_present": True,
             "response_adapter_proof_present": True,
+            "request_adapter_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

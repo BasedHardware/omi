@@ -170,6 +170,7 @@ def test_v3_readiness_pins_oracle_implementation_shape_and_unsafe_approaches():
 
     shape = report["oracle_implementation_shape"]
     assert shape["decision_service"] == "backend/utils/memory/v17_v3_compatibility.py"
+    assert shape["request_adapter"] == "backend/utils/memory/v17_v3_request_adapter.py"
     assert shape["read_service"] == "backend/utils/memory/v17_v3_memory_read_service.py"
     assert shape["response_adapter"] == "backend/utils/memory/v17_v3_response_adapter.py"
     assert shape["projection_store"] == "users/{uid}/memories as V17-derived compatibility projection"
@@ -309,6 +310,24 @@ def test_v3_readiness_links_pure_decision_and_cursor_service_proofs_without_roll
         "archive_default_unavailable_no_stale_short_term_default_visible_proof_fields_only",
     ]
 
+    request_adapter_proof = report["request_adapter_proof"]
+    assert request_adapter_proof["service"] == "backend/utils/memory/v17_v3_request_adapter.py"
+    assert request_adapter_proof["test"] == "backend/tests/unit/test_v17_v3_request_adapter.py"
+    assert request_adapter_proof["runtime_wired"] is False
+    assert request_adapter_proof["production_rollout_approved"] is False
+    assert request_adapter_proof["external_calls"] == []
+    assert request_adapter_proof["covered_defaults"] == [
+        "pure_local_query_parameter_to_read_service_request_contract",
+        "legacy_limit_offset_preserved_as_legacy_primary_only",
+        "v17_cursor_mode_disallows_offset_and_5000_first_page_override",
+        "v17_limit_bounds_validated_without_expanding_to_5000",
+        "category_filter_state_bound_into_filter_hash_and_cursor_binding",
+        "unsupported_filters_fail_closed_no_silent_legacy_fallback",
+        "include_archive_default_false_unavailable_explicit_archive_blocked_for_v3_default",
+        "source_and_read_mode_bounded_to_v17_compatibility_projection",
+        "no_fastapi_dependency_route_wiring_external_calls_or_mutations",
+    ]
+
 
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
@@ -329,6 +348,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "memory_read_service_proof_present": True,
         "write_convergence_proof_present": True,
         "response_adapter_proof_present": True,
+        "request_adapter_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -348,6 +368,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_v3_memory_read_service.py" in test_sh
     assert "test_v17_v3_write_convergence.py" in test_sh
     assert "test_v17_v3_response_adapter.py" in test_sh
+    assert "test_v17_v3_request_adapter.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in ticket_doc
@@ -355,6 +376,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_memory_read_service.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_write_convergence.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_response_adapter.py" in ticket_doc
+    assert "backend/utils/memory/v17_v3_request_adapter.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
@@ -363,4 +385,5 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_memory_read_service.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_write_convergence.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_response_adapter.py" in oracle_doc
+    assert "backend/utils/memory/v17_v3_request_adapter.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc
