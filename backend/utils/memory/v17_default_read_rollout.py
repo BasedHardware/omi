@@ -8,6 +8,7 @@ from database.v17_collections import V17Collections
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
 V17_DEFAULT_READ_ROLLOUT_METRIC_NAME = 'v17_default_read_rollout_decisions_total'
+V17_GLOBAL_READ_GATE_PATH = 'memory_control/v17_global_read_gate'
 _LOW_CARDINALITY_FALLBACK_REASON_BUCKETS = {
     'malformed_rollout_state',
     'missing_chat_default_memory_grant',
@@ -25,6 +26,19 @@ class V17ReadDecision(str, Enum):
     USE_LEGACY_SAFE = 'USE_LEGACY_SAFE'
     DENY_MEMORY = 'DENY_MEMORY'
     SHADOW_ONLY = 'SHADOW_ONLY'
+
+
+@dataclass(frozen=True)
+class V17GlobalReadGateDecision:
+    source_path: str
+    read_decision: V17ReadDecision
+    reason: str = 'ok'
+
+    @property
+    def fallback_reason(self) -> Optional[str]:
+        if self.read_decision == V17ReadDecision.USE_V17:
+            return None
+        return self.reason
 
 
 @dataclass(frozen=True)
@@ -93,6 +107,58 @@ class V17DefaultReadRolloutDecision:
         if not self.app_has_default_memory_grant:
             return f'missing_{self.grant_reason_key}_default_memory_grant'
         return f'v17_default_{self.grant_reason_key}_disabled'
+
+
+def normalize_v17_global_read_gate(data) -> V17GlobalReadGateDecision:
+    """Normalize global V17 read kill-switch state.
+
+    This gate is deliberately independent from per-user
+    `users/{uid}/memory_control/state`. Missing or malformed config denies V17
+    reads so product routes can fail before per-user Firestore/vector/item reads.
+    """
+
+    if not isinstance(data, dict):
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='missing_global_read_gate',
+        )
+    v17_reads_enabled = data.get('v17_reads_enabled')
+    kill_switch_active = data.get('kill_switch_active')
+    if not isinstance(v17_reads_enabled, bool) or not isinstance(kill_switch_active, bool):
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='malformed_global_read_gate',
+        )
+    if kill_switch_active:
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='global_v17_read_kill_switch_active',
+        )
+    if not v17_reads_enabled:
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='global_v17_reads_disabled',
+        )
+    return V17GlobalReadGateDecision(source_path=V17_GLOBAL_READ_GATE_PATH, read_decision=V17ReadDecision.USE_V17)
+
+
+def read_v17_global_read_gate(*, db_client) -> V17GlobalReadGateDecision:
+    """Read the global emergency V17 product-read gate before per-user rollout state."""
+
+    try:
+        snapshot = db_client.document(V17_GLOBAL_READ_GATE_PATH).get()
+        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
+    except Exception:
+        return V17GlobalReadGateDecision(
+            source_path=V17_GLOBAL_READ_GATE_PATH,
+            read_decision=V17ReadDecision.DENY_MEMORY,
+            reason='malformed_global_read_gate',
+        )
+    return normalize_v17_global_read_gate(data)
 
 
 def disabled_v17_default_read_rollout_decision(

@@ -188,6 +188,14 @@ def test_main_registers_v17_product_memory_router():
     assert "app.include_router(v17_memory_product.router)" in contents
 
 
+def _global_read_gate_doc(enabled=True, kill_switch=False):
+    return {'v17_reads_enabled': enabled, 'kill_switch_active': kill_switch}
+
+
+def _global_read_gate_path():
+    return v17_memory_product.V17_GLOBAL_READ_GATE_PATH
+
+
 def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
@@ -198,6 +206,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
     db_client = _FirestoreFake(
         {
+            _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
                 'uid': 'u1',
                 'mode': 'read',
@@ -216,7 +225,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 
     response = v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
 
-    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['fresh-short-term', 'long-term']
     assert response['uid'] == 'u1'
@@ -229,6 +238,74 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
     assert response['policy']['app_has_default_memory_grant'] is True
     assert response['policy']['archive_capability'] is False
     assert response['archive_default_visible'] is False
+
+
+def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(enabled=True, kill_switch=True)})
+    vector_query = MagicMock()
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+
+    route_calls = [
+        lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
+        lambda: v17_memory_product.search_v17_vector_memory(
+            query='coffee', limit=10, uid='u1', vector_query=vector_query
+        ),
+        lambda: v17_memory_product.search_v17_archive_memory(
+            query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
+        ),
+    ]
+
+    for call_route in route_calls:
+        try:
+            call_route()
+        except _HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail['read_decision'] == 'DENY_MEMORY'
+            assert exc.detail['fallback_reason'] == 'global_v17_read_kill_switch_active'
+        else:
+            raise AssertionError('expected global V17 read kill switch to deny product route')
+
+    assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
+    assert db_client.collection_paths == []
+    vector_query.assert_not_called()
+    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
+    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+
+
+def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
+    db_client = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read'}})
+    vector_query = MagicMock()
+    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+
+    route_calls = [
+        lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
+        lambda: v17_memory_product.search_v17_vector_memory(
+            query='coffee', limit=10, uid='u1', vector_query=vector_query
+        ),
+        lambda: v17_memory_product.search_v17_archive_memory(
+            query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
+        ),
+    ]
+
+    for call_route in route_calls:
+        try:
+            call_route()
+        except _HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail['read_decision'] == 'DENY_MEMORY'
+            assert exc.detail['fallback_reason'] == 'missing_global_read_gate'
+        else:
+            raise AssertionError('expected missing global V17 read gate to deny product route')
+
+    assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
+    assert db_client.collection_paths == []
+    vector_query.assert_not_called()
+    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
+    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
 def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
@@ -264,7 +341,7 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
     monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
-        db_client = _FirestoreFake(docs)
+        db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
         monkeypatch.setattr(v17_memory_product, "db", db_client)
         try:
             v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
@@ -275,7 +352,7 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         else:
             raise AssertionError(f'expected product search to fail closed for {expected_reason}')
 
-        assert db_client.document_paths == ['users/u1/memory_control/state']
+        assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
         assert db_client.collection_paths == []
 
     v17_memory_product.fetch_default_product_memory_search.assert_not_called()
@@ -366,7 +443,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
     monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
-        db_client = _FirestoreFake(docs)
+        db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
         monkeypatch.setattr(v17_memory_product, "db", db_client)
         try:
             v17_memory_product.search_v17_archive_memory(
@@ -380,7 +457,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         else:
             raise AssertionError(f'expected archive route to fail closed for {expected_reason}')
 
-        assert db_client.document_paths == ['users/u1/memory_control/state']
+        assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
         assert db_client.collection_paths == []
 
     v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
@@ -393,6 +470,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
     db_client = _FirestoreFake(
         {
+            _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
                 'uid': 'u1',
                 'mode': 'read',
@@ -413,7 +491,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
         query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
     )
 
-    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['archive']
     assert response['policy']['consumer'] == 'omi_chat'
@@ -425,7 +503,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
 
 
 def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
-    db_client = _FirestoreFake({})
+    db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
     monkeypatch.setattr(v17_memory_product, "db", db_client)
 
@@ -437,7 +515,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
     else:
         raise AssertionError('expected disabled persisted rollout to fail closed')
 
-    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == []
     vector_query.assert_not_called()
 
@@ -454,6 +532,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
     db_client = _FirestoreFake(
         {
+            _global_read_gate_path(): _global_read_gate_doc(),
             'users/u1/memory_control/state': {
                 'uid': 'u1',
                 'mode': 'read',
@@ -491,7 +570,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
         query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
     )
 
-    assert db_client.document_paths == ['users/u1/memory_control/state']
+    assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
     assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']

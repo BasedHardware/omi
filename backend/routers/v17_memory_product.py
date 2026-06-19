@@ -6,9 +6,11 @@ from database._client import db
 from models.v17_product_memory import MemoryAccessPolicy
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
+    V17_GLOBAL_READ_GATE_PATH,
     build_v17_default_read_rollout_observability,
     read_v17_archive_read_rollout,
     read_v17_default_read_rollout,
+    read_v17_global_read_gate,
 )
 from utils.memory.v17_product_memory_read_service import (
     MAX_PRODUCT_MEMORY_READ_LIMIT,
@@ -57,6 +59,23 @@ def _policy_payload(policy: MemoryAccessPolicy) -> dict:
     }
 
 
+def _global_read_gate_observability(gate) -> dict:
+    return {
+        'source_path': gate.source_path,
+        'read_decision': gate.read_decision.value,
+        'fallback_reason': gate.fallback_reason,
+        'reason': gate.fallback_reason or gate.reason,
+    }
+
+
+def _require_global_v17_read_gate() -> dict:
+    gate = read_v17_global_read_gate(db_client=db)
+    observability = _global_read_gate_observability(gate)
+    if gate.read_decision != V17ReadDecision.USE_V17:
+        raise HTTPException(status_code=403, detail=observability)
+    return observability
+
+
 @router.get('/v17/memory/search', tags=['memories', 'v17'])
 def search_v17_product_memory(
     query: str = Query(''),
@@ -73,6 +92,7 @@ def search_v17_product_memory(
     """
 
     _validate_search_pagination(limit, offset)
+    global_read_gate = _require_global_v17_read_gate()
     rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
     if rollout.read_decision != V17ReadDecision.USE_V17:
@@ -93,6 +113,7 @@ def search_v17_product_memory(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     response['policy'] = _policy_payload(policy)
+    response['global_read_gate'] = global_read_gate
     response['rollout'] = rollout_observability
     response['archive_default_visible'] = False
     return response
@@ -115,6 +136,7 @@ def search_v17_vector_memory(
     """
 
     _validate_vector_limit(limit)
+    global_read_gate = _require_global_v17_read_gate()
     rollout = read_v17_default_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
     if rollout.read_decision != V17ReadDecision.USE_V17:
@@ -134,6 +156,7 @@ def search_v17_vector_memory(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     response['policy'] = _policy_payload(policy)
+    response['global_read_gate'] = global_read_gate
     response['rollout'] = rollout_observability
     response['archive_default_visible'] = False
     return response
@@ -159,6 +182,7 @@ def search_v17_archive_memory(
     if not include_archive:
         raise HTTPException(status_code=403, detail='explicit archive capability is required')
 
+    global_read_gate = _require_global_v17_read_gate()
     rollout = read_v17_archive_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
     rollout_observability = build_v17_default_read_rollout_observability(rollout)
     if rollout.read_decision != V17ReadDecision.USE_V17 or not rollout.archive_capability:
@@ -179,6 +203,7 @@ def search_v17_archive_memory(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     response['policy'] = _policy_payload(policy)
+    response['global_read_gate'] = global_read_gate
     response['rollout'] = rollout_observability
     response['archive_default_visible'] = False
     response['archive_capability_required'] = True

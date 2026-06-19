@@ -124,6 +124,26 @@ This closes the narrow Oracle P0-1 subpoint for the explicit Archive product rou
 - Expand shared route authorization to any remaining V17 product/caller surfaces before production rollout.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — global V17 product-read gate / emergency kill switch slice
+
+Implemented the next narrow P0-1 global-gate slice after persisted Archive authorization, without changing the production rollout verdict:
+
+- Added `V17_GLOBAL_READ_GATE_PATH = memory_control/v17_global_read_gate` plus `read_v17_global_read_gate(...)` / `normalize_v17_global_read_gate(...)` in `backend/utils/memory/v17_default_read_rollout.py`.
+- The global gate is independent of per-user `users/{uid}/memory_control/state`; product routes read it first and require boolean `v17_reads_enabled=true` and boolean `kill_switch_active=false`.
+- Missing global config, malformed config, disabled global reads, and active kill switch all return explicit `DENY_MEMORY` reasons (`missing_global_read_gate`, `malformed_global_read_gate`, `global_v17_reads_disabled`, `global_v17_read_kill_switch_active`). This intentionally fails safe/closed under the Oracle-risk posture.
+- Applied the gate before per-user rollout reads, vector calls, or `users/{uid}/memory_items` reads on product `/v17/memory/search`, `/v17/memory/vector/search`, and explicit `/v17/memory/archive/search?include_archive=true`.
+- Enabled global gate preserves existing per-user `USE_V17` default and Archive decisions; Archive remains default-unavailable and still requires explicit intent plus persisted Archive capability.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `V17_GLOBAL_READ_GATE_PATH`, GREEN focused tests (`24 passed`), formatted/focused regression (`26 passed`), full `pytest tests/unit/test_v17_*.py -q` (`182 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes the narrow Oracle P0-1 subpoint for the product default/vector/Archive routes' global emergency read gate. Remaining P0 work:
+
+- Continue P0-2 by rolling explicit `USE_V17` / `USE_LEGACY_SAFE` / `DENY_MEMORY` / `SHADOW_ONLY` semantics across remaining fallback callers and denying unsafe legacy downgrades.
+- Address P0-3 write/read split-brain before authoritative read cutover.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

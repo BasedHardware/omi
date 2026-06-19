@@ -1,9 +1,11 @@
 from config.v17_memory import PASSED, V17Mode, V17StageGate
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
+    V17_GLOBAL_READ_GATE_PATH,
     build_v17_default_read_rollout_audit_events,
     legacy_safe_v17_default_read_rollout_decision,
     read_v17_archive_read_rollout,
+    read_v17_global_read_gate,
     render_v17_default_read_rollout_metrics,
     read_v17_default_read_rollout,
     read_v17_default_read_rollout_decisions,
@@ -69,6 +71,48 @@ def _enabled_rollout_doc(uid='u1'):
         'mcp_default_memory_grant': False,
         'developer_default_memory_grant': False,
     }
+
+
+def test_global_read_gate_allows_reads_only_when_enabled_and_kill_switch_inactive():
+    db_client = _FirestoreFake({V17_GLOBAL_READ_GATE_PATH: {'v17_reads_enabled': True, 'kill_switch_active': False}})
+
+    decision = read_v17_global_read_gate(db_client=db_client)
+
+    assert db_client.document_get_paths == [V17_GLOBAL_READ_GATE_PATH]
+    assert db_client.collection_paths == []
+    assert decision.read_decision == V17ReadDecision.USE_V17
+    assert decision.fallback_reason is None
+
+
+def test_global_read_gate_fails_closed_for_missing_disabled_kill_switch_and_malformed_config():
+    cases = [
+        ({}, 'missing_global_read_gate'),
+        (
+            {V17_GLOBAL_READ_GATE_PATH: {'v17_reads_enabled': False, 'kill_switch_active': False}},
+            'global_v17_reads_disabled',
+        ),
+        (
+            {V17_GLOBAL_READ_GATE_PATH: {'v17_reads_enabled': True, 'kill_switch_active': True}},
+            'global_v17_read_kill_switch_active',
+        ),
+        (
+            {V17_GLOBAL_READ_GATE_PATH: {'v17_reads_enabled': 'true', 'kill_switch_active': False}},
+            'malformed_global_read_gate',
+        ),
+        (
+            {V17_GLOBAL_READ_GATE_PATH: {'v17_reads_enabled': True, 'kill_switch_active': 'no'}},
+            'malformed_global_read_gate',
+        ),
+    ]
+
+    for docs, expected_reason in cases:
+        db_client = _FirestoreFake(docs)
+        decision = read_v17_global_read_gate(db_client=db_client)
+
+        assert db_client.document_get_paths == [V17_GLOBAL_READ_GATE_PATH]
+        assert db_client.collection_paths == []
+        assert decision.read_decision == V17ReadDecision.DENY_MEMORY
+        assert decision.fallback_reason == expected_reason
 
 
 def test_shared_rollout_helper_reads_memory_control_state_for_mcp_and_developer_grants_without_archive_default():
