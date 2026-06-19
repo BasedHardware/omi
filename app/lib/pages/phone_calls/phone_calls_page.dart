@@ -53,9 +53,6 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   Future<void> _loadContacts() async {
     try {
       bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
-      // The page can be popped while these awaits are in flight; calling setState
-      // on a disposed State throws "Null check operator used on a null value"
-      // (framework's internal _element!), so bail out if we're no longer mounted.
       if (!mounted) return;
       if (!hasPermission) {
         setState(() {
