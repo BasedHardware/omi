@@ -501,9 +501,16 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
-    """Caches the user_id and scopes for a given hashed Developer API key."""
-    cache_data = {"user_id": user_id, "scopes": scopes}
+def cache_dev_api_key(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    ttl: int = 3600,
+    key_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+):
+    """Caches Developer API key auth context for uid-only and V17 app/key authorization."""
+    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 

@@ -34,6 +34,7 @@ from dependencies import (
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
     get_uid_with_memories_read,
+    get_developer_v17_default_memory_read_context,
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
@@ -52,6 +53,10 @@ from utils.memory.v17_developer_memory_adapter import (
     read_v17_developer_default_memory_rollout,
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
+)
+from utils.memory.v17_product_authorization import (
+    V17ProductAuthorizationContext,
+    authorize_v17_external_default_memory_read,
 )
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
@@ -171,11 +176,12 @@ class BatchMemoriesResponse(BaseModel):
 
 @router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_with_memories_read),
+    auth_context: V17ProductAuthorizationContext = Depends(get_developer_v17_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
 ):
+    uid = auth_context.uid
     category_list = []
     if categories:
         try:
@@ -184,6 +190,20 @@ def get_memories(
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
     if not category_list:
+        v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
+        if not v17_app_key_grant.allowed:
+            raise HTTPException(
+                status_code=v17_app_key_grant.status_code,
+                detail={
+                    'enabled': False,
+                    'reason': v17_app_key_grant.reason,
+                    'consumer': 'developer_api',
+                    'archive_default_visible': False,
+                    'archive_capability': False,
+                    'app_id': auth_context.app_id,
+                    'key_id': auth_context.key_id,
+                },
+            )
         v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
         v17_result = search_v17_default_developer_memories(
             uid=uid,

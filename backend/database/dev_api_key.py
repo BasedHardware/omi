@@ -122,13 +122,15 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
     key_doc = docs[0]
     key_data = key_doc.to_dict()
     user_id = key_data.get("user_id")
+    key_id = key_data.get("id") or getattr(key_doc, "id", None)
+    app_id = key_data.get("app_id") or "developer_api"
     # If scopes field doesn't exist, return None (will be treated as read-only)
     scopes = key_data.get("scopes")
 
     if user_id:
-        # Cache the key with scopes (None if not present) and update last_used_at
-        redis_db.cache_dev_api_key(hashed_key, user_id, scopes)
+        # Cache the key with scopes/app/key context (None scopes remain read-only compatible) and update last_used_at
+        redis_db.cache_dev_api_key(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)
         key_ref = key_doc.reference
         key_ref.update({"last_used_at": datetime.utcnow()})
 
-    return {"user_id": user_id, "scopes": scopes}
+    return {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}

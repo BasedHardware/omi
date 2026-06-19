@@ -737,6 +737,24 @@ This closes only the storage/read helper plus local rules-emulator denial subpoi
 - Keep Archive unavailable by default and require explicit Archive query plus persisted Archive capability in addition to app/key scope grants.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 Developer API app/key/scope default-read composition seam
+
+Continued Oracle P0-1/P0-6 by carrying authenticated Developer API key context into the stored app/key grant authorization seam for one narrow V17 read path, without changing the production rollout verdict:
+
+- Extended Developer API key lookup/cache/auth context to carry `uid`, stable `app_id`, `key_id`, and verified scopes while preserving existing uid-only dependencies that return `auth.uid`.
+- Added `get_developer_v17_default_memory_read_context(...)` to translate verified Developer API scopes (`memories:read`, `memories:write`) into the V17 app/key grant scope vocabulary (`memories.read`, `memories.write`) and build `V17ProductAuthorizationContext` for `consumer='developer_api'` / `surface='developer_default_memory_read'`.
+- Added `authorize_v17_external_default_memory_read(...)`, which reads `users/{uid}/memory_control/v17_app_key_memory_grants` and composes it with `authorize_v17_app_key_scope_memory_grant(..., operation=DEFAULT_READ)`.
+- Wired Developer API default memory list (`GET /v1/dev/user/memories` without category filters) to require that composition before V17 default-list reads. Missing app/key identity, missing/wrong scope, missing/malformed grant state, or missing persisted default-read grant returns 403 before V17 `memory_items` access.
+- Allowed default-read policies keep `archive_capability=false`; Archive remains unavailable by default and no Archive path was exposed.
+
+This closes only the first Developer API default-list composition subpoint. Remaining P0-1/P0-6 work:
+
+- Apply the same app/key/scope grant composition to Developer API vector search before V17 vector reads.
+- MCP REST/SSE still need persisted key scopes or OAuth token introspection plus route execution context carrying app/key/scope identity.
+- Add real FastAPI dependency tests once local route-test dependencies are available; the current dependency coverage is static plus unit seam tests because this local environment still lacks `fastapi`.
+- Run deployed Firestore rules/IAM proof against a real target project before claiming cloud readiness.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

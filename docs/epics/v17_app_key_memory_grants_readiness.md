@@ -72,15 +72,28 @@ npm run test:v17-app-key-grants-rules:emulator
 
 Result: PASS under the local Firebase Firestore emulator. This is not a deployed/cloud rules or IAM proof.
 
+## Narrow developer dependency/composition seam added in this slice
+
+This follow-up carries Developer API authentication output closer to the V17 app/key grant contract, but it remains intentionally narrow:
+
+- `database.dev_api_key.get_user_and_scopes_by_api_key(...)` now returns `key_id` plus a stable `app_id` (`app_id` from key metadata when present, otherwise the explicit Developer API app bucket `developer_api`) in addition to the existing `user_id`/`scopes` fields.
+- `dependencies.ApiKeyAuth` now carries optional `app_id` and `key_id`; existing uid-only helpers still return `auth.uid`, preserving compatibility for routes that only need the historical user id.
+- Added `get_developer_v17_default_memory_read_context(...)`, which converts verified Developer API scopes (`memories:read`, `memories:write`) into the V17 grant scope vocabulary (`memories.read`, `memories.write`) and returns `V17ProductAuthorizationContext` only when uid, app id, key id, and `memories:read` are present.
+- Added `authorize_v17_external_default_memory_read(...)` to compose that authenticated context with `read_v17_app_key_memory_grants_state(...)` and `authorize_v17_app_key_scope_memory_grant(...)` for the required `DEFAULT_READ` operation.
+- Wired the Developer API default memory list path (`GET /v1/dev/user/memories` without category filters) through this composition seam before V17 default-list reads. Category-filtered Developer API list remains explicitly legacy-compatible and does not claim V17 default-read enforcement.
+
+The seam fails closed when authenticated app/key identity, required scope, stored app/key grant state, or the matching persisted operation grant is missing/malformed/wrong. Allowed default-read policies keep `archive_capability=false`; no Archive route/path was exposed.
+
 ## Remaining route dependencies before enforcement
 
-This slice is storage/readiness, not full route enforcement. Remaining blockers:
+This artifact is now partly route-wired for one Developer API default-list V17 seam, but broad route enforcement remains incomplete:
 
-- Developer API route dependencies currently enforce scopes but return only `uid`; V17 enforcement needs authenticated `key_id`, app identity, and verified scopes carried to the shared authorization context.
+- Developer API vector search still needs the same app/key grant composition before V17 vector reads.
+- Developer API category-filtered list remains a legacy compatibility path pending T22/T23 category/read/write convergence.
 - MCP REST/SSE API key auth currently returns only `uid`; MCP key models do not persist scopes/key scope metadata yet.
 - MCP SSE advertises OAuth `memories.read` / `memories.write`; route execution must carry the verified scopes/app/key identity to the V17 memory grant seam.
 - Product `/v17` routes remain first-party `omi_chat`; first-party rollout/default-grant path is intentionally unchanged.
 
 ## Explicit non-claims
 
-No production rollout approval, deployed Firestore rules proof, cloud IAM proof, route enforcement for developer/MCP app-key grants, MCP key scope persistence, production telemetry, benchmark, Pinecone validation, or V17 write convergence is claimed by this slice.
+No production rollout approval, deployed Firestore rules proof, cloud IAM proof, broad route enforcement for all developer/MCP app-key grants, MCP key scope persistence, production telemetry, benchmark, Pinecone validation, or V17 write convergence is claimed by this slice.

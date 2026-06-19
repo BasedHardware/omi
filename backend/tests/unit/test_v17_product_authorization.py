@@ -8,6 +8,7 @@ from utils.memory.v17_product_authorization import (
     V17MemoryGrantOperation,
     V17ProductAuthorizationContext,
     authorize_v17_app_key_scope_memory_grant,
+    authorize_v17_external_default_memory_read,
     authorize_v17_product_memory_route,
 )
 
@@ -358,3 +359,53 @@ def test_app_key_scope_grant_preserves_first_party_omi_chat_rollout_path_without
     assert decision.allowed is True
     assert decision.reason == 'first_party_rollout_authorization'
     assert decision.policy is None
+
+
+class _GrantStateRead:
+    def __init__(self, *, state=None, reason='ok'):
+        self.state = _external_grant_state() if state is None else state
+        self.reason = reason
+        self.source_path = 'users/u1/memory_control/v17_app_key_memory_grants'
+
+
+def test_external_default_memory_composition_reads_stored_app_key_grant_and_allows_without_archive():
+    calls = []
+
+    def read_grants(*, uid, db_client):
+        calls.append((uid, db_client))
+        return _GrantStateRead()
+
+    db_client = _Db()
+    decision = authorize_v17_external_default_memory_read(
+        _external_context(),
+        db_client=db_client,
+        read_app_key_grants_state=read_grants,
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == 'ok'
+    assert decision.policy is not None
+    assert decision.policy.app_has_default_memory_grant is True
+    assert decision.policy.archive_capability is False
+    assert decision.observability['grant_state_reason'] == 'ok'
+    assert calls == [('u1', db_client)]
+
+
+def test_external_default_memory_composition_denies_missing_scope_or_missing_stored_grant():
+    wrong_scope = authorize_v17_external_default_memory_read(
+        _external_context(scopes=('conversations.read',)),
+        db_client=_Db(),
+        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+    )
+    assert wrong_scope.allowed is False
+    assert wrong_scope.reason == 'missing_authenticated_scope_memories.read'
+    assert wrong_scope.policy is None
+
+    missing_grant = authorize_v17_external_default_memory_read(
+        _external_context(key_id='missing-key'),
+        db_client=_Db(),
+        read_app_key_grants_state=lambda *, uid, db_client: _GrantStateRead(),
+    )
+    assert missing_grant.allowed is False
+    assert missing_grant.reason == 'missing_app_key_scope_grant'
+    assert missing_grant.policy is None

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
+from database.v17_app_key_memory_grants import read_v17_app_key_memory_grants_state
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.v17_default_read_rollout import (
     V17DefaultReadRolloutDecision,
@@ -68,6 +69,7 @@ class V17AppKeyScopeGrantDecision:
 
 ReadGlobalGate = Callable[..., V17GlobalReadGateDecision]
 ReadRollout = Callable[..., V17DefaultReadRolloutDecision]
+ReadAppKeyGrantsState = Callable[..., object]
 
 EXTERNAL_V17_MEMORY_CONSUMERS = {'third_party', 'developer_api', 'mcp'}
 V17_MEMORY_OPERATION_REQUIRED_SCOPES = {
@@ -371,6 +373,33 @@ def authorize_v17_app_key_scope_memory_grant(
         grant_path=grant_path,
         status_code=200,
     )
+
+
+def authorize_v17_external_default_memory_read(
+    context: V17ProductAuthorizationContext,
+    *,
+    db_client,
+    read_app_key_grants_state: ReadAppKeyGrantsState = read_v17_app_key_memory_grants_state,
+) -> V17AppKeyScopeGrantDecision:
+    """Compose authenticated external context with stored V17 app/key grants.
+
+    This is the narrow route-ready seam for developer/MCP/third-party default
+    reads. It requires the caller to supply server-authenticated uid/app/key/scope
+    context, reads the server-owned grant document, and delegates to the shared
+    app/key/scope grant contract. Missing identity, missing scope, malformed
+    stored state, or missing grants fail closed; default-read policies never carry
+    Archive capability.
+    """
+
+    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    decision = authorize_v17_app_key_scope_memory_grant(
+        context,
+        persisted_grant_state=getattr(grant_state_read, 'state', {}),
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+    decision.observability['grant_state_reason'] = getattr(grant_state_read, 'reason', 'unknown_grant_state')
+    decision.observability['grant_state_source_path'] = getattr(grant_state_read, 'source_path', None)
+    return decision
 
 
 def authorize_v17_product_memory_route(
