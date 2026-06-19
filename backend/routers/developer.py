@@ -57,6 +57,7 @@ from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
     legacy_safe_v17_default_read_rollout_decision,
+    read_v17_write_convergence_gate,
 )
 import logging
 
@@ -323,6 +324,7 @@ def create_memory(
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='create_memory',
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -380,6 +382,7 @@ def create_memories_batch(
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='batch_create_memories',
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -465,6 +468,7 @@ def delete_memory(
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='delete_memory',
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -497,6 +501,7 @@ def update_memory(
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='update_memory',
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)

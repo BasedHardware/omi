@@ -32,6 +32,7 @@ from utils.log_sanitizer import sanitize_pii
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
+    read_v17_write_convergence_gate,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
@@ -78,6 +79,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         v17_rollout,
         operation="mcp_memory_create",
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not v17_write_guard.allowed:
         raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)
@@ -115,6 +117,7 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         v17_rollout,
         operation="mcp_memory_delete",
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not v17_write_guard.allowed:
         raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)
@@ -134,6 +137,7 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
     v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         v17_rollout,
         operation="mcp_memory_edit",
+        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
     )
     if not v17_write_guard.allowed:
         raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)

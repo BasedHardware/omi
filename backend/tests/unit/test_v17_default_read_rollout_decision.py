@@ -2,10 +2,13 @@ from config.v17_memory import PASSED, V17Mode, V17StageGate
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     V17_GLOBAL_READ_GATE_PATH,
+    V17_WRITE_CONVERGENCE_GATE_PATH,
+    assert_legacy_memory_write_allowed_for_default_read_decision,
     build_v17_default_read_rollout_audit_events,
     legacy_safe_v17_default_read_rollout_decision,
     read_v17_archive_read_rollout,
     read_v17_global_read_gate,
+    read_v17_write_convergence_gate,
     render_v17_default_read_rollout_metrics,
     read_v17_default_read_rollout,
     read_v17_default_read_rollout_decisions,
@@ -113,6 +116,98 @@ def test_global_read_gate_fails_closed_for_missing_disabled_kill_switch_and_malf
         assert db_client.collection_paths == []
         assert decision.read_decision == V17ReadDecision.DENY_MEMORY
         assert decision.fallback_reason == expected_reason
+
+
+def test_write_convergence_gate_requires_durable_outbox_dual_write_and_delete_readiness():
+    db_client = _FirestoreFake(
+        {
+            V17_WRITE_CONVERGENCE_GATE_PATH: {
+                'durable_outbox_enabled': True,
+                'dual_write_projection_ready': True,
+                'delete_convergence_ready': True,
+                'idempotency_contract_ready': True,
+            }
+        }
+    )
+
+    policy = read_v17_write_convergence_gate(db_client=db_client)
+
+    assert db_client.document_get_paths == [V17_WRITE_CONVERGENCE_GATE_PATH]
+    assert db_client.collection_paths == []
+    assert policy.ready is True
+    assert policy.reason == 'ok'
+
+
+def test_write_convergence_gate_fails_closed_for_missing_or_malformed_readiness_config():
+    cases = [
+        ({}, 'missing_write_convergence_gate'),
+        (
+            {
+                V17_WRITE_CONVERGENCE_GATE_PATH: {
+                    'durable_outbox_enabled': True,
+                    'dual_write_projection_ready': True,
+                    'delete_convergence_ready': True,
+                    'idempotency_contract_ready': False,
+                }
+            },
+            'write_convergence_not_ready',
+        ),
+        (
+            {
+                V17_WRITE_CONVERGENCE_GATE_PATH: {
+                    'durable_outbox_enabled': True,
+                    'dual_write_projection_ready': 'yes',
+                    'delete_convergence_ready': True,
+                    'idempotency_contract_ready': True,
+                }
+            },
+            'malformed_write_convergence_gate',
+        ),
+    ]
+
+    for docs, expected_reason in cases:
+        db_client = _FirestoreFake(docs)
+        policy = read_v17_write_convergence_gate(db_client=db_client)
+
+        assert db_client.document_get_paths == [V17_WRITE_CONVERGENCE_GATE_PATH]
+        assert db_client.collection_paths == []
+        assert policy.ready is False
+        assert policy.reason == expected_reason
+
+
+def test_legacy_write_guard_allows_v17_enabled_write_only_with_ready_convergence_policy():
+    enabled_decision = read_v17_default_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()}), consumer='mcp'
+    )
+    ready_policy = read_v17_write_convergence_gate(
+        db_client=_FirestoreFake(
+            {
+                V17_WRITE_CONVERGENCE_GATE_PATH: {
+                    'durable_outbox_enabled': True,
+                    'dual_write_projection_ready': True,
+                    'delete_convergence_ready': True,
+                    'idempotency_contract_ready': True,
+                }
+            }
+        )
+    )
+    missing_policy = read_v17_write_convergence_gate(db_client=_FirestoreFake())
+
+    blocked_without_policy = assert_legacy_memory_write_allowed_for_default_read_decision(
+        enabled_decision, operation='create_memory'
+    )
+    blocked_with_missing_policy = assert_legacy_memory_write_allowed_for_default_read_decision(
+        enabled_decision, operation='create_memory', write_convergence_policy=missing_policy
+    )
+    allowed_with_ready_policy = assert_legacy_memory_write_allowed_for_default_read_decision(
+        enabled_decision, operation='create_memory', write_convergence_policy=ready_policy
+    )
+
+    assert blocked_without_policy.allowed is False
+    assert blocked_with_missing_policy.allowed is False
+    assert blocked_with_missing_policy.detail['convergence_reason'] == 'missing_write_convergence_gate'
+    assert allowed_with_ready_policy.allowed is True
+    assert allowed_with_ready_policy.detail['reason'] == 'legacy_memory_write_allowed_with_v17_convergence'
 
 
 def test_shared_rollout_helper_reads_memory_control_state_for_mcp_and_developer_grants_without_archive_default():

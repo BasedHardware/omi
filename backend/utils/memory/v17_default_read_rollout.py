@@ -9,6 +9,7 @@ SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
 V17_DEFAULT_READ_ROLLOUT_METRIC_NAME = 'v17_default_read_rollout_decisions_total'
 V17_GLOBAL_READ_GATE_PATH = 'memory_control/v17_global_read_gate'
+V17_WRITE_CONVERGENCE_GATE_PATH = 'memory_control/v17_write_convergence_gate'
 _LOW_CARDINALITY_FALLBACK_REASON_BUCKETS = {
     'malformed_rollout_state',
     'missing_chat_default_memory_grant',
@@ -39,6 +40,13 @@ class V17GlobalReadGateDecision:
         if self.read_decision == V17ReadDecision.USE_V17:
             return None
         return self.reason
+
+
+@dataclass(frozen=True)
+class V17WriteConvergencePolicy:
+    source_path: str
+    ready: bool
+    reason: str = 'ok'
 
 
 @dataclass(frozen=True)
@@ -161,6 +169,58 @@ def read_v17_global_read_gate(*, db_client) -> V17GlobalReadGateDecision:
     return normalize_v17_global_read_gate(data)
 
 
+def normalize_v17_write_convergence_gate(data) -> V17WriteConvergencePolicy:
+    """Normalize server-owned write convergence/outbox readiness.
+
+    External legacy-memory writes may only bypass the V17 read split-brain guard
+    when all durable convergence bits are explicitly boolean true. Missing,
+    malformed, or partially ready config fails safe and keeps legacy writes
+    blocked for V17/shadow read consumers.
+    """
+
+    if not isinstance(data, dict):
+        return V17WriteConvergencePolicy(
+            source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
+            ready=False,
+            reason='missing_write_convergence_gate',
+        )
+    required_true_fields = (
+        'durable_outbox_enabled',
+        'dual_write_projection_ready',
+        'delete_convergence_ready',
+        'idempotency_contract_ready',
+    )
+    for field in required_true_fields:
+        if not isinstance(data.get(field), bool):
+            return V17WriteConvergencePolicy(
+                source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
+                ready=False,
+                reason='malformed_write_convergence_gate',
+            )
+    if not all(data[field] is True for field in required_true_fields):
+        return V17WriteConvergencePolicy(
+            source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
+            ready=False,
+            reason='write_convergence_not_ready',
+        )
+    return V17WriteConvergencePolicy(source_path=V17_WRITE_CONVERGENCE_GATE_PATH, ready=True)
+
+
+def read_v17_write_convergence_gate(*, db_client) -> V17WriteConvergencePolicy:
+    """Read server-owned durable write convergence/outbox readiness."""
+
+    try:
+        snapshot = db_client.document(V17_WRITE_CONVERGENCE_GATE_PATH).get()
+        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
+    except Exception:
+        return V17WriteConvergencePolicy(
+            source_path=V17_WRITE_CONVERGENCE_GATE_PATH,
+            ready=False,
+            reason='malformed_write_convergence_gate',
+        )
+    return normalize_v17_write_convergence_gate(data)
+
+
 def disabled_v17_default_read_rollout_decision(
     *, uid: str, source_path: str, consumer: str, reason: str
 ) -> V17DefaultReadRolloutDecision:
@@ -225,6 +285,7 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
     *,
     operation: str,
     allow_write_convergence: bool = False,
+    write_convergence_policy: V17WriteConvergencePolicy | None = None,
 ) -> V17LegacyMemoryWriteGuardDecision:
     """Guard legacy external memory writes while default V17 reads are enabled.
 
@@ -239,7 +300,7 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
     fail_safe_reasons = {'missing_rollout_state', 'malformed_rollout_state', 'uid_mismatch'}
     should_block = decision.read_decision in {V17ReadDecision.USE_V17, V17ReadDecision.SHADOW_ONLY}
     should_block = should_block or decision.fallback_reason in fail_safe_reasons
-    if allow_write_convergence or not should_block:
+    if not should_block:
         return V17LegacyMemoryWriteGuardDecision(
             allowed=True,
             detail={
@@ -251,6 +312,24 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
                 'source_path': decision.source_path,
             },
         )
+    if write_convergence_policy is not None and write_convergence_policy.ready:
+        return V17LegacyMemoryWriteGuardDecision(
+            allowed=True,
+            detail={
+                'enabled': True,
+                'reason': 'legacy_memory_write_allowed_with_v17_convergence',
+                'consumer': decision.consumer,
+                'operation': operation,
+                'read_decision': decision.read_decision.value,
+                'source_path': decision.source_path,
+                'convergence_source_path': write_convergence_policy.source_path,
+            },
+        )
+    convergence_reason = None
+    if write_convergence_policy is not None:
+        convergence_reason = write_convergence_policy.reason
+    elif allow_write_convergence:
+        convergence_reason = 'legacy_boolean_convergence_override_ignored'
     return V17LegacyMemoryWriteGuardDecision(
         allowed=False,
         status_code=409,
@@ -261,6 +340,7 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
             'operation': operation,
             'read_decision': decision.read_decision.value,
             'source_path': decision.source_path,
+            'convergence_reason': convergence_reason,
         },
     )
 

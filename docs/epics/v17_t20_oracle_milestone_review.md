@@ -277,6 +277,27 @@ This closes the narrow Oracle P0-3 subpoints for MCP REST/SSE create/edit/delete
 - Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-3 durable write convergence/outbox readiness gate seam
+
+Concretized the remaining Oracle P0-3 durable write convergence gate as a narrow fail-closed backend seam, without claiming full external V17 write convergence or changing the production rollout verdict:
+
+- Added server-owned convergence gate path `memory_control/v17_write_convergence_gate`, `V17WriteConvergencePolicy`, and `read_v17_write_convergence_gate(...)` in `backend/utils/memory/v17_default_read_rollout.py`.
+- Updated `assert_legacy_memory_write_allowed_for_default_read_decision(...)` so `USE_V17`, `SHADOW_ONLY`, and fail-safe read-decision states still block legacy external writes unless the convergence gate is explicitly ready.
+- Gate readiness requires all four booleans to be true: `durable_outbox_enabled`, `dual_write_projection_ready`, `delete_convergence_ready`, and `idempotency_contract_ready`.
+- Missing, malformed, or partial convergence config fails safe; the old legacy boolean override is not sufficient for V17/shadow read consumers.
+- Wired the gate into the external write surfaces already protected by the P0-3 guard: developer create/batch/edit/delete, MCP REST create/edit/delete, and MCP streamable HTTP/SSE `create_memory`/`delete_memory`/`edit_memory`.
+- Archive remains default-unavailable and no read surface was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing convergence gate import, focused GREEN across MCP/developer/default-read tests (`47 passed`), focused regression (`49 passed`), full `pytest tests/unit/test_v17_*.py -q` (`204 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the fail-closed convergence readiness seam. Remaining P0-3/P0 work:
+
+- Implement the actual durable external V17 write service / dual-write outbox worker and transaction contract.
+- Prove idempotent create/edit/delete replay, delete convergence, and projection consistency under provider/emulator tests.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

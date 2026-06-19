@@ -328,6 +328,7 @@ def test_split_brain_guard_blocks_v17_enabled_developer_legacy_write_without_mut
         'operation': 'create_memory',
         'read_decision': V17ReadDecision.USE_V17.value,
         'source_path': 'users/u1/memory_control/state',
+        'convergence_reason': None,
     }
 
 
@@ -389,7 +390,7 @@ def test_split_brain_guard_blocks_missing_or_malformed_developer_config_fail_saf
         assert decision.detail['reason'] == 'v17_default_read_legacy_write_blocked'
 
 
-def test_split_brain_guard_allows_disabled_or_explicit_converged_developer_legacy_write():
+def test_split_brain_guard_allows_disabled_but_ignores_legacy_boolean_convergence_override():
     disabled = read_v17_developer_default_memory_rollout(
         uid='u1',
         db_client=_FirestoreFake(
@@ -400,12 +401,16 @@ def test_split_brain_guard_allows_disabled_or_explicit_converged_developer_legac
         uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
     )
 
-    assert_legacy_memory_write_allowed_for_default_read_decision(disabled, operation='create_memory')
-    assert_legacy_memory_write_allowed_for_default_read_decision(
+    disabled_allowed = assert_legacy_memory_write_allowed_for_default_read_decision(disabled, operation='create_memory')
+    boolean_override_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
         enabled,
         operation='create_memory',
         allow_write_convergence=True,
     )
+
+    assert disabled_allowed.allowed is True
+    assert boolean_override_blocked.allowed is False
+    assert boolean_override_blocked.detail['convergence_reason'] == 'legacy_boolean_convergence_override_ignored'
 
 
 def test_developer_default_v17_adapter_uses_product_search_and_excludes_stale_short_term_and_archive():
