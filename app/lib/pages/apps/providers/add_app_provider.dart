@@ -216,9 +216,11 @@ class AddAppProvider extends ChangeNotifier {
       );
     }
 
-    // Set existing thumbnails
-    thumbnailUrls = app.thumbnailUrls;
-    thumbnailIds = app.thumbnailIds;
+    // Set existing thumbnails. Copy the lists — assigning app's lists directly would
+    // alias them, so in-place add/remove would also mutate the _originalApp snapshot
+    // and the dirty check would never detect thumbnail changes.
+    thumbnailUrls = List.of(app.thumbnailUrls);
+    thumbnailIds = List.of(app.thumbnailIds);
 
     _originalApp = app;
     isValid = false;
@@ -855,6 +857,7 @@ class AddAppProvider extends ChangeNotifier {
         if (result.isNotEmpty) {
           thumbnailUrls.add(result['thumbnail_url']!);
           thumbnailIds.add(result['thumbnail_id']!);
+          checkValidity();
           Logger.debug('🖼️ Thumbnail uploaded successfully');
         }
         setIsUploadingThumbnail(false);
