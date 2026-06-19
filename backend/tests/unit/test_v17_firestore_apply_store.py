@@ -1,7 +1,11 @@
+import copy
 import os
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 from unittest.mock import MagicMock
+
+import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -39,32 +43,38 @@ class _FakeDocumentRef:
 
 
 class _FakeTransaction:
-    def __init__(self):
+    def __init__(self, db):
+        self._db = db
         self.sets = []
+        self.fail_after_sets: Optional[int] = None
         self._read_only = False
         self._max_attempts = 1
         self._id = None
 
     def set(self, ref, data):
         self.sets.append((ref.path, data))
+        if self.fail_after_sets is not None and len(self.sets) > self.fail_after_sets:
+            raise RuntimeError("injected transaction set failure")
 
     def _clean_up(self):
         self._id = None
 
     def _begin(self, retry_id=None):
         self._id = retry_id or "txn-1"
+        self.sets = []
 
     def _commit(self):
-        pass
+        for path, data in self.sets:
+            self._db.docs[path] = data
 
     def _rollback(self):
-        pass
+        self._id = None
 
 
 class _FakeDb:
     def __init__(self, docs):
         self.docs = docs
-        self.transaction_obj = _FakeTransaction()
+        self.transaction_obj = _FakeTransaction(self)
 
     def transaction(self):
         return self.transaction_obj
@@ -294,3 +304,38 @@ def test_firestore_apply_retries_committed_operation_from_stored_result_without_
     assert result.operation.committed_memory_item_ids == ["mem1"]
     assert result.operation.committed_outbox_event_ids == ["evt_projection", "evt_vector"]
     assert db.transaction_obj.sets == []
+
+
+def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_commits_same_ids():
+    operation = _operation()
+    db = _db_with(operation=operation)
+    patch = _patch()
+    original_docs = copy.deepcopy(db.docs)
+
+    db.transaction_obj.fail_after_sets = 2
+    with pytest.raises(RuntimeError, match="injected transaction set failure"):
+        apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=patch,
+            db_client=db,
+        )
+
+    assert db.docs == original_docs
+
+    db.transaction_obj.fail_after_sets = None
+    retry = apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert retry.status == ApplyStatus.committed
+    assert (
+        db.docs[f"users/u1/memory_operations/{operation.operation_id}"]["committed_head_commit_id"]
+        == retry.control_state.head_commit_id
+    )
+    assert db.docs["users/u1/memory_control/state"]["head_commit_id"] == retry.control_state.head_commit_id
+    assert retry.operation.committed_memory_item_ids == [item.memory_id for item in retry.memory_items]
+    assert retry.operation.committed_outbox_event_ids == [event.event_id for event in retry.outbox_events]

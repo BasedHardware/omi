@@ -6,7 +6,26 @@ from typing import Any, Dict, Iterable, List, Optional
 try:
     from google.cloud.firestore_v1 import transactional
 except ImportError:  # pragma: no cover - local unit tests mock Firestore.
-    transactional = lambda func: func
+
+    def transactional(func):
+        def wrapper(transaction, *args, **kwargs):
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                result = func(transaction, *args, **kwargs)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+                return result
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
+
+        return wrapper
+
 
 from pydantic import BaseModel
 
