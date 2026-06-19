@@ -38,6 +38,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
     read_v17_mcp_default_memory_rollout,
     search_v17_default_mcp_memories,
+    search_v17_default_mcp_memories_vector,
 )
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
@@ -158,6 +159,17 @@ def search_memories(
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
     v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
+    v17_vector_results = search_v17_default_mcp_memories_vector(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=db,
+        rollout_capabilities=v17_rollout.rollout_capabilities,
+        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+    )
+    if v17_vector_results is not None:
+        return v17_vector_results
+
     v17_results = search_v17_default_mcp_memories(
         uid=uid,
         query=query,

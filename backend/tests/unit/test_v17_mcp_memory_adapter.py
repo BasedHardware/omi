@@ -1,10 +1,32 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from config.v17_memory import PASSED, V17Capabilities, V17Mode, V17StageGate
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.mcp_memories import read_v17_mcp_default_memory_rollout, search_v17_default_mcp_memories
+from utils.mcp_memories import (
+    read_v17_mcp_default_memory_rollout,
+    search_v17_default_mcp_memories,
+    search_v17_default_mcp_memories_vector,
+)
+
+
+def test_mcp_rest_search_route_wires_v17_vector_adapter_before_legacy_vector_search():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    contents = mcp_py.read_text(encoding='utf-8')
+
+    rollout_call = 'read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)'
+    vector_adapter_call = 'search_v17_default_mcp_memories_vector('
+    read_adapter_call = 'search_v17_default_mcp_memories('
+    legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
+    assert rollout_call in contents
+    assert vector_adapter_call in contents
+    assert read_adapter_call in contents
+    assert legacy_call in contents
+    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(read_adapter_call)
+    assert contents.index(vector_adapter_call) < contents.index(legacy_call)
 
 
 class _Snapshot:
@@ -59,6 +81,12 @@ class _FirestoreFake:
     def document(self, path):
         self.document_paths.append(path)
         return _DocumentRef(self, path)
+
+
+class _VectorCandidateResult:
+    def __init__(self, hits, rejected_count=0):
+        self.hits = hits
+        self.rejected_count = rejected_count
 
 
 def _read_capabilities(uid='u1', *, enabled=True):
@@ -237,4 +265,112 @@ def test_mcp_default_v17_memory_adapter_returns_none_when_rollout_or_default_gra
         )
         is None
     )
+    assert db_client.collection_paths == []
+
+
+def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    stale_short_term = _memory_item(
+        'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
+    )
+    long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archive memory')
+    db_client = _FirestoreFake(
+        {
+            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+            for item in [archive, stale_short_term, fresh_short_term, long_term]
+        }
+    )
+    vector_calls = []
+
+    def vector_query(uid, query, *, mode, limit):
+        vector_calls.append({'uid': uid, 'query': query, 'mode': mode, 'limit': limit})
+        return _VectorCandidateResult(
+            [
+                SearchVectorHit(
+                    memory_id='archive',
+                    score=0.99,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=now,
+                    uid='u1',
+                ),
+                SearchVectorHit(
+                    memory_id='long-term',
+                    score=0.88,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=now,
+                    uid='u1',
+                ),
+                SearchVectorHit(
+                    memory_id='stale-short-term',
+                    score=0.77,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=now,
+                    uid='u1',
+                ),
+                SearchVectorHit(
+                    memory_id='fresh-short-term',
+                    score=0.66,
+                    projection_commit_id='projection-1',
+                    vector_updated_at=now,
+                    uid='u1',
+                ),
+            ],
+            rejected_count=1,
+        )
+
+    results = search_v17_default_mcp_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_capabilities=_read_capabilities(),
+        vector_query=vector_query,
+    )
+
+    assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
+    assert db_client.collection_paths == ['users/u1/memory_items']
+    assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
+    assert [item['relevance_score'] for item in results] == [0.88, 0.66]
+    assert all(item['v17_default_memory'] is True for item in results)
+    assert all(item['archive_default_visible'] is False for item in results)
+    assert all(item['policy']['consumer'] == 'mcp' for item in results)
+    assert all(item['policy']['archive_capability'] is False for item in results)
+
+
+def test_mcp_vector_adapter_returns_none_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
+    db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
+    vector_calls = []
+
+    def vector_query(*args, **kwargs):
+        vector_calls.append((args, kwargs))
+        return _VectorCandidateResult([])
+
+    assert (
+        search_v17_default_mcp_memories_vector(
+            uid='u1',
+            query='coffee',
+            limit=10,
+            db_client=db_client,
+            rollout_capabilities=_read_capabilities(enabled=False),
+            vector_query=vector_query,
+        )
+        is None
+    )
+    assert (
+        search_v17_default_mcp_memories_vector(
+            uid='u1',
+            query='coffee',
+            limit=10,
+            db_client=db_client,
+            rollout_capabilities=_read_capabilities(),
+            app_has_default_memory_grant=False,
+            vector_query=vector_query,
+        )
+        is None
+    )
+    assert vector_calls == []
     assert db_client.collection_paths == []

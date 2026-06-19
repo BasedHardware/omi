@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
@@ -9,6 +9,7 @@ from utils.memory.v17_default_read_rollout import (
     read_v17_default_read_rollout,
 )
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
+from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
 
 ACTIVITY_TAGS = {
     'activity',
@@ -313,6 +314,70 @@ def search_v17_default_mcp_memories(
                 'content': item['content'],
                 'category': 'other',
                 'relevance_score': round(1.0 - (rank * 0.0001), 4),
+                'v17_default_memory': True,
+                'archive_default_visible': False,
+                'policy': {
+                    'consumer': policy.consumer.value,
+                    'app_has_default_memory_grant': policy.app_has_default_memory_grant,
+                    'archive_capability': policy.archive_capability,
+                    'raw_provenance_capability': policy.raw_provenance_capability,
+                },
+            }
+        )
+    return formatted
+
+
+def search_v17_default_mcp_memories_vector(
+    *,
+    uid: str,
+    query: str,
+    limit: int,
+    db_client,
+    rollout_capabilities: Optional[V17Capabilities],
+    app_has_default_memory_grant: bool = True,
+    vector_query: Optional[Callable[..., Any]] = None,
+    required_projection_commit_id: Optional[str] = None,
+) -> Optional[list[dict]]:
+    """Search hydrated V17 vectors for the concrete MCP memory-search caller.
+
+    Returns `None` before vector lookup or `users/{uid}/memory_items` reads when
+    persisted V17 read rollout or the MCP default-memory grant is unavailable.
+    Archive is deliberately default-disabled here; explicit Archive routes remain
+    separate and capability-gated.
+    """
+
+    if not rollout_capabilities or not rollout_capabilities.v17_reads_enabled:
+        return None
+    if not app_has_default_memory_grant:
+        return None
+
+    bounded_limit = max(1, min(limit, 20))
+    policy = MemoryAccessPolicy(
+        consumer=MemoryConsumer.mcp,
+        app_has_default_memory_grant=True,
+        archive_capability=False,
+        raw_provenance_capability=False,
+    )
+    response = fetch_default_v17_vector_memory_search(
+        uid=uid,
+        query=query,
+        db_client=db_client,
+        policy=policy,
+        vector_query=vector_query,
+        limit=bounded_limit,
+        required_projection_commit_id=required_projection_commit_id,
+    )
+
+    scores_by_memory_id = response.get('scores_by_memory_id', {})
+    formatted = []
+    for item in response['items']:
+        memory_id = item['memory_id']
+        formatted.append(
+            {
+                'id': memory_id,
+                'content': item.get('content') or '',
+                'category': 'other',
+                'relevance_score': round(float(scores_by_memory_id.get(memory_id, 0)), 4),
                 'v17_default_memory': True,
                 'archive_default_visible': False,
                 'policy': {
