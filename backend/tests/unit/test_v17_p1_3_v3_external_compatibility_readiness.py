@@ -368,6 +368,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "request_adapter_proof_present": True,
         "route_planner_proof_present": True,
         "route_signature_integration_proof_present": True,
+        "fastapi_route_contract_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,

@@ -1421,3 +1421,25 @@ The supplied tests use fake Firestore collections, fake vector queries, and sour
 
 **Bottom line:** authoritative hydration is the right foundation, and the tested stale Short-term/Archive exclusion is useful. It is not yet a safe production system because authorization, downgrade behavior, write/read convergence, vector fencing, shared-namespace coexistence, and real operational validation remain unresolved.
 ```
+
+### 2026-06-19 — P1-3 `/v3` controlled FastAPI route contract proof
+
+Continued Oracle P1-3 with a narrow local FastAPI/TestClient proof for `/v3` response-model and dependency behavior, without changing runtime wiring or rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_fastapi_route_contract.py`, a controlled isolated FastAPI mini-app proof for `GET /v3/memories` using the production `MemoryDB` response model. It deliberately does not import `backend/routers/memories.py` or the production app, and stubs only the `database._client.document_id_from_seed` import side effect needed to load the model without constructing Firestore clients.
+- Added `backend/tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py` and registered it in `backend/test.sh`.
+- Linked the proof from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` as `fastapi_route_contract_proof` while keeping `/v3` runtime status `BLOCKED`.
+- Updated `backend/scripts/v17_p1_5_tools_fastapi_testclient_readiness.py` to preserve the prior PEP 668 `pip --user` blocker evidence and additionally record that repo-managed `backend/venv/bin/python` can import `fastapi==0.121.0`, `httpx==0.28.0`, `starlette==0.49.1`, and `TestClient=OK`. The tools route proof itself remains `BLOCKED/NOT_RUN`.
+- The `/v3` proof covers `List[MemoryDB]` legacy-compatible body serialization, additive headers without body mutation, enabled-empty `[]`, fail-closed denied `403` with no body data and no legacy fallback marker, and filtering of V17-only body fields from the `List[MemoryDB]` response body.
+- No Firestore, Pinecone, cloud, provider, network, production app startup, production traffic, mutation, benchmark, telemetry sink, or rollout approval is claimed. Archive remains default-unavailable and stale Short-term is not made default-visible.
+
+Verification for this slice:
+
+- RED: `backend/venv/bin/python -m pytest backend/tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -q` -> `4 failed` before adding the runner/docs/readiness/test.sh registration.
+- GREEN focused route proof: `cd backend && venv/bin/python -m pytest tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -q` -> `4 passed in 1.09s`.
+- Normal-env focused `/v3` proof suite: `env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_v3_memory_read_service.py tests/unit/test_v17_v3_projection_readiness.py tests/unit/test_v17_v3_compatibility.py tests/unit/test_v17_v3_cursor.py tests/unit/test_v17_v3_write_convergence.py tests/unit/test_v17_v3_response_adapter.py tests/unit/test_v17_v3_request_adapter.py tests/unit/test_v17_v3_route_planner.py tests/unit/test_v17_p1_3_v3_route_signature_integration.py tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_5_tools_fastapi_testclient_readiness.py -q` -> `74 passed in 2.73s`.
+- Normal-env full V17 regression: `env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_*.py -q` -> `446 passed, 3 warnings in 4.85s`.
+- Venv proof summary: `venv/bin/python scripts/v17_p1_3_v3_fastapi_route_contract.py --execute` -> `BLOCKED PASSED True 5`.
+- `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True`; tools TestClient readiness: `BLOCKED NOT_RUN True False True True True`.
+- Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

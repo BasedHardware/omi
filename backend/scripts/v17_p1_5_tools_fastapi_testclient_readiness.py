@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import subprocess
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
 ROUTE_SURFACES: List[Dict[str, Any]] = [
@@ -101,13 +103,43 @@ def _fastapi_import_error() -> str | None:
         return 'ValueError'
 
 
+def _repo_venv_testclient_probe(python_path: Path) -> Dict[str, Any]:
+    if not python_path.exists():
+        return {'available': False, 'stdout': '', 'stderr': 'backend/venv/bin/python not found'}
+    completed = subprocess.run(
+        [
+            str(python_path),
+            '-c',
+            'import fastapi, httpx, starlette; from fastapi.testclient import TestClient; '
+            'print(f"fastapi={fastapi.__version__} httpx={httpx.__version__} starlette={starlette.__version__} TestClient=OK")',
+        ],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return {
+        'available': completed.returncode == 0,
+        'stdout': completed.stdout.strip(),
+        'stderr': completed.stderr.strip(),
+    }
+
+
 def build_dependency_evidence() -> Dict[str, Any]:
+    backend_root = Path(__file__).resolve().parents[1]
+    repo_venv_python = backend_root / 'venv' / 'bin' / 'python'
+    repo_venv_probe = _repo_venv_testclient_probe(repo_venv_python)
     return {
         'required_dependency_file': 'backend/requirements.txt',
         'required_fastapi_pin': 'fastapi==0.121.0',
         'required_httpx_pin': 'httpx==0.28.0',
         'verification_python_major_minor': f'{sys.version_info.major}.{sys.version_info.minor}',
         'local_fastapi_import_error': _fastapi_import_error(),
+        'repo_managed_venv_python': 'backend/venv/bin/python',
+        'repo_managed_venv_exists': repo_venv_python.exists(),
+        'repo_managed_venv_fastapi_testclient_available': repo_venv_probe['available'],
+        'repo_managed_venv_probe_stdout': repo_venv_probe['stdout'],
+        'repo_managed_venv_probe_stderr': repo_venv_probe['stderr'],
         'bounded_install_attempted': True,
         'bounded_install_command': "python3 -m pip install --user 'fastapi==0.121.0'",
         'bounded_install_exit_code': 1,
@@ -125,10 +157,13 @@ def build_dependency_evidence() -> Dict[str, Any]:
 def build_report(execute: bool = False) -> Dict[str, Any]:
     fastapi_importable = importlib.util.find_spec('fastapi') is not None
     testclient_importable = importlib.util.find_spec('fastapi.testclient') is not None if fastapi_importable else False
+    dependency_evidence = build_dependency_evidence()
+    dependency_available = fastapi_importable and testclient_importable
+    dependency_available = dependency_available or dependency_evidence['repo_managed_venv_fastapi_testclient_available']
     blocker = (
         'fastapi/testclient unavailable in local Python environment; keep proof BLOCKED/NOT_RUN until dependencies are installed or safely stubbed at FastAPI TestClient level.'
-        if not (fastapi_importable and testclient_importable)
-        else 'FastAPI import is available, but this readiness artifact is intentionally read-only and does not execute route TestClient proof.'
+        if not dependency_available
+        else 'FastAPI/TestClient is available via the repo-managed backend venv, but this tools readiness artifact remains BLOCKED/NOT_RUN until a separate controlled tools route proof is implemented.'
     )
     return {
         'status': 'BLOCKED',
@@ -151,7 +186,7 @@ def build_report(execute: bool = False) -> Dict[str, Any]:
         'behavior_cases_count': len(BEHAVIOR_CASES),
         'route_surfaces': ROUTE_SURFACES,
         'behavior_cases': BEHAVIOR_CASES,
-        'dependency_evidence': build_dependency_evidence(),
+        'dependency_evidence': dependency_evidence,
         'non_claims': NON_CLAIMS,
     }
 

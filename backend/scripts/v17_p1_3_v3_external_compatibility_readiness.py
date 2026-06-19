@@ -551,6 +551,24 @@ ROUTE_SIGNATURE_INTEGRATION_PROOF = {
     ],
 }
 
+FASTAPI_ROUTE_CONTRACT_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_fastapi_route_contract.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "controlled_isolated_fastapi_app": True,
+    "imports_real_router_or_app": False,
+    "covered_defaults": [
+        "list_memorydb_response_model_serializes_legacy_compatible_items",
+        "additive_headers_permitted_without_body_mutation",
+        "enabled_empty_returns_empty_list_no_legacy_fallback_marker",
+        "fail_closed_denied_returns_no_body_data_no_legacy_fallback_marker",
+        "v17_only_fields_filtered_from_list_memorydb_body",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -585,6 +603,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "request_adapter_proof": REQUEST_ADAPTER_PROOF,
         "route_planner_proof": ROUTE_PLANNER_PROOF,
         "route_signature_integration_proof": ROUTE_SIGNATURE_INTEGRATION_PROOF,
+        "fastapi_route_contract_proof": FASTAPI_ROUTE_CONTRACT_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -608,6 +627,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "request_adapter_proof_present": True,
             "route_planner_proof_present": True,
             "route_signature_integration_proof_present": True,
+            "fastapi_route_contract_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

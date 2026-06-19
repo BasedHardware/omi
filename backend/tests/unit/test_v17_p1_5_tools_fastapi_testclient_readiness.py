@@ -97,6 +97,13 @@ def test_tools_fastapi_testclient_readiness_pins_exact_dependency_and_install_bl
     assert report['dependency_evidence']['required_httpx_pin'] == 'httpx==0.28.0'
     assert report['dependency_evidence']['verification_python_major_minor']
     assert report['dependency_evidence']['local_fastapi_import_error'] in ('ModuleNotFoundError', None)
+    assert report['dependency_evidence']['repo_managed_venv_python'] == 'backend/venv/bin/python'
+    assert report['dependency_evidence']['repo_managed_venv_exists'] is True
+    assert report['dependency_evidence']['repo_managed_venv_fastapi_testclient_available'] is True
+    assert 'fastapi=0.121.0' in report['dependency_evidence']['repo_managed_venv_probe_stdout']
+    assert 'httpx=0.28.0' in report['dependency_evidence']['repo_managed_venv_probe_stdout']
+    assert 'starlette=0.49.1' in report['dependency_evidence']['repo_managed_venv_probe_stdout']
+    assert 'TestClient=OK' in report['dependency_evidence']['repo_managed_venv_probe_stdout']
     assert report['dependency_evidence']['bounded_install_attempted'] is True
     assert (
         report['dependency_evidence']['bounded_install_command'] == "python3 -m pip install --user 'fastapi==0.121.0'"
