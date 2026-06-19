@@ -716,6 +716,27 @@ This addresses only the first contract/helper subpoint for Oracle P0-1/P0-6 app/
 - Keep Archive unavailable by default and require explicit Archive query plus persisted Archive capability in addition to app/key scope grants.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 server-owned app/key grant storage/read helper and local rules proof
+
+Continued Oracle P0-1/P0-6 by adding the first server-owned persisted per-app/per-key grant storage/read seam and local client self-grant denial proof, without route enforcement or changing the production rollout verdict:
+
+- Added `backend/database/v17_app_key_memory_grants.py` with canonical path constants for `users/{uid}/memory_control/v17_app_key_memory_grants`, a fake-injectable `read_v17_app_key_memory_grants_state(uid, db_client)`, and a pure contract-shape builder for admin/test tooling.
+- The persisted document intentionally stores the exact nested authorization shape consumed by `authorize_v17_app_key_scope_memory_grant(...)`: `grants.<consumer>.apps.<app_id>.keys.<key_id>`.
+- Missing documents return absent state with `missing_v17_app_key_memory_grants_state`; malformed top-level state returns `malformed_v17_app_key_memory_grants_state` and then fails closed through the grant authorization helper.
+- Valid grant state feeds the existing app/key/scope authorization helper for default read while keeping `archive_capability=false`; Archive grants only produce Archive capability through the explicit `ARCHIVE_READ` operation path and do not make Archive default-visible.
+- Extended the local Firestore rules emulator harness to assert that a signed-in client cannot read/create/update/delete `users/v17-emulator-user/memory_control/v17_app_key_memory_grants` with an attempted `grants.developer_api.apps.client-app.keys.client-key` self-grant. The local emulator proof passed.
+- Added `docs/epics/v17_app_key_memory_grants_readiness.md` with path/schema, conversion rules, emulator command, route dependency blockers, and explicit non-claims.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing storage module, RED emulator harness static test for missing self-grant denial target, GREEN storage/static tests, local emulator PASS, focused V17 regression, full V17 regression, and async scan exit 0 with pre-existing findings only.
+
+This closes only the storage/read helper plus local rules-emulator denial subpoint. Remaining P0-1/P0-6 work:
+
+- Wire developer/MCP/third-party route dependencies to carry authenticated `app_id`, `key_id`, and verified scopes into this storage+authorization seam before any V17 read/write.
+- Persist MCP key scopes / OAuth token scope introspection and add route-level FastAPI tests for REST and streamable HTTP/SSE.
+- Run deployed Firestore rules/IAM proof against a real target project before claiming cloud readiness.
+- Keep Archive unavailable by default and require explicit Archive query plus persisted Archive capability in addition to app/key scope grants.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

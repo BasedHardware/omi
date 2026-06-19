@@ -25,6 +25,38 @@ async function assertClientDeniedForProtectedCollection(db, collection) {
   await assertFails(deleteDoc(protectedDoc));
 }
 
+async function assertClientCannotSelfGrantV17AppKeyMemoryAccess(db) {
+  const grantDoc = doc(db, 'users/v17-emulator-user/memory_control/v17_app_key_memory_grants');
+  const selfGrant = {
+    grants: {
+      developer_api: {
+        apps: {
+          'client-app': {
+            keys: {
+              'client-key': {
+                enabled: true,
+                scopes: ['memories.read', 'memories.archive.read', 'memories.write'],
+                default_read: true,
+                archive_read: true,
+                write: true,
+                probe: 'client-self-grant',
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  // Contract path: grants.developer_api.apps.client-app.keys.client-key.
+  // Firestore client rules must deny creating/updating this server-owned grant
+  // document even when a signed-in client tries to grant itself all scopes.
+  await assertFails(getDoc(grantDoc));
+  await assertFails(setDoc(grantDoc, selfGrant));
+  await assertFails(updateDoc(grantDoc, selfGrant));
+  await assertFails(deleteDoc(grantDoc));
+}
+
 const testEnv = await initializeTestEnvironment({ projectId: PROJECT_ID });
 
 try {
@@ -33,10 +65,11 @@ try {
   for (const collection of V17_PROTECTED_COLLECTIONS) {
     await assertClientDeniedForProtectedCollection(db, collection);
   }
+  await assertClientCannotSelfGrantV17AppKeyMemoryAccess(db);
 
   assert.equal(V17_PROTECTED_COLLECTIONS.length, 8);
   console.log(
-    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections`,
+    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections and V17 app/key memory grant self-grant path`,
   );
 } finally {
   await testEnv.cleanup();
