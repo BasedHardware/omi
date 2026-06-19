@@ -223,7 +223,17 @@ fn translate_request(
     // chat). It is stable within a pi-mono session, so every query after the
     // first reads it at 0.1x instead of re-paying full input cost.
     // (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
-    let system = system_prompt.map(cached_system_block);
+    // Filter empty/whitespace system prompts — Anthropic rejects empty cached
+    // text blocks with 400, and whitespace-only prompts have no semantic value.
+    let system = system_prompt
+        .and_then(|text| {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(cached_system_block(trimmed.to_string()))
+            }
+        });
 
     // Breakpoint 2: mark the latest user message so the conversation prefix up
     // to the current turn is cached too. During a tool-use loop one user turn
@@ -1272,14 +1282,15 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
+        // system is Option<serde_json::Value> — compare via JSON serialization
+        // to avoid type mismatch with AnthropicSystemContentBlock.
+        let json = serde_json::to_value(&result).unwrap();
         assert_eq!(
-            result.system,
-            Some(vec![AnthropicSystemContentBlock {
-                block_type: AnthropicContentBlockType::Text,
-                text: "You are helpful.".to_string(),
-                cache_control: AnthropicCacheControl {
-                    cache_type: AnthropicCacheControlType::Ephemeral,
-                },
+            json["system"],
+            json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
             }])
         );
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
@@ -1479,7 +1490,7 @@ mod tests {
             json!([{
                 "type": "text",
                 "text": "You are helpful.",
-                "cache_control": {"type": "ephemeral"}
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
             }])
         );
     }
