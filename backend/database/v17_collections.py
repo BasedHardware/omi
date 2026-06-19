@@ -30,6 +30,10 @@ class V17Collections:
         return f"{self.user_root}/memory_lineage"
 
     @property
+    def memory_evidence(self) -> str:
+        return f"{self.user_root}/memory_evidence"
+
+    @property
     def memory_runs(self) -> str:
         return f"{self.user_root}/memory_runs"
 
@@ -51,6 +55,7 @@ class V17Collections:
             self.memory_operations,
             self.memory_outbox,
             self.memory_lineage,
+            self.memory_evidence,
             self.memory_runs,
             self.legacy_fallback,
             self.memory_commits,

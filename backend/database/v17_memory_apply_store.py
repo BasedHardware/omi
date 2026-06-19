@@ -1,0 +1,187 @@
+from __future__ import annotations
+
+from enum import Enum
+from typing import Any, Dict, Iterable, List, Optional
+
+try:
+    from google.cloud.firestore_v1 import transactional
+except ImportError:  # pragma: no cover - local unit tests mock Firestore.
+    transactional = lambda func: func
+
+from pydantic import BaseModel
+
+from database._client import db
+from database.v17_collections import V17Collections
+from models.memory_evidence import MemoryEvidence
+from models.v17_memory_apply import (
+    ApplyResult,
+    ApplyStatus,
+    MemoryControlState,
+    apply_long_term_patch_transaction,
+)
+from models.v17_memory_operations import MemoryOperation
+
+
+class V17FirestoreApplyError(Exception):
+    pass
+
+
+class MissingV17Document(V17FirestoreApplyError):
+    pass
+
+
+def apply_long_term_patch_firestore(
+    *,
+    uid: str,
+    operation_id: str,
+    patch_payload: Dict[str, Any],
+    db_client=db,
+) -> ApplyResult:
+    """Apply a V17 Long-term patch through the Firestore transaction boundary.
+
+    The pure contract in `models.v17_memory_apply` stays dependency-free. This
+    adapter owns authoritative Firestore reads/writes and never trusts caller
+    snapshots for control state, operation state, or evidence/source state.
+    """
+    transaction = db_client.transaction()
+    return _apply_long_term_patch_firestore_transaction(
+        transaction,
+        db_client,
+        uid,
+        operation_id,
+        patch_payload,
+    )
+
+
+@transactional
+def _apply_long_term_patch_firestore_transaction(
+    transaction,
+    db_client,
+    uid: str,
+    operation_id: str,
+    patch_payload: Dict[str, Any],
+) -> ApplyResult:
+    collections = V17Collections(uid=uid)
+    control_ref = db_client.document(collections.memory_control_state)
+    operation_ref = db_client.document(f"{collections.memory_operations}/{operation_id}")
+
+    control_state = _required_model(
+        ref=control_ref,
+        transaction=transaction,
+        model=MemoryControlState,
+        label="memory control state",
+    )
+    operation = _required_model(
+        ref=operation_ref,
+        transaction=transaction,
+        model=MemoryOperation,
+        label="memory operation",
+    )
+    if operation.uid != uid:
+        raise V17FirestoreApplyError("operation uid does not match requested uid")
+    if operation.operation_id != operation_id:
+        raise V17FirestoreApplyError("operation_id does not match requested operation document")
+
+    evidence_items = _read_authoritative_evidence(
+        db_client=db_client,
+        transaction=transaction,
+        collections=collections,
+        evidence_ids=operation.evidence_ids,
+    )
+    authoritative_payload = dict(patch_payload)
+    authoritative_payload["evidence"] = evidence_items
+
+    result = apply_long_term_patch_transaction(
+        control_state=control_state,
+        operation=operation,
+        patch_payload=authoritative_payload,
+    )
+    _write_apply_result(
+        transaction=transaction,
+        db_client=db_client,
+        collections=collections,
+        operation_ref=operation_ref,
+        result=result,
+    )
+    return result
+
+
+def _read_authoritative_evidence(
+    *,
+    db_client,
+    transaction,
+    collections: V17Collections,
+    evidence_ids: Iterable[str],
+) -> List[MemoryEvidence]:
+    evidence_items: List[MemoryEvidence] = []
+    for evidence_id in evidence_ids:
+        evidence_ref = db_client.document(f"{collections.memory_evidence}/{evidence_id}")
+        evidence = _required_model(
+            ref=evidence_ref,
+            transaction=transaction,
+            model=MemoryEvidence,
+            label="memory evidence",
+        )
+        evidence_items.append(evidence)
+    return evidence_items
+
+
+def _write_apply_result(
+    *,
+    transaction,
+    db_client,
+    collections: V17Collections,
+    operation_ref,
+    result: ApplyResult,
+) -> None:
+    transaction.set(operation_ref, _firestore_data(result.operation))
+    if result.status != ApplyStatus.committed:
+        return
+
+    control_ref = db_client.document(collections.memory_control_state)
+    commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
+    transaction.set(control_ref, _firestore_data(result.control_state))
+    transaction.set(
+        commit_ref,
+        _firestore_data(
+            {
+                "commit_id": result.control_state.head_commit_id,
+                "uid": result.control_state.uid,
+                "account_generation": result.control_state.account_generation,
+                "source_generation": result.control_state.source_generation,
+                "commit_sequence": result.control_state.commit_sequence,
+                "operation_id": result.operation.operation_id,
+                "memory_item_ids": [item.memory_id for item in result.memory_items],
+                "outbox_event_ids": [event.event_id for event in result.outbox_events],
+                "updated_at": result.control_state.updated_at,
+            }
+        ),
+    )
+    for item in result.memory_items:
+        item_ref = db_client.document(f"{collections.memory_items}/{item.memory_id}")
+        transaction.set(item_ref, _firestore_data(item))
+    for event in result.outbox_events:
+        event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
+        transaction.set(event_ref, _firestore_data(event))
+
+
+def _required_model(*, ref, transaction, model, label: str):
+    snapshot = ref.get(transaction=transaction)
+    if not snapshot.exists:
+        raise MissingV17Document(f"missing {label}: {ref.path}")
+    data = snapshot.to_dict() or {}
+    return model(**data)
+
+
+def _firestore_data(value: Any) -> Any:
+    if isinstance(value, BaseModel):
+        return _firestore_data(value.model_dump(mode="python"))
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, list):
+        return [_firestore_data(item) for item in value]
+    if isinstance(value, tuple):
+        return [_firestore_data(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _firestore_data(item) for key, item in value.items()}
+    return value

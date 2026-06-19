@@ -42,6 +42,13 @@ pytest tests/unit/test_v17_durable_memory_patches.py -v
 pytest tests/unit/test_v17_patch_adapter.py -v
 pytest tests/unit/test_v17_read_api.py -v
 pytest tests/unit/test_v17_projections.py -v
+pytest tests/unit/test_v17_firestore_indexes.py -v
+pytest tests/unit/test_v17_normative_foundations.py -v
+pytest tests/unit/test_v17_typed_synthesis.py -v
+pytest tests/unit/test_v17_memory_operations.py -v
+pytest tests/unit/test_v17_atomic_apply.py -v
+pytest tests/unit/test_v17_search_gateway.py -v
+pytest tests/unit/test_v17_firestore_apply_store.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
