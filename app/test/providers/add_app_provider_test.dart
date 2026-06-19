@@ -103,6 +103,12 @@ void main() {
       provider.thumbnailIds = [...provider.thumbnailIds, 'thumb_1'];
       expect(provider.hasDataChanged(app, app.category), isTrue);
     });
+
+    test('adding an external-integration field to a non-integration app marks dirty', () {
+      // app has no external_integration; the dirty check must still detect this.
+      provider.webhookUrlController.text = 'https://hook';
+      expect(provider.hasDataChanged(app, app.category), isTrue);
+    });
   });
 
   group('AddAppProvider.hasDataChanged — external integration', () {
