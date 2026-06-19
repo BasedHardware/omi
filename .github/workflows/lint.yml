@@ -139,7 +139,7 @@ jobs:
         run: |
           FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs rustfmt --check
+            echo "$FILES" | xargs rustfmt --edition 2021 --check
           fi
           cd desktop/macos/Backend-Rust
           cargo check --locked
