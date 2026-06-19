@@ -1,5 +1,15 @@
 #!/bin/sh
 
+# Universal source hygiene: fail fast on unresolved merge conflict markers.
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -n "$STAGED_FILES" ]; then
+  if git grep --cached -n -I -E '^(<<<<<<<|>>>>>>>)' -- $STAGED_FILES; then
+    echo "Unresolved merge conflict markers found in staged files" >&2
+    exit 1
+  fi
+fi
+
 # Dart formatting for app/
 STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$')
 
@@ -77,6 +87,22 @@ if [ -n "$STAGED_C_FILES" ]; then
   fi
   echo "$STAGED_C_FILES" | xargs clang-format -i
   echo "$STAGED_C_FILES" | xargs git add
+fi
+
+# Rust formatting/checking for desktop backend.
+STAGED_DESKTOP_RUST_FILES=$(git diff --cached --name-only --diff-filter=ACM "desktop/macos/Backend-Rust/**.rs")
+
+if [ -n "$STAGED_DESKTOP_RUST_FILES" ]; then
+  echo "Checking desktop Rust backend..."
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "cargo is not installed. Please install Rust/Cargo first" >&2
+    exit 1
+  fi
+  (
+    cd desktop/macos/Backend-Rust && \
+      cargo fmt --check && \
+      cargo check --locked
+  )
 fi
 
 exit 0
