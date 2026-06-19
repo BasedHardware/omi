@@ -73,6 +73,67 @@ def test_v3_external_compatibility_inventory_pins_exact_route_gaps_and_non_claim
         assert gap["approval_claimed"] is False
 
 
+def test_v3_readiness_pins_code_route_evidence_for_runtime_decision_blockers():
+    root = Path(__file__).resolve().parents[2]
+    module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
+    report = module.build_report(execute=True)
+
+    list_surface = {surface["surface_id"]: surface for surface in report["v3_surfaces"]}["list_default_memories"]
+    assert (
+        list_surface["route_decorator"]
+        == "@router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])"
+    )
+    assert list_surface["handler_signature"] == (
+        "def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):"
+    )
+    assert list_surface["db_call"] == "memories_db.get_memories(uid, limit, offset)"
+    assert list_surface["first_page_limit_override"] == "if offset == 0: limit = 5000"
+    assert list_surface["supported_query_params"] == ["limit", "offset"]
+    assert list_surface["unsupported_query_params"] == ["category", "cursor", "include_archive", "source"]
+    assert list_surface["response_model"] == "List[MemoryDB]"
+    assert list_surface["source_metadata_contract"] == "absent"
+
+    create_surface = {surface["surface_id"]: surface for surface in report["v3_surfaces"]}["create_memory"]
+    assert create_surface["db_write_call"] == "memories_db.create_memory(uid, payload)"
+    assert create_surface["vector_write_call"] == "upsert_memory_vector(...)"
+    assert create_surface["v17_write_convergence"] == "absent"
+
+    delete_surface = {surface["surface_id"]: surface for surface in report["v3_surfaces"]}["delete_memory"]
+    assert delete_surface["validation_call"] == "_validate_memory(uid, memory_id)"
+    assert delete_surface["db_write_call"] == "memories_db.delete_memory(uid, memory_id)"
+    assert delete_surface["v17_tombstone_convergence"] == "absent"
+
+
+def test_v3_readiness_pins_decision_matrix_and_product_dependencies():
+    root = Path(__file__).resolve().parents[2]
+    module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
+    report = module.build_report(execute=True)
+
+    decisions = {decision["state"]: decision for decision in report["runtime_decision_matrix"]}
+    for state in ["disabled", "malformed", "missing", "no_default_memory_grant"]:
+        assert decisions[state]["required_behavior"] == "fail_closed_or_explicit_legacy_safe_product_decision"
+        assert decisions[state]["unsafe_legacy_fallback_allowed"] is False
+    assert decisions["enabled_empty"]["required_behavior"] == "return_empty_v17_result_without_legacy_fallback"
+    assert decisions["enabled_empty"]["unsafe_legacy_fallback_allowed"] is False
+    assert (
+        decisions["archive_default"]["required_behavior"] == "default_unavailable_without_explicit_archive_capability"
+    )
+    assert (
+        decisions["cursor_pagination"]["required_behavior"] == "stable_cursor_contract_required_before_runtime_cutover"
+    )
+
+    dependencies = {dependency["dependency_id"]: dependency for dependency in report["product_decision_dependencies"]}
+    for dependency_id in [
+        "v3_disabled_malformed_no_grant_policy",
+        "v3_enabled_empty_policy",
+        "v3_response_shape_source_metadata",
+        "v3_cursor_pagination_contract",
+        "v3_write_convergence_before_read_cutover",
+    ]:
+        assert dependencies[dependency_id]["status"] == "BLOCKED"
+        assert dependencies[dependency_id]["approval_claimed"] is False
+
+
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
     module = _load_module(root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py")
@@ -84,6 +145,8 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "status": "BLOCKED",
         "surface_count": 7,
         "gap_count": 7,
+        "decision_state_count": 8,
+        "product_dependency_count": 5,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,

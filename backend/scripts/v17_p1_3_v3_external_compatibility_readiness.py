@@ -19,6 +19,14 @@ V3_SURFACES = [
         "route": "GET /v3/memories",
         "source_file": "backend/routers/memories.py",
         "handler": "get_memories",
+        "route_decorator": "@router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])",
+        "handler_signature": "def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):",
+        "db_call": "memories_db.get_memories(uid, limit, offset)",
+        "first_page_limit_override": "if offset == 0: limit = 5000",
+        "supported_query_params": ["limit", "offset"],
+        "unsupported_query_params": ["category", "cursor", "include_archive", "source"],
+        "response_model": "List[MemoryDB]",
+        "source_metadata_contract": "absent",
         "current_read_source": "legacy users/{uid}/memories via database.memories.get_memories",
         "v17_gap": "No route-local V17 rollout decision/read seam or source metadata contract is wired here yet.",
         "status": "BLOCKED",
@@ -29,6 +37,9 @@ V3_SURFACES = [
         "route": "POST /v3/memories",
         "source_file": "backend/routers/memories.py",
         "handler": "create_memory",
+        "db_write_call": "memories_db.create_memory(uid, payload)",
+        "vector_write_call": "upsert_memory_vector(...) ".strip(),
+        "v17_write_convergence": "absent",
         "current_read_source": "legacy users/{uid}/memories write plus vector upsert",
         "v17_gap": "External write convergence/dual-write semantics are not proven for V17 memory_items.",
         "status": "BLOCKED",
@@ -59,6 +70,9 @@ V3_SURFACES = [
         "route": "DELETE /v3/memories/{memory_id}",
         "source_file": "backend/routers/memories.py",
         "handler": "delete_memory",
+        "validation_call": "_validate_memory(uid, memory_id)",
+        "db_write_call": "memories_db.delete_memory(uid, memory_id)",
+        "v17_tombstone_convergence": "absent",
         "current_read_source": "legacy users/{uid}/memories validation/delete plus vector delete",
         "v17_gap": "V17 tombstone/delete/account-generation convergence is not proven for external callers.",
         "status": "BLOCKED",
@@ -150,6 +164,98 @@ REMAINING_GAPS = [
     },
 ]
 
+RUNTIME_DECISION_MATRIX = [
+    {
+        "state": "disabled",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "fail_closed_or_explicit_legacy_safe_product_decision",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: route directly calls legacy memories_db.get_memories without a V17 read decision seam.",
+    },
+    {
+        "state": "malformed",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "fail_closed_or_explicit_legacy_safe_product_decision",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: no route-local malformed rollout-state branch exists before legacy read.",
+    },
+    {
+        "state": "missing",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "fail_closed_or_explicit_legacy_safe_product_decision",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: no route-local missing rollout-state branch exists before legacy read.",
+    },
+    {
+        "state": "no_default_memory_grant",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "fail_closed_or_explicit_legacy_safe_product_decision",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: no /v3 app/key/default-memory grant is enforced before legacy read.",
+    },
+    {
+        "state": "enabled_empty",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "return_empty_v17_result_without_legacy_fallback",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: no V17 memory_items read seam exists, so empty V17 state cannot be distinguished from legacy fallback.",
+    },
+    {
+        "state": "archive_default",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "default_unavailable_without_explicit_archive_capability",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: /v3 has no Archive capability decision; readiness preserves Archive default-unavailable as a non-claim.",
+    },
+    {
+        "state": "response_shape_source_metadata",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "additive_external_contract_required_before_exposing_v17_source_metadata",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: response_model=List[MemoryDB] has no source metadata fields or compatibility source contract.",
+    },
+    {
+        "state": "cursor_pagination",
+        "route_refs": ["GET /v3/memories"],
+        "required_behavior": "stable_cursor_contract_required_before_runtime_cutover",
+        "unsafe_legacy_fallback_allowed": False,
+        "current_runtime_proof": "BLOCKED: /v3 supports limit/offset only and overrides first-page limit to 5000.",
+    },
+]
+
+PRODUCT_DECISION_DEPENDENCIES = [
+    {
+        "dependency_id": "v3_disabled_malformed_no_grant_policy",
+        "status": "BLOCKED",
+        "approval_claimed": False,
+        "needed_decision": "Whether external /v3 callers should receive explicit denial, empty safe response, or opt-in legacy-safe behavior for disabled/malformed/missing/no-grant state.",
+    },
+    {
+        "dependency_id": "v3_enabled_empty_policy",
+        "status": "BLOCKED",
+        "approval_claimed": False,
+        "needed_decision": "Confirm enabled-empty V17 memory_items returns [] and must not fall back to stale legacy memories.",
+    },
+    {
+        "dependency_id": "v3_response_shape_source_metadata",
+        "status": "BLOCKED",
+        "approval_claimed": False,
+        "needed_decision": "Define additive external source metadata and defaulted category/review/manual/edit provenance semantics for MemoryDB-compatible clients.",
+    },
+    {
+        "dependency_id": "v3_cursor_pagination_contract",
+        "status": "BLOCKED",
+        "approval_claimed": False,
+        "needed_decision": "Define stable cursor pagination semantics or explicitly retain legacy offset semantics for /v3 cutover.",
+    },
+    {
+        "dependency_id": "v3_write_convergence_before_read_cutover",
+        "status": "BLOCKED",
+        "approval_claimed": False,
+        "needed_decision": "Decide whether /v3 writes are dual-written/converged to V17 before reads can use V17 by default.",
+    },
+]
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -168,6 +274,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "scope": "Oracle P1-3 `/v3` external compatibility readiness only; no runtime behavior changed.",
         "v3_surfaces": V3_SURFACES,
         "remaining_gaps": REMAINING_GAPS,
+        "runtime_decision_matrix": RUNTIME_DECISION_MATRIX,
+        "product_decision_dependencies": PRODUCT_DECISION_DEPENDENCIES,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -180,6 +288,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "status": "BLOCKED",
             "surface_count": len(V3_SURFACES),
             "gap_count": len(REMAINING_GAPS),
+            "decision_state_count": len(RUNTIME_DECISION_MATRIX),
+            "product_dependency_count": len(PRODUCT_DECISION_DEPENDENCIES),
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
