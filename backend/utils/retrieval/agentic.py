@@ -47,6 +47,7 @@ from utils.retrieval.tools import (
     fetch_url_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
 from utils.llm.chat import _get_agentic_qa_prompt
@@ -271,7 +272,8 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
-    return str(result)
+    result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    return result
 
 
 # ---------------------------------------------------------------------------
