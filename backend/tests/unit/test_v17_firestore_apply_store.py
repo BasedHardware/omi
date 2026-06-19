@@ -256,3 +256,41 @@ def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_
     )
 
     assert result.status == ApplyStatus.committed
+
+
+def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target():
+    operation = _operation(
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Updated.",
+            "result_status": "active",
+        },
+    ).mark_committed(
+        "head1",
+        committed_sequence=5,
+        committed_memory_item_ids=["mem1"],
+        committed_outbox_event_ids=["evt_projection", "evt_vector"],
+    )
+    purged_evidence = _evidence(
+        source_state=SourceState.purged,
+        source_state_reason=SourceStateReason.account_purged,
+        artifact_preservation=ArtifactPreservationState.deleted_by_user,
+    )
+    control = MemoryControlState(uid="u1", head_commit_id="head1", account_generation=1, source_generation=2)
+    db = _db_with(control=control, operation=operation, evidence=purged_evidence)
+    patch = _patch(decision=DurablePatchDecision.update, target_memory_id="mem1", memory_text="Updated.")
+
+    result = apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.idempotent_skip
+    assert result.operation.committed_sequence == 5
+    assert result.operation.committed_memory_item_ids == ["mem1"]
+    assert result.operation.committed_outbox_event_ids == ["evt_projection", "evt_vector"]
+    assert db.transaction_obj.sets == []

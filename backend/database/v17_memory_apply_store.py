@@ -83,6 +83,16 @@ def _apply_long_term_patch_firestore_transaction(
     if operation.operation_id != operation_id:
         raise V17FirestoreApplyError("operation_id does not match requested operation document")
 
+    committed_replay = apply_long_term_patch_transaction(
+        control_state=control_state,
+        operation=operation,
+        patch_payload=patch_payload,
+    )
+    if committed_replay.status == ApplyStatus.idempotent_skip:
+        return committed_replay
+    if committed_replay.status == ApplyStatus.payload_mismatch:
+        return committed_replay
+
     evidence_items = _read_authoritative_evidence(
         db_client=db_client,
         transaction=transaction,
