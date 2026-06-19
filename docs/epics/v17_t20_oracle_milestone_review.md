@@ -1443,3 +1443,26 @@ Verification for this slice:
 - `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True`; tools TestClient readiness: `BLOCKED NOT_RUN True False True True True`.
 - Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` real-router import/dependency-map proof under stubs
+
+Continued the safe bridge toward runtime with a controlled real-router import/dependency-map proof, without changing runtime behavior or rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_real_router_dependency_map.py`, which uses static AST inspection plus a repo-venv subprocess probe to import the real `backend/routers/memories.py` only after explicit stubs are installed for unsafe dependencies: `database.memories`, `database.review_queue`, `database.vector_db`, `database._client`, `utils.executors`, `utils.apps`, and `utils.other.endpoints`.
+- Added `backend/tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py` and registered it in `backend/test.sh`.
+- Linked the proof from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` as `real_router_dependency_map_proof` while keeping `/v3` runtime status `BLOCKED`.
+- The artifact pins import side effects blocked by stubs, every required import stub, route functions/decorators for `GET /v3/memories`, `POST /v3/memories`, and `DELETE /v3/memories/{memory_id}`, and dependency overrides required before any real-router TestClient proof.
+- The future GET seam remains query params -> request adapter -> route planner -> response adapter. No `backend/main.py` import, production app startup, route inclusion, route handler execution, Firestore/Pinecone/cloud/provider/network call, mutation, runtime cutover, benchmark, telemetry sink integration, or rollout approval is claimed.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -q` -> `4 failed in 0.07s` before adding the runner/readiness/docs/test.sh registration.
+- GREEN focused route proof: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -q` -> `4 passed in 0.83s`.
+- Normal-env focused `/v3` proof suite: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_v3_memory_read_service.py tests/unit/test_v17_v3_projection_readiness.py tests/unit/test_v17_v3_compatibility.py tests/unit/test_v17_v3_cursor.py tests/unit/test_v17_v3_write_convergence.py tests/unit/test_v17_v3_response_adapter.py tests/unit/test_v17_v3_request_adapter.py tests/unit/test_v17_v3_route_planner.py tests/unit/test_v17_p1_3_v3_route_signature_integration.py tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_5_tools_fastapi_testclient_readiness.py -q` -> `78 passed in 3.59s`.
+- Normal-env full V17 regression: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_*.py -q` -> `450 passed, 3 warnings in 5.53s`.
+- Venv real-router proof test: `cd backend && venv/bin/python -m pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -q` -> `4 passed in 0.85s`.
+- Real-router dependency-map summary: `venv/bin/python scripts/v17_p1_3_v3_real_router_dependency_map.py --execute` -> `BLOCKED True True 7 3 False`.
+- Existing FastAPI route-contract summary: `venv/bin/python scripts/v17_p1_3_v3_fastapi_route_contract.py --execute` -> `BLOCKED PASSED True 5`.
+- `/v3` readiness: `BLOCKED True False False False False False False False False 7 7 True True`.
+- Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

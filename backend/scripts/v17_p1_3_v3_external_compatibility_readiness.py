@@ -569,6 +569,22 @@ FASTAPI_ROUTE_CONTRACT_PROOF = {
     ],
 }
 
+REAL_ROUTER_DEPENDENCY_MAP_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_real_router_dependency_map.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "imports_real_router_under_stubs": True,
+    "covered_defaults": [
+        "real_memories_router_imported_only_after_explicit_unsafe_dependency_stubs",
+        "pins_import_side_effects_and_required_testclient_overrides_before_route_execution",
+        "pins_get_post_delete_v3_route_functions_and_decorators_from_real_router",
+        "future_get_seam_remains_request_adapter_to_route_planner_to_response_adapter",
+        "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -604,6 +620,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "route_planner_proof": ROUTE_PLANNER_PROOF,
         "route_signature_integration_proof": ROUTE_SIGNATURE_INTEGRATION_PROOF,
         "fastapi_route_contract_proof": FASTAPI_ROUTE_CONTRACT_PROOF,
+        "real_router_dependency_map_proof": REAL_ROUTER_DEPENDENCY_MAP_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -628,6 +645,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "route_planner_proof_present": True,
             "route_signature_integration_proof_present": True,
             "fastapi_route_contract_proof_present": True,
+            "real_router_dependency_map_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
