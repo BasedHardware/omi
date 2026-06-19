@@ -10,6 +10,7 @@ Covers bot-identified correctness gaps:
 - Memory cache not poisoned by failed translations (P1)
 - Sync Redis offloaded to run_blocking in async observe() (P2)
 """
+
 from __future__ import annotations
 
 import re
@@ -88,6 +89,7 @@ def split_into_sentences(text: str) -> list[str]:
 # ===========================================================================
 # TESTS — Abbreviation Splitting (P2 from Codex bot review)
 # ===========================================================================
+
 
 class TestAbbreviationSplitting(unittest.TestCase):
     """Verify split_into_sentences doesn't break on common abbreviations.
@@ -168,6 +170,7 @@ class TestAbbreviationSplitting(unittest.TestCase):
 # TESTS — Structural Code Paths (verify fixes are present in source)
 # ===========================================================================
 
+
 class TestStructuralCodePaths(unittest.TestCase):
     """Verify that bot-identified code paths exist and are correctly structured."""
 
@@ -186,14 +189,12 @@ class TestStructuralCodePaths(unittest.TestCase):
     def test_split_has_abbrev_protection(self):
         source = self._read_source("utils/translation.py")
         self.assertIsNotNone(source)
-        self.assertIn("_ABBREV_PATTERNS", source,
-                        "split_into_sentences must have abbreviation protection patterns")
+        self.assertIn("_ABBREV_PATTERNS", source, "split_into_sentences must have abbreviation protection patterns")
 
     def test_split_has_merge_heuristic(self):
         source = self._read_source("utils/translation.py")
         self.assertIsNotNone(source)
-        self.assertIn("_should_merge", source,
-                        "split_into_sentences must have post-split merge heuristic")
+        self.assertIn("_should_merge", source, "split_into_sentences must have post-split merge heuristic")
 
     # --- Full-text cache before sentence splitting (P2) ---
 
@@ -203,9 +204,9 @@ class TestStructuralCodePaths(unittest.TestCase):
         self.assertIn("full_text_results", source)
         phase_neg1 = source.index("# Phase -1:")
         phase_0 = source.index("# Phase 0:")
-        self.assertLess(phase_neg1, phase_0,
-                        "Full-text cache check (Phase -1) must come before "
-                        "sentence splitting (Phase 0)")
+        self.assertLess(
+            phase_neg1, phase_0, "Full-text cache check (Phase -1) must come before " "sentence splitting (Phase 0)"
+        )
 
     # --- No-op path version bump + batch buffer clear (P1 from round 2) ---
 
@@ -215,13 +216,12 @@ class TestStructuralCodePaths(unittest.TestCase):
         self.assertIn("_next_version()", source)
         self.assertIn("_batch_buffer", source)
         no_op_section = source[
-            source.index("should_persist_translation"):
-            source.index("continue  # Don't add to batch buffer")
+            source.index("should_persist_translation") : source.index("continue  # Don't add to batch buffer")
         ]
-        self.assertIn("_next_version()", no_op_section,
-                        "No-op path must bump version to invalidate stale batch entries")
-        self.assertIn("_batch_buffer", no_op_section,
-                        "No-op path must clear batch buffer for this segment")
+        self.assertIn(
+            "_next_version()", no_op_section, "No-op path must bump version to invalidate stale batch entries"
+        )
+        self.assertIn("_batch_buffer", no_op_section, "No-op path must clear batch buffer for this segment")
 
     # --- Failed-fallback memory cache guard (P1 from round 2) ---
 
@@ -233,10 +233,8 @@ class TestStructuralCodePaths(unittest.TestCase):
         cache_trans_pos = source.rfind("cache_translation(text_hash")
         guard_pos = source.rfind("_failed_sent_hashes", 0, max(set_mem_pos, cache_trans_pos))
         self.assertGreater(guard_pos, -1, "_failed_sent_hashes guard not found")
-        self.assertLess(guard_pos, set_mem_pos,
-                        "_set_memory_cache must be gated by _failed_sent_hashes")
-        self.assertLess(guard_pos, cache_trans_pos,
-                        "cache_translation must be gated by _failed_sent_hashes")
+        self.assertLess(guard_pos, set_mem_pos, "_set_memory_cache must be gated by _failed_sent_hashes")
+        self.assertLess(guard_pos, cache_trans_pos, "cache_translation must be gated by _failed_sent_hashes")
 
     # --- Async Redis via run_blocking (P2 from round 2) ---
 
@@ -244,7 +242,7 @@ class TestStructuralCodePaths(unittest.TestCase):
         source = self._read_source("utils/translation_coordinator.py")
         self.assertIsNotNone(source)
         self.assertIn("run_blocking", source)
-        observe_section = source[source.find("def observe"):]
+        observe_section = source[source.find("def observe") :]
         self.assertIn("run_blocking", observe_section)
         self.assertIn("get_cached_translation", observe_section)
 

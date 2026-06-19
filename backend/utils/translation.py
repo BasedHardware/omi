@@ -356,9 +356,9 @@ def split_into_sentences(text: str) -> List[str]:
     # Does NOT attempt to resolve single-period titles (Dr./Mr.) followed by
     # proper nouns — that requires NLP-level disambiguation.
 
-    _ABBR = 'ⓐⓑⓒ'   # country code internal period
-    _DEC = 'ⓓⓔⓕ'    # decimal point
-    _LAT = 'ⓛⓐⓣ'    # latin abbrev internal period
+    _ABBR = 'ⓐⓑⓒ'  # country code internal period
+    _DEC = 'ⓓⓔⓕ'  # decimal point
+    _LAT = 'ⓛⓐⓣ'  # latin abbrev internal period
 
     _ABBREV_PATTERNS = [
         # Country codes: U.S. → UⓐⓑⓒS. (internal period protected, trailing period kept)
@@ -393,11 +393,7 @@ def split_into_sentences(text: str) -> List[str]:
             s = s.strip()
             if not s:
                 continue
-            restored = (
-                s.replace(_ABBR, '.')
-                 .replace(_DEC, '.')
-                 .replace(_LAT, '.')
-            )
+            restored = s.replace(_ABBR, '.').replace(_DEC, '.').replace(_LAT, '.')
             restored_list.append(restored)
 
         # Phase 4: Merge false splits at abbreviation boundaries
