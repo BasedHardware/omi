@@ -8,6 +8,7 @@ import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.scopes import Scopes, has_scope
 from utils.memory.v17_product_authorization import V17ProductAuthorizationContext
+from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,49 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     return user_id
+
+
+async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+    """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
+
+    Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
+    Missing scopes/app_id/key_id are preserved as missing values so V17 memory
+    authorization fails closed instead of inferring advertised MCP tool scopes.
+    """
+    if not api_key or not api_key.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
+        )
+
+    token = api_key.replace("Bearer ", "")
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    return ApiKeyAuth(
+        uid=user_data["user_id"],
+        scopes=user_data.get("scopes"),
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+    )
+
+
+async def get_mcp_v17_default_memory_read_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> V17ProductAuthorizationContext:
+    if not has_scope(auth.scopes, 'memories.read'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.read")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for V17 memory authorization")
+    return build_mcp_v17_default_memory_read_context(
+        McpV17VerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
 
 
 # Data structure to return from auth

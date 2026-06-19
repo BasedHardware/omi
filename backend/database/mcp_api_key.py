@@ -9,11 +9,23 @@ from database._client import db
 from models.mcp_api_key import McpApiKey
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 
+MCP_DEFAULT_APP_ID = "mcp-api"
 
-def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
+
+def create_mcp_key(
+    user_id: str,
+    name: str,
+    scopes: Optional[List[str]] = None,
+    app_id: Optional[str] = MCP_DEFAULT_APP_ID,
+) -> Tuple[str, McpApiKey]:
     """
     Creates a new MCP API key for a user.
     Returns the raw key and the key's metadata.
+
+    New keys carry stable server-owned app/key identity for future V17
+    authorization. Scopes default to None/no verified scopes so existing keys do
+    not implicitly gain memory access; a server-side grant/migration must set
+    scopes before V17 MCP route enforcement can authorize.
     """
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
@@ -27,6 +39,8 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         "key_prefix": key_prefix,
         "created_at": now,
         "last_used_at": None,
+        "app_id": app_id,
+        "scopes": scopes,
     }
     db.collection("mcp_api_keys").document(key_id).set(api_key_doc)
 
@@ -36,6 +50,8 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         key_prefix=key_prefix,
         created_at=now,
         last_used_at=None,
+        app_id=app_id,
+        scopes=scopes,
     )
     return raw_key, api_key_data
 
@@ -74,17 +90,26 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
     Uses a cache to avoid frequent database lookups.
     Also updates the last_used_at timestamp on cache miss.
     """
+    user_data = get_user_and_scopes_by_api_key(api_key)
+    return user_data.get("user_id") if user_data else None
+
+
+def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
+    """Verifies an MCP API key and returns uid plus persisted app/key/scopes.
+
+    Backward compatibility: old key docs and old Redis entries still authenticate
+    uid-only. Missing persisted scopes/app_id remain None, not inferred from MCP
+    tool advertisements, so V17 authorization fails closed.
+    """
     if not api_key.startswith("omi_mcp_"):
         return None
     secret_part = api_key.replace("omi_mcp_", "", 1)
     hashed_key = hash_api_key(secret_part)
 
-    # Check cache first
-    user_id = redis_db.get_cached_mcp_api_key_user_id(hashed_key)
-    if user_id:
-        return user_id
+    cached_data = redis_db.get_cached_mcp_api_key_auth_context(hashed_key)
+    if cached_data:
+        return cached_data
 
-    # If not in cache, query database
     keys_ref = db.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
     docs = list(keys_ref.stream())
 
@@ -92,12 +117,15 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
         return None
 
     key_doc = docs[0]
-    user_id = key_doc.to_dict().get("user_id")
+    key_data = key_doc.to_dict() or {}
+    user_id = key_data.get("user_id")
+    key_id = key_data.get("id") or getattr(key_doc, "id", None)
+    app_id = key_data.get("app_id")
+    scopes = key_data.get("scopes")
 
     if user_id:
-        # Cache the key and update last_used_at
-        redis_db.cache_mcp_api_key(hashed_key, user_id)
+        redis_db.cache_mcp_api_key_auth_context(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)
         key_ref = key_doc.reference
         key_ref.update({"last_used_at": datetime.utcnow()})
 
-    return user_id
+    return {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}

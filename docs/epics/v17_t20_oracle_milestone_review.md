@@ -793,6 +793,24 @@ This closes only the first MCP context/readiness helper subpoint. Remaining P0-1
 - Deployed Firestore rules/IAM proof against a real target project remains not run.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 persisted MCP API-key auth-context contract
+
+Continued Oracle P0-1/P0-6 by adding a backward-compatible persisted MCP API-key app/key/scope contract, without route enforcement or changing the production rollout verdict:
+
+- Extended `mcp_api_keys/{key_id}` creation/model/cache/read shapes to carry optional server-owned `app_id`, `key_id`, and persisted `scopes`; new keys get stable `app_id='mcp-api'` and no implicit scopes.
+- Added `database.mcp_api_key.get_user_and_scopes_by_api_key(...)` while preserving `get_user_id_by_api_key(...)` / `get_uid_from_mcp_api_key(...)` uid-only compatibility for existing MCP routes and old key docs/cache entries.
+- Added `get_mcp_api_key_auth(...)` and `get_mcp_v17_default_memory_read_context(...)`; the V17 helper only builds a MCP `V17ProductAuthorizationContext` when persisted `memories.read`, `app_id`, and `key_id` are present. Old keys and keys without persisted scopes fail closed for V17 authorization rather than inheriting advertised MCP/OAuth scopes.
+- Added unit coverage proving old docs still authenticate uid-only, missing app/scope context fails closed through the shared grant seam, persisted `memories.read` + app/key identity can compose with `grants.mcp.apps.mcp-api.keys.{key_id}` default-read grants, and default policies keep `archive_capability=false`.
+- Updated `docs/epics/v17_mcp_app_key_scope_readiness.md` to reflect the storage/cache/dependency contract, migration/default behavior, OAuth-introspection gap, and remaining REST/SSE route wiring blockers.
+
+This closes only the persisted MCP API-key auth-context contract subpoint. Remaining P0-1/P0-6 work:
+
+- Add a server/admin migration or OAuth introspection path that actually persists/verifies MCP key scopes for production keys; do not self-grant from client-supplied/advertised scopes.
+- Wire MCP REST `/v1/mcp/memories/search` and streamable HTTP/SSE `search_memories` to pass the verified context into `authorize_v17_external_default_memory_read(...)` and deny before V17 vector/default reads when composition fails.
+- Carry verified auth context through SSE session/tool execution instead of only `user_id: str`.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

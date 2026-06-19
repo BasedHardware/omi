@@ -46,11 +46,11 @@ Memory tools observed:
 | `delete_memory` | `memories.write` | uid string only | Legacy delete guarded by V17 read/write convergence guard | Missing app/key/scope write context |
 | `edit_memory` | `memories.write` | uid string only | Legacy edit guarded by V17 read/write convergence guard | Missing app/key/scope write context |
 
-## MCP API key model/storage gap
+## MCP API key model/storage contract
 
 Current MCP API key storage/model files are `backend/database/mcp_api_key.py` and `backend/models/mcp_api_key.py`.
 
-Current key document fields created for `mcp_api_keys/{key_id}`:
+Current key document fields created for `mcp_api_keys/{key_id}` after the follow-up persisted-context contract slice:
 
 ```yaml
 id: <uuid>
@@ -60,13 +60,19 @@ hashed_key: <hash>
 key_prefix: <prefix>
 created_at: <timestamp>
 last_used_at: null
+app_id: mcp-api | null
+scopes: null | [memories.read, memories.write, ...]
 ```
 
-The public `McpApiKey` model returns only `id`, `name`, `key_prefix`, `created_at`, and `last_used_at`. There is no persisted `app_id`, no persisted key scopes, no OAuth token introspection result, and the Redis MCP key cache stores only `user_id`.
+The public `McpApiKey` model can now carry optional `app_id` and `scopes`. `database.mcp_api_key.get_user_and_scopes_by_api_key(...)` returns `user_id`, `app_id`, `key_id`, and persisted `scopes`. The Redis MCP key cache can store the same shape, while older uid-only cache entries decode as uid-only auth with `app_id=None`, `key_id=None`, and `scopes=None`. Existing `get_uid_from_mcp_api_key(...)` compatibility is preserved through `get_user_id_by_api_key(...)`.
+
+Default behavior is fail-closed for V17 authorization: old key docs have no `app_id`/`scopes`, new key creation writes stable server-owned `app_id: mcp-api` but `scopes: null` unless a server-side migration/admin path explicitly persists verified scopes. No client-supplied or advertised MCP tool scope is treated as verified execution authority.
+
+There is still no OAuth token introspection result wired into MCP execution context. SSE sessions still pass only `user_id` into `execute_tool(...)`, so this is a persisted API-key auth-context contract, not route enforcement.
 
 Therefore this slice does **not** invent MCP scopes or treat advertised OAuth scopes as verified execution scopes. Any V17 route/tool wiring must wait until one of these exists:
 
-1. MCP API keys persist server-owned `app_id`, `key_id`, and verified scopes, and the auth dependency returns them; or
+1. MCP API keys persist server-owned `app_id`, `key_id`, and verified scopes, and the auth dependency returns them for the specific route/tool execution; or
 2. MCP OAuth bearer tokens are introspected/verified and the execution context carries stable client/app/key identity plus verified scopes.
 
 ## Helper added in this slice
@@ -120,15 +126,15 @@ if not v17_app_key_grant.allowed:
 
 This must occur before any V17 vector query, repair/outbox side effect, or `users/{uid}/memory_items` hydration. For streamable HTTP/SSE, the JSON-RPC session/tool execution signature must carry a verified auth context rather than only `user_id: str` before tool execution can be safely V17-wired.
 
+The REST dependency helper now exists as `get_mcp_v17_default_memory_read_context(...)`; it returns a `V17ProductAuthorizationContext` only when the persisted MCP API-key context has `memories.read`, `app_id`, and `key_id`. It is intentionally **not** wired to `/v1/mcp/memories/search` yet because most current keys have no persisted scopes/grants and SSE still lacks a verified execution-context carrier.
+
 ## RED tests still needed before route enforcement
 
-- MCP API key persistence test proving server-owned scopes are written/read and client-requested scopes are ignored.
-- Auth dependency test proving REST `get_mcp_v17_default_memory_read_context` returns uid/app_id/key_id/verified scopes and preserves uid-only compatibility.
-- REST `GET /v1/mcp/memories/search` test proving missing app/key/scope/grant denies before V17 vector read and repair/outbox writer.
+- Route-level REST `GET /v1/mcp/memories/search` test proving `get_mcp_v17_default_memory_read_context(...)` plus `authorize_v17_external_default_memory_read(...)` denies before V17 vector read and repair/outbox writer when app/key/scope/grant composition fails.
 - SSE `search_memories` test proving the same deny-before-vector behavior with a verified execution context.
 - SSE `get_memories` default-list test only if that tool is promoted to V17 reads.
 - Write-scope tests for create/edit/delete only when V17 write convergence is designed; do not broaden writes through this default-read helper.
 
 ## Explicit non-claims
 
-This slice is a readiness/context helper only. It does **not** wire MCP REST/SSE V17 reads to app/key/scope enforcement, persist MCP key scopes, introspect OAuth tokens, run deployed Firestore/IAM proof, call Pinecone, approve production rollout, expose Archive by default, or claim benchmarks/telemetry/cloud evidence.
+This artifact now covers a readiness/context helper plus a backward-compatible persisted MCP API-key auth-context contract. It does **not** wire MCP REST/SSE V17 reads to app/key/scope enforcement, grant scopes to existing keys, create an admin/migration UI for MCP scopes, introspect OAuth tokens, run deployed Firestore/IAM proof, call Pinecone, approve production rollout, expose Archive by default, or claim benchmarks/telemetry/cloud evidence.
