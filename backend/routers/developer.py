@@ -15,6 +15,7 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
@@ -47,6 +48,10 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.v17_developer_memory_adapter import (
+    read_v17_developer_default_memory_rollout,
+    search_v17_default_developer_memories,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -170,6 +175,21 @@ def get_memories(
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+
+    if not category_list:
+        v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
+        v17_memories = search_v17_default_developer_memories(
+            uid=uid,
+            query='',
+            limit=limit,
+            offset=offset,
+            db_client=db,
+            rollout_capabilities=v17_rollout.rollout_capabilities,
+            app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+        )
+        if v17_memories is not None:
+            return [CleanerMemory.model_validate(memory) for memory in v17_memories]
+
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
     # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
     # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
