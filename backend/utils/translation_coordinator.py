@@ -201,7 +201,9 @@ class TranslationCoordinator:
             if state.committed_text and not text.startswith(state.committed_text):
                 # Check if the new merged text was already translated (Redis cache)
                 text_hash = hashlib.md5(text.encode()).hexdigest()
-                redis_cached = get_cached_translation(text_hash, self.target_language)
+                redis_cached = await run_blocking(
+                    sync_executor, get_cached_translation, text_hash, self.target_language
+                )
                 if redis_cached:
                     # Found in Redis — adopt as committed, skip re-translation
                     translated_text = redis_cached['text']
@@ -211,8 +213,10 @@ class TranslationCoordinator:
                         state.committed_text = text
                         state.assembled_translation = translated_text
                         state.detected_lang = detected_lang
+                        state.version = self._next_version()
                         state.latest_text = text
                         state.last_update_at = now
+                        self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
                         self.metrics['prefix_resets'] += 1
                         continue  # Don't add to batch buffer
                     state.committed_text = text

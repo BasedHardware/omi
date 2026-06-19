@@ -654,10 +654,10 @@ class TranslationService:
                 dominant_lang = lang_counts.most_common(1)[0][0]
 
             text_hash = hashlib.md5(original_text.encode()).hexdigest()
-            self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
-            # Only persist to long-lived Redis cache if NO sentence fell back
-            # to original text (avoids poisoning cache with untranslated output).
+            # Only persist to any cache if NO sentence fell back to original text
+            # (avoids poisoning both in-memory LRU and Redis with untranslated output).
             if not any(sh in _failed_sent_hashes for _, sh in sentences):
+                self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
                 cache_translation(text_hash, dest_language, assembled, dominant_lang)
 
             results.append((unit_id, assembled, dominant_lang))
