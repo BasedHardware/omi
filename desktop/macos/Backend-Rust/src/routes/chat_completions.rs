@@ -237,8 +237,6 @@ fn translate_request(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-<<<<<<< HEAD
-=======
         system: system_prompt.and_then(|text| {
             let text = text.trim().to_string();
             if text.is_empty() {
@@ -253,7 +251,6 @@ fn translate_request(
                 }])
             }
         }),
->>>>>>> 608ebd12c3 (refactor: replace raw String types with typed enums for Anthropic block/cache types)
         temperature: req.temperature,
         stream: req.stream,
         tools: if is_tool_choice_none { None } else { anthropic_tools },
@@ -1285,8 +1282,6 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-<<<<<<< HEAD
-=======
         assert_eq!(
             result.system,
             Some(vec![AnthropicSystemContentBlock {
@@ -1297,7 +1292,6 @@ mod tests {
                 },
             }])
         );
->>>>>>> 608ebd12c3 (refactor: replace raw String types with typed enums for Anthropic block/cache types)
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
