@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { AlignLeft, Download, Search, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { AlignLeft, Download, FileText, Search, X } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
+import type { RewindFrame } from '../../../shared/types'
 import { RewindPlayer } from '../components/rewind/RewindPlayer'
 import { RewindTimelineBar } from '../components/rewind/RewindTimelineBar'
 import { RewindThumbnailStrip } from '../components/rewind/RewindThumbnailStrip'
@@ -12,11 +13,32 @@ export function Rewind(): React.JSX.Element {
   const [showSearch, setShowSearch] = useState(false)
   const [showOcr, setShowOcr] = useState(false)
 
+  // Date filter — defaults to today; switching to a past date loads that day's frames.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [dateStr, setDateStr] = useState(todayStr)
+  const [dateFrames, setDateFrames] = useState<RewindFrame[] | null>(null)
+  const [dateLoading, setDateLoading] = useState(false)
+
+  const isToday = dateStr === todayStr
+  const frames = isToday ? r.frames : (dateFrames ?? [])
+
+  useEffect(() => {
+    if (isToday) { setDateFrames(null); return }
+    setDateLoading(true)
+    const dayStart = new Date(dateStr + 'T00:00:00').getTime()
+    const dayEnd = new Date(dateStr + 'T23:59:59.999').getTime()
+    void window.omi.rewindFrames(dayStart, dayEnd).then((f) => {
+      setDateFrames(f)
+      if (f.length > 0) r.setCursorTs(f[f.length - 1].ts)
+    }).finally(() => setDateLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateStr, isToday])
+
   const exportJson = (): void => {
     const data = {
       exportedAt: new Date().toISOString(),
-      frameCount: r.frames.length,
-      frames: r.frames.map((f) => ({
+      frameCount: frames.length,
+      frames: frames.map((f) => ({
         timestamp: new Date(f.ts).toISOString(),
         timestampMs: f.ts,
         app: f.app,
@@ -28,7 +50,27 @@ export function Rewind(): React.JSX.Element {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `omi-rewind-${new Date().toISOString().slice(0, 10)}.json`
+    a.download = `omi-rewind-${dateStr}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportMarkdown = (): void => {
+    const lines: string[] = ['# Omi Rewind Export', '', `**Date:** ${dateStr}`, '']
+    for (const f of frames) {
+      const ts = new Date(f.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      lines.push(`## ${ts}`)
+      lines.push(`**App:** ${f.app || 'Unknown'} · **Window:** ${f.windowTitle || '—'}`)
+      lines.push('')
+      if (f.ocrText) { lines.push(f.ocrText); lines.push('') }
+      lines.push('---')
+      lines.push('')
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `omi-rewind-${dateStr}.md`
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -48,6 +90,16 @@ export function Rewind(): React.JSX.Element {
             </button>
           ) : (
             <>
+              {/* Date picker — filters to a specific day's frames */}
+              <input
+                type="date"
+                value={dateStr}
+                max={todayStr}
+                onChange={(e) => { if (e.target.value) setDateStr(e.target.value) }}
+                disabled={dateLoading}
+                className="rounded bg-white/10 px-2 py-1 text-sm text-white/70 [color-scheme:dark] hover:bg-white/15 disabled:opacity-40"
+                title="Filter to a specific date"
+              />
               <button
                 onClick={() => setShowOcr((v) => !v)}
                 title={showOcr ? 'Hide OCR text' : 'Show OCR text'}
@@ -56,15 +108,25 @@ export function Rewind(): React.JSX.Element {
                 <AlignLeft className="h-3.5 w-3.5" strokeWidth={1.75} />
                 Text
               </button>
-              {r.frames.length > 0 && (
-                <button
-                  onClick={exportJson}
-                  title="Export frames as JSON"
-                  className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-sm text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-                >
-                  <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
-                  Export
-                </button>
+              {frames.length > 0 && (
+                <>
+                  <button
+                    onClick={exportJson}
+                    title="Export frames as JSON"
+                    className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-sm text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+                  >
+                    <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    JSON
+                  </button>
+                  <button
+                    onClick={exportMarkdown}
+                    title="Export frames as Markdown"
+                    className="flex items-center gap-1.5 rounded bg-white/10 px-3 py-1 text-sm text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+                  >
+                    <FileText className="h-3.5 w-3.5" strokeWidth={1.75} />
+                    MD
+                  </button>
+                </>
               )}
               <button
                 onClick={() => setShowSearch(true)}
@@ -74,12 +136,14 @@ export function Rewind(): React.JSX.Element {
                 <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
                 Search
               </button>
-              <button
-                onClick={() => r.setPlaying(!r.playing)}
-                className="rounded bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
-              >
-                {r.playing ? 'Pause' : 'Play'}
-              </button>
+              {isToday && (
+                <button
+                  onClick={() => r.setPlaying(!r.playing)}
+                  className="rounded bg-white/10 px-3 py-1 text-sm text-white hover:bg-white/15"
+                >
+                  {r.playing ? 'Pause' : 'Play'}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -98,14 +162,23 @@ export function Rewind(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} showOcr={showOcr} />
-          <RewindThumbnailStrip frames={r.frames} cursorTs={r.cursorTs} onSeek={r.setCursorTs} />
-          <RewindTimelineBar
-            frames={r.frames}
-            bounds={r.bounds}
-            cursorTs={r.cursorTs}
-            onSeek={r.setCursorTs}
-          />
+          {dateLoading && (
+            <div className="flex items-center justify-center py-4 text-sm text-white/40">
+              Loading frames for {dateStr}…
+            </div>
+          )}
+          {!dateLoading && (
+            <>
+              <RewindPlayer frames={frames} cursorTs={r.cursorTs} showOcr={showOcr} />
+              <RewindThumbnailStrip frames={frames} cursorTs={r.cursorTs} onSeek={r.setCursorTs} />
+              <RewindTimelineBar
+                frames={frames}
+                bounds={isToday ? r.bounds : (frames.length > 0 ? { min: frames[0].ts, max: frames[frames.length - 1].ts } : null)}
+                cursorTs={r.cursorTs}
+                onSeek={r.setCursorTs}
+              />
+            </>
+          )}
         </>
       )}
     </div>

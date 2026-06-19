@@ -126,9 +126,10 @@ Already resolved in Batch 7:
 | Field | Value |
 |-------|-------|
 | macOS source | `InsightPage.swift`, `InsightStorage.swift`, `InsightAssistant.swift` — proactive local insight generation |
-| Windows source | None |
-| Exact blocker | Windows has no proactive assistant backend; insights are generated locally by the macOS app |
-| **Classification** | **DO_NOT_DO_NOW** |
+| Windows source | `Insights.tsx` — **IMPLEMENTED** |
+| Data exists today | YES — `insightRecent(limit)` IPC returns `InsightRecord[]` from SQLite; insight engine runs continuously |
+| **What was added** | (1) `/insights` route and `InsightsPanel` in `MainViews.tsx`. (2) **Insights** nav item (Lightbulb icon) in `Sidebar.tsx`. (3) `Insights.tsx` page: category filter tabs (All / Productivity / Communication / Learning / Health / Other), search field, insight cards (category badge, headline, advice, sourceApp + timestamp footer, expandable reasoning), Refresh button. |
+| **Classification** | **DONE** |
 
 ---
 
@@ -157,14 +158,15 @@ Already resolved in Batch 7:
 
 | Field | Value |
 |-------|-------|
-| macOS source | `RewindPage.swift` — OCR text panel, export menu (markdown/JSON/PDF) |
-| Windows source | `Rewind.tsx` / `RewindPlayer.tsx` — **IMPLEMENTED (Batch 9)** |
+| macOS source | `RewindPage.swift` — OCR text panel, export menu (markdown/JSON/PDF), date picker |
+| Windows source | `Rewind.tsx` / `RewindPlayer.tsx` — **FULLY IMPLEMENTED** |
 | Backend/data | `latestRewindFrame()` returns `{imagePath, ocrText, ts}`. OCR text available per frame. |
 | Data exists today | YES |
 | UI exists today | YES — implemented |
-| **What was added** | (1) **OCR text panel** — collapsible panel below FrameMeta; toggled by "Text" button in header; shows `frame.ocrText` (selectable), empty state "No text captured for this frame." (2) **Fullscreen button** — `Maximize2` icon floating top-right of player, always visible, triggers existing `expanded` modal overlay. Click-on-image behavior preserved. (3) **JSON export** — "Export" button (only shown when frames exist) downloads `omi-rewind-{date}.json` via blob URL; payload: `{ exportedAt, frameCount, frames: [{ timestamp, timestampMs, app, windowTitle, ocrText }] }`. Uses Electron renderer blob download — no new IPC required. |
-| **Remaining gap** | PDF export — requires native library (not implemented). Markdown export deferred. |
-| **Classification** | **DONE** (OCR panel + fullscreen button + JSON export) |
+| **What was added (Batch 9)** | (1) **OCR text panel**. (2) **Fullscreen button**. (3) **JSON export**. |
+| **What was added (current batch)** | (4) **Markdown export** — "MD" button downloads `omi-rewind-{date}.md`; each frame becomes a `## HH:MM:SS` section with **App/Window** header + OCR text body. (5) **Date filter** — `<input type="date">` in header; selecting a past date calls `rewindFrames(dayStart, dayEnd)` and renders that day's frames (live polling continues only for today). |
+| **Remaining gap** | PDF export — requires native library (not implemented). |
+| **Classification** | **DONE** (OCR panel + fullscreen + JSON + Markdown + date filter) |
 
 ---
 
@@ -203,17 +205,23 @@ Already resolved in Batch 7:
 
 ## Summary
 
-| Priority | Item | Files | Risk |
-|----------|------|-------|------|
+| Priority | Item | Files | Status |
+|----------|------|-------|--------|
 | ✓ | Integrations tab (wired in Batch 6) | `tabs.ts`, `Settings.tsx` | Done |
 | ✓ | Shortcuts tab in Settings | `tabs.ts`, `Settings.tsx`, `ShortcutsTab.tsx` | Done |
 | ✓ | Chat citation cards | `useChat.ts`, `ChatMessages.tsx` | Done |
 | ✓ | Conversations starred filter | `Conversations.tsx` | Done |
 | ✓ | Support/About tab | `tabs.ts`, `Settings.tsx`, `SupportTab.tsx` | Done in Batch 11 |
-| ✓ | Rewind OCR overlay + fullscreen button + JSON export | `Rewind.tsx`, `RewindPlayer.tsx` | Done in Batch 9 |
-| ✗ | Focus page | — | Very high / infeasible |
-| ✗ | Insights page | — | Very high / infeasible |
-| ✗ | Notifications settings | — | High / infeasible |
+| ✓ | Rewind OCR overlay + fullscreen + JSON export | `Rewind.tsx`, `RewindPlayer.tsx` | Done in Batch 9 |
+| ✓ | Rewind Markdown export + date filter | `Rewind.tsx` | Done in current batch |
+| ✓ | Insights history page | `Insights.tsx`, `MainViews.tsx`, `Sidebar.tsx` | Done in current batch |
+| ✓ | Memories category filter tabs | `Memories.tsx` | Done in current batch |
+| ✓ | Memory graph interactivity | `Memories.tsx` | Done in current batch |
+| ✓ | Conversations row actions (edit/copy/delete) | `Conversations.tsx` | Done in current batch |
+| ✓ | Conversations folder CRUD (create/delete) | `Conversations.tsx` | Done in current batch |
+| ✓ | Insight settings in Settings (via Rewind tab) | `RewindTab.tsx` | Already present |
+| ✗ | Focus page | — | Infeasible — needs proactive assistant pipeline |
+| ✗ | Notifications settings (proactive) | — | Infeasible — no notification generation infra |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
 | ✓ | Overlay drag/resize/pill | — | Done in Batch 7 |

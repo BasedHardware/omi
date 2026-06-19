@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -28,10 +28,18 @@ export function Memories(): React.JSX.Element {
   const [all, setAll] = useState<Memory[] | null>(null) // full set, owned locally so deletes can drop rows
   const [loadingAll, setLoadingAll] = useState(false)
   const [filter, setFilter] = useState('')
+  const [catFilter, setCatFilter] = useState<string>('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useState({ stop: false })[0]
+
+  // Collect unique category labels from the loaded set for the filter tabs.
+  const categories = useMemo(() => {
+    const seen = new Set<string>()
+    for (const m of memories) if (m.category) seen.add(m.category)
+    return [...seen].sort()
+  }, [memories])
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -75,7 +83,9 @@ export function Memories(): React.JSX.Element {
 
   const source = manage ? (all ?? []) : memories
   const q = filter.trim().toLowerCase()
-  const filtered = q ? source.filter((m) => m.content?.toLowerCase().includes(q)) : source
+  const filtered = source
+    .filter((m) => !catFilter || m.category === catFilter)
+    .filter((m) => !q || m.content?.toLowerCase().includes(q))
   const rendered = filtered.slice(0, RENDER_CAP)
 
   const toggle = (id: string): void =>
@@ -158,6 +168,25 @@ export function Memories(): React.JSX.Element {
         }
       />
 
+      {/* Category filter tabs — only shown when the server actually returns categories */}
+      {!manage && categories.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto border-b border-white/5 px-6 pb-2 pt-2 lg:px-10">
+          {['', ...categories].map((cat) => (
+            <button
+              key={cat || 'all'}
+              onClick={() => setCatFilter(cat)}
+              className={`shrink-0 rounded-full px-3 py-1 text-sm transition-colors ${
+                catFilter === cat
+                  ? 'bg-white/15 text-text-primary'
+                  : 'text-text-tertiary hover:bg-white/8 hover:text-text-secondary'
+              }`}
+            >
+              {cat || 'All'}
+            </button>
+          ))}
+        </div>
+      )}
+
       {manage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-6 py-3 lg:px-10">
           <input
@@ -206,7 +235,7 @@ export function Memories(): React.JSX.Element {
         {!manage && brainGraph.nodes.length > 0 && (
           <div className="mx-auto mb-6 max-w-4xl">
             <div className="surface-card relative h-80 overflow-hidden p-0">
-              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} pauseWhenHidden />
+              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive pauseWhenHidden />
             </div>
           </div>
         )}
