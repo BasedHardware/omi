@@ -33,7 +33,6 @@ from dependencies import (
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
-    get_uid_with_memories_read,
     get_developer_v17_default_memory_read_context,
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
@@ -270,17 +269,35 @@ def get_memories(
 
 @router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
 def search_memories_vector(
+    auth_context: V17ProductAuthorizationContext = Depends(get_developer_v17_default_memory_read_context),
     query: str = Query(..., min_length=1),
-    uid: str = Depends(get_uid_with_memories_read),
     limit: int = Query(10, ge=1, le=100),
 ):
     """Search developer-readable default V17 memory through hydrated vector candidates.
 
-    This narrow developer API vector endpoint fails closed unless the persisted
-    server-owned rollout state enables `developer_api` V17 default-memory reads.
-    Vector hits are hydrated from authoritative `users/{uid}/memory_items` before
-    returning results, so stale Short-term and Archive remain unavailable by default.
+    This narrow developer API vector endpoint fails closed unless the authenticated
+    Developer API app/key has a verified memories.read scope, a persisted app/key
+    default-read grant, and the server-owned rollout state enables developer_api
+    V17 default-memory reads. Vector hits are hydrated from authoritative
+    `users/{uid}/memory_items` before returning results, so stale Short-term and
+    Archive remain unavailable by default.
     """
+
+    uid = auth_context.uid
+    v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
+    if not v17_app_key_grant.allowed:
+        raise HTTPException(
+            status_code=v17_app_key_grant.status_code,
+            detail={
+                'enabled': False,
+                'reason': v17_app_key_grant.reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+                'app_id': auth_context.app_id,
+                'key_id': auth_context.key_id,
+            },
+        )
 
     v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
     v17_result = search_v17_default_developer_memories_vector(

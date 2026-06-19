@@ -179,17 +179,38 @@ def test_developer_route_wires_adapter_before_legacy_memory_reads():
     assert contents.index(rollout_call) < contents.index(adapter_call) < contents.index(legacy_call)
 
 
-def test_developer_vector_route_wires_v17_adapter_behind_rollout():
+def test_developer_vector_route_wires_app_key_scope_grant_before_v17_vector_reads():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     contents = developer_py.read_text(encoding='utf-8')
 
     route = '@router.get("/v1/dev/user/memories/vector/search", tags=["developer"])'
+    auth_context_dependency = (
+        'auth_context: V17ProductAuthorizationContext = Depends(get_developer_v17_default_memory_read_context)'
+    )
+    uid_from_context = 'uid = auth_context.uid'
+    app_key_grant_call = 'v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)'
+    app_key_deny_check = 'if not v17_app_key_grant.allowed:'
     rollout_call = 'read_v17_developer_default_memory_rollout(uid=uid, db_client=db)'
     vector_adapter_call = 'search_v17_default_developer_memories_vector('
+    vector_side_effect = 'fetch_default_v17_vector_memory_search('
     assert route in contents
+    assert auth_context_dependency in contents
+    assert app_key_grant_call in contents
     assert vector_adapter_call in contents
+    assert (
+        vector_side_effect
+        not in contents[contents.index(route) : contents.index(vector_adapter_call, contents.index(route))]
+    )
     route_index = contents.index(route)
-    assert route_index < contents.index(rollout_call, route_index) < contents.index(vector_adapter_call, route_index)
+    assert (
+        route_index
+        < contents.index(auth_context_dependency, route_index)
+        < contents.index(uid_from_context, route_index)
+        < contents.index(app_key_grant_call, route_index)
+        < contents.index(app_key_deny_check, route_index)
+        < contents.index(rollout_call, route_index)
+        < contents.index(vector_adapter_call, route_index)
+    )
 
 
 def test_developer_create_route_checks_split_brain_guard_before_legacy_write():

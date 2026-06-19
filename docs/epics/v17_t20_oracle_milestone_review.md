@@ -755,6 +755,24 @@ This closes only the first Developer API default-list composition subpoint. Rema
 - Run deployed Firestore rules/IAM proof against a real target project before claiming cloud readiness.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 Developer API vector app/key/scope composition seam
+
+Continued Oracle P0-1/P0-6 by applying the same Developer API app/key/scope V17 grant composition to the concrete Developer API vector search route, without changing the production rollout verdict:
+
+- Changed `GET /v1/dev/user/memories/vector/search` from the uid-only `get_uid_with_memories_read` dependency to `get_developer_v17_default_memory_read_context(...)`.
+- The route now derives `uid` from the authenticated V17 product authorization context and calls `authorize_v17_external_default_memory_read(auth_context, db_client=db)` before reading developer rollout state or calling `search_v17_default_developer_memories_vector(...)`.
+- Missing app/key identity, missing/wrong authenticated `memories.read` scope, missing/malformed persisted app/key grant state, disabled grant, missing persisted scope, or missing `default_read=true` returns 403 before any V17 vector query, repair/outbox callback, or `users/{uid}/memory_items` hydration.
+- Valid app/key/scope grant continues to the existing V17 vector adapter and mandatory projection/account-generation fences. Default-read vector policy keeps `archive_capability=false`; no Archive vector path or default Archive exposure was added.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED route-order/static test (`1 failed, 19 passed`), GREEN focused tests (`35 passed`), full `pytest tests/unit/test_v17_*.py -q` (`280 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes the narrow Developer API vector-route P0-1/P0-6 app/key/scope composition subpoint. Remaining P0-1/P0-6 work:
+
+- MCP REST/SSE still need persisted key scopes or OAuth token introspection plus route execution context carrying app/key/scope identity before V17 reads/tools execute.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
