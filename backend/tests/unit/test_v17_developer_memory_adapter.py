@@ -303,6 +303,53 @@ def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision(
     assert contents.index(denied_check, route_index) < contents.index(legacy_safe_check, route_index)
 
 
+def test_developer_category_filters_do_not_force_legacy_when_v17_can_decide_safely():
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    contents = developer_py.read_text(encoding='utf-8')
+
+    category_legacy_reason = 'developer_category_legacy_safe_fallback_explicit'
+    category_filter_argument = 'categories=[c.value for c in category_list]'
+    assert category_filter_argument in contents
+    assert category_legacy_reason not in contents
+
+
+def test_developer_default_v17_adapter_filters_categories_without_legacy_fallback():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    source_unknown = _memory_item('source-unknown', now=now, content='coffee source unknown')
+    db_client = _FirestoreFake({f'users/u1/memory_items/{source_unknown.memory_id}': _stored_item(source_unknown)})
+    decision = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    other_result = search_v17_default_developer_memories(
+        uid='u1',
+        query='',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=decision,
+        now=now,
+        categories=['other'],
+    )
+    manual_result = search_v17_default_developer_memories(
+        uid='u1',
+        query='',
+        limit=10,
+        offset=0,
+        db_client=db_client,
+        rollout_decision=decision,
+        now=now,
+        categories=['manual'],
+    )
+
+    assert other_result.read_decision == V17ReadDecision.USE_V17
+    assert other_result.should_use_legacy_fallback is False
+    assert [item['id'] for item in other_result.memories] == ['source-unknown']
+    assert manual_result.read_decision == V17ReadDecision.USE_V17
+    assert manual_result.should_use_legacy_fallback is False
+    assert manual_result.memories == []
+
+
 def test_developer_rollout_reader_derives_default_memory_grant_without_reading_memory_items():
     db_client = _FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
 
@@ -485,6 +532,30 @@ def test_developer_default_v17_adapter_uses_product_search_and_excludes_stale_sh
     assert all(item['archive_default_visible'] is False for item in results)
     assert all(item['policy']['consumer'] == 'developer_api' for item in results)
     assert all(item['policy']['archive_capability'] is False for item in results)
+
+
+def test_developer_default_v17_response_shape_marks_compatibility_defaults_without_silent_fabrication():
+    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    public_item = _memory_item('public-source', now=now, content='coffee public source', visibility='public')
+    db_client = _FirestoreFake({f'users/u1/memory_items/{public_item.memory_id}': _stored_item(public_item)})
+    decision = read_v17_developer_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+
+    result = search_v17_default_developer_memories(
+        uid='u1', query='', limit=10, offset=0, db_client=db_client, rollout_decision=decision, now=now
+    )
+
+    assert result.read_decision == V17ReadDecision.USE_V17
+    memory = result.memories[0]
+    assert memory['visibility'] == 'public'
+    assert memory['visibility_source'] == 'v17_memory_item.visibility'
+    assert memory['category'] == 'other'
+    assert memory['category_source'] == 'developer_v17_compatibility_default_no_source_category'
+    assert memory['reviewed'] is False
+    assert memory['reviewed_source'] == 'developer_v17_compatibility_default_no_review_state'
+    assert memory['edited'] is False
+    assert memory['edited_source'] == 'developer_v17_compatibility_default_no_edit_state'
 
 
 def test_developer_default_v17_adapter_returns_denied_decision_when_rollout_or_grant_disabled_without_firestore_read():

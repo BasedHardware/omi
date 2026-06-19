@@ -60,7 +60,6 @@ from utils.memory.v17_product_authorization import (
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
-    legacy_safe_v17_default_read_rollout_decision,
     read_v17_write_convergence_gate,
 )
 import logging
@@ -188,47 +187,30 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    if not category_list:
-        v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
-        if not v17_app_key_grant.allowed:
-            raise HTTPException(
-                status_code=v17_app_key_grant.status_code,
-                detail={
-                    'enabled': False,
-                    'reason': v17_app_key_grant.reason,
-                    'consumer': 'developer_api',
-                    'archive_default_visible': False,
-                    'archive_capability': False,
-                    'app_id': auth_context.app_id,
-                    'key_id': auth_context.key_id,
-                },
-            )
-        v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
-        v17_result = search_v17_default_developer_memories(
-            uid=uid,
-            query='',
-            limit=limit,
-            offset=offset,
-            db_client=db,
-            rollout_decision=v17_rollout,
+    v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
+    if not v17_app_key_grant.allowed:
+        raise HTTPException(
+            status_code=v17_app_key_grant.status_code,
+            detail={
+                'enabled': False,
+                'reason': v17_app_key_grant.reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+                'app_id': auth_context.app_id,
+                'key_id': auth_context.key_id,
+            },
         )
-    else:
-        # Category filters remain a legacy-only compatibility path until T22/T23
-        # resolves external read/write/category split-brain. Classify that
-        # fallback explicitly instead of relying on an ambiguous `None` result.
-        v17_result = search_v17_default_developer_memories(
-            uid=uid,
-            query='',
-            limit=limit,
-            offset=offset,
-            db_client=db,
-            rollout_decision=legacy_safe_v17_default_read_rollout_decision(
-                uid=uid,
-                source_path=f'users/{uid}/memory_control/state',
-                consumer='developer_api',
-                reason='developer_category_legacy_safe_fallback_explicit',
-            ),
-        )
+    v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
+    v17_result = search_v17_default_developer_memories(
+        uid=uid,
+        query='',
+        limit=limit,
+        offset=offset,
+        db_client=db,
+        rollout_decision=v17_rollout,
+        categories=[c.value for c in category_list],
+    )
 
     if v17_result.read_decision == V17ReadDecision.USE_V17:
         return [CleanerMemory.model_validate(memory) for memory in v17_result.memories]

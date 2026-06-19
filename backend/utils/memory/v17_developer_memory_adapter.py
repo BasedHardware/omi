@@ -47,21 +47,40 @@ def _parse_datetime(value) -> datetime:
     raise ValueError('missing V17 memory timestamp')
 
 
+def _developer_category(item: dict) -> str:
+    category = item.get('category')
+    if isinstance(category, str) and category.strip():
+        return category
+    return 'other'
+
+
 def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
     updated_at = _parse_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
+    raw_category = item.get('category')
+    category_source = (
+        'v17_memory_item.category'
+        if isinstance(raw_category, str) and raw_category.strip()
+        else 'developer_v17_compatibility_default_no_source_category'
+    )
+    visibility_source = item.get('visibility_source') or 'v17_memory_item.visibility'
     return {
         'id': item['memory_id'],
         'content': item.get('content') or '',
-        'category': 'other',
-        'visibility': 'private',
+        'category': _developer_category(item),
+        'category_source': category_source,
+        'visibility': item.get('visibility') or 'private',
+        'visibility_source': visibility_source,
         'tags': ['v17_default_memory', f"tier:{item.get('tier')}"] if item.get('tier') else ['v17_default_memory'],
         'created_at': updated_at,
         'updated_at': updated_at,
         'manually_added': False,
+        'manually_added_source': 'developer_v17_compatibility_default_no_manual_state',
         'scoring': None,
-        'reviewed': True,
+        'reviewed': False,
+        'reviewed_source': 'developer_v17_compatibility_default_no_review_state',
         'user_review': None,
         'edited': False,
+        'edited_source': 'developer_v17_compatibility_default_no_edit_state',
         'v17_default_memory': True,
         'archive_default_visible': False,
         'policy': {
@@ -110,6 +129,7 @@ def search_v17_default_developer_memories(
     app_has_default_memory_grant: bool = True,
     rollout_decision: Optional[V17DeveloperDefaultMemoryRolloutDecision] = None,
     now: Optional[datetime] = None,
+    categories: Optional[list[str]] = None,
 ) -> V17DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer list caller.
 
@@ -148,8 +168,12 @@ def search_v17_default_developer_memories(
         limit=bounded_limit,
         offset=bounded_offset,
     )
+    formatted = [_format_developer_memory(item, policy) for item in response['items']]
+    if categories:
+        allowed_categories = {category for category in categories if category}
+        formatted = [memory for memory in formatted if memory.get('category') in allowed_categories]
     return V17DeveloperMemorySearchResult(
-        memories=[_format_developer_memory(item, policy) for item in response['items']],
+        memories=formatted,
         read_decision=V17ReadDecision.USE_V17,
     )
 

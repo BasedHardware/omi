@@ -107,6 +107,8 @@ def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason
             item.processing_state.value if hasattr(item.processing_state, "value") else str(item.processing_state)
         ),
         "confidence": None,
+        "visibility": item.visibility,
+        "visibility_source": "v17_memory_item.visibility",
         "source": item.evidence[0].source_id if item.evidence else None,
         "date": item.updated_at.isoformat(),
         "evidence": [evidence.model_dump(mode="json") for evidence in item.evidence],
