@@ -295,7 +295,7 @@ def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
     v17_memory_product.fetch_default_product_memory_search.assert_not_called()
 
 
-def test_archive_search_endpoint_rejects_missing_archive_capability_before_firestore(monkeypatch):
+def test_archive_search_endpoint_rejects_missing_archive_intent_before_firestore(monkeypatch):
     monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     try:
@@ -311,15 +311,99 @@ def test_archive_search_endpoint_rejects_missing_archive_capability_before_fires
     v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
-def test_archive_search_endpoint_requires_explicit_capability_and_only_returns_archive(monkeypatch):
+def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_server_archive_grant_before_memory_items(
+    monkeypatch,
+):
+    cases = [
+        ({}, 'missing_rollout_state'),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {'default_memory': True}},
+                }
+            },
+            'missing_chat_archive_capability',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}},
+                }
+            },
+            'malformed_archive_capability',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'off',
+                    'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
+                }
+            },
+            'v17_reads_disabled',
+        ),
+        (
+            {
+                'users/u1/memory_control/state': {
+                    'uid': 'u1',
+                    'mode': 'read',
+                    'fallback_projection_ready': True,
+                    'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                    'grants': {'omi_chat': {'archive': True}},
+                }
+            },
+            'missing_chat_default_memory_grant',
+        ),
+    ]
+    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+
+    for docs, expected_reason in cases:
+        db_client = _FirestoreFake(docs)
+        monkeypatch.setattr(v17_memory_product, "db", db_client)
+        try:
+            v17_memory_product.search_v17_archive_memory(
+                query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
+            )
+        except _HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail['read_decision'] == 'DENY_MEMORY'
+            assert exc.detail['fallback_reason'] == expected_reason
+            assert exc.detail['archive_capability'] is False
+        else:
+            raise AssertionError(f'expected archive route to fail closed for {expected_reason}')
+
+        assert db_client.document_paths == ['users/u1/memory_control/state']
+        assert db_client.collection_paths == []
+
+    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+
+
+def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_and_only_returns_archive(monkeypatch):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     archive = _memory_item('archive', tier=MemoryTier.archive, now=now, content='coffee archived memory')
     db_client = _FirestoreFake(
         {
-            f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [fresh_short_term, long_term, archive]
+            'users/u1/memory_control/state': {
+                'uid': 'u1',
+                'mode': 'read',
+                'fallback_projection_ready': True,
+                'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
+                'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
+            },
+            **{
+                f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
+                for item in [fresh_short_term, long_term, archive]
+            },
         }
     )
     monkeypatch.setattr(v17_memory_product, "db", db_client)
@@ -329,10 +413,12 @@ def test_archive_search_endpoint_requires_explicit_capability_and_only_returns_a
         query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
     )
 
+    assert db_client.document_paths == ['users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['memory_id'] for item in response['items']] == ['archive']
     assert response['policy']['consumer'] == 'omi_chat'
     assert response['policy']['archive_capability'] is True
+    assert response['rollout']['archive_capability'] is True
     assert response['archive_capability_required'] is True
     assert response['archive_capability_granted'] is True
     assert response['archive_default_visible'] is False

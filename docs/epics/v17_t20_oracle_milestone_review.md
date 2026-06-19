@@ -106,6 +106,24 @@ Remaining P0-1/P0-2 work:
 - Add the global emergency kill switch independent of per-user Firestore reads.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — persisted/server-authorized Archive product-route slice
+
+Implemented the next narrow P0-1 Archive authorization slice after the explicit read-decision product-route work, without changing the production rollout verdict:
+
+- Added shared persisted Archive capability parsing in `backend/utils/memory/v17_default_read_rollout.py` through `read_v17_archive_read_rollout(...)` / `normalize_v17_archive_read_rollout_decision(...)`.
+- Archive reads now require the same persisted Omi-chat V17 default-read authorization (`USE_V17`) plus default-memory grant and a distinct server-owned Archive capability (`grants.omi_chat.archive=true`, `grants.chat.archive=true`, or boolean top-level Omi-chat aliases). Non-boolean Archive capability values fail closed as malformed.
+- Applied the decision to the explicit product `/v17/memory/archive/search` route: it still requires explicit `include_archive=true`, but that flag alone no longer grants Archive access. Missing control state, disabled reads, no default grant, missing Archive grant, or malformed Archive capability all return 403 before `users/{uid}/memory_items` reads.
+- Default `/v17/memory/search` and `/v17/memory/vector/search` remain Archive-default-unavailable (`archive_capability=false`), and no Archive vector route/exposure was added.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `read_v17_archive_read_rollout`, first GREEN attempt exposing fallback reason precedence (`2 failed, 18 passed`), focused GREEN (`20 passed`), full `pytest tests/unit/test_v17_*.py -q` (`178 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes the narrow Oracle P0-1 subpoint for the explicit Archive product route's persisted/server-authorized capability. Remaining P0-1/P0-2 work:
+
+- Continue rolling explicit `USE_V17` / `USE_LEGACY_SAFE` / `DENY_MEMORY` / `SHADOW_ONLY` semantics across fallback callers and deny unsafe downgrades.
+- Add the global emergency kill switch independent of per-user Firestore reads.
+- Expand shared route authorization to any remaining V17 product/caller surfaces before production rollout.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

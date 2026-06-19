@@ -78,6 +78,8 @@ class V17DefaultReadRolloutDecision:
 
     @property
     def fallback_reason(self) -> Optional[str]:
+        if self.read_decision == V17ReadDecision.DENY_MEMORY and self.reason != 'ok':
+            return self.reason
         if self.v17_default_enabled:
             return None
         if self.read_decision == V17ReadDecision.SHADOW_ONLY:
@@ -168,6 +170,39 @@ def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
     return False
 
 
+def _consumer_archive_capability_value(data: dict, consumer: str) -> bool | None:
+    grants = data.get('grants')
+    if isinstance(grants, dict):
+        if consumer == 'developer_api':
+            grant_keys = ['developer', 'developer_api']
+        elif consumer == 'omi_chat':
+            grant_keys = ['omi_chat', 'chat']
+        else:
+            grant_keys = [consumer]
+        for grant_key in grant_keys:
+            consumer_grants = grants.get(grant_key)
+            if isinstance(consumer_grants, dict) and 'archive' in consumer_grants:
+                archive_capability = consumer_grants.get('archive')
+                if not isinstance(archive_capability, bool):
+                    return None
+                return archive_capability
+
+    top_level_keys = []
+    if consumer == 'mcp':
+        top_level_keys = ['mcp_archive_capability']
+    elif consumer == 'developer_api':
+        top_level_keys = ['developer_archive_capability', 'developer_api_archive_capability']
+    elif consumer == 'omi_chat':
+        top_level_keys = ['omi_chat_archive_capability', 'chat_archive_capability']
+    for key in top_level_keys:
+        if key in data:
+            archive_capability = data.get(key)
+            if not isinstance(archive_capability, bool):
+                return None
+            return archive_capability
+    return False
+
+
 def normalize_v17_default_read_rollout_decision(
     *, uid: str, source_path: str, consumer: str, data
 ) -> V17DefaultReadRolloutDecision:
@@ -222,6 +257,58 @@ def normalize_v17_default_read_rollout_decision(
         )
 
 
+def normalize_v17_archive_read_rollout_decision(
+    *, uid: str, source_path: str, consumer: str, data
+) -> V17DefaultReadRolloutDecision:
+    """Normalize persisted control state for explicit Archive product reads.
+
+    Archive access is intentionally stronger than default-memory reads: callers
+    need the usual V17 default-read authorization plus a distinct server-owned
+    Archive capability in `users/{uid}/memory_control/state`. Client query flags
+    are not interpreted here and cannot grant Archive access.
+    """
+
+    default_decision = normalize_v17_default_read_rollout_decision(
+        uid=uid, source_path=source_path, consumer=consumer, data=data
+    )
+    if default_decision.read_decision != V17ReadDecision.USE_V17:
+        return default_decision
+
+    archive_capability = _consumer_archive_capability_value(data, consumer)
+    if archive_capability is None:
+        return V17DefaultReadRolloutDecision(
+            uid=uid,
+            source_path=source_path,
+            consumer=consumer,
+            rollout_capabilities=default_decision.rollout_capabilities,
+            app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
+            archive_capability=False,
+            reason='malformed_archive_capability',
+            explicit_read_decision=V17ReadDecision.DENY_MEMORY,
+        )
+    if not archive_capability:
+        return V17DefaultReadRolloutDecision(
+            uid=uid,
+            source_path=source_path,
+            consumer=consumer,
+            rollout_capabilities=default_decision.rollout_capabilities,
+            app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
+            archive_capability=False,
+            reason=f'missing_{default_decision.grant_reason_key}_archive_capability',
+            explicit_read_decision=V17ReadDecision.DENY_MEMORY,
+        )
+    return V17DefaultReadRolloutDecision(
+        uid=uid,
+        source_path=source_path,
+        consumer=consumer,
+        rollout_capabilities=default_decision.rollout_capabilities,
+        app_has_default_memory_grant=default_decision.app_has_default_memory_grant,
+        archive_capability=True,
+        reason='ok',
+        explicit_read_decision=V17ReadDecision.USE_V17,
+    )
+
+
 def read_v17_default_read_rollout(*, uid: str, db_client, consumer: str) -> V17DefaultReadRolloutDecision:
     """Read and normalize server-owned persisted default-read rollout state."""
 
@@ -234,6 +321,20 @@ def read_v17_default_read_rollout(*, uid: str, db_client, consumer: str) -> V17D
             uid=uid, source_path=source_path, consumer=consumer, reason='malformed_rollout_state'
         )
     return normalize_v17_default_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
+
+
+def read_v17_archive_read_rollout(*, uid: str, db_client, consumer: str) -> V17DefaultReadRolloutDecision:
+    """Read persisted default-read rollout plus server-owned Archive capability."""
+
+    source_path = V17Collections(uid=uid).memory_control_state
+    try:
+        snapshot = db_client.document(source_path).get()
+        data = snapshot.to_dict() if getattr(snapshot, 'exists', True) else None
+    except (TypeError, ValueError, AttributeError):
+        return disabled_v17_default_read_rollout_decision(
+            uid=uid, source_path=source_path, consumer=consumer, reason='malformed_rollout_state'
+        )
+    return normalize_v17_archive_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
 
 def _read_v17_default_rollout_state_doc(*, uid: str, db_client):

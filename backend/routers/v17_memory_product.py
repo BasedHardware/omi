@@ -7,6 +7,7 @@ from models.v17_product_memory import MemoryAccessPolicy
 from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     build_v17_default_read_rollout_observability,
+    read_v17_archive_read_rollout,
     read_v17_default_read_rollout,
 )
 from utils.memory.v17_product_memory_read_service import (
@@ -149,13 +150,19 @@ def search_v17_archive_memory(
     """Search explicit V17 Archive memory for archive-capable product callers only.
 
     This route is intentionally separate from `/v17/memory/search` and requires
-    an explicit caller opt-in flag before it constructs a policy with Archive
-    capability. The default search route remains Archive-free.
+    both an explicit caller opt-in flag and a persisted server-owned Archive
+    capability before it constructs a policy with Archive access. The default
+    search route remains Archive-free.
     """
 
     _validate_search_pagination(limit, offset)
     if not include_archive:
         raise HTTPException(status_code=403, detail='explicit archive capability is required')
+
+    rollout = read_v17_archive_read_rollout(uid=uid, db_client=db, consumer='omi_chat')
+    rollout_observability = build_v17_default_read_rollout_observability(rollout)
+    if rollout.read_decision != V17ReadDecision.USE_V17 or not rollout.archive_capability:
+        raise HTTPException(status_code=403, detail=rollout_observability)
 
     policy = _archive_omi_chat_policy()
     try:
@@ -172,6 +179,7 @@ def search_v17_archive_memory(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     response['policy'] = _policy_payload(policy)
+    response['rollout'] = rollout_observability
     response['archive_default_visible'] = False
     response['archive_capability_required'] = True
     response['archive_capability_granted'] = policy.archive_capability

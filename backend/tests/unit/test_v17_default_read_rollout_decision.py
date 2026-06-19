@@ -3,6 +3,7 @@ from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
     build_v17_default_read_rollout_audit_events,
     legacy_safe_v17_default_read_rollout_decision,
+    read_v17_archive_read_rollout,
     render_v17_default_read_rollout_metrics,
     read_v17_default_read_rollout,
     read_v17_default_read_rollout_decisions,
@@ -143,6 +144,63 @@ def test_shared_rollout_helper_distinguishes_shadow_only_and_explicit_legacy_saf
     assert shadow_decision.fallback_reason == 'shadow_only'
     assert legacy_safe_decision.read_decision == V17ReadDecision.USE_LEGACY_SAFE
     assert legacy_safe_decision.fallback_reason == 'explicit_legacy_endpoint'
+
+
+def test_shared_rollout_helper_computes_persisted_archive_capability_distinct_from_default_reads():
+    rollout_doc = _enabled_rollout_doc() | {
+        'grants': {
+            'omi_chat': {'default_memory': True, 'archive': True},
+        }
+    }
+    db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
+
+    default_decision = read_v17_default_read_rollout(uid='u1', db_client=db_client, consumer='omi_chat')
+    archive_decision = read_v17_archive_read_rollout(uid='u1', db_client=db_client, consumer='omi_chat')
+
+    assert db_client.document_get_paths == ['users/u1/memory_control/state', 'users/u1/memory_control/state']
+    assert db_client.collection_paths == []
+    assert default_decision.read_decision == V17ReadDecision.USE_V17
+    assert default_decision.archive_capability is False
+    assert archive_decision.read_decision == V17ReadDecision.USE_V17
+    assert archive_decision.archive_capability is True
+    assert archive_decision.app_has_default_memory_grant is True
+
+
+def test_shared_rollout_helper_fails_closed_for_missing_malformed_disabled_and_no_archive_grant():
+    missing_archive = _enabled_rollout_doc() | {'grants': {'omi_chat': {'default_memory': True}}}
+    missing_archive_decision = read_v17_archive_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': missing_archive}), consumer='omi_chat'
+    )
+    assert missing_archive_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert missing_archive_decision.fallback_reason == 'missing_chat_archive_capability'
+    assert missing_archive_decision.archive_capability is False
+
+    malformed_archive = _enabled_rollout_doc() | {'grants': {'omi_chat': {'default_memory': True, 'archive': 'yes'}}}
+    malformed_archive_decision = read_v17_archive_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': malformed_archive}), consumer='omi_chat'
+    )
+    assert malformed_archive_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert malformed_archive_decision.fallback_reason == 'malformed_archive_capability'
+    assert malformed_archive_decision.archive_capability is False
+
+    disabled_archive = _enabled_rollout_doc() | {
+        'mode': V17Mode.off.value,
+        'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
+    }
+    disabled_archive_decision = read_v17_archive_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': disabled_archive}), consumer='omi_chat'
+    )
+    assert disabled_archive_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert disabled_archive_decision.fallback_reason == 'v17_reads_disabled'
+    assert disabled_archive_decision.archive_capability is False
+
+    no_default_grant = _enabled_rollout_doc() | {'grants': {'omi_chat': {'archive': True}}}
+    no_default_grant_decision = read_v17_archive_read_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': no_default_grant}), consumer='omi_chat'
+    )
+    assert no_default_grant_decision.read_decision == V17ReadDecision.DENY_MEMORY
+    assert no_default_grant_decision.fallback_reason == 'missing_chat_default_memory_grant'
+    assert no_default_grant_decision.archive_capability is False
 
 
 def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_memory_item_reads():
