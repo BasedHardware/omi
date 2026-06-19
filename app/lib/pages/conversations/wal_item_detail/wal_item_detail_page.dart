@@ -28,7 +28,6 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
-  bool _isSharing = false;
   SyncProvider? _syncProvider;
 
   /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
@@ -601,7 +600,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _handleShare(SyncProvider syncProvider) async {
-    setState(() => _isSharing = true);
     try {
       await syncProvider.shareWalAsWav(widget.wal);
     } catch (e) {
@@ -610,10 +608,6 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
         AppSnackbar.showSnackbarError(
           context.l10n.audioPlaybackFailed,
         );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSharing = false);
       }
     }
   }
