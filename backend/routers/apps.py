@@ -474,9 +474,11 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['id'] = str(ULID())
     data['uid'] = uid
     if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid)
-        data['author'] = user.get('display_name', '')
-        data['email'] = user['email']
+        user = get_user_from_uid(uid) or {}
+        email = user.get('email')
+        # author is required + non-null on AppCreate; display_name/email can both be null.
+        data['author'] = user.get('display_name') or (email.split('@')[0] if email else None) or 'Anonymous'
+        data['email'] = email
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
