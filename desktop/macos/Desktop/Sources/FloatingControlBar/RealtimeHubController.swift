@@ -83,15 +83,41 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
 
+  /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
+  /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
+  /// nil = on the primary; non-nil = the provider we failed over TO.
+  private var fallbackProvider: RealtimeHubProvider?
+
+  /// The realtime provider to actually connect: the failover pick if we've switched to
+  /// it, otherwise the user/Auto-selected one.
+  private var effectiveProvider: RealtimeHubProvider {
+    fallbackProvider ?? RealtimeHubSettings.shared.provider
+  }
+
+  /// Switch to the other realtime provider after the current one fails to connect.
+  /// Returns true if a failover was started. Only fires once per chain (primary →
+  /// alternate); if the alternate also fails we stop and let PTT use the Claude cascade.
+  @discardableResult
+  private func failoverToAlternateProvider() -> Bool {
+    guard fallbackProvider == nil else { return false }  // already on the alternate → cascade
+    let primary = RealtimeHubSettings.shared.provider
+    fallbackProvider = primary.alternate
+    log("RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)")
+    teardownSession()
+    ensureWarm()
+    return true
+  }
+
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
   /// start. The hub is the default voice path (no opt-in toggle).
   var isActive: Bool {
     // Drive a turn only when the hub is actually CONNECTED + authenticated for the
-    // currently-selected provider. A turn never enters hub mode on a key/token that can't
-    // connect (stale/revoked key, failed mint, mid-reconnect, or a just-switched provider):
-    // PTT transparently uses the legacy cascade instead, so a broken hub never costs the
-    // user a turn. The hub re-warms in the background and flips this true once it connects.
-    hubConnected && sessionProvider == RealtimeHubSettings.shared.provider
+    // selected provider OR the failover provider we switched to. A turn never enters hub
+    // mode on a key/token that can't connect (stale/revoked key, failed mint, mid-
+    // reconnect, or a just-switched provider): PTT transparently uses the legacy cascade
+    // instead, so a broken hub never costs the user a turn. The hub re-warms in the
+    // background and flips this true once it connects.
+    hubConnected && (sessionProvider == RealtimeHubSettings.shared.provider || sessionProvider == fallbackProvider)
   }
 
   func setup(barState: FloatingControlBarState) {
@@ -112,6 +138,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   @objc private func settingsChanged() {
+    // A new pick (user or Auto/AutoModelSelector) re-evaluates from the primary, dropping
+    // any active failover so the freshly-selected provider is honored.
+    fallbackProvider = nil
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
@@ -126,7 +155,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
   func ensureWarm() {
-    let provider = RealtimeHubSettings.shared.provider
+    let provider = effectiveProvider
     if session != nil, sessionProvider == provider { return }
     if session != nil { teardownSession() }
 
@@ -152,11 +181,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       guard let self else { return }
       self.minting = false
       guard let token else {
-        log("⚠️ RealtimeHub: ephemeral mint failed / not entitled — staying on cascade")
+        // Mint failed for this provider — try the OTHER realtime provider before the
+        // legacy Claude cascade.
+        if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
         return
       }
-      // Provider may have changed while minting; only connect if still wanted.
-      guard RealtimeHubSettings.shared.provider == provider, self.session == nil
+      // Provider may have changed (picker/failover) while minting; only connect if still wanted.
+      guard self.effectiveProvider == provider, self.session == nil
       else { return }
       self.startSession(provider: provider, auth: .ephemeral(token))
     }
@@ -554,14 +587,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     exitVoiceUI()
     let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
+    // A session that died fast (connected, then the provider rejected/aborted it — e.g.
+    // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
+    // before the cascade. One that lived long was a normal idle-close → re-warm the same.
+    if aliveFor < 10, failoverToAlternateProvider() { return }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
     // the socket (~2.5 min, close 1008) even before the first turn; managed users have
     // no BYOK key, so once `session` is nil `isActive` is false and PTT silently falls
     // back to omni STT. So always try to re-warm (the hub is the default voice path).
     // A socket that survived past the idle window was a normal idle-close → reset the
-    // strike budget and keep re-warming forever; one that died fast is likely a config/
-    // auth failure → let the strikes cap stop the churn.
-    if aliveFor > 60 { hubReconnectStrikes = 0 }
+    // strike budget (and the failover, returning to the Auto pick) and keep re-warming.
+    if aliveFor > 60 {
+      hubReconnectStrikes = 0
+      fallbackProvider = nil
+    }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
     hubReconnectStrikes += 1
     reconnectPending = true
