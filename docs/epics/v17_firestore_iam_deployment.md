@@ -90,20 +90,50 @@ Contract:
 5. Ack/retry/dead-letter patches are applied through `ack_v17_vector_repair_purge_outbox_record(...)`. The returned summary is deterministic and low-cardinality-friendly: `enabled`, `worker_id`, `uid`, `leased_count`, `processed_count`, `skipped_count`, `failed_count`, `ack_failed_count`, `actions`, and `errors`.
 6. Duplicate same-batch `idempotency_key` records remain at most one adapter side effect through the existing worker idempotency seam. Lease contention remains protected by the transaction re-read/update contract validated in the local emulator harness.
 
+### Disabled-by-default Cloud Run/Tasks wrapper contract
+
+`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the first checked-in Cloud Run/Tasks wrapper contract for this tick. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients.
+
+Wrapper behavior:
+
+1. Reads only explicit server-owned env/config.
+2. Fails closed/no-ops when `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` is absent, empty, or `false`; a disabled invocation prints one deterministic JSON summary and does not lease records.
+3. Treats malformed booleans, missing enabled `uid`, missing enabled `worker_id`, and non-positive numeric bounds as config denial; it prints a deterministic JSON summary with `config_valid=false` and exits nonzero before calling the tick.
+4. When enabled and injected with production-safe dependencies, invokes exactly one `run_v17_vector_repair_outbox_worker_tick(...)` for one explicit uid and stable lease owner. There is no unbounded production scan and no client-supplied arbitrary uid execution.
+5. Prints one JSON object suitable for Cloud Run/Tasks logs. Unit tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, worker/action failure summary, and no scheduler enqueue side effects.
+
+Proposed disabled command shape (not yet applied):
+
+```bash
+python3 backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py
+```
+
+Proposed env contract (not yet enabled):
+
+```text
+V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false        # default/fail-closed; only literal true enables
+V17_VECTOR_REPAIR_OUTBOX_UID=<server-owned uid shard> # required only when enabled; no unbounded scan
+V17_VECTOR_REPAIR_OUTBOX_WORKER_ID=<stable service/region/revision lease owner> # required only when enabled
+V17_VECTOR_REPAIR_OUTBOX_LIMIT=<small positive int, default 25>
+V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<positive int, default 300>
+V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<positive int, default 3>
+V17_VECTOR_REPAIR_PINECONE_NAMESPACE=ns2
+```
+
 Proposed Cloud Run/Tasks deployment shape (not yet applied):
 
 ```text
 service/job: v17-vector-repair-outbox-worker
-trigger: Cloud Scheduler or Cloud Tasks HTTP/job tick, disabled by default
+trigger: Cloud Scheduler or Cloud Tasks HTTP/job tick, disabled by default; OIDC-authenticated if HTTP-triggered
 identity: dedicated backend worker service account with Firestore Admin/Datastore User read-write on users/*/memory_outbox and read on authoritative V17 memory item state; Pinecone credentials scoped to ns2-compatible vector delete/upsert only
-config/env: V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false by default; V17_VECTOR_REPAIR_OUTBOX_WORKER_ID=<service-region-revision>; V17_VECTOR_REPAIR_OUTBOX_LIMIT=<small bounded int>; V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<bounded seconds>; V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<int>; V17_VECTOR_REPAIR_PINECONE_NAMESPACE=ns2
+config/env: wrapper env above, with V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false until production gates pass
 input: explicit uid shard/list source must be server-owned; no client-supplied arbitrary uid execution
 output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/dead_letter plus bounded error classes; alerts on dead_letter growth, ack failures, Pinecone failures, and stale-vector backlog age
 ```
 
 Remaining deployment gates before enabling this contract in production:
 
-- Real Cloud Run/Tasks or Scheduler wiring and OIDC/IAM proof for the worker identity.
+- Real Cloud Run/Tasks or Scheduler wiring and OIDC/IAM proof for the worker identity and trigger principal.
 - Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
 - Real authoritative item loader wiring and production-safe uid sharding/backlog discovery.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.

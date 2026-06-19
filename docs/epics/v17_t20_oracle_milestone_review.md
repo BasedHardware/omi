@@ -513,6 +513,29 @@ This closes only the explicit scheduler/lease-owner one-tick contract seam. Rema
 - Add overfetch/refill/budgets, app/key/scope auth, real benchmark/cloud evidence, and explicit production rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 disabled-by-default Cloud Run/Tasks wrapper contract
+
+Continued Oracle P0-4 by adding a checked-in disabled-by-default wrapper contract around the existing one-tick seam, without deploying Cloud Run/Tasks, creating a scheduler, or changing the production rollout verdict:
+
+- Added `backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py`, a small fake-injectable entrypoint that reads explicit env/config and prints one deterministic JSON summary suitable for Cloud Run/Tasks logs.
+- The wrapper fails closed/no-ops when `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` is absent, empty, or `false`; malformed enablement, missing enabled uid, missing enabled stable worker/lease-owner ID, or invalid numeric bounds exit nonzero before any tick/lease call.
+- Enabled execution requires injected Firestore client, authoritative item loader, vector deleter, vector repairer, and invokes exactly one `run_v17_vector_repair_outbox_worker_tick(...)` for one explicit uid. There is no unbounded scan and no scheduler enqueue side effect.
+- Added `backend/tests/unit/test_v17_vector_repair_outbox_worker_entrypoint.py` and registered it in `backend/test.sh`. Tests cover disabled no-op, malformed config denial, required uid/lease-owner denial, enabled fake tick summary, dependency/action failure summary, and source-level no scheduler enqueue side effects.
+- Updated `docs/epics/v17_firestore_iam_deployment.md` with the proposed command, env vars, OIDC/IAM assumptions, uid-shard/backlog ownership rule, telemetry/alert needs, failure modes, and explicit non-claims.
+- This is still a wrapper contract/readiness artifact, not production execution. It does **not** deploy Cloud Run/Tasks, create a Cloud Scheduler job, validate production Firestore IAM/deployed rules, call real Pinecone, prove duplicate physical stale-ID cleanup, prove shared `ns2` isolation, add central alerts, run benchmarks, or approve rollout.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing entrypoint import (`ImportError`), GREEN entrypoint tests (`6 passed`), disabled CLI JSON smoke output, focused vector/outbox/docs regression (`26 passed`), full `pytest tests/unit/test_v17_*.py -q` (`238 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the first disabled-by-default wrapper/config parser contract. Remaining P0-4/P0 work:
+
+- Wire real production-safe dependencies for the wrapper: Admin Firestore client, authoritative item loader, Pinecone delete/upsert adapter, and embedding provider, still disabled by default.
+- Add real Cloud Run/Tasks/Scheduler deployment config and OIDC/IAM proof for the worker identity and trigger principal.
+- Validate production Firestore IAM/service-account bindings and deployed Security Rules against the real Firebase project before rollout.
+- Run real Pinecone delete/upsert validation with duplicate stale physical IDs, tombstoned/deleted/missing authoritative items, retry/dead-letter behavior, and shared-`ns2` legacy isolation evidence.
+- Add central low-cardinality telemetry/alerts for lease/adapter/ack attempts, action counts, retry/dead-letter reasons, latency, stale-vector rates, and backlog age.
+- Add overfetch/refill/budgets, app/key/scope auth, real benchmark/cloud evidence, and explicit production rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.
