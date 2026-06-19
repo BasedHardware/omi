@@ -98,6 +98,11 @@ void main() {
       provider.imageFile = File('new_logo.png');
       expect(provider.hasDataChanged(app, app.category), isTrue);
     });
+
+    test('adding a thumbnail marks dirty (lists must not be aliased to the snapshot)', () {
+      provider.thumbnailIds = [...provider.thumbnailIds, 'thumb_1'];
+      expect(provider.hasDataChanged(app, app.category), isTrue);
+    });
   });
 
   group('AddAppProvider.hasDataChanged — external integration', () {
