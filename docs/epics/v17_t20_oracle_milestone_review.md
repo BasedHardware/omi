@@ -258,6 +258,25 @@ This closes only the narrow Oracle P0-3 subpoints for developer edit and delete.
 - Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — MCP REST/SSE create/edit/delete write/read split-brain guard slice
+
+Implemented the next narrow Oracle P0-3 write/read split-brain guard after the developer edit/delete guard, without changing the production rollout verdict:
+
+- Inspected MCP REST and streamable HTTP/SSE tool write surfaces and found six legacy mutation surfaces: REST `POST /v1/mcp/memories`, `DELETE /v1/mcp/memories/{memory_id}`, `PATCH /v1/mcp/memories/{memory_id}`, and SSE tools `create_memory`, `delete_memory`, `edit_memory`.
+- Applied `assert_legacy_memory_write_allowed_for_default_read_decision(...)` to all six surfaces before legacy mutation/delete and before expensive side effects such as auto-categorization, vector updates, persona updates, and legacy `memories_db.get_memory(...)` validation.
+- The guard uses the same persisted `mcp` default-read rollout decision as MCP V17 reads and blocks legacy mutation/delete for `USE_V17`, `SHADOW_ONLY`, missing, malformed, or uid-mismatched control state unless a server-owned convergence policy explicitly allows the write.
+- REST surfaces return HTTP 409 with the shared guard detail; SSE tools return a safe MCP tool error (`code=-32009`) with the same guard detail. V17-disabled reads preserve existing behavior.
+- Archive remains default-unavailable and no read surface was broadened.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED MCP write-surface guard-order failures (`2 failed, 12 passed`), GREEN MCP adapter/source tests (`14 passed`), focused regression (`26 passed`), full `pytest tests/unit/test_v17_*.py -q` (`201 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes the narrow Oracle P0-3 subpoints for MCP REST/SSE create/edit/delete legacy write protection. Remaining P0-3/P0 work:
+
+- Decide and implement durable V17 write convergence / dual-write outbox before any authoritative external read cutover.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

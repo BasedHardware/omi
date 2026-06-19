@@ -35,7 +35,10 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.v17_default_read_rollout import V17ReadDecision
+from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
+    assert_legacy_memory_write_allowed_for_default_read_decision,
+)
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -574,6 +577,13 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not content:
             raise ToolExecutionError("Content is required")
 
+        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            v17_rollout, operation="mcp_tool_memory_create"
+        )
+        if not v17_write_guard.allowed:
+            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
+
         # Auto-categorize memories from MCP clients
         category = identify_category_for_memory(content)
         memory = Memory(content=content, category=category)
@@ -586,6 +596,13 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         memory_id = arguments.get("memory_id")
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
+
+        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            v17_rollout, operation="mcp_tool_memory_delete"
+        )
+        if not v17_write_guard.allowed:
+            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
 
         memory = memories_db.get_memory(user_id, memory_id)
         if not memory:
@@ -601,6 +618,13 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            v17_rollout, operation="mcp_tool_memory_edit"
+        )
+        if not v17_write_guard.allowed:
+            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
 
         memory = memories_db.get_memory(user_id, memory_id)
         if not memory:

@@ -6,7 +6,11 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
+from utils.memory.v17_default_read_rollout import (
+    V17ReadDecision,
+    assert_legacy_memory_write_allowed_for_default_read_decision,
+    legacy_safe_v17_default_read_rollout_decision,
+)
 from utils.mcp_memories import (
     V17McpMemorySearchResult,
     read_v17_mcp_default_memory_rollout,
@@ -64,6 +68,106 @@ def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_deci
     assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in contents
     assert contents.index('if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < contents.index(
         'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    )
+
+
+def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    contents = mcp_py.read_text(encoding='utf-8')
+
+    assert 'assert_legacy_memory_write_allowed_for_default_read_decision' in contents
+
+    create_route = contents[
+        contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')
+    ]
+    assert 'operation="mcp_memory_create"' in create_route
+    assert create_route.index('read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)') < create_route.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert create_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < create_route.index(
+        'identify_category_for_memory(memory.content)'
+    )
+    assert create_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < create_route.index(
+        'memories_db.create_memory(uid, memory_db.model_dump())'
+    )
+
+    delete_route = contents[
+        contents.index('@router.delete("/v1/mcp/memories/{memory_id}"') : contents.index(
+            '@router.patch("/v1/mcp/memories/{memory_id}"'
+        )
+    ]
+    assert 'operation="mcp_memory_delete"' in delete_route
+    assert delete_route.index('read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)') < delete_route.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert delete_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < delete_route.index(
+        '_validate_mcp_memory(uid, memory_id)'
+    )
+    assert delete_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < delete_route.index(
+        'memories_db.delete_memory(uid, memory_id)'
+    )
+
+    edit_route = contents[
+        contents.index('@router.patch("/v1/mcp/memories/{memory_id}"') : contents.index('class UserProfile')
+    ]
+    assert 'operation="mcp_memory_edit"' in edit_route
+    assert edit_route.index('read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)') < edit_route.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert edit_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < edit_route.index(
+        '_validate_mcp_memory(uid, memory_id)'
+    )
+    assert edit_route.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < edit_route.index(
+        'memories_db.edit_memory(uid, memory_id, value)'
+    )
+
+
+def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+
+    assert 'assert_legacy_memory_write_allowed_for_default_read_decision' in contents
+
+    create_tool = contents[
+        contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
+    ]
+    assert 'operation="mcp_tool_memory_create"' in create_tool
+    assert create_tool.index('read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)') < create_tool.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert create_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < create_tool.index(
+        'identify_category_for_memory(content)'
+    )
+    assert create_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < create_tool.index(
+        'memories_db.create_memory(user_id, memory_db.model_dump())'
+    )
+
+    delete_tool = contents[
+        contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
+    ]
+    assert 'operation="mcp_tool_memory_delete"' in delete_tool
+    assert delete_tool.index('read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)') < delete_tool.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert delete_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < delete_tool.index(
+        'memories_db.get_memory(user_id, memory_id)'
+    )
+    assert delete_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < delete_tool.index(
+        'memories_db.delete_memory(user_id, memory_id)'
+    )
+
+    edit_tool = contents[
+        contents.index('elif tool_name == "edit_memory":') : contents.index('elif tool_name == "get_conversations":')
+    ]
+    assert 'operation="mcp_tool_memory_edit"' in edit_tool
+    assert edit_tool.index('read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)') < edit_tool.index(
+        'assert_legacy_memory_write_allowed_for_default_read_decision('
+    )
+    assert edit_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < edit_tool.index(
+        'memories_db.get_memory(user_id, memory_id)'
+    )
+    assert edit_tool.index('assert_legacy_memory_write_allowed_for_default_read_decision(') < edit_tool.index(
+        'memories_db.edit_memory(user_id, memory_id, content)'
     )
 
 
@@ -219,6 +323,53 @@ def test_mcp_default_v17_rollout_reader_derives_capability_and_default_grant_fro
     assert decision.app_has_default_memory_grant is True
     assert decision.archive_capability is False
     assert decision.source_path == 'users/u1/memory_control/state'
+
+
+def test_mcp_legacy_write_guard_blocks_v17_and_shadow_reads_but_preserves_disabled_legacy_behavior():
+    enabled_decision = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': _enabled_rollout_doc()})
+    )
+    blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
+        enabled_decision,
+        operation='mcp_memory_create',
+    )
+    assert blocked.allowed is False
+    assert blocked.status_code == 409
+    assert blocked.detail['consumer'] == 'mcp'
+    assert blocked.detail['read_decision'] == V17ReadDecision.USE_V17.value
+
+    missing_decision = read_v17_mcp_default_memory_rollout(uid='u1', db_client=_FirestoreFake())
+    missing_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
+        missing_decision,
+        operation='mcp_memory_delete',
+    )
+    assert missing_blocked.allowed is False
+    assert missing_blocked.detail['reason'] == 'v17_default_read_legacy_write_blocked'
+
+    shadow_doc = _enabled_rollout_doc() | {
+        'mode': V17Mode.shadow.value,
+        'fallback_projection_ready': False,
+        'stage_gates': {V17StageGate.shadow.value: PASSED},
+    }
+    shadow_decision = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': shadow_doc})
+    )
+    shadow_blocked = assert_legacy_memory_write_allowed_for_default_read_decision(
+        shadow_decision,
+        operation='mcp_memory_edit',
+    )
+    assert shadow_decision.read_decision == V17ReadDecision.SHADOW_ONLY
+    assert shadow_blocked.allowed is False
+
+    disabled_doc = _enabled_rollout_doc() | {'mode': V17Mode.off.value, 'grants': {}}
+    disabled_decision = read_v17_mcp_default_memory_rollout(
+        uid='u1', db_client=_FirestoreFake({'users/u1/memory_control/state': disabled_doc})
+    )
+    allowed = assert_legacy_memory_write_allowed_for_default_read_decision(
+        disabled_decision,
+        operation='mcp_memory_edit',
+    )
+    assert allowed.allowed is True
 
 
 def test_mcp_default_v17_rollout_reader_fails_closed_for_missing_malformed_or_missing_grant_without_memory_reads():
