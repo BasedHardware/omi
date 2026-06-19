@@ -158,14 +158,13 @@ Already resolved in Batch 7:
 | Field | Value |
 |-------|-------|
 | macOS source | `RewindPage.swift` — OCR text panel, export menu (markdown/JSON/PDF) |
-| Windows source | `Rewind.tsx` shows `RewindPlayer` but no OCR text overlay. OCR text stored per frame (`frame.ocrText`) in `db.ts:latestRewindFrame()` |
-| Backend/data | `latestRewindFrame()` returns `{imagePath, ocrText, ts}`. OCR text is available per frame. |
-| Data exists today | YES — `ocrText` field exists on Rewind frames |
-| UI exists today | NO — OCR text not surfaced in UI |
-| Recommended action | Add OCR text toggle panel below the frame player in `Rewind.tsx`. Low risk, high parity value. |
-| Risk | Low |
-| Effort | Small |
-| **Classification** | **IMPLEMENT_NOW** (but lower priority than integrations/citations/shortcuts) |
+| Windows source | `Rewind.tsx` / `RewindPlayer.tsx` — **IMPLEMENTED (Batch 9)** |
+| Backend/data | `latestRewindFrame()` returns `{imagePath, ocrText, ts}`. OCR text available per frame. |
+| Data exists today | YES |
+| UI exists today | YES — implemented |
+| **What was added** | (1) **OCR text panel** — collapsible panel below FrameMeta; toggled by "Text" button in header; shows `frame.ocrText` (selectable), empty state "No text captured for this frame." (2) **Fullscreen button** — `Maximize2` icon floating top-right of player, always visible, triggers existing `expanded` modal overlay. Click-on-image behavior preserved. (3) **JSON export** — "Export" button (only shown when frames exist) downloads `omi-rewind-{date}.json` via blob URL; payload: `{ exportedAt, frameCount, frames: [{ timestamp, timestampMs, app, windowTitle, ocrText }] }`. Uses Electron renderer blob download — no new IPC required. |
+| **Remaining gap** | PDF export — requires native library (not implemented). Markdown export deferred. |
+| **Classification** | **DONE** (OCR panel + fullscreen button + JSON export) |
 
 ---
 
@@ -173,8 +172,8 @@ Already resolved in Batch 7:
 
 | Field | Value |
 |-------|-------|
-| Windows source | `window.omi.listRewindFrames()` returns frames with `imagePath + ocrText`. Can export as JSON or plain text. |
-| **Classification** | **IMPLEMENT_PARTIAL** (JSON/text export only; PDF requires native library) |
+| Windows source | `Rewind.tsx` — **IMPLEMENTED (Batch 9)**: JSON export via blob URL download |
+| **Classification** | **DONE** (JSON export implemented; PDF not implemented — requires native dependency) |
 
 ---
 
@@ -196,7 +195,7 @@ Already resolved in Batch 7:
 | 2 | Shortcuts tab in Settings | `tabs.ts`, `Settings.tsx`, new `ShortcutsTab.tsx` | Low |
 | 3 | Chat citation cards | `useChat.ts`, `ChatMessages.tsx` | Low |
 | 4 | Conversations starred filter | `Conversations.tsx` | Low |
-| — | Rewind OCR overlay | `Rewind.tsx`, `RewindPlayer.tsx` | Low |
+| ✓ | Rewind OCR overlay + fullscreen button + JSON export | `Rewind.tsx`, `RewindPlayer.tsx` | Done in Batch 9 |
 | ✗ | Focus page | — | Very high / infeasible |
 | ✗ | Insights page | — | Very high / infeasible |
 | ✗ | Notifications settings | — | High / infeasible |

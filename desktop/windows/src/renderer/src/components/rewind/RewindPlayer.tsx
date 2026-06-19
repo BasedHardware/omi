@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Maximize2 } from 'lucide-react'
 import type { RewindFrame } from '../../../../shared/types'
 import {
   frameIndexAtCursor,
@@ -10,10 +11,12 @@ import { parseWindowTitle } from '../../lib/windowTitle'
 
 export function RewindPlayer({
   frames,
-  cursorTs
+  cursorTs,
+  showOcr
 }: {
   frames: RewindFrame[]
   cursorTs: number
+  showOcr?: boolean
 }): React.JSX.Element {
   const [src, setSrc] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -44,12 +47,21 @@ export function RewindPlayer({
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-black/40">
         {frame ? (
           src ? (
-            <img
-              src={src}
-              alt="screen frame"
-              onClick={() => setExpanded(true)}
-              className="max-h-full max-w-full cursor-pointer object-contain"
-            />
+            <>
+              <img
+                src={src}
+                alt="screen frame"
+                onClick={() => setExpanded(true)}
+                className="max-h-full max-w-full cursor-pointer object-contain"
+              />
+              <button
+                onClick={() => setExpanded(true)}
+                className="absolute right-2 top-2 rounded bg-black/50 p-1.5 text-white/40 transition-colors hover:bg-black/70 hover:text-white"
+                title="View fullscreen"
+              >
+                <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </button>
+            </>
           ) : (
             <div className="text-white/40 text-sm">Loading…</div>
           )
@@ -62,6 +74,7 @@ export function RewindPlayer({
         )}
       </div>
       {frame && <FrameMeta frame={frame} />}
+      {showOcr && frame && <OcrPanel ocrText={frame.ocrText} />}
       {expanded && src && (
         <div
           onClick={() => setExpanded(false)}
@@ -70,6 +83,28 @@ export function RewindPlayer({
           <img src={src} alt="screen frame" className="max-h-full max-w-full object-contain" />
         </div>
       )}
+    </div>
+  )
+}
+
+function OcrPanel({ ocrText }: { ocrText: string }): React.JSX.Element {
+  const text = ocrText?.trim()
+  return (
+    <div className="mt-2 shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.04]">
+      <div className="border-b border-white/[0.06] px-3 py-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+          OCR Text
+        </span>
+      </div>
+      <div className="max-h-40 overflow-y-auto px-3 py-2">
+        {text ? (
+          <p className="select-text whitespace-pre-wrap text-xs leading-relaxed text-white/70">
+            {text}
+          </p>
+        ) : (
+          <p className="text-xs italic text-white/30">No text captured for this frame.</p>
+        )}
+      </div>
     </div>
   )
 }

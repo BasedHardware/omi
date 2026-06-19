@@ -136,11 +136,11 @@
 |-------|--------|
 | **macOS source** | `Sources/Rewind/UI/RewindPage.swift`, `Sources/Rewind/UI/RewindTimelineView.swift`, `Sources/Rewind/UI/RewindTimelinePlayerView.swift`, `Sources/Rewind/UI/SearchResultsFilmstrip.swift`, `Sources/Rewind/Core/RewindDatabase.swift` |
 | **Windows source** | `src/renderer/src/pages/Rewind.tsx`, `src/renderer/src/components/rewind/RewindPlayer.tsx`, `src/renderer/src/components/rewind/RewindTimelineBar.tsx`, `src/renderer/src/components/rewind/RewindThumbnailStrip.tsx`, `src/renderer/src/components/rewind/RewindSearchBar.tsx` |
-| **Status** | 🟡 Partial |
-| **Visual gap** | Windows timeline bar and thumbnail strip are implemented. Search bar exists in source but is hidden in the current build. macOS shows OCR text overlay on screenshots; Windows shows only the raw screenshot. |
-| **Functional gap** | Search is built (`RewindSearchBar.tsx`, `src/main/rewind/ocrService.ts`) but not surfaced in the UI. Missing: OCR text overlay on the player view, fullscreen expand of screenshot, transcript export to PDF/Markdown/JSON. |
-| **Proposed fix** | (1) Unhide/enable `RewindSearchBar` in `Rewind.tsx` — infrastructure already exists. (2) Add OCR text overlay as a togglable panel on `RewindPlayer`. These are high-value, low-effort. |
-| **Priority** | P0 |
+| **Status** | 🟡 Partial → improved (Batch 9) |
+| **Visual gap** | Windows timeline bar and thumbnail strip are implemented. Search is surfaced. macOS has an always-visible OCR panel; Windows has a toggleable panel (matches intent, slightly different interaction). |
+| **Improvements (Batch 9)** | (1) **OCR text panel** — "Text" toggle button in Rewind header shows/hides a collapsible panel below the player with the current frame's OCR text, selectable, with "No text captured" empty state. (2) **Fullscreen button** — `Maximize2` icon floats top-right of the screenshot; clicking opens the existing full-screen overlay (click anywhere to dismiss). Click-on-image also still works. (3) **JSON export** — "Export" button (only shown when frames exist) downloads `omi-rewind-{date}.json` with timestamp, app, windowTitle, ocrText per frame — no new IPC, uses browser blob download in Electron renderer. |
+| **Remaining gaps** | PDF export (needs native library); Markdown export (deferred). No per-frame app-icon badge (macOS shows app icons on thumbnail strip). |
+| **Priority** | P0 — IMPROVED |
 
 ---
 
@@ -358,7 +358,7 @@
 | Floating Overlay | 🟡 Partial | P1 |
 | Recording / Listening UI | 🟡 Partial (improved) | P1 — IMPROVED |
 | Conversation History | 🟡 Partial | P1 |
-| Rewind / Timeline | 🟡 Partial | P0 |
+| Rewind / Timeline | 🟡 Partial (improved) | P0 — IMPROVED |
 | Rewind Search | ✅ Works | P0 — DONE |
 | Screen OCR / Context | 🟡 Partial | P2 |
 | Settings | 🟡 Partial (improved) | P1 — IMPROVED |
