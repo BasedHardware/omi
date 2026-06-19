@@ -50,12 +50,6 @@ class PushToTalkManager: ObservableObject {
   /// it uses the realtime omni STT and routes the transcript into the pill's agent
   /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
   private var followUpPill: AgentPill?
-  // Cached local cue for the instant PTT-up ack (preloaded so play() never hits disk).
-  private lazy var ackSound: NSSound? = {
-    let s = NSSound(named: "Pop")
-    s?.volume = 0.35
-    return s
-  }()
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
@@ -556,9 +550,8 @@ class PushToTalkManager: ObservableObject {
         updateBarState()  // clears the listening UI (no "…")
         return
       }
-      // Real speech — instant local ack + commit. The hub speaks the reply and
-      // dispatches tools itself; no transcript/router/LLM hop here.
-      if ShortcutSettings.shared.pttSoundsEnabled { ackSound?.play() }
+      // Real speech — commit. The hub speaks the reply and dispatches tools
+      // itself; no transcript/router/LLM hop here.
       RealtimeHubController.shared.commitTurn()
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
       // status UI), the same as the legacy voice path.
@@ -591,12 +584,6 @@ class PushToTalkManager: ObservableObject {
       }
     }
 
-    // Play end-of-PTT sound
-    if ShortcutSettings.shared.pttSoundsEnabled {
-      let sound = NSSound(named: "Bottle")
-      sound?.volume = 0.3
-      sound?.play()
-    }
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
