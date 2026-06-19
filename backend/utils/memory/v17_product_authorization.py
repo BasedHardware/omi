@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Callable, Optional
 
-from models.v17_product_memory import MemoryAccessPolicy
+from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.v17_default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17GlobalReadGateDecision,
@@ -46,8 +47,34 @@ class V17ProductAuthorizationDecision:
     status_code: int = 403
 
 
+class V17MemoryGrantOperation(str, Enum):
+    DEFAULT_READ = 'default_read'
+    ARCHIVE_READ = 'archive_read'
+    WRITE = 'write'
+
+
+@dataclass(frozen=True)
+class V17AppKeyScopeGrantDecision:
+    allowed: bool
+    context: V17ProductAuthorizationContext
+    operation: V17MemoryGrantOperation
+    reason: str
+    required_scope: str
+    observability: dict
+    policy: Optional[MemoryAccessPolicy] = None
+    grant_path: Optional[str] = None
+    status_code: int = 403
+
+
 ReadGlobalGate = Callable[..., V17GlobalReadGateDecision]
 ReadRollout = Callable[..., V17DefaultReadRolloutDecision]
+
+EXTERNAL_V17_MEMORY_CONSUMERS = {'third_party', 'developer_api', 'mcp'}
+V17_MEMORY_OPERATION_REQUIRED_SCOPES = {
+    V17MemoryGrantOperation.DEFAULT_READ: 'memories.read',
+    V17MemoryGrantOperation.ARCHIVE_READ: 'memories.archive.read',
+    V17MemoryGrantOperation.WRITE: 'memories.write',
+}
 
 
 def _app_context_payload(context: V17ProductAuthorizationContext) -> dict:
@@ -134,6 +161,214 @@ def _allow(
         policy=policy,
         global_gate=global_gate,
         rollout=rollout,
+        status_code=200,
+    )
+
+
+def _grant_observability(
+    context: V17ProductAuthorizationContext,
+    operation: V17MemoryGrantOperation,
+    required_scope: str,
+    reason: str,
+    grant_path: str | None = None,
+) -> dict:
+    return {
+        'consumer': context.consumer,
+        'surface': context.surface,
+        'operation': operation.value,
+        'required_scope': required_scope,
+        'reason': reason,
+        'app_id': context.app_id,
+        'key_id': context.key_id,
+        'authenticated_scopes': list(context.scopes),
+        'grant_path': grant_path,
+        'archive_default_visible': False,
+    }
+
+
+def _grant_decision(
+    *,
+    context: V17ProductAuthorizationContext,
+    operation: V17MemoryGrantOperation,
+    required_scope: str,
+    reason: str,
+    allowed: bool = False,
+    policy: MemoryAccessPolicy | None = None,
+    grant_path: str | None = None,
+    status_code: int = 403,
+) -> V17AppKeyScopeGrantDecision:
+    return V17AppKeyScopeGrantDecision(
+        allowed=allowed or policy is not None,
+        context=context,
+        operation=operation,
+        reason=reason,
+        required_scope=required_scope,
+        observability=_grant_observability(context, operation, required_scope, reason, grant_path),
+        policy=policy,
+        grant_path=grant_path,
+        status_code=status_code,
+    )
+
+
+def _lookup_app_key_grant(
+    context: V17ProductAuthorizationContext, persisted_grant_state
+) -> tuple[dict | None, str | None, bool]:
+    if not isinstance(persisted_grant_state, dict):
+        return None, None, False
+    grants = persisted_grant_state.get('grants')
+    if not isinstance(grants, dict):
+        return None, None, False
+    consumer_grants = grants.get(context.consumer)
+    if not isinstance(consumer_grants, dict):
+        return None, None, True
+    apps = consumer_grants.get('apps')
+    if not isinstance(apps, dict):
+        return None, None, False
+    app_grant = apps.get(context.app_id)
+    if not isinstance(app_grant, dict):
+        return None, None, True
+    keys = app_grant.get('keys')
+    if not isinstance(keys, dict):
+        return None, None, False
+    key_grant = keys.get(context.key_id)
+    if key_grant is None:
+        return None, None, True
+    if not isinstance(key_grant, dict):
+        return None, None, False
+    return key_grant, f'grants.{context.consumer}.apps.{context.app_id}.keys.{context.key_id}', True
+
+
+def _memory_consumer_for_context(context: V17ProductAuthorizationContext) -> MemoryConsumer:
+    try:
+        return MemoryConsumer(context.consumer)
+    except ValueError:
+        return MemoryConsumer.unknown
+
+
+def authorize_v17_app_key_scope_memory_grant(
+    context: V17ProductAuthorizationContext,
+    *,
+    persisted_grant_state,
+    operation: V17MemoryGrantOperation,
+) -> V17AppKeyScopeGrantDecision:
+    """Authorize V17 memory access for external app/key/scope consumers.
+
+    First-party Omi chat continues to be governed by the rollout/default-grant
+    path in `authorize_v17_product_memory_route`. External consumers must present
+    a server-authenticated app id, key id, verified scope, and matching persisted
+    app/key grant. Request-provided scopes alone never grant access.
+    """
+
+    required_scope = V17_MEMORY_OPERATION_REQUIRED_SCOPES[operation]
+    if context.consumer not in EXTERNAL_V17_MEMORY_CONSUMERS:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='first_party_rollout_authorization',
+            allowed=True,
+            status_code=200,
+        )
+
+    if not context.app_id or not context.key_id:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='missing_app_or_key_identity',
+        )
+    if required_scope not in set(context.scopes):
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason=f'missing_authenticated_scope_{required_scope}',
+        )
+
+    grant, grant_path, structurally_valid = _lookup_app_key_grant(context, persisted_grant_state)
+    if not structurally_valid:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='malformed_app_key_scope_grant',
+            grant_path=grant_path,
+        )
+    if grant is None:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='missing_app_key_scope_grant',
+            grant_path=grant_path,
+        )
+
+    grant_scopes = grant.get('scopes')
+    if not isinstance(grant.get('enabled'), bool) or not isinstance(grant_scopes, list):
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='malformed_app_key_scope_grant',
+            grant_path=grant_path,
+        )
+    if not all(isinstance(scope, str) and scope for scope in grant_scopes):
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='malformed_app_key_scope_grant',
+            grant_path=grant_path,
+        )
+    if not grant['enabled']:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='app_key_scope_grant_disabled',
+            grant_path=grant_path,
+        )
+    if required_scope not in set(grant_scopes):
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason=f'missing_persisted_scope_{required_scope}',
+            grant_path=grant_path,
+        )
+
+    operation_flag = operation.value
+    if not isinstance(grant.get(operation_flag), bool):
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason='malformed_app_key_scope_grant',
+            grant_path=grant_path,
+        )
+    if not grant[operation_flag]:
+        return _grant_decision(
+            context=context,
+            operation=operation,
+            required_scope=required_scope,
+            reason=f'missing_{operation.value}_grant',
+            grant_path=grant_path,
+        )
+
+    policy = MemoryAccessPolicy(
+        consumer=_memory_consumer_for_context(context),
+        app_has_default_memory_grant=operation
+        in {V17MemoryGrantOperation.DEFAULT_READ, V17MemoryGrantOperation.ARCHIVE_READ},
+        archive_capability=operation == V17MemoryGrantOperation.ARCHIVE_READ,
+        raw_provenance_capability=False,
+    )
+    return _grant_decision(
+        context=context,
+        operation=operation,
+        required_scope=required_scope,
+        reason='ok',
+        policy=policy,
+        grant_path=grant_path,
         status_code=200,
     )
 

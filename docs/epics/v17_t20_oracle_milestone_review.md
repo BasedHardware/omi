@@ -695,6 +695,27 @@ This addresses the narrow Oracle P0-1 subpoint that product default/vector/Archi
 - Continue P0-7 overfetch/refill/budget work and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 app/key/scope V17 memory grant contract seam
+
+Continued Oracle P0-1/P0-6 with the first fake-injectable app/key/scope grant contract for external V17 memory access, without wiring production route behavior or changing the production rollout verdict:
+
+- Extended `backend/utils/memory/v17_product_authorization.py` with `V17MemoryGrantOperation`, `V17AppKeyScopeGrantDecision`, and `authorize_v17_app_key_scope_memory_grant(...)`.
+- The contract models `consumer`/surface, `app_id`, `key_id`, authenticated scopes, required memory operation (`default_read`, `archive_read`, `write`), a persisted per-consumer/app/key grant shape, and deterministic fail-closed denial reasons.
+- External consumers (`developer_api`, `mcp`, `third_party`) require both an authenticated scope (`memories.read`, `memories.archive.read`, or `memories.write`) and a matching persisted grant at `grants.<consumer>.apps.<app_id>.keys.<key_id>` with boolean `enabled`, operation flag, and scope list. Request/auth scopes alone cannot self-grant V17 memory access.
+- First-party `omi_chat` remains on the existing rollout/default-grant product authorization path and is not required to have an app/key grant in this seam.
+- Archive is not default-visible: default read grants build policies with `archive_capability=false`; Archive read requires the stronger `memories.archive.read` scope plus `archive_read=true` and still remains subject to the existing explicit Archive request and persisted Archive capability when composed with the product route seam.
+- Inspected current route/auth inventory: developer keys carry stored `scopes` but only return uid from route dependencies; MCP REST/SSE API key models currently do not persist scopes; MCP SSE advertises OAuth `memories.read`/`memories.write`; product `/v17` routes are first-party `omi_chat`. Therefore this slice is a contract/helper plus tests, not route enforcement for MCP/developer yet.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing grant-operation import, GREEN grant/product authorization tests (`11 passed`), focused product/default rollout regression (`40 passed`), full `pytest tests/unit/test_v17_*.py -q` (`270 passed, 1 warning`), and async scan exit 0 with pre-existing findings only.
+
+This addresses only the first contract/helper subpoint for Oracle P0-1/P0-6 app/key/scope authorization. Remaining work:
+
+- Persist a server-owned per-app/per-key grant document/field, with emulator/cloud IAM/rules proof that clients cannot self-grant.
+- Carry key id/app id/scopes through developer and MCP REST/SSE auth dependencies, including MCP key scope storage or OAuth token introspection, then compose this seam before V17 memory reads/writes.
+- Add route-level tests for MCP REST, MCP streamable HTTP/SSE tools, developer default/vector/list, and third-party app integrations.
+- Keep Archive unavailable by default and require explicit Archive query plus persisted Archive capability in addition to app/key scope grants.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

@@ -5,7 +5,9 @@ from utils.memory.v17_default_read_rollout import (
     V17ReadDecision,
 )
 from utils.memory.v17_product_authorization import (
+    V17MemoryGrantOperation,
     V17ProductAuthorizationContext,
+    authorize_v17_app_key_scope_memory_grant,
     authorize_v17_product_memory_route,
 )
 
@@ -226,3 +228,133 @@ def test_malformed_global_or_control_state_fails_closed_with_deterministic_reaso
     assert malformed_control.allowed is False
     assert malformed_control.reason == 'malformed_rollout_state'
     assert malformed_control.observability['fallback_reason'] == 'malformed_rollout_state'
+
+
+def _external_grant_state(*, enabled=True, scopes=None, default_read=True, archive_read=False):
+    return {
+        'grants': {
+            'developer_api': {
+                'apps': {
+                    'app-1': {
+                        'keys': {
+                            'key-1': {
+                                'enabled': enabled,
+                                'scopes': ['memories.read'] if scopes is None else scopes,
+                                'default_read': default_read,
+                                'archive_read': archive_read,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+def _external_context(*, scopes=('memories.read',), app_id='app-1', key_id='key-1', consumer='developer_api'):
+    return V17ProductAuthorizationContext(
+        uid='u1',
+        consumer=consumer,
+        surface='developer_default_memory_read',
+        app_id=app_id,
+        key_id=key_id,
+        scopes=scopes,
+    )
+
+
+def test_app_key_scope_grant_denies_external_consumer_without_persisted_grant():
+    decision = authorize_v17_app_key_scope_memory_grant(
+        _external_context(),
+        persisted_grant_state={'grants': {'developer_api': {'apps': {}}}},
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'missing_app_key_scope_grant'
+    assert decision.required_scope == 'memories.read'
+    assert decision.policy is None
+    assert decision.observability['consumer'] == 'developer_api'
+    assert decision.observability['app_id'] == 'app-1'
+    assert decision.observability['key_id'] == 'key-1'
+
+
+def test_app_key_scope_grant_denies_external_consumer_with_wrong_authenticated_scope():
+    decision = authorize_v17_app_key_scope_memory_grant(
+        _external_context(scopes=('conversations.read',)),
+        persisted_grant_state=_external_grant_state(),
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'missing_authenticated_scope_memories.read'
+    assert decision.policy is None
+
+
+def test_app_key_scope_grant_allows_external_default_read_with_persisted_grant_and_required_scope():
+    decision = authorize_v17_app_key_scope_memory_grant(
+        _external_context(),
+        persisted_grant_state=_external_grant_state(),
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == 'ok'
+    assert decision.policy is not None
+    assert decision.policy.consumer.value == 'developer_api'
+    assert decision.policy.app_has_default_memory_grant is True
+    assert decision.policy.archive_capability is False
+    assert decision.grant_path == 'grants.developer_api.apps.app-1.keys.key-1'
+
+
+def test_app_key_scope_grant_denies_archive_with_default_read_scope_only():
+    decision = authorize_v17_app_key_scope_memory_grant(
+        _external_context(),
+        persisted_grant_state=_external_grant_state(),
+        operation=V17MemoryGrantOperation.ARCHIVE_READ,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'missing_authenticated_scope_memories.archive.read'
+    assert decision.policy is None
+
+
+def test_app_key_scope_grant_malformed_persisted_state_fails_closed_deterministically():
+    malformed_state = {
+        'grants': {
+            'developer_api': {
+                'apps': {
+                    'app-1': {
+                        'keys': {
+                            'key-1': {
+                                'enabled': True,
+                                'scopes': 'memories.read',
+                                'default_read': True,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    decision = authorize_v17_app_key_scope_memory_grant(
+        _external_context(),
+        persisted_grant_state=malformed_state,
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'malformed_app_key_scope_grant'
+    assert decision.policy is None
+
+
+def test_app_key_scope_grant_preserves_first_party_omi_chat_rollout_path_without_external_grant():
+    decision = authorize_v17_app_key_scope_memory_grant(
+        V17ProductAuthorizationContext(uid='u1', consumer='omi_chat', surface='product_default_search'),
+        persisted_grant_state=None,
+        operation=V17MemoryGrantOperation.DEFAULT_READ,
+    )
+
+    assert decision.allowed is True
+    assert decision.reason == 'first_party_rollout_authorization'
+    assert decision.policy is None
