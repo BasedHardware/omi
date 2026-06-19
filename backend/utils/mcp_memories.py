@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional
 
 from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory.v17_product_authorization import V17ProductAuthorizationContext
 from utils.memory.v17_default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17ReadDecision,
@@ -32,6 +33,44 @@ ACTIVITY_PREFIXES = (
 
 
 V17McpDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
+
+
+@dataclass(frozen=True)
+class McpV17VerifiedAuth:
+    """Server-verified MCP identity/scope payload for future V17 memory reads.
+
+    Existing MCP API-key dependencies return only uid and remain unchanged. This
+    helper type is deliberately fake-injectable so REST/OAuth/SSE call sites can
+    adopt it only after they can supply stable app/key identity and verified
+    scopes from persisted MCP key scopes or OAuth token introspection.
+    """
+
+    uid: str
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
+    scopes: tuple[str, ...] = ()
+
+
+MCP_V17_DEFAULT_MEMORY_READ_SURFACE = 'mcp_default_memory_read'
+
+
+def build_mcp_v17_default_memory_read_context(auth: McpV17VerifiedAuth) -> V17ProductAuthorizationContext:
+    """Build the MCP V17 default-memory authorization context.
+
+    This function does not grant access by itself. Missing app/key identity or a
+    missing `memories.read` scope is carried into the shared app/key/scope
+    authorization seam, which fails closed with deterministic reasons. Archive is
+    never enabled by this default-read context.
+    """
+
+    return V17ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='mcp',
+        surface=MCP_V17_DEFAULT_MEMORY_READ_SURFACE,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=tuple(scope for scope in auth.scopes if scope in {'memories.read', 'memories.write'}),
+    )
 
 
 @dataclass(frozen=True)

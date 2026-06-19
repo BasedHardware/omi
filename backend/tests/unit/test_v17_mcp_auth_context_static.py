@@ -1,0 +1,104 @@
+from pathlib import Path
+
+from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
+from utils.memory.v17_product_authorization import authorize_v17_external_default_memory_read
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class _GrantStateRead:
+    def __init__(self, state):
+        self.state = state
+        self.reason = 'ok'
+        self.source_path = 'users/u1/memory_control/v17_app_key_memory_grants'
+
+
+def _grant_reader(*, uid, db_client):
+    assert uid == 'u1'
+    assert db_client == 'fake-db'
+    return _GrantStateRead(
+        {
+            'grants': {
+                'mcp': {
+                    'apps': {
+                        'mcp-app-1': {
+                            'keys': {
+                                'mcp-key-1': {
+                                    'enabled': True,
+                                    'scopes': ['memories.read'],
+                                    'default_read': True,
+                                    'archive_read': False,
+                                    'write': False,
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+
+def test_existing_mcp_uid_only_dependency_remains_available():
+    dependencies_source = (ROOT / 'dependencies.py').read_text()
+
+    assert 'async def get_uid_from_mcp_api_key' in dependencies_source
+    assert 'return user_id' in dependencies_source
+
+
+def test_mcp_v17_context_fails_closed_without_app_or_key_identity():
+    auth = McpV17VerifiedAuth(uid='u1', scopes=('memories.read',))
+
+    context = build_mcp_v17_default_memory_read_context(auth)
+    decision = authorize_v17_external_default_memory_read(
+        context,
+        db_client='fake-db',
+        read_app_key_grants_state=_grant_reader,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'missing_app_or_key_identity'
+
+
+def test_mcp_v17_context_fails_closed_without_verified_memories_read_scope():
+    auth = McpV17VerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=())
+
+    context = build_mcp_v17_default_memory_read_context(auth)
+    decision = authorize_v17_external_default_memory_read(
+        context,
+        db_client='fake-db',
+        read_app_key_grants_state=_grant_reader,
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == 'missing_authenticated_scope_memories.read'
+
+
+def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_without_archive():
+    auth = McpV17VerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=('memories.read',))
+    context = build_mcp_v17_default_memory_read_context(auth)
+
+    decision = authorize_v17_external_default_memory_read(
+        context,
+        db_client='fake-db',
+        read_app_key_grants_state=_grant_reader,
+    )
+
+    assert decision.allowed is True
+    assert decision.context.consumer == 'mcp'
+    assert decision.context.surface == 'mcp_default_memory_read'
+    assert decision.policy is not None
+    assert decision.policy.app_has_default_memory_grant is True
+    assert decision.policy.archive_capability is False
+    assert decision.reason == 'ok'
+
+
+def test_mcp_routes_advertise_memories_read_but_do_not_yet_wire_v17_context_dependency():
+    rest_source = (ROOT / 'routers' / 'mcp.py').read_text()
+    sse_source = (ROOT / 'routers' / 'mcp_sse.py').read_text()
+
+    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in rest_source
+    assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in sse_source
+    assert 'def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:' in sse_source
+    assert 'build_mcp_v17_default_memory_read_context' not in rest_source
+    assert 'build_mcp_v17_default_memory_read_context' not in sse_source

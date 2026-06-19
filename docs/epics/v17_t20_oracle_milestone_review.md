@@ -773,6 +773,26 @@ This closes the narrow Developer API vector-route P0-1/P0-6 app/key/scope compos
 - Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 MCP REST/SSE app/key/scope context readiness slice
+
+Continued Oracle P0-1/P0-6 with the first MCP V17 authorization context/readiness helper, without route enforcement or changing the production rollout verdict:
+
+- Added `McpV17VerifiedAuth`, `MCP_V17_DEFAULT_MEMORY_READ_SURFACE`, and `build_mcp_v17_default_memory_read_context(...)` in `backend/utils/mcp_memories.py`.
+- The helper can carry `uid`, stable `app_id`, `key_id`, verified MCP scopes, `consumer='mcp'`, and `surface='mcp_default_memory_read'` into `V17ProductAuthorizationContext` for the existing `authorize_v17_external_default_memory_read(...)` composition seam.
+- Existing uid-only MCP compatibility is preserved: REST routes still use `get_uid_from_mcp_api_key`, and streamable HTTP/SSE `execute_tool(...)` still receives `user_id` only.
+- Missing app/key identity or missing verified `memories.read` scope fails closed through deterministic shared grant reasons before any future V17 read can proceed; valid injected MCP context plus stored `grants.mcp.apps.{app_id}.keys.{key_id}` default-read grant allows a default-read policy with `archive_capability=false`.
+- Added `docs/epics/v17_mcp_app_key_scope_readiness.md`, listing MCP REST routes/tools, SSE tool security schemes/OAuth advertised scopes, current returned values, MCP key model/storage gaps, required future route execution context, safe composition point, RED tests needed, blockers, and explicit non-claims.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing MCP helper import, GREEN helper tests (`5 passed`), focused auth/MCP/product regression (`32 passed`), full `pytest tests/unit/test_v17_*.py -q` (`285 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the first MCP context/readiness helper subpoint. Remaining P0-1/P0-6 work:
+
+- Persist MCP key scopes or add OAuth token introspection so REST/SSE can supply real verified `app_id`, `key_id`, and scopes.
+- Wire MCP REST `/v1/mcp/memories/search` and streamable HTTP/SSE `search_memories` to deny before V17 vector/default reads when app/key/scope grant composition fails.
+- Decide whether `get_memories` becomes V17 default-list; if so, wire the same context before `memory_items` access.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

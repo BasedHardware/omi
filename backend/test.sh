@@ -47,6 +47,7 @@ pytest tests/unit/test_v17_product_memory_router.py -v
 pytest tests/unit/test_v17_product_authorization.py -v
 pytest tests/unit/test_v17_app_key_grant_store.py -v
 pytest tests/unit/test_v17_developer_auth_context_static.py -v
+pytest tests/unit/test_v17_mcp_auth_context_static.py -v
 pytest tests/unit/test_v17_short_term_lifecycle_worker.py -v
 pytest tests/unit/test_v17_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_v17_memory_contracts.py -v
