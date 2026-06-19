@@ -1,0 +1,344 @@
+# V17 T19/T20/T21 Oracle Milestone Review
+
+**Date:** 2026-06-19T10:20:49Z  
+**Oracle session:** `v17-t20-vector-review`  
+**Oracle CLI:** `/usr/local/bin/consult-oracle` (`oracle 0.14.0`)  
+**Requested model:** `gpt-5.5-pro`  
+**Execution mode:** browser foreground  
+**Run summary:** 10m51s, `files=15`, `↑103.84k ↓4.2k ↻0 Δ108.03k`  
+**Model selection caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=select; verified=no`, but returned an answer under `gpt-5.5-pro[browser]`. Treat this as a real Oracle/browser milestone review with model-selection caveat, not as production approval.
+
+## Prompt summary
+
+Review the V17 memory T19/T20/T21 default-read and vector integration milestone for production readiness, focusing on hidden safety/product/architecture risks: stale Short-term default visibility, Archive default exposure, rollout fail-closed behavior, legacy vector fallback interactions, vector metadata vs authoritative hydration, MCP/developer/chat caller surfaces, observability/metrics cardinality, production cutover gates, and missing tests. Return verdict, P0/P1 issues, required fixes before rollout, and product-owner decisions. Do not assume Oracle/cloud/benchmark validation was run unless shown.
+
+## Files reviewed
+
+- `docs/epics/v17_t20_vector_readiness_remaining_gates.md`
+- `docs/epics/v17_memory_implementation_tickets.md`
+- `backend/utils/memory/v17_vector_search_service.py`
+- `backend/database/v17_vector_metadata.py`
+- `backend/routers/v17_memory_product.py`
+- `backend/utils/memory/v17_chat_memory_adapter.py`
+- `backend/utils/mcp_memories.py`
+- `backend/routers/mcp.py`
+- `backend/routers/mcp_sse.py`
+- `backend/utils/memory/v17_developer_memory_adapter.py`
+- `backend/routers/developer.py`
+- `backend/utils/memory/v17_default_read_rollout.py`
+- `backend/tests/unit/test_v17_developer_memory_adapter.py`
+- `backend/tests/unit/test_v17_vector_search_service.py`
+- `backend/tests/unit/test_v17_default_read_rollout_decision.py`
+
+## Oracle verdict
+
+**BLOCK production rollout.** Oracle says this milestone is ready for architecture/milestone review, but a production read/vector cutover is **NO-GO**. Shadow tests that cannot affect returned results may continue.
+
+Oracle affirmed the foundation that vector candidates hydrate through authoritative `memory_items` and that tested stale Short-term/Archive exclusion is useful, but concluded the system is not yet safe for production because authorization, downgrade behavior, write/read convergence, vector fencing, shared-namespace coexistence, and real operational validation remain unresolved.
+
+## P0 issues from Oracle
+
+1. **Product default read is not rollout-gated; Archive capability is client-self-granted.** Every V17 product route must call one shared server-side authorization decision before any `memory_items` access. Archive must require both persisted capability and explicit Archive query.
+2. **“Fail closed” is conflated with unsafe legacy downgrade.** Replace Boolean/`None` rollout contracts with an explicit decision such as `USE_V17`, `USE_LEGACY_SAFE`, `DENY_MEMORY`, and optionally `SHADOW_ONLY`; legacy downgrade must require proven reconciliation/generation/epoch safety and explicit policy.
+3. **Reads are V17 while MCP/developer writes and deletes remain legacy.** Before authoritative read cutover, route applicable create/edit/delete through V17, disable those writes for pilots and prove reconciliation, or implement tested durable dual-write/outbox; deletion must update authoritative state and compatibility/vector projections before success.
+4. **Vector freshness and purge fences are optional in production callers.** Make expected account generation, uid, item revision, content hash, source commit/version, projection commit/version, and source/tombstone state mandatory; missing fence metadata rejects the hit; projection workers must delete prior tier/revision IDs and repair must prove no stale/duplicate IDs remain.
+5. **Shared `ns2` isolation from legacy search is unproven.** Prove with real Pinecone/`ns2` data that legacy queries exclude V17 schema records and retain baseline recall, or add a legacy schema filter / separate namespace before production V17 inserts.
+6. **Third-party authorization is not shown at app/key granularity.** Carry authenticated key/app identity and verified scopes into `MemoryAccessPolicy`; enforce `memories.read` at execution time on every MCP transport; store grants per app/key if product requires differentiated access.
+7. **Vector search algorithm is not production-shaped.** Replace full-collection hydration with candidate-ID batch hydration, measured overfetch/refill, strict budgets, timeouts, rate limits, and high-volume load tests.
+8. **Required cutover evidence is absent.** Real Pinecone, Firestore/cloud, benchmarks, production metrics aggregation, projection/repair consistency, `/v3` compatibility, and T22/T23 write/caller coverage remain gates.
+
+## P1 issues from Oracle
+
+1. Rollout document parsing is too permissive: missing uid accepted, alias/revocation precedence ambiguous, top-level grants may override nested state, Firestore transport exceptions not handled by policy.
+2. Sensitive-data policy is duplicated/incomplete in vector metadata; restricted vectors can pollute top-k before hydration.
+3. Caller/API behavior is inconsistent across product, MCP REST, MCP SSE, chat, developer list, developer category filtering, and fallback semantics.
+4. Current metrics are admin-derived local renderings, not central monotonic production counters.
+5. Chat concatenates memory content directly into LLM-facing text without visible quoting/escaping/size-budget/prompt-injection tests.
+6. Test coverage is mostly fake/static wiring coverage and does not exercise real FastAPI dependencies, response filtering, Pinecone filters, Firestore exceptions, scope enforcement, or cross-store behavior.
+
+## Required fixes/gates before rollout
+
+1. Gate every V17 route with the same versioned rollout decision and add a global emergency kill switch independent of per-user Firestore reads.
+2. Implement server-authorized Archive capability, separate from explicit query flag, with audit logging and revocation tests.
+3. Introduce explicit read decisions and prohibit legacy downgrade unless reconciliation proves it safe.
+4. Complete T22/T23 across applicable surfaces, especially MCP/developer create, edit, delete, list, tools, agent paths, and existing `/v3` compatibility.
+5. Make vector consistency fences mandatory, including current account generation, and complete outbox/stale-ID deletion/repair/tombstone precedence.
+6. Prove shared-namespace isolation against real Pinecone data for V17 and legacy callers.
+7. Replace full-collection hydration with candidate-ID batch hydration and measured overfetch/refill.
+8. Enforce scopes and app/key-specific grants on MCP REST, MCP streamable HTTP/SSE, and developer keys.
+9. Add central, monotonic, low-cardinality telemetry and alerts for path selection, vector errors/latency, candidate/parse/hydration/returned counts, empty-after-hydration, stale mismatch, fallback reason, Firestore reads, and per-surface errors.
+10. Run real cloud validation and benchmarks with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts.
+11. Close all P0 findings before production rollout.
+12. Cut over only through shadow comparison and canaries with abort thresholds and tested rollback that cannot lose or resurrect data.
+
+## Product-owner decisions required
+
+1. Archive authorization: whether first-party `include_archive=true` is enough, or persisted opt-in/capability is required; whether Archive vector search exists now or remains non-vector.
+2. Fallback semantics: deny, error, last-known-safe, merge, or legacy only when reconciliation is proven for missing/malformed control state, grant revocation, vector outage, or empty V17 results.
+3. Meaning of default-memory grant: rollout eligibility vs privacy/consent; if consent, legacy fallback after grant removal is unacceptable.
+4. Third-party scope: broad per-user consumer grant vs per app/key/OAuth client/installation.
+5. Short-term exposure: whether fresh source-backed Short-term is default-visible to MCP/developer apps or first-party chat only without stronger scope.
+6. Read/write sequencing: whether T22 V17 writes/deletes must land before read cutover or pilot external writes are disabled.
+7. API strategy: additive switch on existing `/v3`, MCP, developer endpoints vs private/experimental `/v17` until compatibility is complete.
+8. Launch thresholds: acceptable recall regression, p95/p99 latency, empty-after-hydration rate, stale-vector rate, error rate, and observation period before expanding allowlist.
+
+## Not-run / not-claimed caveats preserved
+
+- Oracle review has now run and is recorded here, but it blocks production rollout.
+- Real Pinecone validation was **not** run.
+- Real Firestore/cloud validation was **not** run.
+- Benchmark/no-silent-data-loss validation for vector search quality, latency, and recall was **not** run.
+- Production metrics aggregation/central `/metrics` integration was **not** completed.
+- Production rollout/cutover is **not** approved.
+
+## Exact Oracle answer
+
+```text
+According to a document from June 19, 2026, this is **ready for architecture/milestone review, but a production read or vector cutover is a NO-GO**. The happy-path unit tests support the intended pattern—authoritative hydration excludes stale Short-term and Archive—but the implementation still has control-plane bypasses, unsafe fallback semantics, read/write split-brain, optional vector freshness fences, and no real-service or benchmark evidence. 
+
+## Verdict
+
+**BLOCK production rollout.**
+
+Do not enable V17 as an authoritative read path for customers, MCP, developer API, or chat. A tightly isolated shadow test that cannot affect returned results may continue, but the current code should not be treated as fail-closed production behavior.
+
+## P0 issues
+
+### P0-1 — Product default read is not rollout-gated; Archive capability is client-self-granted
+
+`GET /v17/memory/search` authenticates the user and immediately reads `memory_items`; it never checks `memory_control/state`, rollout mode, allowlisting, or the Omi-chat grant.
+
+`GET /v17/memory/archive/search` treats `include_archive=true` as sufficient to construct `archive_capability=True`. That is an explicit query, but it is **not** a server-authorized capability. It does not check a persisted Archive opt-in, app policy, rollout state, or global Archive kill switch.
+
+The response fields `archive_default_visible=False` and `archive_capability_granted=True` merely describe the locally constructed policy; they are not authorization controls. This contradicts the documented contract that both app/admin policy and an explicit request are required.
+
+**Required fix:** Every V17 product route must call one shared server-side authorization decision before any `memory_items` access. Archive must require both a persisted capability and an explicit Archive query.
+
+---
+
+### P0-2 — “Fail closed” is conflated with an unsafe legacy downgrade
+
+The rollout helper collapses several materially different states into “V17 disabled”:
+
+* intentionally off;
+* missing or malformed control state;
+* missing consumer grant;
+* unsupported consumer;
+* control-plane inconsistency.
+
+MCP, chat, and the developer list then interpret `None` as “use legacy.” This is not necessarily fail-closed:
+
+* A revoked or missing grant can still result in legacy memory disclosure.
+* A malformed or unavailable control document can fall back to legacy after V17-only writes have begun, hiding new memories or resurrecting deleted/superseded ones.
+* `disabled_v17_default_read_rollout_decision` marks legacy reads authoritative without proving `fallback_projection_ready`, reconciliation, generation, or epoch safety.
+* Recognized malformed states downgrade to legacy, while real Firestore/network exceptions are not caught and instead fail with a 500.
+
+Behavior also differs by surface:
+
+| Surface          | Disabled/malformed/no grant | Enabled but V17 returns zero           |
+| ---------------- | --------------------------- | -------------------------------------- |
+| Product vector   | 403                         | Empty result                           |
+| Developer vector | 403                         | Empty result                           |
+| Developer list   | Legacy fallback             | V17 result                             |
+| Chat             | Legacy fallback             | “No V17 vector memories…”; no fallback |
+| MCP REST         | Legacy fallback             | Empty list; no fallback                |
+| MCP SSE          | Legacy fallback             | Empty list; no fallback                |
+
+Thus an empty or under-indexed V17 vector result silently suppresses legacy memories, while a control-plane failure can silently re-enable legacy.
+
+**Required fix:** Replace the Boolean/`None` contract with an explicit decision:
+
+* `USE_V17`
+* `USE_LEGACY_SAFE`
+* `DENY_MEMORY`
+* optionally `SHADOW_ONLY`
+
+`USE_LEGACY_SAFE` must require proven reconciliation, compatible projection readiness, matching epochs/generation, and an explicit policy permitting downgrade. Operational errors, grant revocation, and malformed state must not automatically mean legacy.
+
+---
+
+### P0-3 — Reads are V17 while MCP/developer writes and deletes remain legacy
+
+The shown MCP and developer create/edit/delete routes still mutate the legacy memory collection and legacy vectors. Meanwhile, search or list may read authoritative V17 `memory_items`.
+
+Consequences include:
+
+* a newly created memory is not visible in V17 search;
+* an edit can leave V17 content unchanged;
+* deleting a legacy memory can leave the V17 item and V17 vector searchable;
+* a category parameter on the developer list bypasses V17 and forces the legacy path;
+* rollbacks and user expectations become dependent on which endpoint was used.
+
+This is exactly the T22 external-write-semantics work that remains after the current milestone. Enabling reads before that work creates an externally visible split-brain system. 
+
+**Required fix:** Before any authoritative read cutover, either:
+
+1. move all applicable create/edit/delete routes through the V17 write/deletion service, or
+2. disable those writes for the pilot and prove reconciliation, or
+3. implement a tested, durable dual-write/outbox protocol.
+
+Deletion must update both authoritative state and all compatibility/vector projections before success is reported.
+
+---
+
+### P0-4 — Vector freshness and purge fences are optional in production callers
+
+The design correctly treats vectors as candidates, but its strongest consistency check is optional:
+
+* `required_projection_commit_id` defaults to `None`;
+* none of the shown production callers supplies it;
+* `uid`, `account_generation`, `item_revision`, `source_commit_id`, and `content_hash` are optional when parsing a vector hit.
+
+Even if the unseen hydration gateway compares a hit with its item, it is not shown receiving the **current control-plane account generation**. A stale vector and a stale-but-not-yet-deleted item can agree with each other while both belong to a purged generation.
+
+Additionally, vector IDs include tier and revision. Every transition or revision produces a new physical vector ID, making correct deletion of prior IDs mandatory. That cleanup, tombstone precedence, and repair flow were not validated.
+
+**Required fix:** Make the following mandatory, not optional:
+
+* expected current account generation;
+* exact uid;
+* item revision;
+* content hash;
+* source commit/version;
+* projection commit/version;
+* source/tombstone state.
+
+Missing fence metadata must reject the hit. Projection workers must delete previous tier/revision IDs, and repair must prove no duplicate or stale IDs remain.
+
+---
+
+### P0-5 — Shared `ns2` isolation from legacy search is unproven
+
+The V17 query has schema and tier filters, but the legacy vector functions are explicitly left untouched. With both schemas in `ns2`, an unchanged legacy top-k query may:
+
+* retrieve V17 vectors and lose useful legacy slots;
+* produce different results for non-enabled users;
+* accidentally hydrate a local legacy record using a V17 hit with the same logical ID;
+* be influenced by Archive or stale V17 embeddings even when the item is later dropped.
+
+“Legacy code untouched” is not evidence that legacy behavior remains unchanged. No real Pinecone validation or legacy-plus-V17 coexistence benchmark was run.
+
+**Required fix:** Prove with real `ns2` data that legacy queries explicitly exclude V17 schema records and retain baseline recall. Otherwise add a legacy schema filter or separate namespace before inserting production V17 vectors.
+
+---
+
+### P0-6 — Third-party authorization is not shown at app/key granularity
+
+The V17 grant is stored per user and broad consumer—`mcp` or `developer_api`—rather than per MCP app, developer key, OAuth client, or installation. Enabling it appears to enable every corresponding key for the user.
+
+More seriously, the shown MCP streamable-HTTP path advertises OAuth scopes in tool metadata, but `authenticate_api_key` returns only a user ID and `execute_tool` receives no scope set. No scope enforcement is visible. Unless an unseen key lookup rejects by scope, metadata such as `MEMORIES_READ_SECURITY` is documentation rather than authorization. 
+
+**Required fix:** Carry authenticated key/app identity and verified scopes into `MemoryAccessPolicy`. Enforce `memories.read` at execution time on every MCP transport, and store grants per app/key where product policy requires differentiated access.
+
+---
+
+### P0-7 — The vector search algorithm is not production-shaped
+
+`fetch_default_v17_vector_memory_search` queries only `limit` vector candidates and then loads the entire authoritative `memory_items` collection into a dictionary.
+
+That creates two severe risks:
+
+1. **Unbounded cost and latency:** every vector search can read all Short-term, Long-term, and Archive documents for the user.
+2. **Silent recall collapse:** stale Short-term, Archive, restricted, processed, or stale-revision vectors can consume all top-k slots. Hydration removes them, but there is no overfetch or refill, so the caller may receive zero results even when eligible results exist below top-k.
+
+The tests prove filtering, not adequate recall after filtering. 
+
+**Required fix:** Batch-fetch only candidate IDs, overfetch by a measured factor or iteratively refill, place strict read/candidate budgets, add timeouts and rate limiting, and load-test high-volume users.
+
+---
+
+### P0-8 — Required cutover evidence is explicitly absent
+
+The artifact states that the following were not run or completed:
+
+* milestone-specific Oracle review;
+* real Pinecone validation;
+* real Firestore/cloud validation for these paths;
+* recall, precision, latency, and no-silent-data-loss benchmarks;
+* production metrics aggregation;
+* production cutover approval.
+
+T20’s repair/projection-consistency work and T21’s `/v3` compatibility and cursor-pagination requirements are also not demonstrated. T22/T23 remain applicable because external writes and caller coverage are incomplete.
+
+## P1 issues
+
+### P1-1 — Rollout document parsing is too permissive
+
+* `data.get('uid', uid)` accepts a rollout document with no uid.
+* A stale top-level grant can override an explicitly false or absent nested grant.
+* Multiple aliases create ambiguous revocation precedence.
+* Firestore timeouts, permission errors, and transport exceptions are outside the caught exception set.
+
+Require a versioned schema, exact uid, one canonical grant location, explicit-false precedence, and bounded reads with defined error handling.
+
+### P1-2 — Sensitive-data policy is duplicated and incomplete
+
+The vector metadata code has a hard-coded restricted-label set that does not visibly cover the complete normative taxonomy, including categories such as third-party personal data and safety risk, and it depends on exact singular label spelling.
+
+Authoritative hydration remains the final control, but restricted vectors can still pollute top-k and starve safe results. Move sensitivity decisions to the central policy module and emit a single derived vector eligibility field.
+
+### P1-3 — Caller/API behavior is inconsistent
+
+* MCP `search_memories` may use V17, while MCP `get_memories` remains legacy.
+* MCP REST and SSE return different shapes and have different fallback chains.
+* Developer category filtering forces legacy.
+* Developer formatting fabricates fields such as `private`, `reviewed=True`, `edited=False`, and `category=other`.
+* Product, MCP, chat, and developer disagree on whether disabled rollout means 403 or legacy.
+
+These differences need an explicit compatibility contract before external rollout.
+
+### P1-4 — Current metrics are not production counters
+
+The low-cardinality labels are a good constraint, but the current Prometheus text is derived from a single admin inspection of three consumer decisions. A metric named `_total` is therefore not monotonic, process-lifetime traffic telemetry, and does not measure actual searches.
+
+Missing production metrics include:
+
+* V17/legacy/deny path selection;
+* vector query errors and latency;
+* candidate, parse-reject, hydration-reject, and returned counts;
+* empty-after-hydration rate;
+* stale revision/generation mismatch;
+* fallback reason;
+* Firestore documents read;
+* per-surface success and error rate.
+
+The milestone itself acknowledges that central aggregation is incomplete. 
+
+### P1-5 — Chat treats memory content as prompt text
+
+The chat adapter concatenates memory content directly into an LLM-facing string. Fresh Short-term content is source-backed and potentially untrusted. There is no visible escaping, structured-data boundary, injection marking, or output-size budget in the adapter.
+
+Treat retrieved memory as quoted evidence, cap item/content lengths, and test prompt-injection payloads.
+
+### P1-6 — Test coverage is largely fake/static wiring coverage
+
+The supplied tests use fake Firestore collections, fake vector queries, and source-text ordering assertions. They do not exercise real FastAPI dependencies, response-model filtering, Pinecone filters, Firestore exceptions, scope enforcement, or cross-store behavior. Some legacy router test attempts were explicitly not run because of missing dependencies.
+
+## Required fixes and gates before rollout
+
+1. **Gate every V17 route** with the same versioned rollout decision; add a global emergency kill switch independent of the per-user Firestore read.
+2. **Implement server-authorized Archive capability**, separate from the explicit query flag, with audit logging and revocation tests.
+3. **Introduce the tri-state/quad-state read decision** and prohibit legacy downgrade unless reconciliation proves it safe.
+4. **Complete T22/T23 for every applicable surface**, especially MCP/developer create, edit, delete, list, tools, agent paths, and existing `/v3` compatibility.
+5. **Make vector consistency fences mandatory**, including current account generation, and complete outbox, stale-ID deletion, repair, and tombstone precedence.
+6. **Prove shared-namespace isolation** against real Pinecone data for both V17 and legacy callers.
+7. **Replace full-collection hydration** with candidate-ID batch hydration and measured overfetch/refill.
+8. **Enforce scopes and app/key-specific grants** on MCP REST, MCP streamable HTTP/SSE, and developer keys.
+9. **Add central, monotonic, low-cardinality telemetry and alerts**, including empty-after-hydration and unsafe-fallback attempts.
+10. **Run real cloud validation and benchmarks** with malformed metadata, cross-user hits, expired Short-term, Archive, deleted/tombstoned sources, duplicate revisions, partial outages, and high-volume accounts.
+11. **Run the milestone Oracle review** and close all P0 findings.
+12. **Cut over through shadow comparison and canaries**, with documented abort thresholds and a tested rollback that cannot lose or resurrect data.
+
+## Decisions requiring product-owner input
+
+1. **Archive authorization:** Is an authenticated first-party user’s `include_archive=true` sufficient, or must Archive require a persisted user/app opt-in? Should Archive vector search exist now or remain non-vector?
+2. **Fallback semantics:** On missing/malformed control state, revoked grant, vector outage, or empty V17 results, should the system deny memory, return an error, use last-known-safe state, merge legacy and V17, or fall back only when reconciliation is proven?
+3. **Meaning of the default-memory grant:** Is it merely rollout eligibility, or a privacy/consent control? If it is consent, legacy fallback after grant removal is unacceptable.
+4. **Third-party scope:** Should every MCP/developer key for a user share one memory grant, or must policy be per app, key, OAuth client, or installation?
+5. **Short-term exposure:** Should fresh source-backed Short-term memory be available by default to MCP/developer apps, or only to first-party chat unless the user grants a stronger scope?
+6. **Read/write sequencing:** Must T22 V17 writes and deletes land before read cutover, or will pilot accounts have external memory writes disabled?
+7. **API strategy:** Should existing `/v3`, MCP, and developer endpoints switch behavior additively, or should `/v17` endpoints remain private/experimental until compatibility is complete?
+8. **Launch thresholds:** Define acceptable recall regression, p95/p99 latency, empty-after-hydration rate, stale-vector rate, error rate, and the required observation period before increasing the allowlist.
+
+**Bottom line:** authoritative hydration is the right foundation, and the tested stale Short-term/Archive exclusion is useful. It is not yet a safe production system because authorization, downgrade behavior, write/read convergence, vector fencing, shared-namespace coexistence, and real operational validation remain unresolved.
+```

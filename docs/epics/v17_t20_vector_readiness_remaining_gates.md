@@ -90,7 +90,7 @@ STRUCTURAL mixed await+sync DB: 10
 
 ## Not run / not claimed
 
-- Oracle review was **not** run for this milestone artifact.
+- Oracle milestone review has now run and is recorded in `docs/epics/v17_t20_oracle_milestone_review.md`; verdict is **BLOCK production rollout** with P0 fixes required before any production read/vector cutover.
 - Real Pinecone validation was **not** run.
 - Real Firestore/cloud validation for these vector paths was **not** run.
 - Benchmark/no-silent-data-loss validation for vector search quality, latency, and recall was **not** run.
@@ -99,7 +99,7 @@ STRUCTURAL mixed await+sync DB: 10
 
 ## Remaining gates / decisions
 
-1. **Oracle milestone review:** submit this T20 status plus T19/T21 read/caller context for review; apply required fixes before any production read/vector cutover.
+1. **Oracle milestone review:** complete and recorded in `docs/epics/v17_t20_oracle_milestone_review.md`; apply all Oracle P0 fixes before any production read/vector cutover.
 2. **Explicit Archive vector policy:** decide whether to add a capability-gated explicit Archive vector path, continue with non-vector Archive search only, or defer until benchmark/user evidence justifies vectorized Archive. No default Archive exposure is permitted.
 3. **Projection/vector consistency:** validate V17 outbox/upsert/delete/tombstone/idempotency behavior against real vector projection flows, including stale-version rejection and delete/tombstone precedence.
 4. **Real service validation:** run cloud/Pinecone/Firestore integration checks with representative metadata, malformed metadata, stale vectors, cross-user vectors, and tombstoned/deleted sources.
@@ -109,4 +109,4 @@ STRUCTURAL mixed await+sync DB: 10
 
 ## Recommended next action
 
-Treat T20 default vector implementation as ready for milestone review/Oracle prep, not production launch. The next implementation slice should either address Oracle findings from this review or proceed to the next ticket-source-of-truth P0 gate (`T22/23-R` API semantics/app capabilities) while preserving the current guarantees: stale Short-term excluded by default, Archive explicit-only, rollout fail-closed, and legacy fallback untouched.
+Treat T20 default vector implementation as reviewed by Oracle and **blocked for production launch**. The next implementation slice should address Oracle P0 findings before production cutover, starting with shared V17 route authorization/Archive capability, explicit read-decision semantics, T22/T23 write/read convergence, mandatory vector fences, shared-namespace validation, third-party scope enforcement, and production-shaped vector hydration/overfetch.
