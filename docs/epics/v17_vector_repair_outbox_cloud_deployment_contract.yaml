@@ -1,0 +1,215 @@
+# V17 vector repair outbox Cloud Run/Tasks/Scheduler deployment contract
+# Status: disabled-by-default readiness artifact; not applied to any cloud project.
+#
+# This file is intentionally checked in as a static, reviewable contract only. It
+# documents the Cloud Run service shape, Cloud Tasks queue/HTTP dispatch shape,
+# Cloud Scheduler trigger shape, OIDC audience, IAM bindings, retry/dead-letter
+# expectations, and proof commands required before production enablement.
+#
+# Important non-claims:
+# - No cloud resources are created by this file.
+# - No production IAM, deployed Firestore rules, Pinecone delete/upsert, shared
+#   ns2 isolation, or Scheduler/Tasks execution has been proven by this artifact.
+# - The current Python entrypoint is a CLI one-tick worker. An HTTP shim (for
+#   example POST /v17-vector-repair-outbox-worker/tick that invokes the same
+#   entrypoint/tick contract) must exist before applying the Service/Tasks shape.
+
+contract:
+  name: v17-vector-repair-outbox-worker
+  status: disabled-by-default; not applied
+  owner: server-owned V17 memory operations
+  requiredBeforeEnablement:
+    - production Firestore IAM proof for the worker service account
+    - deployed Firestore Security Rules proof for protected V17 client denial
+    - real Pinecone duplicate stale physical ID delete/repair validation in ns2
+    - shared ns2 isolation evidence or a separate namespace/filter decision
+    - central low-cardinality retry/dead-letter telemetry and alerts
+    - server-owned uid shard/backlog inventory and ownership model
+  resources:
+    - apiVersion: serving.knative.dev/v1
+      kind: Service
+      metadata:
+        name: v17-vector-repair-outbox-worker
+        annotations:
+          run.googleapis.com/ingress: internal-and-cloud-load-balancing
+          run.googleapis.com/invoker-iam-disabled: "false"
+          run.googleapis.com/description: >-
+            Disabled-by-default V17 vector_repair_purge outbox worker HTTP shim.
+            Do not set V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true until all
+            production gates pass.
+      spec:
+        template:
+          metadata:
+            annotations:
+              autoscaling.knative.dev/minScale: "0"
+              autoscaling.knative.dev/maxScale: "1"
+              run.googleapis.com/execution-environment: gen2
+          spec:
+            serviceAccountName: v17-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com
+            timeoutSeconds: 900
+            containerConcurrency: 1
+            containers:
+              - image: REGION-docker.pkg.dev/PROJECT_ID/omi/backend:V17_VECTOR_REPAIR_IMAGE_DIGEST
+                command: ["python3"]
+                args: ["backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py"]
+                env:
+                  - name: V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED
+                    value: "false"
+                  - name: V17_VECTOR_REPAIR_OUTBOX_UID
+                    value: SERVER_OWNED_UID_SHARD_PLACEHOLDER
+                  - name: V17_VECTOR_REPAIR_OUTBOX_WORKER_ID
+                    value: cloud-run:REGION:v17-vector-repair-outbox-worker:REVISION
+                  - name: V17_VECTOR_REPAIR_OUTBOX_LIMIT
+                    value: "25"
+                  - name: V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS
+                    value: "300"
+                  - name: V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS
+                    value: "3"
+                  - name: V17_VECTOR_REPAIR_PINECONE_NAMESPACE
+                    value: ns2
+                  - name: PINECONE_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: v17-vector-repair-pinecone-api-key
+                        key: latest
+                  - name: PINECONE_INDEX_NAME
+                    valueFrom:
+                      secretKeyRef:
+                        name: v17-vector-repair-pinecone-index-name
+                        key: latest
+                  - name: OPENAI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: v17-vector-repair-openai-api-key
+                        key: latest
+
+    - apiVersion: cloudtasks.googleapis.com/v2
+      kind: Queue
+      metadata:
+        name: v17-vector-repair-outbox-worker
+      spec:
+        description: Cloud Tasks queue for one-at-a-time HTTP worker dispatch; keep disabled until gates pass.
+        location: REGION
+        rateLimits:
+          maxDispatchesPerSecond: 0.05
+          maxConcurrentDispatches: 1
+        retryConfig:
+          maxAttempts: 3
+          minBackoff: 60s
+          maxBackoff: 600s
+          maxDoublings: 3
+          maxRetryDuration: 3600s
+        deadLetterPolicy:
+          # dead-letter backlog must be exported to central logs/alerts before enablement.
+          deadLetterQueue: projects/PROJECT_ID/locations/REGION/queues/v17-vector-repair-outbox-worker-dead-letter
+          maxDeliveryAttempts: 3
+
+    - apiVersion: cloudscheduler.googleapis.com/v1
+      kind: Job
+      metadata:
+        name: v17-vector-repair-outbox-worker-tick
+      spec:
+        description: >-
+          Cloud Scheduler tick that enqueues one server-owned V17 vector repair
+          outbox worker HTTP task. Keep state: PAUSED and worker env disabled
+          until all P0-4 gates pass.
+        schedule: "*/15 * * * *"
+        timeZone: UTC
+        state: PAUSED
+        httpTarget:
+          httpMethod: POST
+          uri: https://REGION-PROJECT_ID.run.app/v17-vector-repair-outbox-worker/tick
+          oidcToken:
+            serviceAccountEmail: v17-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+            audience: https://REGION-PROJECT_ID.run.app/v17-vector-repair-outbox-worker/tick
+          headers:
+            Content-Type: application/json
+          body: |
+            {
+              "contract": "v17_vector_repair_outbox_worker",
+              "uid_source": "server-owned-shard",
+              "enabled_env_required": "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true"
+            }
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: v17-vector-repair-scheduler-run-invoker
+      spec:
+        member: serviceAccount:v17-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/run.invoker
+        resourceRef:
+          apiVersion: serving.knative.dev/v1
+          kind: Service
+          name: v17-vector-repair-outbox-worker
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: v17-vector-repair-scheduler-token-creator
+      spec:
+        member: serviceAccount:cloudscheduler@system.gserviceaccount.com
+        role: roles/iam.serviceAccountTokenCreator
+        resourceRef:
+          external: projects/PROJECT_ID/serviceAccounts/v17-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: v17-vector-repair-scheduler-tasks-enqueuer
+      spec:
+        member: serviceAccount:v17-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/cloudtasks.enqueuer
+        resourceRef:
+          external: projects/PROJECT_ID/locations/REGION/queues/v17-vector-repair-outbox-worker
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: v17-vector-repair-worker-firestore-user
+      spec:
+        member: serviceAccount:v17-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/datastore.user
+        resourceRef:
+          external: projects/PROJECT_ID
+
+  proofChecklist:
+    disabledSmoke:
+      command: python3 backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py
+      passCriteria:
+        - JSON has enabled=false and config_valid=true
+        - leased_count=0 processed_count=0 failed_count=0 ack_failed_count=0
+        - no Pinecone/OpenAI/Firestore dependency initialization occurs
+    staticConfigReview:
+      passCriteria:
+        - V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains value: "false"
+        - Cloud Scheduler state remains PAUSED
+        - Cloud Run ingress is restricted and invoker IAM is required
+        - OIDC oidcToken audience exactly matches the worker tick URI
+        - uid source is server-owned; clients cannot choose arbitrary uid
+        - retryConfig maxAttempts/maxRetryDuration and dead-letter handling are documented
+    commandsToRunLater:
+      # Replace PROJECT_ID/REGION/service account names before execution. These
+      # are proof commands only; they were not run while adding this artifact.
+      - gcloud run services describe v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
+      - gcloud run services get-iam-policy v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
+      - gcloud scheduler jobs describe v17-vector-repair-outbox-worker-tick --location=REGION --project=PROJECT_ID --format=json
+      - gcloud tasks queues describe v17-vector-repair-outbox-worker --location=REGION --project=PROJECT_ID --format=json
+      - gcloud projects get-iam-policy PROJECT_ID --flatten=bindings[].members --filter='bindings.members:v17-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com' --format=json
+      - firebase deploy --only firestore:rules --project PROJECT_ID --dry-run
+    passFailCriteria:
+      pass:
+        - worker service account has roles/datastore.user or narrower custom Firestore role, not owner/editor
+        - scheduler principal has roles/run.invoker and OIDC token creation for only the scheduler service account
+        - scheduler job is paused until explicit rollout approval
+        - task queue concurrency is one and retry/dead-letter settings match this contract
+        - enabled env remains false until all Oracle P0-4 real-service gates pass
+      fail:
+        - any unauthenticated invoker binding exists
+        - any default production deployment sets V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true
+        - uid is accepted from a client body without server-owned shard validation
+        - missing dead-letter/backlog alerting or missing Pinecone ns2 proof
+
+  enablementPatchAfterGatesOnly:
+    V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED: true
+    warning: Do not set the true value until all production gates pass.

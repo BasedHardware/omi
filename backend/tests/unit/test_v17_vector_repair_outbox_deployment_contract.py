@@ -1,0 +1,61 @@
+from pathlib import Path
+
+REQUIRED_CONTRACT_TERMS = [
+    "apiVersion: serving.knative.dev/v1",
+    "kind: Service",
+    "v17-vector-repair-outbox-worker",
+    "python3",
+    "backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py",
+    "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
+    "value: \"false\"",
+    "V17_VECTOR_REPAIR_OUTBOX_UID",
+    "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID",
+    "PINECONE_API_KEY",
+    "PINECONE_INDEX_NAME",
+    "OPENAI_API_KEY",
+    "V17_VECTOR_REPAIR_PINECONE_NAMESPACE",
+    "ns2",
+    "Cloud Scheduler",
+    "Cloud Tasks",
+    "oidcToken",
+    "audience",
+    "serviceAccountEmail",
+    "maxRetryDuration",
+    "maxAttempts",
+    "dead-letter",
+    "roles/run.invoker",
+    "roles/cloudtasks.enqueuer",
+    "roles/iam.serviceAccountTokenCreator",
+    "roles/datastore.user",
+    "disabled-by-default",
+    "not applied",
+]
+
+FORBIDDEN_CLAIMS = [
+    "production IAM validated",
+    "deployed to production",
+    "Pinecone deletion verified",
+    "Cloud Scheduler created",
+    "Cloud Tasks queue created",
+]
+
+
+def test_v17_vector_repair_outbox_cloud_deployment_contract_is_disabled_and_oidc_ready():
+    root = Path(__file__).resolve().parents[2].parent
+    contract_path = root / "docs" / "epics" / "v17_vector_repair_outbox_cloud_deployment_contract.yaml"
+
+    assert contract_path.exists(), "missing checked-in Cloud Run/Tasks/Scheduler contract artifact"
+    contract = contract_path.read_text()
+
+    for required_term in REQUIRED_CONTRACT_TERMS:
+        assert required_term in contract
+    for forbidden_claim in FORBIDDEN_CLAIMS:
+        assert forbidden_claim not in contract
+
+    assert "run.googleapis.com/ingress: internal-and-cloud-load-balancing" in contract
+    assert "run.googleapis.com/invoker-iam-disabled: \"false\"" in contract
+    assert "state: PAUSED" in contract
+    assert "schedule: \"*/15 * * * *\"" in contract
+    assert "uri: https://REGION-PROJECT_ID.run.app/v17-vector-repair-outbox-worker/tick" in contract
+    assert "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true" in contract
+    assert "Do not set the true value until all production gates pass" in contract

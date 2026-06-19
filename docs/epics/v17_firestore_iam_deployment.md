@@ -137,9 +137,25 @@ input: explicit uid shard/list source must be server-owned; no client-supplied a
 output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/dead_letter plus bounded error classes; alerts on dead_letter growth, ack failures, Pinecone failures, and stale-vector backlog age
 ```
 
+### Cloud Run/Tasks/Scheduler static deployment contract and OIDC/IAM proof artifact
+
+`docs/epics/v17_vector_repair_outbox_cloud_deployment_contract.yaml` is now the checked-in disabled-by-default Cloud Run/Tasks/Scheduler contract artifact for this worker. It is a static readiness/proof artifact, not an applied deployment. It deliberately keeps:
+
+- Cloud Run `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` at `"false"` by default.
+- Cloud Scheduler `state: PAUSED` by default.
+- Cloud Run invoker IAM required (`run.googleapis.com/invoker-iam-disabled: "false"`) and ingress restricted.
+- OIDC `serviceAccountEmail` plus `audience` matching the intended worker tick URI.
+- Explicit service-account/IAM proof targets for `roles/run.invoker`, `roles/cloudtasks.enqueuer`, `roles/iam.serviceAccountTokenCreator`, and `roles/datastore.user` (or a narrower maintained Firestore custom role).
+- One-at-a-time Cloud Tasks dispatch with bounded `maxAttempts`, `maxRetryDuration`, and dead-letter routing placeholders.
+- Server-owned uid-shard placeholders only; clients must not select arbitrary uid execution.
+- Explicit proof commands and pass/fail criteria to run later with `gcloud`/Firebase against the target project.
+
+Important readiness caveat: the current Python worker entrypoint is a CLI one-tick wrapper. The contract records the intended HTTP/OIDC Cloud Run/Tasks shape, but an HTTP shim such as `POST /v17-vector-repair-outbox-worker/tick` must exist before applying the Service/Tasks/Scheduler resources. Because that shim and cloud project credentials are not present in this local slice, no Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, or Pinecone operation was created or claimed.
+
 Remaining deployment gates before enabling this contract in production:
 
-- Real Cloud Run/Tasks or Scheduler wiring and OIDC/IAM proof for the worker identity and trigger principal.
+- Add/validate the HTTP shim or choose a Cloud Run Job + OAuth trigger pattern; do not apply the HTTP Cloud Tasks/Scheduler shape until the executable entrypoint matches the trigger.
+- Run the OIDC/IAM proof commands from `docs/epics/v17_vector_repair_outbox_cloud_deployment_contract.yaml` against the target project and attach output to the rollout ticket.
 - Production Firestore IAM and deployed Security Rules validation in the target Firebase project.
 - Production-safe uid sharding/backlog discovery and worker identity ownership model.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.

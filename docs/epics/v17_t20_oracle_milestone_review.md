@@ -549,6 +549,27 @@ This closes only the narrow production dependency factory behind the disabled wr
 - Add overfetch/refill/budgets, app/key/scope auth, real benchmark/cloud evidence, and explicit production rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-4 disabled Cloud Run/Tasks/Scheduler contract and OIDC/IAM proof artifact
+
+Continued Oracle P0-4 by adding a checked-in disabled-by-default deployment/proof contract artifact, without applying cloud resources or changing the production rollout verdict:
+
+- Added `docs/epics/v17_vector_repair_outbox_cloud_deployment_contract.yaml`, a static Cloud Run/Cloud Tasks/Cloud Scheduler contract with explicit command/image shape, env/secrets, dedicated worker/scheduler service accounts, OIDC `serviceAccountEmail`/`audience`, IAM proof targets, retry/backoff/dead-letter placeholders, server-owned uid shard parameterization, and pass/fail proof commands.
+- The contract is intentionally disabled: Cloud Run env has `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED="false"`, Cloud Scheduler is `state: PAUSED`, Cloud Run invoker IAM remains required, Cloud Tasks concurrency is one, and enablement requires later production gates plus an explicit patch to `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true`.
+- Added `backend/tests/unit/test_v17_vector_repair_outbox_deployment_contract.py` and registered it in `backend/test.sh` to assert the static contract contains the required disabled/OIDC/IAM/retry/dead-letter fields and does not claim production IAM, deployed resources, or Pinecone deletion proof.
+- Updated `docs/epics/v17_firestore_iam_deployment.md` to link the artifact and record the key readiness caveat: the current worker entrypoint is CLI one-tick code, so an HTTP shim (or a deliberate Cloud Run Job + OAuth trigger design) must exist before applying the HTTP Cloud Tasks/Scheduler shape.
+- No Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, production Firestore rules validation, Pinecone delete/upsert, shared-`ns2` proof, telemetry alert, benchmark, or production approval was created or claimed.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing contract artifact (`1 failed`), GREEN static contract test (`1 passed`), focused wrapper/outbox/doc regression, disabled CLI smoke JSON, full `pytest tests/unit/test_v17_*.py -q`, and async scan exit 0 with pre-existing findings only.
+
+This closes only the static disabled deployment/proof contract artifact for Cloud Run/Tasks/Scheduler. Remaining P0-4/P0 work:
+
+- Add the worker HTTP shim or switch to a Cloud Run Job trigger pattern and validate the selected trigger end-to-end.
+- Run real OIDC/IAM proof commands from the artifact against the target project and attach exact output.
+- Validate production Firestore IAM/service-account bindings and deployed Security Rules.
+- Run real Pinecone duplicate stale physical-ID delete/repair/tombstone precedence validation and shared-`ns2` isolation proof.
+- Add central retry/dead-letter/backlog telemetry/alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

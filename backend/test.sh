@@ -57,6 +57,7 @@ pytest tests/unit/test_v17_vector_filters.py -v
 pytest tests/unit/test_v17_vector_search_service.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_worker.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_worker_entrypoint.py -v
+pytest tests/unit/test_v17_vector_repair_outbox_deployment_contract.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v
 pytest tests/unit/test_v17_normative_foundations.py -v
