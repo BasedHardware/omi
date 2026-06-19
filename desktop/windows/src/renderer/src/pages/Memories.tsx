@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -14,7 +14,7 @@ import { isAppIndexMemory } from '../lib/memoryCleanup'
 const RENDER_CAP = 400
 
 export function Memories(): React.JSX.Element {
-  const { memories, loading, error, createMemory, refresh } = useMemories()
+  const { memories, loading, error, createMemory, editMemory, refresh } = useMemories()
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -33,6 +33,9 @@ export function Memories(): React.JSX.Element {
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useState({ stop: false })[0]
+  const [editingMemId, setEditingMemId] = useState<string | null>(null)
+  const [editMemText, setEditMemText] = useState('')
+  const [savingMem, setSavingMem] = useState(false)
 
   // Collect unique category labels from the loaded set for the filter tabs.
   const categories = useMemo(() => {
@@ -79,6 +82,31 @@ export function Memories(): React.JSX.Element {
     setManage(false)
     setSelected(new Set())
     setFilter('')
+  }
+
+  const startMemEdit = (m: { id: string; content: string }): void => {
+    setEditingMemId(m.id)
+    setEditMemText(m.content)
+  }
+
+  const cancelMemEdit = (): void => {
+    setEditingMemId(null)
+    setEditMemText('')
+  }
+
+  const commitMemEdit = async (): Promise<void> => {
+    const text = editMemText.trim()
+    if (!text || !editingMemId) { cancelMemEdit(); return }
+    setSavingMem(true)
+    try {
+      await editMemory(editingMemId, text)
+      toast('Memory updated', { tone: 'info' })
+    } catch (e) {
+      toast('Could not update memory', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setSavingMem(false)
+      cancelMemEdit()
+    }
   }
 
   const source = manage ? (all ?? []) : memories
@@ -283,14 +311,25 @@ export function Memories(): React.JSX.Element {
         <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
           {rendered.map((m) => {
             const isSel = selected.has(m.id)
+            const isEditing = editingMemId === m.id
             return (
               <li
                 key={m.id}
-                onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive p-5 ${manage ? 'cursor-pointer' : ''} ${
+                onClick={manage && !isEditing ? () => toggle(m.id) : undefined}
+                className={`surface-card-interactive group/card relative p-5 ${manage ? 'cursor-pointer' : ''} ${
                   isSel ? 'ring-2 ring-white/40' : ''
                 }`}
               >
+                {/* Edit button — only in non-manage mode */}
+                {!manage && !isEditing && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startMemEdit(m) }}
+                    title="Edit memory"
+                    className="absolute right-3 top-3 rounded-md p-1 text-white/0 transition-colors group-hover/card:text-white/30 group-hover/card:hover:text-white/80"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                )}
                 <div className="flex items-start gap-3">
                   {manage && (
                     <input
@@ -302,19 +341,56 @@ export function Memories(): React.JSX.Element {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="font-display text-lg font-bold leading-snug text-text-primary">
-                      {m.headline || m.content.slice(0, 80)}
-                    </div>
-                    {m.headline && (
-                      <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
+                    {isEditing ? (
+                      <div>
+                        <textarea
+                          autoFocus
+                          value={editMemText}
+                          onChange={(e) => setEditMemText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                              e.preventDefault()
+                              void commitMemEdit()
+                            } else if (e.key === 'Escape') {
+                              cancelMemEdit()
+                            }
+                          }}
+                          rows={3}
+                          className="input-field w-full resize-none text-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <span className="mr-auto text-xs text-white/35">Ctrl+Enter to save</span>
+                          <button onClick={cancelMemEdit} className="btn-ghost px-2 py-1 text-xs" disabled={savingMem}>
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => void commitMemEdit()}
+                            disabled={savingMem || !editMemText.trim()}
+                            className="btn-primary px-3 py-1 text-xs disabled:opacity-40"
+                          >
+                            {savingMem ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-display text-lg font-bold leading-snug text-text-primary">
+                          {m.headline || m.content.slice(0, 80)}
+                        </div>
+                        {m.headline && (
+                          <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
+                        )}
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
+                          <time>{new Date(m.created_at).toLocaleString()}</time>
+                          {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
+                          {m.tags && m.tags.length > 0 && (
+                            <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
+                          )}
+                        </div>
+                      </>
                     )}
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
-                      <time>{new Date(m.created_at).toLocaleString()}</time>
-                      {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
-                      {m.tags && m.tags.length > 0 && (
-                        <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
-                      )}
-                    </div>
                   </div>
                 </div>
               </li>

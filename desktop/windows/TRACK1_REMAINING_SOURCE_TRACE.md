@@ -220,8 +220,18 @@ Already resolved in Batch 7:
 | ✓ | Conversations row actions (edit/copy/delete) | `Conversations.tsx` | Done in current batch |
 | ✓ | Conversations folder CRUD (create/delete) | `Conversations.tsx` | Done in current batch |
 | ✓ | Insight settings in Settings (via Rewind tab) | `RewindTab.tsx` | Already present |
+| ✓ | Conversations move-to-folder | `Conversations.tsx` | Done — `PATCH /v1/conversations/{id}/folder` |
+| ✓ | Memory inline edit | `useMemories.ts`, `Memories.tsx` | Done — `PATCH /v3/memories/{id}?value=` |
+| ✓ | Conversation copy shareable link | `Conversations.tsx` | Done — visibility=shared + h.omi.me URL |
+| ✓ | Conversation multi-select merge | `Conversations.tsx` | Done — `POST /v1/conversations/merge` |
+| ✓ | Speaker display names (person_id → name) | `ConversationDetail.tsx` | Done — people[] from GET /v1/conversations/{id} |
 | ✗ | Focus page | — | Infeasible — needs proactive assistant pipeline |
 | ✗ | Notifications settings (proactive) | — | Infeasible — no notification generation infra |
+| ✗ | BYOK | — | High blast-radius — touches every API call header injection |
+| ✗ | Software updates | — | Requires electron-updater package + CI config |
+| ✗ | Chat audio attachment | — | Endpoint confirmed (POST /v2/voice-messages) but needs audio recorder UI |
+| ✗ | Speaker label assignment UI | — | Endpoints confirmed but complex multi-step UI with person picker |
+| ✗ | BLE/Devices | — | No native BLE addon |
 | ✓ | Tasks grouping | — | Already done |
 | ✓ | Screen context | — | Already present |
 | ✓ | Overlay drag/resize/pill | — | Done in Batch 7 |

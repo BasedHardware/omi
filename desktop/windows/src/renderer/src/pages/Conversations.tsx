@@ -6,9 +6,12 @@ import {
   CheckSquare,
   Clipboard,
   Folder,
+  FolderOpen,
   FolderPlus,
   GanttChartSquare,
+  GitMerge,
   LayoutList,
+  Link2,
   MessageSquare,
   Mic,
   Pencil,
@@ -20,6 +23,7 @@ import {
   X
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import { toast } from '../lib/toast'
 import {
   conversationsCache,
   subscribeConversations,
@@ -144,32 +148,74 @@ function ConversationSkeleton(): React.JSX.Element {
 
 // --- Compact row (macOS parity: emoji badge + title + timestamp + star) ---
 
+function FolderPickerDropdown({
+  folders,
+  onSelect,
+  onClose
+}: {
+  folders: FolderItem[]
+  onSelect: (folderId: string | null) => void
+  onClose: () => void
+}): React.JSX.Element {
+  return (
+    <>
+      <div className="fixed inset-0 z-10" onClick={onClose} />
+      <div className="absolute right-0 top-full z-20 mt-1 min-w-[160px] rounded-xl border border-white/10 bg-[#1a1a1a]/95 py-1 shadow-xl backdrop-blur-md">
+        <button
+          onClick={() => onSelect(null)}
+          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white"
+        >
+          <Folder className="h-3.5 w-3.5 shrink-0 text-white/30" />
+          No folder
+        </button>
+        {folders.map((f) => (
+          <button
+            key={f.id}
+            onClick={() => onSelect(f.id)}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white"
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: f.color || '#6B7280' }} />
+            {f.name}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
 function CompactRow({
   r,
   editingId,
   editTitle,
+  folders,
   onToggleStar,
   onStartEdit,
   onEditChange,
   onCommitEdit,
   onCancelEdit,
   onCopy,
-  onDeleteSingle
+  onCopyLink,
+  onDeleteSingle,
+  onMoveToFolder
 }: {
   r: ConversationRow
   editingId: string | null
   editTitle: string
+  folders: FolderItem[]
   onToggleStar: (id: string, current: boolean) => Promise<void>
   onStartEdit: (id: string, title: string) => void
   onEditChange: (v: string) => void
   onCommitEdit: (id: string) => void
   onCancelEdit: () => void
   onCopy: (r: ConversationRow) => void
+  onCopyLink: (id: string) => void
   onDeleteSingle: (id: string) => void
+  onMoveToFolder: (id: string, folderId: string | null) => void
 }): React.JSX.Element {
   const isEditing = editingId === r.id
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
   return (
-    <div className="surface-card-interactive group relative flex items-center overflow-hidden">
+    <div className="surface-card-interactive group relative flex items-center overflow-visible">
       <Link
         to={`/conversations/${r.id}`}
         className={`flex min-w-0 flex-1 items-center gap-3 px-4 py-3 ${isEditing ? 'pointer-events-none' : ''}`}
@@ -221,6 +267,33 @@ function CompactRow({
         >
           <Clipboard className="h-3.5 w-3.5" />
         </button>
+        {r.source === 'cloud' && (
+          <button
+            onClick={(e) => { e.preventDefault(); void onCopyLink(r.id) }}
+            title="Copy shareable link"
+            className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {r.source === 'cloud' && folders.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={(e) => { e.preventDefault(); setShowFolderPicker((v) => !v) }}
+              title="Move to folder"
+              className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+            </button>
+            {showFolderPicker && (
+              <FolderPickerDropdown
+                folders={folders}
+                onSelect={(fid) => { onMoveToFolder(r.id, fid); setShowFolderPicker(false) }}
+                onClose={() => setShowFolderPicker(false)}
+              />
+            )}
+          </div>
+        )}
         <button
           onClick={(e) => { e.preventDefault(); onDeleteSingle(r.id) }}
           title="Delete"
@@ -240,6 +313,140 @@ function CompactRow({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+// --- Expanded row (non-compact) ---
+
+function ExpandedRow({
+  r,
+  isEditingThis,
+  editTitle,
+  folders,
+  onStartEdit,
+  onEditChange,
+  onCommitEdit,
+  onCancelEdit,
+  onCopy,
+  onCopyLink,
+  onDeleteSingle,
+  onToggleStar,
+  onMoveToFolder
+}: {
+  r: ConversationRow
+  isEditingThis: boolean
+  editTitle: string
+  folders: FolderItem[]
+  onStartEdit: (id: string, title: string) => void
+  onEditChange: (v: string) => void
+  onCommitEdit: (id: string) => void
+  onCancelEdit: () => void
+  onCopy: (r: ConversationRow) => void
+  onCopyLink: (id: string) => void
+  onDeleteSingle: (id: string) => void
+  onToggleStar: (id: string, current: boolean) => Promise<void>
+  onMoveToFolder: (id: string, folderId: string | null) => void
+}): React.JSX.Element {
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
+  return (
+    <div className="surface-card-interactive group relative block">
+      {/* Hover action buttons — top-right */}
+      <div className="absolute right-3 top-3 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          onClick={(e) => { e.preventDefault(); onStartEdit(r.id, r.title) }}
+          title="Edit title"
+          className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => { e.preventDefault(); onCopy(r) }}
+          title="Copy preview"
+          className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+        </button>
+        {r.source === 'cloud' && (
+          <button
+            onClick={(e) => { e.preventDefault(); onCopyLink(r.id) }}
+            title="Copy shareable link"
+            className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {r.source === 'cloud' && folders.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={(e) => { e.preventDefault(); setShowFolderPicker((v) => !v) }}
+              title="Move to folder"
+              className="rounded-md p-1.5 text-white/30 hover:text-white/80"
+            >
+              <FolderOpen className="h-3.5 w-3.5" />
+            </button>
+            {showFolderPicker && (
+              <FolderPickerDropdown
+                folders={folders}
+                onSelect={(fid) => { onMoveToFolder(r.id, fid); setShowFolderPicker(false) }}
+                onClose={() => setShowFolderPicker(false)}
+              />
+            )}
+          </div>
+        )}
+        <button
+          onClick={(e) => { e.preventDefault(); onDeleteSingle(r.id) }}
+          title="Delete"
+          className="rounded-md p-1.5 text-white/30 hover:text-red-400"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+        {r.source === 'cloud' && (
+          <button
+            onClick={(e) => { e.preventDefault(); void onToggleStar(r.id, r.starred ?? false) }}
+            title={r.starred ? 'Unstar' : 'Star'}
+            className={`rounded-md p-1.5 transition-colors ${
+              r.starred ? 'text-amber-400' : 'text-white/30 hover:text-amber-400/70'
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" fill={r.starred ? 'currentColor' : 'none'} />
+          </button>
+        )}
+      </div>
+      <Link to={`/conversations/${r.id}`} className={`block p-5 ${isEditingThis ? 'pointer-events-none' : ''}`}>
+        <div className="flex items-start justify-between gap-3 pr-36">
+          {isEditingThis ? (
+            <input
+              autoFocus
+              value={editTitle}
+              onChange={(e) => onEditChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); onCommitEdit(r.id) }
+                if (e.key === 'Escape') onCancelEdit()
+              }}
+              onBlur={() => onCommitEdit(r.id)}
+              onClick={(e) => e.preventDefault()}
+              className="font-display w-full rounded bg-white/10 px-2 py-0.5 text-base font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-white/30"
+            />
+          ) : (
+            <div className="font-display text-base font-semibold leading-tight text-text-primary">
+              {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
+              {r.title || <span className="italic text-text-tertiary">loading…</span>}
+            </div>
+          )}
+          {!isEditingThis && (r.localKind === 'chat' ? (
+            <span className="badge shrink-0">Chat</span>
+          ) : (
+            r.source === 'local' && <span className="badge-warning shrink-0">Not synced</span>
+          ))}
+        </div>
+        <div className="mt-1 text-xs text-text-quaternary">
+          {r.source === 'cloud' ? formatConversationTs(r.sortAt) : r.subtitle}
+        </div>
+        <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
+          {r.preview}
+        </p>
+      </Link>
     </div>
   )
 }
@@ -270,6 +477,7 @@ export function Conversations(): React.JSX.Element {
   // Inline title edit
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
+  const [merging, setMerging] = useState(false)
   // Stable ref so loadAll / subscriptions always see the current folderId
   const folderIdRef = useRef<string | null>(null)
   folderIdRef.current = folderId
@@ -518,6 +726,57 @@ export function Conversations(): React.JSX.Element {
     }
   }
 
+  const moveToFolder = async (id: string, fid: string | null): Promise<void> => {
+    try {
+      await omiApi.patch(`/v1/conversations/${id}/folder`, { folder_id: fid })
+      // Remove from list when browsing a specific folder and conversation moved away
+      if (folderId !== null && fid !== folderId) {
+        setRows((rs) => rs.filter((r) => r.id !== id))
+      }
+      toast(fid ? 'Moved to folder' : 'Removed from folder', { tone: 'info' })
+    } catch (e) {
+      toast('Could not move conversation', { tone: 'error', body: (e as Error).message })
+    }
+  }
+
+  const copyConversationLink = async (id: string): Promise<void> => {
+    try {
+      await omiApi.patch(`/v1/conversations/${id}/visibility`, null, { params: { value: 'shared' } })
+      await navigator.clipboard.writeText(`https://h.omi.me/conversations/${id}`)
+      toast('Link copied', { tone: 'info', body: 'Anyone with this link can view the conversation.' })
+    } catch (e) {
+      toast('Could not copy link', { tone: 'error', body: (e as Error).message })
+    }
+  }
+
+  const handleMerge = async (): Promise<void> => {
+    const cloudIds = Array.from(selected).filter((id) =>
+      rows.find((r) => r.id === id && r.source === 'cloud')
+    )
+    if (cloudIds.length < 2) {
+      toast('Select at least 2 cloud conversations to merge', { tone: 'warn' })
+      return
+    }
+    if (
+      !confirm(
+        `Merge ${cloudIds.length} conversations? The originals will be deleted and replaced by a new merged conversation.`
+      )
+    )
+      return
+    setMerging(true)
+    try {
+      await omiApi.post('/v1/conversations/merge', { conversation_ids: cloudIds, reprocess: true })
+      toast('Merge started', { tone: 'info', body: 'Refresh in a moment to see the merged conversation.' })
+      setSelected(new Set())
+      setSelectMode(false)
+      setTimeout(() => void loadAll(), 6000)
+    } catch (e) {
+      toast('Merge failed', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setMerging(false)
+    }
+  }
+
   const hasActiveFilter = filter !== 'all' || dateFilter !== 'all' || !!folderId || !!query
 
   return (
@@ -755,6 +1014,16 @@ export function Conversations(): React.JSX.Element {
             <Share2 className="h-3.5 w-3.5" />
             Share
           </button>
+          {Array.from(selected).filter((id) => rows.find((r) => r.id === id && r.source === 'cloud')).length >= 2 && (
+            <button
+              onClick={() => void handleMerge()}
+              disabled={merging}
+              className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              <GitMerge className="h-3.5 w-3.5" />
+              {merging ? 'Merging…' : 'Merge'}
+            </button>
+          )}
         </div>
       )}
 
@@ -856,13 +1125,16 @@ export function Conversations(): React.JSX.Element {
                       r={r}
                       editingId={editingId}
                       editTitle={editTitle}
+                      folders={folders}
                       onToggleStar={toggleStar}
                       onStartEdit={startEdit}
                       onEditChange={setEditTitle}
                       onCommitEdit={(id) => void commitEdit(id)}
                       onCancelEdit={cancelEdit}
                       onCopy={copyRow}
+                      onCopyLink={(id) => void copyConversationLink(id)}
                       onDeleteSingle={doDeleteSingle}
+                      onMoveToFolder={(id, fid) => void moveToFolder(id, fid)}
                     />
                   </li>
                 )
@@ -872,79 +1144,21 @@ export function Conversations(): React.JSX.Element {
               const isEditingThis = editingId === r.id
               return (
                 <li key={r.id}>
-                  <div className="surface-card-interactive group relative block">
-                    {/* Hover action buttons — top-right */}
-                    <div className="absolute right-3 top-3 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                      <button
-                        onClick={(e) => { e.preventDefault(); startEdit(r.id, r.title) }}
-                        title="Edit title"
-                        className="rounded-md p-1.5 text-white/30 hover:text-white/80"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.preventDefault(); copyRow(r) }}
-                        title="Copy preview"
-                        className="rounded-md p-1.5 text-white/30 hover:text-white/80"
-                      >
-                        <Clipboard className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.preventDefault(); doDeleteSingle(r.id) }}
-                        title="Delete"
-                        className="rounded-md p-1.5 text-white/30 hover:text-red-400"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                      {r.source === 'cloud' && (
-                        <button
-                          onClick={(e) => { e.preventDefault(); void toggleStar(r.id, r.starred ?? false) }}
-                          title={r.starred ? 'Unstar' : 'Star'}
-                          className={`rounded-md p-1.5 transition-colors ${
-                            r.starred ? 'text-amber-400' : 'text-white/30 hover:text-amber-400/70'
-                          }`}
-                        >
-                          <Star className="h-3.5 w-3.5" fill={r.starred ? 'currentColor' : 'none'} />
-                        </button>
-                      )}
-                    </div>
-                    <Link to={`/conversations/${r.id}`} className={`block p-5 ${isEditingThis ? 'pointer-events-none' : ''}`}>
-                      <div className="flex items-start justify-between gap-3 pr-28">
-                        {isEditingThis ? (
-                          <input
-                            autoFocus
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); void commitEdit(r.id) }
-                              if (e.key === 'Escape') cancelEdit()
-                            }}
-                            onBlur={() => void commitEdit(r.id)}
-                            onClick={(e) => e.preventDefault()}
-                            className="font-display w-full rounded bg-white/10 px-2 py-0.5 text-base font-semibold text-text-primary focus:outline-none focus:ring-1 focus:ring-white/30"
-                          />
-                        ) : (
-                          <div className="font-display text-base font-semibold leading-tight text-text-primary">
-                            {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                            {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                          </div>
-                        )}
-                        {!isEditingThis && (r.localKind === 'chat' ? (
-                          <span className="badge shrink-0">Chat</span>
-                        ) : (
-                          r.source === 'local' && (
-                            <span className="badge-warning shrink-0">Not synced</span>
-                          )
-                        ))}
-                      </div>
-                      <div className="mt-1 text-xs text-text-quaternary">
-                        {r.source === 'cloud' ? formatConversationTs(r.sortAt) : r.subtitle}
-                      </div>
-                      <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
-                        {r.preview}
-                      </p>
-                    </Link>
-                  </div>
+                  <ExpandedRow
+                    r={r}
+                    isEditingThis={isEditingThis}
+                    editTitle={editTitle}
+                    folders={folders}
+                    onStartEdit={startEdit}
+                    onEditChange={setEditTitle}
+                    onCommitEdit={(id) => void commitEdit(id)}
+                    onCancelEdit={cancelEdit}
+                    onCopy={copyRow}
+                    onCopyLink={(id) => void copyConversationLink(id)}
+                    onDeleteSingle={doDeleteSingle}
+                    onToggleStar={toggleStar}
+                    onMoveToFolder={(id, fid) => void moveToFolder(id, fid)}
+                  />
                 </li>
               )
             })}

@@ -13,7 +13,7 @@ type ServerConversation = {
   title?: string | null
   overview?: string | null
   status?: string | null
-  transcript_segments?: { text: string; speaker?: string; start?: number; end?: number }[]
+  transcript_segments?: { text: string; speaker?: string; person_id?: string | null; start?: number; end?: number }[]
   structured?: {
     title?: string | null
     overview?: string | null
@@ -21,6 +21,7 @@ type ServerConversation = {
     category?: string | null
     emoji?: string | null
   } | null
+  people?: { id: string; name: string }[]
   created_at?: string
   finished_at?: string
 }
@@ -30,19 +31,22 @@ type Display = {
   emoji?: string
   subtitle?: string
   overview?: string
-  segments?: { text: string; speaker?: string; start?: number; end?: number }[]
+  segments?: { text: string; speaker?: string; person_id?: string | null; start?: number; end?: number }[]
   transcript?: string
   actionItems?: { id?: string; description: string; completed?: boolean }[]
   chatMessages?: ChatMessage[]
   isLocal: boolean
   status?: string
   processing: boolean
+  personNames: Record<string, string>
 }
 
 function mapServer(c: ServerConversation): Display {
   const title = c.structured?.title || c.title || 'Conversation'
   const overview = c.structured?.overview || c.overview || ''
   const status = c.status ?? ''
+  const personNames: Record<string, string> = {}
+  for (const p of c.people ?? []) if (p.id && p.name) personNames[p.id] = p.name
   return {
     title,
     emoji: c.structured?.emoji || undefined,
@@ -52,7 +56,8 @@ function mapServer(c: ServerConversation): Display {
     actionItems: c.structured?.action_items,
     isLocal: false,
     status,
-    processing: status === 'processing'
+    processing: status === 'processing',
+    personNames
   }
 }
 
@@ -130,7 +135,8 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
             chatMessages: c.messages ?? [],
             transcript: c.transcript,
             isLocal: true,
-            processing: false
+            processing: false,
+            personNames: {}
           })
           return
         }
@@ -144,7 +150,8 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
             ? [{ text: c.transcript, speaker: 'SPEAKER_00', start: 0 }]
             : undefined,
           isLocal: true,
-          processing: false
+          processing: false,
+          personNames: {}
         })
         return
       }
@@ -448,15 +455,18 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
               ) : display.segments && display.segments.length > 0 ? (
                 <ul className="space-y-4">
                   {display.segments.map((s, i) => {
-                    const label = s.speaker || 'speaker'
+                    const rawLabel = s.speaker || 'speaker'
+                    const personName = s.person_id ? display.personNames[s.person_id] : undefined
+                    const displayLabel = personName || rawLabel.replace(/^SPEAKER_/, 'S')
                     return (
                       <li key={i} className="flex gap-3 animate-fade-in">
                         <span
                           className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
-                            label
+                            rawLabel
                           )}`}
+                          title={personName ? rawLabel : undefined}
                         >
-                          {label.replace(/^SPEAKER_/, 'S')}
+                          {displayLabel}
                         </span>
                         <div className="min-w-0 flex-1">
                           {s.start != null && (

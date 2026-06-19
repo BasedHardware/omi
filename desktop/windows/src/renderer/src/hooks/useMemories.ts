@@ -59,6 +59,7 @@ export function useMemories(): {
   loading: boolean
   error: string | null
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
+  editMemory: (id: string, content: string) => Promise<void>
   refresh: () => Promise<void>
 } {
   const [memories, setMemories] = useState<Memory[]>(cache.list ?? [])
@@ -113,11 +114,19 @@ export function useMemories(): {
     publish(await fetchMemories())
   }
 
+  // Edit memory content in-place — PATCH /v3/memories/{id}?value=<text>
+  const editMemory = async (id: string, content: string): Promise<void> => {
+    const text = content.trim()
+    if (!text) return
+    await omiApi.patch(`/v3/memories/${id}`, null, { params: { value: text } })
+    publish((cache.list ?? []).map((m) => (m.id === id ? { ...m, content: text } : m)))
+  }
+
   // Re-pull the server list and broadcast to all mounts. Used after a bulk
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     publish(await fetchMemories())
   }
 
-  return { memories, loading, error, createMemory, refresh }
+  return { memories, loading, error, createMemory, editMemory, refresh }
 }
