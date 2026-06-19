@@ -11,6 +11,7 @@ const V17_PROTECTED_COLLECTIONS = [
   'memory_state',
   'memory_commits',
   'memory_evidence',
+  'short_term_lifecycle_transitions',
 ];
 
 const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-v17-memory';
@@ -33,7 +34,7 @@ try {
     await assertClientDeniedForProtectedCollection(db, collection);
   }
 
-  assert.equal(V17_PROTECTED_COLLECTIONS.length, 7);
+  assert.equal(V17_PROTECTED_COLLECTIONS.length, 8);
   console.log(
     `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections`,
   );

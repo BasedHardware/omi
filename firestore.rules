@@ -14,7 +14,8 @@ service cloud.firestore {
         'memory_control',
         'memory_state',
         'memory_commits',
-        'memory_evidence'
+        'memory_evidence',
+        'short_term_lifecycle_transitions'
       ];
     }
 

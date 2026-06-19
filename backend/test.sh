@@ -39,6 +39,7 @@ pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_short_term_lifecycle.py -v
 pytest tests/unit/test_v17_product_memory_items.py -v
 pytest tests/unit/test_v17_short_term_lifecycle_worker.py -v
+pytest tests/unit/test_v17_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_v17_memory_contracts.py -v
 pytest tests/unit/test_v17_working_memory_extractor.py -v
 pytest tests/unit/test_v17_durable_memory_patches.py -v

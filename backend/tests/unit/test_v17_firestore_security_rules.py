@@ -8,6 +8,7 @@ V17_PROTECTED_COLLECTIONS = [
     "memory_state",
     "memory_commits",
     "memory_evidence",
+    "short_term_lifecycle_transitions",
 ]
 
 

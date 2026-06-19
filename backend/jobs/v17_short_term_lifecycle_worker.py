@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
 
+from database.v17_collections import V17Collections
 from models.v17_product_memory import V17MemoryItem
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
@@ -95,6 +96,71 @@ class InMemoryShortTermLifecycleTransitionStore:
         return matches[0]
 
 
+class FirestoreShortTermLifecycleTransitionStore:
+    """Firestore-backed lifecycle transition/audit store.
+
+    Records are stored under `users/{uid}/short_term_lifecycle_transitions`
+    using deterministic document IDs derived from the uid and worker
+    idempotency key. Replays return the existing record, while same-key payload
+    drift fails closed before writing.
+    """
+
+    def __init__(self, *, db_client, now: Optional[datetime] = None) -> None:
+        self._db_client = db_client
+        self._now = now
+
+    def persist_short_term_lifecycle_transition(
+        self, record: ShortTermLifecycleTransitionRecord
+    ) -> ShortTermLifecyclePersistResult:
+        transaction = self._db_client.transaction()
+        return _run_short_term_lifecycle_transaction(
+            transaction,
+            _persist_short_term_lifecycle_transition_transaction,
+            self._db_client,
+            record,
+            self._now,
+        )
+
+
+def _persist_short_term_lifecycle_transition_transaction(
+    transaction,
+    db_client,
+    record: ShortTermLifecycleTransitionRecord,
+    now: Optional[datetime],
+) -> ShortTermLifecyclePersistResult:
+    transition_id = _stable_transition_id(record.uid, record.idempotency_key)
+    collections = V17Collections(uid=record.uid)
+    transition_ref = db_client.document(f'{collections.short_term_lifecycle_transitions}/{transition_id}')
+    snapshot = transition_ref.get(transaction=transaction)
+
+    if snapshot.exists:
+        data = snapshot.to_dict() or {}
+        if data.get('fingerprint') != record.fingerprint:
+            raise ValueError('short-term lifecycle idempotency key payload mismatch')
+        return ShortTermLifecyclePersistResult(record=_record_from_firestore_data(data), created=False)
+
+    payload = _firestore_transition_payload(record, transition_id=transition_id, now=now)
+    transaction.set(transition_ref, payload)
+    return ShortTermLifecyclePersistResult(record=record, created=True)
+
+
+def _run_short_term_lifecycle_transaction(transaction, func, *args):
+    if hasattr(transaction, '_begin'):
+        transaction._begin()
+    try:
+        result = func(transaction, *args)
+        if hasattr(transaction, '_commit'):
+            transaction._commit()
+        return result
+    except Exception:
+        if hasattr(transaction, '_rollback'):
+            transaction._rollback()
+        raise
+    finally:
+        if hasattr(transaction, '_clean_up'):
+            transaction._clean_up()
+
+
 def _current_time(now: Optional[datetime]) -> datetime:
     current_time = now or datetime.now(timezone.utc)
     if current_time.tzinfo is None or current_time.utcoffset() is None:
@@ -129,6 +195,55 @@ def _canonical_json(payload: Dict) -> str:
 
 def _sha256(payload: Dict) -> str:
     return hashlib.sha256(_canonical_json(payload).encode('utf-8')).hexdigest()
+
+
+def _stable_transition_id(uid: str, idempotency_key: str) -> str:
+    digest = hashlib.sha256(f'{uid}:{idempotency_key}'.encode('utf-8')).hexdigest()
+    return f'stl_{digest[:32]}'
+
+
+def _created_at_iso(now: Optional[datetime]) -> str:
+    created_at = _current_time(now)
+    return created_at.isoformat()
+
+
+def _firestore_transition_payload(
+    record: ShortTermLifecycleTransitionRecord,
+    *,
+    transition_id: str,
+    now: Optional[datetime],
+) -> Dict:
+    source_refs = list(record.audit_metadata.get('source_refs') or [])
+    return {
+        'transition_id': transition_id,
+        'uid': record.uid,
+        'memory_item_id': record.memory_item_id,
+        'outcome': record.outcome,
+        'reason': record.reason,
+        'run_id': record.run_id,
+        'evaluated_at': record.evaluated_at,
+        'audit_metadata': record.audit_metadata,
+        'source_refs': source_refs,
+        'idempotency_key': record.idempotency_key,
+        'fingerprint': record.fingerprint,
+        'default_access_allowed': bool(record.audit_metadata.get('default_access_allowed', False)),
+        'archive_default_visible': False,
+        'created_at': _created_at_iso(now),
+    }
+
+
+def _record_from_firestore_data(data: Dict) -> ShortTermLifecycleTransitionRecord:
+    return ShortTermLifecycleTransitionRecord(
+        uid=data['uid'],
+        memory_item_id=data['memory_item_id'],
+        outcome=data['outcome'],
+        reason=data['reason'],
+        run_id=data['run_id'],
+        evaluated_at=data['evaluated_at'],
+        audit_metadata=dict(data.get('audit_metadata') or {}),
+        idempotency_key=data['idempotency_key'],
+        fingerprint=data['fingerprint'],
+    )
 
 
 def _transition_required(decision: ShortTermLifecycleDecision) -> bool:

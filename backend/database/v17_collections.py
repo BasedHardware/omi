@@ -42,6 +42,10 @@ class V17Collections:
         return f"{self.user_root}/non_active_memory_routes"
 
     @property
+    def short_term_lifecycle_transitions(self) -> str:
+        return f"{self.user_root}/short_term_lifecycle_transitions"
+
+    @property
     def legacy_fallback(self) -> str:
         return f"{self.user_root}/memory_legacy_fallback"
 
@@ -62,6 +66,7 @@ class V17Collections:
             self.memory_evidence,
             self.memory_runs,
             self.non_active_memory_routes,
+            self.short_term_lifecycle_transitions,
             self.legacy_fallback,
             self.memory_commits,
         ]
