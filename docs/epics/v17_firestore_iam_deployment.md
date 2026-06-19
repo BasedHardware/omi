@@ -140,9 +140,47 @@ trigger: Cloud Scheduler or Cloud Tasks HTTP POST /v17-vector-repair-outbox-work
 identity: dedicated backend worker service account with Firestore Admin/Datastore User read-write on users/*/memory_outbox and read on authoritative V17 memory item state; Pinecone credentials scoped to ns2-compatible vector delete/upsert only
 config/env: wrapper env above, with V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false until production gates pass
 input: explicit uid shard/list source must be server-owned; no client-supplied arbitrary uid execution
-output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/dead_letter plus bounded error classes; alerts on dead_letter growth, ack failures, Pinecone failures, and stale-vector backlog age
+output/telemetry: monotonic counters for leased/processed/skipped/failed/ack_failed/action=delete|repair/retry/dead_letter/backlog_count/oldest_pending_age/duration with bounded labels only; alerts on dead_letter growth, ack failures, Pinecone/retry failure ratio, scheduler starvation, and stale-vector backlog age
 auth: Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks OIDC serviceAccountEmail/audience; the app shim intentionally has no app-level bearer token
 ```
+
+### V17 vector repair outbox central telemetry/alert seam
+
+`backend/database/v17_vector_repair_outbox_telemetry.py` defines the central fake-injectable telemetry seam for the outbox worker. It converts one deterministic worker tick summary plus optional backlog/duration inputs into low-cardinality metric/event payloads for an injected emitter. This is a code seam and alert contract only; it is **not** wired to Prometheus/OpenTelemetry/Cloud Monitoring in production by this repository slice.
+
+Telemetry contract before enablement:
+
+```text
+metrics:
+  v17_vector_repair_outbox_worker_records_total{worker_component,status=leased|processed|skipped|failed}
+  v17_vector_repair_outbox_worker_action_total{worker_component,action=delete|repair}
+  v17_vector_repair_outbox_worker_retry_total{worker_component,reason}
+  v17_vector_repair_outbox_worker_dead_letter_total{worker_component,reason}
+  v17_vector_repair_outbox_worker_ack_failure_total{worker_component,reason}
+  v17_vector_repair_outbox_worker_backlog_count{worker_component,status=pending|dead_letter}
+  v17_vector_repair_outbox_worker_oldest_pending_age_seconds{worker_component,status=pending}
+  v17_vector_repair_outbox_worker_duration_ms{worker_component,status=tick}
+events:
+  v17_vector_repair_outbox_worker_dead_letter
+  v17_vector_repair_outbox_worker_ack_failure
+allowed labels only:
+  worker_component, status, action, reason, event_type
+forbidden labels/fields:
+  uid, worker_id, vector_id, memory_id, record_id, idempotency_key, raw error text
+```
+
+Proposed alert gates that must be implemented in the real metrics backend before enablement:
+
+- `dead_letter_count > 0` for any uid shard over 15 minutes: page and pause enablement/expansion.
+- `ack_failed_count > 0` over 5 minutes: page because Pinecone may have mutated while Firestore ack state is ambiguous.
+- `failed_count / leased_count >= 0.10` for 15 minutes: warn; `>= 0.25` for 15 minutes: page and disable worker expansion.
+- `oldest_pending_age_seconds > 3600`: warn; `> 21600`: page and block cutover.
+- `leased_count == 0` while `pending backlog_count > 0` for 30 minutes: warn for scheduler/IAM/lease starvation.
+
+Pass/fail criteria:
+
+- Pass: central sink receives monotonic counters/events with only allowed labels; alert policies exist for dead letters, ack failures, retry spike ratio, scheduler starvation, and oldest pending backlog; telemetry emitter failures are recorded as telemetry failures and never mask worker cleanup/ack results.
+- Fail: any metric/event label includes uid/worker_id/vector_id/memory_id/record_id/idempotency_key/raw error text; worker can be enabled before dashboards and alert policies exist; telemetry exceptions change delete/repair/ack outcome.
 
 ### Cloud Run/Tasks/Scheduler static deployment contract and OIDC/IAM proof artifact
 

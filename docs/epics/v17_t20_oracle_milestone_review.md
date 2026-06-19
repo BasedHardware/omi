@@ -649,9 +649,30 @@ Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED 
 This closes only the Pinecone validation readiness/non-claim artifact. Remaining P0-4/P0 work:
 
 - Implement/run the real throwaway Pinecone fixture validation with exact PASS/FAIL output for duplicate stale physical IDs, delete/repair/tombstone precedence, retry/dead-letter, and post-run absence of prefix-scoped stale vectors.
-- Produce read-only shared `ns2` coexistence evidence proving legacy queries exclude V17 schema records and baseline recall remains intact, or choose a separate namespace/filter before production inserts.
+- Produce read-only shared `ns2` coexistence evidence proving legacy queries exclude V17 schema records and baseline legacy recall remains intact, or choose a separate namespace/filter before production inserts.
 - Run the OIDC/IAM and Firestore IAM/deployed-rules proof runners against target cloud projects and attach exact output.
 - Add central retry/dead-letter/backlog telemetry and alerts, overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
+### 2026-06-19 — P0-4 central retry/dead-letter/backlog telemetry seam
+
+Continued Oracle P0-4 by adding a fake-injectable low-cardinality telemetry and alert contract for the V17 vector repair outbox worker, without claiming production metrics wiring or changing the production rollout verdict:
+
+- Added `backend/database/v17_vector_repair_outbox_telemetry.py` with `V17VectorRepairOutboxTelemetryConfig` and `emit_v17_vector_repair_outbox_worker_telemetry(...)`.
+- The seam converts deterministic worker tick summaries plus optional backlog/duration inputs into central-emitter-ready metric/event payloads for leased/processed/skipped/failed records, delete/repair actions, retry failures, dead letters, ack failures, pending/dead-letter backlog counts, oldest pending age, and tick duration.
+- Labels are bounded to `worker_component`, `status`, `action`, `reason`, and `event_type`; uid, worker id, vector id, memory id, record id, idempotency key, and raw error text are excluded from metric/event labels.
+- `run_v17_vector_repair_outbox_worker_tick(...)` now accepts an optional injected telemetry emitter/config/backlog/duration and records telemetry emission failures under `summary["telemetry"]` without masking lease/process/ack cleanup results.
+- Updated the Cloud Run/Tasks/Scheduler contract and Firestore/IAM deployment doc with metric names, allowed/forbidden labels, alert thresholds, pass/fail criteria, and explicit non-claims.
+- This is still a seam only. It does **not** wire Prometheus/OpenTelemetry/Cloud Monitoring, create dashboards or alert policies, run production worker telemetry, validate OIDC/IAM/deployed rules, call Pinecone, prove shared `ns2`, run benchmarks, or approve rollout.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED missing telemetry module (`ModuleNotFoundError`), GREEN telemetry tests (`4 passed`), focused vector/outbox/doc regression, full V17 regression, and async scan exit 0 with pre-existing findings only.
+
+This closes only the central telemetry payload/emitter seam. Remaining P0-4/P0 work:
+
+- Wire the seam to the production metrics/log backend and create dashboard/alert policies with exact output before enabling the worker.
+- Run OIDC/IAM and Firestore IAM/deployed-rules proof runners against target cloud projects and attach exact JSON output.
+- Run real Pinecone duplicate stale physical-ID delete/repair/tombstone validation in `ns2` and prove shared-namespace isolation.
+- Complete overfetch/refill/budgets, app/key/scope auth, benchmarks, and explicit rollout gates.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
 ## Not-run / not-claimed caveats preserved

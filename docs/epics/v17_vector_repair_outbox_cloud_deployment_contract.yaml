@@ -25,7 +25,8 @@ contract:
     - deployed Firestore Security Rules proof for protected V17 client denial
     - real Pinecone duplicate stale physical ID delete/repair validation in ns2
     - shared ns2 isolation evidence or a separate namespace/filter decision
-    - central low-cardinality retry/dead-letter telemetry and alerts
+    - central low-cardinality retry/dead-letter/backlog telemetry seam wired to production metrics/log sink
+    - alert rules for dead letters, retry spikes, ack failures, and oldest pending backlog age
     - server-owned uid shard/backlog inventory and ownership model
   resources:
     - apiVersion: serving.knative.dev/v1
@@ -197,6 +198,51 @@ contract:
         - OIDC oidcToken audience exactly matches the worker tick URI
         - uid source is server-owned; clients cannot choose arbitrary uid
         - retryConfig maxAttempts/maxRetryDuration and dead-letter handling are documented
+    telemetryAndAlertContract:
+      status: seam only; not wired to production metrics backend by this artifact
+      emitterSeam: database.v17_vector_repair_outbox_telemetry.emit_v17_vector_repair_outbox_worker_telemetry
+      lowCardinalityLabels:
+        allowed: [worker_component, status, action, reason, event_type]
+        forbidden: [uid, worker_id, record_id, vector_id, memory_id, idempotency_key, raw_error]
+      metrics:
+        - name: v17_vector_repair_outbox_worker_records_total
+          labels: [worker_component, status]
+          statuses: [leased, processed, skipped, failed]
+        - name: v17_vector_repair_outbox_worker_action_total
+          labels: [worker_component, action]
+          actions: [delete, repair]
+        - name: v17_vector_repair_outbox_worker_retry_total
+          labels: [worker_component, reason]
+          reasons: [worker_failure, lease_failure, ack_failure, tick_failure, dependencies_failure, config_failure]
+        - name: v17_vector_repair_outbox_worker_dead_letter_total
+          labels: [worker_component, reason]
+        - name: v17_vector_repair_outbox_worker_ack_failure_total
+          labels: [worker_component, reason]
+        - name: v17_vector_repair_outbox_worker_backlog_count
+          labels: [worker_component, status]
+          statuses: [pending, dead_letter]
+        - name: v17_vector_repair_outbox_worker_oldest_pending_age_seconds
+          labels: [worker_component, status]
+        - name: v17_vector_repair_outbox_worker_duration_ms
+          labels: [worker_component, status]
+      events:
+        - v17_vector_repair_outbox_worker_dead_letter
+        - v17_vector_repair_outbox_worker_ack_failure
+      alertThresholdsBeforeEnablement:
+        - dead_letter_count > 0 for any uid shard over a 15 minute window pages V17 memory on-call and pauses enablement/expansion.
+        - ack_failed_count > 0 over a 5 minute window pages because Pinecone may have mutated while Firestore ack is ambiguous.
+        - failed_count / leased_count >= 0.10 for 15 minutes warns; >= 0.25 for 15 minutes pages and disables worker expansion.
+        - oldest_pending_age_seconds > 3600 warns; > 21600 pages and blocks cutover because repair backlog is stale.
+        - leased_count == 0 while pending backlog_count > 0 for 30 minutes warns for scheduler/IAM/lease starvation.
+      passFailCriteria:
+        pass:
+          - central sink receives monotonic counters/events with only allowed labels
+          - alert policies exist for dead letters, ack failures, retry spike ratio, and oldest pending backlog age
+          - telemetry emitter failure is recorded separately and never masks worker cleanup/ack result
+        fail:
+          - any metric/event label contains uid, worker_id, vector_id, memory_id, record_id, idempotency_key, or raw error text
+          - production worker can be enabled before alert policies and dashboard queries exist
+          - telemetry exceptions change the worker outbox ack/delete/repair result
     readOnlyProofRunner:
       commandInventory: >-
         python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py

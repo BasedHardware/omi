@@ -7,6 +7,10 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 from google.cloud import firestore
 
 from database.v17_collections import V17Collections
+from database.v17_vector_repair_outbox_telemetry import (
+    V17VectorRepairOutboxTelemetryConfig,
+    emit_v17_vector_repair_outbox_worker_telemetry,
+)
 from models.memory_evidence import SourceState
 from models.v17_product_memory import MemoryItemStatus
 
@@ -51,6 +55,10 @@ def run_v17_vector_repair_outbox_worker_tick(
     vector_deleter: Callable[[Dict[str, Any]], Any],
     vector_repairer: Callable[[Dict[str, Any], Any], Any],
     now: Optional[datetime] = None,
+    telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]] = None,
+    telemetry_config: Optional[V17VectorRepairOutboxTelemetryConfig] = None,
+    backlog: Optional[Dict[str, Any]] = None,
+    duration_ms: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run one explicit, fake-injectable lease/process/ack worker tick.
 
@@ -64,7 +72,13 @@ def run_v17_vector_repair_outbox_worker_tick(
     _validate_worker_tick_inputs(uid=uid, config=config)
     summary = _empty_worker_tick_summary(uid=uid, config=config)
     if not config.enabled:
-        return summary
+        return _attach_v17_vector_repair_outbox_worker_telemetry(
+            summary,
+            telemetry_emitter=telemetry_emitter,
+            telemetry_config=telemetry_config,
+            backlog=backlog,
+            duration_ms=duration_ms,
+        )
 
     try:
         leased = lease_v17_vector_repair_purge_outbox_records(
@@ -77,7 +91,13 @@ def run_v17_vector_repair_outbox_worker_tick(
         )
     except Exception as exc:
         summary["errors"].append({"stage": "lease", "error": str(exc)})
-        return summary
+        return _attach_v17_vector_repair_outbox_worker_telemetry(
+            summary,
+            telemetry_emitter=telemetry_emitter,
+            telemetry_config=telemetry_config,
+            backlog=backlog,
+            duration_ms=duration_ms,
+        )
 
     summary["leased_count"] = len(leased)
 
@@ -105,7 +125,34 @@ def run_v17_vector_repair_outbox_worker_tick(
     summary["skipped_count"] = processed["skipped_count"]
     summary["failed_count"] = processed["failed_count"]
     summary["actions"] = processed["actions"]
-    return summary
+    return _attach_v17_vector_repair_outbox_worker_telemetry(
+        summary,
+        telemetry_emitter=telemetry_emitter,
+        telemetry_config=telemetry_config,
+        backlog=backlog,
+        duration_ms=duration_ms,
+    )
+
+
+def _attach_v17_vector_repair_outbox_worker_telemetry(
+    summary: Dict[str, Any],
+    *,
+    telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]],
+    telemetry_config: Optional[V17VectorRepairOutboxTelemetryConfig],
+    backlog: Optional[Dict[str, Any]],
+    duration_ms: Optional[int],
+) -> Dict[str, Any]:
+    if telemetry_emitter is None or telemetry_config is None:
+        return summary
+    output = dict(summary)
+    output["telemetry"] = emit_v17_vector_repair_outbox_worker_telemetry(
+        tick_summary=output,
+        emitter=telemetry_emitter,
+        config=telemetry_config,
+        backlog=backlog,
+        duration_ms=duration_ms,
+    )
+    return output
 
 
 def _validate_worker_tick_inputs(*, uid: str, config: V17VectorRepairOutboxWorkerTickConfig) -> None:
