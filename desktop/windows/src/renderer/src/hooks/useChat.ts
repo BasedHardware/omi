@@ -9,7 +9,14 @@ import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
-export type ChatCitation = { id: string; title: string; emoji?: string; created_at?: string }
+export type ChatCitation = {
+  id: string
+  title: string
+  emoji?: string
+  created_at?: string
+  /** Short preview text from the conversation overview, if the backend returned it. */
+  preview?: string
+}
 export type ChatMsg = {
   id?: string
   role: 'user' | 'assistant'
@@ -285,22 +292,71 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // `__CRLF__` so they survive single-line SSE framing; restore those.
       // (c) The `done:` line carries a base64-encoded ResponseMessage JSON with
       // the `memories` field — cited conversations for citation cards.
+      // The backend strips [N] citation markers from the text before encoding, so
+      // `json.text` is the clean version; we replace assistantText with it after
+      // the stream so markers don't stay visible. Memories may use field names:
+      //   memories[] / citations[] / sources[]
+      //   id / memory_id / conversation_id
+      //   title at root or under structured.title
+      //   emoji at root or under structured.emoji
+      //   created_at at root; overview/text/content for preview snippet
       let citationsFromDone: ChatCitation[] = []
+      let cleanTextFromDone: string | null = null
       const parseDone = (line: string): void => {
         try {
           const b64 = line.slice('done:'.length).trim()
           if (!b64) return
-          const json = JSON.parse(atob(b64)) as {
-            memories?: { id: string; structured: { title: string; emoji: string }; created_at?: string }[]
+          const json = JSON.parse(atob(b64)) as Record<string, unknown>
+
+          // Capture the backend-cleaned text (citation markers stripped).
+          if (typeof json.text === 'string' && json.text.trim()) {
+            cleanTextFromDone = json.text.trim()
           }
-          citationsFromDone = (json.memories ?? []).map((m) => ({
-            id: m.id,
-            title: m.structured?.title ?? m.id,
-            emoji: m.structured?.emoji || undefined,
-            created_at: m.created_at
-          }))
-        } catch {
-          /* malformed done payload — ignore */
+
+          // Tolerate memories / citations / sources as the container field name.
+          const list = (json.memories ?? json.citations ?? json.sources ?? []) as unknown[]
+          citationsFromDone = (Array.isArray(list) ? list : [])
+            .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
+            .map((m) => {
+              const structured = m.structured as Record<string, unknown> | undefined
+              // id may be 'id', 'memory_id', or 'conversation_id'
+              const id = (m.id ?? m.memory_id ?? m.conversation_id ?? '') as string
+              // title: prefer root-level, then structured, then friendly fallback
+              const rawTitle = (m.title ?? structured?.title ?? null) as string | null
+              const title = rawTitle && rawTitle.trim() ? rawTitle.trim() : 'Conversation source'
+              // emoji: prefer root-level, then structured
+              const emoji = (m.emoji ?? structured?.emoji ?? undefined) as string | undefined
+              const created_at = (m.created_at ?? undefined) as string | undefined
+              // preview: short text from overview or content fields
+              const rawPreview = (
+                structured?.overview ??
+                m.overview ??
+                m.text ??
+                m.content ??
+                null
+              ) as string | null
+              const preview =
+                rawPreview && typeof rawPreview === 'string' && rawPreview.trim()
+                  ? rawPreview.trim().slice(0, 120)
+                  : undefined
+              return { id, title, emoji: emoji || undefined, created_at, preview }
+            })
+            .filter((c) => !!c.id)
+
+          // Always log citation diagnostics so DevTools shows what the backend sent.
+          console.error(
+            '[chat:done] memories from backend:',
+            Array.isArray(list) ? list.length : 0,
+            '→ citations after parse:',
+            citationsFromDone.length,
+            citationsFromDone.length > 0
+              ? citationsFromDone.map((c) => ({ id: c.id, title: c.title }))
+              : Array.isArray(list) && list.length > 0
+                ? { raw: list[0] }
+                : '(backend sent empty memories)'
+          )
+        } catch (e) {
+          if (import.meta.env.DEV) console.warn('[chat:done] failed to parse done payload:', e)
         }
       }
       const parseChunk = (line: string): string | null => {
@@ -353,6 +409,18 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
           "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+      }
+      // Apply the backend-cleaned text from the `done:` payload.
+      // The backend strips [N] citation markers before encoding so the final
+      // stored text is clean. Replacing here ensures the UI matches what is
+      // stored and avoids dangling [1] markers with no corresponding cards.
+      if (cleanTextFromDone && cleanTextFromDone !== assistantText && !looksLikeRawPlan(cleanTextFromDone)) {
+        assistantText = cleanTextFromDone
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
