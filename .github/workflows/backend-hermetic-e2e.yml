@@ -24,7 +24,8 @@ jobs:
           python-version-file: backend/.python-version
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v7
+        # astral-sh/setup-uv v7, pinned to an immutable commit for CI supply-chain stability.
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           enable-cache: true
           cache-dependency-glob: backend/pylock.toml

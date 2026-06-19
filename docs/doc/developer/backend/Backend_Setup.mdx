@@ -273,11 +273,22 @@ OAuth is required for user authentication. You need to configure both Google and
     The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
     </Tip>
 
-    ```bash
-    # From backend/
-    ./scripts/sync-python-deps.sh
-    source .venv/bin/activate
-    ```
+    <Tabs>
+      <Tab title="macOS/Linux">
+        ```bash
+        # From backend/
+        ./scripts/sync-python-deps.sh
+        source .venv/bin/activate
+        ```
+      </Tab>
+      <Tab title="Windows PowerShell">
+        ```powershell
+        # From backend/
+        bash ./scripts/sync-python-deps.sh
+        .venv\Scripts\Activate.ps1
+        ```
+      </Tab>
+    </Tabs>
 
     You should see `(.venv)` at the beginning of your command prompt.
   </Step>
