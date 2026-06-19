@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
+  ],
   "releases": [
     {
       "version": "0.11.473",
