@@ -239,6 +239,25 @@ def test_v3_readiness_links_pure_decision_and_cursor_service_proofs_without_roll
         "legacy_first_page_5000_override_disallowed",
     ]
 
+    projection_proof = report["projection_readiness_proof"]
+    assert projection_proof["service"] == "backend/utils/memory/v17_v3_projection_readiness.py"
+    assert projection_proof["test"] == "backend/tests/unit/test_v17_v3_projection_readiness.py"
+    assert projection_proof["runtime_wired"] is False
+    assert projection_proof["production_rollout_approved"] is False
+    assert projection_proof["external_calls"] == []
+    assert projection_proof["covered_defaults"] == [
+        "external_create_update_delete_write_convergence_required",
+        "account_generation_present_and_matching",
+        "projection_generation_present_and_current",
+        "source_v17_derived_compatibility_projection_only",
+        "tombstone_delete_fence_present_and_current",
+        "source_projection_commit_version_and_freshness_fences_required",
+        "missing_stale_inconsistent_projection_fails_closed",
+        "enabled_empty_returns_empty_list_only_when_projection_ready",
+        "no_legacy_fallback_after_projection_failure",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ]
+
 
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
@@ -255,6 +274,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "product_dependency_count": 5,
         "decision_service_proof_present": True,
         "cursor_service_proof_present": True,
+        "projection_readiness_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -270,11 +290,14 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_p1_3_v3_external_compatibility_readiness.py" in test_sh
     assert "test_v17_v3_compatibility.py" in test_sh
     assert "test_v17_v3_cursor.py" in test_sh
+    assert "test_v17_v3_projection_readiness.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in ticket_doc
+    assert "backend/utils/memory/v17_v3_projection_readiness.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in oracle_doc
+    assert "backend/utils/memory/v17_v3_projection_readiness.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc

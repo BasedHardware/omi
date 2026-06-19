@@ -422,6 +422,26 @@ CURSOR_SERVICE_PROOF = {
     ],
 }
 
+PROJECTION_READINESS_PROOF = {
+    "service": "backend/utils/memory/v17_v3_projection_readiness.py",
+    "test": "backend/tests/unit/test_v17_v3_projection_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "external_create_update_delete_write_convergence_required",
+        "account_generation_present_and_matching",
+        "projection_generation_present_and_current",
+        "source_v17_derived_compatibility_projection_only",
+        "tombstone_delete_fence_present_and_current",
+        "source_projection_commit_version_and_freshness_fences_required",
+        "missing_stale_inconsistent_projection_fails_closed",
+        "enabled_empty_returns_empty_list_only_when_projection_ready",
+        "no_legacy_fallback_after_projection_failure",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -449,6 +469,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "unsafe_approaches_to_avoid": UNSAFE_APPROACHES_TO_AVOID,
         "decision_service_proof": DECISION_SERVICE_PROOF,
         "cursor_service_proof": CURSOR_SERVICE_PROOF,
+        "projection_readiness_proof": PROJECTION_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -465,6 +486,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "product_dependency_count": len(PRODUCT_DECISION_DEPENDENCIES),
             "decision_service_proof_present": True,
             "cursor_service_proof_present": True,
+            "projection_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
