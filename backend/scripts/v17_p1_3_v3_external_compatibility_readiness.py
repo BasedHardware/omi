@@ -400,6 +400,28 @@ DECISION_SERVICE_PROOF = {
     ],
 }
 
+CURSOR_SERVICE_PROOF = {
+    "service": "backend/utils/memory/v17_v3_cursor.py",
+    "test": "backend/tests/unit/test_v17_v3_cursor.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "opaque_hmac_signed_cursor",
+        "created_at_desc_memory_id_desc_keyset",
+        "uid_bound",
+        "account_generation_bound",
+        "projection_generation_bound",
+        "filter_hash_bound",
+        "source_bound",
+        "read_mode_bound",
+        "expiration_enforced",
+        "tamper_rejected_fail_closed",
+        "offset_disallowed_in_v17_cursor_mode",
+        "legacy_first_page_5000_override_disallowed",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -426,6 +448,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "oracle_implementation_shape": ORACLE_IMPLEMENTATION_SHAPE,
         "unsafe_approaches_to_avoid": UNSAFE_APPROACHES_TO_AVOID,
         "decision_service_proof": DECISION_SERVICE_PROOF,
+        "cursor_service_proof": CURSOR_SERVICE_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -441,6 +464,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "decision_state_count": len(RUNTIME_DECISION_MATRIX),
             "product_dependency_count": len(PRODUCT_DECISION_DEPENDENCIES),
             "decision_service_proof_present": True,
+            "cursor_service_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
