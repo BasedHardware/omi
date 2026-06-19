@@ -811,6 +811,26 @@ This closes only the persisted MCP API-key auth-context contract subpoint. Remai
 - Deployed Firestore rules/IAM proof against a real target project remains not run.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — P0-1/P0-6 MCP REST memory search app/key/scope composition
+
+Continued Oracle P0-1/P0-6 by wiring the concrete MCP REST memory-search route through the persisted MCP API-key app/key/scope context and server-owned app/key grant composition, without changing the production rollout verdict:
+
+- Changed REST `GET /v1/mcp/memories/search` from uid-only `get_uid_from_mcp_api_key` to `get_mcp_v17_default_memory_read_context(...)`.
+- The route now calls `authorize_v17_external_default_memory_read(auth_context, db_client=db)` before reading MCP rollout state, calling `search_v17_default_mcp_memories_vector(...)`, touching legacy vector fallback, or hydrating `users/{uid}/memory_items`.
+- Missing app/key identity, missing/wrong persisted `memories.read` scope, missing/malformed `users/{uid}/memory_control/v17_app_key_memory_grants`, disabled grant, missing persisted scope, or missing `default_read=true` returns 403 before V17 reads/vector side effects.
+- Valid persisted MCP key scope plus a matching stored `grants.mcp.apps.{app_id}.keys.{key_id}` default-read grant reaches the existing V17 MCP vector adapter; the resulting default-read policy keeps `archive_capability=false`.
+- Existing uid-only MCP auth compatibility is preserved for untouched REST routes such as `/v1/mcp/profile` and `GET /v1/mcp/memories`; no Archive path/default exposure was added.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED route-order/static test (`1 failed, 14 passed`), GREEN route/static tests (`15 passed`), focused MCP/auth/product regression (`37 passed, 2 warnings`), full V17 regression (`290 passed, 3 warnings`), and async blocker scan exit 0 with pre-existing findings only.
+
+This closes only the narrow MCP REST `/v1/mcp/memories/search` P0-1/P0-6 app/key/scope composition subpoint. Remaining P0-1/P0-6 work:
+
+- Wire streamable HTTP/SSE `search_memories` through verified app/key/scope context and stored grant composition before tool V17 reads.
+- Add a production MCP key-scope migration or OAuth token introspection path; do not infer scopes from advertised MCP tool metadata.
+- Deployed Firestore rules/IAM proof against a real target project remains not run.
+- Add real FastAPI dependency tests once local route-test dependencies are available; current coverage remains static plus unit seam tests.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

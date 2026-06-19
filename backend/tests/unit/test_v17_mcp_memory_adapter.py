@@ -19,17 +19,43 @@ from utils.mcp_memories import (
 )
 
 
-def test_mcp_rest_search_route_wires_v17_vector_adapter_before_legacy_vector_search():
+def test_mcp_rest_search_route_wires_app_key_scope_grant_before_v17_vector_adapter_and_legacy_search():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
+    search_route = contents[
+        contents.index('@router.get("/v1/mcp/memories/search"') : contents.index('@router.get("/v1/mcp/memories"')
+    ]
 
+    context_dependency = (
+        'auth_context: V17ProductAuthorizationContext = Depends(get_mcp_v17_default_memory_read_context)'
+    )
+    grant_call = 'authorize_v17_external_default_memory_read(auth_context, db_client=db)'
+    uid_assignment = 'uid = auth_context.uid'
     rollout_call = 'read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)'
     vector_adapter_call = 'search_v17_default_mcp_memories_vector('
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
-    assert rollout_call in contents
-    assert vector_adapter_call in contents
-    assert legacy_call in contents
-    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(legacy_call)
+    assert context_dependency in search_route
+    assert grant_call in search_route
+    assert uid_assignment in search_route
+    assert rollout_call in search_route
+    assert vector_adapter_call in search_route
+    assert legacy_call in search_route
+    assert search_route.index(grant_call) < search_route.index(rollout_call)
+    assert search_route.index(grant_call) < search_route.index(vector_adapter_call)
+    assert search_route.index(grant_call) < search_route.index(legacy_call)
+    assert search_route.index(rollout_call) < search_route.index(vector_adapter_call) < search_route.index(legacy_call)
+
+
+def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    contents = mcp_py.read_text(encoding='utf-8')
+
+    profile_route = contents[contents.index('@router.get("/v1/mcp/profile"') : contents.index('class CleanerMemory')]
+    list_route = contents[contents.index('@router.get("/v1/mcp/memories"') : contents.index('class SimpleStructured')]
+    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
+    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in list_route
+    assert 'get_mcp_v17_default_memory_read_context' not in profile_route
+    assert 'get_mcp_v17_default_memory_read_context' not in list_route
 
 
 def test_mcp_sse_search_tool_wires_v17_vector_adapter_before_legacy_vector_search():
