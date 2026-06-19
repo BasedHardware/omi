@@ -8,7 +8,13 @@ from typing import Optional
 
 import database.memories as memory_db
 import database.vector_db as vector_db
+from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.v17_chat_memory_adapter import (
+    list_v17_default_chat_memories_decision_text,
+    search_v17_default_chat_memories_vector_decision_text,
+)
+from utils.memory.v17_default_read_rollout import V17ReadDecision
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
 
@@ -25,8 +31,9 @@ def get_memories_text(
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
 
-    # Cap limit
-    limit = min(limit, 5000)
+    # Cap request bounds before either V17 or legacy reads.
+    limit = max(1, min(limit, 5000))
+    offset = max(0, offset)
 
     # Parse dates
     start_dt = None
@@ -41,6 +48,22 @@ def get_memories_text(
             end_dt = parse_iso_date(end_date, 'end_date')
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
+
+    v17_default_memories = list_v17_default_chat_memories_decision_text(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=firestore_db,
+    )
+    if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
+        logger.info("get_memories_text - using V17 default chat memory list results")
+        return v17_default_memories.text or "No V17 default memories found."
+    if v17_default_memories.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "get_memories_text - V17 default memory list denied without legacy fallback: "
+            f"{v17_default_memories.fallback_reason}"
+        )
+        return v17_default_memories.text or "No memories available for this request."
 
     # Fetch
     memories = []
@@ -89,7 +112,23 @@ def search_memories_text(
     """Semantic vector search for memories, formatted as LLM-ready text."""
     logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
 
-    limit = min(limit, 20)
+    limit = max(1, min(limit, 20))
+
+    v17_default_memories = search_v17_default_chat_memories_vector_decision_text(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=firestore_db,
+    )
+    if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
+        logger.info("search_memories_text - using V17 default chat vector memory results")
+        return v17_default_memories.text or f"No V17 vector memories found matching '{query}'."
+    if v17_default_memories.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "search_memories_text - V17 default memory vector search denied without legacy fallback: "
+            f"{v17_default_memories.fallback_reason}"
+        )
+        return v17_default_memories.text or "No memories available for this request."
 
     try:
         matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)

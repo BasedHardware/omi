@@ -44,6 +44,7 @@ pytest tests/unit/test_v17_rollout_schema_readiness.py -v
 pytest tests/unit/test_v17_chat_memory_adapter.py -v
 pytest tests/unit/test_v17_chat_memory_tool_caller.py -v
 pytest tests/unit/test_v17_tools_agent_route_response_shape.py -v
+pytest tests/unit/test_v17_tools_rest_memory_runtime_adapter.py -v
 pytest tests/unit/test_v17_developer_memory_adapter.py -v
 pytest tests/unit/test_v17_mcp_memory_adapter.py -v
 pytest tests/unit/test_v17_product_memory_router.py -v
