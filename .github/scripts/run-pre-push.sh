@@ -2,13 +2,13 @@
 # run-pre-push.sh — Run pre-push tests manually (without actually pushing)
 #
 # Usage:
-#   ./scripts/lint/run-pre-push.sh              # vs origin/main
-#   ./scripts/lint/run-pre-push.sh upstream     # vs upstream/main
+#   ./github/scripts/run-pre-push.sh              # vs origin/main
+#   ./github/scripts/run-pre-push.sh upstream     # vs upstream/main
 #
 # Timing: ~5-30s depending on how many files changed
 
 set -euo pipefail
-cd "$(dirname "$0")/../.."
+cd "$(dirname "$0")/.."
 
 REMOTE="${1:-origin}"
 
@@ -18,21 +18,27 @@ echo ""
 # Export so the hook script sees it
 export PRE_PUSH_DRY_RUN=1
 
-# Run the same logic as the pre-push hook
-MERGE_BASE=""
+# Detect the base branch (main or master)
+BASE_REF=""
 for candidate in main master; do
   if git rev-parse --verify "$REMOTE/$candidate" >/dev/null 2>&1; then
-    MERGE_BASE="$($REMOTE/$candidate)"
+    BASE_REF="$REMOTE/$candidate"
     break
   fi
 done
 
-if [ -z "$MERGE_BASE" ]; then
+if [ -z "$BASE_REF" ]; then
   echo "⚠️  Cannot find $REMOTE/main or $REMOTE/master"
   exit 1
 fi
 
-CHANGED_FILES=$(git diff --name-only "$(git merge-base "$REMOTE/main" HEAD 2>/dev/null || echo HEAD)" HEAD -- 'backend/**/*.py' 2>/dev/null || true)
+MERGE_BASE=$(git merge-base "$BASE_REF" HEAD 2>/dev/null || echo "")
+if [ -z "$MERGE_BASE" ]; then
+  echo "⚠️  No merge-base with $BASE_REF"
+  exit 1
+fi
+
+CHANGED_FILES=$(git diff --name-only "$MERGE_BASE" HEAD -- 'backend/**/*.py' 2>/dev/null || true)
 
 if [ -z "$CHANGED_FILES" ]; then
   echo "ℹ️  No backend Python files changed"
@@ -52,14 +58,18 @@ while IFS= read -r f; do
   REL_PATH="${f#backend/}"
   MODULE_NAME=$(basename "$f" .py)
 
+  # If the changed file IS a test file, run it directly
   if [[ "$REL_PATH" == tests/*/test_*.py ]]; then
     echo "$REL_PATH" >> "$TEST_TMP"
     continue
   fi
 
+  # Strategy 1: exact match — test_<module>.py in unit or integration
   for candidate in "tests/unit/test_${MODULE_NAME}.py" "tests/integration/test_${MODULE_NAME}.py"; do
     [ -f "backend/$candidate" ] && echo "$candidate" >> "$TEST_TMP"
   done
+
+  # Strategy 2: prefix glob — test_<module_prefix>*.py
   find backend/tests/unit backend/tests/integration \
     -name "test_${MODULE_NAME}*.py" >> "$TEST_TMP" 2>/dev/null || true
 done <<< "$CHANGED_FILES"

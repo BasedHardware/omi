@@ -28,14 +28,11 @@ repos:
     rev: v0.4.4
     hooks:
       # Lint + auto-fix (unused imports, undefined names, noqa abuse)
+      # Note: formatting handled by black above — ruff-format intentionally
+      # omitted to avoid conflicts when black and ruff-format disagree on output
       - id: ruff
         name: ruff (lint + fix)
         args: [--fix, --exit-non-zero-on-fix, --target-version, py39]
-        types_or: [python]
-      # Formatter (complements black, handles things black doesn't)
-      - id: ruff-format
-        name: ruff-format
-        args: [--line-length=120]
         types_or: [python]
 
   # ── Secret detection (critical for open-source repo with creds in history) ──
