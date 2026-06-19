@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, Link, useLocation } from 'react-router-dom'
 import {
   House,
   GanttChartSquare,
@@ -10,7 +10,8 @@ import {
   Monitor,
   Mic,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Settings
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
@@ -25,7 +26,8 @@ const navItems = [
   { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
   { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid }
+  { label: 'Apps', to: '/apps', Icon: LayoutGrid },
+  { label: 'Settings', to: '/settings', Icon: Settings }
 ]
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
@@ -224,17 +226,16 @@ export function Sidebar(): React.JSX.Element {
 
       <div className="my-2 h-px w-full bg-white/10" />
 
-      {/* Account row → opens Settings (Sign out now lives in Settings). */}
-      <NavLink
+      {/* Account row → opens Settings (Sign out now lives in Settings). Plain Link
+          so the account avatar doesn't double-highlight alongside the Settings nav item. */}
+      <Link
         to="/settings"
         title={collapsed ? displayName : undefined}
-        className={({ isActive }) =>
-          cn(
-            'flex w-full items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150',
-            !collapsed && 'gap-3',
-            isActive ? 'nav-active' : cn('text-white/60 hover:text-white/90', HOVER)
-          )
-        }
+        className={cn(
+          'flex w-full items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150 text-white/60 hover:text-white/90',
+          !collapsed && 'gap-3',
+          HOVER
+        )}
       >
         <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
           <img
@@ -258,7 +259,7 @@ export function Sidebar(): React.JSX.Element {
           </div>
         </div>
         {label(displayName)}
-      </NavLink>
+      </Link>
     </nav>
   )
 }

@@ -32,11 +32,11 @@
 | **macOS source** | `Sources/OmiApp.swift`, `Sources/MainWindow/DesktopHomeView.swift`, `Sources/MainWindow/SidebarView.swift` |
 | **Windows source** | `src/main/index.ts`, `src/renderer/src/App.tsx`, `src/renderer/src/components/layout/Sidebar.tsx` |
 | **macOS sidebar items** | Dashboard · Conversations · Memories · Tasks · Rewind · Apps · Settings (7 items) |
-| **Windows sidebar items** | Home · Conversations · Tasks · Rewind · Apps (5 items — missing Memories, Goals, Insights, Focus, Settings as nav item) |
-| **Status** | 🟡 Partial |
-| **Visual gap** | Sidebar is missing 2-4 top-level navigation items that macOS exposes. macOS uses a native `NavigationSplitView` look; Windows uses a custom CSS rail. Font scaling (Cmd++/−) absent. |
-| **Functional gap** | No Dashboard as a separate tab. Memories is hidden inside Settings tab rather than being a primary nav destination. No Goals or Insights page in nav. |
-| **Proposed fix** | Add Memories, Goals, and Insights as top-level sidebar items alongside existing items. Promote Dashboard to its own route separate from the merged Home/chat page. |
+| **Windows sidebar items** | Dashboard · Conversations · Memories · Tasks · Rewind · Apps · Settings (7 items — **exact match**) |
+| **Status** | 🟡 Partial → improved (Batch 6) |
+| **Visual gap** | macOS uses a native `NavigationSplitView` look; Windows uses a custom CSS rail. Font scaling (Cmd++/−) absent. Item count now matches macOS exactly (7). |
+| **Functional gap** | No Goals or Insights page in nav. No Focus page. Dashboard merges widgets + chat rather than being a separate dedicated route. |
+| **Proposed fix** | Add Goals and Insights as top-level sidebar items. Promote Dashboard to its own route separate from the merged Home/chat page. |
 | **Priority** | P0 |
 
 ---
@@ -165,11 +165,12 @@
 | **Windows source** | `src/renderer/src/pages/Settings.tsx`, `src/renderer/src/components/settings/` |
 | **macOS sections** | General · Assistants · Devices · Integrations · Shortcuts · Notifications · Support |
 | **Windows sections** | General · Rewind · Privacy · Account · Advanced · Memories |
-| **Status** | 🟡 Partial |
+| **Status** | 🟡 Partial → improved (Batch 6) |
 | **Visual gap** | macOS settings use a sidebar rail + right-panel pattern with section groupings. Windows uses a tabbed horizontal navigation with a search bar. Both are dark-themed but the layout and terminology differ significantly. |
+| **Nav change (Batch 6)** | Settings is now a first-class sidebar nav item (after Apps), matching macOS sidebar order exactly. The account avatar row still links to Settings but is now a plain `Link` (not a `NavLink`) to avoid double-active-state. The Settings tab rail retains its own Back→Home button for deep-link convenience. |
 | **Functional gap** | Missing tabs: Shortcuts (keyboard shortcut customization), Notifications (per-assistant alert config), Devices/Bluetooth section, Assistants enable/disable panel, Support (feedback/docs/about). Windows has features macOS doesn't: Memory Export, Sticky Notes import, Retention mode. |
 | **Proposed fix** | (1) Add a **Shortcuts** tab with the global shortcut configurator (already implemented in onboarding — reuse it). (2) Add a **Notifications** tab with per-feature toggles. (3) Rename "Rewind" → "Rewind & Screen" to match macOS "Assistants" terminology more closely. |
-| **Priority** | P1 |
+| **Priority** | P1 — IMPROVED |
 
 ---
 
@@ -349,7 +350,7 @@
 
 | Surface | Status | Priority |
 |---------|--------|----------|
-| App Shell / Sidebar Nav | 🟡 Partial | P0 |
+| App Shell / Sidebar Nav | 🟡 Partial (improved) | P0 — IMPROVED |
 | Onboarding | 🟡 Partial | P2 |
 | Login / Auth | ✅ Works | — |
 | Chat / AI Conversation | 🟡 Partial (improved) | P1 — IMPROVED |
@@ -359,7 +360,7 @@
 | Rewind / Timeline | 🟡 Partial | P0 |
 | Rewind Search | ✅ Works | P0 — DONE |
 | Screen OCR / Context | 🟡 Partial | P2 |
-| Settings | 🟡 Partial | P1 |
+| Settings | 🟡 Partial (improved) | P1 — IMPROVED |
 | System Tray | ✅ Works | P0 — DONE |
 | Notifications | 🟡 Partial | P2 |
 | Integrations | 🟡 Partial | P1 |
