@@ -1,5 +1,9 @@
 from config.v17_memory import PASSED, V17Mode, V17StageGate
-from utils.memory.v17_default_read_rollout import read_v17_default_read_rollout
+from utils.memory.v17_default_read_rollout import (
+    build_v17_default_read_rollout_audit_events,
+    read_v17_default_read_rollout,
+    read_v17_default_read_rollout_decisions,
+)
 
 
 class _Snapshot:
@@ -109,3 +113,72 @@ def test_shared_rollout_helper_fails_closed_for_missing_malformed_uid_mismatch_a
     assert no_grant_decision.v17_default_developer_enabled is False
     assert no_grant_decision.fallback_reason == 'missing_developer_default_memory_grant'
     assert no_grant.collection_paths == []
+
+
+def test_shared_rollout_helper_builds_local_audit_events_and_counters_without_memory_item_reads():
+    rollout_doc = _enabled_rollout_doc() | {
+        'grants': {
+            'mcp': {'default_memory': True, 'archive': True},
+            'developer_api': {},
+            'omi_chat': {'default_memory': True, 'archive': True},
+        }
+    }
+    db_client = _FirestoreFake({'users/u1/memory_control/state': rollout_doc})
+
+    decisions = read_v17_default_read_rollout_decisions(uid='u1', db_client=db_client)
+    audit = build_v17_default_read_rollout_audit_events(decisions)
+
+    assert db_client.document_get_paths == ['users/u1/memory_control/state']
+    assert db_client.collection_paths == []
+    assert audit == {
+        'events': [
+            {
+                'uid': 'u1',
+                'source_path': 'users/u1/memory_control/state',
+                'consumer': 'mcp',
+                'enabled': True,
+                'outcome': 'enabled',
+                'fallback_reason': None,
+                'default_memory_grant': True,
+                'v17_reads_enabled': True,
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+            {
+                'uid': 'u1',
+                'source_path': 'users/u1/memory_control/state',
+                'consumer': 'developer_api',
+                'enabled': False,
+                'outcome': 'fallback',
+                'fallback_reason': 'missing_developer_default_memory_grant',
+                'default_memory_grant': False,
+                'v17_reads_enabled': True,
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+            {
+                'uid': 'u1',
+                'source_path': 'users/u1/memory_control/state',
+                'consumer': 'omi_chat',
+                'enabled': True,
+                'outcome': 'enabled',
+                'fallback_reason': None,
+                'default_memory_grant': True,
+                'v17_reads_enabled': True,
+                'archive_default_visible': False,
+                'archive_capability': False,
+            },
+        ],
+        'counters': {
+            'total': {'enabled': 2, 'fallback': 1},
+            'by_consumer': {
+                'mcp': {'enabled': 1, 'fallback': 0, 'fallback_reasons': {}},
+                'developer_api': {
+                    'enabled': 0,
+                    'fallback': 1,
+                    'fallback_reasons': {'missing_developer_default_memory_grant': 1},
+                },
+                'omi_chat': {'enabled': 1, 'fallback': 0, 'fallback_reasons': {}},
+            },
+        },
+    }

@@ -222,16 +222,60 @@ def build_v17_default_read_rollout_observability(decision: V17DefaultReadRollout
     }
 
 
+def build_v17_default_read_rollout_audit_event(decision: V17DefaultReadRolloutDecision) -> dict:
+    enabled = decision.v17_default_enabled
+    return {
+        'uid': decision.uid,
+        'source_path': decision.source_path,
+        'consumer': decision.consumer,
+        'enabled': enabled,
+        'outcome': 'enabled' if enabled else 'fallback',
+        'fallback_reason': decision.fallback_reason,
+        'default_memory_grant': decision.app_has_default_memory_grant,
+        'v17_reads_enabled': decision.rollout_capabilities.v17_reads_enabled,
+        'archive_default_visible': False,
+        'archive_capability': decision.archive_capability,
+    }
+
+
+def build_v17_default_read_rollout_decision_counters(events: list[dict]) -> dict:
+    counters = {'total': {'enabled': 0, 'fallback': 0}, 'by_consumer': {}}
+    for event in events:
+        consumer = str(event.get('consumer') or 'unknown')
+        consumer_counters = counters['by_consumer'].setdefault(
+            consumer, {'enabled': 0, 'fallback': 0, 'fallback_reasons': {}}
+        )
+        if event.get('enabled') is True:
+            counters['total']['enabled'] += 1
+            consumer_counters['enabled'] += 1
+        else:
+            counters['total']['fallback'] += 1
+            consumer_counters['fallback'] += 1
+            fallback_reason = str(event.get('fallback_reason') or 'unknown_fallback')
+            consumer_counters['fallback_reasons'][fallback_reason] = (
+                consumer_counters['fallback_reasons'].get(fallback_reason, 0) + 1
+            )
+    return counters
+
+
+def build_v17_default_read_rollout_audit_events(decisions: dict[str, V17DefaultReadRolloutDecision]) -> dict:
+    events = [build_v17_default_read_rollout_audit_event(decision) for decision in decisions.values()]
+    return {'events': events, 'counters': build_v17_default_read_rollout_decision_counters(events)}
+
+
 def build_v17_default_read_rollout_observability_report(
     decisions: dict[str, V17DefaultReadRolloutDecision],
 ) -> dict:
     source_path = next(iter(decisions.values())).source_path if decisions else ''
     uid = next(iter(decisions.values())).uid if decisions else ''
+    audit = build_v17_default_read_rollout_audit_events(decisions)
     return {
         'uid': uid,
         'source_path': source_path,
         'archive_default_visible': False,
         'archive_capability': False,
+        'decision_audit_events': audit['events'],
+        'decision_counters': audit['counters'],
         'consumers': {
             consumer: build_v17_default_read_rollout_observability(decision) for consumer, decision in decisions.items()
         },

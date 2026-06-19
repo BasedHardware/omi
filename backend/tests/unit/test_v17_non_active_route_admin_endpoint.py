@@ -158,6 +158,52 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
     assert response["source_path"] == "users/u1/memory_control/state"
     assert response["archive_default_visible"] is False
     assert response["archive_capability"] is False
+    assert response["decision_counters"] == {
+        "total": {"enabled": 3, "fallback": 0},
+        "by_consumer": {
+            "mcp": {"enabled": 1, "fallback": 0, "fallback_reasons": {}},
+            "developer_api": {"enabled": 1, "fallback": 0, "fallback_reasons": {}},
+            "omi_chat": {"enabled": 1, "fallback": 0, "fallback_reasons": {}},
+        },
+    }
+    assert response["decision_audit_events"] == [
+        {
+            "uid": "u1",
+            "source_path": "users/u1/memory_control/state",
+            "consumer": "mcp",
+            "enabled": True,
+            "outcome": "enabled",
+            "fallback_reason": None,
+            "default_memory_grant": True,
+            "v17_reads_enabled": True,
+            "archive_default_visible": False,
+            "archive_capability": False,
+        },
+        {
+            "uid": "u1",
+            "source_path": "users/u1/memory_control/state",
+            "consumer": "developer_api",
+            "enabled": True,
+            "outcome": "enabled",
+            "fallback_reason": None,
+            "default_memory_grant": True,
+            "v17_reads_enabled": True,
+            "archive_default_visible": False,
+            "archive_capability": False,
+        },
+        {
+            "uid": "u1",
+            "source_path": "users/u1/memory_control/state",
+            "consumer": "omi_chat",
+            "enabled": True,
+            "outcome": "enabled",
+            "fallback_reason": None,
+            "default_memory_grant": True,
+            "v17_reads_enabled": True,
+            "archive_default_visible": False,
+            "archive_capability": False,
+        },
+    ]
     assert sorted(response["consumers"]) == ["developer_api", "mcp", "omi_chat"]
     for consumer in ("mcp", "developer_api", "omi_chat"):
         decision = response["consumers"][consumer]
