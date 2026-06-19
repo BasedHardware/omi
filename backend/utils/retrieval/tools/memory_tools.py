@@ -13,7 +13,10 @@ import database.memories as memory_db
 import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
-from utils.memory.v17_chat_memory_adapter import search_v17_default_chat_memories_vector_decision_text
+from utils.memory.v17_chat_memory_adapter import (
+    list_v17_default_chat_memories_decision_text,
+    search_v17_default_chat_memories_vector_decision_text,
+)
 from utils.memory.v17_default_read_rollout import V17ReadDecision
 from utils.retrieval.hybrid import rrf_rerank
 import logging
@@ -151,6 +154,22 @@ def get_memories_tool(
             logger.info(f"📅 Parsed end_date '{end_date}' as {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+
+    v17_default_memories = list_v17_default_chat_memories_decision_text(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=firestore_db,
+    )
+    if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
+        logger.info("✅ get_memories_tool - using V17 default chat memory list results")
+        return v17_default_memories.text or "No V17 default memories found."
+    if v17_default_memories.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "🛑 get_memories_tool - V17 chat memory list denied without legacy fallback: "
+            f"{v17_default_memories.fallback_reason}"
+        )
+        return v17_default_memories.text or "No memories available for this request."
 
     # Get memories
     memories = []

@@ -99,6 +99,87 @@ def search_v17_default_chat_memories_text(
     return '\n'.join(lines).strip()
 
 
+def list_v17_default_chat_memories_decision_text(
+    *,
+    uid: str,
+    limit: int,
+    offset: int = 0,
+    db_client,
+    now: Optional[datetime] = None,
+    allow_legacy_safe_fallback: bool = False,
+) -> V17ChatMemorySearchResult:
+    """Return explicit V17 read-decision semantics for Omi chat get/list reads.
+
+    This mirrors the search-memory tool's denied/no-grant behavior: denied V17
+    control states return a safe no-memory response and do not downgrade to legacy
+    unless a caller deliberately opts into the legacy-safe compatibility wrapper.
+    """
+
+    decision = read_v17_chat_default_memory_rollout(uid=uid, db_client=db_client)
+    if decision.read_decision != V17ReadDecision.USE_V17:
+        if allow_legacy_safe_fallback:
+            legacy_safe = legacy_safe_v17_default_read_rollout_decision(
+                uid=uid,
+                source_path=decision.source_path,
+                consumer='omi_chat',
+                reason='chat_get_legacy_safe_fallback_explicit',
+            )
+            return V17ChatMemorySearchResult(
+                text=None,
+                read_decision=legacy_safe.read_decision,
+                fallback_reason=legacy_safe.fallback_reason,
+            )
+        return V17ChatMemorySearchResult(
+            text="No memories available for this request.",
+            read_decision=decision.read_decision,
+            fallback_reason=decision.fallback_reason,
+        )
+
+    bounded_limit = max(1, min(limit, 5000))
+    bounded_offset = max(0, offset)
+    policy = MemoryAccessPolicy(
+        consumer=MemoryConsumer.omi_chat,
+        app_has_default_memory_grant=True,
+        archive_capability=False,
+        raw_provenance_capability=False,
+    )
+    response = fetch_default_product_memory_search(
+        uid=uid,
+        query='',
+        db_client=db_client,
+        policy=policy,
+        now=now,
+        limit=bounded_limit,
+        offset=bounded_offset,
+    )
+    items = response['items']
+    if not items:
+        return V17ChatMemorySearchResult(
+            text="No V17 default memories found.",
+            read_decision=decision.read_decision,
+            fallback_reason=decision.fallback_reason,
+        )
+
+    lines = _chat_memory_header(f"User V17 default memories ({len(items)} total):")
+    for item in items:
+        updated_at = _parse_datetime(item.get('date') or item.get('updated_at'))
+        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
+        lines.append(
+            _format_chat_memory_evidence_line(
+                item,
+                source_marker='v17_default_memory',
+                suffix=f"tier: {item.get('tier')}, date: {date_str}",
+            )
+        )
+    lines.append('')
+    lines.append('archive_default_visible=False')
+    return V17ChatMemorySearchResult(
+        text='\n'.join(lines).strip(),
+        read_decision=decision.read_decision,
+        fallback_reason=decision.fallback_reason,
+    )
+
+
 def search_v17_default_chat_memories_vector_text(
     *,
     uid: str,

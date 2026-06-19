@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
@@ -302,7 +303,8 @@ async def execute_tool(
         else:
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
             result = target.invoke(params, config=config)
-        return {"result": str(result)}
+        result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
+        return {"result": result}
     except Exception as e:
         logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
         return {"error": str(e)}
