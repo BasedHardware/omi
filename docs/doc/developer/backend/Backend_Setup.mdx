@@ -270,34 +270,22 @@ OAuth is required for user authentication. You need to configure both Google and
   </Step>
   <Step title="Set Up Python Virtual Environment" icon="python">
     <Tip>
-    Using a virtual environment is strongly recommended to avoid dependency conflicts.
+    The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
     </Tip>
 
     ```bash
-    # Create virtual environment with Python 3.11
-    python --version
-    python -m venv venv
+    # From backend/
+    ./scripts/sync-python-deps.sh
+    source .venv/bin/activate
     ```
 
-    <Tabs>
-      <Tab title="macOS/Linux">
-        ```bash
-        source venv/bin/activate
-        ```
-      </Tab>
-      <Tab title="Windows">
-        ```powershell
-        venv\Scripts\activate
-        ```
-      </Tab>
-    </Tabs>
-
-    You should see `(venv)` at the beginning of your command prompt.
+    You should see `(.venv)` at the beginning of your command prompt.
   </Step>
-  <Step title="Install Python Dependencies" icon="download">
+  <Step title="Update Python Dependencies" icon="download">
+    When intentionally changing backend dependencies, edit `requirements.txt` or `testing/e2e/requirements.txt`, then refresh the lock:
+
     ```bash
-    pip install PyOgg
-    pip install -r requirements.txt
+    ./scripts/update-python-lock.sh
     ```
   </Step>
   <Step title="Create Environment File" icon="file">

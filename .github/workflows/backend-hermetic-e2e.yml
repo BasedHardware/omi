@@ -21,18 +21,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: |
-            backend/requirements.txt
-            backend/testing/e2e/requirements.txt
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock.toml
 
       - name: Install backend and e2e dependencies
         working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install -r testing/e2e/requirements.txt
+        run: uv pip sync pylock.toml --system
 
       - name: Prewarm tokenizer cache
         working-directory: backend
