@@ -47,6 +47,9 @@ export type Preferences = {
     gemini?: string
     deepgram?: string
   }
+  // Notification preferences — whether to show a Windows notification when a
+  // recording session ends and is saved (default on).
+  notifyOnRecordingSaved?: boolean
 }
 
 const defaults: Preferences = {

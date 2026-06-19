@@ -13,6 +13,8 @@ import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { IntegrationsTab } from '../components/settings/tabs/IntegrationsTab'
 import { SupportTab } from '../components/settings/tabs/SupportTab'
 import { BYOKTab } from '../components/settings/tabs/BYOKTab'
+import { NotificationsTab } from '../components/settings/tabs/NotificationsTab'
+import { DevicesTab } from '../components/settings/tabs/DevicesTab'
 import { Memories } from './Memories'
 
 // The Memories tab renders the full Memories page (its own layout, brain map and
@@ -27,6 +29,8 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   privacy: PrivacyTab,
   account: AccountTab,
   advanced: AdvancedTab,
+  notifications: NotificationsTab,
+  devices: DevicesTab,
   byok: BYOKTab,
   support: SupportTab
 }

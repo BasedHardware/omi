@@ -10,6 +10,7 @@ import { Goals } from '../../pages/Goals'
 import { Apps } from '../../pages/Apps'
 import { Rewind } from '../../pages/Rewind'
 import { Insights } from '../../pages/Insights'
+import { Focus } from '../../pages/Focus'
 import { LiveConversation } from '../../pages/LiveConversation'
 
 // Every page stays mounted (inactive ones are just hidden) so switching tabs is
@@ -28,6 +29,7 @@ const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
+const FocusPanel = memo(Focus)
 
 function panelClass(active: boolean): string {
   return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
@@ -74,6 +76,7 @@ export function MainViews(): React.JSX.Element {
   const isApps = pathname === '/apps'
   const isRewind = pathname === '/rewind'
   const isInsights = pathname === '/insights'
+  const isFocus = pathname === '/focus'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -92,6 +95,7 @@ export function MainViews(): React.JSX.Element {
       <div className={panelClass(isApps)}>{(isApps || hydrateAll) && <AppsPanel />}</div>
       <div className={panelClass(isRewind)}>{(isRewind || hydrateAll) && <RewindPanel />}</div>
       <div className={panelClass(isInsights)}>{(isInsights || hydrateAll) && <InsightsPanel />}</div>
+      <div className={panelClass(isFocus)}>{(isFocus || hydrateAll) && <FocusPanel />}</div>
     </div>
   )
 }

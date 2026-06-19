@@ -9,6 +9,8 @@ import {
   Puzzle,
   Info,
   Key,
+  Bell,
+  Bluetooth,
   type LucideIcon
 } from 'lucide-react'
 
@@ -18,6 +20,8 @@ export type SettingsTabId =
   | 'rewind'
   | 'integrations'
   | 'shortcuts'
+  | 'notifications'
+  | 'devices'
   | 'privacy'
   | 'account'
   | 'advanced'
@@ -30,6 +34,8 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'rewind', label: 'Rewind', Icon: History },
   { id: 'integrations', label: 'Integrations', Icon: Puzzle },
   { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
+  { id: 'notifications', label: 'Notifications', Icon: Bell },
+  { id: 'devices', label: 'Devices', Icon: Bluetooth },
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },
   { id: 'account', label: 'Account', Icon: CircleUserRound },
   { id: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
