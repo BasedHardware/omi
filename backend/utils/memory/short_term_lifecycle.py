@@ -134,16 +134,27 @@ def evaluate_short_term_lifecycle(
             disposition=resolved_disposition,
         )
 
-    if item.processing_state == ProcessingState.processed and resolved_disposition is not None:
-        outcome = ShortTermLifecycleOutcome(resolved_disposition.value)
+    if item.processing_state == ProcessingState.processed:
+        if resolved_disposition is not None:
+            outcome = ShortTermLifecycleOutcome(resolved_disposition.value)
+            return _decision(
+                item,
+                now=current_time,
+                expiry_at=expiry_at,
+                outcome=outcome,
+                default_access_allowed=False,
+                requires_lifecycle_decision=False,
+                decision_reason=f'l2_processed_{resolved_disposition.value}',
+                disposition=resolved_disposition,
+            )
         return _decision(
             item,
             now=current_time,
             expiry_at=expiry_at,
-            outcome=outcome,
+            outcome=ShortTermLifecycleOutcome.remain_short_term,
             default_access_allowed=False,
-            requires_lifecycle_decision=False,
-            decision_reason=f'l2_processed_{resolved_disposition.value}',
+            requires_lifecycle_decision=True,
+            decision_reason='short_term_l2_processed_requires_explicit_lifecycle_disposition',
             disposition=resolved_disposition,
         )
 
