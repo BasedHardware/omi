@@ -215,6 +215,10 @@ class TranslationCoordinator:
                         state.latest_text = text
                         state.last_update_at = now
                         self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                        # Cancel any in-flight batch task to prevent stale overwrite
+                        if self._batch_task and not self._batch_task.done():
+                            self._batch_task.cancel()
+                            self._batch_task = None
                         self.metrics['prefix_resets'] += 1
                         continue  # Don't add to batch buffer
                     state.committed_text = text
@@ -222,10 +226,13 @@ class TranslationCoordinator:
                     state.detected_lang = detected_lang
                     # Bump version so any in-flight batch job is rejected as stale.
                     state.version = self._next_version()
-                    self.metrics['prefix_resets'] += 1
                     # Invalidate any pending batch entries for this segment so
                     # _flush_batch() does not overwrite with stale buffered text.
                     self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                    # Cancel any in-flight batch task to prevent stale overwrite
+                    if self._batch_task and not self._batch_task.done():
+                        self._batch_task.cancel()
+                        self._batch_task = None
                     state.latest_text = text
                     state.last_update_at = now
                     await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)

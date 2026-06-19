@@ -436,11 +436,10 @@ def _should_merge(prev: str, nxt: str) -> bool:
             and len(prev_body) <= 3  # U.S., UK, Dr
             or prev_body in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
             or prev_body in ('etc', 'vs')  # Latin abbrevs
-            or prev_body[0].isupper()
-            and prev_body[1:].isdigit()  # v2, V3
+            or (prev_body[0].isupper() and len(prev_body) > 1 and prev_body[1:].isdigit())  # v2, V3
         )
-        if not is_abbrev_like:
-            return False
+        if is_abbrev_like:
+            return True
 
     return False
 
@@ -748,22 +747,19 @@ class TranslationService:
                             sent_translation[h] = (sent_hash_to_info[h]['text'], '')
                             _failed_sent_hashes.add(h)
 
-        # Phase 3: Reassemble per-unit results from sentence translations
-        results = []
-        # First, emit any units that hit the full-text cache in Phase -1
-        # (they were skipped during Phase 0 sentence splitting)
-        for unit_id, _ in units:
-            if unit_id in full_text_results and unit_id not in (uid for uid, _, _ in unit_sentences):
-                trans, det = full_text_results[unit_id]
-                results.append((unit_id, trans, det))
+        # Phase 3: Reassemble per-unit results from sentence translations.
+        # Results are emitted in the same order as the input `units` list
+        # so downstream consumers can rely on positional mapping.
+        results: list[tuple[str, str, str] | None] = [None] * len(units)  # pre-allocate for in-order assembly
 
         for unit_idx, (unit_id, original_text, sentences) in enumerate(unit_sentences):
             if not sentences:
-                results.append((unit_id, original_text, ''))
+                results[unit_idx] = (unit_id, original_text, '')
                 continue
 
             translated_parts = []
             detected_langs = []
+            _fallback_sent_hashes: set[str] = set()
             for sent_text, sent_hash in sentences:
                 if sent_hash in sent_translation:
                     trans_text, det_lang = sent_translation[sent_hash]
@@ -773,6 +769,7 @@ class TranslationService:
                 else:
                     # Fallback: should not happen, but use original text
                     translated_parts.append(sent_text)
+                    _fallback_sent_hashes.add(sent_hash)
 
             assembled = ' '.join(translated_parts)
             # Dominant detected language from constituent sentences
@@ -784,13 +781,32 @@ class TranslationService:
             text_hash = hashlib.md5(original_text.encode()).hexdigest()
             # Only persist to any cache if NO sentence fell back to original text
             # (avoids poisoning both in-memory LRU and Redis with untranslated output).
-            if not any(sh in _failed_sent_hashes for _, sh in sentences):
+            # This covers both exception-path failures (_failed_sent_hashes) and
+            # quiet fallbacks where a sentence hash was never populated.
+            _any_failure = any(sh in _failed_sent_hashes for _, sh in sentences) or bool(_fallback_sent_hashes)
+            if not _any_failure:
                 self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
                 cache_translation(text_hash, dest_language, assembled, dominant_lang)
 
-            results.append((unit_id, assembled, dominant_lang))
+            results[unit_idx] = (unit_id, assembled, dominant_lang)
 
-        return results
+        # Fill in any units that hit the full-text cache in Phase -1
+        # (they were skipped during sentence splitting)
+        for unit_idx, (unit_id, _) in enumerate(units):
+            if results[unit_idx] is None and unit_id in full_text_results:
+                trans, det = full_text_results[unit_id]
+                results[unit_idx] = (unit_id, trans, det)
+
+        # Safety: replace any remaining gaps with original-text fallbacks
+        final_results = []
+        for idx, r in enumerate(results):
+            if r is not None:
+                final_results.append(r)
+            else:
+                uid, orig_text = units[idx]
+                final_results.append((uid, orig_text, ''))
+
+        return final_results
 
     def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
         """
