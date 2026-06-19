@@ -30,6 +30,7 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+from database._client import db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
@@ -41,6 +42,8 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
+    read_v17_mcp_default_memory_rollout,
+    search_v17_default_mcp_memories_vector,
 )
 
 router = APIRouter()
@@ -689,6 +692,18 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
+
+        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        v17_vector_results = search_v17_default_mcp_memories_vector(
+            uid=user_id,
+            query=query,
+            limit=limit,
+            db_client=db,
+            rollout_capabilities=v17_rollout.rollout_capabilities,
+            app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+        )
+        if v17_vector_results is not None:
+            return {"memories": v17_vector_results}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:

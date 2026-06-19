@@ -29,6 +29,19 @@ def test_mcp_rest_search_route_wires_v17_vector_adapter_before_legacy_vector_sea
     assert contents.index(vector_adapter_call) < contents.index(legacy_call)
 
 
+def test_mcp_sse_search_tool_wires_v17_vector_adapter_before_legacy_vector_search():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+
+    rollout_call = 'read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)'
+    vector_adapter_call = 'search_v17_default_mcp_memories_vector('
+    legacy_call = 'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    assert rollout_call in contents
+    assert vector_adapter_call in contents
+    assert legacy_call in contents
+    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(legacy_call)
+
+
 class _Snapshot:
     def __init__(self, data=None, *, exists=True):
         self._data = data
