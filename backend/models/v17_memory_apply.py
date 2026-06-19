@@ -14,7 +14,6 @@ from models.v17_product_memory import (
     MemoryTier,
     ProcessingState,
     V17MemoryItem,
-    new_memory_id,
 )
 
 
@@ -160,12 +159,31 @@ class ApplyResult(BaseModel):
     reason: Optional[str] = None
 
 
+def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch, commit_id: str) -> str:
+    if patch.target_memory_id:
+        return patch.target_memory_id
+    if patch.new_memory_id:
+        return patch.new_memory_id
+    return (
+        "mem_"
+        + deterministic_contract_id(
+            "v17-memory-materialized-item",
+            {
+                "uid": uid,
+                "commit_id": commit_id,
+                "patch_id": patch.patch_id,
+                "idempotency_key": patch.idempotency_key,
+            },
+        )[:32]
+    )
+
+
 def _materialize_memory_item(
     *, uid: str, patch: DurableMemoryPatch, evidence: List[MemoryEvidence], commit_id: str, sequence: int
 ) -> V17MemoryItem:
     now = datetime.now(timezone.utc)
     return V17MemoryItem(
-        memory_id=patch.target_memory_id or patch.new_memory_id or new_memory_id(),
+        memory_id=_deterministic_materialized_memory_id(uid=uid, patch=patch, commit_id=commit_id),
         uid=uid,
         version=1,
         tier=MemoryTier.long_term,

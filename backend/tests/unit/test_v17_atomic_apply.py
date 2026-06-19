@@ -186,3 +186,20 @@ def test_skip_duplicate_advances_audit_head_with_barrier_outbox_but_no_memory_it
     assert result.status == ApplyStatus.committed
     assert result.memory_items == []
     assert [event.payload["action"] for event in result.outbox_events] == ["barrier", "barrier"]
+
+
+def test_firestore_transaction_retry_produces_identical_memory_commit_and_outbox_ids():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    operation = _operation()
+    patch = _patch()
+
+    first = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+    retry = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch)
+
+    assert first.status == ApplyStatus.committed
+    assert retry.status == ApplyStatus.committed
+    assert first.control_state.head_commit_id == retry.control_state.head_commit_id
+    assert [item.memory_id for item in first.memory_items] == [item.memory_id for item in retry.memory_items]
+    assert [event.event_id for event in first.outbox_events] == [event.event_id for event in retry.outbox_events]
+    assert first.operation.committed_memory_item_ids == retry.operation.committed_memory_item_ids
+    assert first.operation.committed_outbox_event_ids == retry.operation.committed_outbox_event_ids
