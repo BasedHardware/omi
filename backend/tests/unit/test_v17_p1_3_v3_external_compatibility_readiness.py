@@ -328,6 +328,23 @@ def test_v3_readiness_links_pure_decision_and_cursor_service_proofs_without_roll
         "no_fastapi_dependency_route_wiring_external_calls_or_mutations",
     ]
 
+    route_planner_proof = report["route_planner_proof"]
+    assert route_planner_proof["service"] == "backend/utils/memory/v17_v3_route_planner.py"
+    assert route_planner_proof["test"] == "backend/tests/unit/test_v17_v3_route_planner.py"
+    assert route_planner_proof["runtime_wired"] is False
+    assert route_planner_proof["production_rollout_approved"] is False
+    assert route_planner_proof["external_calls"] == []
+    assert route_planner_proof["covered_defaults"] == [
+        "pure_local_route_adjacent_composition_no_route_wiring_or_data_fetching",
+        "composes_request_adapter_decision_write_projection_read_response_seams",
+        "non_enrolled_legacy_primary_plan_marker_only_preserves_limit_offset",
+        "enrolled_valid_request_returns_list_memorydb_response_with_additive_headers",
+        "enrolled_invalid_request_cursor_filter_archive_fail_closed_no_legacy_fallback",
+        "enrolled_malformed_no_grant_projection_not_ready_write_not_ready_fail_closed_or_deny",
+        "enabled_empty_returns_200_empty_list_no_legacy_fallback",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ]
+
 
 def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
     root = Path(__file__).resolve().parents[2]
@@ -349,6 +366,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "write_convergence_proof_present": True,
         "response_adapter_proof_present": True,
         "request_adapter_proof_present": True,
+        "route_planner_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
@@ -369,6 +387,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_v3_write_convergence.py" in test_sh
     assert "test_v17_v3_response_adapter.py" in test_sh
     assert "test_v17_v3_request_adapter.py" in test_sh
+    assert "test_v17_v3_route_planner.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_cursor.py" in ticket_doc
@@ -377,6 +396,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_write_convergence.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_response_adapter.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_request_adapter.py" in ticket_doc
+    assert "backend/utils/memory/v17_v3_route_planner.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in oracle_doc
@@ -386,4 +406,5 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "backend/utils/memory/v17_v3_write_convergence.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_response_adapter.py" in oracle_doc
     assert "backend/utils/memory/v17_v3_request_adapter.py" in oracle_doc
+    assert "backend/utils/memory/v17_v3_route_planner.py" in oracle_doc
     assert "local `/v3` external compatibility readiness slice" in oracle_doc

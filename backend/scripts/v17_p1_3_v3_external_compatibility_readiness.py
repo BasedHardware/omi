@@ -343,6 +343,7 @@ IRREDUCIBLE_PRODUCT_API_DECISIONS = [
 ORACLE_IMPLEMENTATION_SHAPE = {
     "decision_service": "backend/utils/memory/v17_v3_compatibility.py",
     "request_adapter": "backend/utils/memory/v17_v3_request_adapter.py",
+    "route_planner": "backend/utils/memory/v17_v3_route_planner.py",
     "read_service": "backend/utils/memory/v17_v3_memory_read_service.py",
     "response_adapter": "backend/utils/memory/v17_v3_response_adapter.py",
     "projection_service": "backend/database/v17_v3_compatibility_projection.py",
@@ -516,6 +517,24 @@ REQUEST_ADAPTER_PROOF = {
     ],
 }
 
+ROUTE_PLANNER_PROOF = {
+    "service": "backend/utils/memory/v17_v3_route_planner.py",
+    "test": "backend/tests/unit/test_v17_v3_route_planner.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "pure_local_route_adjacent_composition_no_route_wiring_or_data_fetching",
+        "composes_request_adapter_decision_write_projection_read_response_seams",
+        "non_enrolled_legacy_primary_plan_marker_only_preserves_limit_offset",
+        "enrolled_valid_request_returns_list_memorydb_response_with_additive_headers",
+        "enrolled_invalid_request_cursor_filter_archive_fail_closed_no_legacy_fallback",
+        "enrolled_malformed_no_grant_projection_not_ready_write_not_ready_fail_closed_or_deny",
+        "enabled_empty_returns_200_empty_list_no_legacy_fallback",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -548,6 +567,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "write_convergence_proof": WRITE_CONVERGENCE_PROOF,
         "response_adapter_proof": RESPONSE_ADAPTER_PROOF,
         "request_adapter_proof": REQUEST_ADAPTER_PROOF,
+        "route_planner_proof": ROUTE_PLANNER_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -569,6 +589,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "write_convergence_proof_present": True,
             "response_adapter_proof_present": True,
             "request_adapter_proof_present": True,
+            "route_planner_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
