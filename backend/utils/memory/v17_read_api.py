@@ -1,5 +1,7 @@
-from typing import Any, Dict, Iterable, List
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional
 
+from database.product_memory_items import filter_default_product_memory_items
 from models.v17_memory_contracts import (
     L1MemoryArchiveClass,
     L1MemoryArchiveItem,
@@ -8,6 +10,7 @@ from models.v17_memory_contracts import (
     derive_allowed_use,
     filter_l1_archive_for_normal_search,
 )
+from models.v17_product_memory import MemoryAccessPolicy, MemoryTier, V17MemoryItem, is_archive_access_eligible
 
 
 def _tokens(query: str) -> set[str]:
@@ -81,6 +84,85 @@ def _coerce_archive_item(record: L1MemoryArchiveItem | Dict[str, Any]) -> L1Memo
     if isinstance(record, L1MemoryArchiveItem):
         return record
     return L1MemoryArchiveItem.model_validate(record)
+
+
+def _coerce_product_memory_item(record: V17MemoryItem | Dict[str, Any]) -> V17MemoryItem:
+    if isinstance(record, V17MemoryItem):
+        return record
+    return V17MemoryItem.model_validate(record)
+
+
+def _tier_value(item: V17MemoryItem) -> str:
+    return item.tier.value if isinstance(item.tier, MemoryTier) else str(item.tier)
+
+
+def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
+    return {
+        "memory_id": item.memory_id,
+        "memory_layer": "product_memory",
+        "tier": _tier_value(item),
+        "content": item.content or "",
+        "lifecycle_status": item.status.value if hasattr(item.status, "value") else str(item.status),
+        "processing_state": (
+            item.processing_state.value if hasattr(item.processing_state, "value") else str(item.processing_state)
+        ),
+        "confidence": None,
+        "source": item.evidence[0].source_id if item.evidence else None,
+        "date": item.updated_at.isoformat(),
+        "evidence": [evidence.model_dump(mode="json") for evidence in item.evidence],
+        "agent_use": agent_use,
+        "access_reason": access_reason,
+        "superseded_by": None,
+    }
+
+
+def query_default_product_memory_items(
+    query: str,
+    records: Iterable[V17MemoryItem | Dict[str, Any]],
+    *,
+    policy: MemoryAccessPolicy,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """Search V17 product memory items for default-visible product output.
+
+    Callers pass authoritative `memory_items`; this seam applies the product default
+    memory filter before query matching, so stale Short-term and Archive records are
+    never default-visible even when their content matches.
+    """
+
+    items = [_coerce_product_memory_item(record) for record in records]
+    report = filter_default_product_memory_items(items, policy=policy, now=now)
+    results = []
+    for item in report.visible_items:
+        content = item.content or ""
+        if not _matches(query, content):
+            continue
+        decision = report.decisions[item.memory_id]
+        results.append(_product_memory_result(item, agent_use="default_access_memory", access_reason=decision.reason))
+    return results
+
+
+def query_archive_product_memory_items(
+    query: str,
+    records: Iterable[V17MemoryItem | Dict[str, Any]],
+    *,
+    policy: MemoryAccessPolicy,
+    now: Optional[datetime] = None,
+) -> List[Dict[str, Any]]:
+    """Search Archive product memory only for explicit archive-capable callers."""
+
+    results = []
+    for item in [_coerce_product_memory_item(record) for record in records]:
+        if item.tier != MemoryTier.archive:
+            continue
+        content = item.content or ""
+        if not _matches(query, content):
+            continue
+        access = is_archive_access_eligible(item, policy, now=now)
+        if not access.allowed:
+            continue
+        results.append(_product_memory_result(item, agent_use="explicit_archive_memory", access_reason=access.reason))
+    return results
 
 
 def query_l1_archive(
