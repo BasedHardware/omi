@@ -6,7 +6,9 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
+from utils.memory.v17_default_read_rollout import V17ReadDecision, legacy_safe_v17_default_read_rollout_decision
 from utils.mcp_memories import (
+    V17McpMemorySearchResult,
     read_v17_mcp_default_memory_rollout,
     search_v17_default_mcp_memories,
     search_v17_default_mcp_memories_vector,
@@ -19,14 +21,11 @@ def test_mcp_rest_search_route_wires_v17_vector_adapter_before_legacy_vector_sea
 
     rollout_call = 'read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)'
     vector_adapter_call = 'search_v17_default_mcp_memories_vector('
-    read_adapter_call = 'search_v17_default_mcp_memories('
     legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
     assert rollout_call in contents
     assert vector_adapter_call in contents
-    assert read_adapter_call in contents
     assert legacy_call in contents
-    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(read_adapter_call)
-    assert contents.index(vector_adapter_call) < contents.index(legacy_call)
+    assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(legacy_call)
 
 
 def test_mcp_sse_search_tool_wires_v17_vector_adapter_before_legacy_vector_search():
@@ -40,6 +39,32 @@ def test_mcp_sse_search_tool_wires_v17_vector_adapter_before_legacy_vector_searc
     assert vector_adapter_call in contents
     assert legacy_call in contents
     assert contents.index(rollout_call) < contents.index(vector_adapter_call) < contents.index(legacy_call)
+
+
+def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
+    mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    contents = mcp_py.read_text(encoding='utf-8')
+
+    assert 'V17ReadDecision.USE_V17' in contents
+    assert 'V17ReadDecision.USE_LEGACY_SAFE' in contents
+    assert 'if v17_vector_results.read_decision == V17ReadDecision.USE_V17:' in contents
+    assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in contents
+    assert contents.index('if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < contents.index(
+        'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
+    )
+
+
+def test_mcp_sse_search_tool_only_reaches_legacy_after_explicit_legacy_safe_decision():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+
+    assert 'V17ReadDecision.USE_V17' in contents
+    assert 'V17ReadDecision.USE_LEGACY_SAFE' in contents
+    assert 'if v17_vector_results.read_decision == V17ReadDecision.USE_V17:' in contents
+    assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in contents
+    assert contents.index('if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < contents.index(
+        'vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)'
+    )
 
 
 class _Snapshot:
@@ -333,7 +358,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
             rejected_count=1,
         )
 
-    results = search_v17_default_mcp_memories_vector(
+    result = search_v17_default_mcp_memories_vector(
         uid='u1',
         query='coffee',
         limit=10,
@@ -342,6 +367,9 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
         vector_query=vector_query,
     )
 
+    assert isinstance(result, V17McpMemorySearchResult)
+    assert result.read_decision == V17ReadDecision.USE_V17
+    results = result.memories
     assert vector_calls == [{'uid': 'u1', 'query': 'coffee', 'mode': SearchMode.default, 'limit': 10}]
     assert db_client.collection_paths == ['users/u1/memory_items']
     assert [item['id'] for item in results] == ['long-term', 'fresh-short-term']
@@ -352,7 +380,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
     assert all(item['policy']['archive_capability'] is False for item in results)
 
 
-def test_mcp_vector_adapter_returns_none_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
+def test_mcp_vector_adapter_returns_explicit_denial_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
@@ -362,28 +390,55 @@ def test_mcp_vector_adapter_returns_none_before_vector_or_memory_reads_when_roll
         vector_calls.append((args, kwargs))
         return _VectorCandidateResult([])
 
-    assert (
-        search_v17_default_mcp_memories_vector(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            db_client=db_client,
-            rollout_capabilities=_read_capabilities(enabled=False),
-            vector_query=vector_query,
-        )
-        is None
+    disabled_result = search_v17_default_mcp_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_capabilities=_read_capabilities(enabled=False),
+        vector_query=vector_query,
     )
-    assert (
-        search_v17_default_mcp_memories_vector(
-            uid='u1',
-            query='coffee',
-            limit=10,
-            db_client=db_client,
-            rollout_capabilities=_read_capabilities(),
-            app_has_default_memory_grant=False,
-            vector_query=vector_query,
-        )
-        is None
+    no_grant_result = search_v17_default_mcp_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_capabilities=_read_capabilities(),
+        app_has_default_memory_grant=False,
+        vector_query=vector_query,
     )
+    assert disabled_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert disabled_result.memories == []
+    assert disabled_result.fallback_reason == 'v17_reads_disabled'
+    assert no_grant_result.read_decision == V17ReadDecision.DENY_MEMORY
+    assert no_grant_result.memories == []
+    assert no_grant_result.fallback_reason == 'missing_mcp_default_memory_grant'
+    assert vector_calls == []
+    assert db_client.collection_paths == []
+
+
+def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification():
+    db_client = _FirestoreFake()
+    vector_calls = []
+
+    def vector_query(*args, **kwargs):
+        vector_calls.append((args, kwargs))
+        return _VectorCandidateResult([])
+
+    result = search_v17_default_mcp_memories_vector(
+        uid='u1',
+        query='coffee',
+        limit=10,
+        db_client=db_client,
+        rollout_decision=legacy_safe_v17_default_read_rollout_decision(
+            uid='u1', source_path='compatibility/mcp', consumer='mcp', reason='legacy_mcp_compatibility'
+        ),
+        vector_query=vector_query,
+    )
+
+    assert result.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+    assert result.memories == []
+    assert result.fallback_reason == 'legacy_mcp_compatibility'
+    assert result.should_use_legacy_fallback is True
     assert vector_calls == []
     assert db_client.collection_paths == []

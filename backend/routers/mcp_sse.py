@@ -35,6 +35,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.v17_default_read_rollout import V17ReadDecision
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -699,11 +700,12 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             query=query,
             limit=limit,
             db_client=db,
-            rollout_capabilities=v17_rollout.rollout_capabilities,
-            app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+            rollout_decision=v17_rollout,
         )
-        if v17_vector_results is not None:
-            return {"memories": v17_vector_results}
+        if v17_vector_results.read_decision == V17ReadDecision.USE_V17:
+            return {"memories": v17_vector_results.memories}
+        if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+            return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:

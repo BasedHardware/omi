@@ -164,6 +164,27 @@ This closes one Oracle P0-2 subpoint for the Omi chat vector fallback caller fam
 - Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
 
+### 2026-06-19 — MCP REST/SSE vector fallback explicit read-decision slice
+
+Implemented the next narrow Oracle P0-2 MCP fallback-caller slice after the Omi chat vector caller work, without changing the production rollout verdict:
+
+- Added `V17McpMemorySearchResult` in `backend/utils/mcp_memories.py` so the MCP hydrated vector adapter returns explicit `V17ReadDecision` semantics plus fallback reason instead of using `None` as an ambiguous downgrade signal.
+- Wired MCP REST `/v1/mcp/memories/search` and streamable HTTP/SSE `search_memories` to pass the persisted MCP rollout decision into the adapter and branch on `USE_V17` / `USE_LEGACY_SAFE` / `DENY_MEMORY` / `SHADOW_ONLY` before any legacy vector/default fallback.
+- Missing, malformed, no-grant, disabled, or shadow-only MCP rollout decisions now avoid V17 vector search and `users/{uid}/memory_items` reads and return an empty safe memory response instead of silently calling legacy `vector_db.find_similar_memories(...)` or the legacy default read fallback.
+- Enabled/granted MCP rollout continues using hydrated V17 vector search with default Archive unavailable; no Archive exposure was broadened.
+- Intentional legacy fallback is preserved only for an explicit `USE_LEGACY_SAFE` adapter classification.
+
+Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED import failure for missing `V17McpMemorySearchResult`, GREEN MCP adapter tests (`11 passed`), focused regression (`23 passed`), full `pytest tests/unit/test_v17_*.py -q` (`186 passed, 1 warning`), and async blocker scan exit 0 with pre-existing findings only. An additional attempted legacy MCP route test collection is blocked in this local environment by missing `fastapi`.
+
+This closes the Oracle P0-2 subpoint for MCP REST/SSE vector search fallback downgrade semantics. Remaining P0-2/P0 work:
+
+- MCP list (`GET /v1/mcp/memories`) is still legacy-only/not V17-default-read-wired; if it becomes a V17 default/list path, convert it through explicit decisions before rollout.
+- Continue converting developer list/category fallback semantics and any other fallback callers so only explicit `USE_LEGACY_SAFE` can downgrade to legacy.
+- Address P0-3 write/read split-brain before authoritative read cutover.
+- Make P0-4 vector freshness/purge fences mandatory and complete repair/stale-ID proof.
+- Complete shared `ns2`, third-party app/key/scope authorization, vector overfetch/budgets, central telemetry, and real cloud/Pinecone/Firestore/benchmark evidence.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0s and required real-service evidence are complete.
+
 ## Not-run / not-claimed caveats preserved
 
 - Oracle review has now run and is recorded here, but it blocks production rollout.

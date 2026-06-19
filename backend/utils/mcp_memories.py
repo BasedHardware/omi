@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
@@ -5,7 +6,9 @@ from config.v17_memory import V17Capabilities
 from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.v17_default_read_rollout import (
     V17DefaultReadRolloutDecision,
+    V17ReadDecision,
     build_v17_default_read_rollout_observability,
+    disabled_v17_default_read_rollout_decision,
     read_v17_default_read_rollout,
 )
 from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
@@ -29,6 +32,17 @@ ACTIVITY_PREFIXES = (
 
 
 V17McpDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
+
+
+@dataclass(frozen=True)
+class V17McpMemorySearchResult:
+    memories: list[dict]
+    read_decision: V17ReadDecision
+    fallback_reason: Optional[str] = None
+
+    @property
+    def should_use_legacy_fallback(self) -> bool:
+        return self.read_decision == V17ReadDecision.USE_LEGACY_SAFE
 
 
 def build_v17_mcp_default_memory_rollout_observability(
@@ -333,23 +347,46 @@ def search_v17_default_mcp_memories_vector(
     query: str,
     limit: int,
     db_client,
-    rollout_capabilities: Optional[V17Capabilities],
+    rollout_capabilities: Optional[V17Capabilities] = None,
     app_has_default_memory_grant: bool = True,
+    rollout_decision: Optional[V17McpDefaultMemoryRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
-) -> Optional[list[dict]]:
+) -> V17McpMemorySearchResult:
     """Search hydrated V17 vectors for the concrete MCP memory-search caller.
 
-    Returns `None` before vector lookup or `users/{uid}/memory_items` reads when
-    persisted V17 read rollout or the MCP default-memory grant is unavailable.
+    Returns an explicit read decision before vector lookup or
+    `users/{uid}/memory_items` reads. Missing/malformed/no-grant/disabled rollout
+    states are DENY_MEMORY/SHADOW_ONLY, not implicit legacy fallback; callers may
+    reach legacy only when the decision is explicitly USE_LEGACY_SAFE.
     Archive is deliberately default-disabled here; explicit Archive routes remain
     separate and capability-gated.
     """
 
-    if not rollout_capabilities or not rollout_capabilities.v17_reads_enabled:
-        return None
-    if not app_has_default_memory_grant:
-        return None
+    if rollout_decision is None:
+        if rollout_capabilities is None:
+            rollout_decision = disabled_v17_default_read_rollout_decision(
+                uid=uid,
+                source_path=f'users/{uid}/memory_control/state',
+                consumer='mcp',
+                reason='missing_rollout_state',
+            )
+        else:
+            rollout_decision = V17DefaultReadRolloutDecision(
+                uid=uid,
+                source_path=f'users/{uid}/memory_control/state',
+                consumer='mcp',
+                rollout_capabilities=rollout_capabilities,
+                app_has_default_memory_grant=app_has_default_memory_grant,
+                archive_capability=False,
+            )
+
+    if rollout_decision.read_decision != V17ReadDecision.USE_V17:
+        return V17McpMemorySearchResult(
+            memories=[],
+            read_decision=rollout_decision.read_decision,
+            fallback_reason=rollout_decision.fallback_reason,
+        )
 
     bounded_limit = max(1, min(limit, 20))
     policy = MemoryAccessPolicy(
@@ -388,4 +425,4 @@ def search_v17_default_mcp_memories_vector(
                 },
             }
         )
-    return formatted
+    return V17McpMemorySearchResult(memories=formatted, read_decision=V17ReadDecision.USE_V17)

@@ -29,6 +29,7 @@ from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
+from utils.memory.v17_default_read_rollout import V17ReadDecision
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -37,7 +38,6 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
     read_v17_mcp_default_memory_rollout,
-    search_v17_default_mcp_memories,
     search_v17_default_mcp_memories_vector,
 )
 import database.mcp_api_key as mcp_api_key_db
@@ -164,22 +164,12 @@ def search_memories(
         query=query,
         limit=limit,
         db_client=db,
-        rollout_capabilities=v17_rollout.rollout_capabilities,
-        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
+        rollout_decision=v17_rollout,
     )
-    if v17_vector_results is not None:
-        return v17_vector_results
-
-    v17_results = search_v17_default_mcp_memories(
-        uid=uid,
-        query=query,
-        limit=limit,
-        db_client=db,
-        rollout_capabilities=v17_rollout.rollout_capabilities,
-        app_has_default_memory_grant=v17_rollout.app_has_default_memory_grant,
-    )
-    if v17_results is not None:
-        return v17_results
+    if v17_vector_results.read_decision == V17ReadDecision.USE_V17:
+        return v17_vector_results.memories
+    if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        return []
 
     fetch_limit = min(limit * 3, 60)
     matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
