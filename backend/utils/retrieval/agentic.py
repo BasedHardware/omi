@@ -657,5 +657,11 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         traceback.print_exc()
         if callback_data is not None:
             callback_data['error'] = str(e)
+            # Ensure answer is always set so generate_stream can emit the done: line
+            # and the frontend receives clean text even when an exception cut the
+            # normal success path before line 644.
+            if 'answer' not in callback_data:
+                callback_data['answer'] = ''.join(full_response)
+                callback_data['memories_found'] = conversations_collected if conversations_collected else []
 
     yield None  # Signal completion
