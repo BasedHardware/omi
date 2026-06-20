@@ -6,15 +6,52 @@ import { ChatSessionsSidebar } from '../components/chat/ChatSessionsSidebar'
 import { useSessionChat } from '../hooks/useSessionChat'
 import omiMark from '../assets/omi-logo.png'
 
+const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
+
+/** Generate 2-3 follow-up suggestion chips from the last assistant reply. */
+async function fetchSuggestions(lastReply: string): Promise<string[]> {
+  try {
+    const token = await auth.currentUser?.getIdToken()
+    const prompt = `Given this AI assistant response, generate exactly 3 short follow-up questions a user might ask next. Each question must be under 8 words. Return only the 3 questions, one per line, no numbering, no quotes.\n\nResponse:\n${lastReply.slice(0, 400)}`
+    const res = await fetch(`${OMI_BASE}/v2/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ text: prompt })
+    })
+    if (!res.ok || !res.body) return []
+    let text = ''
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line || line.startsWith('done:')) continue
+        const c = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
+        if (!c.startsWith('think:')) text += c.replace(/__CRLF__/g, '\n')
+      }
+    }
+    return text.trim().split('\n').map((l) => l.trim().replace(/^[-•*\d.]+\s*/, '')).filter((l) => l.length > 0 && l.length < 80).slice(0, 3)
+  } catch {
+    return []
+  }
+}
+
 export function Chat(): React.JSX.Element {
   const [user, setUser] = useState<{ displayName?: string | null; email?: string | null } | null>(
     auth.currentUser
   )
   const [input, setInput] = useState('')
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<string[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const nearBottomRef = useRef(true)
+  const prevSendingRef = useRef(false)
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
 
@@ -34,6 +71,21 @@ export function Chat(): React.JSX.Element {
     if (activeSessionId) localStorage.setItem('omi.chat.activeSession', activeSessionId)
   }, [activeSessionId])
 
+  // Generate suggestions when streaming completes
+  useEffect(() => {
+    if (prevSendingRef.current && !sending) {
+      // Streaming just finished — generate follow-up suggestions from last reply
+      const last = history[history.length - 1]
+      if (last?.role === 'assistant' && last.content) {
+        void fetchSuggestions(last.content).then(setSuggestions)
+      }
+    }
+    prevSendingRef.current = sending
+  }, [sending, history])
+
+  // Clear suggestions when switching sessions
+  useEffect(() => { setSuggestions([]) }, [activeSessionId])
+
   // Auto-scroll on new messages
   useEffect(() => {
     if (nearBottomRef.current && scrollRef.current) {
@@ -47,12 +99,13 @@ export function Chat(): React.JSX.Element {
     nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
   }
 
-  const doSend = (): void => {
-    const text = input.trim()
-    if (!text || sending) return
+  const doSend = (text?: string): void => {
+    const t = (text ?? input).trim()
+    if (!t) return
     setInput('')
+    setSuggestions([])
     nearBottomRef.current = true
-    void send(text)
+    void send(t)
   }
 
   const newSession = (): void => {
@@ -63,9 +116,7 @@ export function Chat(): React.JSX.Element {
   }
 
   const handleAudio = (file: File): void => {
-    if (sending) return
     nearBottomRef.current = true
-    // Audio messages use text summary for now in session chat
     void send(`[Audio file: ${file.name}]`)
   }
 
@@ -104,7 +155,7 @@ export function Chat(): React.JSX.Element {
                   (prompt) => (
                     <button
                       key={prompt}
-                      onClick={() => { setInput(prompt); nearBottomRef.current = true; void send(prompt) }}
+                      onClick={() => { nearBottomRef.current = true; doSend(prompt) }}
                       className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-2 text-xs text-text-tertiary hover:border-white/15 hover:bg-white/[0.07] hover:text-text-secondary"
                     >
                       {prompt}
@@ -115,7 +166,13 @@ export function Chat(): React.JSX.Element {
             </div>
           ) : (
             <div className="mx-auto max-w-2xl">
-              <ChatMessages messages={history} sending={sending} variant="main" />
+              <ChatMessages
+                messages={history}
+                sending={sending}
+                variant="main"
+                suggestions={suggestions}
+                onSuggest={(t) => { doSend(t) }}
+              />
             </div>
           )}
         </div>
@@ -131,23 +188,22 @@ export function Chat(): React.JSX.Element {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleAudio(f); e.target.value = '' }}
             />
             <button
-              disabled={sending}
               onClick={() => fileRef.current?.click()}
               aria-label="Attach audio"
-              className="shrink-0 rounded-xl p-2 text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:opacity-40"
+              className="shrink-0 rounded-xl p-2 text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80"
             >
               <Paperclip className="h-4 w-4" />
             </button>
             <input
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(e) => { setInput(e.target.value); if (e.target.value) setSuggestions([]) }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend() } }}
               placeholder="Ask Omi…"
               className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
             />
             <button
-              disabled={sending || !input.trim()}
-              onClick={doSend}
+              disabled={!input.trim() && !sending}
+              onClick={() => doSend()}
               aria-label="Send"
               className="shrink-0 rounded-xl bg-white/[0.06] p-2.5 text-white/80 transition-colors hover:bg-white/[0.12] hover:text-white disabled:opacity-50"
             >

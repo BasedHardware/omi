@@ -137,15 +137,20 @@ function CopyMsgButton({ text }: { text: string }): React.JSX.Element {
  * Shared chat message list used by both the main window (Home) and the overlay.
  * Owns bubble styling (per `variant`), markdown rendering, and the smooth reveal
  * of the live assistant message. Callers provide their own scroll container.
+ * `suggestions` + `onSuggest` render contextual follow-up chips after the last AI reply.
  */
 export function ChatMessages({
   messages,
   sending,
-  variant
+  variant,
+  suggestions,
+  onSuggest
 }: {
   messages: ChatMsg[]
   sending: boolean
   variant: 'main' | 'overlay'
+  suggestions?: string[]
+  onSuggest?: (text: string) => void
 }): React.JSX.Element {
   const cls = BUBBLE[variant]
   return (
@@ -173,6 +178,20 @@ export function ChatMessages({
             )}
             {m.role === 'assistant' && m.citations && m.citations.length > 0 && (
               <CitationCards citations={m.citations} variant={variant} />
+            )}
+            {/* Suggestion chips: only on the last AI message, when not streaming, main variant */}
+            {isLast && m.role === 'assistant' && !sending && variant === 'main' && suggestions && suggestions.length > 0 && onSuggest && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => onSuggest(s)}
+                    className="rounded-2xl border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-xs text-white/55 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white/80"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )
