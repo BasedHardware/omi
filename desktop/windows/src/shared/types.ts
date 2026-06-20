@@ -41,6 +41,11 @@ export type TranscriptLine = {
   speaker?: string
   text: string
   interim?: boolean
+  speakerId?: number
+  isUser?: boolean
+  personId?: string
+  start?: number
+  end?: number
 }
 
 export type ConversationPayload = {
@@ -183,6 +188,19 @@ export type LocalConversation = {
 }
 
 export type ListenSource = 'mic' | 'system'
+export type TranscriptionBackend = 'omi' | 'local-parakeet'
+export type SttMode = 'auto' | 'cloud' | 'local-parakeet'
+
+export type LocalSttStatus = {
+  backend: 'parakeet'
+  configuredUrl: string
+  healthUrl: string
+  healthy: boolean
+  available: boolean
+  nvidiaAvailable: boolean | null
+  reason?: string
+  checkedAt: number
+}
 
 export type ListenStartArgs = {
   sessionId: string
@@ -191,10 +209,12 @@ export type ListenStartArgs = {
   token: string
   /** BCP-47-ish language code for transcription (e.g. 'en', 'es'). */
   language: string
+  /** 'auto' prefers local Parakeet only when the runtime is healthy and supported. */
+  sttMode?: SttMode
 }
 
 export type ListenMessage =
-  | { sessionId: string; kind: 'connected' }
+  | { sessionId: string; kind: 'connected'; backend: TranscriptionBackend }
   | { sessionId: string; kind: 'segments'; segments: BackendSegment[] }
   | { sessionId: string; kind: 'event'; event: ListenEvent }
   | { sessionId: string; kind: 'error'; message: string; fatal: boolean }
@@ -318,6 +338,8 @@ export type OmiBridgeApi = {
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  /** Probe the local Parakeet STT runtime used for on-device transcription. */
+  localSttStatus: () => Promise<LocalSttStatus>
   observabilityCapture: (event: ObservabilityEvent) => void
   observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) => void
   localAgentStatus: () => Promise<LocalAgentStatus>
