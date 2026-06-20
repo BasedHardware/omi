@@ -35,6 +35,7 @@ import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerMcpKeyHandlers } from './ipc/mcpKey'
 import { registerLocalAgentHandlers } from './ipc/localAgent'
 import { registerPiChatHandlers } from './ipc/piChat'
+import { registerClaudeAcpHandlers } from './ipc/claudeAcp'
 import { registerByokHandlers } from './ipc/byok'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -49,6 +50,7 @@ import {
   initMainObservability,
   registerObservabilityIpc
 } from './observability'
+import { startWindowsUpdater } from './updater'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
 // telemetry. The bench runner overrides OMI_PERF_LOG to point at .bench/.
@@ -312,6 +314,7 @@ app.whenReady().then(async () => {
   registerMcpKeyHandlers()
   registerLocalAgentHandlers()
   registerPiChatHandlers()
+  registerClaudeAcpHandlers()
   registerByokHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
@@ -366,6 +369,7 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    startWindowsUpdater()
   })
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
