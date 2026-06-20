@@ -3,8 +3,10 @@ import {
   AlertCircle,
   Check,
   Cloud,
+  Copy,
   Database,
   Download,
+  ExternalLink,
   FileText,
   FolderSearch,
   LayoutGrid,
@@ -29,6 +31,12 @@ import { runGoogleSync } from '../lib/googleSync'
 import { fetchAllMemories } from '../lib/memoriesBulk'
 import { buildLocalGraph } from '../lib/kgSynthesis'
 import { useMemories, type Memory } from '../hooks/useMemories'
+import {
+  memoryImportApp,
+  readMemoryImportStats,
+  recordMemoryImport,
+  type MemoryImportStatsBySource
+} from '../lib/memoryImportFlow'
 import type {
   ExportMemory,
   FileIndexStatus,
@@ -333,11 +341,17 @@ export function Apps(): React.JSX.Element {
   const [extracting, setExtracting] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importMessage, setImportMessage] = useState<StatusMessage>(null)
+  const [importStats, setImportStats] = useState<MemoryImportStatsBySource>(() =>
+    readMemoryImportStats()
+  )
 
   const [notionToken, setNotionToken] = useState('')
   const [notionPage, setNotionPage] = useState('')
   const [exporting, setExporting] = useState<ExportTarget | null>(null)
   const [exportMessage, setExportMessage] = useState<StatusMessage>(null)
+
+  const selectedImportApp = memoryImportApp(source)
+  const selectedImportStats = importStats[source]
 
   const load = async (): Promise<void> => {
     setError(null)
@@ -682,6 +696,37 @@ export function Apps(): React.JSX.Element {
     }
   }
 
+  const selectImportSource = (nextSource: MemorySource): void => {
+    if (extracting || importing) return
+    setSource(nextSource)
+    setParsed(null)
+    setProfile('')
+    setImportMessage(null)
+  }
+
+  const copyImportPrompt = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(selectedImportApp.prompt)
+      setImportMessage({
+        tone: 'success',
+        text: `Copied ${selectedImportApp.label} prompt. Paste the response below when it replies.`
+      })
+    } catch (copyError) {
+      setImportMessage({
+        tone: 'error',
+        text: `Could not copy prompt: ${errorMessage(copyError)}`
+      })
+    }
+  }
+
+  const openImportApp = (): void => {
+    window.open(selectedImportApp.url, '_blank', 'noopener,noreferrer')
+    setImportMessage({
+      tone: 'info',
+      text: `Opened ${selectedImportApp.label}. Paste the copied prompt there, then paste the response below.`
+    })
+  }
+
   const extractDump = async (): Promise<void> => {
     if (extracting) return
     setExtracting(true)
@@ -727,6 +772,7 @@ export function Apps(): React.JSX.Element {
 
   const importMemories = async (): Promise<void> => {
     if (!parsed || parsed.length === 0 || importing) return
+    const importSource = source
     setImporting(true)
     setImportMessage({
       tone: 'info',
@@ -749,7 +795,10 @@ export function Apps(): React.JSX.Element {
       tone: failed ? (ok ? 'warn' : 'error') : 'success',
       text: `Imported ${pluralize(ok, 'memory', 'memories')}${failed ? `, ${pluralize(failed, 'failure')}${firstError ? `: ${firstError}` : ''}` : '.'}`
     })
-    if (ok > 0) await refreshMemories()
+    if (ok > 0) {
+      setImportStats(recordMemoryImport(importSource, ok))
+      await refreshMemories()
+    }
     if (!failed) {
       setDump('')
       setParsed(null)
@@ -886,7 +935,8 @@ export function Apps(): React.JSX.Element {
       : (fileIndex?.filesIndexed ?? 0) > 0
         ? 'connected'
         : 'optional'
-  const importCardStatus: StatusKind = extracting || importing ? 'working' : 'optional'
+  const importCardStatus: StatusKind =
+    extracting || importing ? 'working' : selectedImportStats ? 'connected' : 'optional'
   const exportCardStatus: StatusKind = memoriesLoading
     ? 'loading'
     : exporting
@@ -1082,24 +1132,59 @@ export function Apps(): React.JSX.Element {
                 statusText={
                   parsed && parsed.length > 0
                     ? `${pluralize(parsed.length, 'memory', 'memories')} ready to import.`
-                    : 'Optional one-time import from ChatGPT or Claude.'
+                    : selectedImportStats
+                      ? `${selectedImportApp.label}: imported ${pluralize(selectedImportStats.count, 'memory', 'memories')} on ${formatDateTime(selectedImportStats.importedAt)}.`
+                      : `Copy a prompt for ${selectedImportApp.label}, then paste the response here.`
                 }
               >
                 <InlineStatus message={importMessage} />
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-white/45">Source</span>
-                  {(['chatgpt', 'claude'] as const).map((nextSource) => (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-white/45">Source</span>
+                    {(['chatgpt', 'claude'] as const).map((nextSource) => (
+                      <button
+                        key={nextSource}
+                        onClick={() => selectImportSource(nextSource)}
+                        disabled={extracting || importing}
+                        className={`rounded-xl px-3 py-1.5 text-xs disabled:opacity-50 ${
+                          source === nextSource ? 'btn-primary' : 'btn-ghost'
+                        }`}
+                      >
+                        {nextSource === 'chatgpt' ? 'ChatGPT' : 'Claude'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      key={nextSource}
-                      onClick={() => setSource(nextSource)}
-                      className={`rounded-xl px-3 py-1.5 text-xs ${
-                        source === nextSource ? 'btn-primary' : 'btn-ghost'
-                      }`}
+                      onClick={copyImportPrompt}
+                      disabled={extracting || importing}
+                      className="btn-ghost inline-flex items-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
                     >
-                      {nextSource === 'chatgpt' ? 'ChatGPT' : 'Claude'}
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy prompt
                     </button>
-                  ))}
+                    <button
+                      onClick={openImportApp}
+                      disabled={extracting || importing}
+                      className="btn-ghost inline-flex items-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      Open {selectedImportApp.label}
+                    </button>
+                  </div>
                 </div>
+                {selectedImportStats && (
+                  <div className="grid grid-cols-2 gap-2 text-xs text-white/50">
+                    <div className="glass-subtle px-3 py-2">
+                      <span className="block text-white/35">Imported</span>
+                      {pluralize(selectedImportStats.count, 'memory', 'memories')}
+                    </div>
+                    <div className="glass-subtle px-3 py-2">
+                      <span className="block text-white/35">Last import</span>
+                      {formatDateTime(selectedImportStats.importedAt)}
+                    </div>
+                  </div>
+                )}
                 <textarea
                   value={dump}
                   onChange={(e) => {
@@ -1109,7 +1194,7 @@ export function Apps(): React.JSX.Element {
                     setImportMessage(null)
                   }}
                   rows={5}
-                  placeholder="Paste the assistant's memory reply here..."
+                  placeholder={selectedImportApp.responsePlaceholder}
                   className="input-field resize-none"
                 />
                 <MemoryPreview profile={profile} memories={parsed} />
