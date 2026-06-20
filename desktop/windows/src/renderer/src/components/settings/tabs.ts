@@ -9,11 +9,13 @@ import {
   CircleUserRound,
   SlidersHorizontal,
   Brain,
+  KeyRound,
   type LucideIcon
 } from 'lucide-react'
 
 export type SettingsTabId =
   | 'ai-chat'
+  | 'byok'
   | 'shortcuts'
   | 'transcription'
   | 'plan-usage'
@@ -26,6 +28,7 @@ export type SettingsTabId =
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon }[] = [
   { id: 'ai-chat', label: 'AI Chat', Icon: BotMessageSquare },
+  { id: 'byok', label: 'BYOK', Icon: KeyRound },
   { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
   { id: 'transcription', label: 'Transcription', Icon: AudioLines },
   { id: 'plan-usage', label: 'Plan and Usage', Icon: CreditCard },
