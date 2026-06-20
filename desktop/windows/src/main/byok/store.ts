@@ -9,8 +9,15 @@ import type {
   ByokValidationResult
 } from '../../shared/types'
 
-export const BYOK_PROVIDERS = ['openai', 'anthropic', 'gemini', 'deepgram'] as const
-export const BYOK_CHAT_PROVIDERS = ['openai', 'anthropic', 'gemini'] as const
+export const BYOK_PROVIDERS = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'deepgram',
+  'openrouter',
+  'elevenlabs'
+] as const
+export const BYOK_CHAT_PROVIDERS = ['openai', 'anthropic', 'gemini', 'openrouter'] as const
 
 type StoredByokProvider = {
   key: string
@@ -147,14 +154,16 @@ function providerStatus(
 
 export function getByokStatus(): ByokStatus {
   const settings = loadSettings()
+  const providers = Object.fromEntries(
+    BYOK_PROVIDERS.map((provider) => [
+      provider,
+      providerStatus(provider, settings.providers[provider])
+    ])
+  ) as Record<ByokProvider, ByokProviderStatus>
+
   return {
     activeChatProvider: settings.activeChatProvider,
-    providers: {
-      openai: providerStatus('openai', settings.providers.openai),
-      anthropic: providerStatus('anthropic', settings.providers.anthropic),
-      gemini: providerStatus('gemini', settings.providers.gemini),
-      deepgram: providerStatus('deepgram', settings.providers.deepgram)
-    }
+    providers
   }
 }
 
