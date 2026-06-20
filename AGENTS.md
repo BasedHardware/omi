@@ -129,6 +129,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
+- Windows desktop env: `OMI_CLAUDE_ACP_COMMAND`/`OMI_CLAUDE_ACP_ARGS` select the local Claude account command, `VITE_OMI_REALTIME_VOICE_URL` enables realtime voice relay readiness, and `OMI_WINDOWS_UPDATE_FEED_URL` + `OMI_UPDATES_ENABLED=1` enable dev update checks.
 - For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
 
 #### Named Test Bundles
