@@ -70,6 +70,7 @@ type Phase =
   | 'connected'
   | 'disconnected'
   | 'cancelled'
+  | 'noneFound'
   | 'error'
   | 'unavailable'
 
@@ -89,10 +90,14 @@ export function DevicesTab(): React.JSX.Element {
   // Keep the live BluetoothDevice object in a ref — not state — so event
   // listener registration/removal doesn't cause extra renders.
   const deviceRef = useRef<BleDevice | null>(null)
+  // Set to true by main before calling cb('') when the scan found zero devices,
+  // so the NotFoundError catch can show "no devices found" vs "user cancelled".
+  const noDevicesFoundRef = useRef(false)
 
   useEffect(() => {
     setBtAvailable(typeof navigator !== 'undefined' && 'bluetooth' in navigator)
     setLastDevice(loadLastDevice())
+    return window.omi.onBluetoothNoDevices(() => { noDevicesFoundRef.current = true })
   }, [])
 
   const onDisconnected = useCallback(() => {
@@ -114,6 +119,7 @@ export function DevicesTab(): React.JSX.Element {
 
   const handleScan = async (): Promise<void> => {
     if (!btAvailable) return
+    noDevicesFoundRef.current = false
     setPhase('scanning')
     resetDeviceInfo()
 
@@ -187,7 +193,12 @@ export function DevicesTab(): React.JSX.Element {
     } catch (e: unknown) {
       const err = e as Error
       if (err.name === 'NotFoundError' || err.message?.includes('cancel')) {
-        setPhase('cancelled')
+        if (noDevicesFoundRef.current) {
+          setPhase('noneFound')
+        } else {
+          setPhase('cancelled')
+        }
+        noDevicesFoundRef.current = false
       } else if (err.name === 'NotSupportedError') {
         setPhase('unavailable')
         setUnavailableReason('Bluetooth not supported on this system')
@@ -214,6 +225,8 @@ export function DevicesTab(): React.JSX.Element {
     if (phase === 'connected') return `Connected to ${deviceName}`
     if (phase === 'disconnected') return `Disconnected from ${deviceName}. Scan to reconnect.`
     if (phase === 'cancelled') return 'Scan cancelled.'
+    if (phase === 'noneFound')
+      return 'No Bluetooth devices found nearby. Make sure your device is powered on and in pairing mode, then try again.'
     if (phase === 'error') return `Error: ${errorMsg}`
     if (phase === 'unavailable') return `Unavailable: ${unavailableReason}`
     return ''
@@ -271,7 +284,7 @@ export function DevicesTab(): React.JSX.Element {
               >
                 {isBusy
                   ? 'Scanning…'
-                  : isActive || phase === 'disconnected' || phase === 'cancelled'
+                  : isActive || phase === 'disconnected' || phase === 'cancelled' || phase === 'noneFound'
                     ? 'Scan again'
                     : 'Scan'}
               </button>

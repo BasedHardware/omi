@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Copy, Check } from 'lucide-react'
 import type { ChatMsg, ChatCitation } from '../../hooks/useChat'
 import { Markdown } from '../Markdown'
 
@@ -55,24 +56,55 @@ function CitationCards({
   citations: ChatCitation[]
   variant: 'main' | 'overlay'
 }): React.JSX.Element {
+  const cardClass =
+    'flex w-full items-center gap-2.5 rounded-lg border border-white/[0.12] bg-white/[0.06] px-3 py-2.5 text-left transition-colors hover:border-white/20 hover:bg-white/[0.10]'
   return (
-    <div className={`mt-2 space-y-1.5 ${variant === 'overlay' ? 'max-w-[80%]' : 'max-w-[85%]'}`}>
-      <p className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-white/35">
+    <div className={`mt-2.5 space-y-1.5 ${variant === 'overlay' ? 'max-w-[80%]' : 'max-w-[85%]'}`}>
+      <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+        <span>📎</span>
         <span>Sources</span>
       </p>
-      {citations.map((c) => (
-        <Link
-          key={c.id}
-          to={`/conversations/${c.id}`}
-          className="flex items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-left transition-colors hover:bg-white/[0.08]"
-        >
-          {c.emoji && <span className="text-base leading-none">{c.emoji}</span>}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-medium leading-none text-white/80">{c.title}</p>
-          </div>
-          <span className="shrink-0 text-[10px] text-white/25">›</span>
-        </Link>
-      ))}
+      {citations.map((c) => {
+        const emoji = c.emoji ? (
+          <span className="text-base leading-none">{c.emoji}</span>
+        ) : (
+          <span className="text-sm leading-none text-white/30">💬</span>
+        )
+        const body = (
+          <>
+            {emoji}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-white/85">{c.title}</p>
+              {c.preview && (
+                <p className="mt-0.5 line-clamp-1 text-[10px] text-white/40">{c.preview}</p>
+              )}
+              {c.created_at && (
+                <p className="mt-0.5 text-[10px] text-white/30">
+                  {new Date(c.created_at).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+            <span className="shrink-0 rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/40">
+              Open
+            </span>
+          </>
+        )
+        return variant === 'overlay' ? (
+          // In the overlay, <Link> would navigate inside the overlay window (broken).
+          // Instead, call openMainRoute() which hides the overlay and navigates the main window.
+          <button
+            key={c.id}
+            onClick={() => window.omiOverlay?.openMainRoute(`/conversations/${c.id}`)}
+            className={cardClass}
+          >
+            {body}
+          </button>
+        ) : (
+          <Link key={c.id} to={`/conversations/${c.id}`} className={cardClass}>
+            {body}
+          </Link>
+        )
+      })}
     </div>
   )
 }
@@ -87,10 +119,16 @@ function CopyMsgButton({ text }: { text: string }): React.JSX.Element {
           setTimeout(() => setCopied(false), 1500)
         })
       }}
-      className="mt-0.5 self-start rounded px-1.5 py-0.5 text-[10px] text-white/25 opacity-0 transition-all group-hover:opacity-100 hover:bg-white/10 hover:text-white/60"
+      aria-label="Copy message"
       title="Copy message"
+      className="mt-1.5 flex items-center gap-1 self-start rounded-md border border-white/[0.10] bg-white/[0.04] px-2 py-1 text-[11px] text-white/45 transition-all hover:border-white/20 hover:bg-white/[0.09] hover:text-white/80"
     >
-      {copied ? '✓ Copied' : 'Copy'}
+      {copied ? (
+        <Check className="h-3 w-3 text-green-400" strokeWidth={2.5} />
+      ) : (
+        <Copy className="h-3 w-3" strokeWidth={2} />
+      )}
+      {copied ? 'Copied' : 'Copy'}
     </button>
   )
 }

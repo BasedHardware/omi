@@ -18,14 +18,32 @@ function DragHandle(): React.JSX.Element {
   )
 }
 
-/** Active-agent indicator — a single "Omi" pill matching the macOS agent pills
- *  row. No real agent VM backend on Windows, so this is the default agent only. */
-function OmiPill(): React.JSX.Element {
+type PillState = 'idle' | 'recording' | 'finalizing' | 'sending'
+
+/** Active-agent indicator — mirrors macOS agent pills row. State changes to
+ *  reflect recording / transcribing / thinking so the user always knows what Omi is doing. */
+function OmiPill({ state }: { state: PillState }): React.JSX.Element {
+  const dotClass =
+    state === 'idle'
+      ? 'bg-[#4ade80]'
+      : state === 'recording'
+        ? 'animate-pulse bg-red-400'
+        : state === 'finalizing'
+          ? 'animate-pulse bg-yellow-400'
+          : 'animate-pulse bg-blue-400'
+  const label =
+    state === 'idle'
+      ? 'Omi'
+      : state === 'recording'
+        ? 'Listening…'
+        : state === 'finalizing'
+          ? 'Transcribing…'
+          : 'Thinking…'
   return (
     <div className="overlay-no-drag flex items-center pb-0.5">
-      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] px-2 py-0.5">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" />
-        <span className="text-[10px] font-medium leading-none text-neutral-400">Omi</span>
+      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] px-2 py-0.5 transition-all duration-200">
+        <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${dotClass}`} />
+        <span className="text-[10px] font-medium leading-none text-neutral-400">{label}</span>
       </div>
     </div>
   )
@@ -211,7 +229,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             last flex child) gets shrunk/clipped and looks like it disappears after a
             send. Pinning it means the history above shrinks/scrolls instead. */}
         <div className="overlay-no-drag flex shrink-0 flex-col gap-2">
-          <OmiPill />
+          <OmiPill
+            state={ptt.recording ? 'recording' : ptt.finalizing ? 'finalizing' : sending ? 'sending' : 'idle'}
+          />
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
@@ -229,7 +249,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
               }}
               onKeyUp={(e) => ptt.onKeyUp(e)}
               placeholder="Ask Omi…  ·  hold Space to talk"
-              className="max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500"
+              className={`max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500 transition-shadow duration-150${ptt.recording ? ' ring-1 ring-red-500/50' : ''}`}
             />
             <button
               onClick={submit}
@@ -245,12 +265,18 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             // waveform animates and the recognized transcript renders into the
             // textarea above. On release the strip disappears (no "Transcribing…");
             // the transcript keeps filling the box and auto-sends when settled.
-            <div className="flex items-center gap-3 rounded-xl bg-neutral-800/50 px-3 py-1.5">
-              <span className="shrink-0 text-xs font-medium text-neutral-300">Listening…</span>
+            <div className="flex items-center gap-3 rounded-xl bg-red-950/40 border border-red-500/20 px-3 py-1.5">
+              <span className="shrink-0 text-xs font-medium text-red-300">Listening…</span>
               <Waveform analyserRef={ptt.analyserRef} />
               <span className="shrink-0 text-[10px] text-neutral-500">
                 release to send · Esc cancels
               </span>
+            </div>
+          )}
+          {ptt.finalizing && !ptt.recording && (
+            <div className="flex items-center gap-2.5 rounded-xl bg-neutral-800/50 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
+              <span className="text-xs font-medium text-neutral-400">Transcribing…</span>
             </div>
           )}
         </div>
