@@ -1,21 +1,33 @@
+import type { LocalAgentChatToolName, LocalAgentToolArguments } from '../../../shared/types'
+
 // One JSON object the model emits per turn of the bounded tool loop.
 export type ToolAction =
-  | { action: 'query_kg'; input: string }
-  | { action: 'search_files'; input: string; fileType?: string }
-  | { action: 'search_memories'; input: string }
-  | { action: 'execute_sql'; input: string }
+  | { action: LocalAgentChatToolName; input: LocalAgentToolArguments }
   | { action: 'final' }
+
+export const CHAT_LOCAL_TOOL_NAMES = [
+  'get_local_status',
+  'search_screen_history',
+  'execute_sql',
+  'get_screenshot'
+] as const satisfies readonly LocalAgentChatToolName[]
+
+const CHAT_LOCAL_TOOL_SET = new Set<string>(CHAT_LOCAL_TOOL_NAMES)
 
 // Compact schema description handed to the chat agent so it can write its own
 // read-only SELECTs (mirrors macOS's execute_sql tool). Kept terse on purpose.
 export const LOCAL_DB_SCHEMA = [
   'Tables you can SELECT from (read-only):',
+  '- rewind_frames(id, ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)',
+  '  — local Rewind screen-history frames; ts is epoch ms; use substr(ocr_text, 1, 500)',
+  '  for previews and COUNT(*) for counts instead of selecting full OCR bodies.',
   '- local_kg_nodes(id, label, node_type, summary, source, created_at) — node_type in',
-  '  (project, person, org, interest, technology, app, file_group)',
+  '  (card, project, person, org, interest, technology, app, file_group)',
   '- local_kg_edges(id, source_id, target_id, label) — relationships between node ids',
   '- indexed_files(filename, folder, file_type, extension, modified_at) — file_type in',
   '  (code, document, image, media, archive, application)',
-  '- local_conversation(id, transcript, started_at, kind) — past chats/recordings'
+  '- local_conversation(id, transcript, started_at, ended_at, kind, title) — past chats/recordings;',
+  '  use COUNT(*) for count questions and substr(transcript, 1, 500) for previews.'
 ].join('\n')
 
 // Extract the first balanced JSON object from arbitrary model text. Tolerates
@@ -58,16 +70,56 @@ export function parseAction(text: string): ToolAction | null {
   }
   const o = obj as { action?: unknown; input?: unknown; fileType?: unknown }
   if (o.action === 'final') return { action: 'final' }
-  const input = typeof o.input === 'string' ? o.input.trim() : ''
-  if (o.action === 'query_kg' && input) return { action: 'query_kg', input }
-  if (o.action === 'search_memories' && input) return { action: 'search_memories', input }
-  if (o.action === 'execute_sql' && input) return { action: 'execute_sql', input }
-  if (o.action === 'search_files' && input) {
-    return typeof o.fileType === 'string'
-      ? { action: 'search_files', input, fileType: o.fileType }
-      : { action: 'search_files', input }
+  if (typeof o.action !== 'string' || !CHAT_LOCAL_TOOL_SET.has(o.action)) return null
+  const action = o.action as LocalAgentChatToolName
+  const input = normalizeToolInput(action, o.input)
+  if (!input) return null
+  return { action, input }
+}
+
+function normalizeToolInput(
+  action: LocalAgentChatToolName,
+  input: unknown
+): LocalAgentToolArguments | null {
+  if (action === 'get_local_status') return {}
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const args = input as LocalAgentToolArguments
+    if (action === 'execute_sql') {
+      return typeof args.query === 'string' && args.query.trim()
+        ? { ...args, query: args.query.trim() }
+        : null
+    }
+    if (action === 'search_screen_history') {
+      return typeof args.query === 'string' && args.query.trim()
+        ? { ...args, query: args.query.trim() }
+        : null
+    }
+    if (action === 'get_screenshot') {
+      const id = numericId(args.screenshot_id ?? args.id)
+      return id == null ? null : { ...args, screenshot_id: id }
+    }
+  }
+  if (action === 'execute_sql' && typeof input === 'string' && input.trim()) {
+    return { query: input.trim() }
+  }
+  if (action === 'search_screen_history' && typeof input === 'string' && input.trim()) {
+    return { query: input.trim() }
+  }
+  if (action === 'get_screenshot') {
+    const id = numericId(input)
+    if (id != null) return { screenshot_id: id }
   }
   return null
+}
+
+function numericId(value: unknown): number | null {
+  const parsed =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim()
+        ? Number(value.trim())
+        : NaN
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
 export type ContextSection = { heading: string; items: string[] }

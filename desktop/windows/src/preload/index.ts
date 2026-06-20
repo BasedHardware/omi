@@ -17,7 +17,9 @@ import type {
   InsightPayload,
   AutomationPlan,
   StepResult,
-  McpKeyRecord
+  McpKeyRecord,
+  LocalAgentChatToolName,
+  LocalAgentToolArguments
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -69,6 +71,8 @@ const omi: OmiBridgeApi = {
   kgQueryNodes: (q, limit?) => ipcRenderer.invoke('kg:queryNodes', q, limit),
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
+  localAgentChatTool: (name: LocalAgentChatToolName, args?: LocalAgentToolArguments) =>
+    ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
