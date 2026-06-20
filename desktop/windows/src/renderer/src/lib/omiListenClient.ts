@@ -1,6 +1,7 @@
 import { auth } from './firebase'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
+import { audioAnalyser } from './audioAnalyser'
 
 export type OmiListenCallbacks = {
   /** Fires once when the v4/listen WS reaches OPEN. */
@@ -71,8 +72,12 @@ export async function startOmiListen(
 
   const audioCtx = new AudioContext({ sampleRate: 16000 })
   const node = audioCtx.createMediaStreamSource(stream)
+  const analyser = audioCtx.createAnalyser()
+  analyser.fftSize = 32
   const processor = audioCtx.createScriptProcessor(4096, 1, 1)
-  node.connect(processor)
+  node.connect(analyser)
+  analyser.connect(processor)
+  audioAnalyser.set(analyser)
 
   let stopped = false
   let connected = false
@@ -112,6 +117,7 @@ export async function startOmiListen(
     })
   } catch (e) {
     unsub()
+    audioAnalyser.set(null)
     try {
       processor.disconnect()
     } catch {
@@ -152,6 +158,7 @@ export async function startOmiListen(
     stop: (): void => {
       stopped = true
       unsub()
+      audioAnalyser.set(null)
       try {
         processor.disconnect()
       } catch {
