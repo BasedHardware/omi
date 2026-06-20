@@ -263,7 +263,6 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       ])
 
       const contextParts = [localContext, screenContext].filter(Boolean)
-      const t1 = performance.now()
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
@@ -273,6 +272,35 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         body: JSON.stringify({ text: textToSend })
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+
+      // Parse the done: payload for citation metadata only — the text field is
+      // intentionally ignored. Streaming data: chunks are decoded by the browser's
+      // native UTF-8 layer and always carry correct emoji; replacing with the
+      // base64-decoded text caused garbling on some builds.
+      let citationsFromDone: ChatCitation[] = []
+      const parseDone = (line: string): void => {
+        try {
+          const b64 = line.slice('done:'.length).trim()
+          if (!b64) return
+          const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))
+          const json = JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>
+          const list = (json.memories ?? json.citations ?? json.sources ?? []) as unknown[]
+          citationsFromDone = (Array.isArray(list) ? list : [])
+            .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
+            .map((m) => {
+              const structured = m.structured as Record<string, unknown> | undefined
+              const id = (m.id ?? m.memory_id ?? m.conversation_id ?? '') as string
+              const rawTitle = (m.title ?? structured?.title ?? null) as string | null
+              const title = rawTitle?.trim() || 'Conversation source'
+              const emoji = (m.emoji ?? structured?.emoji ?? undefined) as string | undefined
+              const created_at = (m.created_at ?? undefined) as string | undefined
+              const rawPreview = (structured?.overview ?? m.overview ?? m.text ?? m.content ?? null) as string | null
+              const preview = rawPreview?.trim() ? rawPreview.trim().slice(0, 120) : undefined
+              return { id, title, emoji: emoji || undefined, created_at, preview }
+            })
+            .filter((c) => !!c.id)
+        } catch { /* malformed payload — citations stay empty */ }
+      }
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
@@ -284,7 +312,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
-          if (!line || line.startsWith('done:') || line.startsWith('think:')) continue
+          if (!line || line.startsWith('think:')) continue
+          if (line.startsWith('done:')) { parseDone(line); continue }
           const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
           if (content.startsWith('think:')) continue
           const chunk = content.replace(/__CRLF__/g, '\n')
@@ -293,6 +322,11 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           setHistory((h) => { const next = [...h]; next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }; return next })
         }
         if (Date.now() - lastPersist > 1500) { lastPersist = Date.now(); void persistChat(buildThread(assistantText)) }
+      }
+      // Tail flush — done: is usually the last line with no trailing \n.
+      if (buffer.startsWith('done:')) parseDone(buffer)
+      if (citationsFromDone.length > 0) {
+        setHistory((h) => { const next = [...h]; next[next.length - 1] = { ...next[next.length - 1], citations: citationsFromDone }; return next })
       }
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
