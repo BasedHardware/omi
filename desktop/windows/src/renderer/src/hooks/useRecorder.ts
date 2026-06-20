@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { useRecording } from './useRecording'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import { invalidateConversationsCache, refreshCloudConversations } from '../lib/pageCache'
-import type { CaptureSource, TranscriptLine } from '../../../shared/types'
+import { getPreferences } from '../lib/preferences'
+import { uploadConversationFromSegments } from '../lib/localSttUpload'
+import type { CaptureSource, TranscriptLine, TranscriptionBackend } from '../../../shared/types'
 
 function linesToString(lines: TranscriptLine[], interim: string): string {
   const parts = lines.map((l) => (l.speaker ? `${l.speaker}: ${l.text}` : l.text))
@@ -39,9 +41,9 @@ export type UseRecorder = {
   systemLines: TranscriptLine[]
   systemInterim: string
   /** Which backend is driving the mic (and system) session, for debug/UI hints.
-   * Always 'omi' once connected (the only transcription backend). */
-  micBackend: 'omi' | null
-  systemBackend: 'omi' | null
+   * 'omi' for hosted /v4/listen or 'local-parakeet' for local STT. */
+  micBackend: TranscriptionBackend | null
+  systemBackend: TranscriptionBackend | null
   screenStream: MediaStream | null
   videoRef: React.RefObject<HTMLVideoElement | null>
   /** Begin a recording session. Pass `system: true` to also transcribe loopback. */
@@ -59,11 +61,15 @@ export function useRecorder(): UseRecorder {
   const [systemLines, setSystemLines] = useState<TranscriptLine[]>([])
   const [systemInterim, setSystemInterim] = useState('')
   const [hasSystem, setHasSystem] = useState(false)
-  const [micBackend, setMicBackend] = useState<'omi' | null>(null)
-  const [systemBackend, setSystemBackend] = useState<'omi' | null>(null)
+  const [micBackend, setMicBackend] = useState<TranscriptionBackend | null>(null)
+  const [systemBackend, setSystemBackend] = useState<TranscriptionBackend | null>(null)
   const [saving, setSaving] = useState(false)
   const micRef = useRef<TranscriptionHandle | null>(null)
   const systemRef = useRef<TranscriptionHandle | null>(null)
+  const micLinesRef = useRef<TranscriptLine[]>([])
+  const systemLinesRef = useRef<TranscriptLine[]>([])
+  const micBackendRef = useRef<TranscriptionBackend | null>(null)
+  const systemBackendRef = useRef<TranscriptionBackend | null>(null)
 
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -91,32 +97,44 @@ export function useRecorder(): UseRecorder {
     setSystemInterim('')
     setMicBackend(null)
     setSystemBackend(null)
+    micLinesRef.current = []
+    systemLinesRef.current = []
+    micBackendRef.current = null
+    systemBackendRef.current = null
     setHasSystem(withSystem)
     try {
       micRef.current = await startTranscription('mic', {
         onLine: (line) => {
+          micLinesRef.current = [...micLinesRef.current, line]
           setMicLines((prev) => [...prev, line])
           setMicInterim('')
         },
         onInterim: setMicInterim,
-        onBackend: setMicBackend,
+        onBackend: (backend) => {
+          micBackendRef.current = backend
+          setMicBackend(backend)
+        },
         onError: (e) => console.error('Transcription (mic):', e)
       })
       if (withSystem) {
         systemRef.current = await startTranscription('system', {
           onLine: (line) => {
+            systemLinesRef.current = [...systemLinesRef.current, line]
             setSystemLines((prev) => [...prev, line])
             setSystemInterim('')
           },
           onInterim: setSystemInterim,
-          onBackend: setSystemBackend,
+          onBackend: (backend) => {
+            systemBackendRef.current = backend
+            setSystemBackend(backend)
+          },
           onError: (e) => console.error('Transcription (system):', e)
         })
       }
     } catch (e) {
-      micRef.current?.stop()
+      void micRef.current?.stop()
       micRef.current = null
-      systemRef.current?.stop()
+      void systemRef.current?.stop()
       systemRef.current = null
       const err = e as Error
       const hint =
@@ -167,9 +185,9 @@ export function useRecorder(): UseRecorder {
   }
 
   const stop = async (): Promise<void> => {
-    micRef.current?.stop()
+    await micRef.current?.stop()
     micRef.current = null
-    systemRef.current?.stop()
+    await systemRef.current?.stop()
     systemRef.current = null
     screenStream?.getTracks().forEach((t) => t.stop())
     setScreenStream(null)
@@ -177,6 +195,31 @@ export function useRecorder(): UseRecorder {
 
     const session = stopSession()
     if (!session) return
+
+    const usedLocal =
+      micBackendRef.current === 'local-parakeet' || systemBackendRef.current === 'local-parakeet'
+    if (usedLocal) {
+      const lines = [...micLinesRef.current, ...systemLinesRef.current].sort(
+        (a, b) => (a.start ?? 0) - (b.start ?? 0)
+      )
+      setSaving(true)
+      try {
+        await uploadConversationFromSegments({
+          lines,
+          startedAt: session.startedAt,
+          finishedAt: session.endedAt,
+          language: getPreferences().language
+        })
+        refreshCloudConversations()
+        navigate('/conversations', { replace: true })
+      } catch (e) {
+        console.error('Local STT upload failed:', (e as Error).message)
+        alert(`Save failed: ${(e as Error).message}`)
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
 
     // Mic-only sessions are backend-owned now: the cloud creates a titled
     // conversation from the same stream, so saving a local copy would just be an
