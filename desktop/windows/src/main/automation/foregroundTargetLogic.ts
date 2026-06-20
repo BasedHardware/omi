@@ -1,4 +1,4 @@
-import { basename } from 'path'
+import { win32 } from 'path'
 
 // Pure target-selection logic, split out from foregroundTarget.ts (which pulls
 // in electron + native koffi) so it can be unit-tested under node Vitest.
@@ -8,7 +8,7 @@ import { basename } from 'path'
 // inspector share electron.exe, which is fine: we just won't target ourselves.
 export function isSelfExe(exePath: string | null, selfExe: string): boolean {
   if (!exePath) return false
-  return basename(exePath).toLowerCase() === basename(selfExe).toLowerCase()
+  return win32.basename(exePath).toLowerCase() === win32.basename(selfExe).toLowerCase()
 }
 
 // Window classes of the Windows shell surfaces (desktop, taskbar, Start/search,
