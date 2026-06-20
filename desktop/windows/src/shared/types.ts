@@ -75,6 +75,21 @@ export type PiChatResponse = {
   toolCalls: PiChatToolCall[]
 }
 
+export type ClaudeAcpStatus = {
+  configured: boolean
+  command: string
+  authenticated: boolean | null
+  reason?: string
+}
+
+export type ClaudeAcpChatRequest = {
+  messages: ChatMessage[]
+}
+
+export type ClaudeAcpChatResponse = {
+  text: string
+}
+
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
 // transcribed independently).
@@ -266,6 +281,8 @@ export type OmiBridgeApi = {
   /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
   piChatEnabled: boolean
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
+  claudeAcpStatus: () => Promise<ClaudeAcpStatus>
+  claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
