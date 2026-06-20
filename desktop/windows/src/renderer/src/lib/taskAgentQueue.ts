@@ -93,7 +93,8 @@ async function runWithProvider(run: TaskAgentRun): Promise<void> {
       const response = await window.omi.piChatSend({
         token: token ?? '',
         messages,
-        skillIds: getPreferences().enabledSkillIds ?? []
+        skillIds: getPreferences().enabledSkillIds ?? [],
+        modelId: getPreferences().defaultModelByPurpose?.agent
       })
       updateRun(run.id, {
         status: 'completed',
