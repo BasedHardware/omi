@@ -1,5 +1,4 @@
 import AVFoundation
-import AppKit
 import CoreGraphics
 import Foundation
 
@@ -47,14 +46,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Consecutive failed (re)connects with no surviving session — caps churn on a hard
   /// failure. Reset when a socket survives past the idle window or a turn completes.
   private var hubReconnectStrikes = 0
-  /// Caps the reconnect backoff growth (strikes index the exponential delay). The hub
-  /// NEVER permanently gives up re-warming — it's the default voice path, so a dropped
-  /// socket must always self-heal; the cap just bounds the retry rate on a hard failure
-  /// (e.g. a revoked key) to one attempt per ~15s.
-  private static let maxBackoffStrikes = 5
-  /// Belt-and-suspenders ticker: re-warms the session if it's ever found cold, so the
-  /// hub stays connected even if some path nilled the socket without scheduling a retry.
-  private var warmKeeper: Timer?
+  /// After this many consecutive fast failures (e.g. a stale/revoked key failing auth),
+  /// the hub stops re-warming so it doesn't hammer a dead endpoint.
+  private static let maxReconnectStrikes = 5
   /// True only while a session is connected + authenticated for `sessionProvider`. This is
   /// what gates `isActive`: a PTT turn enters hub mode only when the hub is genuinely
   /// connected right now; otherwise it transparently uses the legacy cascade. Set in
@@ -141,77 +135,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
     refreshAboutUserCard()
-    // Re-warm whenever the app comes back to front or the machine wakes from sleep —
-    // both kill the realtime socket silently, and without this the hub stays cold
-    // (PTT falls to the slow Claude cascade) until the next error happens to fire.
-    NotificationCenter.default.removeObserver(
-      self, name: NSApplication.didBecomeActiveNotification, object: nil)
-    NotificationCenter.default.addObserver(
-      self, selector: #selector(rewarmOnLifecycle),
-      name: NSApplication.didBecomeActiveNotification, object: nil)
-    NSWorkspace.shared.notificationCenter.removeObserver(
-      self, name: NSWorkspace.didWakeNotification, object: nil)
-    NSWorkspace.shared.notificationCenter.addObserver(
-      self, selector: #selector(rewarmOnLifecycle),
-      name: NSWorkspace.didWakeNotification, object: nil)
-    // Keep a warm session alive proactively so the hub is essentially always connected.
-    startWarmKeeper()
-    ensureWarm()
-  }
-
-  @objc private func rewarmOnLifecycle() {
-    hubReconnectStrikes = 0  // fresh chance — reset backoff
-    if session == nil { ensureWarm() }
-  }
-
-  /// Periodically guarantee a warm session exists (default voice path). Covers provider
-  /// idle-closes and any path that nilled the socket without scheduling a reconnect, so
-  /// the steady state is "connected" rather than "silently on the Claude cascade".
-  private func startWarmKeeper() {
-    warmKeeper?.invalidate()
-    warmKeeper = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
-      Task { @MainActor in
-        guard let self else { return }
-        let canConnect =
-          APIKeyService.byokKey(self.effectiveProvider.byokProvider) != nil
-          || AuthService.shared.isSignedIn
-        guard canConnect else { return }
-        // (a) Cold socket → warm it.
-        if self.session == nil {
-          guard !self.reconnectPending, !self.minting else { return }
-          self.ensureWarm()
-          return
-        }
-        // (b) Proactive pre-cap re-warm: managed (ephemeral) sessions are killed at a hard
-        // 30-min server cap (SESSION_MAX_MIN in realtime.rs). Re-mint + reconnect BEFORE
-        // that boundary, while idle between turns, so a press never lands mid-cap on the
-        // slow cascade. Gated on !responding so it never cuts an in-flight reply. (A fresh
-        // mint is required — the ephemeral token is single-use.)
-        if !self.responding, !self.minting, let warmedAt = self.lastWarmAt,
-          Date().timeIntervalSince(warmedAt) > 27 * 60
-        {
-          log("RealtimeHub: proactive re-warm before 30-min session cap")
-          self.teardownSession()
-          self.ensureWarm()
-        }
-      }
-    }
-  }
-
-  /// Re-warm with capped exponential backoff. NEVER permanently gives up (the old
-  /// maxReconnectStrikes bail silently stranded users on the Claude cascade for the rest
-  /// of the session). Backoff: 0.5s, 1, 2, 4, 8, …capped at 15s — bounding the rate on a
-  /// hard failure without ever stopping.
-  private func scheduleReconnect() {
-    guard !reconnectPending, session == nil else { return }
-    let delay = min(0.5 * pow(2.0, Double(min(hubReconnectStrikes, Self.maxBackoffStrikes))), 15.0)
-    hubReconnectStrikes += 1
-    reconnectPending = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-      guard let self else { return }
-      self.reconnectPending = false
-      if self.session == nil { self.ensureWarm() }
-    }
   }
 
   @objc private func settingsChanged() {
@@ -378,7 +301,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func hubDidConnect() {
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
-    hubReconnectStrikes = 0  // a successful connect proves the path works — reset backoff
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
   }
 
@@ -679,10 +601,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       hubReconnectStrikes = 0
       fallbackProvider = nil
     }
-    // Always re-warm — the hub must self-heal so the next PTT turn stays on realtime
-    // instead of silently sinking to the slow Claude cascade. scheduleReconnect uses
-    // capped backoff and never permanently gives up.
-    scheduleReconnect()
+    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
+    hubReconnectStrikes += 1
+    reconnectPending = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+      guard let self else { return }
+      self.reconnectPending = false
+      if self.session == nil { self.ensureWarm() }
+    }
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.

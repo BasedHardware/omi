@@ -73,10 +73,6 @@ final class RealtimeHubSession: NSObject {
   private let q = DispatchQueue(label: "omi.realtime-hub.session")
 
   private var task: URLSessionWebSocketTask?
-  /// OpenAI keepalive: URLSession's WS task has no built-in ping, so an idle socket
-  /// (between bursty PTT turns) gets closed by the provider. A periodic ping keeps it
-  /// warm. (Gemini's RawWebSocket pings itself.)
-  private var pingTimer: DispatchSourceTimer?
   private lazy var session = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
   // Gemini's Live endpoint rejects both of Apple's WebSocket stacks, so it uses a
   // hand-rolled RFC 6455 client (RawWebSocket). OpenAI uses URLSession.
@@ -170,28 +166,9 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in self?.delegate = nil }
   }
 
-  /// OpenAI only: ping the WS every 20s while open so an idle socket isn't dropped by
-  /// the provider between PTT turns. Must be started on `q` after the task opens.
-  private func startPingKeepalive() {
-    guard provider == .openai else { return }
-    pingTimer?.cancel()
-    let timer = DispatchSource.makeTimerSource(queue: q)
-    timer.schedule(deadline: .now() + 20, repeating: 20)
-    timer.setEventHandler { [weak self] in
-      guard let self, let task = self.task, !self.terminated else { return }
-      task.sendPing { [weak self] error in
-        if let error { self?.q.async { self?.notifyError("keepalive ping failed: \(error.localizedDescription)") } }
-      }
-    }
-    timer.resume()
-    pingTimer = timer
-  }
-
   func stop() {
     q.async { [weak self] in
       guard let self else { return }
-      self.pingTimer?.cancel()
-      self.pingTimer = nil
       self.task?.cancel(with: .goingAway, reason: nil)
       self.task = nil
       self.rawWS?.close()
@@ -807,7 +784,6 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
     q.async {
       self.receiveLoop()
       self.sendSessionSetup()
-      self.startPingKeepalive()
     }
   }
 
