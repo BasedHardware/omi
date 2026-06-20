@@ -53,6 +53,7 @@ PROOF_CONSTANTS = {
     "real_router_fail_closed_matrix_proof": _EXTERNAL.REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
     "write_convergence_tombstone_matrix_proof": _EXTERNAL.WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
     "cursor_secret_readiness_proof": _EXTERNAL.CURSOR_SECRET_READINESS_PROOF,
+    "cursor_secret_production_readiness_proof": _EXTERNAL.CURSOR_SECRET_PRODUCTION_READINESS_PROOF,
     "observability_approval_readiness_proof": _EXTERNAL.OBSERVABILITY_APPROVAL_READINESS_PROOF,
     "canary_approval_source_readiness_proof": _EXTERNAL.CANARY_APPROVAL_SOURCE_READINESS_PROOF,
     "canary_approval_production_readiness_proof": _EXTERNAL.CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
@@ -171,6 +172,7 @@ REMAINING_GATES = [
         "existing_local_proofs": [
             "cursor_service_proof",
             "cursor_secret_readiness_proof",
+            "cursor_secret_production_readiness_proof",
             "request_adapter_proof",
             "memory_read_service_proof",
         ],

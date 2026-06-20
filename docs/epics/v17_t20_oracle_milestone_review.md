@@ -1717,6 +1717,16 @@ Added a safe pre-runtime readiness proof for future `/v3` cursor-secret/source i
 - Under fake server-owned secret material only, the pure cursor matrix proves first-page no-cursor needs no client-secret trust; signed cursors preserve account generation, projection generation, source, and keyset; and tampered, expired, account/projection generation mismatch, source mismatch, wrong-secret, and client-supplied-secret cases fail closed without legacy fallback.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production secret read, no production Firestore/cloud/provider/vector call, no client-supplied cursor secret trust, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
 
+### 2026-06-20 — P1-3 `/v3` cursor secret/config production metadata read proof
+
+Added the next non-canary production-safe cursor secret/config metadata read proof readiness runner for future `/v3` cursor secret/config source validation while keeping the route blocked:
+
+- Added `backend/scripts/v17_p1_3_v3_cursor_secret_production_readiness.py` and `backend/tests/unit/test_v17_p1_3_v3_cursor_secret_production_readiness.py`; registered the test in `backend/test.sh`.
+- Linked `cursor_secret_production_readiness_proof` from `backend/scripts/v17_p1_3_v3_cursor_secret_readiness.py`, `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py`, and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The runner defaults to `NOT_RUN`/`BLOCKED`. `--execute` requires explicit allow/project/credentials/service-account/secret-id environment gates; missing env reports exact missing prerequisites and performs no production calls.
+- The selected source shape is route-scoped (`GET /v3/memories`, `v17-v3-get-memories-cursor-signing-secret`) with no uid/session/memory/request/raw-cursor dimensions. The proof validates only Secret Manager/config metadata labels/resource shape and never accesses, prints, or logs secret material or raw cursor tokens.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production secret-material proof, no client-supplied cursor secret trust, no production Firestore write/cloud/provider/vector call by default, no telemetry sink call, no production rollout approval, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
+
 ### 2026-06-20 — P1-3 `/v3` canary/approval artifact reader readiness seam
 
 Extended the local canary/approval proof from schema-only validation to an injected reader readiness seam without changing `backend/routers/memories.py` or runtime behavior:

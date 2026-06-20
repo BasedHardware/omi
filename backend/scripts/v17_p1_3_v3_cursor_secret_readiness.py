@@ -30,10 +30,26 @@ from utils.memory.v17_v3_cursor import (
 _FAKE_SERVER_OWNED_SECRET = b'fake-server-owned-v17-v3-cursor-secret-readiness-only'
 _FAKE_CLIENT_SUPPLIED_SECRET = b'fake-client-supplied-secret-must-never-be-trusted'
 
+CURSOR_SECRET_PRODUCTION_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_cursor_secret_production_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_cursor_secret_production_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Production-safe cursor secret/config metadata read proof is available as a disabled-by-default read-only "
+        "runner; missing env gates produce NOT_RUN/BLOCKED and no secret material is read."
+    ),
+}
+
 SERVER_OWNED_SECRET_SOURCE = {
     "status": "BLOCKED",
     "required_source": "server-owned V17_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime",
     "candidate_env_var": "V17_V3_CURSOR_SIGNING_SECRET",
+    "candidate_production_metadata_runner": "backend/scripts/v17_p1_3_v3_cursor_secret_production_readiness.py",
     "blocker": "No existing runtime-owned V17 /v3 cursor signing secret/config source is wired.",
     "required_before_runtime_change": True,
     "client_supplied_secret_trusted": False,
@@ -194,6 +210,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "approval_claimed": False,
         "scope": "Pre-runtime cursor secret/source integration readiness under pure fake contexts only.",
         "server_owned_secret_source": SERVER_OWNED_SECRET_SOURCE,
+        "cursor_secret_production_readiness_proof": CURSOR_SECRET_PRODUCTION_READINESS_PROOF,
         "trust_boundary_requirements": TRUST_BOUNDARY_REQUIREMENTS,
         "pure_fake_cursor_case_matrix": case_matrix,
         "required_future_integration": [
