@@ -1739,3 +1739,23 @@ Use this as the single ordered checklist before any dev GCP test or prod read-on
 - [ ] No shadow mode requirement.
 - [ ] Implement server-owned staged rollout by user/cohort: per-user allowlist, cohort stage, per-user rollback/disable, global kill switch, rollout config/generation epoch, reason/audit metadata.
 - [ ] Require separate product/platform readiness and approval before any user-visible V17 `/v3` read behavior change.
+
+### Final Oracle review — F6 local pre-GCP readiness (2026-06-20)
+
+**Oracle session:** `final-prescripti-review-use-only`  
+**Reviewed commit:** `ffb0746e1c200f6fc6f90f669065da35b48fa2c1` (`v17: add pre-gcp evidence readiness gates`)  
+**Model caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`, but returned an answer under `gpt-5.5-pro[browser]`.
+
+**Verdict:** local `PRE_GCP_READY` for the defined F6A-F6H contracts.
+
+Oracle's answer, quoted:
+
+> Yes—based on this bundle, commit `ffb0746e` supports:
+>
+> V17 F6 is locally `PRE_GCP_READY` for the defined F6A–F6H contracts and is awaiting environment-specific GCP access, identity/IAM verification, profile/project selection, audit-log correlation inputs, and required approval/run-record values.
+>
+> No further local fixes are evidenced.
+>
+> Avoid saying actual IAM or audit-log readiness is already proven: those remain cloud-side validations, not merely configuration entry.
+
+Posture after this review: the branch is locally ready to move to the GCP-access host for the next bounded readonly evidence step. Remaining blockers are actual GCP access/profile/project/log/approval values and live verification, not missing local F6A-F6H implementation.
