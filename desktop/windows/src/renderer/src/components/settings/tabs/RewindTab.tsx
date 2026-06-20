@@ -5,11 +5,8 @@ import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
-import type {
-  RewindSettings,
-  ScreenSynthState,
-  InsightSettings
-} from '../../../../../shared/types'
+import { toast } from '../../../lib/toast'
+import type { RewindSettings, ScreenSynthState, InsightSettings } from '../../../../../shared/types'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
 // call via Omi's proxy, so longer intervals mean less backend cost.
@@ -20,6 +17,7 @@ export function RewindTab(): React.JSX.Element {
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
+  const [deletingRewind, setDeletingRewind] = useState(false)
   const [continuousRec, setContinuousRec] = useState<boolean>(
     () => !!getPreferences().continuousRecording
   )
@@ -67,6 +65,24 @@ export function RewindTab(): React.JSX.Element {
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
     setInsight(await window.omi.insightSetSettings(patch))
   }
+  const deleteAllRewind = async (): Promise<void> => {
+    if (deletingRewind) return
+    const ok = window.confirm(
+      'Delete all Rewind screenshots and screen text stored on this PC? This cannot be undone.'
+    )
+    if (!ok) return
+    setDeletingRewind(true)
+    try {
+      const deleted = await window.omi.rewindDeleteAll()
+      toast(`Deleted ${deleted.toLocaleString()} Rewind frame${deleted === 1 ? '' : 's'}`, {
+        tone: 'success'
+      })
+    } catch (e) {
+      toast('Could not delete Rewind history', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setDeletingRewind(false)
+    }
+  }
 
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
@@ -85,11 +101,7 @@ export function RewindTab(): React.JSX.Element {
         subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
         keywords="continuous recording microphone audio always-on"
         control={
-          <Toggle
-            on={continuousRec}
-            onChange={toggleContinuous}
-            label="Continuous recording"
-          />
+          <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
         }
       />
       <SettingRow
@@ -137,14 +149,24 @@ export function RewindTab(): React.JSX.Element {
         control={
           <select
             value={rewind?.intervalMs ?? 1000}
-            onChange={(e) => rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
+            onChange={(e) =>
+              rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })
+            }
             disabled={!rewind}
             className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
           >
-            <option value={1000} className="bg-neutral-900">Every 1s</option>
-            <option value={2000} className="bg-neutral-900">Every 2s</option>
-            <option value={5000} className="bg-neutral-900">Every 5s</option>
-            <option value={10000} className="bg-neutral-900">Every 10s</option>
+            <option value={1000} className="bg-neutral-900">
+              Every 1s
+            </option>
+            <option value={2000} className="bg-neutral-900">
+              Every 2s
+            </option>
+            <option value={5000} className="bg-neutral-900">
+              Every 5s
+            </option>
+            <option value={10000} className="bg-neutral-900">
+              Every 10s
+            </option>
           </select>
         }
       />
@@ -172,6 +194,21 @@ export function RewindTab(): React.JSX.Element {
         }
       />
       <SettingRow
+        icon={Trash2}
+        title="Delete all Rewind history"
+        subtitle="Deletes every local Rewind screenshot and its OCR text from this PC."
+        keywords="rewind delete all screenshots history clear"
+        control={
+          <button
+            onClick={() => void deleteAllRewind()}
+            disabled={deletingRewind}
+            className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deletingRewind ? 'Deleting...' : 'Delete all'}
+          </button>
+        }
+      />
+      <SettingRow
         icon={Ban}
         title="Excluded apps"
         subtitle="Rewind never screenshots while one of these apps is in focus. Matched loosely (e.g. “chrome” covers Google Chrome)."
@@ -191,7 +228,11 @@ export function RewindTab(): React.JSX.Element {
               placeholder="App name (e.g. Banking)"
               className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={addExcludedApp} disabled={!newExcluded.trim()} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={addExcludedApp}
+              disabled={!newExcluded.trim()}
+              className="btn-ghost disabled:opacity-40"
+            >
               Add
             </button>
           </div>
@@ -250,7 +291,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={screenSynth.denylist.join('\n')}
               onBlur={(e) =>
                 void patchScreenSynth({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
@@ -311,8 +355,12 @@ export function RewindTab(): React.JSX.Element {
                 }
                 className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
               >
-                <option value="omi" className="bg-neutral-900">Omi notification</option>
-                <option value="native" className="bg-neutral-900">Windows notification</option>
+                <option value="omi" className="bg-neutral-900">
+                  Omi notification
+                </option>
+                <option value="native" className="bg-neutral-900">
+                  Windows notification
+                </option>
               </select>
             </label>
             <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
@@ -324,7 +372,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={insight.denylist.join('\n')}
               onBlur={(e) =>
                 void patchInsight({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
