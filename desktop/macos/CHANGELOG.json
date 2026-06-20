@@ -1,9 +1,15 @@
 {
   "unreleased": [
-    "Fixed push-to-talk voice responses falling back to the slower model \u2014 the realtime voice connection now stays warm and auto-reconnects (keepalive, relentless reconnect, re-warm on wake)",
     "Voice replies now follow your language setting by default (fixes occasional replies in the wrong language) while still letting you switch languages mid-conversation"
   ],
   "releases": [
+    {
+      "version": "0.11.480",
+      "date": "2026-06-20",
+      "changes": [
+        "Fixed push-to-talk voice responses falling back to the slower model \u2014 the realtime voice connection now stays warm and auto-reconnects (keepalive, relentless reconnect, re-warm on wake)"
+      ]
+    },
     {
       "version": "0.11.478",
       "date": "2026-06-20",
