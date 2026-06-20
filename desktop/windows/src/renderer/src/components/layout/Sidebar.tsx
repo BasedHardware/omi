@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   House,
@@ -11,6 +11,7 @@ import {
   Target,
   Monitor,
   Mic,
+  MicOff,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -18,12 +19,16 @@ import {
   ShieldAlert,
   Bluetooth,
   HelpCircle,
-  User as UserIcon
+  User as UserIcon,
+  Loader2,
+  ChevronRight,
+  X,
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
 import { RecordingStatusBar } from '../recording/RecordingStatusBar'
+import { liveConversation, type LiveStatus } from '../../lib/liveConversation'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 import { loadObservations, type FocusStatus } from '../../lib/focusEngine'
@@ -41,6 +46,8 @@ const navItems = [
 ]
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
+const LAST_DEVICE_KEY = 'omi.ble.lastDevice.v1'
+const GET_OMI_DISMISSED_KEY = 'omi.sidebar.getOmiDismissed'
 
 const HOVER = 'hover:bg-[var(--nav-sel)]'
 
@@ -48,6 +55,21 @@ const FOCUS_DOT: Record<FocusStatus, string> = {
   focused: 'bg-green-500',
   distracted: 'bg-orange-500',
   neutral: 'bg-white/25',
+}
+
+/** 4 animated bars — mirrors macOS AudioLevelNavItem when transcription is active. */
+function AudioBars(): React.JSX.Element {
+  return (
+    <div className="flex h-4 shrink-0 items-end gap-[2px]">
+      {([0, 1, 2, 3] as const).map((i) => (
+        <span
+          key={i}
+          className="sidebar-audio-bar w-[2px] origin-bottom rounded-sm bg-[color:var(--accent)]"
+          style={{ animationDelay: `${i * 130}ms` }}
+        />
+      ))}
+    </div>
+  )
 }
 
 export function Sidebar(): React.JSX.Element {
@@ -59,6 +81,19 @@ export function Sidebar(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   const [focusStatus, setFocusStatus] = useState<FocusStatus | null>(null)
   const [insightBadge, setInsightBadge] = useState(0)
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>(() => liveConversation.getStatus())
+  const [micPermission, setMicPermission] = useState<PermissionState | null>(null)
+  const [loadingNav, setLoadingNav] = useState<string | null>(null)
+  const [pairedDevice, setPairedDevice] = useState<{
+    name: string
+    id: string
+    seenAt: number
+  } | null>(null)
+  const [showGetOmi, setShowGetOmi] = useState(
+    () => localStorage.getItem(GET_OMI_DISMISSED_KEY) !== '1'
+  )
+  const loadingNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
@@ -70,6 +105,40 @@ export function Sidebar(): React.JSX.Element {
     const obs = loadObservations()
     if (obs.length > 0) setFocusStatus(obs[0].status)
   }, [pathname]) // refresh when navigating
+
+  // Live conversation status — drives AudioBars on Conversations nav item
+  useEffect(() => liveConversation.subscribe(() => setLiveStatus(liveConversation.getStatus())), [])
+
+  // Mic permission — shown in permission status section
+  useEffect(() => {
+    if (!navigator.permissions) return
+    navigator.permissions
+      .query({ name: 'microphone' as PermissionName })
+      .then((status) => {
+        setMicPermission(status.state)
+        status.addEventListener('change', () => setMicPermission(status.state))
+      })
+      .catch(() => {})
+  }, [])
+
+  // Load last-paired BLE device from localStorage (saved by DevicesTab on each connect)
+  useEffect(() => {
+    const raw = localStorage.getItem(LAST_DEVICE_KEY)
+    if (raw) {
+      try {
+        setPairedDevice(JSON.parse(raw) as { name: string; id: string; seenAt: number })
+      } catch {}
+    }
+    // Re-check when the user returns to the app (e.g. after pairing in DevicesTab)
+    const onStorage = (e: StorageEvent): void => {
+      if (e.key !== LAST_DEVICE_KEY) return
+      const val = e.newValue
+      if (!val) { setPairedDevice(null); return }
+      try { setPairedDevice(JSON.parse(val)) } catch {}
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   // Insight unread badge: count insights newer than the last time the user
   // visited /insights. Cleared on entry to /insights.
@@ -86,6 +155,15 @@ export function Sidebar(): React.JSX.Element {
       setInsightBadge(unread)
     })
   }, [pathname])
+
+  // Clear loadingNav when navigation completes
+  useEffect(() => {
+    if (loadingNav && pathname === loadingNav) {
+      const t = setTimeout(() => setLoadingNav(null), 600)
+      return () => clearTimeout(t)
+    }
+    return undefined
+  }, [pathname, loadingNav])
 
   // Ctrl+1–N: jump to the nth sidebar item
   useEffect(() => {
@@ -112,6 +190,21 @@ export function Sidebar(): React.JSX.Element {
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
   }, [])
+
+  const handleNavClick = (to: string): void => {
+    if (pathname !== to) {
+      if (loadingNavTimerRef.current) clearTimeout(loadingNavTimerRef.current)
+      setLoadingNav(to)
+      loadingNavTimerRef.current = setTimeout(() => setLoadingNav(null), 3000)
+    }
+  }
+
+  const dismissGetOmi = (e: React.MouseEvent): void => {
+    e.stopPropagation()
+    e.preventDefault()
+    localStorage.setItem(GET_OMI_DISMISSED_KEY, '1')
+    setShowGetOmi(false)
+  }
 
   const email = user?.email
   const displayName = user?.displayName?.trim() || prefName?.trim() || email || 'Account'
@@ -189,6 +282,13 @@ export function Sidebar(): React.JSX.Element {
     </button>
   )
 
+  // Device connection freshness: if seenAt is within last 60 minutes, treat as "recently connected"
+  const deviceIsRecent =
+    pairedDevice != null && Date.now() - pairedDevice.seenAt < 60 * 60 * 1000
+
+  // Mic permission: show row when denied (shows Grant button) or when 'prompt' (not yet granted)
+  const showMicPermissionRow = micPermission === 'denied'
+
   // Bottom utility links: Settings, Permissions, Device, Help
   const bottomLinks = [
     { label: 'Settings', to: '/settings', Icon: Settings },
@@ -236,71 +336,196 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Main nav items */}
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ label: text, to, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={collapsed ? text : undefined}
-            className={({ isActive }) =>
-              linkClass(
-                isActive ||
-                (to === '/tasks' && pathname === '/goals') ||
-                (to === '/home' && pathname === '/chat-legacy')
-              )
-            }
-          >
-            {({ isActive }) => {
-              const active = isActive || (to === '/tasks' && pathname === '/goals')
-              return (
-                <>
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0 transition-colors duration-150',
-                      active ? 'text-[color:var(--accent)]' : 'text-white/50'
+        {navItems.map(({ label: text, to, Icon }) => {
+          const isLive = to === '/conversations' && (liveStatus === 'live' || liveStatus === 'connecting')
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              title={collapsed ? text : undefined}
+              onClick={() => handleNavClick(to)}
+              className={({ isActive }) =>
+                linkClass(
+                  isActive ||
+                  (to === '/tasks' && pathname === '/goals') ||
+                  (to === '/home' && pathname === '/chat-legacy')
+                )
+              }
+            >
+              {({ isActive }) => {
+                const active = isActive || (to === '/tasks' && pathname === '/goals')
+                const isLoading = loadingNav === to
+                return (
+                  <>
+                    {isLoading ? (
+                      <Loader2
+                        className="h-4 w-4 shrink-0 animate-spin text-[color:var(--accent)]"
+                        strokeWidth={1.75}
+                      />
+                    ) : isLive ? (
+                      <AudioBars />
+                    ) : (
+                      <Icon
+                        className={cn(
+                          'h-4 w-4 shrink-0 transition-colors duration-150',
+                          active ? 'text-[color:var(--accent)]' : 'text-white/50'
+                        )}
+                        strokeWidth={1.75}
+                      />
                     )}
-                    strokeWidth={1.75}
-                  />
-                  {label(text)}
-                  {/* Focus status dot */}
-                  {to === '/focus' && focusStatus && !collapsed && (
-                    <span className={cn('h-2 w-2 shrink-0 rounded-full', FOCUS_DOT[focusStatus])} />
-                  )}
-                  {/* Insight unread badge */}
-                  {to === '/insights' && insightBadge > 0 && !collapsed && (
-                    <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[10px] font-bold leading-none text-white">
-                      {insightBadge > 99 ? '99+' : insightBadge}
-                    </span>
-                  )}
-                  {/* Rewind pulse dot when screen or mic capture is active */}
-                  {to === '/rewind' && (screenOn || micOn) && !collapsed && (
-                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[color:var(--accent)]" />
-                  )}
-                </>
-              )
-            }}
-          </NavLink>
-        ))}
+                    {label(text)}
+                    {/* Focus status dot */}
+                    {to === '/focus' && focusStatus && !collapsed && (
+                      <span className={cn('h-2 w-2 shrink-0 rounded-full', FOCUS_DOT[focusStatus])} />
+                    )}
+                    {/* Insight unread badge */}
+                    {to === '/insights' && insightBadge > 0 && !collapsed && (
+                      <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[10px] font-bold leading-none text-white">
+                        {insightBadge > 99 ? '99+' : insightBadge}
+                      </span>
+                    )}
+                    {/* Rewind pulse dot when screen or mic capture is active */}
+                    {to === '/rewind' && (screenOn || micOn) && !collapsed && (
+                      <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[color:var(--accent)]" />
+                    )}
+                  </>
+                )
+              }}
+            </NavLink>
+          )
+        })}
 
         {/* Persona link */}
         <NavLink
           to="/persona"
           title={collapsed ? 'AI Persona' : undefined}
+          onClick={() => handleNavClick('/persona')}
           className={({ isActive }) => linkClass(isActive)}
         >
           {({ isActive }) => (
             <>
-              <UserIcon
-                className={cn(
-                  'h-4 w-4 shrink-0 transition-colors duration-150',
-                  isActive ? 'text-[color:var(--accent)]' : 'text-white/50'
-                )}
-                strokeWidth={1.75}
-              />
+              {loadingNav === '/persona' ? (
+                <Loader2
+                  className="h-4 w-4 shrink-0 animate-spin text-[color:var(--accent)]"
+                  strokeWidth={1.75}
+                />
+              ) : (
+                <UserIcon
+                  className={cn(
+                    'h-4 w-4 shrink-0 transition-colors duration-150',
+                    isActive ? 'text-[color:var(--accent)]' : 'text-white/50'
+                  )}
+                  strokeWidth={1.75}
+                />
+              )}
               {label('Persona')}
             </>
           )}
         </NavLink>
       </div>
+
+      {/* ── Widgets section (macOS parity) ──────────────────────────────── */}
+
+      {/* Device status widget: shown when a BLE device has been paired */}
+      {pairedDevice && (
+        <button
+          onClick={() => navigate('/settings?tab=devices')}
+          title={collapsed ? pairedDevice.name : undefined}
+          className={cn(
+            'mt-2 flex w-full items-center rounded-xl border px-3 py-2.5 text-left transition-colors duration-150',
+            !collapsed && 'gap-3',
+            deviceIsRecent
+              ? 'border-green-500/25 bg-white/[0.04] hover:bg-white/[0.07]'
+              : 'border-white/10 bg-white/[0.03] hover:bg-white/[0.06]'
+          )}
+        >
+          {/* Device icon with connection dot */}
+          <div className="relative shrink-0">
+            <Bluetooth
+              className={cn(
+                'h-4 w-4',
+                deviceIsRecent ? 'text-[color:var(--accent)]' : 'text-white/40'
+              )}
+              strokeWidth={1.75}
+            />
+            <span
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-1 ring-[#0a0a0a]',
+                deviceIsRecent ? 'bg-green-500' : 'bg-orange-400'
+              )}
+            />
+          </div>
+          {!collapsed && (
+            <>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-white/80">{pairedDevice.name}</p>
+                <p className={cn('text-[10px]', deviceIsRecent ? 'text-green-500' : 'text-orange-400')}>
+                  {deviceIsRecent ? 'Connected' : 'Last paired'}
+                </p>
+              </div>
+              <ChevronRight className="h-3 w-3 shrink-0 text-white/25" strokeWidth={2} />
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Get Omi promo widget: shown when no device paired and not dismissed */}
+      {!pairedDevice && showGetOmi && (
+        <div
+          className={cn(
+            'mt-2 flex w-full items-center rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5',
+            !collapsed && 'gap-3'
+          )}
+        >
+          <Bluetooth
+            className="h-4 w-4 shrink-0 text-[color:var(--accent)]"
+            strokeWidth={1.75}
+            title={collapsed ? 'Get Omi Device' : undefined}
+          />
+          {!collapsed && (
+            <>
+              <button
+                onClick={() => window.omi.openExternal?.('https://www.omi.me')}
+                className="min-w-0 flex-1 text-left"
+              >
+                <p className="truncate text-xs font-semibold text-white/80">Get Omi Device</p>
+                <p className="text-[10px] text-white/35">Your wearable AI companion</p>
+              </button>
+              <button
+                onClick={dismissGetOmi}
+                className="shrink-0 rounded-md p-1 text-white/30 transition-colors hover:bg-white/10 hover:text-white/60"
+                title="Dismiss"
+              >
+                <X className="h-3 w-3" strokeWidth={2} />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Mic permission row: shown when mic is denied */}
+      {showMicPermissionRow && (
+        <div
+          className={cn(
+            'mt-2 flex w-full items-center rounded-xl border border-red-500/20 bg-red-500/[0.06] px-3 py-2',
+            !collapsed && 'gap-3'
+          )}
+          title={collapsed ? 'Microphone permission denied' : undefined}
+        >
+          <MicOff className="h-4 w-4 shrink-0 text-red-400" strokeWidth={1.75} />
+          {!collapsed && (
+            <>
+              <span className="min-w-0 flex-1 truncate text-xs text-white/60">Microphone</span>
+              <button
+                onClick={() => navigate('/permissions')}
+                className="shrink-0 rounded-md bg-red-500/70 px-2 py-0.5 text-[11px] font-semibold text-white transition-colors hover:bg-red-500"
+              >
+                Grant
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       <div className="my-2 h-px w-full bg-white/10" />
 

@@ -427,6 +427,18 @@
   background: rgba(255, 255, 255, 0.32);
 }
 
+/* Sidebar Conversations nav audio bars — mirrors macOS AudioLevelNavItem.
+   Each bar animates between 25% and 100% height at staggered delays. */
+@keyframes sidebarAudioBar {
+  from { transform: scaleY(0.25); }
+  to   { transform: scaleY(1); }
+}
+.sidebar-audio-bar {
+  display: inline-block;
+  height: 100%;
+  animation: sidebarAudioBar 0.65s ease-in-out infinite alternate;
+}
+
 /* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned
    by wheel/drag, so the bar itself shouldn't show a scrollbar). */
 .no-scrollbar {
