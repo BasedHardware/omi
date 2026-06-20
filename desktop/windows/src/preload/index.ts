@@ -58,6 +58,7 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  localSttStatus: () => ipcRenderer.invoke('omi-local-stt:status'),
   observabilityCapture: (event: ObservabilityEvent) =>
     ipcRenderer.send('observability:capture', event),
   observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) =>
