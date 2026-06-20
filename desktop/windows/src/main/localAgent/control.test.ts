@@ -32,6 +32,8 @@ vi.mock('electron', () => ({
 }))
 
 import {
+  buildOmiAgentSetupPrompt,
+  copyLocalAgentSetupPrompt,
   copyLocalAgentToken,
   getLocalAgentStatus,
   rotateLocalAgentAccessToken,
@@ -152,6 +154,50 @@ describe('local agent controls', () => {
     expect(electronState.clipboardText).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(status.hasToken).toBe(true)
     expect(status).not.toHaveProperty('token')
+  })
+
+  it('builds an agent setup prompt with hosted and local credentials', () => {
+    const prompt = buildOmiAgentSetupPrompt({
+      hostedServerUrl: 'https://api.omi.me/v1/mcp/sse',
+      hostedKey: 'hosted_secret',
+      localUrl: 'http://127.0.0.1:47778',
+      localToolEndpoint: 'http://127.0.0.1:47778/v1/local/tool',
+      localToken: 'local_secret'
+    })
+
+    expect(prompt).toContain('Authorization: Bearer hosted_secret')
+    expect(prompt).toContain('Authorization: Bearer local_secret')
+    expect(prompt).toContain('GET http://127.0.0.1:47778/v1/local/tools')
+    expect(prompt).toContain('same-Windows-PC context')
+    expect(prompt).toContain(
+      'Do not create, edit, complete, or delete Omi memories or local tasks unless the user clearly asked for that change.'
+    )
+  })
+
+  it('copies the agent setup prompt from main while enabling the local API', async () => {
+    const port = await freePort()
+    await setLocalAgentPort(port)
+
+    const status = await copyLocalAgentSetupPrompt({
+      hostedServerUrl: 'https://api.omi.me/v1/mcp/sse',
+      hostedKey: 'hosted_secret'
+    })
+    const token = loadLocalAgentToken()
+    if (!token || !status.localUrl) throw new Error('expected local agent setup')
+
+    expect(status).toMatchObject({
+      enabled: true,
+      running: true,
+      configuredPort: port,
+      currentPort: port,
+      localUrl: `http://127.0.0.1:${port}`,
+      hasToken: true
+    })
+    expect(status).not.toHaveProperty('token')
+    expect(electronState.clipboardText).toContain('Authorization: Bearer hosted_secret')
+    expect(electronState.clipboardText).toContain(`Local Omi Windows URL:\n${status.localUrl}`)
+    expect(electronState.clipboardText).toContain(`Authorization: Bearer ${token}`)
+    await expect(fetchTools(status.localUrl, token)).resolves.toMatchObject({ status: 200 })
   })
 
   it('rotates the bearer token and invalidates the old one', async () => {

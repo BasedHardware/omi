@@ -19,6 +19,7 @@ import type {
   StepResult,
   McpKeyRecord,
   LocalAgentChatToolName,
+  LocalAgentSetupPromptArgs,
   LocalAgentToolArguments
 } from '../shared/types'
 
@@ -54,6 +55,8 @@ const omi: OmiBridgeApi = {
   localAgentCopyToken: () => ipcRenderer.invoke('localAgent:copyToken'),
   localAgentRotateToken: () => ipcRenderer.invoke('localAgent:rotateToken'),
   localAgentTestTools: () => ipcRenderer.invoke('localAgent:testTools'),
+  localAgentCopySetupPrompt: (args: LocalAgentSetupPromptArgs) =>
+    ipcRenderer.invoke('localAgent:copySetupPrompt', args),
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),

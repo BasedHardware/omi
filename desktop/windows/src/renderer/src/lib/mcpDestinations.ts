@@ -4,6 +4,8 @@ export type McpSetup = {
   serverURL: string
   copyTitle?: string
   copyText?: string
+  agentPrompt?: boolean
+  securityWarning?: string
   steps: string[]
   openURL?: string
   openTitle?: string
@@ -178,26 +180,19 @@ args = ["-y", "mcp-remote", "${mcpServerURL}", "--header", "Authorization: Beare
   {
     id: 'agents',
     title: 'AI Agents',
-    subtitle: 'Generic MCP setup',
-    description: 'Use the server URL and bearer key with any MCP-compatible agent.',
-    setup: (key) => ({
+    subtitle: 'Setup prompt',
+    description:
+      'Copy one prompt that connects a trusted agent to hosted Omi MCP and local Omi Windows tools.',
+    setup: () => ({
       serverURL: mcpServerURL,
-      copyTitle: 'Copy JSON',
-      copyText: JSON.stringify(
-        {
-          'omi-memory': {
-            transport: 'http',
-            url: mcpServerURL,
-            headers: { Authorization: `Bearer ${key}` }
-          }
-        },
-        null,
-        2
-      ),
+      copyTitle: 'Copy setup prompt',
+      agentPrompt: true,
+      securityWarning:
+        'The setup prompt includes your hosted MCP key and local bearer token. Only paste it into an agent you trust.',
       steps: [
-        'Create a hosted HTTP MCP server entry named "omi-memory".',
-        'Use the server URL below and set Authorization to Bearer plus your Omi MCP key.',
-        'Test the connection with get_memories and a small limit before relying on it.'
+        'Copy the setup prompt. Omi reuses or creates your hosted MCP key and enables the local Omi Windows API.',
+        'Paste it into a trusted agent. The prompt includes hosted and local access keys.',
+        'Have the agent list hosted MCP tools and call the local tools endpoint before using Omi context.'
       ]
     })
   }
