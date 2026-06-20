@@ -46,6 +46,7 @@ PROOF_CONSTANTS = {
     "real_router_get_testclient_proof": _EXTERNAL.REAL_ROUTER_GET_TESTCLIENT_PROOF,
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
+    "projection_read_source_readiness_proof": _EXTERNAL.PROJECTION_READ_SOURCE_READINESS_PROOF,
     "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
     "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
     "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
@@ -136,6 +137,7 @@ REMAINING_GATES = [
         "existing_local_proofs": [
             "projection_readiness_proof",
             "projection_store_readiness_proof",
+            "projection_read_source_readiness_proof",
             "memory_read_service_proof",
             "response_adapter_proof",
         ],

@@ -1731,6 +1731,18 @@ Added the next non-canary production-safe cursor secret/config metadata read pro
 - The selected source shape is route-scoped (`GET /v3/memories`, `v17-v3-get-memories-cursor-signing-secret`) with no uid/session/memory/request/raw-cursor dimensions. The proof validates only Secret Manager/config metadata labels/resource shape and never accesses, prints, or logs secret material or raw cursor tokens.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production secret-material proof, no client-supplied cursor secret trust, no production Firestore write/cloud/provider/vector call by default, no telemetry sink call, no production rollout approval, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
 
+### 2026-06-20 — P1-3 `/v3` projection read source contract/readiness
+
+Added the next non-canary production-safe projection read source contract/readiness proof for future V17-backed `GET /v3/memories`, while keeping route wiring blocked:
+
+- Added `backend/scripts/v17_p1_3_v3_projection_read_source_readiness.py` and `backend/tests/unit/test_v17_p1_3_v3_projection_read_source_readiness.py`; registered the test in `backend/test.sh`.
+- Linked `projection_read_source_readiness_proof` from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The contract selects backend-owned projection sources `users/{uid}/v3_compatibility_projection/state` and `users/{uid}/v3_compatibility_projection_items/{memory_id}` for future route-scoped `GET /v3/memories` reads. The uid is the authenticated subject selector only, not a config dimension or client override.
+- The future query shape is bounded and deterministic: limit bounds `1..500` with default `100`, keyset ordering `created_at DESC, __name__ DESC`, and cursor fields `created_at`, `memory_id`, `account_generation`, `projection_generation`, and `projection_commit_id`. Offset and the legacy first-page `5000` override are not part of the V17 projection read source contract.
+- The readiness proof defaults to `NOT_RUN`/`BLOCKED`. Gated `--execute` requires explicit allow/project/credentials/service-account/uid environment gates and validates only projection source metadata/readiness; missing env performs no production calls.
+- Privacy and fail-closed constraints are explicit: no client-controlled collection/path/source override; no uid/session/memory/request-payload/cursor-token/secret/content telemetry labels; missing, stale, malformed, route/uid/source/version/generation/fence/convergence-invalid metadata fails closed.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production Firestore writes, no production calls by default, no telemetry sink/provider/vector call, no production rollout approval, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
+
 ### 2026-06-20 — P1-3 `/v3` canary/approval artifact reader readiness seam
 
 Extended the local canary/approval proof from schema-only validation to an injected reader readiness seam without changing `backend/routers/memories.py` or runtime behavior:

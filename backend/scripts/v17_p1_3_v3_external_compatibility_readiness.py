@@ -642,6 +642,31 @@ PROJECTION_STORE_READINESS_PROOF = {
     ],
 }
 
+PROJECTION_READ_SOURCE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_projection_read_source_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_projection_read_source_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Backend-owned V17 /v3 projection read source contract is selected locally, but production-safe "
+        "backend service-principal source reads remain optional/explicit and no route wiring or rollout approval is claimed."
+    ),
+    "covered_defaults": [
+        "route_scoped_server_owned_projection_state_and_items_sources_selected",
+        "authenticated_subject_uid_selector_only_not_config_dimension",
+        "bounded_limit_max_500_and_keyset_created_at_desc_document_id_desc_ordering",
+        "projection_metadata_missing_stale_malformed_fails_closed",
+        "no_client_controlled_collection_path_or_source_override",
+        "no_uid_session_memory_request_payload_cursor_token_secret_or_content_telemetry_labels",
+        "no_legacy_fallback_or_v17_legacy_merge_claim",
+        "valid_read_source_proof_does_not_claim_runtime_wiring_or_rollout_approval",
+    ],
+}
+
 CONTROL_READER_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_control_reader_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_control_reader_readiness.py",
@@ -985,6 +1010,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
+        "projection_read_source_readiness_proof": PROJECTION_READ_SOURCE_READINESS_PROOF,
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
@@ -1028,6 +1054,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_get_testclient_proof_present": True,
             "get_dependency_auth_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
+            "projection_read_source_readiness_proof_present": True,
             "control_reader_readiness_proof_present": True,
             "control_reader_contract_proof_present": True,
             "account_generation_readiness_proof_present": True,
