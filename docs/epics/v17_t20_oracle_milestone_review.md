@@ -1,11 +1,11 @@
 # V17 T19/T20/T21 Oracle Milestone Review
 
-**Date:** 2026-06-19T10:20:49Z  
-**Oracle session:** `v17-t20-vector-review`  
-**Oracle CLI:** `/usr/local/bin/consult-oracle` (`oracle 0.14.0`)  
-**Requested model:** `gpt-5.5-pro`  
-**Execution mode:** browser foreground  
-**Run summary:** 10m51s, `files=15`, `↑103.84k ↓4.2k ↻0 Δ108.03k`  
+**Date:** 2026-06-19T10:20:49Z
+**Oracle session:** `v17-t20-vector-review`
+**Oracle CLI:** `/usr/local/bin/consult-oracle` (`oracle 0.14.0`)
+**Requested model:** `gpt-5.5-pro`
+**Execution mode:** browser foreground
+**Run summary:** 10m51s, `files=15`, `↑103.84k ↓4.2k ↻0 Δ108.03k`
 **Model selection caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=select; verified=no`, but returned an answer under `gpt-5.5-pro[browser]`. Treat this as a real Oracle/browser milestone review with model-selection caveat, not as production approval.
 
 ## Prompt summary
@@ -1076,7 +1076,7 @@ Verification recorded in `docs/epics/v17_memory_implementation_tickets.md`: RED 
 ## Exact Oracle answer
 
 ```text
-According to a document from June 19, 2026, this is **ready for architecture/milestone review, but a production read or vector cutover is a NO-GO**. The happy-path unit tests support the intended pattern—authoritative hydration excludes stale Short-term and Archive—but the implementation still has control-plane bypasses, unsafe fallback semantics, read/write split-brain, optional vector freshness fences, and no real-service or benchmark evidence. 
+According to a document from June 19, 2026, this is **ready for architecture/milestone review, but a production read or vector cutover is a NO-GO**. The happy-path unit tests support the intended pattern—authoritative hydration excludes stale Short-term and Archive—but the implementation still has control-plane bypasses, unsafe fallback semantics, read/write split-brain, optional vector freshness fences, and no real-service or benchmark evidence.
 
 ## Verdict
 
@@ -1151,7 +1151,7 @@ Consequences include:
 * a category parameter on the developer list bypasses V17 and forces the legacy path;
 * rollbacks and user expectations become dependent on which endpoint was used.
 
-This is exactly the T22 external-write-semantics work that remains after the current milestone. Enabling reads before that work creates an externally visible split-brain system. 
+This is exactly the T22 external-write-semantics work that remains after the current milestone. Enabling reads before that work creates an externally visible split-brain system.
 
 **Required fix:** Before any authoritative read cutover, either:
 
@@ -1212,7 +1212,7 @@ Also added a narrow local code guard: legacy queries exclude V17 schema before t
 
 The V17 grant is stored per user and broad consumer—`mcp` or `developer_api`—rather than per MCP app, developer key, OAuth client, or installation. Enabling it appears to enable every corresponding key for the user.
 
-More seriously, the shown MCP streamable-HTTP path advertises OAuth scopes in tool metadata, but `authenticate_api_key` returns only a user ID and `execute_tool` receives no scope set. No scope enforcement is visible. Unless an unseen key lookup rejects by scope, metadata such as `MEMORIES_READ_SECURITY` is documentation rather than authorization. 
+More seriously, the shown MCP streamable-HTTP path advertises OAuth scopes in tool metadata, but `authenticate_api_key` returns only a user ID and `execute_tool` receives no scope set. No scope enforcement is visible. Unless an unseen key lookup rejects by scope, metadata such as `MEMORIES_READ_SECURITY` is documentation rather than authorization.
 
 **Required fix:** Carry authenticated key/app identity and verified scopes into `MemoryAccessPolicy`. Enforce `memories.read` at execution time on every MCP transport, and store grants per app/key where product policy requires differentiated access.
 
@@ -1227,7 +1227,7 @@ That creates two severe risks:
 1. **Unbounded cost and latency:** every vector search can read all Short-term, Long-term, and Archive documents for the user.
 2. **Silent recall collapse:** stale Short-term, Archive, restricted, processed, or stale-revision vectors can consume all top-k slots. Hydration removes them, but there is no overfetch or refill, so the caller may receive zero results even when eligible results exist below top-k.
 
-The tests prove filtering, not adequate recall after filtering. 
+The tests prove filtering, not adequate recall after filtering.
 
 **Required fix:** Batch-fetch only candidate IDs, overfetch by a measured factor or iteratively refill, place strict read/candidate budgets, add timeouts and rate limiting, and load-test high-volume users.
 
@@ -1364,7 +1364,7 @@ Missing production metrics include:
 * Firestore documents read;
 * per-surface success and error rate.
 
-The milestone itself acknowledges that central aggregation is incomplete. 
+The milestone itself acknowledges that central aggregation is incomplete.
 
 ### P1-5 — Chat treats memory content as prompt text
 
@@ -1823,8 +1823,8 @@ Added `backend/scripts/v17_p1_3_v3_archive_short_term_visibility_readiness.py`, 
 
 ## Oracle follow-up review: V17 /v3 pre-runtime readiness chain (2026-06-20)
 
-**Session:** `compact-v17-v3-readiness-review`  
-**Model caveat:** Browser evidence reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`; treat as external review advice, not authoritative execution evidence.  
+**Session:** `compact-v17-v3-readiness-review`
+**Model caveat:** Browser evidence reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`; treat as external review advice, not authoritative execution evidence.
 **Local verification before consult:** clean tree at `ad01f543b`; full V17 regression `676 passed, 3 warnings`; runtime readiness remained `BLOCKED` with `remaining_gate_count=10`, `existing_local_proof_count=33`; no `backend/routers/memories.py` diff.
 
 ### Verdict
@@ -1878,4 +1878,49 @@ No `backend/routers/memories.py` edits, runtime route wiring, production calls, 
 
 1. **No default-memory grant:** recommended default is privacy/consent denial → `403`, no legacy fallback.
 2. **Pagination compatibility:** recommended default is legacy offset behavior only for non-enrolled callers; V17 uses signed keyset cursor, rejects `offset>0`, default limit `100`, max `500`, no `5000` first-page override.
+
+## Oracle milestone review: F1+F2 before F3 composed service (2026-06-20)
+
+Oracle caveat: browser model selection reported `requested=Pro; resolved=(unavailable); strategy=current; verified=no`. Treat as architecture/code-review advice, not runtime evidence.
+
+According to the June 20, 2026 repository bundle, pure pre-wiring work may continue while runtime remains explicitly blocked.
+
+## 1. Verdict
+
+**LIMITED GO for F3 only.**
+
+Proceed with the framework-independent composed service. Keep **NO-GO** for router wiring, canaries, or external readiness. F3 must not be presented as read-cutover evidence, especially while write/delete convergence remains a separate runtime concern.
+
+## 2. Highest-risk gaps
+
+1. **Snapshot-to-read TOCTOU:** define one immutable execution context binding subject, grant/config epoch, account generation, projection generation/commit, cursor-policy and secret versions, read timestamp, and deadline. The projection result must attest the same values; any mismatch should invalidate the whole page.
+
+2. **Row-level fences:** F2’s snapshot coherence is insufficient by itself. Every returned row should match subject, account/projection generation, item revision, source version/commit, and delete/tombstone state. Subject/generation/proof mismatches should fail the page, not merely drop the row.
+
+3. **Filtering versus cursor advancement:** specify whether the next cursor represents the last scanned or last returned row. Prefer last scanned with bounded refill, otherwise hidden Archive, expired Short-term, or tombstoned rows can cause duplicates, omissions, or endless sparse pages.
+
+4. **Deadline enforcement:** checking a deadline only during snapshot construction is not enough. Pass remaining budget into every adapter, recheck around projection reads, and never turn timeout or partial-read results into `200 []`.
+
+5. **Public error taxonomy:** pin exact mappings now—request/cursor/offset errors, grant denial, infrastructure/config failure, generation invalidation, and deadline exhaustion—while keeping public details non-enumerating and sanitized.
+
+## 3. F3 acceptance criteria
+
+* Exact call-order tests with “bomb” adapters proving no later stage runs after failure.
+* Non-enrolled path calls only the legacy reader; enrolled paths can never call it.
+* Missing, false, malformed, or revoked grant performs zero projection reads and zero legacy reads.
+* Closed typed adapter outputs only; dictionaries, unknown enum values, contradictory status flags, exceptions, and malformed returns fail closed.
+* Post-read snapshot attestation plus row-level validation occurs before lifecycle filtering or response adaptation.
+* Multi-page property tests prove no duplicates or omissions across filtered Archive, expired Short-term, deleted rows, equal timestamps, and generation changes.
+* Bounded scan/refill/read counts, response-byte cap, and deadline propagation; no unbounded work merely to fill a 500-item page.
+* `200 []` is reserved for a successfully verified empty projection/page—not timeout, malformed output, partial convergence, or all-security-invalid rows.
+* Readiness results are derived from executed spies and negative cases, not hard-coded “zero call” booleans or test-count growth. Include mutation tests that deliberately bypass a gate and verify the suite fails.
+* Static import checks prohibit FastAPI/router modules, production database clients, network/provider clients, and telemetry sinks.
+
+## 4. Product-decision concerns
+
+**No-default-memory-grant:** the fail-closed/no-fallback decision is sound. The remaining semantic issue is scope: if this grant represents universal privacy consent for default memory, allowing non-enrolled legacy reads without it is contradictory. If it authorizes only the V17 path, state that explicitly. Bind a grant/config epoch into the snapshot and cursor so revocation invalidates outstanding cursors and stale positive caches.
+
+**Pagination:** the decision is sound. Pin `offset=0` as an accepted compatibility no-op, use a stable total order such as `(created_at DESC, memory_id DESC)`, and bind cursors to subject, generation/commit, filters, Archive intent, source/read mode, and grant/config epoch. Include expiry and bounded previous-secret support for rotation.
+
+I could not directly inspect commit `9d81b81e…` because the repository path was unavailable in this session; F2-specific conclusions therefore rely on your supplied milestone summary plus the uploaded repository bundle.
 
