@@ -756,6 +756,25 @@ WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
     ],
 }
 
+CURSOR_SECRET_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_cursor_secret_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_cursor_secret_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "blocker": "No existing runtime-owned V17 /v3 cursor signing secret/config source is wired.",
+    "client_supplied_secret_trusted": False,
+    "covered_defaults": [
+        "server_owned_cursor_secret_source_required_before_runtime_wiring",
+        "client_supplied_cursor_secret_never_trusted",
+        "first_page_no_cursor_does_not_require_client_secret_trust",
+        "signed_cursor_preserves_account_projection_generation_source_and_keyset",
+        "tamper_expiry_generation_source_wrong_secret_fail_closed_no_legacy_fallback",
+        "no_fastapi_firestore_pinecone_provider_cloud_network_imports_or_runtime_wiring",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -818,6 +837,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "account_generation_readiness_proof": ACCOUNT_GENERATION_READINESS_PROOF,
         "real_router_fail_closed_matrix_proof": REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
         "write_convergence_tombstone_matrix_proof": WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
+        "cursor_secret_readiness_proof": CURSOR_SECRET_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -852,6 +872,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "account_generation_readiness_proof_present": True,
             "real_router_fail_closed_matrix_proof_present": True,
             "write_convergence_tombstone_matrix_proof_present": True,
+            "cursor_secret_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

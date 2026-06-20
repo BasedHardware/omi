@@ -52,6 +52,7 @@ PROOF_CONSTANTS = {
     "account_generation_readiness_proof": _EXTERNAL.ACCOUNT_GENERATION_READINESS_PROOF,
     "real_router_fail_closed_matrix_proof": _EXTERNAL.REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
     "write_convergence_tombstone_matrix_proof": _EXTERNAL.WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
+    "cursor_secret_readiness_proof": _EXTERNAL.CURSOR_SECRET_READINESS_PROOF,
 }
 
 
@@ -162,7 +163,12 @@ REMAINING_GATES = [
             "Real cursor signing secret/config and route validation integration must reject tamper/expiry/filter or "
             "generation mismatch and must not apply offset=0 -> limit=5000 behavior in V17 cursor mode."
         ),
-        "existing_local_proofs": ["cursor_service_proof", "request_adapter_proof", "memory_read_service_proof"],
+        "existing_local_proofs": [
+            "cursor_service_proof",
+            "cursor_secret_readiness_proof",
+            "request_adapter_proof",
+            "memory_read_service_proof",
+        ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
