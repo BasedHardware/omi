@@ -42,6 +42,12 @@ import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { startLocalAgentServerIfEnabled, stopLocalAgentServer } from './localAgent/server'
 import { perfMark, flushPerfMarks } from '../shared/perf'
+import {
+  addObservabilityBreadcrumb,
+  captureMainException,
+  initMainObservability,
+  registerObservabilityIpc
+} from './observability'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
 // telemetry. The bench runner overrides OMI_PERF_LOG to point at .bench/.
@@ -86,6 +92,7 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
+initMainObservability()
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -193,6 +200,12 @@ function createWindow(): BrowserWindow {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   perfMark('main:ready')
+  registerObservabilityIpc()
+  addObservabilityBreadcrumb(
+    'app.ready',
+    { automationEnabled: AUTOMATION_ENABLED },
+    { category: 'app' }
+  )
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
@@ -201,6 +214,7 @@ app.whenReady().then(async () => {
     try {
       await startRendererServer(join(__dirname, '../renderer'))
     } catch (e) {
+      captureMainException('renderer_server.start_failed', e)
       console.error(
         '[main] renderer server failed to start — falling back to file:// (sign-in will not work):',
         e
@@ -210,6 +224,7 @@ app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.omiwindows.app')
   void startLocalAgentServerIfEnabled().catch((e) => {
+    captureMainException('local_agent.startup_failed', e)
     console.error('[local-agent] failed to start:', e)
   })
 

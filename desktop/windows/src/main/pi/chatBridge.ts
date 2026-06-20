@@ -1,6 +1,7 @@
 import type { LocalAgentRuntimeContext, LocalAgentToolDefinition } from '../localAgent/tools'
 import { errorResponseBody, listLocalAgentTools, runLocalAgentTool } from '../localAgent/tools'
 import type { ChatMessage, PiChatResponse, PiChatToolCall, PiChatUsage } from '../../shared/types'
+import { addObservabilityBreadcrumb, captureMainException } from '../observability'
 
 const DEFAULT_DESKTOP_API_BASE = 'https://desktop-backend-hhibjajaja-uc.a.run.app'
 const PI_CHAT_MODEL = 'omi-sonnet'
@@ -210,6 +211,11 @@ async function executeToolCall(
   const context = options.runtimeContext ?? defaultRuntimeContext()
 
   let content = ''
+  addObservabilityBreadcrumb(
+    'pi_chat.tool_call_started',
+    { toolName: call.function.name },
+    { category: 'pi_chat' }
+  )
   try {
     if (!PI_CHAT_TOOL_NAMES.has(call.function.name)) {
       throw new Error(`Local tool is not available to Pi/Omi chat: ${call.function.name}`)
@@ -217,8 +223,22 @@ async function executeToolCall(
     const args = parseToolArguments(call)
     const result = await runTool(call.function.name, args, context)
     content = resultToToolContent(result)
+    addObservabilityBreadcrumb(
+      'pi_chat.tool_call_finished',
+      { ok: true, toolName: call.function.name },
+      { category: 'pi_chat' }
+    )
   } catch (error) {
     content = toolErrorContent(error)
+    addObservabilityBreadcrumb(
+      'pi_chat.tool_call_finished',
+      {
+        ok: false,
+        toolName: call.function.name,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      },
+      { category: 'pi_chat', level: 'warning' }
+    )
   }
 
   return {
@@ -244,6 +264,12 @@ export async function sendPiChat(
   let usage: PiChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   let finalText = ''
 
+  addObservabilityBreadcrumb(
+    'pi_chat.send_started',
+    { messageCount: request.messages.length, toolCount: tools.length },
+    { category: 'pi_chat' }
+  )
+
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
     const body: JsonRecord = {
       model: PI_CHAT_MODEL,
@@ -252,13 +278,28 @@ export async function sendPiChat(
       tools,
       tool_choice: 'auto'
     }
-    const completion = await callChatCompletions(body, token, options)
+    let completion: OpenAiChatCompletion
+    try {
+      completion = await callChatCompletions(body, token, options)
+    } catch (error) {
+      captureMainException('pi_chat.request_failed', error, { round })
+      throw error
+    }
     usage = addUsage(usage, usageFrom(completion.usage))
     const message = completion.choices?.[0]?.message
     if (!message) throw new Error('Pi/Omi chat returned no message')
 
     const assistantText = typeof message.content === 'string' ? message.content : ''
     const calls = message.tool_calls ?? []
+    addObservabilityBreadcrumb(
+      'pi_chat.round_finished',
+      {
+        round,
+        toolCallCount: calls.length,
+        hasFinalText: calls.length === 0 && assistantText.length > 0
+      },
+      { category: 'pi_chat' }
+    )
     if (calls.length === 0) {
       finalText = assistantText
       break
@@ -277,8 +318,25 @@ export async function sendPiChat(
   }
 
   if (!finalText && toolCalls.length > 0) {
+    addObservabilityBreadcrumb(
+      'pi_chat.send_finished',
+      { ok: false, toolCallCount: toolCalls.length, reason: 'tool_round_limit' },
+      { category: 'pi_chat', level: 'warning' }
+    )
     throw new Error('Pi/Omi chat exceeded the local tool-call round limit')
   }
+
+  addObservabilityBreadcrumb(
+    'pi_chat.send_finished',
+    {
+      ok: true,
+      toolCallCount: toolCalls.length,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens
+    },
+    { category: 'pi_chat' }
+  )
 
   return {
     text: finalText,

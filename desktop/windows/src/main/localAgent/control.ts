@@ -7,6 +7,7 @@ import type {
 import { getLocalAgentSettings, setLocalAgentSettings } from './settings'
 import { getLocalAgentServerInfo, startLocalAgentServer, stopLocalAgentServer } from './server'
 import { ensureLocalAgentToken, loadLocalAgentToken, rotateLocalAgentToken } from './tokenStore'
+import { addObservabilityBreadcrumb } from '../observability'
 
 const LOCAL_AGENT_HOST = '127.0.0.1'
 
@@ -141,6 +142,11 @@ export function getLocalAgentStatus(): LocalAgentStatus {
 
 export async function setLocalAgentEnabled(enabled: boolean): Promise<LocalAgentStatus> {
   const settings = setLocalAgentSettings({ ...getLocalAgentSettings(), enabled })
+  addObservabilityBreadcrumb(
+    'local_agent.enabled_changed',
+    { enabled, configuredPort: settings.port },
+    { category: 'local_agent' }
+  )
   if (!enabled) {
     await stopLocalAgentServer()
     return getLocalAgentStatus()
@@ -153,6 +159,11 @@ export async function setLocalAgentEnabled(enabled: boolean): Promise<LocalAgent
 export async function setLocalAgentPort(port: number): Promise<LocalAgentStatus> {
   const validatedPort = validatePort(port)
   const settings = setLocalAgentSettings({ ...getLocalAgentSettings(), port: validatedPort })
+  addObservabilityBreadcrumb(
+    'local_agent.port_changed',
+    { configuredPort: settings.port, enabled: settings.enabled },
+    { category: 'local_agent' }
+  )
 
   if (settings.enabled) {
     await stopLocalAgentServer()
@@ -164,6 +175,7 @@ export async function setLocalAgentPort(port: number): Promise<LocalAgentStatus>
 
 export function copyLocalAgentToken(): LocalAgentStatus {
   clipboard.writeText(ensureLocalAgentToken())
+  addObservabilityBreadcrumb('local_agent.token_copied', {}, { category: 'local_agent' })
   return getLocalAgentStatus()
 }
 
@@ -173,6 +185,11 @@ export async function copyLocalAgentSetupPrompt(
   const hostedServerUrl = requireText(args.hostedServerUrl, 'Hosted MCP server URL')
   const hostedKey = requireText(args.hostedKey, 'Hosted MCP key')
   const settings = setLocalAgentSettings({ ...getLocalAgentSettings(), enabled: true })
+  addObservabilityBreadcrumb(
+    'local_agent.setup_prompt_requested',
+    { hasHostedServerUrl: Boolean(hostedServerUrl), hasHostedKey: Boolean(hostedKey) },
+    { category: 'local_agent' }
+  )
   const info = await startLocalAgentServer({ preferredPort: settings.port })
   const localToken = ensureLocalAgentToken()
 
@@ -192,6 +209,11 @@ export async function copyLocalAgentSetupPrompt(
 export async function rotateLocalAgentAccessToken(): Promise<LocalAgentStatus> {
   rotateLocalAgentToken()
   const settings = getLocalAgentSettings()
+  addObservabilityBreadcrumb(
+    'local_agent.token_rotated',
+    { enabled: settings.enabled, configuredPort: settings.port },
+    { category: 'local_agent' }
+  )
 
   if (settings.enabled) {
     await stopLocalAgentServer()
@@ -203,12 +225,27 @@ export async function rotateLocalAgentAccessToken(): Promise<LocalAgentStatus> {
 
 export async function testLocalAgentTools(): Promise<LocalAgentToolsTestResult> {
   const info = getLocalAgentServerInfo()
+  addObservabilityBreadcrumb(
+    'local_agent.tools_test_started',
+    { running: info !== null, port: info?.port ?? null },
+    { category: 'local_agent' }
+  )
   if (!info) {
+    addObservabilityBreadcrumb(
+      'local_agent.tools_test_finished',
+      { ok: false, errorCode: 'not_listening' },
+      { category: 'local_agent', level: 'warning' }
+    )
     return { ok: false, error: 'Local agent API is not listening' }
   }
 
   const token = loadLocalAgentToken()
   if (!token) {
+    addObservabilityBreadcrumb(
+      'local_agent.tools_test_finished',
+      { ok: false, port: info.port, errorCode: 'missing_token' },
+      { category: 'local_agent', level: 'warning' }
+    )
     return { ok: false, error: 'Local agent token is missing' }
   }
 
@@ -217,13 +254,32 @@ export async function testLocalAgentTools(): Promise<LocalAgentToolsTestResult> 
       headers: { authorization: `Bearer ${token}` }
     })
     if (!response.ok) {
+      addObservabilityBreadcrumb(
+        'local_agent.tools_test_finished',
+        { ok: false, port: info.port, status: response.status },
+        { category: 'local_agent', level: 'warning' }
+      )
       return { ok: false, status: response.status, error: `HTTP ${response.status}` }
     }
 
     const body = (await response.json()) as { tools?: unknown[] }
     const toolCount = Array.isArray(body.tools) ? body.tools.length : 0
+    addObservabilityBreadcrumb(
+      'local_agent.tools_test_finished',
+      { ok: true, port: info.port, status: response.status, toolCount },
+      { category: 'local_agent' }
+    )
     return { ok: true, status: response.status, toolCount }
   } catch (error) {
+    addObservabilityBreadcrumb(
+      'local_agent.tools_test_finished',
+      {
+        ok: false,
+        port: info.port,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      },
+      { category: 'local_agent', level: 'warning' }
+    )
     return {
       ok: false,
       error: error instanceof Error ? error.message : 'Local agent tools test failed'

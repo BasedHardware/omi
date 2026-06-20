@@ -1,4 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import {
+  errorToObservabilityPayload,
+  sanitizeObservabilityValue
+} from '../../../../shared/observabilityRedaction'
+import { captureRendererException } from '../../lib/observability'
 
 type Props = {
   children: ReactNode
@@ -21,7 +26,15 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    console.error(`[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`, error, info.componentStack)
+    captureRendererException('renderer.react_error_boundary', error, {
+      label: this.props.label,
+      componentStack: info.componentStack
+    })
+    console.error(
+      `[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`,
+      errorToObservabilityPayload(error),
+      sanitizeObservabilityValue({ componentStack: info.componentStack })
+    )
   }
 
   render(): ReactNode {
