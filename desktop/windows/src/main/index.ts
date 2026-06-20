@@ -34,6 +34,7 @@ import {
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerLocalAgentHandlers } from './ipc/localAgent'
 import { registerPiChatHandlers } from './ipc/piChat'
+import { registerClaudeAcpHandlers } from './ipc/claudeAcp'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -294,6 +295,7 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerLocalAgentHandlers()
   registerPiChatHandlers()
+  registerClaudeAcpHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
