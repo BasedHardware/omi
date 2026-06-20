@@ -96,6 +96,7 @@ const omi: OmiBridgeApi = {
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  rewindFrameById: (id: number) => ipcRenderer.invoke('rewind:frameById', id),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
