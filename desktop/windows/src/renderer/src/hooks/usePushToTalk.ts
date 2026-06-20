@@ -206,7 +206,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
     setFinalizing(false)
     stopAudioViz()
     try {
-      handleRef.current?.stop()
+      void handleRef.current?.stop()
     } catch {
       /* ignore */
     }
@@ -263,7 +263,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
         // Released/superseded before the connection resolved — tear it straight down.
         if (sessionRef.current !== session) {
           try {
-            handle.stop()
+            void handle.stop()
           } catch {
             /* ignore */
           }
@@ -294,13 +294,17 @@ export function usePushToTalk(opts: Options): PushToTalk {
     const releasedAt = Date.now()
 
     const commitNow = (): void => {
+      void commitNowAsync()
+    }
+
+    const commitNowAsync = async (): Promise<void> => {
       if (sessionRef.current !== session) return
       clearPoll()
       finalizingRef.current = false
       setFinalizing(false)
       stopAudioViz()
       try {
-        handleRef.current?.stop()
+        await handleRef.current?.stop()
       } catch {
         /* ignore */
       }
@@ -391,11 +395,14 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // field, so the two never double-handle. Latest start/finish/getDraft are read
   // through refs so the once-registered listeners never call a stale closure.
   const startRecordingRef = useRef(startRecording)
-  startRecordingRef.current = startRecording
   const finishRecordingRef = useRef(finishRecording)
-  finishRecordingRef.current = finishRecording
   const getDraftRef = useRef(opts.getDraft)
-  getDraftRef.current = opts.getDraft
+
+  useEffect(() => {
+    startRecordingRef.current = startRecording
+    finishRecordingRef.current = finishRecording
+    getDraftRef.current = opts.getDraft
+  })
 
   useEffect(() => {
     const inTextField = (): boolean => {
@@ -441,19 +448,19 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   // Tear everything down if the panel unmounts mid-recording/finalize (e.g. Esc reset).
   useEffect(() => {
+    const session = sessionRef
     return () => {
       if (holdTimerRef.current !== null) clearTimeout(holdTimerRef.current)
       clearPoll()
       stopAudioViz()
       try {
-        handleRef.current?.stop()
+        void handleRef.current?.stop()
       } catch {
         /* ignore */
       }
       handleRef.current = null
-      sessionRef.current++
+      session.current++
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return { recording, finalizing, error, analyserRef, onKeyDown, onKeyUp, cancel }
