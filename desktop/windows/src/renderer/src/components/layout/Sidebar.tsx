@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { audioAnalyser } from '../../lib/audioAnalyser'
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   House,
@@ -26,6 +27,7 @@ import {
   Download,
   Gift,
   MoreHorizontal,
+  Lock,
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
@@ -37,16 +39,18 @@ import type { RewindSettings } from '../../../../shared/types'
 import { loadObservations, type FocusStatus } from '../../lib/focusEngine'
 
 const navItems = [
-  { label: 'Dashboard', to: '/home', Icon: House },
-  { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
-  { label: 'Chat', to: '/chat', Icon: MessageCircle },
-  { label: 'Memories', to: '/memories', Icon: Brain },
-  { label: 'Tasks', to: '/tasks', Icon: ListChecks },
-  { label: 'Focus', to: '/focus', Icon: Target },
-  { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Insights', to: '/insights', Icon: Lightbulb },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid },
+  { label: 'Dashboard', to: '/home', Icon: House, tier: 5 },
+  { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare, tier: 1 },
+  { label: 'Chat', to: '/chat', Icon: MessageCircle, tier: 4 },
+  { label: 'Memories', to: '/memories', Icon: Brain, tier: 2 },
+  { label: 'Tasks', to: '/tasks', Icon: ListChecks, tier: 3 },
+  { label: 'Focus', to: '/focus', Icon: Target, tier: 0 },
+  { label: 'Rewind', to: '/rewind', Icon: History, tier: 1 },
+  { label: 'Insights', to: '/insights', Icon: Lightbulb, tier: 0 },
+  { label: 'Apps', to: '/apps', Icon: LayoutGrid, tier: 6 },
 ]
+
+const TIER_KEY = 'omi.tier.level'
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
 const LAST_DEVICE_KEY = 'omi.ble.lastDevice.v1'
@@ -60,15 +64,68 @@ const FOCUS_DOT: Record<FocusStatus, string> = {
   neutral: 'bg-white/25',
 }
 
-/** 4 animated bars — mirrors macOS AudioLevelNavItem when transcription is active. */
+const BAR_MIN = 0.15
+const BAR_GAIN = 3.5
+const BAR_SMOOTH = 0.35
+const FLOOR_DECAY = 0.002
+const FLOOR_MARGIN = 0.04
+
+/** 4 bars driven by real mic AnalyserNode amplitude — mirrors macOS AudioLevelNavItem. */
 function AudioBars(): React.JSX.Element {
+  const barsRef = useRef<Array<HTMLSpanElement | null>>([null, null, null, null])
+  const scalesRef = useRef<number[]>([BAR_MIN, BAR_MIN, BAR_MIN, BAR_MIN])
+  const floorRef = useRef(0)
+  const dataRef = useRef<Uint8Array>(new Uint8Array(16))
+
+  useEffect(() => {
+    let raf = 0
+    const tick = (): void => {
+      const analyserNode = audioAnalyser.get()
+      const bars = barsRef.current
+      if (analyserNode) {
+        if (dataRef.current.length !== analyserNode.frequencyBinCount) {
+          dataRef.current = new Uint8Array(analyserNode.frequencyBinCount)
+        }
+        analyserNode.getByteFrequencyData(dataRef.current as Uint8Array<ArrayBuffer>)
+        const d = dataRef.current
+        const avg = d.reduce((s, v) => s + v / 255, 0) / d.length
+        floorRef.current =
+          avg > floorRef.current ? avg : Math.max(0, floorRef.current - FLOOR_DECAY)
+        const floor = Math.max(0, floorRef.current - FLOOR_MARGIN)
+        const bucketSize = Math.max(1, Math.floor(d.length / 4))
+        for (let i = 0; i < 4; i++) {
+          const s = i * bucketSize
+          const e = Math.min(s + bucketSize, d.length)
+          let sum = 0
+          for (let j = s; j < e; j++) sum += d[j] / 255
+          const raw = sum / (e - s)
+          const v = Math.min(1, Math.max(0, (raw - floor) * BAR_GAIN))
+          const target = BAR_MIN + v * (1 - BAR_MIN)
+          const next = (scalesRef.current[i] ?? BAR_MIN) + (target - (scalesRef.current[i] ?? BAR_MIN)) * BAR_SMOOTH
+          scalesRef.current[i] = next
+          if (bars[i]) bars[i]!.style.transform = `scaleY(${next})`
+        }
+      } else {
+        for (let i = 0; i < 4; i++) {
+          const next = (scalesRef.current[i] ?? BAR_MIN) + (BAR_MIN - (scalesRef.current[i] ?? BAR_MIN)) * 0.1
+          scalesRef.current[i] = next
+          if (bars[i]) bars[i]!.style.transform = `scaleY(${next})`
+        }
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [])
+
   return (
     <div className="flex h-4 shrink-0 items-end gap-[2px]">
       {([0, 1, 2, 3] as const).map((i) => (
         <span
           key={i}
-          className="sidebar-audio-bar w-[2px] origin-bottom rounded-sm bg-[color:var(--accent)]"
-          style={{ animationDelay: `${i * 130}ms` }}
+          ref={(el) => { barsRef.current[i] = el }}
+          className="w-[2px] origin-bottom rounded-sm bg-[color:var(--accent)]"
+          style={{ height: '100%', transform: `scaleY(${BAR_MIN})` }}
         />
       ))}
     </div>
@@ -97,6 +154,10 @@ export function Sidebar(): React.JSX.Element {
   )
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [tierLevel, setTierLevel] = useState<number>(() => {
+    const v = parseInt(localStorage.getItem(TIER_KEY) ?? '', 10)
+    return isNaN(v) ? 99 : v
+  })
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const loadingNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -141,6 +202,17 @@ export function Sidebar(): React.JSX.Element {
       const val = e.newValue
       if (!val) { setPairedDevice(null); return }
       try { setPairedDevice(JSON.parse(val)) } catch {}
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Sync tier level from localStorage — set by the onboarding flow
+  useEffect(() => {
+    const onStorage = (e: StorageEvent): void => {
+      if (e.key !== TIER_KEY) return
+      const v = parseInt(e.newValue ?? '', 10)
+      setTierLevel(isNaN(v) ? 99 : v)
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
@@ -372,13 +444,14 @@ export function Sidebar(): React.JSX.Element {
 
       {/* Main nav items */}
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ label: text, to, Icon }) => {
+        {navItems.map(({ label: text, to, Icon, tier }) => {
           const isLive = to === '/conversations' && (liveStatus === 'live' || liveStatus === 'connecting')
+          const isLocked = tier > 0 && tierLevel < tier
           return (
             <NavLink
               key={to}
               to={to}
-              title={collapsed ? text : undefined}
+              title={collapsed ? (isLocked ? `${text} (unlocks at Tier ${tier})` : text) : undefined}
               onClick={() => handleNavClick(to)}
               className={({ isActive }) =>
                 linkClass(
@@ -410,18 +483,24 @@ export function Sidebar(): React.JSX.Element {
                       />
                     )}
                     {label(text)}
+                    {/* Tier lock icon — shown during onboarding tier flow */}
+                    {isLocked && !collapsed && (
+                      <span title={`Unlocks at Tier ${tier}`}>
+                        <Lock className="h-3 w-3 shrink-0 text-white/25" strokeWidth={2} />
+                      </span>
+                    )}
                     {/* Focus status dot */}
-                    {to === '/focus' && focusStatus && !collapsed && (
+                    {!isLocked && to === '/focus' && focusStatus && !collapsed && (
                       <span className={cn('h-2 w-2 shrink-0 rounded-full', FOCUS_DOT[focusStatus])} />
                     )}
                     {/* Insight unread badge */}
-                    {to === '/insights' && insightBadge > 0 && !collapsed && (
+                    {!isLocked && to === '/insights' && insightBadge > 0 && !collapsed && (
                       <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[10px] font-bold leading-none text-white">
                         {insightBadge > 99 ? '99+' : insightBadge}
                       </span>
                     )}
                     {/* Rewind pulse dot when screen or mic capture is active */}
-                    {to === '/rewind' && (screenOn || micOn) && !collapsed && (
+                    {!isLocked && to === '/rewind' && (screenOn || micOn) && !collapsed && (
                       <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[color:var(--accent)]" />
                     )}
                   </>
@@ -516,7 +595,6 @@ export function Sidebar(): React.JSX.Element {
           <Bluetooth
             className="h-4 w-4 shrink-0 text-[color:var(--accent)]"
             strokeWidth={1.75}
-            title={collapsed ? 'Get Omi Device' : undefined}
           />
           {!collapsed && (
             <>
