@@ -301,7 +301,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         byokStatus.providers[byokStatus.activeChatProvider]?.configured
       ) {
         const result = await window.omi.byokChatSend({
-          messages: [...baseHistory, { ...userMsg, content: textToSend }]
+          messages: [...baseHistory, { ...userMsg, content: textToSend }],
+          modelId: prefs.defaultModelByPurpose?.chat
         })
         assistantText = result.text
         setHistory((h) => {
