@@ -35,6 +35,7 @@ import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerMcpKeyHandlers } from './ipc/mcpKey'
 import { registerLocalAgentHandlers } from './ipc/localAgent'
 import { registerPiChatHandlers } from './ipc/piChat'
+import { registerByokHandlers } from './ipc/byok'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -296,6 +297,7 @@ app.whenReady().then(async () => {
   registerMcpKeyHandlers()
   registerLocalAgentHandlers()
   registerPiChatHandlers()
+  registerByokHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()

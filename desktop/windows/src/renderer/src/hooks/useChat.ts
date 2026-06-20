@@ -271,6 +271,22 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
+      const byokStatus = await window.omi.byokStatus().catch(() => null)
+      if (
+        byokStatus?.activeChatProvider &&
+        byokStatus.providers[byokStatus.activeChatProvider]?.configured
+      ) {
+        const result = await window.omi.byokChatSend({
+          messages: [...baseHistory, { ...userMsg, content: textToSend }]
+        })
+        assistantText = result.text
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+        return
+      }
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
         headers: {
