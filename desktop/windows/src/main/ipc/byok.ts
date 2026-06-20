@@ -9,9 +9,11 @@ import type {
   ByokTestRequest,
   ByokUseRequest,
   ByokValidationResult,
-  ChatMessage
+  ChatMessage,
+  ModelListResult
 } from '../../shared/types'
 import { sendByokChat } from '../byok/chat'
+import { listAvailableByokModels } from '../byok/models'
 import {
   deleteByokKey,
   getByokStatus,
@@ -94,7 +96,11 @@ function normalizeChatRequest(raw: unknown): ByokChatRequest {
   }
   const record = raw as Partial<ByokChatRequest>
   return {
-    messages: normalizeMessages(record.messages)
+    messages: normalizeMessages(record.messages),
+    modelId:
+      typeof record.modelId === 'string' && record.modelId.trim()
+        ? record.modelId.trim()
+        : undefined
   }
 }
 
@@ -133,7 +139,11 @@ export function registerByokHandlers(): void {
       const request = normalizeChatRequest(rawRequest)
       const active = loadActiveByokChatKey()
       if (!active) throw new Error('No BYOK chat provider is active')
-      return sendByokChat(active.provider, active.key, request.messages)
+      return sendByokChat(active.provider, active.key, request.messages, request.modelId)
     }
   )
+
+  ipcMain.handle('byok:models', async (): Promise<ModelListResult> => {
+    return listAvailableByokModels()
+  })
 }
