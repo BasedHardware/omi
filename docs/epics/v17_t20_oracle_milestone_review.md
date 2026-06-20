@@ -1747,3 +1747,9 @@ Added the local pure seam behind the observability/approval readiness gate witho
 - The rollback/read-disable seam is pure/config-shaped: enrolled V17 users fail closed for missing, malformed, disabled, or emergency-disabled server-owned config, while non-enrolled callers remain outside the V17 read seam.
 - `backend/scripts/v17_p1_3_v3_observability_approval_readiness.py` now links this local proof as `v17_v3_local_telemetry_and_rollback_seam`; remaining blockers are real route wiring, real telemetry sink/config source, canary enrollment artifact, rollback gate wiring, and explicit product/privacy/ops approval.
 - Runtime remains **BLOCKED / NO-GO**. No production telemetry sink, Firestore/cloud/provider/vector call, PII/raw memory telemetry, secret/cursor-token logging, Archive default visibility, stale Short-term default visibility, legacy fallback/merge, or production approval is claimed.
+
+### 2026-06-20 — final local canary approval GO/NO-GO aggregate readiness
+
+Added `backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py` as a local-only pre-runtime aggregate decision report for `GET /v3/memories` canary approval. It reports `status=BLOCKED`, `decision=NO_GO`, `runtime_wiring_changed=false`, and no production calls/writes by default or with `--execute`.
+
+The aggregate links the local schema validator, source/IAM emulator/client-deny readiness, production read proof, lifecycle/evidence bundle, observability/telemetry approval, runtime wiring, and external compatibility gates. Local readiness contracts exist, but runtime remains NO-GO until real production read proof, production artifact existence/validity, human approval evidence, telemetry sink/runbook proof, and route wiring gates are satisfied. No production approval, route wiring, Archive default visibility, stale Short-term default visibility, or legacy fallback/merge is claimed.

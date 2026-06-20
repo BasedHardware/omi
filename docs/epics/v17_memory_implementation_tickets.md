@@ -1593,3 +1593,11 @@ Oracle P0 blockers to incorporate before implementation:
 8. Strengthen sensitive-data enforcement, third-party consent/scopes, raw-artifact copy-before-drop, live conversation-to-Short-term ingestion, review backlog resolution, and quantitative launch gates.
 
 The next planning pass should convert these Oracle findings into new P0/P1 tickets and reorder the queue so safety infrastructure, benchmark gates, vector gateway, and rollout verifier precede write-mode tickets.
+
+### 2026-06-20 — final local canary approval GO/NO-GO aggregate readiness
+
+Implemented `backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py` as the final local canary approval GO/NO-GO aggregate readiness artifact for future `GET /v3/memories` canary approval. It imports/uses the existing local readiness report builders where safe and emits `status=BLOCKED`, `decision=NO_GO`, `runtime_wiring_changed=false`, and no production calls/writes by default and with `--execute`.
+
+The aggregate consolidates local schema validator, source/IAM emulator/client-deny readiness, production read proof missing/not-run, lifecycle/evidence bundle blocked, observability/telemetry approval blocked, runtime wiring blocked, and external compatibility blocked gate rows. It preserves the explicit NO-GO blockers: real production backend service-principal read proof, production artifact existence/validity, human approval evidence, telemetry sink/runbook proof, and route wiring gates.
+
+No runtime `/v3` behavior, route wiring, production rollout approval, production Firestore/cloud/provider/vector/network call, telemetry sink call, PII/raw content telemetry, secret/cursor token logging, V17 failure fallback/merge, Archive default visibility, or stale Short-term default visibility is claimed.

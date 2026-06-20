@@ -867,6 +867,21 @@ CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
     ],
 }
 
+CANARY_APPROVAL_AGGREGATE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_aggregate_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "decision": "NO_GO",
+    "approval_claimed": False,
+    "blocker": (
+        "Final local canary approval GO/NO-GO aggregate readiness exists as a pre-runtime NO_GO artifact; "
+        "external compatibility remains blocked until real production proof and route wiring gates pass."
+    ),
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -935,6 +950,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
         "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
+        "canary_approval_aggregate_readiness_proof": CANARY_APPROVAL_AGGREGATE_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",

@@ -63,6 +63,21 @@ CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
     ),
 }
 
+CANARY_APPROVAL_AGGREGATE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_aggregate_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "decision": "NO_GO",
+    "approval_claimed": False,
+    "blocker": (
+        "Final local canary approval aggregate readiness consolidates local contracts but remains NO_GO until "
+        "production read proof, artifact validity, human approval evidence, sink/runbook proof, and route wiring pass."
+    ),
+}
+
 REQUIRED_TELEMETRY_FIELDS = [
     {
         "field_id": "read_source",
@@ -564,6 +579,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
         "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
+        "canary_approval_aggregate_readiness_proof": CANARY_APPROVAL_AGGREGATE_READINESS_PROOF,
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",
