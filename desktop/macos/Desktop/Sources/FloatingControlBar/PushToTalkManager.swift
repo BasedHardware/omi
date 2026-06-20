@@ -852,11 +852,6 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    // Hub wasn't connected for this turn → kick a re-warm now so the NEXT turn lands on
-    // realtime instead of silently staying on the slow cascade. Non-blocking + idempotent
-    // (no-op if already warming); this turn still uses the cascade below.
-    RealtimeHubController.shared.ensureWarm()
-
     // The floating bar's STT is the realtime omni model (replaces Deepgram):
     // one omni model transcribes; reasoning/tools/TTS are untouched (the final
     // transcript still goes to ChatProvider via sendTranscript()/sendQuery()).
