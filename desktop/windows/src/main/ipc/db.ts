@@ -785,6 +785,11 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   return pruneOlderThan(cutoffTs)
 }
 
+export function deleteAllRewindFrames(): number {
+  const result = get().prepare('DELETE FROM rewind_frames').run()
+  return result.changes
+}
+
 // --- Proactive Insights ---
 
 const INSIGHT_COLUMNS =
