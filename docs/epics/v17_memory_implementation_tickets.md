@@ -1774,7 +1774,7 @@ Goal: make the local F6 pre-GCP readiness package maintainable as a future migra
 
 **Wave 3 Oracle session:** `wave-3-final-platonic-ideal`
 **Wave 3 verdict:** no remaining P0 maintainability issues; do not schedule another structural cleanup wave. Only P1 spot-check was deterministic local smoke clock.
-**Wave 3 commit:** `60d73cb8b2f7b233a564ad5bfa55d72fc1d90570` (`refactor(v17): pin f6 local smoke clock`).
+**Wave 3 commit:** this cleanup commit (`refactor(v17): pin f6 local smoke clock`).
 
 Wave 3 Oracle explicitly advised not to make additional structural churn now: keep broad `__init__.py` exports as compatibility surface, keep `local_doubles.py` in the package for executable local smoke, keep protocols beside their consumers, do not rename run-record classes or forbidden-permission constants before handoff, and retain all legacy facades until a later import-migration window.
 
