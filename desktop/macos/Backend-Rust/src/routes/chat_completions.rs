@@ -225,13 +225,14 @@ fn translate_request(
     // (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
     // Filter empty/whitespace system prompts — Anthropic rejects empty cached
     // text blocks with 400, and whitespace-only prompts have no semantic value.
+    // Use original text (not trimmed) for non-empty prompts to preserve content.
     let system = system_prompt
         .and_then(|text| {
             let trimmed = text.trim();
             if trimmed.is_empty() {
                 None
             } else {
-                Some(cached_system_block(trimmed.to_string()))
+                Some(cached_system_block(text))
             }
         });
 
