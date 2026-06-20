@@ -19,6 +19,10 @@ asarUnpack:
   # koffi loads its native .node at runtime, resolved relative to its own package
   # dir — it must live outside the asar archive or the foreground monitor fails.
   - node_modules/koffi/**
+  # Kokoro local TTS uses Transformers.js + onnxruntime-node. The native binding
+  # and provider DLLs must be unpacked so Electron can dlopen them at runtime.
+  - node_modules/onnxruntime-node/**
+  - node_modules/.pnpm/onnxruntime-node*/node_modules/onnxruntime-node/**
 extraResources:
   - from: resources/koffi
     to: koffi

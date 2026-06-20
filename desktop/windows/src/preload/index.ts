@@ -7,6 +7,7 @@ import type {
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  LocalTtsSynthesizeRequest,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -59,6 +60,9 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
   localSttStatus: () => ipcRenderer.invoke('omi-local-stt:status'),
+  localTtsStatus: () => ipcRenderer.invoke('omi-local-tts:status'),
+  localTtsSynthesize: (request: LocalTtsSynthesizeRequest) =>
+    ipcRenderer.invoke('omi-local-tts:synthesize', request),
   observabilityCapture: (event: ObservabilityEvent) =>
     ipcRenderer.send('observability:capture', event),
   observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) =>

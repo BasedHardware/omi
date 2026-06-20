@@ -1,7 +1,7 @@
-import type { ByokStatus } from '../../../shared/types'
+import type { ByokStatus, LocalTtsStatus, RealtimeVoiceProvider } from '../../../shared/types'
 import type { Preferences } from './preferences'
 
-export type RealtimeVoiceProvider = NonNullable<Preferences['realtimeVoiceProvider']>
+export type { RealtimeVoiceProvider } from '../../../shared/types'
 
 export type RealtimeVoiceReadiness = {
   enabled: boolean
@@ -15,10 +15,27 @@ export type RealtimeVoiceReadiness = {
 
 export function realtimeVoiceReadiness(
   preferences: Preferences,
-  byokStatus: ByokStatus | null
+  byokStatus: ByokStatus | null,
+  localTtsStatus: LocalTtsStatus | null = null
 ): RealtimeVoiceReadiness {
   const provider = preferences.realtimeVoiceProvider ?? 'omi-relay'
   const enabled = !!preferences.realtimeVoiceEnabled
+  if (provider === 'local-kokoro') {
+    const canRun = !!localTtsStatus?.available || !!localTtsStatus?.runtime.canInstall
+    return {
+      enabled,
+      provider,
+      ready: enabled && canRun,
+      label: 'Local Kokoro',
+      keyPath: 'On-device Kokoro-82M',
+      transcriptionPath: 'Omi /v4/listen remains active for transcription',
+      reason: canRun
+        ? localTtsStatus?.available
+          ? undefined
+          : 'Kokoro installs on first spoken reply'
+        : (localTtsStatus?.reason ?? 'Local Kokoro TTS unavailable')
+    }
+  }
   if (provider === 'openai-byok') {
     const configured = !!byokStatus?.providers.openai.configured
     return {

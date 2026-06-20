@@ -44,6 +44,18 @@ declare namespace NodeJS {
     OMI_LOCAL_STT_MODEL_NAME?: string
     /** Test/dev override for the GGUF model URL. */
     OMI_LOCAL_STT_MODEL_URL?: string
+    /** Disable the Windows local Kokoro TTS adapter entirely. */
+    OMI_LOCAL_TTS_DISABLED?: string
+    /** Test/dev escape hatch: exercise Kokoro status/synthesis logic outside Windows. */
+    OMI_LOCAL_TTS_ALLOW_NON_WINDOWS?: string
+    /** Test/dev override for the app-owned Kokoro runtime/model cache root. */
+    OMI_LOCAL_TTS_RUNTIME_ROOT?: string
+    /** Test/dev override for the Hugging Face Kokoro ONNX model id. */
+    OMI_LOCAL_TTS_MODEL_ID?: string
+    /** Test/dev override for the Kokoro voice id, e.g. af_heart. */
+    OMI_LOCAL_TTS_VOICE?: string
+    /** Test/dev override for Kokoro ONNX quantization. Defaults to q8. */
+    OMI_LOCAL_TTS_DTYPE?: 'fp32' | 'fp16' | 'q8' | 'q4' | 'q4f16'
     /** The desktop-automation bridge (snapshot → plan → approve → execute real
      *  Windows UI actions) is ON by default. Set OMI_AUTOMATION='0' to disable it
      *  (kill-switch for builds that don't want the experimental feature). */

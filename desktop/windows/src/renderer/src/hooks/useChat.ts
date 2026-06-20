@@ -8,6 +8,7 @@ import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { speakAssistantText } from '../lib/localTtsPlayback'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
 
@@ -212,6 +213,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       }
       setHistory((h) => [...h, outMsg])
       void persistChat([...baseHistory, userMsg, outMsg])
+      void speakAssistantText(outMsg.content)
       sendingRef.current = false
       return
     }
@@ -224,6 +226,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       }
       setHistory((h) => [...h, errMsg])
       void persistChat([...baseHistory, userMsg, errMsg])
+      void speakAssistantText(errMsg.content)
       sendingRef.current = false
       return
     }
@@ -388,6 +391,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       sendingRef.current = false
       setSending(false)
       await persistChat(buildThread(assistantText))
+      void speakAssistantText(assistantText)
     }
   }
 

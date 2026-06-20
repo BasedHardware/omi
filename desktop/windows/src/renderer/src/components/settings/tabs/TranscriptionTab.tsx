@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Activity, Cpu, Languages, Mic, Radio } from 'lucide-react'
-import type { ByokStatus, LocalSttStatus, SttMode } from '../../../../../shared/types'
+import type {
+  ByokStatus,
+  LocalSttStatus,
+  LocalTtsStatus,
+  SttMode
+} from '../../../../../shared/types'
 import { LANGUAGES, languageLabel } from '../../../lib/languages'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { realtimeVoiceReadiness, type RealtimeVoiceProvider } from '../../../lib/realtimeVoice'
@@ -54,6 +59,30 @@ function localRuntimeTone(
   return 'neutral'
 }
 
+function localTtsRuntimeValue(status: LocalTtsStatus | null): string {
+  const state = status?.runtime.installState
+  if (!state) return 'Checking'
+  if (state === 'installed' || state === 'running') return 'Ready'
+  if (state === 'installing') return 'Installing'
+  if (state === 'not_installed') return 'Installs on first reply'
+  if (state === 'unsupported') return 'Unavailable'
+  return 'Needs attention'
+}
+
+function localTtsRuntimeTone(
+  status: LocalTtsStatus | null,
+  selected: boolean
+): 'good' | 'warn' | 'neutral' {
+  if (status?.available) return 'good'
+  if (
+    selected &&
+    (!status || !status.runtime.canInstall || status.runtime.installState === 'error')
+  ) {
+    return 'warn'
+  }
+  return 'neutral'
+}
+
 export function TranscriptionTab(): React.JSX.Element {
   const [language, setLanguage] = useState(getPreferences().language)
   const [continuousRec, setContinuousRec] = useState<boolean>(
@@ -68,6 +97,7 @@ export function TranscriptionTab(): React.JSX.Element {
     () => getPreferences().realtimeVoiceProvider ?? 'omi-relay'
   )
   const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
+  const [localTtsStatus, setLocalTtsStatus] = useState<LocalTtsStatus | null>(null)
   const recordingStatus = useContinuousRecordingStatus()
   const socketTone = websocketStateTone(recordingStatus.websocketState)
   const authValue = recordingStatus.signedIn
@@ -116,7 +146,8 @@ export function TranscriptionTab(): React.JSX.Element {
       realtimeVoiceEnabled,
       realtimeVoiceProvider
     },
-    byokStatus
+    byokStatus,
+    localTtsStatus
   )
 
   useEffect(() => {
@@ -131,6 +162,26 @@ export function TranscriptionTab(): React.JSX.Element {
       })
     return () => {
       canceled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let canceled = false
+    const refresh = (): void => {
+      window.omi
+        .localTtsStatus()
+        .then((status) => {
+          if (!canceled) setLocalTtsStatus(status)
+        })
+        .catch(() => {
+          if (!canceled) setLocalTtsStatus(null)
+        })
+    }
+    refresh()
+    const timer = setInterval(refresh, 15000)
+    return () => {
+      canceled = true
+      clearInterval(timer)
     }
   }, [])
 
@@ -289,6 +340,9 @@ export function TranscriptionTab(): React.JSX.Element {
             <option value="openai-byok" className="bg-neutral-900">
               OpenAI BYOK
             </option>
+            <option value="local-kokoro" className="bg-neutral-900">
+              Local Kokoro
+            </option>
           </select>
           <StatusTile
             label="Voice readiness"
@@ -300,6 +354,22 @@ export function TranscriptionTab(): React.JSX.Element {
                   : (voiceReadiness.reason ?? 'Needs setup')
             }
             tone={!realtimeVoiceEnabled ? 'neutral' : voiceReadiness.ready ? 'good' : 'warn'}
+          />
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <StatusTile
+            label="Local TTS"
+            value={localTtsRuntimeValue(localTtsStatus)}
+            tone={localTtsRuntimeTone(localTtsStatus, realtimeVoiceProvider === 'local-kokoro')}
+          />
+          <StatusTile
+            label="Voice model"
+            value={localTtsStatus?.runtime.model.includes('Kokoro-82M') ? 'Kokoro-82M' : 'Kokoro'}
+            tone={
+              realtimeVoiceProvider === 'local-kokoro' && localTtsStatus?.runtime.canInstall
+                ? 'good'
+                : 'neutral'
+            }
           />
         </div>
         <div className="mt-3 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-white/45">

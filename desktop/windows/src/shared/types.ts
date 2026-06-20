@@ -190,6 +190,7 @@ export type LocalConversation = {
 export type ListenSource = 'mic' | 'system'
 export type TranscriptionBackend = 'omi' | 'local-parakeet'
 export type SttMode = 'auto' | 'cloud' | 'local-parakeet'
+export type RealtimeVoiceProvider = 'omi-relay' | 'openai-byok' | 'local-kokoro'
 
 export type LocalSttStatus = {
   backend: 'parakeet'
@@ -216,6 +217,34 @@ export type LocalSttStatus = {
   }
   reason?: string
   checkedAt: number
+}
+
+export type LocalTtsStatus = {
+  backend: 'kokoro'
+  healthy: boolean
+  available: boolean
+  managed: boolean
+  runtime: {
+    kind: 'kokoro-js'
+    installState: 'unsupported' | 'not_installed' | 'installing' | 'installed' | 'running' | 'error'
+    model: string
+    voice: string
+    canInstall: boolean
+  }
+  reason?: string
+  checkedAt: number
+}
+
+export type LocalTtsSynthesizeRequest = {
+  text: string
+  voice?: string
+  speed?: number
+}
+
+export type LocalTtsSynthesizeResult = {
+  audioPath: string
+  audioUrl: string
+  mimeType: 'audio/wav'
 }
 
 export type ListenStartArgs = {
@@ -356,6 +385,9 @@ export type OmiBridgeApi = {
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
   /** Probe the local Parakeet STT runtime used for on-device transcription. */
   localSttStatus: () => Promise<LocalSttStatus>
+  /** Probe the local Kokoro TTS runtime used for on-device assistant speech. */
+  localTtsStatus: () => Promise<LocalTtsStatus>
+  localTtsSynthesize: (request: LocalTtsSynthesizeRequest) => Promise<LocalTtsSynthesizeResult>
   observabilityCapture: (event: ObservabilityEvent) => void
   observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) => void
   localAgentStatus: () => Promise<LocalAgentStatus>
