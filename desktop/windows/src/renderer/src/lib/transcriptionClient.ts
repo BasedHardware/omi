@@ -10,7 +10,7 @@ import type {
 } from '../../../shared/types'
 
 const CLOUD_CONNECT_TIMEOUT_MS = 3000
-const LOCAL_CONNECT_TIMEOUT_MS = 10000
+const LOCAL_CONNECT_TIMEOUT_MS = 5 * 60_000
 
 export type TranscriptionCallbacks = {
   /** Fires every time a new finalized line is ready. */
@@ -81,7 +81,8 @@ function modeForBackend(backend: TranscriptionBackend): SttMode {
 
 async function localSttAvailable(): Promise<boolean> {
   try {
-    return (await window.omi.localSttStatus()).available
+    const status = await window.omi.localSttStatus()
+    return status.available || status.runtime.canInstall
   } catch {
     return false
   }

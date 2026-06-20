@@ -26,14 +26,24 @@ declare namespace NodeJS {
     OMI_FORCE_PARAKEET_FAIL?: string
     /** Disable the Windows local Parakeet STT adapter entirely. */
     OMI_LOCAL_STT_DISABLED?: string
-    /** Base URL for the local Parakeet service, e.g. http://127.0.0.1:8765. */
-    OMI_LOCAL_PARAKEET_URL?: string
-    /** Alias for OMI_LOCAL_PARAKEET_URL. */
-    OMI_PARAKEET_URL?: string
     /** Test/dev override for machines where nvidia-smi is unavailable. */
     OMI_LOCAL_STT_ASSUME_NVIDIA?: string
-    /** Allow a healthy Parakeet runtime even when nvidia-smi is absent. */
+    /** Test/dev escape hatch: install CPU Parakeet when nvidia-smi is absent. */
     OMI_LOCAL_STT_ALLOW_NON_NVIDIA?: string
+    /** Test/dev escape hatch: exercise installer logic outside Windows. */
+    OMI_LOCAL_STT_ALLOW_NON_WINDOWS?: string
+    /** Test/dev override for the app-owned Parakeet runtime cache root. */
+    OMI_LOCAL_STT_RUNTIME_ROOT?: string
+    /** Test/dev override for runtime flavor; production auto-selects CUDA on NVIDIA Windows. */
+    OMI_LOCAL_STT_RUNTIME_VARIANT?: 'cuda' | 'cpu'
+    /** Test/dev override for parakeet.cpp release version, e.g. v0.3.2. */
+    OMI_LOCAL_STT_PARAKEET_CPP_VERSION?: string
+    /** Test/dev override for parakeet.cpp release asset base URL. */
+    OMI_LOCAL_STT_RELEASE_BASE?: string
+    /** Test/dev override for the GGUF model filename. */
+    OMI_LOCAL_STT_MODEL_NAME?: string
+    /** Test/dev override for the GGUF model URL. */
+    OMI_LOCAL_STT_MODEL_URL?: string
     /** The desktop-automation bridge (snapshot → plan → approve → execute real
      *  Windows UI actions) is ON by default. Set OMI_AUTOMATION='0' to disable it
      *  (kill-switch for builds that don't want the experimental feature). */
