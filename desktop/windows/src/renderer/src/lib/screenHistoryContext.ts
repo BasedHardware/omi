@@ -26,7 +26,9 @@ export async function getScreenHistoryContext(message: string): Promise<string> 
       description: 'recent'
     }
     
-    return fetchScreenContext(defaultRange.startTime, defaultRange.endTime, message)
+    // Extract search terms without temporal phrases for better search
+    const searchTerms = extractSearchTerms(message)
+    return fetchScreenContext(defaultRange.startTime, defaultRange.endTime, searchTerms || undefined)
   }
   
   // Extract search terms after removing temporal phrases

@@ -65,6 +65,18 @@ export function parseTemporalReference(query: string, currentTime: number = Date
   }
 
   // Match "this morning", "this afternoon", "this evening"
+  if (lowerQuery.includes('this evening')) {
+    const startOfEvening = new Date(currentTime)
+    startOfEvening.setHours(18, 0, 0, 0)
+    const endOfEvening = new Date(currentTime)
+    endOfEvening.setHours(23, 59, 59, 999)
+    return {
+      startTime: startOfEvening.getTime(),
+      endTime: endOfEvening.getTime(),
+      description: 'this evening'
+    }
+  }
+
   if (lowerQuery.includes('this morning')) {
     const startOfMorning = new Date(currentTime)
     startOfMorning.setHours(6, 0, 0, 0)
@@ -133,6 +145,7 @@ export function extractSearchTerms(query: string): string {
     /\btoday\b/gi,
     /\bthis morning\b/gi,
     /\bthis afternoon\b/gi,
+    /\bthis evening\b/gi,
     /\blast week\b/gi,
     /\brecently\b/gi,
     /\bjust now\b/gi,

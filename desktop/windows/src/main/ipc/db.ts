@@ -755,7 +755,7 @@ export function searchRewindFramesInTimeRange(
 ): RewindFrame[] {
   return timed('searchRewindFramesInTimeRange', () => {
     if (searchQuery && searchQuery.trim()) {
-      const like = `%${searchQuery}%`
+      const like = `%${searchQuery.trim()}%`
       return get()
         .prepare(
           `SELECT ${REWIND_COLUMNS} FROM rewind_frames

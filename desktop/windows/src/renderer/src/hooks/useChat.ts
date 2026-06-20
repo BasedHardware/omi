@@ -254,7 +254,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       //   • local KG/file context — apps/projects/tech the chat is grounded in.
       const [screenContext, historyContext, localContext] = await Promise.all([
         readCurrentScreen(),
-        getScreenHistoryContext(userMsg.content),
+        Promise.race([
+          getScreenHistoryContext(userMsg.content),
+          new Promise<string>((resolve) => setTimeout(() => resolve(''), 1500))
+        ]),
         gatherLocalContext(userMsg.content)
       ])
       const contextParts = [screenContext, historyContext, localContext].filter(Boolean)

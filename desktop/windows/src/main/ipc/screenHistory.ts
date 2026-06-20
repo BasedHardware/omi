@@ -55,8 +55,9 @@ async function searchScreenHistory(params: ScreenHistorySearchParams): Promise<S
           const contextStart = Math.max(0, index - 50)
           const contextEnd = Math.min(frame.ocrText.length, index + searchQuery.length + 50)
           const snippet = frame.ocrText.substring(contextStart, contextEnd).trim()
-          snippets.push(`[${frame.app}] ...${snippet}...`)
-          if (snippets.length >= 3) break // Limit snippets
+          if (snippets.length < 3) {
+            snippets.push(`[${frame.app}] ...${snippet}...`)
+          }
         }
       }
     }
