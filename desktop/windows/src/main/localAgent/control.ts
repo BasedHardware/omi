@@ -107,9 +107,11 @@ Local Omi Windows authorization header:
 Authorization: Bearer ${localToken}
 
 Local API setup:
+- Direct HTTP is the primary path. No CLI is required for this setup.
 - Verify local status: \`GET ${localUrl}/health\`
 - Discover local tools: \`GET ${localUrl}/v1/local/tools\` with the local authorization header.
 - Call a local tool: \`POST ${localToolEndpoint}\` with the local authorization header and JSON body \`{"name":"get_local_status","arguments":{}}\`.
+- Optional CLI compatibility: only use an Omi CLI or equivalent wrapper if it is already installed and supports this Windows local API. Treat it as a convenience wrapper around the same local URL and bearer token; fall back to direct HTTP if the CLI is absent or fails.
 
 3. Save the Omi guide below. If this agent supports skills, install it as a skill named \`omi\`; otherwise save it in durable agent or project instructions.
 
