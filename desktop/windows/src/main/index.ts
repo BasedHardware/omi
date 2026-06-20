@@ -11,7 +11,8 @@ import {
 } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import iconPath from '../../resources/icon.png?asset'
+import iconPngPath from '../../resources/icon.png?asset'
+import iconIcoPath from '../../resources/icon.ico?asset'
 import { listCaptureSources } from './ipc/capture'
 import { registerOmiListenHandlers } from './ipc/omiListen'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
@@ -93,6 +94,8 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
 
+const iconPath = process.platform === 'win32' ? iconIcoPath : iconPngPath
+const trayIconPath = iconPngPath
 const icon = nativeImage.createFromPath(iconPath)
 let tray: Tray | null = null
 let quitting = false
@@ -131,6 +134,7 @@ function createWindow(): BrowserWindow {
       backgroundThrottling: false
     }
   })
+  mainWindow.setIcon(icon)
 
   // NOTE: the main window is intentionally NOT content-protected. We used to call
   // setContentProtection(true) here (Windows WDA_EXCLUDEFROMCAPTURE) so Rewind/chat
@@ -206,7 +210,7 @@ function showMainWindow(mainWindow: BrowserWindow): void {
 function createTray(mainWindow: BrowserWindow): void {
   if (tray || process.platform !== 'win32') return
   const trayIcon = icon.isEmpty()
-    ? nativeImage.createFromPath(iconPath)
+    ? nativeImage.createFromPath(trayIconPath)
     : icon.resize({ width: 16, height: 16 })
   tray = new Tray(trayIcon)
   tray.setToolTip('Omi')
