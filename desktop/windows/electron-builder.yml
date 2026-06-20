@@ -20,6 +20,7 @@ asarUnpack:
   # dir — it must live outside the asar archive or the foreground monitor fails.
   - node_modules/koffi/**
 win:
+  icon: resources/icon.ico
   executableName: omi-windows
   target:
     - target: nsis
