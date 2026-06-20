@@ -51,3 +51,4 @@ src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
 *.tsbuildinfo
+electron.vite.config.*.mjs
