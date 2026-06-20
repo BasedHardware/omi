@@ -23,16 +23,15 @@ pub struct AppConfig {
     #[serde(default)]
     pub gemini_api_key: String,
 
-    /// OpenAI / Azure OpenAI API key
+    /// OpenAI API key
     #[serde(default)]
     pub openai_api_key: String,
 
-    /// OpenAI base URL (set to Azure endpoint for Azure OpenAI)
-    /// e.g. https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT
+    /// OpenAI base URL
     #[serde(default = "default_openai_base_url")]
     pub openai_base_url: String,
 
-    /// OpenAI model name (or Azure deployment name)
+    /// OpenAI model name
     #[serde(default = "default_openai_model")]
     pub openai_model: String,
 
@@ -49,13 +48,13 @@ pub struct AppConfig {
     pub anthropic_model: String,
 
     /// Primary provider for interactive / low-latency requests (chat, agent).
-    /// One of: "auto" | "openai" | "azure" | "groq" | "anthropic"
+    /// One of: "auto" | "openai" | "groq" | "anthropic"
     #[serde(default = "default_auto")]
     pub primary_provider: String,
 
     /// Provider for background tasks (extraction, summarization, OCR).
     /// Separating this avoids rate-limiting the interactive experience.
-    /// One of: "auto" | "openai" | "azure" | "groq" | "anthropic"
+    /// One of: "auto" | "openai" | "groq" | "anthropic"
     #[serde(default = "default_auto")]
     pub background_provider: String,
 

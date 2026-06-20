@@ -15,52 +15,71 @@ use tracing::{info, warn};
 
 use crate::config::AppConfig;
 
-/// Speak `text` aloud using OpenAI TTS.
+/// Speak `text` aloud using OpenAI TTS (or Google TTS fallback).
 ///
-/// Requires `cfg.openai_api_key` to be non-empty.
 /// Blocks the current thread briefly during `rodio` sink playback (sink.sleep_until_end).
 pub async fn speak_text(text: &str, cfg: &AppConfig) -> Result<()> {
-    let api_key = cfg.openai_api_key.trim().to_string();
-    if api_key.is_empty() {
-        bail!("No OpenAI API key configured — skipping TTS");
-    }
-
     if text.trim().is_empty() {
         return Ok(());
     }
 
-    let voice = if cfg.openai_tts_voice.is_empty() {
-        "alloy".to_string()
+    let api_key = cfg.openai_api_key.trim().to_string();
+    let mp3_bytes = if !api_key.is_empty() {
+        let voice = if cfg.openai_tts_voice.is_empty() {
+            "alloy".to_string()
+        } else {
+            cfg.openai_tts_voice.clone()
+        };
+
+        info!("[TTS] Synthesizing {} chars with voice={voice} (OpenAI)", text.len());
+
+        // ── 1a. Call OpenAI TTS ────────────────────────────────────────────────────
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({
+            "model": "tts-1",
+            "input": text,
+            "voice": voice,
+            "response_format": "mp3"
+        });
+
+        let response = client
+            .post("https://api.openai.com/v1/audio/speech")
+            .bearer_auth(&api_key)
+            .json(&body)
+            .send()
+            .await
+            .context("OpenAI TTS request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let err_text = response.text().await.unwrap_or_default();
+            bail!("OpenAI TTS HTTP {status}: {err_text}");
+        }
+
+        response.bytes().await.context("Failed to read TTS response bytes")?
     } else {
-        cfg.openai_tts_voice.clone()
+        info!("[TTS] Synthesizing {} chars using Google TTS fallback", text.len());
+        // ── 1b. Call Google Translate TTS ──────────────────────────────────────────
+        let client = reqwest::Client::new();
+        let safe_text = text.chars().take(200).collect::<String>();
+        let encoded = urlencoding::encode(&safe_text);
+        let url = format!("https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q={}", encoded);
+
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .context("Google TTS request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let err_text = response.text().await.unwrap_or_default();
+            bail!("Google TTS HTTP {status}: {err_text}");
+        }
+
+        response.bytes().await.context("Failed to read Google TTS response bytes")?
     };
 
-    info!("[TTS] Synthesizing {} chars with voice={voice}", text.len());
-
-    // ── 1. Call OpenAI TTS ────────────────────────────────────────────────────
-    let client = reqwest::Client::new();
-    let body = serde_json::json!({
-        "model": "tts-1",
-        "input": text,
-        "voice": voice,
-        "response_format": "mp3"
-    });
-
-    let response = client
-        .post("https://api.openai.com/v1/audio/speech")
-        .bearer_auth(&api_key)
-        .json(&body)
-        .send()
-        .await
-        .context("OpenAI TTS request failed")?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let err_text = response.text().await.unwrap_or_default();
-        bail!("OpenAI TTS HTTP {status}: {err_text}");
-    }
-
-    let mp3_bytes = response.bytes().await.context("Failed to read TTS response bytes")?;
     info!("[TTS] Received {} bytes of MP3 audio", mp3_bytes.len());
 
     // ── 2. Write to a temp file so rodio can decode ───────────────────────────
@@ -94,9 +113,9 @@ pub async fn speak_text(text: &str, cfg: &AppConfig) -> Result<()> {
     .context("TTS playback error")
 }
 
-/// Check if OpenAI TTS is available based on current config.
-pub fn is_available(cfg: &AppConfig) -> bool {
-    !cfg.openai_api_key.trim().is_empty()
+/// Check if TTS is available based on current config.
+pub fn is_available(_cfg: &AppConfig) -> bool {
+    true // We have Google TTS fallback
 }
 
 /// Speak text in a fire-and-forget tokio task.

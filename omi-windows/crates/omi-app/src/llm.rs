@@ -1,8 +1,8 @@
 /// Shared LLM utilities — multi-provider with per-use-case routing.
 ///
 /// # Provider priority (auto mode)
-/// Primary (chat/agent):    Anthropic → Groq → OpenAI/Azure
-/// Background (extraction): OpenAI/Azure → Anthropic → Groq
+/// Primary (chat/agent):    Anthropic → Groq → OpenAI
+/// Background (extraction): OpenAI → Anthropic → Groq
 /// This ensures interactive chat is never blocked by background summarisation
 /// jobs hammering the same rate-limited endpoint simultaneously.
 
@@ -104,7 +104,6 @@ pub struct ScreenshotExtraction {
 #[derive(Debug, Clone)]
 enum Provider {
     OpenAI { key: String, url: String, model: String },
-    Azure  { key: String, url: String, model: String },
     Groq   { key: String, model: String },
     Anthropic { key: String, model: String },
 }
@@ -113,7 +112,6 @@ impl Provider {
     fn label(&self) -> &'static str {
         match self {
             Self::OpenAI { .. }    => "openai",
-            Self::Azure { .. }     => "azure",
             Self::Groq { .. }      => "groq",
             Self::Anthropic { .. } => "anthropic",
         }
@@ -122,7 +120,6 @@ impl Provider {
     fn is_configured(&self) -> bool {
         match self {
             Self::OpenAI { key, url, .. }    => !key.is_empty() && !url.is_empty(),
-            Self::Azure { key, url, .. }     => !key.is_empty() && !url.is_empty(),
             Self::Groq { key, .. }           => !key.is_empty(),
             Self::Anthropic { key, .. }      => !key.is_empty(),
         }
@@ -142,26 +139,9 @@ fn provider_from_name(name: &str, cfg: &AppConfig) -> Option<Provider> {
         }),
         "openai" if !cfg.openai_api_key.is_empty() => {
             let base = cfg.openai_base_url.trim_end_matches('/');
-            // Azure detection: base URL contains azure.com
-            if base.contains("azure.com") {
-                Some(Provider::Azure {
-                    key: cfg.openai_api_key.clone(),
-                    url: azure_chat_url(base),
-                    model: cfg.openai_model.clone(),
-                })
-            } else {
-                Some(Provider::OpenAI {
-                    key: cfg.openai_api_key.clone(),
-                    url: format!("{base}/chat/completions"),
-                    model: cfg.openai_model.clone(),
-                })
-            }
-        }
-        "azure" if !cfg.openai_api_key.is_empty() => {
-            let base = cfg.openai_base_url.trim_end_matches('/');
-            Some(Provider::Azure {
+            Some(Provider::OpenAI {
                 key: cfg.openai_api_key.clone(),
-                url: azure_chat_url(base),
+                url: format!("{base}/chat/completions"),
                 model: cfg.openai_model.clone(),
             })
         }
@@ -169,29 +149,8 @@ fn provider_from_name(name: &str, cfg: &AppConfig) -> Option<Provider> {
     }
 }
 
-/// Build the correct Azure completions URL, adding api-version if missing.
-fn azure_chat_url(base: &str) -> String {
-    // Azure full path pattern:
-    //   https://{resource}.openai.azure.com/openai/deployments/{deploy}/chat/completions?api-version=2024-02-01
-    let has_path = base.contains("/chat/completions");
-    let has_version = base.contains("api-version");
-    if has_path && has_version {
-        return base.to_string();
-    }
-    let base = base.trim_end_matches('/');
-    if has_path {
-        format!("{base}?api-version=2024-02-01")
-    } else {
-        format!("{base}/chat/completions?api-version=2024-02-01")
-    }
-}
-
 /// Collect every configured provider in priority order for the given use-case.
 fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
-    let azure_key = std::env::var("AZURE_API_KEY").unwrap_or_default();
-    let azure_base = std::env::var("AZURE_BASE_URL").unwrap_or_default();
-    let azure_model = std::env::var("AZURE_MODEL").unwrap_or_else(|_| "gpt-4o-mini".into());
-
     // If user selected a specific provider, try that first
     let pref = match use_case {
         LlmUseCase::Chat       => cfg.primary_provider.as_str(),
@@ -223,17 +182,6 @@ fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
         }
     }
 
-    // Env-var Azure fallback
-    if !azure_key.is_empty() && !azure_base.is_empty()
-        && !out.iter().any(|x| x.label() == "azure")
-    {
-        out.push(Provider::Azure {
-            key: azure_key,
-            url: azure_chat_url(&azure_base),
-            model: azure_model,
-        });
-    }
-
     out
 }
 
@@ -242,7 +190,6 @@ fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
 pub fn resolve_llm_endpoint(cfg: &AppConfig) -> (String, String, String) {
     match all_providers_for(cfg, LlmUseCase::Chat).into_iter().next() {
         Some(Provider::OpenAI    { key, url, model }) => (key, url, model),
-        Some(Provider::Azure     { key, url, model }) => (key, url, model),
         Some(Provider::Groq      { key, model })      => (
             key,
             "https://api.groq.com/openai/v1/chat/completions".into(),
@@ -289,16 +236,12 @@ where
                 call_openai_streaming(
                     key,
                     "https://api.groq.com/openai/v1/chat/completions",
-                    model, &messages, max_tokens, false, &on_token,
+                    model, &messages, max_tokens, &on_token,
                 ).await
             }
             Provider::OpenAI { key, url, model } => {
                 let _permit = openai_sem().acquire().await.ok();
-                call_openai_streaming(key, url, model, &messages, max_tokens, false, &on_token).await
-            }
-            Provider::Azure { key, url, model } => {
-                let _permit = openai_sem().acquire().await.ok();
-                call_openai_streaming(key, url, model, &messages, max_tokens, true, &on_token).await
+                call_openai_streaming(key, url, model, &messages, max_tokens, &on_token).await
             }
         };
         match result {
@@ -319,7 +262,6 @@ async fn call_openai_streaming<F>(
     model: &str,
     messages: &[LlmMessage],
     max_tokens: Option<u32>,
-    is_azure: bool,
     on_token: &F,
 ) -> Result<String>
 where
@@ -336,11 +278,7 @@ where
     };
 
     let mut builder = reqwest::Client::new().post(url).json(&req);
-    if is_azure {
-        builder = builder.header("api-key", api_key).header("Content-Type", "application/json");
-    } else {
-        builder = builder.header("Authorization", format!("Bearer {api_key}"));
-    }
+    builder = builder.header("Authorization", format!("Bearer {api_key}"));
 
     let resp = builder.send().await.context("Streaming LLM request failed")?;
     let status = resp.status();
@@ -432,16 +370,11 @@ async fn call_provider(
                     model,
                     &messages,
                     max_tokens,
-                    false,
                 ).await
             }
             Provider::OpenAI { key, url, model } => {
                 let _permit = openai_sem().acquire().await.ok();
-                call_openai_compat(key, url, model, &messages, max_tokens, false).await
-            }
-            Provider::Azure { key, url, model } => {
-                let _permit = openai_sem().acquire().await.ok();
-                call_openai_compat(key, url, model, &messages, max_tokens, true).await
+                call_openai_compat(key, url, model, &messages, max_tokens).await
             }
         };
 
@@ -474,8 +407,7 @@ pub async fn complete(
     if url == "anthropic" {
         return call_anthropic(api_key, model, &messages, max_tokens).await;
     }
-    let is_azure = url.contains("azure.com");
-    call_openai_compat(api_key, url, model, &messages, max_tokens, is_azure).await
+    call_openai_compat(api_key, url, model, &messages, max_tokens).await
 }
 
 async fn call_openai_compat(
@@ -484,7 +416,6 @@ async fn call_openai_compat(
     model: &str,
     messages: &[LlmMessage],
     max_tokens: Option<u32>,
-    is_azure: bool,
 ) -> Result<String> {
     let req = LlmRequest {
         model: model.to_string(),
@@ -495,13 +426,7 @@ async fn call_openai_compat(
     };
 
     let mut builder = reqwest::Client::new().post(url).json(&req);
-    if is_azure {
-        builder = builder
-            .header("api-key", api_key)
-            .header("Content-Type", "application/json");
-    } else {
-        builder = builder.header("Authorization", format!("Bearer {api_key}"));
-    }
+    builder = builder.header("Authorization", format!("Bearer {api_key}"));
 
     let resp = builder.send().await.context("LLM request failed")?;
     let status = resp.status();

@@ -152,19 +152,12 @@ pub fn ChatPage() -> Element {
                 stream: false,
             };
 
-            let is_azure = api_url.contains("azure.com");
             tracing::info!("Chat URL: {api_url}");
             tracing::info!("Chat model: {}", req.model);
-            tracing::info!("Chat is_azure: {is_azure}");
 
-            let mut request = reqwest::Client::new().post(&api_url);
-            if is_azure {
-                request = request
-                    .header("api-key", &api_key)
-                    .header("Content-Type", "application/json");
-            } else {
-                request = request.header("Authorization", format!("Bearer {api_key}"));
-            }
+            let request = reqwest::Client::new()
+                .post(&api_url)
+                .header("Authorization", format!("Bearer {api_key}"));
             let result = request.json(&req).send().await;
 
             match result {

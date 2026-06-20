@@ -491,6 +491,7 @@ pub fn App() -> Element {
             let desktop = dioxus::desktop::window();
             
             // Build secondary window config
+            #[allow(unused_mut)]
             let mut builder = dioxus::desktop::tao::window::WindowBuilder::new()
                 .with_title("Omi Character")
                 .with_decorations(false)     // borderless
@@ -498,6 +499,12 @@ pub fn App() -> Element {
                 .with_always_on_top(true)    // always-on-top overlay
                 .with_resizable(false)
                 .with_inner_size(dioxus::desktop::tao::dpi::LogicalSize::new(180.0, 180.0));
+
+            #[cfg(target_os = "windows")]
+            {
+                use dioxus::desktop::tao::platform::windows::WindowBuilderExtWindows;
+                builder = builder.with_skip_taskbar(true).with_undecorated_shadow(false);
+            }
 
             // Position in the bottom-right corner of the primary monitor
             if let Some(monitor) = desktop.primary_monitor() {
@@ -515,6 +522,7 @@ pub fn App() -> Element {
 
             let character_cfg = dioxus::desktop::Config::new()
                 .with_background_color((0, 0, 0, 0))
+                .with_custom_head(r#"<style>html, body, #main { background-color: transparent !important; background: transparent !important; overflow: hidden; margin: 0; padding: 0; }</style>"#.to_string())
                 .with_window(builder);
 
             desktop.new_window(

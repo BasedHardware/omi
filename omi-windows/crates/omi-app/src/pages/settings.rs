@@ -153,11 +153,11 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
-                    label { class: "settings-label", "OpenAI / Azure Key" }
+                    label { class: "settings-label", "OpenAI Key" }
                     input {
                         class: "settings-input",
                         r#type: "password",
-                        placeholder: "sk-... or Azure api-key",
+                        placeholder: "sk-...",
                         value: "{config.read().openai_api_key}",
                         onchange: move |e| {
                             config.write().openai_api_key = e.value();

@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use crate::agent_runtime::{AgentEvent, AgentRuntime, AgentStatus};
 use crate::app::Db;
 use crate::config::AppConfig;
-
+use crate::recording::LiveTranscript;
 
 // ── Message types ─────────────────────────────────────────────────────────────
 
@@ -57,6 +57,7 @@ pub fn AgentPage() -> Element {
     let config: Signal<AppConfig> = use_context();
     let db: Signal<Option<Db>> = use_context();
     let runtime: Signal<AgentRuntime> = use_context();
+    let live_transcript: Signal<LiveTranscript> = use_context();
     let mut messages: Signal<Vec<ChatMessage>> = use_signal(Vec::new);
     // Flat history for the LLM: (role, content) pairs — kept in sync with messages
     let mut history: Signal<Vec<(String, String)>> = use_signal(Vec::new);
@@ -64,7 +65,7 @@ pub fn AgentPage() -> Element {
     let is_loading = use_signal(|| false);
 
     // Pre-fill from a tapped suggestion (if one exists in context)
-    let suggestion_prompt: Signal<Option<String>> = use_context();
+    let mut suggestion_prompt: Signal<Option<String>> = use_context();
 
     // Native mode: agent is "Ready" as long as an LLM key is configured.
     let (api_key, _, _) = crate::llm::resolve_llm_endpoint(&config.read());
@@ -151,14 +152,32 @@ pub fn AgentPage() -> Element {
         }
     });
 
-    // Build context for agent queries from DB
+    // Build context for agent queries from DB + live transcript + persona
     let build_context = move || -> String {
         let db_val = db.read().clone();
+        let cfg = config.read().clone();
+        let mut ctx = String::new();
+
+        // Persona instructions
+        if !cfg.persona_instructions.is_empty() {
+            ctx.push_str("## Persona Instructions\n");
+            ctx.push_str(&cfg.persona_instructions);
+            ctx.push('\n');
+        }
+
+        // Live transcript (what you're saying right now)
+        let transcript = live_transcript.read();
+        if !transcript.segments.is_empty() {
+            ctx.push_str("## Live Transcript\n");
+            for seg in transcript.segments.iter().take(6) {
+                ctx.push_str(&format!("S{}: {}\n", seg.speaker, seg.text));
+            }
+        }
+
+        // DB context
         if let Some(crate::app::Db(ref d)) = db_val {
             let memories = d.get_memories_text(10).unwrap_or_default();
             let recent = d.get_recent_context(3).unwrap_or_default();
-            let mut ctx = String::new();
-            // recent is Vec<(String,String,String)>; format into text
             if !recent.is_empty() {
                 ctx.push_str("## Recent Conversations\n");
                 for (ts, title, text) in &recent {
@@ -169,10 +188,9 @@ pub fn AgentPage() -> Element {
                 ctx.push_str("## Long-term Memories\n");
                 ctx.push_str(&memories);
             }
-            ctx
-        } else {
-            String::new()
         }
+
+        ctx
     };
 
     let mut send_message = move |text: String| {
@@ -192,18 +210,30 @@ pub fn AgentPage() -> Element {
         msgs.set(list);
         let mut h = hist.read().clone();
         h.push(("user".into(), text.clone()));
+        // Keep last 12 turns to avoid token bloat
+        if h.len() > 24 {
+            h = h.split_off(h.len() - 24);
+        }
         hist.set(h.clone());
         loading.set(true);
         input_text.set(String::new());
 
         let ctx = build_context();
 
+        // Clear suggestion pill after use
+        suggestion_prompt.set(None);
+
         spawn(async move {
+            let cfg = config.read().clone();
+            let assistant_name = if cfg.persona_name.is_empty() { "Omi" } else { &cfg.persona_name };
+            let user_name = if cfg.user_name.is_empty() { "the user" } else { &cfg.user_name };
             let system = format!(
-                "You are Omi, a proactive AI assistant running on the user's Windows computer.\n\
+                "You are {}, a proactive AI assistant running on {}'s Windows computer.\n\
                 Be concise, precise, and helpful. Use context below when relevant.\n\
-                When listing items use plain text, not markdown (the UI renders plain text).\n\n\
-                {ctx}"
+                When listing items use plain text, not markdown (the UI renders plain text).\n\
+                Adapt your tone to be natural and conversational.\n\n\
+                {ctx}",
+                assistant_name, user_name, ctx = ctx
             );
             // Use native LLM path — no Node.js dependency
             let rt = runtime_ref.read().clone();
@@ -237,7 +267,7 @@ pub fn AgentPage() -> Element {
                 }
                 if matches!(agent_status, AgentStatus::Unavailable) {
                     div { class: "agent-unavailable-hint",
-                        "⚠ No LLM API key configured. Add an OpenAI, Groq, or Azure key in Settings → API Keys to use the Agent."
+                        "⚠ No LLM API key configured. Add an OpenAI or Groq key in Settings → API Keys to use the Agent."
                     }
                 }
             }

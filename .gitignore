@@ -14,7 +14,8 @@ dump/
 *.wav
 node_modules
 yarn.lock
-
+credentials.json
+token.json
 # Coordination (AI agent collab manifests)
 .coordination/
 
