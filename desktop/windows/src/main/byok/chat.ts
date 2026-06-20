@@ -32,7 +32,7 @@ function normalizeModelOverride(provider: ByokChatProvider, modelId?: string): s
   return null
 }
 
-function modelFor(provider: ByokChatProvider, modelId?: string): string {
+export function byokChatModelFor(provider: ByokChatProvider, modelId?: string): string {
   const override = normalizeModelOverride(provider, modelId)
   if (override) return override
 
@@ -101,7 +101,7 @@ export function buildByokChatRequest(
   messages: ChatMessage[],
   modelId?: string
 ): { url: string; init: RequestInit } {
-  const model = modelFor(provider, modelId)
+  const model = byokChatModelFor(provider, modelId)
   const thread = chatMessages(messages)
 
   switch (provider) {
