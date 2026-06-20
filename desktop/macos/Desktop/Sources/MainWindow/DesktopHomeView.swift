@@ -381,6 +381,10 @@ struct DesktopHomeView: View {
       // Removing .minSize from sizingOptions prevents this full-tree traversal.
       // The window's min size is enforced at the AppKit level instead.
       enforceMainWindowMinimumSize()
+      // SwiftUI's automatic resizability later re-derives the window min from content
+      // extrema and resets our pin, after which the window can be dragged small enough
+      // to hide content. Re-pin on every live resize so AppKit keeps clamping the drag.
+      installMinimumSizeGuardIfNeeded()
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
@@ -389,7 +393,12 @@ struct DesktopHomeView: View {
       redirectIfPageHidden()
       reportAutomationState()
     }
-    .onChange(of: selectedIndex) { _, _ in reportAutomationState() }
+    .onChange(of: selectedIndex) { _, _ in
+      // Page nav recreates the content hosting view with default sizingOptions, which
+      // resets the window min — re-pin + re-disable to hold the minimum.
+      enforceMainWindowMinimumSize()
+      reportAutomationState()
+    }
     .onChange(of: selectedSettingsSection) { _, _ in reportAutomationState() }
     .onChange(of: highlightedSettingId) { _, _ in reportAutomationState() }
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
@@ -433,6 +442,30 @@ struct DesktopHomeView: View {
         // Search contentView itself + all descendants.
         Self.disableMinSizeComputation(in: window)
       }
+    }
+  }
+
+  /// Re-pin the window minimum on every live resize. SwiftUI's `.automatic` window
+  /// resizability periodically recomputes content-size extrema and overwrites the
+  /// one-shot pin from `enforceMainWindowMinimumSize()`, after which the window can be
+  /// dragged small enough to hide content. Observing `didResize` and re-pinning keeps
+  /// AppKit clamping the live drag at the minimum. Installed once for the app's lifetime.
+  private static var minimumSizeGuardInstalled = false
+  private func installMinimumSizeGuardIfNeeded() {
+    guard !Self.minimumSizeGuardInstalled else { return }
+    Self.minimumSizeGuardInstalled = true
+    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResizeNotification, object: nil, queue: .main
+    ) { note in
+      guard let window = note.object as? NSWindow,
+        window.title.lowercased().hasPrefix("omi")
+      else { return }
+      let frameMin = window.frameRect(
+        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+      ).size
+      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+      if window.minSize != frameMin { window.minSize = frameMin }
     }
   }
 
