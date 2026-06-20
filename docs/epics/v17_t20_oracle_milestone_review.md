@@ -1820,3 +1820,50 @@ Non-claims preserved: no `backend/routers/memories.py` change, no runtime `/v3` 
 ### Follow-up implementation slice: archive + stale Short-term visibility readiness
 
 Added `backend/scripts/v17_p1_3_v3_archive_short_term_visibility_readiness.py`, `backend/utils/memory/v17_v3_archive_visibility_readiness.py`, and `backend/tests/unit/test_v17_v3_archive_visibility_readiness.py` as a local/read-only readiness contract for future GET `/v3/memories`: Archive is unavailable by default, stale Short-term is not default-visible, archive/historical context requires explicit opt-in, fresh source-backed Short-term and active stable Long-term may be default-visible, and unknown visibility/lifecycle/freshness fails closed. Runtime remains BLOCKED; no route wiring, production calls, telemetry sink, approval, Archive default visibility, stale Short-term default visibility, or legacy fallback/merge is claimed.
+
+## Oracle follow-up review: V17 /v3 pre-runtime readiness chain (2026-06-20)
+
+**Session:** `compact-v17-v3-readiness-review`  
+**Model caveat:** Browser evidence reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`; treat as external review advice, not authoritative execution evidence.  
+**Local verification before consult:** clean tree at `ad01f543b`; full V17 regression `676 passed, 3 warnings`; runtime readiness remained `BLOCKED` with `remaining_gate_count=10`, `existing_local_proof_count=33`; no `backend/routers/memories.py` diff.
+
+### Verdict
+
+Oracle: **GO to begin a default-off wiring implementation; NO-GO to enable the V17 path, canary it, or describe it as runtime-ready.** The review says the local proof chain has reached diminishing returns and the next meaningful proof is composed route behavior, but several seam defects should be fixed before the first router commit.
+
+### P0 activation blockers
+
+1. No composed V17 FastAPI behavior exists; current real-router proof is legacy-only baseline evidence.
+2. Write/delete/tombstone/rollback convergence is not real production evidence yet.
+3. Production control/source/config/secret/IAM behavior remains unproved.
+
+### P1 fixes before route wiring PR is considered complete
+
+1. Restrict `legacy_primary_only` to the enrollment step and only when `context.enrolled is False`; otherwise fail closed as an internal contract error.
+2. Normalize adapter exceptions/timeouts/malformed decisions into typed bounded outcomes.
+3. Fix the Short-term lifecycle hole: missing/empty lifecycle currently passes for fresh source-backed Short-term; require an explicit approved Short-term lifecycle.
+4. Model archive opt-in as `query_requested AND server_capability_granted`, not plain request booleans.
+5. Add/request a request-scoped consistency snapshot for control/config/account generation/projection/cursor/convergence evidence.
+6. Decide/pin pagination compatibility: non-enrolled legacy keeps current behavior; V17 should use signed keyset cursors and reject `offset>0` unless product decides otherwise.
+7. Replace module-import checks for V17 adapter invocation with function-level call counters/spies.
+
+### P2 cleanup
+
+- Remove memory IDs from readiness output; reason/count-only is safer.
+- Stop treating `existing_local_proof_count` as confidence.
+- Consolidate static readiness reporters into a manifest-driven gate reporter with evidence types.
+- Rename no-I/O `--execute` scripts to `--report` or contract artifacts where appropriate.
+- Reduce tests that only assert `proof_present=True` or doc strings; keep a smaller documentation-link lint.
+
+### Recommended next slices
+
+1. Harden pure seams: legacy restriction, decision invariants, exception normalization, Short-term lifecycle, archive capability, no identifiers in reports.
+2. Add a typed request-scoped `V17V3GetRuntimeSnapshot` with subject/control/config/account generation/projection generation/convergence/cursor/archive capability/deadline/read timestamp coherence.
+3. Build a framework-independent composed service entry point before route wiring.
+4. First router commit should be default-off, legacy-byte-preserving for non-enrolled callers, V17-only for enrolled callers, dependency-overrideable in TestClient, and never fallback to legacy after V17 entry.
+
+### Minimal decisions for David
+
+1. **No default-memory grant:** recommended default is privacy/consent denial → `403`, no legacy fallback.
+2. **Pagination compatibility:** recommended default is legacy offset behavior only for non-enrolled callers; V17 uses signed keyset cursor, rejects `offset>0`, default limit `100`, max `500`, no `5000` first-page override.
+
