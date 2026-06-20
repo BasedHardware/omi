@@ -206,7 +206,7 @@ export function Memories(): React.JSX.Element {
         {!manage && brainGraph.nodes.length > 0 && (
           <div className="mx-auto mb-6 max-w-4xl">
             <div className="surface-card relative h-80 overflow-hidden p-0">
-              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive={false} pauseWhenHidden />
+              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive orbit="rotate" spherical cameraDistance={1300} pauseWhenHidden lite />
             </div>
           </div>
         )}

@@ -197,11 +197,31 @@ export function useRecorder(): UseRecorder {
         systemLines,
         systemInterim
       })
+      // Keep the per-speaker lines (not just the flattened transcript) so the
+      // detail view can show speaker tags. `source` keeps mic and system-audio
+      // speakers apart (their speaker numbers are independent and can collide).
+      const segments = [
+        ...micLines.map((l) => ({
+          speaker: l.speaker,
+          speakerId: l.speakerId,
+          isUser: l.isUser,
+          text: l.text,
+          source: 'mic' as const
+        })),
+        ...systemLines.map((l) => ({
+          speaker: l.speaker,
+          speakerId: l.speakerId,
+          isUser: l.isUser,
+          text: l.text,
+          source: 'system' as const
+        }))
+      ]
       await window.omi.insertLocalConversation({
         id: session.conversationId,
         startedAt: session.startedAt,
         endedAt: session.endedAt,
         transcript,
+        segments,
         createdAt: Date.now()
       })
       // Saved locally only (the dev API key 401s on Omi's read/reprocess

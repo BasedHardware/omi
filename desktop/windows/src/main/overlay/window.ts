@@ -8,9 +8,8 @@
 // the corners. Visual confirmation is manual GUI.
 import { app, BrowserWindow, screen } from 'electron'
 import { join } from 'path'
-import { is } from '@electron-toolkit/utils'
+import { loadRenderer } from '../render/renderServer'
 import { computeOverlayBounds, OVERLAY_WIDTH } from './bounds'
-import { rendererBaseUrl } from '../rendererServer'
 
 let overlayWindow: BrowserWindow | null = null
 
@@ -33,7 +32,7 @@ export function getOverlayWindow(): BrowserWindow | null {
  */
 export function createOverlayWindow(): BrowserWindow {
   const win = new BrowserWindow({
-    width: OVERLAY_WIDTH,
+    width: currentOverlayWidth(),
     height: 200,
     show: false,
     // Hidden title bar, NO native caption buttons (no minimize/close). The window
@@ -104,16 +103,9 @@ export function createOverlayWindow(): BrowserWindow {
     console.error('[overlay] did-fail-load', code, desc, url)
   )
 
-  // Must load from the same origin as the main window (dev server or the
-  // production loopback server) — auth/localStorage state is per-origin, so a
-  // file:// overlay would always look signed out.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/overlay`)
-  } else if (rendererBaseUrl()) {
-    win.loadURL(`${rendererBaseUrl()}/index.html#/overlay`)
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'overlay' })
-  }
+  // Same origin as the main window (localhost in prod) so the overlay shares the
+  // default session's Firebase auth + onboarding state.
+  loadRenderer(win, 'overlay')
 
   applyOverlayMaterial(win)
   overlayWindow = win
@@ -185,6 +177,38 @@ let activeWorkArea: { x: number; y: number; width: number; height: number } | nu
 // shortcut-setup step ships later.
 let overlayEnabled = false
 
+// Global UI scale (1 = default). The overlay renderer zooms its fixed-width panel
+// by this factor, so the window WIDTH must scale to match (height is measured from
+// the DOM and handled by the height tween). Pushed from the renderer on startup
+// and whenever the user changes the UI scale in Settings.
+let overlayScale = 1
+
+/** The overlay window width at the current UI scale. The renderer paints the panel
+ *  at OVERLAY_WIDTH × scale, so the window must be that wide to fit it edge-to-edge. */
+function currentOverlayWidth(): number {
+  return Math.round(OVERLAY_WIDTH * overlayScale)
+}
+
+/**
+ * Set the global UI scale. Clamps it, forwards it to the (warm) overlay window so
+ * it re-zooms its panel live, and resizes the window width to match — immediately
+ * if it's currently open, otherwise the new width is applied on the next summon.
+ */
+export function setOverlayScale(scale: number): void {
+  if (!Number.isFinite(scale)) return
+  overlayScale = Math.min(1.6, Math.max(0.8, scale))
+  const win = overlayWindow
+  if (!win || win.isDestroyed()) return
+  win.webContents.send('overlay:scale', overlayScale)
+  // If it's open, re-fit the window to the new width now (the renderer's re-zoom
+  // will also report a fresh height, which the height tween picks up).
+  if (win.isVisible()) {
+    const wa =
+      activeWorkArea ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+    win.setBounds(computeOverlayBounds(wa, lastContentHeight, currentOverlayWidth()))
+  }
+}
+
 /** Enable/disable summoning. Disabling also hides the overlay if it's open. */
 export function setOverlayEnabled(enabled: boolean): void {
   overlayEnabled = enabled
@@ -241,7 +265,7 @@ function presentOverlay(win: BrowserWindow): void {
   if (!activeWorkArea) {
     activeWorkArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   }
-  win.setBounds(computeOverlayBounds(activeWorkArea, lastContentHeight))
+  win.setBounds(computeOverlayBounds(activeWorkArea, lastContentHeight, currentOverlayWidth()))
   snapUntil = Date.now() + SETTLE_MS
   win.show()
   win.focus()
@@ -337,7 +361,7 @@ export function setOverlayHeight(contentHeight: number): void {
   // somehow unset) so the tween never repositions onto a different monitor.
   const workArea =
     activeWorkArea ?? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
-  const target = computeOverlayBounds(workArea, contentHeight)
+  const target = computeOverlayBounds(workArea, contentHeight, currentOverlayWidth())
   const current = win.getBounds()
 
   // Retarget the (single, continuous) tween toward the latest goal. Updating these

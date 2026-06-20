@@ -38,7 +38,13 @@ export type TranscriptLine = {
    *  refined / re-emitted around pauses, so consumers can upsert instead of append
    *  to avoid duplicating earlier speech. May be undefined for un-id'd lines. */
   id?: string
+  /** Display label (single-speaker context): "You" / "Speaker N" / a name. */
   speaker?: string
+  /** Raw diarization fields, preserved so a multi-voice transcript can be
+   *  re-labeled by `speaker_id` (on the desktop single mic `is_user` is always
+   *  true and can't tell real speakers apart). */
+  speakerId?: number
+  isUser?: boolean
   text: string
   interim?: boolean
 }
@@ -57,6 +63,20 @@ export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: st
 // transcribed independently).
 export type CaptureChoice = 'mic' | 'screen'
 
+// One stored transcript line for a local (screen) recording. `speaker` is the
+// already-resolved display label ("You" / "Speaker 0" / a name); `source`
+// distinguishes the wearer's mic from captured system audio, since the two
+// streams are diarized independently and their speaker numbers can collide.
+export type LocalTranscriptSegment = {
+  speaker?: string
+  // Raw diarization fields so the detail view can tell real speakers apart even
+  // when the mic channel marks everything is_user=true.
+  speakerId?: number
+  isUser?: boolean
+  text: string
+  source?: 'mic' | 'system'
+}
+
 export type LocalConversation = {
   id: string
   startedAt: number
@@ -68,6 +88,10 @@ export type LocalConversation = {
   // chat conversations (null for recordings).
   kind?: 'recording' | 'chat'
   messages?: ChatMessage[]
+  // Per-speaker transcript lines for screen recordings, so the detail view can
+  // show speaker tags instead of one flattened block. Absent for older
+  // recordings and for chat threads.
+  segments?: LocalTranscriptSegment[]
   // User-given name. When null/absent a default ("Recording"/"Chat with Omi")
   // is shown instead.
   title?: string | null
@@ -137,12 +161,23 @@ export type OmiOverlayApi = {
   /** Subscribe to overlay "asked" events — any message sent from the bar
    *  (broadcast to every window). Returns an unsubscribe fn. */
   onAsked: (cb: () => void) => () => void
+  /** Tell main the global UI scale (1 = default). Main widens the overlay window
+   *  to match and forwards the value to the (warm) overlay window so it re-zooms
+   *  live. Pushed on startup and whenever the user changes it in Settings. */
+  setScale: (scale: number) => void
+  /** Subscribe to UI-scale changes (delivered to the overlay window so it can
+   *  re-zoom its panel live). Returns an unsubscribe fn. */
+  onScale: (cb: (scale: number) => void) => () => void
 }
 
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
 export type OverlayVisibility = { open: boolean; active: boolean }
 
 export type OmiBridgeApi = {
+  /** The running app version (from package.json), for the About/version display. */
+  getAppVersion: () => Promise<string>
+  /** Dev smoke test: run the update-UI flow (native dialogs + progress dialog). */
+  simulateUpdate: () => Promise<void>
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
   insertLocalConversation: (c: LocalConversation) => Promise<void>
@@ -168,10 +203,7 @@ export type OmiBridgeApi = {
   /** Load the local onboarding knowledge graph. */
   localGraphLoad: () => Promise<KnowledgeGraph>
   /** Upsert nodes/edges (idempotent by id); returns the full graph after write. */
-  localGraphUpsert: (
-    nodes: OnboardingGraphNode[],
-    edges: OnboardingGraphEdge[]
-  ) => Promise<KnowledgeGraph>
+  localGraphUpsert: (nodes: OnboardingGraphNode[], edges: OnboardingGraphEdge[]) => Promise<KnowledgeGraph>
   /** Clear the local onboarding graph (called once at first onboarding start). */
   localGraphClear: () => Promise<void>
   /** Aggregated local app-usage rows (foreground seconds per app). */
@@ -274,10 +306,9 @@ export type OmiBridgeApi = {
   automationEnabled: boolean
   automationSnapshot: (windowHandle?: string) => Promise<UiSnapshot>
   automationTargetWindow: () => Promise<string | null>
+  automationRun: (plan: AutomationPlan) => Promise<PlanRunResult>
   // Native-dialog consent gate: shows the plan in a Windows dialog and runs it
-  // only on approval. `canceled` = user declined; otherwise ok/message. This is
-  // the ONLY automation-run path exposed to the renderer (the consent-free
-  // `automation:run` handler was removed — it had no legitimate caller).
+  // only on approval. `canceled` = user declined; otherwise ok/message.
   automationConfirmRun: (
     plan: AutomationPlan
   ) => Promise<{ ok: boolean; canceled?: boolean; message?: string }>
@@ -565,14 +596,7 @@ export type FetchNewResult<T> = {
 
 // --- Windows OCR helper (win-ocr-helper) ---
 
-export type OcrLine = {
-  text: string
-  x: number
-  y: number
-  w: number
-  h: number
-  confidence: number
-}
+export type OcrLine = { text: string; x: number; y: number; w: number; h: number; confidence: number }
 export type OcrResult =
   | { ok: true; fullText: string; lines: OcrLine[] }
   | { ok: false; code: 'NO_LANGUAGE' | 'DECODE_FAILED' | 'HELPER_ERROR'; message?: string }
@@ -613,10 +637,18 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+  /** Longest-edge cap (px) for captured frames — controls capture resolution.
+   *  One of the presets in shared/rewindResolution. Lower = cheaper. */
+  captureMaxEdge: number
 }
 
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---
-export type InsightCategory = 'productivity' | 'communication' | 'learning' | 'health' | 'other'
+export type InsightCategory =
+  | 'productivity'
+  | 'communication'
+  | 'learning'
+  | 'health'
+  | 'other'
 
 // One insight as shown in the toast (mirrors macOS ExtractedInsight).
 export type InsightPayload = {

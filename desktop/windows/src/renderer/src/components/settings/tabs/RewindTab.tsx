@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2 } from 'lucide-react'
+import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2, Maximize } from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
+import { runInsightOnce, type InsightRunResult } from '../../../lib/insightEngine'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
+import { CAPTURE_RESOLUTIONS, DEFAULT_CAPTURE_MAX_EDGE } from '../../../../../shared/rewindResolution'
 import { SettingRow } from '../SettingRow'
+import { LevelSlider } from '../LevelSlider'
 import { Toggle } from '../Toggle'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import type {
@@ -68,6 +71,40 @@ export function RewindTab(): React.JSX.Element {
     setInsight(await window.omi.insightSetSettings(patch))
   }
 
+  // Force a REAL proactive insight right now (built from the current screen
+  // activity) so the pipeline can be tested on demand instead of waiting for the
+  // next scheduled run. Surfaces why nothing showed, when that happens.
+  const [testingInsight, setTestingInsight] = useState(false)
+  const [insightTestMsg, setInsightTestMsg] = useState<string | null>(null)
+  const REASON_MESSAGE: Record<Extract<InsightRunResult, { shown: false }>['reason'], string> = {
+    busy: 'An insight run is already in progress — try again in a moment.',
+    disabled: 'Proactive insights are off.',
+    'capture-off': "Turn on 'Capture my screen' first — there's nothing to read otherwise.",
+    'no-activity': 'No on-screen text captured yet. Open something with text, wait a few seconds, and retry.',
+    'no-insight': "The model didn't return an insight this time — try again.",
+    error: 'Something went wrong generating the insight. See the console for details.'
+  }
+  const forceTestInsight = async (): Promise<void> => {
+    setTestingInsight(true)
+    setInsightTestMsg(null)
+    // Omi is never captured, so an insight built while Omi is focused is about the
+    // user's LAST other screen. Count down so they can switch to the screen they
+    // actually want to test — the capture host samples it during the countdown.
+    for (let s = 3; s > 0; s--) {
+      setInsightTestMsg(`Switch to the screen you want to test — capturing in ${s}…`)
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+    setInsightTestMsg('Generating insight…')
+    try {
+      const result = await runInsightOnce({ force: true })
+      setInsightTestMsg(
+        result.shown ? 'Insight sent — check your notification.' : REASON_MESSAGE[result.reason]
+      )
+    } finally {
+      setTestingInsight(false)
+    }
+  }
+
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
   useEffect(() => {
@@ -75,6 +112,13 @@ export function RewindTab(): React.JSX.Element {
       void patchInsight({ intervalMin: 15 })
     }
   }, [insight])
+
+  // The preset matching the current capture-resolution value (for the slider's
+  // subtitle label); falls back to the default, then the first preset.
+  const currentResolution =
+    CAPTURE_RESOLUTIONS.find((r) => r.maxEdge === (rewind?.captureMaxEdge ?? DEFAULT_CAPTURE_MAX_EDGE)) ??
+    CAPTURE_RESOLUTIONS.find((r) => r.maxEdge === DEFAULT_CAPTURE_MAX_EDGE) ??
+    CAPTURE_RESOLUTIONS[0]
 
   return (
     <>
@@ -148,6 +192,22 @@ export function RewindTab(): React.JSX.Element {
           </select>
         }
       />
+      <SettingRow
+        icon={Maximize}
+        title="Capture resolution"
+        subtitle={`Sharper text costs more CPU and disk; lower is lighter. ${currentResolution.label} — ${currentResolution.hint}.`}
+        keywords="rewind resolution quality size pixels detail sharper"
+      >
+        <LevelSlider
+          ariaLabel="Capture resolution"
+          value={rewind?.captureMaxEdge ?? DEFAULT_CAPTURE_MAX_EDGE}
+          levels={CAPTURE_RESOLUTIONS.map((r) => r.maxEdge)}
+          onChange={(v) => rewind && saveRewind({ ...rewind, captureMaxEdge: v })}
+          minLabel={<Maximize className="h-2.5 w-2.5" />}
+          maxLabel={<Maximize className="h-4 w-4" />}
+          valueText={(v) => `${v}px`}
+        />
+      </SettingRow>
       <SettingRow
         icon={CalendarClock}
         title="Keep history for"
@@ -315,9 +375,20 @@ export function RewindTab(): React.JSX.Element {
                 <option value="native" className="bg-neutral-900">Windows notification</option>
               </select>
             </label>
-            <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
-              Send a test notification
-            </button>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                onClick={() => void forceTestInsight()}
+                disabled={testingInsight}
+                className="btn-ghost self-start disabled:opacity-40"
+              >
+                {testingInsight ? 'Generating insight…' : 'Test: generate an insight now'}
+              </button>
+              <span className="text-xs text-text-tertiary">
+                Click, then switch to the screen you want to test. Forces a real insight from it
+                (ignores the schedule and confidence cutoff).
+              </span>
+              {insightTestMsg && <span className="text-xs text-amber-300/80">{insightTestMsg}</span>}
+            </div>
             <textarea
               rows={2}
               placeholder="Denylist — one app/site keyword per line (e.g. therapy, salary)"

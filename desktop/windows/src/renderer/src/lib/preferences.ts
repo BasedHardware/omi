@@ -9,6 +9,13 @@ export type Preferences = {
   captionIntervalMs: number
   showRecordingBadge: boolean
   reduceMotion: boolean
+  // Font/zoom scale for the MAIN app window (1 = default; <1 compact, >1 larger).
+  // Applied via CSS zoom on the document root.
+  uiScale: number
+  // Font/zoom scale for the FLOATING BAR (overlay) window — independent of the
+  // main app. Applied by multiplying the overlay's own zoom; main widens the bar
+  // window to match.
+  overlayScale: number
   // Set during the startup wizard.
   displayName?: string
   language: string
@@ -39,12 +46,19 @@ export type Preferences = {
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'
   onboardingCompletedAt?: number
+  // Chosen microphone input (MediaDeviceInfo.deviceId) for transcription. Set in
+  // Settings → General. Undefined / '' = use the OS default device (original
+  // behavior). The device is pinned with `{ deviceId: { exact } }`; if it's been
+  // unplugged, capture falls back to the OS default.
+  micDeviceId?: string
 }
 
 const defaults: Preferences = {
   captionIntervalMs: 2000,
   showRecordingBadge: true,
   reduceMotion: false,
+  uiScale: 1,
+  overlayScale: 1,
   language: DEFAULT_LANGUAGE,
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you

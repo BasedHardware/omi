@@ -18,6 +18,7 @@ import {
   subscribeCloudRefresh,
   invalidateConversationsCache,
   getPendingConversations,
+  removePendingConversation,
   reconcilePending,
   type ConversationRow
 } from '../lib/pageCache'
@@ -195,7 +196,11 @@ export function Conversations(): React.JSX.Element {
       const row = rows.find((r) => r.id === id)
       if (!row) continue
       try {
-        if (row.source === 'local') {
+        if (row.pending) {
+          // Optimistic placeholder: lives only in the in-memory pending store
+          // (no cloud/DB row), so just drop it there — a cloud DELETE would 404.
+          removePendingConversation(id)
+        } else if (row.source === 'local') {
           await window.omi.deleteLocalConversation(id)
         } else {
           await omiApi.delete(`/v1/conversations/${id}`)

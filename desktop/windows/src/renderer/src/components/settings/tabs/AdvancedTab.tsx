@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw } from 'lucide-react'
+import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw, Info } from 'lucide-react'
 import { omiApi } from '../../../lib/apiClient'
 import { toast } from '../../../lib/toast'
 import { extractMemories, type MemorySource } from '../../../lib/memoryExtract'
@@ -18,6 +18,12 @@ import type {
 
 export function AdvancedTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
+
+  // --- App version (shown at the bottom) ---
+  const [appVersion, setAppVersion] = useState<string | null>(null)
+  useEffect(() => {
+    window.omi.getAppVersion().then(setAppVersion).catch(() => setAppVersion(null))
+  }, [])
 
   // --- File indexing ---
   const [fileIndex, setFileIndex] = useState<FileIndexStatus | null>(null)
@@ -453,6 +459,18 @@ export function AdvancedTab(): React.JSX.Element {
           <button onClick={replayOnboarding} className="btn-ghost">
             Replay
           </button>
+        }
+      />
+
+      <SettingRow
+        icon={Info}
+        title="Version"
+        subtitle="The version of Omi you're running. Updates install automatically."
+        keywords="version about build number update"
+        control={
+          <span className="text-sm tabular-nums text-white/55">
+            {appVersion ? `Omi ${appVersion}` : '—'}
+          </span>
         }
       />
     </>

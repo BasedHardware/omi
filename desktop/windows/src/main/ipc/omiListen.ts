@@ -36,12 +36,46 @@ function emit(ownerId: number, msg: ListenMessage): void {
   }
 }
 
+// Dev-only harness: when OMI_LISTEN_SIMULATE_CLOSE is set, a listen session does
+// NOT hit the real backend. It fakes the "connected, then closed (1008 <reason>)"
+// flow so the renderer's close handling + the user-facing alert can be verified on
+// a HEALTHY account (you can't otherwise reproduce trial_expired / Bad user). The
+// value is the close reason, e.g.:
+//   $env:OMI_LISTEN_SIMULATE_CLOSE="trial_expired"  -> trial alert
+//   $env:OMI_LISTEN_SIMULATE_CLOSE="Bad user"       -> account alert
+// Unset (production) → this whole branch is skipped.
+const SIMULATE_CLOSE = process.env.OMI_LISTEN_SIMULATE_CLOSE?.trim()
+
+function simulateClose(args: ListenStartArgs, owner: WebContents, reason: string): void {
+  console.log(`[omi-listen] SIMULATING close ${args.sessionId} code=1008 reason=${reason}`)
+  // Mirror the real timing: open first (so the renderer commits outcome='omi'),
+  // then — for trial_expired — the freemium event the backend sends before closing,
+  // then the 1008 close.
+  emit(owner.id, { sessionId: args.sessionId, kind: 'connected' })
+  if (/trial_expired/i.test(reason)) {
+    setTimeout(() => {
+      emit(owner.id, {
+        sessionId: args.sessionId,
+        kind: 'event',
+        event: { type: 'freemium_threshold_reached', raw: { remaining_seconds: 0 } }
+      })
+    }, 300)
+  }
+  setTimeout(() => {
+    emit(owner.id, { sessionId: args.sessionId, kind: 'closed', code: 1008, reason })
+  }, 600)
+}
+
 function startSession(args: ListenStartArgs, owner: WebContents): void {
   const existing = sessions.get(args.sessionId)
   if (existing) {
     // Already running — caller bug. Tear the old one down to avoid leaks.
     try { existing.ws.close() } catch { /* ignore */ }
     sessions.delete(args.sessionId)
+  }
+  if (SIMULATE_CLOSE) {
+    simulateClose(args, owner, SIMULATE_CLOSE)
+    return
   }
   // Decode (not verify) the JWT to derive the uid for the query param; the
   // backend verifies the token from the Authorization header.
@@ -59,6 +93,10 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   // Firebase token from the Authorization header. Send both.
   const base = buildEndpoint(args.language)
   const url = uid ? `${base}&uid=${encodeURIComponent(uid)}` : base
+  // Token rides in the Authorization header (not the URL), so the URL is safe to
+  // log. This surfaces the exact connect params + any close reason for diagnosing
+  // 1008s (trial_expired, "Bad uid", "language not supported", …).
+  console.log(`[omi-listen] connecting ${args.sessionId} src=${args.source} ${url}`)
   const ws = new WebSocket(url, {
     headers: { Authorization: `Bearer ${args.token}` }
   })
@@ -108,11 +146,13 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     if (session.closed) return
     session.closed = true
     sessions.delete(args.sessionId)
+    const reason = reasonBuf.toString()
+    console.log(`[omi-listen] closed ${args.sessionId} code=${code} reason=${reason || '(none)'}`)
     emit(session.ownerId, {
       sessionId: args.sessionId,
       kind: 'closed',
       code,
-      reason: reasonBuf.toString()
+      reason
     })
   })
 }

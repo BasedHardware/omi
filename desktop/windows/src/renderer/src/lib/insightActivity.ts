@@ -24,16 +24,27 @@ export function summarizeActivity(frames: RewindFrame[], maxChars: number): stri
   }
   flush()
 
-  let out = ''
-  for (const b of blocks) {
-    if (out === '') {
-      // Always include the first block (truncated to the budget) so one verbose
-      // screen never starves the summary — and we never make an empty Gemini call.
-      out = b.length > maxChars ? b.slice(0, maxChars) : b
+  // Fill the budget from the MOST RECENT activity backward: frames arrive
+  // oldest-first, so the last block is the user's current screen. A proactive
+  // insight must be about what they're doing NOW, so the newest blocks are kept
+  // and the oldest are dropped when the budget is tight (the reverse of filling
+  // from the front, which truncated away the current screen). The most-recent
+  // block is always included — truncated if it alone exceeds the budget — so the
+  // summary is never empty and is always anchored on the current screen.
+  const selected: string[] = []
+  let used = 0
+  const SEP = 2 // '\n\n'
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const b = blocks[i]
+    if (selected.length === 0) {
+      selected.push(b.length > maxChars ? b.slice(0, maxChars) : b)
+      used = selected[0].length
       continue
     }
-    if (out.length + b.length > maxChars) break
-    out += '\n\n' + b
+    if (used + SEP + b.length > maxChars) break
+    selected.push(b)
+    used += SEP + b.length
   }
-  return out
+  // Emit oldest→newest so the model reads the current screen LAST (as "now").
+  return selected.reverse().join('\n\n')
 }

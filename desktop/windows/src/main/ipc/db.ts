@@ -95,6 +95,7 @@ function get(): Database.Database {
       created_at INTEGER NOT NULL,
       kind TEXT NOT NULL DEFAULT 'recording',
       messages TEXT,
+      segments TEXT,
       title TEXT
     );
 
@@ -189,6 +190,7 @@ function get(): Database.Database {
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
+  ensureColumn(db, 'local_conversation', 'segments', 'TEXT')
   ensureColumn(db, 'local_conversation', 'title', 'TEXT')
   // Node provenance for the LLM-synthesized graph (additive).
   ensureColumn(db, 'local_kg_nodes', 'aliases_json', 'TEXT')
@@ -206,6 +208,7 @@ type LocalConversationRow = {
   createdAt: number
   kind: string | null
   messages: string | null
+  segments: string | null
   title: string | null
 }
 
@@ -218,17 +221,20 @@ function mapLocalConversation(row: LocalConversationRow): LocalConversation {
     createdAt: row.createdAt,
     kind: row.kind === 'chat' ? 'chat' : 'recording',
     messages: row.messages ? (JSON.parse(row.messages) as ChatMessage[]) : undefined,
+    segments: row.segments
+      ? (JSON.parse(row.segments) as LocalConversation['segments'])
+      : undefined,
     title: row.title ?? null
   }
 }
 
 const LOCAL_CONVERSATION_COLUMNS =
-  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, title'
+  'id, started_at AS startedAt, ended_at AS endedAt, transcript, created_at AS createdAt, kind, messages, segments, title'
 
 export function insertLocalConversation(c: LocalConversation): void {
   get()
     .prepare(
-      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, title) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT OR REPLACE INTO local_conversation (id, started_at, ended_at, transcript, created_at, kind, messages, segments, title) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     )
     .run(
       c.id,
@@ -238,6 +244,7 @@ export function insertLocalConversation(c: LocalConversation): void {
       c.createdAt,
       c.kind ?? 'recording',
       c.messages ? JSON.stringify(c.messages) : null,
+      c.segments ? JSON.stringify(c.segments) : null,
       c.title ?? null
     )
 }

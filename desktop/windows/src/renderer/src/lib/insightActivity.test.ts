@@ -32,4 +32,32 @@ describe('summarizeActivity', () => {
     expect(out.length).toBeLessThanOrEqual(40)
     expect(out.startsWith('## ')).toBe(true)
   })
+
+  // Bug #2: frames arrive oldest-first (listRewindFrames is ORDER BY ts). When the
+  // budget can't hold everything, the summary must keep the MOST RECENT activity
+  // (what the user is doing now) and drop the oldest — otherwise the proactive
+  // insight is generated about a screen from up to an hour ago.
+  it('keeps the most recent activity and drops the oldest when over budget', () => {
+    const old = 'OLD_' + 'o'.repeat(120)
+    const mid = 'MID_' + 'm'.repeat(120)
+    const now = 'NOW_' + 'n'.repeat(120)
+    const out = summarizeActivity(
+      [f('OldApp', 'old', old), f('MidApp', 'mid', mid), f('NowApp', 'now', now)],
+      300 // fits ~2 of the 3 blocks
+    )
+    expect(out).toContain('NOW_') // current screen is always present
+    expect(out).not.toContain('OLD_') // oldest is dropped first
+  })
+
+  // The kept blocks must still read oldest→newest so the model sees the current
+  // screen LAST (as "now"), not in reverse.
+  it('emits kept blocks in chronological order (current screen last)', () => {
+    const mid = 'MID_' + 'm'.repeat(120)
+    const now = 'NOW_' + 'n'.repeat(120)
+    const out = summarizeActivity(
+      [f('MidApp', 'mid', mid), f('NowApp', 'now', now)],
+      10_000 // both fit
+    )
+    expect(out.indexOf('MID_')).toBeLessThan(out.indexOf('NOW_'))
+  })
 })

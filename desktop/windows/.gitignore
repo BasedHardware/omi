@@ -50,3 +50,8 @@ resources/win-ocr-helper/*.pdb
 src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
+
+# .NET build artifacts (win-update-helper)
+src/main/update/win-update-helper/bin/
+src/main/update/win-update-helper/obj/
+resources/win-update-helper/*.pdb

@@ -1,6 +1,14 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer
+} from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { registerOmiListenHandlers } from './ipc/omiListen'
@@ -32,7 +40,8 @@ import {
   stopAutomationTargetTracker
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
-import { startRendererServer, rendererBaseUrl } from './rendererServer'
+import { initAutoUpdate, simulateUpdateUi } from './update/autoUpdate'
+import { startRenderServer, loadRenderer } from './render/renderServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
@@ -82,6 +91,35 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
   const suffix = sandbox === '1' ? 'chat-kg' : sandbox.replace(/[^a-zA-Z0-9._-]/g, '-')
   app.setPath('userData', join(app.getPath('appData'), `omi-windows-sandbox-${suffix}`))
 }
+
+// Single-instance lock. A second launch must focus the existing window instead
+// of spinning up a competing process that fights over the same userData profile
+// — concurrent instances corrupt Chromium's storage (quota DB resets), which
+// silently wipes localStorage (Firebase session + onboarding flag) and logs the
+// user out. Bench runs use isolated --user-data-dir, so don't gate them.
+const gotSingleInstanceLock = process.env.OMI_BENCH === '1' || app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+}
+
+// Set once createWindow runs; used by the single-instance focus + clean-quit path.
+let mainWindowRef: BrowserWindow | null = null
+// True from before-quit onward, so the main window's 'closed' handler doesn't
+// re-enter app.quit() during a quit that's already underway.
+let isQuitting = false
+
+// A second launch focuses the existing window instead of starting a rival process.
+app.on('second-instance', () => {
+  const w = mainWindowRef
+  if (w && !w.isDestroyed()) {
+    if (w.isMinimized()) w.restore()
+    w.show()
+    w.focus()
+  }
+})
+app.on('before-quit', () => {
+  isQuitting = true
+})
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -152,35 +190,14 @@ function createWindow(): BrowserWindow {
         }
       }
     }
-    // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
-    // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
-    // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
-    // the renderer's Markdown scheme allow-list.
-    try {
-      const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
-        shell.openExternal(url)
-      } else {
-        console.warn('[main] blocked external open of non-web URL scheme:', scheme)
-      }
-    } catch {
-      console.warn('[main] blocked external open of unparseable URL')
-    }
+    shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development, or the loopback renderer server in
-  // production — a file:// origin would break Firebase sign-in (see
-  // rendererServer.ts). loadFile stays as a last resort so a server failure
-  // still produces a window (signed-out features only).
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else if (rendererBaseUrl()) {
-    mainWindow.loadURL(`${rendererBaseUrl()}/index.html`)
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  // Dev: Vite dev server. Production: in-process localhost static server (so
+  // Firebase auth has an authorized origin + localStorage persists). The server
+  // is started in whenReady before this runs.
+  loadRenderer(mainWindow)
   return mainWindow
 }
 
@@ -188,21 +205,12 @@ function createWindow(): BrowserWindow {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
+  // Lost the single-instance race — the first instance gets the 'second-instance'
+  // event and focuses itself; this one must do nothing (it's already quitting).
+  if (!gotSingleInstanceLock) return
   perfMark('main:ready')
-
-  // Production only (dev uses the vite dev server): serve the packaged renderer
-  // over localhost so Firebase auth sees an authorized origin. Must be up before
-  // any window loads.
-  if (!(is.dev && process.env['ELECTRON_RENDERER_URL'])) {
-    try {
-      await startRendererServer(join(__dirname, '../renderer'))
-    } catch (e) {
-      console.error(
-        '[main] renderer server failed to start — falling back to file:// (sign-in will not work):',
-        e
-      )
-    }
-  }
+  // Start the production renderer server before any window loads (no-op in dev).
+  await startRenderServer()
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.omiwindows.app')
 
@@ -217,7 +225,10 @@ app.whenReady().then(async () => {
   // In Electron we control the network stack, so strip the Origin header on
   // outgoing requests and inject permissive CORS response headers. Scoped to
   // the specific upstreams — everything else flows normally.
-  const apiUrls = ['https://api.omi.me/*', 'https://desktop-backend-hhibjajaja-uc.a.run.app/*']
+  const apiUrls = [
+    'https://api.omi.me/*',
+    'https://desktop-backend-hhibjajaja-uc.a.run.app/*'
+  ]
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: apiUrls }, (details, cb) => {
     const headers = { ...details.requestHeaders }
     delete headers.Origin
@@ -270,6 +281,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:remapConversationId', async (_e, fromId: string, toId: string) =>
     remapConversationId(fromId, toId)
   )
+  ipcMain.handle('app:getVersion', () => app.getVersion())
+  // Smoke test: trigger the update UI on demand from the DevTools console
+  // (`window.omi.simulateUpdate()`). DEV ONLY — a no-op in the packaged app so it
+  // can never fire for end users.
+  ipcMain.handle('update:simulate', () => {
+    if (app.isPackaged) return undefined
+    if (mainWindowRef) return simulateUpdateUi(mainWindowRef)
+    return undefined
+  })
   ipcMain.handle('db:insertLocalConversation', async (_e, c) => insertLocalConversation(c))
   ipcMain.handle('db:getLocalConversation', async (_e, id: string) => getLocalConversation(id))
   ipcMain.handle('db:listLocalConversations', async () => listLocalConversations())
@@ -316,6 +336,21 @@ app.whenReady().then(async () => {
   registerScreenSynthHandlers()
 
   const mainWindow = createWindow()
+  mainWindowRef = mainWindow
+
+  // Proactively commit DOM storage to disk on a timer. Chromium only durably
+  // commits localStorage on a CLEAN shutdown; if the app is force-killed (or the
+  // machine sleeps/crashes) between commits, the last session's writes — Firebase
+  // auth session + onboarding flag — are silently lost on next launch (the user
+  // gets logged out / re-onboarded). Flushing every few seconds bounds that loss.
+  const storageFlush = setInterval(() => {
+    try {
+      session.defaultSession.flushStorageData()
+    } catch {
+      /* best-effort */
+    }
+  }, 4000)
+  app.once('will-quit', () => clearInterval(storageFlush))
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
@@ -339,6 +374,16 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Check GitHub Releases for a newer version (packaged builds only; no-op in dev).
+    initAutoUpdate(mainWindow)
+    // Smoke test: OMI_SIMULATE_UPDATE=1 walks the update UI (available dialog →
+    // progress dialog → restart dialog) with fake data, no network/install — so
+    // the flow can be verified in `pnpm dev` without publishing a release. DEV
+    // ONLY so it can never fire in the packaged app.
+    if (!app.isPackaged && process.env.OMI_SIMULATE_UPDATE === '1') {
+      console.log('[autoUpdate] OMI_SIMULATE_UPDATE=1 — running update-UI smoke test in 1.5s')
+      setTimeout(() => void simulateUpdateUi(mainWindow), 1500)
+    }
   })
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
@@ -360,6 +405,11 @@ app.whenReady().then(async () => {
   mainWindow.on('closed', () => {
     const overlay = getOverlayWindow()
     if (overlay && !overlay.isDestroyed()) overlay.destroy()
+    // Quit the whole app when the main window closes. Hidden helper windows (the
+    // pre-created insight toast) would otherwise keep the process alive so
+    // 'window-all-closed' never fires — the app lingers, never shuts down cleanly,
+    // and Chromium never commits localStorage, logging the user out next launch.
+    if (!isQuitting) app.quit()
   })
 
   // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
@@ -448,6 +498,13 @@ app.on('window-all-closed', () => {
 // On a normal shutdown: flush buffered perf marks, release the overlay shortcut,
 // and tear down the automation helper process + foreground-window hook.
 app.on('will-quit', () => {
+  // Final synchronous commit of DOM storage (Firebase session + onboarding flag)
+  // before the process exits, on top of the periodic flush.
+  try {
+    session.defaultSession.flushStorageData()
+  } catch {
+    /* best-effort */
+  }
   unregisterOverlayShortcut()
   flushPerfMarks()
   automationBridge.dispose()
