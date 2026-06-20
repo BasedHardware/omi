@@ -19,9 +19,16 @@ import {
   type Usage
 } from '@earendil-works/pi-ai/base'
 import type { TSchema } from '@earendil-works/pi-ai/base'
+import { byokChatModelFor } from '../byok/chat'
 import type { LocalAgentRuntimeContext, LocalAgentToolDefinition } from '../localAgent/tools'
 import { listLocalAgentTools, runLocalAgentTool } from '../localAgent/tools'
-import type { ChatMessage, PiChatResponse, PiChatToolCall, PiChatUsage } from '../../shared/types'
+import type {
+  ByokChatProvider,
+  ChatMessage,
+  PiChatResponse,
+  PiChatToolCall,
+  PiChatUsage
+} from '../../shared/types'
 import { loadSkillPromptSections } from '../skills/loader'
 import { addObservabilityBreadcrumb, captureMainException } from '../observability'
 
@@ -30,6 +37,7 @@ const PI_MODEL_ID = 'omi-sonnet'
 const PI_MODEL_NAME = 'Omi Sonnet'
 const OMI_PI_API = 'omi-chat-completions'
 const OMI_PI_PROVIDER = 'omi'
+const BYOK_PI_API = 'byok-chat-completions'
 const MAX_TOOL_RESULT_CHARS = 24_000
 
 const EMPTY_USAGE: Usage = {
@@ -61,6 +69,27 @@ const NATIVE_PI_TOOL_NAMES = new Set([
 
 type JsonRecord = Record<string, unknown>
 type FetchLike = typeof fetch
+type ActiveByokChatKey = { provider: ByokChatProvider; key: string } | null
+type LoadActiveByokChatKey = () => ActiveByokChatKey | Promise<ActiveByokChatKey>
+
+type PiModelRoute =
+  | {
+      kind: 'omi'
+      api: typeof OMI_PI_API
+      provider: typeof OMI_PI_PROVIDER
+      model: typeof PI_MODEL_ID
+      name: typeof PI_MODEL_NAME
+      baseUrl: string
+    }
+  | {
+      kind: 'byok'
+      api: typeof BYOK_PI_API
+      provider: ByokChatProvider
+      key: string
+      model: string
+      name: string
+      baseUrl: string
+    }
 
 type OpenAiChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
@@ -113,12 +142,14 @@ export type PiChatBridgeOptions = {
   runTool?: typeof runLocalAgentTool
   runtimeContext?: LocalAgentRuntimeContext
   loadSkillSections?: typeof loadSkillPromptSections
+  loadActiveByokChatKey?: LoadActiveByokChatKey
 }
 
 export type PiChatSendRequest = {
   token: string
   messages: ChatMessage[]
   skillIds?: string[]
+  modelId?: string
 }
 
 export function isPiChatEnabled(): boolean {
@@ -137,13 +168,73 @@ export function chatCompletionsUrl(baseUrl = desktopApiBaseUrl()): string {
   return `${baseUrl.replace(/\/+$/, '')}/v2/chat/completions`
 }
 
-function piModel(baseUrl = desktopApiBaseUrl()): Model<string> {
+async function defaultLoadActiveByokChatKey(): Promise<ActiveByokChatKey> {
+  const store = await import('../byok/store')
+  return store.loadActiveByokChatKey()
+}
+
+function omiRoute(baseUrl = desktopApiBaseUrl()): PiModelRoute {
   return {
-    id: PI_MODEL_ID,
-    name: PI_MODEL_NAME,
+    kind: 'omi',
     api: OMI_PI_API,
     provider: OMI_PI_PROVIDER,
-    baseUrl: chatCompletionsUrl(baseUrl),
+    model: PI_MODEL_ID,
+    name: PI_MODEL_NAME,
+    baseUrl: chatCompletionsUrl(baseUrl)
+  }
+}
+
+async function resolvePiModelRoute(
+  request: PiChatSendRequest,
+  options: PiChatBridgeOptions
+): Promise<PiModelRoute> {
+  const loadActiveByok = options.loadActiveByokChatKey ?? defaultLoadActiveByokChatKey
+  let active: ActiveByokChatKey
+  try {
+    active = await loadActiveByok()
+  } catch (error) {
+    addObservabilityBreadcrumb(
+      'native_pi.byok_route_unavailable',
+      { error: error instanceof Error ? error.message : String(error) },
+      { category: 'native_pi' }
+    )
+    return omiRoute(options.desktopApiBaseUrl)
+  }
+
+  if (!active) return omiRoute(options.desktopApiBaseUrl)
+
+  const model = byokChatModelFor(active.provider, request.modelId)
+  return {
+    kind: 'byok',
+    api: BYOK_PI_API,
+    provider: active.provider,
+    key: active.key,
+    model,
+    name: `${active.provider}:${model}`,
+    baseUrl: byokRouteUrl(active.provider, model)
+  }
+}
+
+function byokRouteUrl(provider: ByokChatProvider, model: string): string {
+  switch (provider) {
+    case 'openai':
+      return 'https://api.openai.com/v1/chat/completions'
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1/messages'
+    case 'gemini':
+      return `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`
+    case 'openrouter':
+      return 'https://openrouter.ai/api/v1/chat/completions'
+  }
+}
+
+function piModelForRoute(route: PiModelRoute): Model<string> {
+  return {
+    id: route.model,
+    name: route.name,
+    api: route.api,
+    provider: route.provider,
+    baseUrl: route.baseUrl,
     reasoning: false,
     input: ['text'],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -258,14 +349,18 @@ export function buildPiChatRequest(messages: ChatMessage[]): JsonRecord {
   return buildOmiChatCompletionBody(context)
 }
 
-function buildOmiChatCompletionBody(context: Context): JsonRecord {
+function buildOpenAiChatCompletionBody(context: Context, model = PI_MODEL_ID): JsonRecord {
   const tools = openAiToolsForContext(context)
   return {
-    model: PI_MODEL_ID,
+    model,
     stream: false,
     messages: openAiMessagesForContext(context),
     ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {})
   }
+}
+
+function buildOmiChatCompletionBody(context: Context): JsonRecord {
+  return buildOpenAiChatCompletionBody(context, PI_MODEL_ID)
 }
 
 function parseToolArguments(call: OpenAiToolCall): JsonRecord {
@@ -287,10 +382,31 @@ function stopReason(
   return 'stop'
 }
 
-function assistantMessageFromCompletion(completion: OpenAiChatCompletion): AssistantMessage {
+function routeError(route: PiModelRoute, status: number): Error {
+  return new Error(
+    route.kind === 'omi'
+      ? `Omi Pi provider request failed with HTTP ${status}`
+      : `BYOK ${route.provider} Pi provider request failed with HTTP ${status}`
+  )
+}
+
+function assistantMetadata(
+  route: PiModelRoute
+): Pick<AssistantMessage, 'api' | 'provider' | 'model'> {
+  return {
+    api: route.api,
+    provider: route.provider,
+    model: route.model
+  }
+}
+
+function assistantMessageFromOpenAiCompletion(
+  route: PiModelRoute,
+  completion: OpenAiChatCompletion
+): AssistantMessage {
   const choice = completion.choices?.[0]
   const message = choice?.message
-  if (!message) throw new Error('Omi chat returned no message')
+  if (!message) throw new Error('Pi provider returned no message')
 
   const toolCalls = message.tool_calls ?? []
   const content: AssistantMessage['content'] = []
@@ -309,11 +425,219 @@ function assistantMessageFromCompletion(completion: OpenAiChatCompletion): Assis
   return {
     role: 'assistant',
     content,
-    api: OMI_PI_API,
-    provider: OMI_PI_PROVIDER,
-    model: PI_MODEL_ID,
+    ...assistantMetadata(route),
     usage: usageFrom(completion.usage),
     stopReason: stopReason(choice.finish_reason, toolCalls.length > 0),
+    timestamp: Date.now()
+  }
+}
+
+function anthropicToolsForContext(context: Context): JsonRecord[] {
+  return (context.tools ?? []).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    input_schema: tool.parameters as unknown as JsonRecord
+  }))
+}
+
+function anthropicMessagesForContext(context: Context): JsonRecord[] {
+  return context.messages.map((message) => {
+    if (message.role === 'user') {
+      return { role: 'user', content: messageText(message) }
+    }
+    if (message.role === 'assistant') {
+      const content: JsonRecord[] = []
+      const text = messageText(message)
+      if (text) content.push({ type: 'text', text })
+      for (const call of toolCallsFromAssistant(message)) {
+        content.push({
+          type: 'tool_use',
+          id: call.id,
+          name: call.function.name,
+          input: parseToolArguments(call)
+        })
+      }
+      return {
+        role: 'assistant',
+        content: content.length > 0 ? content : [{ type: 'text', text: '' }]
+      }
+    }
+    return {
+      role: 'user',
+      content: [
+        {
+          type: 'tool_result',
+          tool_use_id: message.toolCallId,
+          content: messageText(message)
+        }
+      ]
+    }
+  })
+}
+
+function buildAnthropicBody(context: Context, model: string): JsonRecord {
+  const tools = anthropicToolsForContext(context)
+  return {
+    model,
+    max_tokens: 1024,
+    system: context.systemPrompt,
+    messages: anthropicMessagesForContext(context),
+    ...(tools.length > 0 ? { tools, tool_choice: { type: 'auto' } } : {})
+  }
+}
+
+function usageFromAnthropic(raw: JsonRecord | undefined): Usage {
+  const input = Number(raw?.input_tokens ?? 0)
+  const output = Number(raw?.output_tokens ?? 0)
+  return {
+    input,
+    output,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: input + output,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+  }
+}
+
+function assistantMessageFromAnthropic(route: PiModelRoute, raw: JsonRecord): AssistantMessage {
+  const rawContent = Array.isArray(raw.content) ? raw.content : []
+  const content: AssistantMessage['content'] = []
+  for (const block of rawContent) {
+    if (!block || typeof block !== 'object') continue
+    const record = block as JsonRecord
+    if (record.type === 'text' && typeof record.text === 'string') {
+      content.push({ type: 'text', text: record.text })
+      continue
+    }
+    if (
+      record.type === 'tool_use' &&
+      typeof record.id === 'string' &&
+      typeof record.name === 'string'
+    ) {
+      const input = record.input
+      content.push({
+        type: 'toolCall',
+        id: record.id,
+        name: record.name,
+        arguments: input && typeof input === 'object' && !Array.isArray(input) ? input : {}
+      })
+    }
+  }
+  const hasToolCalls = content.some((block) => block.type === 'toolCall')
+  return {
+    role: 'assistant',
+    content,
+    ...assistantMetadata(route),
+    usage: usageFromAnthropic(raw.usage as JsonRecord | undefined),
+    stopReason: hasToolCalls || raw.stop_reason === 'tool_use' ? 'toolUse' : 'stop',
+    timestamp: Date.now()
+  }
+}
+
+function geminiToolsForContext(context: Context): JsonRecord[] {
+  const declarations = (context.tools ?? []).map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.parameters as unknown as JsonRecord
+  }))
+  return declarations.length > 0 ? [{ function_declarations: declarations }] : []
+}
+
+function geminiPartsForAssistant(message: AgentMessage): JsonRecord[] {
+  const parts: JsonRecord[] = []
+  const text = messageText(message)
+  if (text) parts.push({ text })
+  for (const call of toolCallsFromAssistant(message)) {
+    parts.push({
+      functionCall: {
+        name: call.function.name,
+        args: parseToolArguments(call)
+      }
+    })
+  }
+  return parts.length > 0 ? parts : [{ text: '' }]
+}
+
+function geminiContentsForContext(context: Context): JsonRecord[] {
+  return context.messages.map((message) => {
+    if (message.role === 'user') {
+      return { role: 'user', parts: [{ text: messageText(message) }] }
+    }
+    if (message.role === 'assistant') {
+      return { role: 'model', parts: geminiPartsForAssistant(message) }
+    }
+    return {
+      role: 'user',
+      parts: [
+        {
+          functionResponse: {
+            name: message.toolName,
+            response: { content: messageText(message) }
+          }
+        }
+      ]
+    }
+  })
+}
+
+function buildGeminiBody(context: Context): JsonRecord {
+  const tools = geminiToolsForContext(context)
+  return {
+    system_instruction: { parts: [{ text: context.systemPrompt }] },
+    contents: geminiContentsForContext(context),
+    ...(tools.length > 0
+      ? {
+          tools,
+          tool_config: { function_calling_config: { mode: 'AUTO' } }
+        }
+      : {})
+  }
+}
+
+function usageFromGemini(raw: JsonRecord | undefined): Usage {
+  const input = Number(raw?.promptTokenCount ?? 0)
+  const output = Number(raw?.candidatesTokenCount ?? 0)
+  return {
+    input,
+    output,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: Number(raw?.totalTokenCount ?? input + output),
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+  }
+}
+
+function assistantMessageFromGemini(route: PiModelRoute, raw: JsonRecord): AssistantMessage {
+  const candidates = Array.isArray(raw.candidates) ? raw.candidates : []
+  const candidate = candidates[0] as JsonRecord | undefined
+  const contentRecord = candidate?.content as JsonRecord | undefined
+  const parts = Array.isArray(contentRecord?.parts) ? contentRecord.parts : []
+  const content: AssistantMessage['content'] = []
+  parts.forEach((part, index) => {
+    if (!part || typeof part !== 'object') return
+    const record = part as JsonRecord
+    if (typeof record.text === 'string') {
+      content.push({ type: 'text', text: record.text })
+      return
+    }
+    const functionCall = record.functionCall as JsonRecord | undefined
+    if (functionCall && typeof functionCall.name === 'string') {
+      const args = functionCall.args
+      content.push({
+        type: 'toolCall',
+        id: `gemini-${Date.now()}-${index}`,
+        name: functionCall.name,
+        arguments: args && typeof args === 'object' && !Array.isArray(args) ? args : {}
+      })
+    }
+  })
+  const hasToolCalls = content.some((block) => block.type === 'toolCall')
+  return {
+    role: 'assistant',
+    content,
+    ...assistantMetadata(route),
+    usage: usageFromGemini(raw.usageMetadata as JsonRecord | undefined),
+    stopReason: stopReason(String(candidate?.finishReason ?? ''), hasToolCalls),
     timestamp: Date.now()
   }
 }
@@ -381,13 +705,11 @@ function emitAssistantMessage(
   stream.end(message)
 }
 
-function errorAssistantMessage(error: unknown): AssistantMessage {
+function errorAssistantMessage(error: unknown, route: PiModelRoute = omiRoute()): AssistantMessage {
   return {
     role: 'assistant',
     content: [],
-    api: OMI_PI_API,
-    provider: OMI_PI_PROVIDER,
-    model: PI_MODEL_ID,
+    ...assistantMetadata(route),
     usage: EMPTY_USAGE,
     stopReason: 'error',
     errorMessage: error instanceof Error ? error.message : String(error),
@@ -395,37 +717,111 @@ function errorAssistantMessage(error: unknown): AssistantMessage {
   }
 }
 
-async function callOmiChatCompletions(
+function buildPiProviderRequest(
+  route: PiModelRoute,
+  context: Context,
+  token: string
+): { url: string; init: RequestInit } {
+  if (route.kind === 'omi') {
+    return {
+      url: route.baseUrl,
+      init: {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(buildOpenAiChatCompletionBody(context, route.model))
+      }
+    }
+  }
+
+  switch (route.provider) {
+    case 'openai':
+      return {
+        url: route.baseUrl,
+        init: {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${route.key}`
+          },
+          body: JSON.stringify(buildOpenAiChatCompletionBody(context, route.model))
+        }
+      }
+    case 'openrouter':
+      return {
+        url: route.baseUrl,
+        init: {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${route.key}`,
+            'HTTP-Referer': 'https://omi.me',
+            'X-Title': 'Omi Windows'
+          },
+          body: JSON.stringify(buildOpenAiChatCompletionBody(context, route.model))
+        }
+      }
+    case 'anthropic':
+      return {
+        url: route.baseUrl,
+        init: {
+          method: 'POST',
+          headers: {
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'x-api-key': route.key
+          },
+          body: JSON.stringify(buildAnthropicBody(context, route.model))
+        }
+      }
+    case 'gemini':
+      return {
+        url: route.baseUrl,
+        init: {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-goog-api-key': route.key
+          },
+          body: JSON.stringify(buildGeminiBody(context))
+        }
+      }
+  }
+}
+
+function assistantMessageFromProvider(route: PiModelRoute, raw: JsonRecord): AssistantMessage {
+  if (route.kind === 'omi' || route.provider === 'openai' || route.provider === 'openrouter') {
+    return assistantMessageFromOpenAiCompletion(route, raw as OpenAiChatCompletion)
+  }
+  if (route.provider === 'anthropic') return assistantMessageFromAnthropic(route, raw)
+  return assistantMessageFromGemini(route, raw)
+}
+
+async function callPiProvider(
+  route: PiModelRoute,
   context: Context,
   token: string,
   options: PiChatBridgeOptions
-): Promise<OpenAiChatCompletion> {
-  const response = await (options.fetchImpl ?? fetch)(
-    chatCompletionsUrl(options.desktopApiBaseUrl),
-    {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify(buildOmiChatCompletionBody(context))
-    }
-  )
+): Promise<AssistantMessage> {
+  const request = buildPiProviderRequest(route, context, token)
+  const response = await (options.fetchImpl ?? fetch)(request.url, request.init)
   if (!response.ok) {
-    throw new Error(`Omi Pi provider request failed with HTTP ${response.status}`)
+    throw routeError(route, response.status)
   }
-  return (await response.json()) as OpenAiChatCompletion
+  return assistantMessageFromProvider(route, (await response.json()) as JsonRecord)
 }
 
-function createOmiStreamFn(token: string, options: PiChatBridgeOptions) {
+function createPiStreamFn(token: string, route: PiModelRoute, options: PiChatBridgeOptions) {
   return (_model: Model<string>, context: Context): AssistantMessageEventStream => {
     const stream = createAssistantMessageEventStream()
     void (async () => {
       try {
-        const completion = await callOmiChatCompletions(context, token, options)
-        emitAssistantMessage(stream, assistantMessageFromCompletion(completion))
+        const message = await callPiProvider(route, context, token, options)
+        emitAssistantMessage(stream, message)
       } catch (error) {
-        const message = errorAssistantMessage(error)
+        const message = errorAssistantMessage(error, route)
         stream.push({ type: 'error', reason: 'error', error: message })
         stream.end(message)
       }
@@ -570,14 +966,15 @@ export async function sendPiChat(
   }
 
   const skillSections = await loadSelectedSkillSections(request, options)
+  const route = await resolvePiModelRoute(request, options)
   const agent = new Agent({
     initialState: {
       systemPrompt: systemPromptWithSkills(skillSections),
-      model: piModel(options.desktopApiBaseUrl),
+      model: piModelForRoute(route),
       tools: nativePiTools(options),
       thinkingLevel: 'off'
     },
-    streamFn: createOmiStreamFn(token, options),
+    streamFn: createPiStreamFn(token, route, options),
     toolExecution: 'sequential',
     transport: 'sse'
   })
@@ -602,7 +999,10 @@ export async function sendPiChat(
     {
       messageCount: request.messages.length,
       toolCount: agent.state.tools.length,
-      skillCount: skillSections.length
+      skillCount: skillSections.length,
+      provider: route.provider,
+      model: route.model,
+      route: route.kind
     },
     { category: 'native_pi' }
   )
