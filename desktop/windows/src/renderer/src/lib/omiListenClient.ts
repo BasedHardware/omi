@@ -1,5 +1,11 @@
 import { auth } from './firebase'
-import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
+import type {
+  BackendSegment,
+  ListenEvent,
+  ListenSource,
+  SttMode,
+  TranscriptionBackend
+} from '../../../shared/types'
 import { getPreferences } from './preferences'
 import {
   noteListenWebSocketClosed,
@@ -10,8 +16,8 @@ import {
 import type { RecordingDiagnosticsScope } from './continuousRecordingStatus'
 
 export type OmiListenCallbacks = {
-  /** Fires once when the v4/listen WS reaches OPEN. */
-  onConnected: () => void
+  /** Fires once when the selected transcription backend is ready. */
+  onConnected: (backend: TranscriptionBackend) => void
   /** Fires for each batch of finalized segments. */
   onSegments: (segments: BackendSegment[]) => void
   /** Fires for type-tagged status events; renderer just logs. */
@@ -30,7 +36,7 @@ export type OmiListenCallbacks = {
 }
 
 export type OmiListenHandle = {
-  stop: () => void
+  stop: () => Promise<void>
 }
 
 let nextSessionId = 1
@@ -65,7 +71,8 @@ async function getSystemAudioStream(): Promise<MediaStream> {
 export async function startOmiListen(
   source: ListenSource,
   cb: OmiListenCallbacks,
-  diagnosticsScope: RecordingDiagnosticsScope = 'recorder'
+  diagnosticsScope: RecordingDiagnosticsScope = 'recorder',
+  sttMode: SttMode = getPreferences().sttMode ?? 'auto'
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
@@ -99,7 +106,7 @@ export async function startOmiListen(
     if (msg.kind === 'connected') {
       connected = true
       if (trackDiagnostics) noteListenWebSocketOpen(sessionId)
-      cb.onConnected()
+      cb.onConnected(msg.backend)
     } else if (msg.kind === 'segments') {
       cb.onSegments(msg.segments)
     } else if (msg.kind === 'event') {
@@ -128,7 +135,8 @@ export async function startOmiListen(
       sessionId,
       source,
       token,
-      language: getPreferences().language
+      language: getPreferences().language,
+      sttMode
     })
   } catch (e) {
     if (trackDiagnostics) noteListenWebSocketError(sessionId, (e as Error).message)
@@ -170,9 +178,8 @@ export async function startOmiListen(
   processor.connect(audioCtx.destination)
 
   return {
-    stop: (): void => {
+    stop: async (): Promise<void> => {
       stopped = true
-      unsub()
       try {
         processor.disconnect()
       } catch {
@@ -193,7 +200,11 @@ export async function startOmiListen(
       } catch {
         /* ignore */
       }
-      void window.omi.listenStop(sessionId)
+      try {
+        await window.omi.listenStop(sessionId)
+      } finally {
+        unsub()
+      }
     }
   }
 }
