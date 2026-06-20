@@ -61,6 +61,8 @@ export type PiChatRequest = {
   /** Firebase ID token. Main fails closed when this is absent or blank. */
   token: string
   messages: ChatMessage[]
+  /** Skill ids selected in the Skills tab; main reads the corresponding SKILL.md files. */
+  skillIds?: string[]
 }
 
 export type PiChatUsage = {
@@ -78,6 +80,19 @@ export type PiChatResponse = {
   text: string
   usage: PiChatUsage
   toolCalls: PiChatToolCall[]
+}
+
+export type SkillEntry = {
+  id: string
+  name: string
+  description: string
+  sourcePath: string
+  relativePath: string
+}
+
+export type SkillsListResult = {
+  roots: string[]
+  skills: SkillEntry[]
 }
 
 export type ClaudeAcpStatus = {
@@ -457,9 +472,10 @@ export type OmiBridgeApi = {
     name: LocalAgentChatToolName,
     args?: LocalAgentToolArguments
   ) => Promise<LocalAgentChatToolResponse>
-  /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
+  /** Native Pi/Omi chat availability. Explicit env kill-switches can still disable it. */
   piChatEnabled: boolean
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
+  skillsList: () => Promise<SkillsListResult>
   claudeAcpStatus: () => Promise<ClaudeAcpStatus>
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
   byokStatus: () => Promise<ByokStatus>

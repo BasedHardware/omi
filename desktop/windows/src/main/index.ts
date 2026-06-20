@@ -48,6 +48,7 @@ import { registerLocalAgentHandlers } from './ipc/localAgent'
 import { registerPiChatHandlers } from './ipc/piChat'
 import { registerClaudeAcpHandlers } from './ipc/claudeAcp'
 import { registerByokHandlers } from './ipc/byok'
+import { registerSkillsHandlers } from './ipc/skills'
 import { registerLocalTtsHandlers } from './ipc/localTts'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -367,6 +368,7 @@ app.whenReady().then(async () => {
   registerPiChatHandlers()
   registerClaudeAcpHandlers()
   registerByokHandlers()
+  registerSkillsHandlers()
   registerLocalTtsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()

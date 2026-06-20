@@ -100,8 +100,9 @@ const omi: OmiBridgeApi = {
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   localAgentChatTool: (name: LocalAgentChatToolName, args?: LocalAgentToolArguments) =>
     ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
-  piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1',
+  piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT !== '0' && process.env.OMI_PI_CHAT !== '0',
   piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
+  skillsList: () => ipcRenderer.invoke('skills:list'),
   claudeAcpStatus: () => ipcRenderer.invoke('claudeAcp:status'),
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) =>
     ipcRenderer.invoke('claudeAcp:chatSend', request),
