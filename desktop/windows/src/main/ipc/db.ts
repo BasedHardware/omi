@@ -39,6 +39,10 @@ let db: Database.Database | null = null
 let roDb: Database.Database | null = null
 let rewindFtsAvailable: boolean | null = null
 
+function dbFilePath(): string {
+  return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+}
+
 // Add a column only if it doesn't already exist, so existing databases (which
 // predate the `kind`/`messages` columns) migrate forward without data loss.
 function ensureColumn(d: Database.Database, table: string, col: string, decl: string): void {
@@ -65,7 +69,7 @@ function get(): Database.Database {
   if (db) return db
   // OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
   // never reads or writes the user's real omi.db.
-  const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+  const file = dbFilePath()
   db = new Database(file)
   // For the throwaway bench DB only, relax durability so seeding ~7k rows isn't
   // dominated by a per-insert fsync (otherwise it swamps the startup measurement).
@@ -466,7 +470,7 @@ export function getLocalKGStatus(): LocalKGStatus {
 function getReadonly(): Database.Database {
   if (roDb) return roDb
   get() // ensure the db file + schema exist before opening read-only
-  roDb = new Database(join(app.getPath('userData'), 'omi.db'), { readonly: true })
+  roDb = new Database(dbFilePath(), { readonly: true })
   return roDb
 }
 
@@ -478,6 +482,246 @@ export function execSafeSelect(sql: string): KgSqlResult {
   const rows = stmt.all() as Record<string, unknown>[]
   const columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map((c) => c.name) ?? [])
   return { columns, rows }
+}
+
+export type LocalTaskSearchRecord = {
+  source: string
+  id: string
+  backendId: string | null
+  description: string
+  completed: boolean
+  deleted: boolean
+  dueAt: string | number | null
+  createdAt: string | number | null
+  updatedAt: string | number | null
+  priority: string | null
+}
+
+export type LocalTaskSearchResult = {
+  available: boolean
+  reason?: string
+  sources: string[]
+  tasks: LocalTaskSearchRecord[]
+}
+
+type TaskTableSpec = {
+  table: string
+  id: string[]
+  backendId: string[]
+  description: string[]
+  completed: string[]
+  deleted: string[]
+  dueAt: string[]
+  createdAt: string[]
+  updatedAt: string[]
+  priority: string[]
+}
+
+const TASK_TABLE_SPECS: TaskTableSpec[] = [
+  {
+    table: 'action_items',
+    id: ['backendId', 'backend_id', 'id'],
+    backendId: ['backendId', 'backend_id'],
+    description: ['description', 'title', 'text', 'content'],
+    completed: ['completed', 'is_completed'],
+    deleted: ['deleted', 'is_deleted'],
+    dueAt: ['dueAt', 'due_at'],
+    createdAt: ['createdAt', 'created_at'],
+    updatedAt: ['updatedAt', 'updated_at'],
+    priority: ['priority']
+  },
+  {
+    table: 'staged_tasks',
+    id: ['id', 'backendId', 'backend_id'],
+    backendId: ['backendId', 'backend_id'],
+    description: ['description', 'title', 'text', 'content'],
+    completed: ['completed', 'is_completed'],
+    deleted: ['deleted', 'is_deleted'],
+    dueAt: ['dueAt', 'due_at'],
+    createdAt: ['createdAt', 'created_at'],
+    updatedAt: ['updatedAt', 'updated_at'],
+    priority: ['priority']
+  }
+]
+
+type LocalTaskSearchRow = {
+  source: string
+  id: unknown
+  backendId: unknown
+  description: string
+  completed: number
+  deleted: number
+  dueAt: unknown
+  createdAt: unknown
+  updatedAt: unknown
+  priority: unknown
+}
+
+function safeIdent(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`unsafe identifier: ${name}`)
+  return `"${name}"`
+}
+
+function tableExists(d: Database.Database, table: string): boolean {
+  const row = d
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name=?")
+    .get(table) as { ok: number } | undefined
+  return row?.ok === 1
+}
+
+function tableColumns(d: Database.Database, table: string): Map<string, string> {
+  const rows = d.prepare(`PRAGMA table_info(${safeIdent(table)})`).all() as { name: string }[]
+  const out = new Map<string, string>()
+  for (const row of rows) out.set(row.name.toLowerCase(), row.name)
+  return out
+}
+
+function firstColumn(columns: Map<string, string>, candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    const column = columns.get(candidate.toLowerCase())
+    if (column) return column
+  }
+  return null
+}
+
+function coalesceColumnExpr(
+  columns: Map<string, string>,
+  candidates: string[],
+  fallbackSql: string
+): string {
+  const matches = candidates
+    .map((candidate) => firstColumn(columns, [candidate]))
+    .filter((column): column is string => column != null)
+  if (matches.length === 0) return fallbackSql
+  return `COALESCE(${matches.map(safeIdent).join(', ')}, ${fallbackSql})`
+}
+
+function booleanColumnExpr(column: string | null): string {
+  if (!column) return '0'
+  const quoted = safeIdent(column)
+  return `CASE WHEN ${quoted} IN (1, '1', 'true', 'TRUE') THEN 1 ELSE 0 END`
+}
+
+function optionalColumnExpr(column: string | null): string {
+  return column ? safeIdent(column) : 'NULL'
+}
+
+function localTaskValue(value: unknown): string | number | null {
+  if (typeof value === 'string' || typeof value === 'number') return value
+  return null
+}
+
+function localTaskString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function localTaskTimestampValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function mapLocalTaskRow(row: LocalTaskSearchRow): LocalTaskSearchRecord {
+  const fallbackId = `${row.source}:${row.description}:${String(row.createdAt ?? '')}`
+  return {
+    source: row.source,
+    id: String(row.id || row.backendId || fallbackId),
+    backendId: localTaskString(row.backendId),
+    description: row.description,
+    completed: row.completed === 1,
+    deleted: row.deleted === 1,
+    dueAt: localTaskValue(row.dueAt),
+    createdAt: localTaskValue(row.createdAt),
+    updatedAt: localTaskValue(row.updatedAt),
+    priority: localTaskString(row.priority)
+  }
+}
+
+export function searchLocalTasks(
+  query: string,
+  includeCompleted = false,
+  limit = 20
+): LocalTaskSearchResult {
+  const d = getReadonly()
+  const cappedLimit = Math.min(50, Math.max(1, Math.trunc(limit)))
+  const trimmed = query.trim()
+  const tasks: LocalTaskSearchRecord[] = []
+  const sources: string[] = []
+
+  for (const spec of TASK_TABLE_SPECS) {
+    if (!tableExists(d, spec.table)) continue
+    const columns = tableColumns(d, spec.table)
+    const descriptionColumn = firstColumn(columns, spec.description)
+    if (!descriptionColumn) continue
+
+    sources.push(spec.table)
+    const completedColumn = firstColumn(columns, spec.completed)
+    const deletedColumn = firstColumn(columns, spec.deleted)
+    const createdColumn = firstColumn(columns, spec.createdAt)
+    const titleColumn = firstColumn(columns, ['title'])
+    const searchColumns = [...new Set([descriptionColumn, titleColumn].filter(Boolean))] as string[]
+
+    const where: string[] = []
+    const params: unknown[] = []
+    if (deletedColumn) where.push(`${booleanColumnExpr(deletedColumn)} = 0`)
+    if (!includeCompleted && completedColumn)
+      where.push(`${booleanColumnExpr(completedColumn)} = 0`)
+    if (trimmed) {
+      const needles = [
+        trimmed,
+        ...trimmed
+          .split(/\s+/)
+          .map((part) => part.trim())
+          .filter((part) => part.length >= 2 && part !== trimmed)
+      ]
+      const searchParts = needles.map((needle) => {
+        for (let index = 0; index < searchColumns.length; index += 1) params.push(`%${needle}%`)
+        return `(${searchColumns.map((column) => `${safeIdent(column)} LIKE ?`).join(' OR ')})`
+      })
+      where.push(`(${searchParts.join(' OR ')})`)
+    }
+
+    const sql = `
+      SELECT
+        '${spec.table}' AS source,
+        ${coalesceColumnExpr(columns, spec.id, "''")} AS id,
+        ${coalesceColumnExpr(columns, spec.backendId, 'NULL')} AS backendId,
+        ${safeIdent(descriptionColumn)} AS description,
+        ${booleanColumnExpr(completedColumn)} AS completed,
+        ${booleanColumnExpr(deletedColumn)} AS deleted,
+        ${optionalColumnExpr(firstColumn(columns, spec.dueAt))} AS dueAt,
+        ${optionalColumnExpr(createdColumn)} AS createdAt,
+        ${optionalColumnExpr(firstColumn(columns, spec.updatedAt))} AS updatedAt,
+        ${optionalColumnExpr(firstColumn(columns, spec.priority))} AS priority
+      FROM ${safeIdent(spec.table)}
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY ${createdColumn ? safeIdent(createdColumn) : 'rowid'} DESC
+      LIMIT ?
+    `
+    const rows = d.prepare(sql).all(...params, cappedLimit) as LocalTaskSearchRow[]
+    tasks.push(...rows.map(mapLocalTaskRow))
+  }
+
+  if (sources.length === 0) {
+    return {
+      available: false,
+      reason: 'No supported local task tables were found in the Windows main-process database.',
+      sources: [],
+      tasks: []
+    }
+  }
+
+  tasks.sort((a, b) => localTaskTimestampValue(b.createdAt) - localTaskTimestampValue(a.createdAt))
+  return {
+    available: true,
+    sources,
+    tasks: tasks.slice(0, cappedLimit)
+  }
 }
 
 type LocalKGNodeRow = {

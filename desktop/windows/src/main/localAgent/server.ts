@@ -3,6 +3,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'net'
 import { getLocalAgentSettings, LOCAL_AGENT_DEFAULT_PORT } from './settings'
 import { ensureLocalAgentToken } from './tokenStore'
+import {
+  errorResponseBody,
+  listLocalAgentTools,
+  runLocalAgentTool,
+  type LocalAgentRuntimeContext
+} from './tools'
 
 const LOCAL_AGENT_HOST = '127.0.0.1'
 const LOCAL_AGENT_APP_ID = 'com.omiwindows.app'
@@ -47,6 +53,26 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
     req.on('error', reject)
   })
+}
+
+function parseToolRequest(body: string): { name: string; arguments: unknown } {
+  let payload: unknown
+  try {
+    payload = JSON.parse(body)
+  } catch {
+    throw new Error('invalid_json_body')
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new Error('invalid_json_body')
+  }
+  const record = payload as Record<string, unknown>
+  if (typeof record.name !== 'string' || !record.name.trim()) {
+    throw new Error('missing_tool_name')
+  }
+  return {
+    name: record.name.trim(),
+    arguments: record.arguments ?? {}
+  }
 }
 
 function authorize(req: IncomingMessage, token: string): boolean {
@@ -106,7 +132,8 @@ function route(
 
     if (method === 'GET' && url.pathname === '/v1/local/tools') {
       json(res, 200, {
-        tools: [],
+        ok: true,
+        tools: listLocalAgentTools(),
         toolEndpoint: info.toolEndpoint
       })
       return
@@ -114,14 +141,37 @@ function route(
 
     if (method === 'POST' && url.pathname === '/v1/local/tool') {
       void readBody(req)
-        .then(() => {
-          json(res, 501, {
-            error: 'no_local_tools_registered',
-            tools: []
-          })
+        .then(async (body) => {
+          let request: { name: string; arguments: unknown }
+          try {
+            request = parseToolRequest(body)
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'invalid_json_body'
+            json(res, 400, { ok: false, error: { code: message, message } })
+            return
+          }
+
+          try {
+            const context: LocalAgentRuntimeContext = {
+              localUrl: info.localUrl,
+              toolEndpoint: info.toolEndpoint,
+              app: {
+                name: appInfo.name,
+                version: appInfo.version,
+                appId: appInfo.appId
+              }
+            }
+            json(res, 200, await runLocalAgentTool(request.name, request.arguments, context))
+          } catch (error) {
+            const { status, body } = errorResponseBody(error)
+            json(res, status, body)
+          }
         })
         .catch(() => {
-          json(res, 400, { error: 'invalid_request_body' })
+          json(res, 400, {
+            ok: false,
+            error: { code: 'invalid_request_body', message: 'invalid_request_body' }
+          })
         })
       return
     }

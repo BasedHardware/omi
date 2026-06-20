@@ -100,10 +100,24 @@ describe('local agent server', () => {
     const tools = await fetch(`${info.localUrl}/v1/local/tools`, {
       headers: { authorization: 'Bearer test-token' }
     })
-    await expect(tools.json()).resolves.toEqual({
-      tools: [],
+    const toolsBody = await tools.json()
+    expect(toolsBody).toMatchObject({
+      ok: true,
       toolEndpoint: `${info.localUrl}/v1/local/tool`
     })
+    expect(toolsBody.tools.map((tool: { name: string }) => tool.name)).toEqual(
+      expect.arrayContaining([
+        'get_local_status',
+        'execute_sql',
+        'search_screen_history',
+        'semantic_search',
+        'get_screenshot',
+        'get_daily_recap',
+        'search_tasks',
+        'complete_task',
+        'delete_task'
+      ])
+    )
 
     const missingAuthToolCall = await fetch(`${info.localUrl}/v1/local/tool`, { method: 'POST' })
     expect(missingAuthToolCall.status).toBe(401)
@@ -114,9 +128,31 @@ describe('local agent server', () => {
         authorization: 'Bearer test-token',
         'content-type': 'application/json'
       },
+      body: JSON.stringify({ name: 'get_local_status', arguments: {} })
+    })
+    expect(toolCall.status).toBe(200)
+    await expect(toolCall.json()).resolves.toMatchObject({
+      ok: true,
+      name: 'get_local_status',
+      result: {
+        ok: true,
+        mode: 'local_omi_windows'
+      }
+    })
+
+    const unknownTool = await fetch(`${info.localUrl}/v1/local/tool`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer test-token',
+        'content-type': 'application/json'
+      },
       body: JSON.stringify({ name: 'noop', arguments: {} })
     })
-    expect(toolCall.status).toBe(501)
+    expect(unknownTool.status).toBe(404)
+    await expect(unknownTool.json()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'unknown_tool' }
+    })
   })
 
   it('falls back from the default port without binding to all interfaces', async () => {
