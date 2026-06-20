@@ -6,7 +6,8 @@ import {
   getRewindFrame,
   listRewindFrames,
   searchRewindFrames,
-  rewindDayBounds
+  rewindDayBounds,
+  rewindStatusStats
 } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
@@ -17,8 +18,8 @@ import {
 import { readRewindFrameImage, resolveFrameImagePath } from '../rewind/frameImage'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
-import { clearCurrentScreen } from '../rewind/currentScreen'
 import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
+import { clearCurrentScreen } from '../rewind/currentScreen'
 
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
@@ -53,6 +54,7 @@ export function registerRewindHandlers(): void {
     }
     return current
   })
+  ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
   ipcMain.handle('rewind:deleteAll', async () => {
     const deleted = deleteAllRewindFrames()

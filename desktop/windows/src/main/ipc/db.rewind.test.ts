@@ -108,4 +108,28 @@ describe('rewind DB search', () => {
       indexed: 0
     })
   })
+
+  it('summarizes Rewind diagnostic status', async () => {
+    const db = await import('./db')
+
+    expect(db.rewindStatusStats()).toEqual({
+      latestFrameTs: null,
+      oldestFrameTs: null,
+      totalFrameCount: 0,
+      indexedFrameCount: 0,
+      ocrBacklogCount: 0
+    })
+
+    db.insertRewindFrame(frame({ ts: 1_000, indexed: 0 }))
+    db.insertRewindFrame(frame({ ts: 3_000, indexed: 1 }))
+    db.insertRewindFrame(frame({ ts: 2_000, indexed: 0 }))
+
+    expect(db.rewindStatusStats()).toEqual({
+      latestFrameTs: 3_000,
+      oldestFrameTs: 1_000,
+      totalFrameCount: 3,
+      indexedFrameCount: 1,
+      ocrBacklogCount: 2
+    })
+  })
 })

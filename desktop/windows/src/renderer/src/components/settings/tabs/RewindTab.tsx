@@ -1,31 +1,52 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2 } from 'lucide-react'
+import {
+  Monitor,
+  Clock,
+  CalendarClock,
+  Ban,
+  Brain,
+  Lightbulb,
+  X,
+  Trash2,
+  Activity
+} from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { StatusTile } from '../StatusTile'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
-import type { RewindSettings, ScreenSynthState, InsightSettings } from '../../../../../shared/types'
+import type {
+  RewindSettings,
+  RewindStatus,
+  ScreenSynthState,
+  InsightSettings
+} from '../../../../../shared/types'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
 // call via Omi's proxy, so longer intervals mean less backend cost.
 const INSIGHT_INTERVALS = [15, 20, 30, 60]
 
+function formatStatusTime(ts: number | null): string {
+  if (ts == null) return 'No frames yet'
+  return new Date(ts).toLocaleString()
+}
+
+function retentionLabel(status: RewindStatus | null, days: number | undefined): string {
+  const retentionDays = days ?? 14
+  if (!status || status.totalFrameCount === 0) return `${retentionDays} days, no stored frames`
+  const oldest = formatStatusTime(status.oldestFrameTs)
+  return `${retentionDays} days, oldest ${oldest}`
+}
+
 export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
+  const [rewindStatus, setRewindStatus] = useState<RewindStatus | null>(null)
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
   const [deletingRewind, setDeletingRewind] = useState(false)
-  const [continuousRec, setContinuousRec] = useState<boolean>(
-    () => !!getPreferences().continuousRecording
-  )
-  const toggleContinuous = (): void => {
-    const next = !continuousRec
-    setContinuousRec(next)
-    setPreferences({ continuousRecording: next })
-  }
   const [retention, setRetention] = useState<'off' | 'dry-run' | 'live'>(
     () => getPreferences().retentionMode ?? 'dry-run'
   )
@@ -36,13 +57,17 @@ export function RewindTab(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+    void window.omi.rewindStatus().then(setRewindStatus)
     void window.omi.screenSynthGetState().then(setScreenSynth)
     void window.omi.insightGetSettings().then(setInsight)
   }, [])
 
   const saveRewind = (next: RewindSettings): void => {
     setRewind(next) // optimistic
-    void window.omi.rewindSetSettings(next).then(setRewind)
+    void window.omi.rewindSetSettings(next).then((saved) => {
+      setRewind(saved)
+      void window.omi.rewindStatus().then(setRewindStatus)
+    })
   }
   const addExcludedApp = (): void => {
     const name = newExcluded.trim()
@@ -64,6 +89,13 @@ export function RewindTab(): React.JSX.Element {
   }
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
     setInsight(await window.omi.insightSetSettings(patch))
+  }
+  const refreshRewindStatus = async (): Promise<void> => {
+    setRewindStatus(await window.omi.rewindStatus())
+  }
+  const pruneRewindNow = async (): Promise<void> => {
+    await window.omi.rewindPruneNow()
+    await refreshRewindStatus()
   }
   const deleteAllRewind = async (): Promise<void> => {
     if (deletingRewind) return
@@ -94,16 +126,6 @@ export function RewindTab(): React.JSX.Element {
 
   return (
     <>
-      <SettingRow
-        icon={Mic}
-        dot={continuousRec ? 'on' : 'off'}
-        title="Continuous recording"
-        subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
-        keywords="continuous recording microphone audio always-on"
-        control={
-          <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
-        }
-      />
       <SettingRow
         icon={Trash2}
         title="Auto-cleanup"
@@ -193,6 +215,56 @@ export function RewindTab(): React.JSX.Element {
           </div>
         }
       />
+      <SettingRow
+        icon={Activity}
+        dot={rewind?.captureEnabled ? 'on' : 'off'}
+        title="Rewind status"
+        subtitle="Capture, OCR, retention, and search-index health for this PC."
+        keywords="rewind status diagnostics ocr indexed frames capture retention"
+        control={
+          <button onClick={() => void refreshRewindStatus()} className="btn-ghost">
+            Refresh
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StatusTile
+              label="Capture"
+              value={rewind == null ? 'Loading...' : rewind.captureEnabled ? 'Enabled' : 'Disabled'}
+              tone={rewind == null ? 'neutral' : rewind.captureEnabled ? 'good' : 'warn'}
+            />
+            <StatusTile
+              label="Last frame"
+              value={formatStatusTime(rewindStatus?.latestFrameTs ?? null)}
+              tone={rewindStatus?.latestFrameTs ? 'good' : 'warn'}
+            />
+            <StatusTile
+              label="OCR backlog"
+              value={`${rewindStatus?.ocrBacklogCount ?? 0} frame${(rewindStatus?.ocrBacklogCount ?? 0) === 1 ? '' : 's'}`}
+              tone={(rewindStatus?.ocrBacklogCount ?? 0) > 0 ? 'warn' : 'good'}
+            />
+            <StatusTile
+              label="Retention"
+              value={retentionLabel(rewindStatus, rewind?.retentionDays)}
+              tone="neutral"
+            />
+            <StatusTile
+              label="Indexed frames"
+              value={`${rewindStatus?.indexedFrameCount ?? 0} of ${rewindStatus?.totalFrameCount ?? 0}`}
+              tone={(rewindStatus?.indexedFrameCount ?? 0) > 0 ? 'good' : 'neutral'}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
+            <span>
+              Search uses indexed OCR text; backlog frames may not appear in text search yet.
+            </span>
+            <button onClick={() => void pruneRewindNow()} className="btn-ghost shrink-0">
+              Prune now
+            </button>
+          </div>
+        </div>
+      </SettingRow>
       <SettingRow
         icon={Trash2}
         title="Delete all Rewind history"

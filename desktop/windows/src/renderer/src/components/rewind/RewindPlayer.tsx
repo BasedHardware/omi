@@ -10,10 +10,12 @@ import { parseWindowTitle } from '../../lib/windowTitle'
 
 export function RewindPlayer({
   frames,
-  cursorTs
+  cursorTs,
+  onOpenSettings
 }: {
   frames: RewindFrame[]
   cursorTs: number
+  onOpenSettings?: () => void
 }): React.JSX.Element {
   const [src, setSrc] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -54,10 +56,17 @@ export function RewindPlayer({
             <div className="text-white/40 text-sm">Loading…</div>
           )
         ) : (
-          <div className="text-white/50 text-sm">
-            {frames.length === 0
-              ? 'No frames yet — enable Rewind capture in Settings.'
-              : 'No screenshot at this moment.'}
+          <div className="flex flex-col items-center gap-2 px-4 text-center text-sm text-white/50">
+            <span>
+              {frames.length === 0
+                ? 'No frames yet. Check Rewind capture and OCR status in Settings.'
+                : 'No screenshot at this moment.'}
+            </span>
+            {frames.length === 0 && onOpenSettings && (
+              <button onClick={onOpenSettings} className="btn-ghost">
+                Open Rewind settings
+              </button>
+            )}
           </div>
         )}
       </div>

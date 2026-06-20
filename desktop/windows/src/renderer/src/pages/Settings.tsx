@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { SettingsSearchProvider, useSettingsSearch } from '../components/settings/searchContext'
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
@@ -23,9 +23,13 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
 }
 
 function SettingsInner(): React.JSX.Element {
-  const [active, setActive] = useState<SettingsTabId>('general')
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [active, setActive] = useState<SettingsTabId>(() => {
+    const tab = searchParams.get('tab')
+    return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'general'
+  })
 
   return (
     <div className="flex h-full min-h-0">
@@ -34,6 +38,7 @@ function SettingsInner(): React.JSX.Element {
         onSelect={(id) => {
           setActive(id)
           setQuery('') // selecting a tab exits search
+          setSearchParams(id === 'general' ? {} : { tab: id })
         }}
         query={query}
         onQuery={setQuery}
