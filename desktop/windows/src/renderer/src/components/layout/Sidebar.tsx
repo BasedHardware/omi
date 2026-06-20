@@ -23,6 +23,9 @@ import {
   Loader2,
   ChevronRight,
   X,
+  Download,
+  Gift,
+  MoreHorizontal,
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
@@ -92,6 +95,9 @@ export function Sidebar(): React.JSX.Element {
   const [showGetOmi, setShowGetOmi] = useState(
     () => localStorage.getItem(GET_OMI_DISMISSED_KEY) !== '1'
   )
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
   const loadingNavTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const { pathname } = useLocation()
@@ -139,6 +145,36 @@ export function Sidebar(): React.JSX.Element {
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
   }, [])
+
+  // Check for updates via GitHub releases API — mirrors macOS Sparkle check.
+  // Compares current app version (semver) to the latest windows-tagged release.
+  useEffect(() => {
+    void (async () => {
+      const current = await window.omi.getAppVersion?.()
+      if (!current) return
+      try {
+        const res = await fetch('https://api.github.com/repos/BasedHardware/omi/releases/latest')
+        if (!res.ok) return
+        const data = (await res.json()) as { tag_name?: string }
+        const tag = data.tag_name ?? ''
+        if (!tag.toLowerCase().includes('windows')) return
+        const latest = tag.replace(/^v/i, '').replace(/-windows.*/i, '')
+        if (latest && latest !== current && latest > current) setUpdateVersion(latest)
+      } catch {}
+    })()
+  }, [])
+
+  // Close profile menu when clicking outside it
+  useEffect(() => {
+    if (!profileMenuOpen) return
+    const handler = (e: MouseEvent): void => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
+        setProfileMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [profileMenuOpen])
 
   // Insight unread badge: count insights newer than the last time the user
   // visited /insights. Cleared on entry to /insights.
@@ -527,6 +563,28 @@ export function Sidebar(): React.JSX.Element {
         </div>
       )}
 
+      {/* Update available widget — mirrors macOS pulsing purple card */}
+      {updateVersion && (
+        <button
+          onClick={() => window.omi.checkForUpdates?.()}
+          title={collapsed ? `Update available: v${updateVersion}` : undefined}
+          className={cn(
+            'mt-2 flex w-full items-center rounded-xl bg-[color:var(--accent)] px-3 py-2.5 transition-all duration-150 hover:brightness-110 active:scale-[0.98]',
+            !collapsed && 'gap-3',
+            'sidebar-update-glow'
+          )}
+        >
+          <Download className="h-4 w-4 shrink-0 text-white" strokeWidth={1.75} />
+          {!collapsed && (
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-xs font-semibold text-white">Update Available</p>
+              <p className="text-[10px] text-white/75">v{updateVersion}</p>
+            </div>
+          )}
+          {!collapsed && <ChevronRight className="h-3 w-3 shrink-0 text-white/70" strokeWidth={2} />}
+        </button>
+      )}
+
       <div className="my-2 h-px w-full bg-white/10" />
 
       {/* Recording status */}
@@ -567,39 +625,75 @@ export function Sidebar(): React.JSX.Element {
 
       <div className="my-2 h-px w-full bg-white/10" />
 
-      {/* Account row */}
-      <Link
-        to="/settings"
-        title={collapsed ? displayName : undefined}
-        className={cn(
-          'flex w-full items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150 text-white/60 hover:text-white/90',
-          !collapsed && 'gap-3',
-          HOVER
-        )}
-      >
-        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
-          <img
-            src={photoURL ?? ''}
-            alt=""
-            className={cn('h-full w-full object-cover', photoURL ? 'block' : 'hidden')}
-            referrerPolicy="no-referrer"
-            onError={(e) => {
-              const el = e.currentTarget
-              el.classList.add('hidden')
-              el.nextElementSibling?.classList.remove('hidden')
-            }}
-          />
-          <div
-            className={cn(
-              'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
-              photoURL ? 'hidden' : ''
-            )}
-          >
-            {initial}
+      {/* Account row + profile menu popover — mirrors macOS profileMenuButton */}
+      <div ref={profileMenuRef} className="relative">
+        {/* Profile popover */}
+        {profileMenuOpen && !collapsed && (
+          <div className="absolute bottom-full left-0 right-0 mb-1 overflow-hidden rounded-xl border border-white/10 bg-[#0f0f0f] py-1 shadow-xl">
+            <button
+              onClick={() => { setProfileMenuOpen(false); window.omi.openExternal?.('https://affiliate.omi.me') }}
+              className="flex w-full items-center gap-3 px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/8 hover:text-white/90"
+            >
+              <Gift className="h-4 w-4 shrink-0 text-[color:var(--accent)]" strokeWidth={1.75} />
+              Refer a Friend
+            </button>
+            <button
+              onClick={() => { setProfileMenuOpen(false); window.omi.openExternal?.('https://discord.com/invite/8MP3b9ymvx') }}
+              className="flex w-full items-center gap-3 px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/8 hover:text-white/90"
+            >
+              <MessageCircle className="h-4 w-4 shrink-0 text-[#5865F2]" strokeWidth={1.75} />
+              Discord
+            </button>
+            <div className="mx-3 my-1 h-px bg-white/8" />
+            <Link
+              to="/settings"
+              onClick={() => setProfileMenuOpen(false)}
+              className="flex w-full items-center gap-3 px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/8 hover:text-white/90"
+            >
+              <Settings className="h-4 w-4 shrink-0 text-white/40" strokeWidth={1.75} />
+              Settings
+            </Link>
           </div>
-        </div>
-        {label(displayName)}
-      </Link>
+        )}
+
+        <button
+          onClick={() => (collapsed ? navigate('/settings') : setProfileMenuOpen((o) => !o))}
+          title={collapsed ? displayName : undefined}
+          className={cn(
+            'flex w-full items-center rounded-xl px-2.5 py-2 text-sm transition-colors duration-150 text-white/60 hover:text-white/90',
+            !collapsed && 'gap-3',
+            profileMenuOpen ? 'bg-[var(--nav-sel)] text-white/90' : HOVER
+          )}
+        >
+          <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10">
+            <img
+              src={photoURL ?? ''}
+              alt=""
+              className={cn('h-full w-full object-cover', photoURL ? 'block' : 'hidden')}
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const el = e.currentTarget
+                el.classList.add('hidden')
+                el.nextElementSibling?.classList.remove('hidden')
+              }}
+            />
+            <div
+              className={cn(
+                'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
+                photoURL ? 'hidden' : ''
+              )}
+            >
+              {initial}
+            </div>
+          </div>
+          {!collapsed && (
+            <>
+              {label(displayName)}
+              <MoreHorizontal className="h-4 w-4 shrink-0 text-white/30" strokeWidth={1.75} />
+            </>
+          )}
+        </button>
+      </div>
     </nav>
   )
 }

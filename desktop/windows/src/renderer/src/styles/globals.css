@@ -439,6 +439,15 @@
   animation: sidebarAudioBar 0.65s ease-in-out infinite alternate;
 }
 
+/* Update available widget: pulsing purple glow — mirrors macOS sidebar card. */
+@keyframes updateGlow {
+  from { box-shadow: 0 0 6px 0 rgba(91, 2, 224, 0.35); }
+  to   { box-shadow: 0 0 16px 4px rgba(91, 2, 224, 0.75); }
+}
+.sidebar-update-glow {
+  animation: updateGlow 1.2s ease-in-out infinite alternate;
+}
+
 /* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned
    by wheel/drag, so the bar itself shouldn't show a scrollbar). */
 .no-scrollbar {
