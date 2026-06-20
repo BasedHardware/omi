@@ -51,6 +51,7 @@ PROOF_CONSTANTS = {
     "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
     "account_generation_readiness_proof": _EXTERNAL.ACCOUNT_GENERATION_READINESS_PROOF,
     "real_router_fail_closed_matrix_proof": _EXTERNAL.REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
+    "write_convergence_tombstone_matrix_proof": _EXTERNAL.WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
 }
 
 
@@ -143,7 +144,11 @@ REMAINING_GATES = [
             "authoritative writes, projection commits, tombstones, vector cleanup fences, and no direct legacy write "
             "fallback before V17 read cutover."
         ),
-        "existing_local_proofs": ["write_convergence_proof", "projection_readiness_proof"],
+        "existing_local_proofs": [
+            "write_convergence_proof",
+            "projection_readiness_proof",
+            "write_convergence_tombstone_matrix_proof",
+        ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
@@ -226,6 +231,7 @@ REMAINING_GATES = [
         "existing_local_proofs": [
             "projection_readiness_proof",
             "write_convergence_proof",
+            "write_convergence_tombstone_matrix_proof",
             "response_adapter_proof",
             "request_adapter_proof",
             "route_planner_proof",

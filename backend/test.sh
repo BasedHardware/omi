@@ -98,6 +98,7 @@ pytest tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_get_testclient.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_fail_closed_matrix.py -v
+pytest tests/unit/test_v17_p1_3_v3_write_convergence_tombstone_matrix.py -v
 pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_control_reader_readiness.py -v

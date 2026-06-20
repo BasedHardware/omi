@@ -1679,3 +1679,14 @@ Added a safe pre-wiring proof that makes the future `GET /v3/memories` dispatche
 - Current real-router baseline remains legacy-only under stubs via the existing TestClient proof: `offset=0 -> limit=5000`, explicit nonzero `limit`/`offset` preserved, no V17 adapters invoked, and no mutating routes executed.
 - Future dispatcher matrix is intentionally proven only at a pure helper/route-planner seam with fake readers: non-enrolled legacy calls legacy only; enrolled projection success calls projection reader only; fail-closed states call neither legacy nor projection; no-grant/archive denial returns 403; projection/control/account/cursor mismatch fails closed; enabled-empty returns `[]` with no legacy fallback.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore/cloud/provider/vector call, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
+
+### 2026-06-20 — P1-3 `/v3` write-convergence/delete/tombstone pre-runtime matrix proof
+
+Added the next safe pre-runtime proof for the write-convergence/delete/tombstone gates future `GET /v3/memories` must require before returning V17 projection data:
+
+- Added `backend/scripts/v17_p1_3_v3_write_convergence_tombstone_matrix.py` and `backend/tests/unit/test_v17_p1_3_v3_write_convergence_tombstone_matrix.py`; registered the test in `backend/test.sh`.
+- Linked `write_convergence_tombstone_matrix_proof` from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The matrix uses only pure route-planner/projection/write-convergence seams with fake caller contexts and fake in-memory readers. It proves V17 projection success requires create, update, and delete convergence plus matching account/projection/tombstone/freshness fences.
+- Fail-closed cases cover create convergence false, update convergence false, delete convergence false, tombstone fence missing, tombstone generation stale/mismatched, and enabled-empty with missing tombstone fence. These cases call no fake legacy reader, call no fake projection reader, and disallow legacy fallback or V17/legacy merge.
+- Default visibility non-claims are preserved through explicit Archive default-denied and stale Short-term default-hidden cases.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore/cloud/provider/vector call, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.

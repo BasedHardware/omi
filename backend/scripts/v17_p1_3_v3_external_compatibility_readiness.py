@@ -738,6 +738,24 @@ REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {
     ],
 }
 
+WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_write_convergence_tombstone_matrix.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_write_convergence_tombstone_matrix.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "create_update_delete_convergence_all_required_before_v17_projection_reads",
+        "create_update_delete_convergence_false_fail_closed_without_legacy_fallback",
+        "delete_tombstone_fence_missing_or_generation_mismatch_fail_closed",
+        "account_projection_tombstone_freshness_generation_fences_must_match",
+        "enabled_empty_allowed_only_when_all_write_projection_tombstone_fences_ready",
+        "archive_default_unavailable_and_stale_short_term_default_hidden",
+        "failures_never_allow_legacy_fallback_or_v17_legacy_merge",
+        "future_dispatcher_matrix_proven_only_at_pure_helper_route_planner_write_projection_seam",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -799,6 +817,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
         "account_generation_readiness_proof": ACCOUNT_GENERATION_READINESS_PROOF,
         "real_router_fail_closed_matrix_proof": REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
+        "write_convergence_tombstone_matrix_proof": WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -832,6 +851,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "control_reader_contract_proof_present": True,
             "account_generation_readiness_proof_present": True,
             "real_router_fail_closed_matrix_proof_present": True,
+            "write_convergence_tombstone_matrix_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,
