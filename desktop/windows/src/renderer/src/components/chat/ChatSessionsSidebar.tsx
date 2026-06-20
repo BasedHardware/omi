@@ -109,15 +109,17 @@ export function ChatSessionsSidebar({
   const saveEdit = async (): Promise<void> => {
     if (!editingId) return
     const trimmed = editTitle.trim()
+    if (!trimmed) {
+      setEditingId(null)
+      return
+    }
     try {
-      if (trimmed) {
-        await window.omi.updateLocalConversationTitle(editingId, trimmed)
-        setSessions((s) => s.map((x) => x.id === editingId ? { ...x, title: trimmed } : x))
-      }
+      await window.omi.updateLocalConversationTitle(editingId, trimmed)
+      setSessions((s) => s.map((x) => x.id === editingId ? { ...x, title: trimmed } : x))
+      setEditingId(null)
     } catch (e) {
       console.error('Failed to rename chat session:', e)
-    } finally {
-      setEditingId(null)
+      // Keep editor open so user can retry or cancel manually
     }
   }
 

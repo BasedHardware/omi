@@ -405,7 +405,7 @@ app.whenReady().then(async () => {
   // in Electron 22 / Chromium 100).
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
     const p = permission as string
-    return p === 'bluetooth' || p === 'media' || p === 'display-capture' || p === 'notifications'
+    return p === 'bluetooth' || p === 'media' || p === 'display-capture' || p === 'notifications' || p === 'clipboard-sanitized-write'
   })
   session.defaultSession.setDevicePermissionHandler((details) => {
     return (details.deviceType as unknown as string) === 'bluetooth'
