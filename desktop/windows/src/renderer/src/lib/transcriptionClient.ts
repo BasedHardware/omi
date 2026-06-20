@@ -1,29 +1,33 @@
 import { auth } from './firebase'
 import { startOmiListen, type OmiListenHandle } from './omiListenClient'
+import { getPreferences } from './preferences'
 import type { RecordingDiagnosticsScope } from './continuousRecordingStatus'
-import type { BackendSegment, ListenSource, TranscriptLine } from '../../../shared/types'
+import type {
+  BackendSegment,
+  ListenSource,
+  SttMode,
+  TranscriptLine,
+  TranscriptionBackend
+} from '../../../shared/types'
 
-const CONNECT_TIMEOUT_MS = 3000
+const CLOUD_CONNECT_TIMEOUT_MS = 3000
+const LOCAL_CONNECT_TIMEOUT_MS = 10000
 
 export type TranscriptionCallbacks = {
-  /** Fires every time a new finalized line is ready (a v4/listen segment). */
+  /** Fires every time a new finalized line is ready. */
   onLine: (line: TranscriptLine) => void
-  /** Reserved for in-progress interim text. The Omi v4/listen path emits only
-   *  finalized segments, so this currently never fires; kept so callers that
-   *  render interim text don't need to change. */
+  /** Reserved for in-progress interim text. The current backends emit finalized segments only. */
   onInterim: (text: string) => void
-  /** Fires once when the session connects. Always 'omi' (the only backend). */
-  onBackend: (backend: 'omi') => void
-  /** Fires when transcription can't start or can't continue: connect failure,
-   *  quota exhausted, or the socket dropped. The session is over when this fires. */
+  /** Fires once when the winning backend connects. */
+  onBackend: (backend: TranscriptionBackend) => void
+  /** Fires when transcription can't start or can't continue. */
   onError: (err: Error) => void
-  /** Fires for every non-segment backend event (e.g. `memory_creating`). Optional;
-   *  quota events are still handled internally regardless. */
+  /** Fires for every non-segment backend event. Optional; quota events are still handled internally. */
   onEvent?: (event: { type: string; raw: Record<string, unknown> }) => void
 }
 
 export type TranscriptionHandle = {
-  stop: () => void
+  stop: () => Promise<void>
 }
 
 function segmentToLine(seg: BackendSegment): TranscriptLine {
@@ -34,7 +38,16 @@ function segmentToLine(seg: BackendSegment): TranscriptLine {
       : typeof seg.speaker_id === 'number'
         ? `Speaker ${seg.speaker_id}`
         : undefined
-  return { id: seg.id, speaker, text: seg.text }
+  return {
+    id: seg.id,
+    speaker,
+    text: seg.text,
+    speakerId: seg.speaker_id,
+    isUser: seg.is_user,
+    personId: seg.person_id,
+    start: seg.start,
+    end: seg.end
+  }
 }
 
 /**
@@ -63,117 +76,117 @@ function isQuotaClose(code: number, reason: string): boolean {
 const QUOTA_MESSAGE =
   'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
+function modeForBackend(backend: TranscriptionBackend): SttMode {
+  return backend === 'local-parakeet' ? 'local-parakeet' : 'cloud'
+}
+
+async function localSttAvailable(): Promise<boolean> {
+  try {
+    return (await window.omi.localSttStatus()).available
+  } catch {
+    return false
+  }
+}
+
+async function initialBackendOrder(): Promise<TranscriptionBackend[]> {
+  const preference = getPreferences().sttMode ?? 'auto'
+  if (preference === 'cloud') {
+    return (await localSttAvailable()) ? ['omi', 'local-parakeet'] : ['omi']
+  }
+  if (preference === 'local-parakeet') return ['local-parakeet', 'omi']
+  return (await localSttAvailable()) ? ['local-parakeet', 'omi'] : ['omi']
+}
+
 /**
- * Start an Omi v4/listen session for one source. Resolves the handle once the
- * socket connects, or null on an initial failure (connect timeout, fatal WS
- * error, no signed-in user, or quota exhausted before connect). `onLost` fires
- * when a CONNECTED session can no longer continue (quota exhausted or socket
- * dropped) so the caller can surface an error to the user.
+ * Start one selected backend for one source. Resolves the handle once the
+ * backend connects, or null on an initial failure. `onLost` fires when a
+ * connected session can no longer continue so the owner can try the other
+ * backend or surface an error.
  */
-async function startWithOmi(
+async function startWithBackend(
   source: ListenSource,
+  backend: TranscriptionBackend,
   cb: TranscriptionCallbacks,
-  onLost: (reason: string) => void,
+  onLost: (reason: string, backend: TranscriptionBackend) => void,
   diagnosticsScope: RecordingDiagnosticsScope
 ): Promise<OmiListenHandle | null> {
   if (!auth.currentUser) return null
-  let outcome: 'pending' | 'omi' | 'failed' = 'pending'
+  let outcome: 'pending' | 'connected' | 'failed' = 'pending'
   return new Promise<OmiListenHandle | null>((resolve) => {
     let handle: OmiListenHandle | null = null
-    const timeout = setTimeout(() => {
-      if (outcome !== 'pending') return
-      outcome = 'failed'
-      try {
-        handle?.stop()
-      } catch {
-        /* ignore */
-      }
-      resolve(null)
-    }, CONNECT_TIMEOUT_MS)
+    const timeout = setTimeout(
+      () => {
+        if (outcome !== 'pending') return
+        outcome = 'failed'
+        void handle?.stop().catch(() => undefined)
+        resolve(null)
+      },
+      backend === 'local-parakeet' ? LOCAL_CONNECT_TIMEOUT_MS : CLOUD_CONNECT_TIMEOUT_MS
+    )
 
     startOmiListen(
       source,
       {
-        onConnected: () => {
+        onConnected: (actualBackend) => {
           if (outcome !== 'pending') return
-          outcome = 'omi'
+          outcome = 'connected'
           clearTimeout(timeout)
-          cb.onBackend('omi')
+          cb.onBackend(actualBackend)
           resolve(handle)
         },
         onSegments: (segs) => {
-          if (outcome !== 'omi') return
+          if (outcome !== 'connected') return
           for (const s of segs) cb.onLine(segmentToLine(s))
         },
         onEvent: (ev) => {
           cb.onEvent?.(ev)
-          if (!isQuotaExhaustedEvent(ev)) return
+          if (backend !== 'omi' || !isQuotaExhaustedEvent(ev)) return
           // Free quota is used up — the cloud STT will never emit transcripts.
           if (outcome === 'pending') {
-            // Never connected as the winner yet: treat as an initial failure.
             outcome = 'failed'
             clearTimeout(timeout)
-            try {
-              handle?.stop()
-            } catch {
-              /* ignore */
-            }
+            void handle?.stop().catch(() => undefined)
             resolve(null)
-          } else if (outcome === 'omi') {
-            // Already connected and committed: tell the caller the session is over.
-            onLost('Omi free quota exhausted')
+          } else if (outcome === 'connected') {
+            onLost('Omi free quota exhausted', backend)
           }
         },
         onClosed: (code, reason) => {
-          // The Omi socket dropped AFTER connecting (abnormal 1005/1006, clean
-          // 1000, etc.). Omi will emit no more transcripts, so end the session.
-          // (Pre-connect closes arrive via onError and drive the initial failure.)
-          if (outcome !== 'omi') return
-          onLost(
-            isQuotaClose(code, reason)
-              ? QUOTA_MESSAGE
-              : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
-          )
+          if (outcome !== 'connected') return
+          const message =
+            backend === 'omi'
+              ? isQuotaClose(code, reason)
+                ? QUOTA_MESSAGE
+                : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
+              : `Local Parakeet STT closed (${code})${reason ? ` ${reason}` : ''}`
+          onLost(message, backend)
         },
         onError: (err, fatal) => {
           if (outcome === 'pending' && fatal) {
             outcome = 'failed'
             clearTimeout(timeout)
-            try {
-              handle?.stop()
-            } catch {
-              /* ignore */
-            }
-            console.warn(`[v4/listen ${source}] initial failure:`, err.message)
+            void handle?.stop().catch(() => undefined)
+            console.warn(`[transcription ${backend} ${source}] initial failure:`, err.message)
             resolve(null)
             return
           }
-          // Only surface post-connect errors when Omi actually connected.
-          if (outcome === 'omi') {
-            // Quota backstop: a 1008 'trial_expired' close (in case the typed
-            // event didn't arrive first). End the session rather than erroring twice.
-            if (isTrialExpiredError(err)) {
-              onLost(QUOTA_MESSAGE)
+          if (outcome === 'connected') {
+            if (backend === 'omi' && isTrialExpiredError(err)) {
+              onLost(QUOTA_MESSAGE, backend)
               return
             }
-            cb.onError(err)
+            onLost(err.message, backend)
           }
         }
       },
-      diagnosticsScope
+      diagnosticsScope,
+      modeForBackend(backend)
     )
       .then((h) => {
-        // startOmiListen resolves as soon as the WS is *created* — long before
-        // it reaches OPEN (~150ms+ away). At that point `outcome` is still
-        // 'pending', so we keep the handle and let onConnected/timeout decide.
-        // Only tear down if we've ALREADY failed; closing here on a still-pending
-        // outcome aborts the handshake mid-connect (ws code 1006).
+        // startOmiListen resolves once capture + IPC are set up; the backend
+        // handshake still decides the winner via onConnected/timeout.
         if (outcome === 'failed') {
-          try {
-            h.stop()
-          } catch {
-            /* ignore */
-          }
+          void h.stop().catch(() => undefined)
         } else {
           handle = h
         }
@@ -182,17 +195,17 @@ async function startWithOmi(
         if (outcome !== 'pending') return
         outcome = 'failed'
         clearTimeout(timeout)
-        console.warn(`[v4/listen ${source}] start threw:`, err)
+        console.warn(`[transcription ${backend} ${source}] start threw:`, err)
         resolve(null)
       })
   })
 }
 
 /**
- * Begin transcribing one audio source via Omi v4/listen. Omi is the only
- * transcription backend: if it can't connect, runs out of free quota, or its
- * socket drops mid-session, the session ends and `onError` fires. (There is no
- * Deepgram fallback.)
+ * Begin transcribing one audio source. Auto mode uses local Parakeet only when a
+ * healthy supported local runtime is present; otherwise it uses Omi /v4/listen.
+ * Local model/runtime failure falls back to hosted cloud, and hosted startup/loss
+ * can try local once when the runtime is available.
  */
 export async function startTranscription(
   source: ListenSource,
@@ -200,19 +213,42 @@ export async function startTranscription(
   diagnosticsScope: RecordingDiagnosticsScope = 'recorder'
 ): Promise<TranscriptionHandle> {
   let active: OmiListenHandle | null = null
+  let stopped = false
+  const tried = new Set<TranscriptionBackend>()
 
-  const omi = await startWithOmi(
-    source,
-    cb,
-    (reason) => {
-      cb.onError(new Error(`Omi transcription stopped: ${reason}`))
-    },
-    diagnosticsScope
-  )
+  const activate = async (backend: TranscriptionBackend): Promise<OmiListenHandle | null> => {
+    if (stopped || tried.has(backend)) return null
+    tried.add(backend)
+    return startWithBackend(
+      source,
+      backend,
+      cb,
+      (reason, lostBackend) => {
+        if (stopped) return
+        const fallback: TranscriptionBackend = lostBackend === 'omi' ? 'local-parakeet' : 'omi'
+        void (async () => {
+          if (fallback === 'local-parakeet' && !(await localSttAvailable())) {
+            cb.onError(new Error(`Transcription stopped: ${reason}`))
+            return
+          }
+          const next = await activate(fallback)
+          if (next) {
+            active = next
+            return
+          }
+          cb.onError(new Error(`Transcription stopped: ${reason}`))
+        })()
+      },
+      diagnosticsScope
+    )
+  }
 
-  if (omi) {
-    active = omi
-  } else {
+  for (const backend of await initialBackendOrder()) {
+    active = await activate(backend)
+    if (active) break
+  }
+
+  if (!active) {
     cb.onError(
       new Error(
         auth.currentUser
@@ -223,12 +259,9 @@ export async function startTranscription(
   }
 
   return {
-    stop: (): void => {
-      try {
-        active?.stop()
-      } catch {
-        /* ignore */
-      }
+    stop: async (): Promise<void> => {
+      stopped = true
+      await active?.stop()
     }
   }
 }
