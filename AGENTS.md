@@ -117,6 +117,51 @@ Key rules:
 - Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
 - App flows & screen map: `app/e2e/SKILL.md`. Full command reference: `agent-flutter schema`.
 
+### Desktop (Windows — Electron app)
+
+The Windows desktop app lives in `desktop/windows/` and uses Electron + React + TypeScript.
+
+#### Building & Packaging
+
+- Before any Windows dev/build/package run, make sure dependencies and env are present:
+  ```bash
+  cd desktop/windows
+  pnpm install
+  test -f .env || cp .env.example .env
+  ```
+- `.env` is required for a real packaged app. Vite/electron-vite inline these values at build time, and `electron-builder.yml` intentionally excludes `.env`, so copying `.env` after packaging does nothing. If sign-in, backend URLs, update feed, Google integration, or realtime voice config look missing in a packaged copy, rebuild after fixing `.env`.
+- Windows desktop env: `OMI_CLAUDE_ACP_COMMAND`/`OMI_CLAUDE_ACP_ARGS` select the local Claude account command, `VITE_OMI_REALTIME_VOICE_URL` enables realtime voice relay readiness, `OMI_WINDOWS_UPDATE_FEED_URL` + `OMI_UPDATES_ENABLED=1` enable dev update checks, and local STT/TTS runtime env vars are read by the main process at runtime.
+- Validate first, then package:
+  ```bash
+  cd desktop/windows
+  npm run typecheck
+  npm run build
+  npx electron-builder --win --x64 --dir -c.win.signAndEditExecutable=false
+  ```
+- For user testing, copy the entire unpacked app folder, never just `omi-windows.exe`, `out/`, or `resources/app.asar`:
+  ```bash
+  dest="/mnt/c/Temp/omi-windows-test-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$dest"
+  cp -a dist/win-unpacked/. "$dest/"
+  echo "$dest"
+  ```
+  The copied folder must include `resources/`, `locales/`, Electron DLLs, and `omi-windows.exe`. Running a loose exe causes missing-module/runtime errors.
+
+#### Packaging Native Runtime Dependencies
+
+- Runtime imports used by packaged main/preload code must be in `dependencies`, not only `devDependencies`; otherwise `electron-builder` may omit them.
+- Native Node packages must be unpacked in `desktop/windows/electron-builder.yml` under `asarUnpack`. Existing examples: `koffi` for foreground monitoring and `onnxruntime-node` for Kokoro/Transformers local TTS.
+- If adding a package that loads `.node`, `.dll`, `.exe`, model, or voice files at runtime, add an explicit packaged check after `electron-builder --dir`, for example:
+  ```bash
+  find dist/win-unpacked/resources/app.asar.unpacked -path '*onnxruntime*' | head
+  npx asar list dist/win-unpacked/resources/app.asar | rg 'node_modules/(package-name|model-file)'
+  ```
+- Do not create ad hoc helper executables or DLLs in temp directories. Helpers that must ship with the app belong under `desktop/windows/resources/**`, are built by scripts in `desktop/windows/scripts/`, and are copied by `electron-builder`.
+- Known packaged-app failure checks:
+  - `Cannot find module 'electron-updater'` means the dependency/package contents are wrong; confirm it is in `dependencies`, reinstall, rebuild, and copy the full `dist/win-unpacked` folder.
+  - Native load failures usually mean missing `asarUnpack` rules or a package version mismatch; inspect `resources/app.asar.unpacked`.
+  - Missing Firebase/API/realtime/update config means `.env` was absent or wrong at build time; fix `.env` and rebuild.
+
 ### Desktop (macOS — Swift app + Rust backend)
 
 The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
@@ -129,7 +174,6 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
-- Windows desktop env: `OMI_CLAUDE_ACP_COMMAND`/`OMI_CLAUDE_ACP_ARGS` select the local Claude account command, `VITE_OMI_REALTIME_VOICE_URL` enables realtime voice relay readiness, and `OMI_WINDOWS_UPDATE_FEED_URL` + `OMI_UPDATES_ENABLED=1` enable dev update checks.
 - For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
 
 #### Named Test Bundles
