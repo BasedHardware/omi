@@ -1,0 +1,115 @@
+#!/bin/sh
+
+# Dart formatting for app/
+STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$')
+
+if [ -n "$STAGED_DART_FILES" ]; then
+  echo "Formatting staged Dart files in app/..."
+  echo "$STAGED_DART_FILES" | xargs dart format --line-length 120
+  echo "$STAGED_DART_FILES" | xargs git add
+fi
+
+# Python formatting for backend/
+STAGED_PYTHON_FILES=$(git diff --cached --name-only --diff-filter=ACM "backend/**.py")
+
+if [ -n "$STAGED_PYTHON_FILES" ]; then
+  echo "Formatting staged Python files in backend/..."
+  if command -v black >/dev/null 2>&1; then
+    BLACK_CMD="black"
+  elif python3 -m black --version >/dev/null 2>&1; then
+    BLACK_CMD="python3 -m black"
+  else
+    echo "black is not installed. Please run 'pip install black'" >&2
+    exit 1
+  fi
+  echo "$STAGED_PYTHON_FILES" | xargs $BLACK_CMD --line-length 120 --skip-string-normalization
+  echo "$STAGED_PYTHON_FILES" | xargs git add
+fi
+
+# ARB (l10n JSON) formatting for app/lib/l10n/
+STAGED_ARB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep '\.arb$')
+
+if [ -n "$STAGED_ARB_FILES" ]; then
+  if command -v jq >/dev/null 2>&1; then
+    echo "Formatting ARB files to 4-space JSON indent..."
+    for f in $STAGED_ARB_FILES; do
+      jq --indent 4 '.' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+    done
+    echo "$STAGED_ARB_FILES" | xargs git add
+  else
+    echo "jq is not installed. Please run 'sudo apt install jq' or 'brew install jq'" >&2
+    exit 1
+  fi
+fi
+
+# Web (JS/TS/JSX/TSX) formatting with Prettier
+STAGED_WEB_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|jsx|ts|tsx)$' | grep -E '^web/')
+
+if [ -n "$STAGED_WEB_FILES" ]; then
+  echo "Formatting staged web files with Prettier..."
+  for dir in web/frontend web/app web/personas-open-source; do
+    DIR_FILES=$(echo "$STAGED_WEB_FILES" | grep "^$dir/")
+    if [ -z "$DIR_FILES" ]; then
+      continue
+    fi
+    if [ -x "$dir/node_modules/.bin/prettier" ]; then
+      echo "$DIR_FILES" | xargs "$dir/node_modules/.bin/prettier" --write
+    elif command -v npx >/dev/null 2>&1; then
+      echo "$DIR_FILES" | xargs npx --prefix "$dir" prettier --write
+    elif command -v prettier >/dev/null 2>&1; then
+      echo "$DIR_FILES" | xargs prettier --write
+    else
+      echo "prettier not found for $dir. Run 'npm install' in $dir or install prettier globally." >&2
+      exit 1
+    fi
+    echo "$DIR_FILES" | xargs git add
+  done
+fi
+
+# C/C++ formatting for firmware/
+STAGED_C_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(c|cpp|cc|cxx|h|hpp)$' | grep -E '^(omi/|omiGlass/)')
+
+if [ -n "$STAGED_C_FILES" ]; then
+  echo "Formatting staged C/C++ files in firmware..."
+  if ! command -v clang-format >/dev/null 2>&1; then
+    echo "clang-format is not installed. Please install it first" >&2
+    exit 1
+  fi
+  echo "$STAGED_C_FILES" | xargs clang-format -i
+  echo "$STAGED_C_FILES" | xargs git add
+fi
+
+exit 0
+
+# --- BEGIN BEADS INTEGRATION v1.0.5 ---
+# This section is managed by beads. Do not remove these markers.
+if command -v bd >/dev/null 2>&1; then
+  export BD_GIT_HOOK=1
+  _bd_timeout=${BEADS_HOOK_TIMEOUT:-300}
+  _bd_used_perl=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$_bd_timeout" bd hooks run pre-commit "$@"
+    _bd_exit=$?
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$_bd_timeout" bd hooks run pre-commit "$@"
+    _bd_exit=$?
+  elif command -v perl >/dev/null 2>&1; then
+    _bd_used_perl=1
+    perl -e 'alarm shift; exec @ARGV' "$_bd_timeout" bd hooks run pre-commit "$@"
+    _bd_exit=$?
+  else
+    echo >&2 "beads: hook 'pre-commit' running without timeout; install coreutils or perl to enable BEADS_HOOK_TIMEOUT"
+    bd hooks run pre-commit "$@"
+    _bd_exit=$?
+  fi
+  if [ $_bd_exit -eq 124 ] || { [ $_bd_used_perl -eq 1 ] && [ $_bd_exit -eq 142 ]; }; then
+    echo >&2 "beads: hook 'pre-commit' timed out after ${_bd_timeout}s — continuing without beads"
+    _bd_exit=0
+  fi
+  if [ $_bd_exit -eq 3 ]; then
+    echo >&2 "beads: database not initialized — skipping hook 'pre-commit'"
+    _bd_exit=0
+  fi
+  if [ $_bd_exit -ne 0 ]; then exit $_bd_exit; fi
+fi
+# --- END BEADS INTEGRATION v1.0.5 ---
