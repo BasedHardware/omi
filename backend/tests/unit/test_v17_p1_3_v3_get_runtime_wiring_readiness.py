@@ -40,6 +40,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "observability_approval_readiness_proof",
     "canary_approval_source_readiness_proof",
     "canary_approval_production_readiness_proof",
+    "canary_approval_lifecycle_readiness_proof",
 }
 
 
@@ -174,7 +175,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 10,
         "blocked_gate_count": 10,
-        "existing_local_proof_count": 24,
+        "existing_local_proof_count": 25,
         "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,

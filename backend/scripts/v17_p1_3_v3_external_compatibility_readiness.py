@@ -842,6 +842,31 @@ CANARY_APPROVAL_PRODUCTION_READINESS_PROOF = {
     ],
 }
 
+CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Approval lifecycle/evidence bundle is now defined as a local fail-closed contract, but human/ops approval "
+        "evidence, fresh rotation, rollback ownership, monitoring gates, production read proof, IAM/emulator proof, "
+        "telemetry/runbook reference, and exact route scope remain production blockers."
+    ),
+    "covered_defaults": [
+        "human_ops_approval_ticket_and_approval_id_required",
+        "bounded_owner_group_and_approver_role_required",
+        "issued_approved_expires_at_rotation_window_required",
+        "rollback_owner_and_steps_required",
+        "monitoring_gate_ids_required",
+        "production_read_and_iam_emulator_proof_references_required",
+        "telemetry_runbook_reference_and_exact_get_v3_memories_scope_required",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -909,6 +934,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
+        "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -947,6 +973,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "observability_approval_readiness_proof_present": True,
             "canary_approval_source_readiness_proof_present": True,
             "canary_approval_production_readiness_proof_present": True,
+            "canary_approval_lifecycle_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

@@ -105,6 +105,7 @@ pytest tests/unit/test_v17_p1_3_v3_write_convergence_tombstone_matrix.py -v
 pytest tests/unit/test_v17_p1_3_v3_cursor_secret_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_canary_approval_source_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_canary_approval_production_readiness.py -v
+pytest tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_observability_approval_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -v

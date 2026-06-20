@@ -39,6 +39,19 @@ GOOGLE_CREDENTIALS_ENV = "GOOGLE_APPLICATION_CREDENTIALS"
 SERVICE_ACCOUNT_JSON_ENV = "SERVICE_ACCOUNT_JSON"
 DEFAULT_COHORT = "canary_1"
 
+CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "route_scope": ROUTE_SCOPE,
+    "read_only": True,
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "approval_claimed": False,
+    "blocker": "Production artifact read proof remains insufficient without lifecycle/evidence-bundle approval evidence.",
+}
+
 
 def _base_proof() -> dict[str, Any]:
     return {
@@ -180,6 +193,7 @@ def build_report(
         "production_rollout_approved": False,
         "approval_claimed": False,
         "production_read_proof": proof,
+        "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",

@@ -47,6 +47,22 @@ CANARY_APPROVAL_PRODUCTION_READINESS_PROOF = {
     ),
 }
 
+CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Human/ops approval evidence bundle, expiry/rotation, rollback ownership, monitoring gates, "
+        "production read proof reference, IAM/emulator proof reference, telemetry/runbook reference, and exact route "
+        "scope are inventoried locally but not supplied as production evidence."
+    ),
+}
+
 REQUIRED_TELEMETRY_FIELDS = [
     {
         "field_id": "read_source",
@@ -547,6 +563,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
+        "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",

@@ -190,6 +190,19 @@ PRODUCTION_READINESS_PROOF = {
     ),
 }
 
+CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "route_scope": ROUTE_SCOPE,
+    "read_only": True,
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "approval_claimed": False,
+    "blocker": "Lifecycle/evidence-bundle contract exists locally, but no production approval evidence is claimed.",
+}
+
 FAILURE_SEMANTICS = [
     {
         "state": "source_missing",
@@ -250,6 +263,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "source_selection_contract": SOURCE_SELECTION_CONTRACT,
         "static_iam_rules_emulator_readiness_proof": STATIC_IAM_RULES_EMULATOR_READINESS_PROOF,
         "canary_approval_production_readiness_proof": PRODUCTION_READINESS_PROOF,
+        "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
         "required_iam_rules_privacy_proofs": REQUIRED_IAM_RULES_PRIVACY_PROOFS,
         "failure_semantics": FAILURE_SEMANTICS,
         "non_claims": [

@@ -56,6 +56,7 @@ PROOF_CONSTANTS = {
     "observability_approval_readiness_proof": _EXTERNAL.OBSERVABILITY_APPROVAL_READINESS_PROOF,
     "canary_approval_source_readiness_proof": _EXTERNAL.CANARY_APPROVAL_SOURCE_READINESS_PROOF,
     "canary_approval_production_readiness_proof": _EXTERNAL.CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
+    "canary_approval_lifecycle_readiness_proof": _EXTERNAL.CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
 }
 
 

@@ -382,6 +382,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "observability_approval_readiness_proof_present": True,
         "canary_approval_source_readiness_proof_present": True,
         "canary_approval_production_readiness_proof_present": True,
+        "canary_approval_lifecycle_readiness_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
