@@ -17,11 +17,26 @@ export async function speakAssistantText(
   const cleanText = text.trim()
   const preferences = deps.getPrefs?.() ?? getPreferences()
   if (!cleanText || cleanText.startsWith('Error:')) return 'skipped'
-  if (!preferences.realtimeVoiceEnabled || preferences.realtimeVoiceProvider !== 'local-kokoro') {
+  if (
+    !preferences.realtimeVoiceEnabled ||
+    (preferences.realtimeVoiceProvider !== 'local-kokoro' &&
+      preferences.realtimeVoiceProvider !== 'elevenlabs')
+  ) {
     return 'skipped'
   }
 
   try {
+    if (preferences.realtimeVoiceProvider === 'elevenlabs') {
+      const status = await window.omi.byokStatus()
+      if (!status.providers.elevenlabs.configured) return 'failed'
+      const result = await window.omi.elevenLabsTtsSynthesize({
+        text: cleanText,
+        voiceId: preferences.elevenLabsVoiceId
+      })
+      await (deps.playAudio ?? playAudioUrl)(result.audioUrl)
+      return 'played'
+    }
+
     const status = await window.omi.localTtsStatus()
     if (!status.available && !status.runtime.canInstall) return 'failed'
     const result = await window.omi.localTtsSynthesize({
