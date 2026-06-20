@@ -58,10 +58,10 @@ describe('BYOK secure storage', () => {
   })
 
   it('persists active chat provider and clears it when that provider is deleted', () => {
-    saveByokKey('anthropic', 'sk-ant-secret-1234567890')
+    saveByokKey('openrouter', 'sk-or-secret-1234567890')
 
-    expect(setActiveByokChatProvider('anthropic').activeChatProvider).toBe('anthropic')
-    expect(deleteByokKey('anthropic').activeChatProvider).toBeNull()
+    expect(setActiveByokChatProvider('openrouter').activeChatProvider).toBe('openrouter')
+    expect(deleteByokKey('openrouter').activeChatProvider).toBeNull()
   })
 
   it('records validation metadata without storing raw keys in status', () => {
@@ -84,6 +84,7 @@ describe('BYOK secure storage', () => {
 
     expect(loadByokKey('deepgram')).toBeNull()
     expect(getByokStatus().providers.deepgram.configured).toBe(false)
+    expect(getByokStatus().providers.elevenlabs.configured).toBe(false)
   })
 
   it('refuses to save when secure storage is unavailable', () => {
