@@ -7,6 +7,7 @@ import type {
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  ElevenLabsTtsSynthesizeRequest,
   LocalTtsSynthesizeRequest,
   ExportMemory,
   GoogleSource,
@@ -112,6 +113,9 @@ const omi: OmiBridgeApi = {
   byokTest: (request: ByokTestRequest) => ipcRenderer.invoke('byok:test', request),
   byokUse: (request: ByokUseRequest) => ipcRenderer.invoke('byok:use', request),
   byokChatSend: (request: ByokChatRequest) => ipcRenderer.invoke('byok:chatSend', request),
+  byokListModels: () => ipcRenderer.invoke('byok:models'),
+  elevenLabsTtsSynthesize: (request: ElevenLabsTtsSynthesizeRequest) =>
+    ipcRenderer.invoke('omi-elevenlabs-tts:synthesize', request),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
