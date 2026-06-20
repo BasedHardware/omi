@@ -408,7 +408,7 @@ class ConversationProvider extends ChangeNotifier {
       // so the list self-heals without the user having to pull-to-refresh.
       conversationsLoadFailed = true;
       if (conversations.isEmpty && selectedFolderId == null) {
-        conversations = SharedPreferencesUtil().cachedConversations;
+        conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
       }
       if (searchedConversations.isEmpty) {
         searchedConversations = conversations;
@@ -422,7 +422,7 @@ class ConversationProvider extends ChangeNotifier {
     conversationsLoadFailed = false;
     _initialFetchRetryTimer?.cancel();
     _initialFetchRetryCount = 0;
-    conversations = result.items;
+    conversations = _filterPendingDeletes(result.items);
 
     // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -432,7 +432,7 @@ class ConversationProvider extends ChangeNotifier {
 
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
-      conversations = SharedPreferencesUtil().cachedConversations;
+      conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
@@ -626,7 +626,12 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future getMoreConversationsFromServer() async {
-    if (conversations.length % 50 != 0) return;
+    // Use server-equivalent length so the load-more gate and offset stay aligned
+    // with what the server has — pending-delete IDs are still present server-side
+    // until the 3-second undo timer fires the actual DELETE. Without this, a
+    // delete leaves the local length non-multiple-of-50 and load-more never fires.
+    final serverEquivalentLength = conversations.length + memoriesToDelete.length;
+    if (serverEquivalentLength % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
 
@@ -634,14 +639,14 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     var newConversations = await getConversations(
-      offset: conversations.length,
+      offset: serverEquivalentLength,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
-    conversations.addAll(newConversations);
+    conversations.addAll(_filterPendingDeletes(newConversations));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     setLoadingConversations(false);
@@ -760,6 +765,14 @@ class ConversationProvider extends ChangeNotifier {
   Map<String, ServerConversation> memoriesToDelete = {};
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
+
+  // Hide conversations whose server-side DELETE is still pending (3s undo window
+  // or in-flight HTTP). Without this, a pull-to-refresh during that window
+  // re-surfaces the just-deleted conversation, which users read as "delete didn't work".
+  List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
+    if (memoriesToDelete.isEmpty) return items;
+    return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
+  }
 
   void deleteConversationLocally(ServerConversation conversation, DateTime date) {
     if (lastDeletedConversationId != null &&
