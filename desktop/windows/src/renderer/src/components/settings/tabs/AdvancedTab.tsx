@@ -1,17 +1,33 @@
 import { useEffect, useState } from 'react'
-import { Download, Upload, Wrench, FolderSearch, Network, RotateCcw } from 'lucide-react'
+import {
+  Copy,
+  Download,
+  Upload,
+  Wrench,
+  FolderSearch,
+  Network,
+  RotateCcw,
+  KeyRound,
+  RefreshCw
+} from 'lucide-react'
 import { omiApi } from '../../../lib/apiClient'
 import { toast } from '../../../lib/toast'
 import { extractMemories, type MemorySource } from '../../../lib/memoryExtract'
 import { buildLocalGraph } from '../../../lib/kgSynthesis'
-import { summarizeMemories, appIndexMemoryIds, type MemoryBreakdown } from '../../../lib/memoryCleanup'
+import {
+  summarizeMemories,
+  appIndexMemoryIds,
+  type MemoryBreakdown
+} from '../../../lib/memoryCleanup'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
+import { Toggle } from '../Toggle'
 import { IntegrationsTab } from './IntegrationsTab'
 import type {
   ExportMemory,
   FileIndexStatus,
+  LocalAgentStatus,
   LocalKGStatus,
   MemoryExportResult
 } from '../../../../../shared/types'
@@ -19,11 +35,174 @@ import type {
 export function AdvancedTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
 
+  // --- Local agent API ---
+  const [localAgent, setLocalAgent] = useState<LocalAgentStatus | null>(null)
+  const [localAgentPort, setLocalAgentPort] = useState('')
+  const [localAgentBusy, setLocalAgentBusy] = useState<
+    '' | 'enable' | 'port' | 'copy-token' | 'rotate-token' | 'test' | 'refresh' | 'copy-url'
+  >('')
+
+  const applyLocalAgentStatus = (status: LocalAgentStatus): void => {
+    setLocalAgent(status)
+    setLocalAgentPort(String(status.configuredPort))
+  }
+
+  const refreshLocalAgent = async (): Promise<void> => {
+    setLocalAgentBusy((current) => current || 'refresh')
+    try {
+      const status = await window.omi.localAgentStatus()
+      applyLocalAgentStatus(status)
+    } catch (e) {
+      toast('Could not read local agent status', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setLocalAgentBusy((current) => (current === 'refresh' ? '' : current))
+    }
+  }
+
+  useEffect(() => {
+    let canceled = false
+    window.omi
+      .localAgentStatus()
+      .then((status) => {
+        if (!canceled) applyLocalAgentStatus(status)
+      })
+      .catch((e) => {
+        if (!canceled) {
+          toast('Could not read local agent status', { tone: 'error', body: (e as Error).message })
+        }
+      })
+    return () => {
+      canceled = true
+    }
+  }, [])
+
+  const setLocalAgentEnabled = async (enabled: boolean): Promise<void> => {
+    if (localAgentBusy) return
+    setLocalAgentBusy('enable')
+    try {
+      const status = await window.omi.localAgentSetEnabled(enabled)
+      applyLocalAgentStatus(status)
+      toast(enabled ? 'Local agent API enabled' : 'Local agent API disabled', { tone: 'success' })
+    } catch (e) {
+      toast(enabled ? 'Could not enable local agent API' : 'Could not disable local agent API', {
+        tone: 'error',
+        body: (e as Error).message
+      })
+      await refreshLocalAgent()
+    } finally {
+      setLocalAgentBusy('')
+    }
+  }
+
+  const saveLocalAgentPort = async (): Promise<void> => {
+    if (localAgentBusy) return
+    const port = Number(localAgentPort)
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      toast('Enter a port between 1024 and 65535', { tone: 'warn' })
+      return
+    }
+
+    setLocalAgentBusy('port')
+    try {
+      const status = await window.omi.localAgentSetPort(port)
+      applyLocalAgentStatus(status)
+      toast('Local agent port saved', {
+        tone: 'success',
+        body: status.running ? `Listening on ${status.localUrl}` : undefined
+      })
+    } catch (e) {
+      toast('Could not save local agent port', { tone: 'error', body: (e as Error).message })
+      await refreshLocalAgent()
+    } finally {
+      setLocalAgentBusy('')
+    }
+  }
+
+  const copyLocalAgentUrl = async (): Promise<void> => {
+    if (!localAgent?.localUrl || localAgentBusy) return
+    setLocalAgentBusy('copy-url')
+    try {
+      await navigator.clipboard.writeText(localAgent.localUrl)
+      toast('Local agent URL copied', { tone: 'success' })
+    } catch (e) {
+      toast('Could not copy local agent URL', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setLocalAgentBusy('')
+    }
+  }
+
+  const copyLocalAgentToken = async (): Promise<void> => {
+    if (localAgentBusy) return
+    setLocalAgentBusy('copy-token')
+    try {
+      const status = await window.omi.localAgentCopyToken()
+      applyLocalAgentStatus(status)
+      toast('Bearer token copied', { tone: 'success' })
+    } catch (e) {
+      toast('Could not copy bearer token', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setLocalAgentBusy('')
+    }
+  }
+
+  const rotateLocalAgentToken = async (): Promise<void> => {
+    if (localAgentBusy) return
+    setLocalAgentBusy('rotate-token')
+    try {
+      const status = await window.omi.localAgentRotateToken()
+      applyLocalAgentStatus(status)
+      toast('Bearer token rotated', {
+        tone: 'success',
+        body: status.running ? 'Existing clients must use the new token.' : undefined
+      })
+    } catch (e) {
+      toast('Could not rotate bearer token', { tone: 'error', body: (e as Error).message })
+      await refreshLocalAgent()
+    } finally {
+      setLocalAgentBusy('')
+    }
+  }
+
+  const testLocalAgentTools = async (): Promise<void> => {
+    if (localAgentBusy) return
+    setLocalAgentBusy('test')
+    try {
+      const result = await window.omi.localAgentTestTools()
+      if (result.ok) {
+        toast('Local agent tools reachable', {
+          tone: 'success',
+          body: `${result.toolCount ?? 0} tools available`
+        })
+      } else {
+        toast('Local agent tools test failed', {
+          tone: 'error',
+          body: result.error ?? (result.status ? `HTTP ${result.status}` : undefined)
+        })
+      }
+    } catch (e) {
+      toast('Local agent tools test failed', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setLocalAgentBusy('')
+      void refreshLocalAgent()
+    }
+  }
+
+  const localAgentSubtitle = !localAgent
+    ? 'Loading local API status…'
+    : localAgent.running
+      ? `Listening on ${localAgent.localUrl}`
+      : localAgent.enabled
+        ? 'Enabled, but not currently listening. Refresh status or disable and re-enable.'
+        : 'Disabled by default. Enable to let local agents access Omi through loopback with bearer auth.'
+
   // --- File indexing ---
   const [fileIndex, setFileIndex] = useState<FileIndexStatus | null>(null)
   const [scanning, setScanning] = useState(false)
   useEffect(() => {
-    window.omi.indexFilesStatus().then(setFileIndex).catch(() => setFileIndex(null))
+    window.omi
+      .indexFilesStatus()
+      .then(setFileIndex)
+      .catch(() => setFileIndex(null))
   }, [])
   const rescan = async (): Promise<void> => {
     if (scanning) return
@@ -43,7 +222,10 @@ export function AdvancedTab(): React.JSX.Element {
   const [kgStatus, setKgStatus] = useState<LocalKGStatus | null>(null)
   const [rebuildingKg, setRebuildingKg] = useState(false)
   useEffect(() => {
-    window.omi.kgStatus().then(setKgStatus).catch(() => setKgStatus(null))
+    window.omi
+      .kgStatus()
+      .then(setKgStatus)
+      .catch(() => setKgStatus(null))
   }, [])
   const rebuildKg = async (): Promise<void> => {
     if (rebuildingKg) return
@@ -75,12 +257,17 @@ export function AdvancedTab(): React.JSX.Element {
       const { memories: list, profile: summary } = await extractMemories(dump, source, existing)
       setParsed(list)
       setProfile(summary)
-      if (list.length === 0) toast('No new memories found — they may already be saved', { tone: 'warn' })
+      if (list.length === 0)
+        toast('No new memories found — they may already be saved', { tone: 'warn' })
     } catch (e) {
       console.warn('[memoryImport] AI extraction failed, falling back to split:', e)
       try {
         const norm = (s: string): string =>
-          s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, '').replace(/\s+/g, ' ').trim()
+          s
+            .toLowerCase()
+            .replace(/[^\p{L}\p{N}\s]/gu, '')
+            .replace(/\s+/g, ' ')
+            .trim()
         const have = new Set(existing.map(norm))
         const list = (await window.omi.memoryImportParse(dump)).filter((m) => !have.has(norm(m)))
         setParsed(list)
@@ -134,7 +321,11 @@ export function AdvancedTab(): React.JSX.Element {
   const [notionPage, setNotionPage] = useState('')
   const [exporting, setExporting] = useState(false)
   const toExportMemories = (): ExportMemory[] =>
-    memories.map((m) => ({ content: m.content, category: m.category ?? null, createdAt: m.created_at }))
+    memories.map((m) => ({
+      content: m.content,
+      category: m.category ?? null,
+      createdAt: m.created_at
+    }))
 
   const runExport = async (target: 'obsidian' | 'file' | 'notion'): Promise<void> => {
     if (exporting) return
@@ -159,7 +350,10 @@ export function AdvancedTab(): React.JSX.Element {
           memories: mems
         })
       if (!r.canceled) {
-        toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, { tone: 'success', body: r.location })
+        toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, {
+          tone: 'success',
+          body: r.location
+        })
       }
     } catch (e) {
       toast('Export failed', { tone: 'error', body: (e as Error).message })
@@ -209,7 +403,12 @@ export function AdvancedTab(): React.JSX.Element {
   const deleteAppIndexMemories = async (): Promise<void> => {
     const ids = appIndexMemoryIds(memAllMemories)
     if (ids.length === 0 || memDeleting) return
-    if (!window.confirm(`Permanently delete ${ids.length} app/file-index memories? This cannot be undone.`)) return
+    if (
+      !window.confirm(
+        `Permanently delete ${ids.length} app/file-index memories? This cannot be undone.`
+      )
+    )
+      return
     setMemDeleting(true)
     setMemDeleteProgress(0)
     const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -224,13 +423,16 @@ export function AdvancedTab(): React.JSX.Element {
           await omiApi.delete(`/v3/memories/${id}`, { ...({ __noRetry: true } as object) })
           return 'ok'
         } catch (e) {
-          const resp = (e as { response?: { status?: number; headers?: Record<string, string> } }).response
+          const resp = (e as { response?: { status?: number; headers?: Record<string, string> } })
+            .response
           const status = resp?.status
           if (status === 404) return 'gone'
           if (status === 429) {
             paceMs = 1100
             const ra = Number(resp?.headers?.['retry-after'])
-            await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000))
+            await sleep(
+              Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+            )
             continue
           }
           if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message
@@ -250,7 +452,9 @@ export function AdvancedTab(): React.JSX.Element {
       }
       toast(`Deleted ${deleted} of ${ids.length} memories`, {
         tone: failed ? 'warn' : 'success',
-        body: failed ? `${failed} failed${firstError ? ` — ${firstError}` : ''}. Analyze again to retry.` : undefined
+        body: failed
+          ? `${failed} failed${firstError ? ` — ${firstError}` : ''}. Analyze again to retry.`
+          : undefined
       })
     } catch (e) {
       toast('Delete failed', { tone: 'error', body: (e as Error).message })
@@ -268,6 +472,140 @@ export function AdvancedTab(): React.JSX.Element {
 
   return (
     <>
+      <SettingRow
+        icon={Network}
+        title="Local Agent Access"
+        subtitle={localAgentSubtitle}
+        keywords="local agent api bearer token codex claude chatgpt tools mcp loopback localhost port"
+        dot={!localAgent ? 'off' : localAgent.running ? 'on' : localAgent.enabled ? 'warn' : 'off'}
+        control={
+          <Toggle
+            on={localAgent?.enabled ?? false}
+            onChange={setLocalAgentEnabled}
+            disabled={!localAgent || localAgentBusy !== ''}
+            label="Enable local agent API"
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="glass-subtle rounded-lg px-4 py-3">
+              <div className="text-xs uppercase text-text-tertiary">Status</div>
+              <div className="mt-1 text-sm font-semibold text-text-primary">
+                {!localAgent
+                  ? 'Loading'
+                  : localAgent.running
+                    ? 'Listening'
+                    : localAgent.enabled
+                      ? 'Enabled, stopped'
+                      : 'Disabled'}
+              </div>
+            </div>
+            <div className="glass-subtle rounded-lg px-4 py-3">
+              <div className="text-xs uppercase text-text-tertiary">Current port</div>
+              <div className="mt-1 text-sm font-semibold text-text-primary">
+                {localAgent?.currentPort ?? localAgent?.configuredPort ?? '—'}
+              </div>
+            </div>
+            <div className="glass-subtle rounded-lg px-4 py-3">
+              <div className="text-xs uppercase text-text-tertiary">Host</div>
+              <div className="mt-1 text-sm font-semibold text-text-primary">
+                {localAgent?.host ?? '127.0.0.1'}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs uppercase text-text-tertiary">Local URL</div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <code className="glass-subtle min-w-0 flex-1 overflow-x-auto rounded-lg px-3 py-2 text-sm text-text-secondary">
+                {localAgent?.localUrl ?? 'Not listening'}
+              </code>
+              <button
+                type="button"
+                onClick={copyLocalAgentUrl}
+                disabled={!localAgent?.localUrl || localAgentBusy !== ''}
+                className="btn-ghost inline-flex items-center justify-center gap-2 disabled:opacity-40"
+              >
+                <Copy className="h-4 w-4" />
+                Copy URL
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <label className="min-w-0 flex-1">
+              <span className="mb-1 block text-xs uppercase text-text-tertiary">Port</span>
+              <input
+                type="number"
+                min={1024}
+                max={65535}
+                value={localAgentPort}
+                onChange={(e) => setLocalAgentPort(e.target.value)}
+                disabled={!localAgent || localAgentBusy !== ''}
+                className="input-field"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={saveLocalAgentPort}
+              disabled={
+                !localAgent ||
+                localAgentBusy !== '' ||
+                localAgentPort === String(localAgent.configuredPort)
+              }
+              className="btn-ghost disabled:opacity-40"
+            >
+              {localAgentBusy === 'port' ? 'Saving…' : 'Save port'}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={copyLocalAgentToken}
+              disabled={!localAgent || localAgentBusy !== ''}
+              className="btn-ghost inline-flex items-center gap-2 disabled:opacity-40"
+            >
+              <Copy className="h-4 w-4" />
+              {localAgentBusy === 'copy-token' ? 'Copying…' : 'Copy token'}
+            </button>
+            <button
+              type="button"
+              onClick={rotateLocalAgentToken}
+              disabled={!localAgent || localAgentBusy !== ''}
+              className="btn-ghost inline-flex items-center gap-2 disabled:opacity-40"
+            >
+              <KeyRound className="h-4 w-4" />
+              {localAgentBusy === 'rotate-token' ? 'Rotating…' : 'Rotate token'}
+            </button>
+            <button
+              type="button"
+              onClick={testLocalAgentTools}
+              disabled={!localAgent?.running || localAgentBusy !== ''}
+              className="btn-ghost inline-flex items-center gap-2 disabled:opacity-40"
+            >
+              <Wrench className="h-4 w-4" />
+              {localAgentBusy === 'test' ? 'Testing…' : 'Test local tools'}
+            </button>
+            <button
+              type="button"
+              onClick={refreshLocalAgent}
+              disabled={localAgentBusy !== ''}
+              className="btn-ghost inline-flex items-center gap-2 disabled:opacity-40"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </button>
+          </div>
+
+          <p className="text-sm text-text-tertiary">
+            Bearer auth is required for tools. The token is copied directly to your clipboard and is
+            not displayed here.
+          </p>
+        </div>
+      </SettingRow>
+
       <SettingRow
         icon={Download}
         title="Import memories"
@@ -299,22 +637,36 @@ export function AdvancedTab(): React.JSX.Element {
             className="input-field resize-none"
           />
           <div className="flex items-center gap-2">
-            <button onClick={extractDump} disabled={!dump.trim() || extracting || importing} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={extractDump}
+              disabled={!dump.trim() || extracting || importing}
+              className="btn-ghost disabled:opacity-40"
+            >
               {extracting ? 'Extracting…' : 'Extract memories'}
             </button>
             {parsed && parsed.length > 0 && (
-              <button onClick={importMemories} disabled={importing} className="btn-primary px-4 py-2 disabled:opacity-40">
-                {importing ? 'Importing…' : `Import ${parsed.length} memor${parsed.length === 1 ? 'y' : 'ies'}`}
+              <button
+                onClick={importMemories}
+                disabled={importing}
+                className="btn-primary px-4 py-2 disabled:opacity-40"
+              >
+                {importing
+                  ? 'Importing…'
+                  : `Import ${parsed.length} memor${parsed.length === 1 ? 'y' : 'ies'}`}
               </button>
             )}
           </div>
           {profile && (
-            <p className="glass-subtle rounded-lg px-4 py-3 text-sm italic text-text-tertiary">{profile}</p>
+            <p className="glass-subtle rounded-lg px-4 py-3 text-sm italic text-text-tertiary">
+              {profile}
+            </p>
           )}
           {parsed && parsed.length > 0 && (
             <ul className="glass-subtle max-h-40 overflow-y-auto rounded-lg px-4 py-3 text-sm text-text-tertiary">
               {parsed.map((m, i) => (
-                <li key={i} className="py-0.5">• {m}</li>
+                <li key={i} className="py-0.5">
+                  • {m}
+                </li>
               ))}
             </ul>
           )}
@@ -329,10 +681,18 @@ export function AdvancedTab(): React.JSX.Element {
       >
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => runExport('obsidian')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('obsidian')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               Obsidian vault…
             </button>
-            <button onClick={() => runExport('file')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('file')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               Plain file…
             </button>
           </div>
@@ -352,7 +712,11 @@ export function AdvancedTab(): React.JSX.Element {
               placeholder="Parent page ID"
               className="glass-subtle mb-2 w-full rounded-lg px-4 py-3 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={() => runExport('notion')} disabled={exporting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={() => runExport('notion')}
+              disabled={exporting}
+              className="btn-ghost disabled:opacity-40"
+            >
               {exporting ? 'Exporting…' : 'Export to Notion'}
             </button>
           </div>
@@ -367,11 +731,19 @@ export function AdvancedTab(): React.JSX.Element {
       >
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <button onClick={auditMemories} disabled={memAuditing || memDeleting} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={auditMemories}
+              disabled={memAuditing || memDeleting}
+              className="btn-ghost disabled:opacity-40"
+            >
               {memAuditing ? 'Analyzing…' : 'Analyze memories'}
             </button>
             {memBreakdown && memBreakdown.appIndexCount > 0 && (
-              <button onClick={deleteAppIndexMemories} disabled={memDeleting || memAuditing} className="btn-primary px-4 py-2 disabled:opacity-40">
+              <button
+                onClick={deleteAppIndexMemories}
+                disabled={memDeleting || memAuditing}
+                className="btn-primary px-4 py-2 disabled:opacity-40"
+              >
                 {memDeleting
                   ? `Deleting ${memDeleteProgress}/${memBreakdown.appIndexCount}…`
                   : `Delete ${memBreakdown.appIndexCount} app/file memories`}
@@ -382,12 +754,15 @@ export function AdvancedTab(): React.JSX.Element {
             <div className="glass-subtle rounded-lg px-4 py-3 text-sm text-text-tertiary">
               <p className="mb-2 text-text-secondary">
                 {memBreakdown.total} total memories ·{' '}
-                <span className="text-text-primary">{memBreakdown.appIndexCount}</span> app/file-index matches
+                <span className="text-text-primary">{memBreakdown.appIndexCount}</span>{' '}
+                app/file-index matches
               </p>
               {memBreakdown.appIndexCount > 0 && (
                 <ul className="mb-3 max-h-32 overflow-y-auto">
                   {memBreakdown.appIndexSamples.map((s, i) => (
-                    <li key={i} className="py-0.5">• {s}</li>
+                    <li key={i} className="py-0.5">
+                      • {s}
+                    </li>
                   ))}
                 </ul>
               )}
@@ -396,7 +771,9 @@ export function AdvancedTab(): React.JSX.Element {
                 {memBreakdown.groups.map((g) => (
                   <li key={g.key} className="py-0.5">
                     <span className="text-text-primary">{g.count}</span> — {g.key}
-                    {g.samples[0] ? <span className="opacity-60"> · e.g. “{g.samples[0]}”</span> : null}
+                    {g.samples[0] ? (
+                      <span className="opacity-60"> · e.g. “{g.samples[0]}”</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -414,7 +791,9 @@ export function AdvancedTab(): React.JSX.Element {
         subtitle={
           fileIndex
             ? `${fileIndex.filesIndexed.toLocaleString()} items indexed${
-                fileIndex.lastRunAt ? ` · last run ${new Date(fileIndex.lastRunAt).toLocaleString()}` : ''
+                fileIndex.lastRunAt
+                  ? ` · last run ${new Date(fileIndex.lastRunAt).toLocaleString()}`
+                  : ''
               }`
             : 'Indexes file names/metadata locally (contents never read or uploaded).'
         }
@@ -432,13 +811,19 @@ export function AdvancedTab(): React.JSX.Element {
         subtitle={
           kgStatus
             ? `${kgStatus.nodeCount.toLocaleString()} nodes · ${kgStatus.edgeCount.toLocaleString()} relationships${
-                kgStatus.lastBuiltAt ? ` · last built ${new Date(kgStatus.lastBuiltAt).toLocaleString()}` : ''
+                kgStatus.lastBuiltAt
+                  ? ` · last built ${new Date(kgStatus.lastBuiltAt).toLocaleString()}`
+                  : ''
               }`
             : 'A local graph of your projects, tech, people, and apps — used to ground chat answers.'
         }
         keywords="knowledge graph rebuild kg nodes"
         control={
-          <button onClick={rebuildKg} disabled={rebuildingKg} className="btn-ghost disabled:opacity-40">
+          <button
+            onClick={rebuildKg}
+            disabled={rebuildingKg}
+            className="btn-ghost disabled:opacity-40"
+          >
             {rebuildingKg ? 'Rebuilding…' : 'Rebuild now'}
           </button>
         }

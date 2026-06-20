@@ -247,6 +247,10 @@ export async function startLocalAgentServerIfEnabled(): Promise<LocalAgentServer
   return startLocalAgentServer({ preferredPort: settings.port })
 }
 
+export function getLocalAgentServerInfo(): LocalAgentServerInfo | null {
+  return runningInfo
+}
+
 export async function stopLocalAgentServer(): Promise<void> {
   const server = runningServer
   runningServer = null

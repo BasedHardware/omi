@@ -26,6 +26,7 @@ import {
   clearLocalAgentToken,
   ensureLocalAgentToken,
   loadLocalAgentToken,
+  rotateLocalAgentToken,
   saveLocalAgentToken
 } from './tokenStore'
 
@@ -53,6 +54,15 @@ describe('local agent token store', () => {
 
     expect(first).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(second).toBe(first)
+  })
+
+  it('rotates and persists a new bearer token', () => {
+    const first = ensureLocalAgentToken()
+    const second = rotateLocalAgentToken()
+
+    expect(second).toMatch(/^[A-Za-z0-9_-]+$/)
+    expect(second).not.toBe(first)
+    expect(loadLocalAgentToken()).toBe(second)
   })
 
   it('deletes the stored token', () => {
