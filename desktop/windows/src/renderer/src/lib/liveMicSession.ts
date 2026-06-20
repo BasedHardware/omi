@@ -12,6 +12,7 @@ import {
   noteContinuousRecordingTranscript,
   setContinuousRecordingSession
 } from './continuousRecordingStatus'
+import type { TranscriptionBackend } from '../../../shared/types'
 
 // Force a local-KG rebuild so conversation-derived memories reach the brain map,
 // throttled to once per 30 min (the rebuild is two LLM calls). Delayed so the
@@ -51,7 +52,7 @@ export function startLiveMicSession(): LiveMicController {
   let attempt = 0
   let hasSpeech = false
   let finalizing = false
-  let currentBackend: 'omi' | 'local-parakeet' | null = null
+  let currentBackend: TranscriptionBackend | null = null
   let currentStartedAt = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
   const timers: ReturnType<typeof setTimeout>[] = []
@@ -96,14 +97,14 @@ export function startLiveMicSession(): LiveMicController {
   // instantly (titled client-side), keep it on the live screen flagged "saved",
   // and start a fresh session so capture continues.
   const saveCurrent = (args: {
-    backend: 'omi' | 'local-parakeet' | null
+    backend: TranscriptionBackend | null
     startedAt: number
     finishedAt: number
   }): void => {
     const segments = [...liveConversation.getSegments()]
     createPendingConversation(segments)
     liveConversation.markSaved()
-    if (args.backend === 'local-parakeet') {
+    if (args.backend === 'local-parakeet' || args.backend === 'elevenlabs') {
       void uploadConversationFromSegments({
         lines: segments,
         startedAt: args.startedAt,
