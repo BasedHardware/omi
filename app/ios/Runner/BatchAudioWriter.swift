@@ -39,7 +39,7 @@ final class BatchAudioWriter {
     private var diagLoggedMatch = false
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
-    private let maxFileSeconds: Int64 = 1800 // 30 min per file
+    private let maxFileSeconds: Int64 = 900 // 15 min per file
     private let gapMs: Int64 = 30_000 // start a new file after this silence gap
     private let fsyncIntervalMs: Int64 = 2_000
     private let minFreeBytes: Int64 = 200 * 1024 * 1024 // stop below 200 MB free
