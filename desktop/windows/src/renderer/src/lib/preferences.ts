@@ -103,7 +103,7 @@ export function isOnboardingComplete(): boolean {
 }
 
 // One-shot, in-memory route the app shell should jump to right after onboarding
-// finishes (e.g. "Take me to my tasks" → '/tasks'). Not persisted — it only
+// finishes (e.g. "Go to chat" -> '/home'). Not persisted — it only
 // bridges the onboarding→shell handoff. Navigating from the onboarding screen
 // directly races the onboarding gate's redirect to /home, so instead we record
 // the destination here and let the shell consume it once it mounts.

@@ -116,11 +116,11 @@ export function Onboarding(): React.JSX.Element {
     next()
   }
 
-  // Finish onboarding and land on the Tasks tab. We record the destination
+  // Finish onboarding and land on the main chat/home page. We record the destination
   // first, then flip the gate flag — the app shell consumes the pending route on
   // mount (navigating from here directly races the gate's redirect to /home).
-  const finishToTasks = (): void => {
-    setPendingRoute('/tasks')
+  const finishToChat = (): void => {
+    setPendingRoute('/home')
     completeOnboarding()
   }
 
@@ -177,8 +177,6 @@ export function Onboarding(): React.JSX.Element {
       )
     }
     if (step === 5) {
-      // The old DiskAccessStep (button-driven file scan) is hidden; this
-      // discovery step scans automatically with the orbit animation instead.
       return (
         <BuildProfileStep stepIndex={5} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
       )
@@ -231,9 +229,7 @@ export function Onboarding(): React.JSX.Element {
         />
       )
     }
-    // Final screen: a preview of the auto-created tasks feature. Its button both
-    // completes onboarding and routes straight to the Tasks tab.
-    return <AutoCreatedTasksStep onFinish={finishToTasks} />
+    return <AutoCreatedTasksStep onFinish={finishToChat} />
   }
 
   // Persistent two-pane shell: omi logo + the swapping step card on the left, the
