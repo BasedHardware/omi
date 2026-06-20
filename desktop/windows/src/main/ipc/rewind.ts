@@ -1,12 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readFile } from 'fs/promises'
+import { readFile, rm } from 'fs/promises'
 import { resolve, sep } from 'path'
 import { getPrimarySourceId } from '../rewind/sourceId'
-import {
-  listRewindFrames,
-  searchRewindFrames,
-  rewindDayBounds
-} from './db'
+import { deleteAllRewindFrames, listRewindFrames, searchRewindFrames, rewindDayBounds } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
   getRewindSettings,
@@ -15,10 +11,13 @@ import {
 } from '../rewind/captureService'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
+import { clearCurrentScreen } from '../rewind/currentScreen'
 import type { RewindSettings } from '../../shared/types'
 
 export function registerRewindHandlers(): void {
-  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) => listRewindFrames(from, to))
+  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
+    listRewindFrames(from, to)
+  )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
@@ -46,6 +45,15 @@ export function registerRewindHandlers(): void {
     return current
   })
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
+  ipcMain.handle('rewind:deleteAll', async () => {
+    const deleted = deleteAllRewindFrames()
+    await rm(rewindRoot(), { recursive: true, force: true })
+    clearCurrentScreen()
+    for (const w of BrowserWindow.getAllWindows()) {
+      w.webContents.send('rewind:cleared')
+    }
+    return deleted
+  })
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
   // is an instant cache hit in the normal case.
