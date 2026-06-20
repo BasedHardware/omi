@@ -83,7 +83,8 @@ def test_control_reader_emulator_readiness_inventories_local_emulator_harness_wi
     assert inventory["firestore_emulator_configured"] is True
     assert inventory["firestore_emulator_port"] == 8085
     assert inventory["rules_emulator_harness_present"] is True
-    assert inventory["control_reader_emulator_harness_present"] is False
+    assert inventory["control_reader_emulator_harness_present"] is True
+    assert inventory["control_reader_emulator_script_present"] is True
     assert inventory["firestore_emulator_host_env_present"] is True
     assert inventory["safe_detection_only_no_service_start"] is True
 
@@ -105,6 +106,7 @@ def test_control_reader_emulator_readiness_pins_prerequisites_and_fixture_schema
         prerequisites["canonical_server_control_source_path_api"]["canonical_path"]
         == "users/{uid}/memory_control/state"
     )
+    assert prerequisites["control_reader_fixture_schema"]["status"] == "READY_LOCAL_HARNESS_FIXTURE_PROVEN"
     assert prerequisites["control_reader_fixture_schema"]["required_fields"] == REQUIRED_SCHEMA_FIELDS
     assert prerequisites["firestore_emulator_config_and_cli"]["requires_firestore_emulator_host"] is True
     assert prerequisites["api_backed_server_reader_harness"]["must_not_start_cloud_services"] is True
@@ -122,9 +124,13 @@ def test_control_reader_emulator_readiness_requires_security_iam_evidence_no_cli
         "rules_static_emulator_iam_proof_separation",
     ]
     assert evidence["no_direct_client_control_reads_rules_static"]["direct_client_control_reads_allowed"] is False
-    assert evidence["no_direct_client_control_reads_emulator"]["required_emulator_case"] == (
-        "signed-in client getDoc(users/{uid}/memory_control/state) is denied"
-    )
+    assert evidence["no_direct_client_control_reads_emulator"]["status"] == "READY_LOCAL_EMULATOR_HARNESS_PRESENT"
+    assert evidence["no_direct_client_control_reads_emulator"]["required_emulator_cases"] == [
+        "signed-in client getDoc(users/{uid}/memory_control/state) is denied",
+        "signed-in client setDoc(users/{uid}/memory_control/state) is denied",
+        "signed-in client updateDoc(users/{uid}/memory_control/state) is denied",
+        "signed-in client deleteDoc(users/{uid}/memory_control/state) is denied",
+    ]
     assert evidence["server_principal_control_read_allowed_iam"]["cloud_credentials_required_now"] is False
     assert evidence["server_principal_control_read_allowed_iam"]["status"] == "BLOCKED"
     assert evidence["rules_static_emulator_iam_proof_separation"]["emulator_rules_proof_is_not_cloud_iam"] is True
@@ -178,11 +184,11 @@ def test_control_reader_emulator_readiness_links_readiness_chain_docs_and_summar
         "production_control_reader_implemented": False,
         "approval_claimed": False,
         "prerequisite_count": 5,
-        "blocked_prerequisite_count": 4,
+        "blocked_prerequisite_count": 3,
         "fixture_schema_field_count": 11,
         "required_contract_case_count": 9,
         "security_iam_evidence_requirement_count": 4,
         "linked_readiness_proof_count": 4,
-        "control_reader_emulator_harness_present": False,
+        "control_reader_emulator_harness_present": True,
         "firestore_emulator_host_env_present": False,
     }

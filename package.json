@@ -6,7 +6,8 @@
     "test:v17-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"python3 backend/scripts/v17_vector_repair_outbox_emulator_test.py\"",
     "test:v17-vector-repair-outbox-rules:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs\"",
     "test:v17-vector-repair-outbox-lease:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"python3 backend/scripts/v17_vector_repair_outbox_lease_emulator_test.py\"",
-    "test:v17-app-key-grants-rules:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs\""
+    "test:v17-app-key-grants-rules:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs\"",
+    "test:v17-v3-control-reader:emulator": "firebase emulators:exec --only firestore --project demo-v17-memory \"node backend/scripts/v17_firestore_rules_emulator_test.mjs && PYTHONPATH=backend python3 backend/scripts/v17_p1_3_v3_control_reader_emulator_test.py\""
   },
   "dependencies": {
     "expo-file-system": "^18.0.12",

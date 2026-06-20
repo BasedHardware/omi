@@ -1576,12 +1576,12 @@ Added the next real-service-adjacent readiness artifact for future Firestore-emu
 - Added `backend/scripts/v17_p1_3_v3_control_reader_emulator_readiness.py`, a safe default `BLOCKED`/`NOT_RUN` inventory that never starts Firestore emulators, reads or writes Firestore cloud/emulator data, calls cloud/provider/network services, mutates state, implements a production reader, wires routes, or claims approval.
 - Added `backend/tests/unit/test_v17_p1_3_v3_control_reader_emulator_readiness.py` and registered it in `backend/test.sh`.
 - Linked `control_reader_emulator_readiness_proof` from the `/v3` external compatibility readiness, control-reader readiness, and GET runtime-wiring readiness chains.
-- The artifact records the exact prerequisites for a future emulator/API-backed proof: canonical server-side control source/path/API still blocked until chosen; Firestore emulator config/env/tooling; control-doc fixture schema with `uid`, `schema_version`, `cohort_enrolled`, `default_memory_grant`, `account_generation`, `control_generation`, `projection_ready`, `write_convergence_ready`, `archive_allowed`, and `short_term_freshness_default_visible`; an API-backed server-reader harness; and separate static rules, emulator-denial, and cloud IAM evidence.
+- The artifact records the exact prerequisites for emulator/API-backed proof against the resolved canonical server-side control source `users/{uid}/memory_control/state`; Firestore emulator config/env/tooling; control-doc fixture schema with `uid`, `schema_version`, `mode`, `mode_epoch`, `cutover_epoch`, `account_generation`, `fallback_projection_ready`, `persistent_v17_writes_started`, `writes_blocked`, `stage_gates`, and `grants`; an API-backed server-reader harness; and separate static rules, emulator-denial, and cloud IAM evidence.
 - Security/IAM evidence requirements explicitly disallow direct client control reads, require future server-principal allowed evidence, and keep rules-static, emulator, and cloud IAM proofs separate.
 - Required proof cases are pinned to `v17_v3_control_reader_contract.py`: non-enrolled legacy boundary, enrolled V17 projection allowed only when all gates are ready, and fail-closed/no-fallback cases for missing control doc, stale generation, no grant, projection not ready, write convergence not ready, invalid/missing cursor secret, Archive not allowed, and stale Short-term default-hidden.
-- Local detection found the checked-in Firebase emulator configuration/rules harness shape, but no control-reader emulator harness/script is claimed. `/v3` runtime remains **BLOCKED / NO-GO**.
+- Local detection now finds the checked-in Firebase emulator configuration, explicit client-denial rules harness, and control-reader Admin-context emulator harness/script. `/v3` runtime remains **BLOCKED / NO-GO**.
 
-Verification for this slice is recorded in the subagent handoff: RED focused test `6 failed`; final focused/linked tests, full V17 regression, readiness summaries, async scan, docs hygiene, and commit SHA are attached there. Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+Verification for this slice is superseded by the later 2026-06-20 emulator/API-backed proof section below. Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
 
 ### 2026-06-20 — Oracle follow-up: reuse existing rollout control state for `/v3`
 
@@ -1604,3 +1604,21 @@ Verification for this slice:
 - Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`.
 - Docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-20 — P1-3 `/v3` control reader emulator/API-backed proof against canonical state
+
+Implemented and ran the next narrow local Firestore-emulator proof for the server-side V17 `/v3` control-reader seam against the accepted canonical path `users/{uid}/memory_control/state`, without wiring runtime `/v3` routes or touching production Firestore:
+
+- Added `backend/scripts/v17_p1_3_v3_control_reader_emulator_test.py`, an emulator-only Python/Admin-context fixture harness. It refuses to run unless `FIRESTORE_EMULATOR_HOST` is set, seeds only local emulator docs, and maps emulator-read rollout fixtures through `read_v17_v3_control(...)`, `V17V3ControlState`, and `decide_v17_v3_control_route(...)`.
+- Extended `backend/scripts/v17_firestore_rules_emulator_test.mjs` to assert signed-in client `getDoc`, `setDoc`, `updateDoc`, and `deleteDoc` are denied specifically for `users/{uid}/memory_control/state`.
+- Added `npm run test:v17-v3-control-reader:emulator`, which starts the local Firestore emulator and runs both the client-denial rules proof and Admin-context control-reader mapping proof.
+- Fixture schema matches the persisted rollout doc fields: `uid`, `schema_version`, `mode`, `mode_epoch`, `cutover_epoch`, `account_generation`, `fallback_projection_ready`, `persistent_v17_writes_started`, `writes_blocked`, `stage_gates`, and `grants`. Synthetic `cohort_enrolled`, `control_generation`, `projection_ready`, and Short-term freshness/default-visible control fields remain absent.
+- Emulator proof cases cover V17 projection success plus missing, malformed, no-grant, projection-not-ready, write-convergence-not-ready, and global-gate-closed fail-closed outcomes with no legacy fallback. Non-enrolled no-read boundary remains covered by pure adapter tests.
+- Readiness now records the canonical path/API as resolved to `users/{uid}/memory_control/state`, the fixture schema as locally proven in the harness, and the client-denial emulator harness as present. Overall `/v3` runtime remains **BLOCKED / NO-GO** until production route wiring, projection/observability/benchmark, cloud IAM/server-principal evidence, and approval gates pass.
+
+Verification for this slice:
+
+- RED: focused readiness test failed before implementation with `4 failed, 2 passed` on missing control-reader emulator harness/script, fixture readiness status, emulator security status, and summary counts; first emulator run also failed honestly on the Admin-context `write_not_ready` expectation, then the harness was corrected to use the write-convergence gate.
+- Emulator: `npm run test:v17-v3-control-reader:emulator` starts the local Firestore emulator, prints expected client `PERMISSION_DENIED` logs, then `PASS: signed-in client read/write denial asserted for 8 V17 collections, users/{uid}/memory_control/state, and V17 app/key memory grant self-grant path` and `PASS: emulator Admin-context fixture read from users/{uid}/memory_control/state mapped through read_v17_v3_control/decide_v17_v3_control_route for 7 cases; no production Firestore or runtime /v3 wiring used`.
+- Focused/linked, full V17, async scan, docs hygiene, and commit SHA are recorded in the subagent handoff for this slice.
+- Non-claims preserved: no production cloud calls, no cloud IAM/server-principal proof, no `backend/routers/memories.py` wiring, no production reader/cutover approval, no Archive default visibility, and no stale Short-term route-control field.
