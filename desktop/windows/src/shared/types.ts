@@ -140,6 +140,8 @@ export type OmiOverlayApi = {
   /** Hide the overlay, focus the main window, and navigate it to a route.
    *  Main relays the route via 'overlay:mainRoute' to the main window renderer. */
   openMainRoute: (route: string) => void
+  /** Subscribe to proactive notifications pushed from main (title + body). Returns an unsubscribe fn. */
+  onNotification: (cb: (n: { title: string; body: string }) => void) => () => void
 }
 
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */

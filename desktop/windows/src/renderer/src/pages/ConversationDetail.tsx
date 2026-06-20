@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, UserRound } from 'lucide-react'
+import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, ScrollText, X } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
-
-type Person = { id: string; name: string }
+import { NameSpeakerSheet } from '../components/conversations/NameSpeakerSheet'
+import { cn } from '../lib/utils'
+import type { SpeakerTarget, Person } from '../components/conversations/NameSpeakerSheet'
 
 type ServerConversation = {
   id: string
@@ -86,7 +87,6 @@ function CopyTranscriptButton(props: { transcript: string }): React.JSX.Element 
 }
 
 function speakerColor(label: string): string {
-  // Stable hash from label → one of a handful of glass tints.
   const palette = [
     'border-emerald-400/30 bg-emerald-400/8 text-emerald-200',
     'border-sky-400/30 bg-sky-400/8 text-sky-200',
@@ -108,6 +108,103 @@ function formatStart(seconds?: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`
 }
 
+// Transcript drawer — right-side slide-in panel matching macOS .move(edge:.trailing)
+function TranscriptDrawer({
+  display,
+  people,
+  onClose,
+  onOpenNameSheet
+}: {
+  display: Display
+  people: Person[]
+  onClose: () => void
+  onOpenNameSheet: (target: SpeakerTarget) => void
+}): React.JSX.Element {
+  const fullText = display.segments
+    ? display.segments.map((s) => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`).join('\n\n')
+    : (display.transcript ?? '')
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      {/* Panel */}
+      <div className="fixed right-0 top-0 z-50 flex h-full w-[450px] max-w-[90vw] flex-col border-l border-white/[0.07] bg-[#0d0d0d] shadow-2xl animate-slide-in-right">
+        {/* Header */}
+        <div className="flex shrink-0 items-center gap-3 border-b border-white/[0.07] px-5 py-3.5">
+          <ScrollText className="h-4 w-4 text-white/50" strokeWidth={1.75} />
+          <span className="flex-1 text-sm font-semibold text-white/85">Transcript</span>
+          <CopyTranscriptButton transcript={fullText} />
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-white/30 hover:bg-white/10 hover:text-white/70"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Segments */}
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+          {display.segments && display.segments.length > 0 ? (
+            <ul className="space-y-4">
+              {display.segments.map((s, i) => {
+                const rawLabel = s.speaker || 'speaker'
+                const personName = s.person_id ? display.personNames[s.person_id] : undefined
+                const displayLabel = personName || rawLabel.replace(/^SPEAKER_/, 'S')
+                const segCountForLabel = display.segments!.filter((x) => x.speaker === rawLabel).length
+                const previewText = s.text
+                return (
+                  <li key={i} className="flex gap-3">
+                    <div className="shrink-0 self-start">
+                      {!display.isLocal ? (
+                        <button
+                          onClick={() =>
+                            onOpenNameSheet({
+                              rawLabel,
+                              previewText,
+                              segmentCount: segCountForLabel
+                            })
+                          }
+                          className={cn(
+                            'rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-opacity hover:opacity-80',
+                            speakerColor(rawLabel)
+                          )}
+                          title="Click to assign a name"
+                        >
+                          {displayLabel}
+                        </button>
+                      ) : (
+                        <span
+                          className={cn(
+                            'rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                            speakerColor(rawLabel)
+                          )}
+                        >
+                          {displayLabel}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {s.start != null && (
+                        <div className="text-[10px] font-mono text-white/30">{formatStart(s.start)}</div>
+                      )}
+                      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/80">{s.text}</p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/70">
+              {display.transcript || '(no transcript)'}
+            </pre>
+          )}
+        </div>
+      </div>
+    </>
+  )
+}
+
 export function ConversationDetail({ conversationId }: { conversationId: string }): React.JSX.Element {
   const id = conversationId
   const navigate = useNavigate()
@@ -117,11 +214,15 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const [reprocessing, setReprocessing] = useState(false)
   const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Speaker assignment — people from /v1/users/people, picker state
+  // Speaker assignment — people from /v1/users/people
   const [people, setPeople] = useState<Person[]>([])
-  const [activePicker, setActivePicker] = useState<string | null>(null) // rawLabel with picker open
-  const [newPersonName, setNewPersonName] = useState('')
   const [assigningLabel, setAssigningLabel] = useState<string | null>(null)
+
+  // Transcript drawer
+  const [showTranscriptDrawer, setShowTranscriptDrawer] = useState(false)
+
+  // NameSpeakerSheet
+  const [nameSpeakerTarget, setNameSpeakerTarget] = useState<SpeakerTarget | null>(null)
 
   const fetchServer = async (idStr: string): Promise<Display | null> => {
     const r = await omiApi.get<ServerConversation>(`/v1/conversations/${idStr}`)
@@ -176,8 +277,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     const isLocal = id.startsWith('local-') || id.startsWith('chat-')
     setError(null)
     setDisplay(null)
+    setShowTranscriptDrawer(false)
+    setNameSpeakerTarget(null)
     load(id, isLocal)
-    // Fetch people for speaker assignment on cloud conversations only.
     if (!isLocal) {
       omiApi.get<Person[]>('/v1/users/people').then((r) => {
         const list = Array.isArray(r.data) ? r.data : []
@@ -187,8 +289,6 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // Poll while Omi is still processing — title/overview/action_items become
-  // available once the pipeline finishes summarizing the segments we POSTed.
   useEffect(() => {
     if (!id || !display || display.isLocal) return
     if (!display.processing) {
@@ -212,7 +312,6 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       } catch {
         /* retry next tick */
       }
-      // Give up after ~60s; user can still refresh manually.
       if (ticks > 20) {
         if (pollHandle.current) clearInterval(pollHandle.current)
         pollHandle.current = null
@@ -248,7 +347,6 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const onRename = async (title: string): Promise<void> => {
     if (!id || !display) return
     const prev = display.title
-    // Optimistic — update the heading immediately, revert if the write fails.
     setDisplay((d) => (d ? { ...d, title } : d))
     try {
       await window.omi.updateLocalConversationTitle(id, title)
@@ -264,34 +362,21 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     const item = display.actionItems[idx]
     if (!item) return
     const next = !item.completed
-    // Optimistic
     setDisplay((d) =>
       d && d.actionItems
-        ? {
-            ...d,
-            actionItems: d.actionItems.map((a, i) => (i === idx ? { ...a, completed: next } : a))
-          }
+        ? { ...d, actionItems: d.actionItems.map((a, i) => (i === idx ? { ...a, completed: next } : a)) }
         : d
     )
     try {
       if (item.id) {
         await omiApi.patch(`/v1/action-items/${item.id}/completed`, { completed: next })
       } else if (id) {
-        await omiApi.patch(`/v1/conversations/${id}/action-items`, {
-          action_item_idx: idx,
-          completed: next
-        })
+        await omiApi.patch(`/v1/conversations/${id}/action-items`, { action_item_idx: idx, completed: next })
       }
     } catch (e) {
-      // Revert
       setDisplay((d) =>
         d && d.actionItems
-          ? {
-              ...d,
-              actionItems: d.actionItems.map((a, i) =>
-                i === idx ? { ...a, completed: !next } : a
-              )
-            }
+          ? { ...d, actionItems: d.actionItems.map((a, i) => (i === idx ? { ...a, completed: !next } : a)) }
           : d
       )
       toast('Could not update task', { tone: 'error', body: (e as Error).message })
@@ -304,7 +389,6 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     try {
       await omiApi.post(`/v1/conversations/${id}/reprocess`)
       toast('Reprocessing', { tone: 'info', body: 'Omi is regenerating the summary.' })
-      // Trigger polling by marking processing=true locally.
       setDisplay((d) => (d ? { ...d, processing: true, status: 'processing' } : d))
     } catch (e) {
       toast('Reprocess failed', { tone: 'error', body: (e as Error).message })
@@ -313,34 +397,48 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     }
   }
 
-  // Assign all segments with rawLabel to a person. speaker_id in the URL is
-  // the integer extracted from SPEAKER_XX (backend field: segment.speaker_id: int).
-  const assignSpeaker = async (rawLabel: string, person: Person): Promise<void> => {
+  const assignSpeaker = async (rawLabel: string, personId: string | null, isUser: boolean, allSegments: boolean): Promise<void> => {
     if (!id || assigningLabel) return
     const speakerInt = parseInt(rawLabel.replace(/^SPEAKER_0*/, '') || '0', 10)
     setAssigningLabel(rawLabel)
-    setActivePicker(null)
     try {
-      await omiApi.patch(
-        `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
-        null,
-        { params: { assign_type: 'person_id', value: person.id } }
-      )
-      setDisplay((d) =>
-        d ? { ...d, personNames: { ...d.personNames, [person.id]: person.name } } : d
-      )
-      // Update local segments so every occurrence of this speaker shows the name.
-      setDisplay((d) =>
-        d && d.segments
-          ? {
-              ...d,
-              segments: d.segments.map((s) =>
-                s.speaker === rawLabel ? { ...s, person_id: person.id } : s
-              )
-            }
-          : d
-      )
-      toast(`Assigned ${rawLabel} → ${person.name}`, { tone: 'info' })
+      if (isUser) {
+        await omiApi.patch(
+          `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
+          null,
+          { params: { assign_type: 'user', value: 'true' } }
+        )
+        // Mark segments as user
+        setDisplay((d) =>
+          d && d.segments
+            ? { ...d, segments: d.segments.map((s) => (s.speaker === rawLabel || allSegments ? { ...s, person_id: 'user' } : s)) }
+            : d
+        )
+        toast(`Assigned ${rawLabel} → You`, { tone: 'info' })
+      } else if (personId) {
+        await omiApi.patch(
+          `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
+          null,
+          { params: { assign_type: 'person_id', value: personId } }
+        )
+        const person = people.find((p) => p.id === personId)
+        setDisplay((d) =>
+          d ? { ...d, personNames: { ...d.personNames, ...(person ? { [personId]: person.name } : {}) } } : d
+        )
+        setDisplay((d) =>
+          d && d.segments
+            ? {
+                ...d,
+                segments: d.segments.map((s) =>
+                  (allSegments ? s.speaker === rawLabel : s.speaker === rawLabel && s === d.segments![0])
+                    ? { ...s, person_id: personId }
+                    : s
+                )
+              }
+            : d
+        )
+        toast(`Assigned ${rawLabel} → ${person?.name ?? personId}`, { tone: 'info' })
+      }
     } catch (e) {
       toast('Assignment failed', { tone: 'error', body: (e as Error).message })
     } finally {
@@ -361,6 +459,14 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       return null
     }
   }
+
+  const openNameSheet = (target: SpeakerTarget): void => {
+    setNameSpeakerTarget(target)
+  }
+
+  const hasTranscript = display && (
+    (display.segments && display.segments.length > 0) || !!display.transcript
+  ) && !display.chatMessages
 
   if (error) {
     return (
@@ -395,6 +501,20 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Processing
               </span>
+            )}
+            {/* Transcript drawer button */}
+            {hasTranscript && (
+              <button
+                onClick={() => setShowTranscriptDrawer((v) => !v)}
+                className={cn(
+                  'btn-ghost px-3 py-2 gap-1.5',
+                  showTranscriptDrawer ? 'bg-white/10 text-white' : ''
+                )}
+                title="View transcript"
+              >
+                <ScrollText className="h-4 w-4" />
+                Transcript
+              </button>
             )}
             {display.isLocal ? (
               <>
@@ -458,25 +578,12 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                         title={a.completed ? 'Mark as open' : 'Mark as done'}
                       >
                         {a.completed && (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="h-3 w-3"
-                          >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                         )}
                       </button>
-                      <span
-                        className={`text-sm leading-relaxed transition-colors ${
-                          a.completed ? 'text-white/40 line-through' : 'text-white/85'
-                        }`}
-                      >
+                      <span className={`text-sm leading-relaxed transition-colors ${a.completed ? 'text-white/40 line-through' : 'text-white/85'}`}>
                         {a.description}
                       </span>
                     </li>
@@ -484,146 +591,119 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 </ul>
               </div>
             )}
+            {/* Inline transcript section (always visible in main scroll) */}
             <div className="surface-card p-6">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="section-label">{display.chatMessages ? 'Messages' : 'Transcript'}</h2>
                 <CopyTranscriptButton
                   transcript={
                     display.segments
-                      ? display.segments
-                          .map((s) => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`)
-                          .join('\n\n')
+                      ? display.segments.map((s) => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`).join('\n\n')
                       : (display.transcript ?? '')
                   }
                 />
               </div>
               <div className="max-h-[60vh] overflow-y-auto pr-1 -mr-1">
-              {display.chatMessages ? (
-                <ul className="space-y-3">
-                  {display.chatMessages.map((m, i) => (
-                    <li
-                      key={i}
-                      className={
-                        m.role === 'user'
-                          ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
-                          : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
-                      }
-                    >
-                      <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
-                        {m.role === 'user' ? 'You' : 'Omi'}
-                      </div>
-                      <div className="whitespace-pre-wrap">{m.content}</div>
-                    </li>
-                  ))}
-                </ul>
-              ) : display.segments && display.segments.length > 0 ? (
-                <ul className="space-y-4">
-                  {display.segments.map((s, i) => {
-                    const rawLabel = s.speaker || 'speaker'
-                    const personName = s.person_id ? display.personNames[s.person_id] : undefined
-                    const displayLabel = personName || rawLabel.replace(/^SPEAKER_/, 'S')
-                    const isCloudConv = !display.isLocal
-                    const isPickerOpen = activePicker === rawLabel
-                    const isAssigning = assigningLabel === rawLabel
-                    return (
-                      <li key={i} className="flex gap-3 animate-fade-in">
-                        <div className="relative shrink-0 self-start">
-                          {isCloudConv ? (
-                            <button
-                              onClick={() => setActivePicker(isPickerOpen ? null : rawLabel)}
-                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-opacity ${speakerColor(rawLabel)} ${isAssigning ? 'opacity-50' : 'hover:opacity-80'}`}
-                              title={personName ? `${rawLabel} — click to reassign` : 'Click to assign a person'}
-                            >
-                              {isAssigning ? (
-                                <Loader2 className="inline h-2.5 w-2.5 animate-spin" />
-                              ) : (
-                                displayLabel
-                              )}
-                            </button>
-                          ) : (
-                            <span
-                              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(rawLabel)}`}
-                              title={personName ? rawLabel : undefined}
-                            >
-                              {displayLabel}
-                            </span>
-                          )}
-                          {isPickerOpen && (
-                            <>
-                              <div className="fixed inset-0 z-10" onClick={() => { setActivePicker(null); setNewPersonName('') }} />
-                              <div className="absolute left-0 top-full z-20 mt-1 min-w-[180px] rounded-xl border border-white/10 bg-[#1a1a1a]/95 py-1 shadow-xl backdrop-blur-md">
-                                {people.length > 0 && (
-                                  <div className="max-h-36 overflow-y-auto">
-                                    {people.map((p) => (
-                                      <button
-                                        key={p.id}
-                                        onClick={() => void assignSpeaker(rawLabel, p)}
-                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-white/80 hover:bg-white/8 hover:text-white"
-                                      >
-                                        <UserRound className="h-3 w-3 shrink-0 text-white/40" />
-                                        {p.name}
-                                        {personName === p.name && <Check className="ml-auto h-3 w-3 text-emerald-400" />}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                {people.length > 0 && <div className="mx-3 my-1 border-t border-white/10" />}
-                                <div className="px-2 py-1.5">
-                                  <input
-                                    autoFocus={people.length === 0}
-                                    value={newPersonName}
-                                    onChange={(e) => setNewPersonName(e.target.value)}
-                                    onKeyDown={async (e) => {
-                                      if (e.key === 'Enter') {
-                                        const p = await getOrCreatePerson(newPersonName)
-                                        if (p) { setNewPersonName(''); await assignSpeaker(rawLabel, p) }
-                                      } else if (e.key === 'Escape') {
-                                        setActivePicker(null); setNewPersonName('')
-                                      }
-                                    }}
-                                    placeholder="New person name…"
-                                    className="w-full rounded-lg bg-white/8 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:outline-none"
-                                  />
-                                </div>
-                                {newPersonName.trim() && (
-                                  <button
-                                    onClick={async () => {
-                                      const p = await getOrCreatePerson(newPersonName)
-                                      if (p) { setNewPersonName(''); await assignSpeaker(rawLabel, p) }
-                                    }}
-                                    className="mx-2 mb-1 w-[calc(100%-16px)] rounded-lg bg-white/10 py-1 text-sm text-white hover:bg-white/20"
-                                  >
-                                    Create &amp; assign "{newPersonName.trim()}"
-                                  </button>
-                                )}
-                              </div>
-                            </>
-                          )}
+                {display.chatMessages ? (
+                  <ul className="space-y-3">
+                    {display.chatMessages.map((m, i) => (
+                      <li
+                        key={i}
+                        className={
+                          m.role === 'user'
+                            ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
+                            : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
+                        }
+                      >
+                        <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
+                          {m.role === 'user' ? 'You' : 'Omi'}
                         </div>
-                        <div className="min-w-0 flex-1">
-                          {s.start != null && (
-                            <div className="text-[10px] font-mono text-white/35">
-                              {formatStart(s.start)}
-                            </div>
-                          )}
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                            {s.text}
-                          </p>
-                        </div>
+                        <div className="whitespace-pre-wrap">{m.content}</div>
                       </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
-                  {display.transcript || '(no transcript)'}
-                </pre>
-              )}
+                    ))}
+                  </ul>
+                ) : display.segments && display.segments.length > 0 ? (
+                  <ul className="space-y-4">
+                    {display.segments.map((s, i) => {
+                      const rawLabel = s.speaker || 'speaker'
+                      const personName = s.person_id ? display.personNames[s.person_id] : undefined
+                      const displayLabel = personName || rawLabel.replace(/^SPEAKER_/, 'S')
+                      const isAssigning = assigningLabel === rawLabel
+                      const segCount = display.segments!.filter((x) => x.speaker === rawLabel).length
+                      return (
+                        <li key={i} className="flex gap-3 animate-fade-in">
+                          <div className="shrink-0 self-start">
+                            {!display.isLocal ? (
+                              <button
+                                onClick={() => openNameSheet({ rawLabel, previewText: s.text, segmentCount: segCount })}
+                                className={cn(
+                                  'rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide transition-opacity hover:opacity-80',
+                                  speakerColor(rawLabel),
+                                  isAssigning && 'opacity-50'
+                                )}
+                                title={personName ? `${rawLabel} — click to reassign` : 'Click to assign a person'}
+                              >
+                                {isAssigning ? (
+                                  <Loader2 className="inline h-2.5 w-2.5 animate-spin" />
+                                ) : (
+                                  displayLabel
+                                )}
+                              </button>
+                            ) : (
+                              <span
+                                className={cn(
+                                  'rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+                                  speakerColor(rawLabel)
+                                )}
+                              >
+                                {displayLabel}
+                              </span>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            {s.start != null && (
+                              <div className="text-[10px] font-mono text-white/35">{formatStart(s.start)}</div>
+                            )}
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">{s.text}</p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
+                    {display.transcript || '(no transcript)'}
+                  </pre>
+                )}
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Transcript drawer */}
+      {showTranscriptDrawer && display && (
+        <TranscriptDrawer
+          display={display}
+          people={people}
+          onClose={() => setShowTranscriptDrawer(false)}
+          onOpenNameSheet={openNameSheet}
+        />
+      )}
+
+      {/* NameSpeakerSheet modal */}
+      {nameSpeakerTarget && (
+        <NameSpeakerSheet
+          target={nameSpeakerTarget}
+          people={people}
+          onClose={() => setNameSpeakerTarget(null)}
+          onSave={async (personId, isUser, allSegments) => {
+            await assignSpeaker(nameSpeakerTarget.rawLabel, personId, isUser, allSegments)
+            setNameSpeakerTarget(null)
+          }}
+          onCreatePerson={getOrCreatePerson}
+        />
+      )}
     </div>
   )
 }

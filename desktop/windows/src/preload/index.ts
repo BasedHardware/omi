@@ -212,7 +212,12 @@ const omiOverlay: OmiOverlayApi = {
     ipcRenderer.on('overlay:asked', listener)
     return () => ipcRenderer.removeListener('overlay:asked', listener)
   },
-  openMainRoute: (route: string) => ipcRenderer.send('overlay:openMainRoute', route)
+  openMainRoute: (route: string) => ipcRenderer.send('overlay:openMainRoute', route),
+  onNotification: (cb: (n: { title: string; body: string }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, n: { title: string; body: string }): void => cb(n)
+    ipcRenderer.on('overlay:notification', listener)
+    return () => ipcRenderer.removeListener('overlay:notification', listener)
+  }
 }
 
 // Extend the omi bridge with optional convenience methods (shell, app info).

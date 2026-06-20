@@ -8,6 +8,55 @@ import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
 
+// ── TTS helper ────────────────────────────────────────────────────────────────
+function speak(text: string): void {
+  if (!window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  const utt = new SpeechSynthesisUtterance(text)
+  utt.rate = 1.1
+  utt.pitch = 1
+  window.speechSynthesis.speak(utt)
+}
+
+// ── Proactive notification card ───────────────────────────────────────────────
+type Notification = { title: string; body: string }
+
+function ProactiveCard({
+  notification,
+  onExecute,
+  onDismiss
+}: {
+  notification: Notification
+  onExecute: () => void
+  onDismiss: () => void
+}): React.JSX.Element {
+  return (
+    <div className="overlay-no-drag mb-2 rounded-xl border border-white/[0.10] bg-white/[0.07] px-3 py-2.5 shadow-md animate-fade-in">
+      <div className="mb-1.5 flex items-start gap-2">
+        <span className="mt-0.5 text-[13px]">🔔</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold text-neutral-200 leading-tight">{notification.title}</p>
+          <p className="mt-0.5 text-[10px] text-neutral-400 leading-snug">{notification.body}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={onExecute}
+          className="flex-1 rounded-lg bg-white/[0.12] py-1 text-[10px] font-medium text-neutral-200 hover:bg-white/[0.20] transition-colors"
+        >
+          Execute
+        </button>
+        <button
+          onClick={onDismiss}
+          className="rounded-lg px-2.5 py-1 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // Settings gear for the overlay header row — mirrors macOS floating bar.
 // Opens Settings in the main window. Shows on hover over the close button area.
 function SettingsGear(): React.JSX.Element {
@@ -92,6 +141,26 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+
+  // TTS: speak each new assistant reply
+  const lastSpokenRef = useRef<string>('')
+  useEffect(() => {
+    if (!history.length) return
+    const last = history[history.length - 1]
+    if (last.role !== 'assistant' || !last.content || sending) return
+    if (last.content === lastSpokenRef.current) return
+    lastSpokenRef.current = last.content
+    speak(last.content)
+  }, [history, sending])
+
+  // Proactive notifications from main
+  const [activeNotification, setActiveNotification] = useState<Notification | null>(null)
+  useEffect(() => {
+    return window.omiOverlay.onNotification((n) => {
+      setActiveNotification(n)
+      speak(n.title + '. ' + n.body)
+    })
+  }, [])
 
   // Serialize sends so a back-to-back voice message isn't fired while the previous
   // reply is still streaming (which `useChat.send` would no-op). Each send is
@@ -222,6 +291,18 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
       </button>
 
       <div className="flex min-h-0 flex-col gap-3 px-4 pb-4">
+        {activeNotification && (
+          <ProactiveCard
+            notification={activeNotification}
+            onExecute={() => {
+              // Send the notification body as a message so Omi acts on it
+              setActiveNotification(null)
+              setDraft('')
+              enqueueSend(activeNotification.body)
+            }}
+            onDismiss={() => setActiveNotification(null)}
+          />
+        )}
         {history.length > 0 && (
           <div
             ref={scrollRef}

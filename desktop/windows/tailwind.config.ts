@@ -74,12 +74,17 @@ export default {
         pulseRing: {
           '0%, 100%': { transform: 'scale(1)', opacity: '0.4' },
           '50%': { transform: 'scale(1.12)', opacity: '0.15' }
+        },
+        slideInRight: {
+          '0%': { opacity: '0', transform: 'translateX(32px)' },
+          '100%': { opacity: '1', transform: 'translateX(0)' }
         }
       },
       animation: {
         'fade-in': 'fadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
         shimmer: 'shimmer 2s ease-in-out infinite',
-        'pulse-ring': 'pulseRing 2s ease-in-out infinite'
+        'pulse-ring': 'pulseRing 2s ease-in-out infinite',
+        'slide-in-right': 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both'
       }
     }
   },
