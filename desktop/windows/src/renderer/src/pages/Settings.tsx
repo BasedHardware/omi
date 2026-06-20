@@ -30,7 +30,7 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   advanced: AdvancedTab
 }
 
-function SettingsInner(): React.JSX.Element {
+function SettingsInner(props: { onClose?: () => void }): React.JSX.Element {
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -38,6 +38,7 @@ function SettingsInner(): React.JSX.Element {
     const tab = searchParams.get('tab')
     return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'ai-chat'
   })
+  const close = props.onClose ?? (() => navigate('/home'))
 
   return (
     <div className="flex h-full min-h-0">
@@ -50,7 +51,8 @@ function SettingsInner(): React.JSX.Element {
         }}
         query={query}
         onQuery={setQuery}
-        onBack={() => navigate('/home')}
+        onBack={close}
+        backLabel={props.onClose ? 'Close' : 'Back'}
       />
       {active === 'memories' && !query.trim() ? (
         // Full page: owns its own header, scroll and width (the brain map needs the
@@ -80,10 +82,10 @@ function SettingsInner(): React.JSX.Element {
   )
 }
 
-export function Settings(): React.JSX.Element {
+export function Settings(props: { onClose?: () => void }): React.JSX.Element {
   return (
     <SettingsSearchProvider>
-      <SettingsInner />
+      <SettingsInner onClose={props.onClose} />
     </SettingsSearchProvider>
   )
 }

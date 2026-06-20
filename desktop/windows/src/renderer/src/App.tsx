@@ -1,8 +1,7 @@
-import { useEffect } from 'react'
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect } from 'react'
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
-import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
@@ -26,11 +25,11 @@ import { InsightToast } from './components/insight/InsightToast'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
-  // Settings is a full-screen view with its own tab rail + Back button, so the
-  // main app sidebar is hidden there.
-  const { pathname } = useLocation()
   const navigate = useNavigate()
-  const hideSidebar = pathname === '/settings'
+  const setRecorderVideoRef = useCallback(
+    (node: HTMLVideoElement | null): void => recorder.setVideoRef(node),
+    [recorder]
+  )
 
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
@@ -62,7 +61,6 @@ function AppShellInner(): React.JSX.Element {
 
   return (
     <div className="app-canvas flex h-full min-h-0">
-      {!hideSidebar && <Sidebar />}
       <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
         <MainViews />
       </main>
@@ -70,14 +68,14 @@ function AppShellInner(): React.JSX.Element {
           mounted app-wide so the screen stream has a render target regardless of
           which tab is active. */}
       <video
-        ref={recorder.videoRef}
+        ref={setRecorderVideoRef}
         muted
         className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
       />
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onPick={recorder.pickScreen}
+        onPick={(source) => recorder.pickScreen(source)}
       />
       {/* Background screen capture for Rewind (runs while the app is open). */}
       <RewindCaptureHost />

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useRecording } from './useRecording'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
@@ -46,6 +46,7 @@ export type UseRecorder = {
   systemBackend: TranscriptionBackend | null
   screenStream: MediaStream | null
   videoRef: React.RefObject<HTMLVideoElement | null>
+  setVideoRef: (node: HTMLVideoElement | null) => void
   /** Begin a recording session. Pass `system: true` to also transcribe loopback. */
   start: (opts?: { system?: boolean }) => Promise<void>
   pickScreen: (s: CaptureSource) => Promise<void>
@@ -73,6 +74,9 @@ export function useRecorder(): UseRecorder {
 
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const setVideoRef = useCallback((node: HTMLVideoElement | null): void => {
+    videoRef.current = node
+  }, [])
 
   // Attach/detach the MediaStream when screenStream changes. We can't do this
   // imperatively inside pickScreen() because the <video> element is
@@ -271,6 +275,7 @@ export function useRecorder(): UseRecorder {
     systemBackend,
     screenStream,
     videoRef,
+    setVideoRef,
     start,
     pickScreen,
     stopScreen,

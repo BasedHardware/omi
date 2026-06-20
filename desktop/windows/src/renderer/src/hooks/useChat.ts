@@ -27,6 +27,8 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the floating overlay.
   send: (text: string) => Promise<void>
+  /** Load a persisted local chat conversation into the main chat surface. */
+  loadConversation: (id: string) => Promise<boolean>
   /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
   reset: () => void
 }
@@ -44,26 +46,23 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
   const [history, setHistory] = useState<ChatMsg[]>([])
   const [sending, setSending] = useState(false)
+  const infiniteStore = {
+    get: () => localStorage.getItem('omi-chat-infinite-id'),
+    set: (id: string) => {
+      try {
+        localStorage.setItem('omi-chat-infinite-id', id)
+      } catch {
+        /* private mode / quota */
+      }
+    }
+  }
 
   // Resolve the conversation id once for this hook's lifetime, based on the mode.
   // 'infinite' shares one stable id across launches AND across the main/overlay
   // windows (stored in localStorage); 'per-launch' is fresh per mount.
   const chatIdRef = useRef<string | null>(null)
   if (chatIdRef.current === null) {
-    chatIdRef.current = resolveChatId(
-      mode,
-      {
-        get: () => localStorage.getItem('omi-chat-infinite-id'),
-        set: (id) => {
-          try {
-            localStorage.setItem('omi-chat-infinite-id', id)
-          } catch {
-            /* private mode / quota */
-          }
-        }
-      },
-      () => `chat-${crypto.randomUUID()}`
-    )
+    chatIdRef.current = resolveChatId(mode, infiniteStore, () => `chat-${crypto.randomUUID()}`)
   }
   const startedAtRef = useRef<number>(0)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
@@ -412,5 +411,28 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  return { history, sending, send, reset }
+  const loadConversation = async (id: string): Promise<boolean> => {
+    if (sendingRef.current) return false
+    try {
+      const c = await window.omi.getLocalConversation(id)
+      if (!c || c.kind !== 'chat' || !c.messages) return false
+      chatIdRef.current = c.id
+      if (mode === 'infinite') infiniteStore.set(c.id)
+      startedAtRef.current = c.startedAt || Date.now()
+      sendingRef.current = false
+      setSending(false)
+      setHistory(
+        c.messages.map((m) => ({
+          id: m.id ?? crypto.randomUUID(),
+          role: m.role,
+          content: m.content
+        }))
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  return { history, sending, send, loadConversation, reset }
 }
