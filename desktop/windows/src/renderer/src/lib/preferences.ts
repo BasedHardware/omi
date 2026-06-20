@@ -2,6 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { ModelPurpose } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -16,6 +17,8 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  modelPurpose?: ModelPurpose
+  defaultModelByPurpose?: Partial<Record<ModelPurpose, string>>
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
