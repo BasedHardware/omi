@@ -38,7 +38,7 @@ class OmiBatchAudioWriter(private val context: Context) {
         private const val FLUTTER_PREFS = "FlutterSharedPreferences"
         private const val PART_SUFFIX = ".part" // active (still-being-written) files end .bin.part
         private const val MAX_FILE_BYTES = 32L * 1024 * 1024 // ~32 MB per file
-        private const val MAX_FILE_SECONDS = 1800L // 30 min per file
+        private const val MAX_FILE_SECONDS = 900L // 15 min per file
         private const val GAP_MS = 30_000L // close current file after this silence gap
         private const val FSYNC_INTERVAL_MS = 2_000L
         private const val MIN_FREE_BYTES = 200L * 1024 * 1024 // stop writing below 200 MB free
