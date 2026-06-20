@@ -45,6 +45,7 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  localSttStatus: () => ipcRenderer.invoke('omi-local-stt:status'),
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
