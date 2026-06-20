@@ -10,13 +10,15 @@ import type { StickyNote } from '../../shared/types'
 // into a newline.
 const BLOCK_ANCHOR =
   /\\id=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\s*/g
+// eslint-disable-next-line no-control-regex -- Sticky Notes bodies contain control characters.
+const CONTROL_CHARS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F]', 'g')
 
 export function cleanNoteText(raw: string): string {
   if (!raw) return ''
   return raw
     .replace(BLOCK_ANCHOR, '\n') // drop block-id anchors, keep block boundaries
     .replace(/\r\n?/g, '\n') // normalize line endings first
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ') // strip control chars (keep tab + newline)
+    .replace(CONTROL_CHARS, ' ') // strip control chars (keep tab + newline)
     .replace(/[ \t]+/g, ' ')
     .replace(/ *\n */g, '\n')
     .replace(/\n{3,}/g, '\n\n')
