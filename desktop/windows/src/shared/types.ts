@@ -75,6 +75,21 @@ export type PiChatResponse = {
   toolCalls: PiChatToolCall[]
 }
 
+export type ClaudeAcpStatus = {
+  configured: boolean
+  command: string
+  authenticated: boolean | null
+  reason?: string
+}
+
+export type ClaudeAcpChatRequest = {
+  messages: ChatMessage[]
+}
+
+export type ClaudeAcpChatResponse = {
+  text: string
+}
+
 export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
 
 export type ByokChatProvider = Exclude<ByokProvider, 'deepgram'>
@@ -375,6 +390,8 @@ export type OmiBridgeApi = {
   /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
   piChatEnabled: boolean
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
+  claudeAcpStatus: () => Promise<ClaudeAcpStatus>
+  claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
   byokStatus: () => Promise<ByokStatus>
   byokSave: (request: ByokSaveRequest) => Promise<ByokStatus>
   byokDelete: (provider: ByokProvider) => Promise<ByokStatus>
