@@ -19,6 +19,8 @@ const byokStatus: ByokStatus = {
     openai: { provider: 'openai', configured: true },
     anthropic: { provider: 'anthropic', configured: false },
     gemini: { provider: 'gemini', configured: false },
+    openrouter: { provider: 'openrouter', configured: false },
+    elevenlabs: { provider: 'elevenlabs', configured: true },
     deepgram: { provider: 'deepgram', configured: false }
   }
 }
@@ -106,5 +108,19 @@ describe('realtimeVoiceReadiness', () => {
     expect(readiness.ready).toBe(false)
     expect(readiness.reason).toBe('unsupported')
     expect(readiness.transcriptionPath).toContain('/v4/listen')
+  })
+
+  it('uses ElevenLabs readiness when selected', () => {
+    const readiness = realtimeVoiceReadiness(
+      {
+        ...basePreferences,
+        realtimeVoiceEnabled: true,
+        realtimeVoiceProvider: 'elevenlabs'
+      },
+      byokStatus
+    )
+    expect(readiness.ready).toBe(true)
+    expect(readiness.keyPath).toBe('ElevenLabs BYOK key')
+    expect(readiness.transcriptionPath).toContain('ElevenLabs realtime STT')
   })
 })
