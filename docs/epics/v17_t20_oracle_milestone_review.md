@@ -1543,3 +1543,24 @@ Verification for this slice:
 - RED: `cd backend && pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -q` -> `7 failed in 0.09s` before adding the runner/test.sh/docs/readiness links.
 - Focused GREEN and full verification outputs are recorded with the local commit summary for this slice.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-19 — P1-3 `/v3` control reader readiness
+
+Added the next real-service-adjacent gate as a safe readiness/local contract artifact for the server-side V17 cohort/enrollment/control reader needed before future `GET /v3/memories` cutover:
+
+- Added `backend/scripts/v17_p1_3_v3_control_reader_readiness.py`, a read-only BLOCKED inventory of exact production control reader requirements.
+- Added `backend/tests/unit/test_v17_p1_3_v3_control_reader_readiness.py` and registered it in `backend/test.sh`.
+- Linked `control_reader_readiness_proof` from both `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- The artifact records that the canonical control source/path/API is still blocked until chosen, requires server-owned control reads with no direct client control reads, defines a fake-injectable control reader interface shape without route wiring, and pins fail-closed semantics for missing control doc, stale generation, no grant, projection-not-ready, write-convergence-not-ready, invalid/missing cursor secret, Archive-not-allowed, and stale Short-term default-hidden states.
+- Non-enrolled users preserve legacy-primary behavior including `offset=0 -> limit=5000` only on the legacy path; enrolled V17 users must not fall back to legacy on V17 gate failures.
+- It ties these requirements to the existing local pure decision, cursor, projection, memory read-service, write-convergence, request/response adapter, route-planner, FastAPI route-contract, dependency/auth, projection-store, and GET runtime-wiring proofs while marking real Firestore/API/emulator/security rules/IAM evidence still missing.
+- No production control reader, runtime route wiring, real Firestore/Pinecone/cloud/provider/network call, emulator/security-rules/IAM evidence, benchmark, telemetry sink integration, Archive default visibility, stale Short-term default visibility, or approval is claimed.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_control_reader_readiness.py -q` -> `8 failed in 0.10s` before adding the runner/test.sh/docs/readiness links.
+- Focused GREEN: `cd backend && black --line-length 120 --skip-string-normalization scripts/v17_p1_3_v3_control_reader_readiness.py tests/unit/test_v17_p1_3_v3_control_reader_readiness.py scripts/v17_p1_3_v3_external_compatibility_readiness.py scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_p1_3_v3_control_reader_readiness.py tests/unit/test_v17_p1_3_v3_projection_store_readiness.py tests/unit/test_v17_p1_3_v3_external_compatibility_readiness.py tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py -q` -> `2 files reformatted, 4 files left unchanged`, `30 passed in 0.21s`.
+- Normal-env focused `/v3` proof suite: `104 passed in 5.08s`; normal-env full V17 regression: `481 passed, 3 warnings in 8.54s`.
+- Readiness summaries: control reader `BLOCKED BLOCKED True False False False 8 8 8 12 5 7`; GET runtime-wiring `BLOCKED BLOCKED True False False False 9 15 8 4`; `/v3` external compatibility `BLOCKED True False False False False False False False 7 7 True`.
+- Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

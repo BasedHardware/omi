@@ -642,6 +642,25 @@ PROJECTION_STORE_READINESS_PROOF = {
     ],
 }
 
+CONTROL_READER_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_control_reader_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_control_reader_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "read_only_server_side_control_reader_requirements_inventory",
+        "canonical_control_source_path_api_blocked_until_chosen",
+        "server_owned_control_reads_only_no_direct_client_control_reads",
+        "fake_injectable_control_reader_interface_shape_without_route_wiring",
+        "missing_control_doc_stale_generation_no_grant_fail_closed_or_denied",
+        "projection_not_ready_write_convergence_not_ready_cursor_secret_fail_closed",
+        "non_enrolled_legacy_offset_zero_limit_5000_preserved_only_for_legacy_primary",
+        "enrolled_gate_failures_never_fallback_to_legacy",
+        "archive_default_unavailable_no_stale_short_term_default_visible",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -698,6 +717,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
+        "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -727,6 +747,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_get_testclient_proof_present": True,
             "get_dependency_auth_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
+            "control_reader_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

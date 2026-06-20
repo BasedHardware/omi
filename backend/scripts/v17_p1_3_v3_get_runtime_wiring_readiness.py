@@ -46,6 +46,7 @@ PROOF_CONSTANTS = {
     "real_router_get_testclient_proof": _EXTERNAL.REAL_ROUTER_GET_TESTCLIENT_PROOF,
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
+    "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
 }
 
 
@@ -77,7 +78,12 @@ REMAINING_GATES = [
             "and fail-closed for enrolled missing/malformed/timeout states, without client-side direct control reads "
             "if that is unsafe."
         ),
-        "existing_local_proofs": ["decision_service_proof", "memory_read_service_proof", "route_planner_proof"],
+        "existing_local_proofs": [
+            "decision_service_proof",
+            "memory_read_service_proof",
+            "route_planner_proof",
+            "control_reader_readiness_proof",
+        ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
