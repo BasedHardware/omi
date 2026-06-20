@@ -9,9 +9,35 @@ function fmtTime(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
-function SpeakerBubble({ line }: { line: TranscriptLine }): React.JSX.Element {
-  const isUser = line.speaker === 'You'
-  const initial = line.speaker ? line.speaker[0].toUpperCase() : '?'
+function SpeakerBubble({
+  line,
+  speakerNames,
+  onRename
+}: {
+  line: TranscriptLine
+  speakerNames: Record<string, string>
+  onRename: (original: string, name: string) => void
+}): React.JSX.Element {
+  const rawSpeaker = line.speaker ?? 'Unknown'
+  const displaySpeaker = speakerNames[rawSpeaker] ?? rawSpeaker
+  const isUser = displaySpeaker === 'You' || rawSpeaker === 'You'
+  const initial = displaySpeaker ? displaySpeaker[0].toUpperCase() : '?'
+
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const startEdit = (): void => {
+    setDraft(displaySpeaker)
+    setEditing(true)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }
+
+  const commit = (): void => {
+    const trimmed = draft.trim()
+    if (trimmed && trimmed !== displaySpeaker) onRename(rawSpeaker, trimmed)
+    setEditing(false)
+  }
 
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'flex-row-reverse' : 'flex-row')}>
@@ -26,9 +52,30 @@ function SpeakerBubble({ line }: { line: TranscriptLine }): React.JSX.Element {
       </div>
 
       <div className={cn('flex max-w-[75%] flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
-        {/* Speaker label */}
+        {/* Speaker label — click to rename */}
         {line.speaker && (
-          <span className="px-1 text-[10px] text-white/40">{line.speaker}</span>
+          editing ? (
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commit()
+                else if (e.key === 'Escape') setEditing(false)
+              }}
+              className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white focus:border-white/50 focus:outline-none"
+              style={{ width: `${Math.max(60, draft.length * 8)}px` }}
+            />
+          ) : (
+            <button
+              onClick={startEdit}
+              title="Click to rename speaker"
+              className="cursor-pointer rounded px-1 text-[10px] text-white/40 hover:bg-white/[0.06] hover:text-white/70"
+            >
+              {displaySpeaker}
+            </button>
+          )
         )}
         {/* Bubble */}
         <div
@@ -49,6 +96,7 @@ function SpeakerBubble({ line }: { line: TranscriptLine }): React.JSX.Element {
 /**
  * Floating live transcript panel — mirrors macOS LiveTranscriptPanel.
  * Shown at the bottom-right while recording is active; collapses to a pill.
+ * Speaker labels are clickable to rename (e.g. "Speaker 1" → "Alice").
  */
 export function LiveTranscriptPanel(): React.JSX.Element | null {
   const [status, setStatus] = useState<LiveStatus>(() => liveConversation.getStatus())
@@ -56,6 +104,8 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
   const [collapsed, setCollapsed] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  // Persistent speaker name map for this session: "Speaker 1" → "Alice"
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
   const startRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -68,10 +118,11 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
 
   const isActive = status === 'live' || status === 'connecting'
 
-  // Reset dismissed state when a new session starts
+  // Reset dismissed state and speaker names when a new session starts
   useEffect(() => {
     if (isActive) {
       setDismissed(false)
+      setSpeakerNames({})
       if (startRef.current === null) startRef.current = Date.now()
       const id = setInterval(() => setElapsed(Date.now() - (startRef.current ?? Date.now())), 1000)
       return () => clearInterval(id)
@@ -87,6 +138,10 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [segments, collapsed])
+
+  const handleRename = (original: string, name: string): void => {
+    setSpeakerNames((prev) => ({ ...prev, [original]: name }))
+  }
 
   if (!isActive || dismissed) return null
 
@@ -131,7 +186,14 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
                 {status === 'connecting' ? 'Connecting to transcription…' : 'Listening…'}
               </div>
             ) : (
-              segments.map((seg, i) => <SpeakerBubble key={i} line={seg} />)
+              segments.map((seg, i) => (
+                <SpeakerBubble
+                  key={i}
+                  line={seg}
+                  speakerNames={speakerNames}
+                  onRename={handleRename}
+                />
+              ))
             )}
           </div>
         )}

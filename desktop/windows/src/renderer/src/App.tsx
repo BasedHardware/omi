@@ -25,6 +25,7 @@ import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { GoalCelebration } from './components/ui/GoalCelebration'
 import { LiveTranscriptPanel } from './components/recording/LiveTranscriptPanel'
+import { LiveNotesPanel } from './components/recording/LiveNotesPanel'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -145,6 +146,8 @@ function AppShellInner(): React.JSX.Element {
       <GoalCelebration />
       {/* Floating live transcript panel — mirrors macOS LiveTranscriptPanel. */}
       <LiveTranscriptPanel />
+      {/* Floating live notes panel — mirrors macOS LiveNotesView. */}
+      <LiveNotesPanel />
     </div>
   )
 }
