@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Voice replies now follow your language setting by default (fixes occasional replies in the wrong language) while still letting you switch languages mid-conversation"
+  ],
   "releases": [
     {
       "version": "0.11.480",
