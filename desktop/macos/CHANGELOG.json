@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed push-to-talk voice responses falling back to the slower model \u2014 the realtime voice connection now stays warm and auto-reconnects (keepalive, relentless reconnect, re-warm on wake)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.480",
+      "date": "2026-06-20",
+      "changes": [
+        "Fixed push-to-talk voice responses falling back to the slower model \u2014 the realtime voice connection now stays warm and auto-reconnects (keepalive, relentless reconnect, re-warm on wake)"
+      ]
+    },
     {
       "version": "0.11.478",
       "date": "2026-06-20",
