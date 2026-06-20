@@ -37,11 +37,11 @@ const MANUFACTURER_NAME = 'manufacturer_name_string'
 const MODEL_NUMBER = 'model_number_string'
 
 const LAST_DEVICE_KEY = 'omi.ble.lastDevice.v1'
-type LastDevice = { name: string; id: string; seenAt: number }
+type LastDevice = { name: string; id: string; seenAt: number; batteryLevel?: number }
 
-function saveLastDevice(name: string, id: string): void {
+function saveLastDevice(name: string, id: string, batteryLevel?: number): void {
   try {
-    localStorage.setItem(LAST_DEVICE_KEY, JSON.stringify({ name, id, seenAt: Date.now() }))
+    localStorage.setItem(LAST_DEVICE_KEY, JSON.stringify({ name, id, seenAt: Date.now(), batteryLevel }))
   } catch { /* quota */ }
 }
 
@@ -169,7 +169,11 @@ export function DevicesTab(): React.JSX.Element {
         const bSvc = await server.getPrimaryService(BATTERY_SERVICE)
         const bChar = await bSvc.getCharacteristic(BATTERY_LEVEL)
         const bVal = await bChar.readValue()
-        setBattery(bVal.getUint8(0))
+        const level = bVal.getUint8(0)
+        setBattery(level)
+        // Save battery level alongside device info so sidebar can show it
+        saveLastDevice(name, device.id, level)
+        setLastDevice((prev) => prev ? { ...prev, batteryLevel: level } : prev)
       } catch {
         setBattery(-1) // -1 = service not available on this device
       }
