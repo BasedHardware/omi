@@ -83,6 +83,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   }
 
   void _filterContacts(String query) {
+    if (!mounted) return;
     setState(() {
       if (query.isEmpty) {
         _filteredContacts = _contacts;
