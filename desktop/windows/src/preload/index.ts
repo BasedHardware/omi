@@ -16,7 +16,8 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  McpKeyRecord
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -76,6 +77,9 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  mcpKeyCreate: (key: McpKeyRecord) => ipcRenderer.invoke('mcpKey:create', key),
+  mcpKeyRead: () => ipcRenderer.invoke('mcpKey:read'),
+  mcpKeyDelete: () => ipcRenderer.invoke('mcpKey:delete'),
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
