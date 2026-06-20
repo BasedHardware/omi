@@ -28,7 +28,14 @@ function normalizeRequest(value: unknown): PiChatRequest {
   }
   return {
     token: record.token,
-    messages: record.messages
+    messages: record.messages,
+    skillIds: Array.isArray(record.skillIds)
+      ? record.skillIds.filter((id): id is string => typeof id === 'string')
+      : undefined,
+    modelId:
+      typeof record.modelId === 'string' && record.modelId.trim()
+        ? record.modelId.trim()
+        : undefined
   }
 }
 
