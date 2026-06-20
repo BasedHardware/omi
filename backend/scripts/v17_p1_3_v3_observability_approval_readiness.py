@@ -16,6 +16,21 @@ from typing import Any
 
 _REQUIRED_ROUTE_REFS = ["GET /v3/memories"]
 
+CANARY_APPROVAL_SOURCE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_source_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_source_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "approval_claimed": False,
+    "blocker": (
+        "Future GET /v3/memories canary approval artifact source is selected as a server-owned route-scoped "
+        "artifact, but production source existence, direct-client-deny rules/IAM proof, and backend service-principal "
+        "read proof remain missing/not-run."
+    ),
+}
+
 REQUIRED_TELEMETRY_FIELDS = [
     {
         "field_id": "read_source",
@@ -514,6 +529,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "blockers": BLOCKERS,
         "static_guardrails": STATIC_GUARDRAILS,
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
+        "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",

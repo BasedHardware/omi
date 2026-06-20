@@ -799,6 +799,28 @@ OBSERVABILITY_APPROVAL_READINESS_PROOF = {
     ],
 }
 
+CANARY_APPROVAL_SOURCE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_source_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_source_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "approval_claimed": False,
+    "blocker": (
+        "Server-owned approval artifact source/ownership/IAM contract is selected locally, but production artifact, "
+        "direct-client-deny rules/IAM evidence, and backend service-principal read evidence are still missing/not-run."
+    ),
+    "covered_defaults": [
+        "server_owned_route_scoped_approval_artifact_source_selected",
+        "client_supplied_approval_artifacts_never_trusted",
+        "bounded_product_privacy_ops_and_memory_platform_oncall_ownership_required",
+        "direct_client_read_write_denied_or_emulator_iam_proof_required",
+        "backend_service_principal_read_required_before_runtime_wiring",
+        "no_uid_session_memory_cursor_token_secret_payload_or_high_cardinality_artifact_dimensions",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -864,6 +886,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "write_convergence_tombstone_matrix_proof": WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
         "cursor_secret_readiness_proof": CURSOR_SECRET_READINESS_PROOF,
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
+        "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -900,6 +923,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "write_convergence_tombstone_matrix_proof_present": True,
             "cursor_secret_readiness_proof_present": True,
             "observability_approval_readiness_proof_present": True,
+            "canary_approval_source_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

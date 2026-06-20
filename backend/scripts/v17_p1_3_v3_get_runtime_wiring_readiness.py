@@ -54,6 +54,7 @@ PROOF_CONSTANTS = {
     "write_convergence_tombstone_matrix_proof": _EXTERNAL.WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
     "cursor_secret_readiness_proof": _EXTERNAL.CURSOR_SECRET_READINESS_PROOF,
     "observability_approval_readiness_proof": _EXTERNAL.OBSERVABILITY_APPROVAL_READINESS_PROOF,
+    "canary_approval_source_readiness_proof": _EXTERNAL.CANARY_APPROVAL_SOURCE_READINESS_PROOF,
 }
 
 
@@ -260,8 +261,10 @@ REMAINING_GATES = [
             "response_adapter_proof",
             "memory_read_service_proof",
             "observability_approval_readiness_proof",
+            "canary_approval_source_readiness_proof",
         ],
         "observability_approval_readiness_proof": "backend/scripts/v17_p1_3_v3_observability_approval_readiness.py",
+        "canary_approval_source_readiness_proof": ("backend/scripts/v17_p1_3_v3_canary_approval_source_readiness.py"),
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
