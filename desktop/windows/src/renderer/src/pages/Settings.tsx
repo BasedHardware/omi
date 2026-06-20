@@ -4,7 +4,11 @@ import { SettingsSearchProvider, useSettingsSearch } from '../components/setting
 import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
-import { GeneralTab } from '../components/settings/tabs/GeneralTab'
+import { AIChatTab } from '../components/settings/tabs/AIChatTab'
+import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
+import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
+import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
+import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
@@ -15,7 +19,11 @@ import { Memories } from './Memories'
 // management UI), so it isn't a simple searchable settings panel — it's handled
 // separately below and is intentionally absent from this map.
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
-  general: GeneralTab,
+  'ai-chat': AIChatTab,
+  shortcuts: ShortcutsTab,
+  transcription: TranscriptionTab,
+  'plan-usage': PlanUsageTab,
+  about: AboutTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
   account: AccountTab,
@@ -28,7 +36,7 @@ function SettingsInner(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const [active, setActive] = useState<SettingsTabId>(() => {
     const tab = searchParams.get('tab')
-    return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'general'
+    return tab && SETTINGS_TABS.some((t) => t.id === tab) ? (tab as SettingsTabId) : 'ai-chat'
   })
 
   return (
@@ -38,13 +46,13 @@ function SettingsInner(): React.JSX.Element {
         onSelect={(id) => {
           setActive(id)
           setQuery('') // selecting a tab exits search
-          setSearchParams(id === 'general' ? {} : { tab: id })
+          setSearchParams(id === 'ai-chat' ? {} : { tab: id })
         }}
         query={query}
         onQuery={setQuery}
         onBack={() => navigate('/home')}
       />
-      {active === 'memories' ? (
+      {active === 'memories' && !query.trim() ? (
         // Full page: owns its own header, scroll and width (the brain map needs the
         // room). Mounted only while active so its memory fetch + WebGL map don't run
         // behind the other tabs.

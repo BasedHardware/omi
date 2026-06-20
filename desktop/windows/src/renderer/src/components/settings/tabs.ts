@@ -1,6 +1,10 @@
 import {
-  Settings as SettingsIcon,
+  AudioLines,
+  BotMessageSquare,
+  CreditCard,
   History,
+  Info,
+  Keyboard,
   ShieldCheck,
   CircleUserRound,
   SlidersHorizontal,
@@ -8,10 +12,24 @@ import {
   type LucideIcon
 } from 'lucide-react'
 
-export type SettingsTabId = 'general' | 'memories' | 'rewind' | 'privacy' | 'account' | 'advanced'
+export type SettingsTabId =
+  | 'ai-chat'
+  | 'shortcuts'
+  | 'transcription'
+  | 'plan-usage'
+  | 'about'
+  | 'memories'
+  | 'rewind'
+  | 'privacy'
+  | 'account'
+  | 'advanced'
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon }[] = [
-  { id: 'general', label: 'General', Icon: SettingsIcon },
+  { id: 'ai-chat', label: 'AI Chat', Icon: BotMessageSquare },
+  { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
+  { id: 'transcription', label: 'Transcription', Icon: AudioLines },
+  { id: 'plan-usage', label: 'Plan and Usage', Icon: CreditCard },
+  { id: 'about', label: 'About', Icon: Info },
   { id: 'memories', label: 'Memories', Icon: Brain },
   { id: 'rewind', label: 'Rewind', Icon: History },
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },
