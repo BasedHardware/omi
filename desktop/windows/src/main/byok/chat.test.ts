@@ -23,6 +23,21 @@ describe('BYOK chat', () => {
     expect(String(request.init.body)).not.toContain('sk-openai-secret')
   })
 
+  it('constructs direct OpenRouter requests with OpenAI-compatible payloads', () => {
+    const request = buildByokChatRequest('openrouter', 'sk-or-secret', [
+      { role: 'user', content: 'hello' }
+    ])
+
+    expect(request.url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(request.init.headers).toMatchObject({
+      authorization: 'Bearer sk-or-secret',
+      'HTTP-Referer': 'https://omi.me',
+      'X-Title': 'Omi Windows'
+    })
+    expect(String(request.init.body)).toContain('openrouter/auto')
+    expect(String(request.init.body)).not.toContain('sk-or-secret')
+  })
+
   it('constructs direct Anthropic and Gemini requests with provider-owned credentials', () => {
     const anthropic = buildByokChatRequest('anthropic', 'sk-ant-secret', [
       { role: 'user', content: 'hello' }
@@ -58,6 +73,7 @@ describe('BYOK chat', () => {
       'openai',
       'sk-openai-secret',
       [{ role: 'user', content: 'hello' }],
+      undefined,
       { fetchImpl }
     )
 
@@ -76,7 +92,7 @@ describe('BYOK chat', () => {
 
   it('parses Anthropic and Gemini text response shapes', async () => {
     await expect(
-      sendByokChat('anthropic', 'sk-ant-secret', [{ role: 'user', content: 'hello' }], {
+      sendByokChat('anthropic', 'sk-ant-secret', [{ role: 'user', content: 'hello' }], undefined, {
         fetchImpl: vi.fn().mockResolvedValue(
           jsonResponse({
             content: [{ type: 'text', text: 'Claude response' }],
@@ -91,7 +107,7 @@ describe('BYOK chat', () => {
     })
 
     await expect(
-      sendByokChat('gemini', 'AIzaSecretKey', [{ role: 'user', content: 'hello' }], {
+      sendByokChat('gemini', 'AIzaSecretKey', [{ role: 'user', content: 'hello' }], undefined, {
         fetchImpl: vi.fn().mockResolvedValue(
           jsonResponse({
             candidates: [{ content: { parts: [{ text: 'Gemini response' }] } }],
