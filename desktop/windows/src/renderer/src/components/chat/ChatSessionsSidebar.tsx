@@ -58,7 +58,7 @@ export function ChatSessionsSidebar({
       const mapped: Session[] = chats.map((c) => {
         const msgs = c.messages ?? []
         const last = msgs[msgs.length - 1]
-        const preview = last?.content?.trim().slice(0, 80) ?? ''
+        const preview = last?.content?.trim()?.slice(0, 80) ?? ''
         return {
           id: c.id,
           title: c.title ?? (msgs.length ? 'Chat with Omi' : 'New Chat'),
@@ -109,11 +109,16 @@ export function ChatSessionsSidebar({
   const saveEdit = async (): Promise<void> => {
     if (!editingId) return
     const trimmed = editTitle.trim()
-    if (trimmed) {
-      await window.omi.updateLocalConversationTitle(editingId, trimmed)
-      setSessions((s) => s.map((x) => x.id === editingId ? { ...x, title: trimmed } : x))
+    try {
+      if (trimmed) {
+        await window.omi.updateLocalConversationTitle(editingId, trimmed)
+        setSessions((s) => s.map((x) => x.id === editingId ? { ...x, title: trimmed } : x))
+      }
+    } catch (e) {
+      console.error('Failed to rename chat session:', e)
+    } finally {
+      setEditingId(null)
     }
-    setEditingId(null)
   }
 
   const filtered = sessions
@@ -242,13 +247,16 @@ function SessionRow({
   const [hover, setHover] = useState(false)
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={isEditing ? undefined : onSelect}
       onDoubleClick={onStartEdit}
+      onKeyDown={(e) => { if (!isEditing && (e.key === 'Enter' || e.key === ' ')) onSelect() }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       className={cn(
-        'group flex w-full items-start gap-2 rounded-xl px-3 py-2 text-left transition-colors',
+        'group flex w-full cursor-pointer items-start gap-2 rounded-xl px-3 py-2 text-left transition-colors',
         isActive ? 'bg-white/10' : 'hover:bg-white/[0.06]'
       )}
     >
@@ -296,6 +304,6 @@ function SessionRow({
         </div>
       )}
       {isDeleting && <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin text-white/30" />}
-    </button>
+    </div>
   )
 }

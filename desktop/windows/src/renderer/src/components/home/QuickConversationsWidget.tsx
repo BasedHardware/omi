@@ -74,9 +74,9 @@ export function QuickConversationsWidget({
   }, [userId, fetchConvs])
 
   useEffect(() => {
-    if (pathname !== '/home') return
+    if (pathname !== '/home' || !userId) return
     return fetchConvs()
-  }, [pathname, fetchConvs])
+  }, [pathname, userId, fetchConvs])
 
   // Still loading — withhold rendering so the parent can reveal all widgets together.
   if (!convs) return null

@@ -108,7 +108,7 @@ export function NameSpeakerSheet({ target, people, onClose, onSave, onCreatePers
           {/* Speaker preview card */}
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/30">
-              {target.rawLabel.replace(/^SPEAKER_0*/, 'Speaker ')}
+              {target.rawLabel.replace(/^SPEAKER_0*(\d+)/, 'Speaker $1')}
             </p>
             <p className="line-clamp-2 text-sm text-white/60">
               "{target.previewText.slice(0, 120)}{target.previewText.length > 120 ? '…' : ''}"
@@ -186,7 +186,7 @@ export function NameSpeakerSheet({ target, people, onClose, onSave, onCreatePers
                 </button>
               </div>
             )}
-            {duplicateError && (
+            {addingNew && duplicateError && (
               <p className="mt-1 text-xs text-red-400">A person with that name already exists.</p>
             )}
           </div>

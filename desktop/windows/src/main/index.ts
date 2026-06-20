@@ -398,14 +398,14 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Bluetooth: allow renderer access to Web Bluetooth API.
-  // `setPermissionCheckHandler` gates whether the browser API is exposed;
-  // `setDevicePermissionHandler` auto-grants previously-seen device access.
-  // Cast to `unknown` first: Electron's TS defs don't include 'bluetooth' yet
-  // but the runtime does support it (added in Electron 22 / Chromium 100).
+  // Gate API access to only the permissions this app actively uses.
+  // `setPermissionCheckHandler` controls whether the browser API is exposed at all;
+  // `setDevicePermissionHandler` below auto-grants previously-seen BLE devices.
+  // Cast to unknown: Electron's TS defs don't include 'bluetooth' yet (added
+  // in Electron 22 / Chromium 100).
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
-    if ((permission as unknown as string) === 'bluetooth') return true
-    return true // permissive for a local Electron app
+    const p = permission as string
+    return p === 'bluetooth' || p === 'media' || p === 'display-capture' || p === 'notifications'
   })
   session.defaultSession.setDevicePermissionHandler((details) => {
     return (details.deviceType as unknown as string) === 'bluetooth'
