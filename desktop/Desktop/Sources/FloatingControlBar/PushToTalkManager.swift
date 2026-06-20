@@ -63,7 +63,22 @@ class PushToTalkManager: ObservableObject {
     self.barState = barState
     hasMicPermission = AudioCaptureService.checkPermission()
     installEventMonitors()
+    warmUpBackend()
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
+  }
+
+  /// Pre-warm the desktop-backend connection (DNS + TLS + Cloud Run cold start)
+  /// so the FIRST PTT query doesn't pay ~2-3s of cold-start latency on top of the
+  /// normal response time (measured: cold first call ~4.2s vs ~1.5-2.2s warm).
+  /// Fire-and-forget; any failure is harmless.
+  private func warmUpBackend() {
+    Task.detached(priority: .utility) {
+      let base = await APIClient.shared.rustBackendURL
+      guard !base.isEmpty, let url = URL(string: base) else { return }
+      var req = URLRequest(url: url, timeoutInterval: 5)
+      req.httpMethod = "HEAD"
+      _ = try? await URLSession.shared.data(for: req)
+    }
   }
 
   func cleanup() {
