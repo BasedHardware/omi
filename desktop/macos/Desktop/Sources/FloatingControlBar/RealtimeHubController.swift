@@ -272,22 +272,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  /// The user's configured language as an English display name (e.g. "English"), or nil
-  /// when on auto-detect (multi) — passed to the system instruction to bias the reply
-  /// language without hard-pinning it, so a mis-detected utterance defaults to the user's
-  /// language while they can still switch languages mid-conversation.
-  private static func primaryLanguageName() -> String? {
-    let s = AssistantSettings.shared
-    if s.effectiveTranscriptionLanguage == "multi" { return nil }  // auto-detect → pure detection
-    let code = s.transcriptionLanguage
-    guard !code.isEmpty, code != "multi", code != "auto" else { return nil }
-    let base = String(code.prefix(2))
-    return Locale(identifier: "en").localizedString(forLanguageCode: base)?.capitalized
-  }
-
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let instructions = RealtimeHubTools.systemInstruction(
-      aboutUser: aboutUserCard, primaryLanguage: Self.primaryLanguageName())
+    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
     let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
     session = s
     sessionProvider = provider

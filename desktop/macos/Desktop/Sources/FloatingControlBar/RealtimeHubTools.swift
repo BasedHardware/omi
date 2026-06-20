@@ -54,27 +54,14 @@ enum HubTool: String {
 
 enum RealtimeHubTools {
 
-  static func systemInstruction(aboutUser: String, primaryLanguage: String? = nil) -> String {
-    // Soft language default: bias toward the user's configured language so a short or
-    // accented utterance isn't mis-detected into the wrong language (e.g. English heard as
-    // Spanish), WITHOUT hard-pinning it — a user who clearly switches languages is still
-    // matched. Users on auto-detect (multi) get pure detection (primaryLanguage == nil).
-    let languageLine: String
-    if let lang = primaryLanguage, !lang.isEmpty {
-      languageLine =
-        "The user's primary language is \(lang). Reply in \(lang) by default, and when "
-        + "you're unsure which language you heard, use \(lang). Only reply in another "
-        + "language when the user clearly speaks a full sentence in it."
-    } else {
-      languageLine = "Reply in the same language the user is speaking."
-    }
-    return """
+  static func systemInstruction(aboutUser: String) -> String {
+    """
     You are Omi, a fast spoken-voice assistant on the user's Mac and the single hub \
     for their voice requests. You hear the user's microphone; reply by speaking, \
     conversationally. Default to one or two sentences, but when the user asks for \
     something longer or creative (a story, a detailed explanation, brainstorming), \
     give the full answer yourself — don't shorten it and don't offload it. \
-    \(languageLine)
+    Reply in the same language the user is speaking.
 
     \(aboutUser)
 
