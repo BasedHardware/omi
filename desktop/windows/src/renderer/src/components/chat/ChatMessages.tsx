@@ -33,20 +33,58 @@ function RevealMarkdown({
   return <Markdown text={text.slice(0, shown)} />
 }
 
+/** Animated 3-dot typing indicator — mirrors macOS TypingIndicator component */
+function TypingIndicator(): React.JSX.Element {
+  return (
+    <span className="flex items-center gap-[3px] py-0.5">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="typing-dot inline-block h-[5px] w-[5px] rounded-full bg-white/50"
+        />
+      ))}
+    </span>
+  )
+}
+
+// macOS-exact bubble spec:
+//   User:      bg #43389F (OmiColors.userBubble), corner 20pt continuous, sharp bottom-right
+//   Assistant: bg #252525 @ 95% opacity (OmiColors.backgroundTertiary), sharp bottom-left
+//   Padding:   14px horiz / 10px vert (matches .padding(.horizontal, 14).padding(.vertical, 10))
+//   Gap:       18pt between messages (LazyVStack spacing: 18)
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
-    user: 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white select-text',
+    user:
+      'bg-[#43389F] ml-auto max-w-[85%] rounded-[20px] rounded-br-[6px] px-[14px] py-[10px] text-sm leading-snug text-white select-text',
     assistant:
-      'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75 select-text'
+      'bg-[#252525]/95 mr-auto max-w-[85%] rounded-[20px] rounded-bl-[6px] px-[14px] py-[10px] text-sm leading-snug text-white/85 select-text'
   },
-  // Same bubble design as the main window (Home) — shape, padding, asymmetric
-  // corner, and the bubble-in entrance animation — but keeping the overlay's
-  // neutral colors (the floating bar's dark acrylic, not Home's accent/white).
   overlay: {
     user: 'bubble-in ml-auto w-fit max-w-[80%] rounded-2xl rounded-br-md bg-neutral-700/70 px-3.5 py-2 text-sm leading-snug text-neutral-100 select-text',
     assistant:
       'bubble-in mr-auto w-fit max-w-[80%] rounded-2xl rounded-bl-md bg-neutral-800/60 px-3.5 py-2 text-sm leading-snug text-neutral-100 select-text'
   }
+}
+
+// Message truncation at 500 chars — matches macOS behavior
+const TRUNCATE_AT = 500
+
+function TruncatedContent({ text }: { text: string }): React.JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  if (text.length <= TRUNCATE_AT || expanded) {
+    return <Markdown text={text} />
+  }
+  return (
+    <>
+      <Markdown text={text.slice(0, TRUNCATE_AT) + '…'} />
+      <button
+        onClick={() => setExpanded(true)}
+        className="mt-1 text-[11px] text-white/40 underline-offset-2 hover:text-white/70 hover:underline"
+      >
+        Show more
+      </button>
+    </>
+  )
 }
 
 function CitationCards({
@@ -90,8 +128,6 @@ function CitationCards({
           </>
         )
         return variant === 'overlay' ? (
-          // In the overlay, <Link> would navigate inside the overlay window (broken).
-          // Instead, call openMainRoute() which hides the overlay and navigates the main window.
           <button
             key={c.id}
             onClick={() => window.omiOverlay?.openMainRoute(`/conversations/${c.id}`)}
@@ -109,6 +145,7 @@ function CitationCards({
   )
 }
 
+/** Icon-only copy button — matches macOS (doc.on.doc icon, no text label) */
 function CopyMsgButton({ text }: { text: string }): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   return (
@@ -121,23 +158,21 @@ function CopyMsgButton({ text }: { text: string }): React.JSX.Element {
       }}
       aria-label="Copy message"
       title="Copy message"
-      className="mt-1.5 flex items-center gap-1 self-start rounded-md border border-white/[0.10] bg-white/[0.04] px-2 py-1 text-[11px] text-white/45 transition-all hover:border-white/20 hover:bg-white/[0.09] hover:text-white/80"
+      className="mt-1 self-start rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/[0.06] hover:text-white/70"
     >
       {copied ? (
-        <Check className="h-3 w-3 text-green-400" strokeWidth={2.5} />
+        <Check className="h-3.5 w-3.5 text-green-400" strokeWidth={2.5} />
       ) : (
-        <Copy className="h-3 w-3" strokeWidth={2} />
+        <Copy className="h-3.5 w-3.5" strokeWidth={2} />
       )}
-      {copied ? 'Copied' : 'Copy'}
     </button>
   )
 }
 
 /**
  * Shared chat message list used by both the main window (Home) and the overlay.
- * Owns bubble styling (per `variant`), markdown rendering, and the smooth reveal
- * of the live assistant message. Callers provide their own scroll container.
- * `suggestions` + `onSuggest` render contextual follow-up chips after the last AI reply.
+ * Main variant matches macOS exactly: purple user bubbles, dark-grey assistant bubbles,
+ * 20pt continuous corners, 14/10px padding, 18px gap, icon-only copy, typing dots.
  */
 export function ChatMessages({
   messages,
@@ -153,8 +188,10 @@ export function ChatMessages({
   onSuggest?: (text: string) => void
 }): React.JSX.Element {
   const cls = BUBBLE[variant]
+  // 18px gap between messages matches macOS LazyVStack(spacing: 18)
+  const gapClass = variant === 'main' ? 'flex flex-col gap-[18px]' : 'flex flex-col gap-3'
   return (
-    <>
+    <div className={gapClass}>
       {messages.map((m, i) => {
         const isLast = i === messages.length - 1
         const isStreaming = isLast && sending && m.role === 'assistant'
@@ -163,9 +200,17 @@ export function ChatMessages({
             <div className={m.role === 'user' ? cls.user : cls.assistant}>
               {m.role === 'assistant' ? (
                 m.content ? (
-                  <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
+                  variant === 'main' ? (
+                    isStreaming ? (
+                      <RevealMarkdown text={m.content} startRevealed={false} />
+                    ) : (
+                      <TruncatedContent text={m.content} />
+                    )
+                  ) : (
+                    <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
+                  )
                 ) : sending ? (
-                  '…'
+                  <TypingIndicator />
                 ) : (
                   ''
                 )
@@ -179,7 +224,7 @@ export function ChatMessages({
             {m.role === 'assistant' && m.citations && m.citations.length > 0 && (
               <CitationCards citations={m.citations} variant={variant} />
             )}
-            {/* Suggestion chips: only on the last AI message, when not streaming, main variant */}
+            {/* Suggestion chips — only on the last AI message when not streaming (main variant) */}
             {isLast && m.role === 'assistant' && !sending && variant === 'main' && suggestions && suggestions.length > 0 && onSuggest && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {suggestions.map((s) => (
@@ -196,6 +241,6 @@ export function ChatMessages({
           </div>
         )
       })}
-    </>
+    </div>
   )
 }

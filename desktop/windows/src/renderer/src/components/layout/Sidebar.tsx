@@ -126,7 +126,7 @@ function AudioBars(): React.JSX.Element {
         <span
           key={i}
           ref={(el) => { barsRef.current[i] = el }}
-          className="w-[2px] origin-bottom rounded-sm bg-[color:var(--accent)]"
+          className="w-[3px] origin-bottom rounded-sm bg-[color:var(--accent)]"
           style={{ height: '100%', transform: `scaleY(${BAR_MIN})` }}
         />
       ))}
@@ -349,7 +349,8 @@ export function Sidebar(): React.JSX.Element {
 
   const linkClass = (active: boolean): string =>
     cn(
-      'flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm font-medium transition-[color] duration-150',
+      // px-4 (16px) matches macOS horizontal padding; text-[13px] matches macOS .scaledFont(size:13)
+      'flex items-center gap-3 rounded-xl px-4 py-2 text-[13px] font-medium transition-[color] duration-200',
       active ? 'nav-active' : cn('text-white/50 hover:text-white/80', HOVER)
     )
 
@@ -370,7 +371,7 @@ export function Sidebar(): React.JSX.Element {
       )}
     >
       <Icon
-        className={cn('h-4 w-4 shrink-0', on && 'text-[color:var(--accent)]')}
+        className={cn('h-[18px] w-[18px] shrink-0', on && 'text-[color:var(--accent)]')}
         strokeWidth={1.75}
       />
       {label(text)}
@@ -412,7 +413,7 @@ export function Sidebar(): React.JSX.Element {
       className={cn(
         'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a] px-2 py-3',
         'transition-[width] duration-200 ease-out',
-        collapsed ? 'w-16' : 'w-60'
+        collapsed ? 'w-16' : 'w-[260px]'
       )}
     >
       {/* Top row: logo + collapse toggle */}
@@ -470,7 +471,7 @@ export function Sidebar(): React.JSX.Element {
                   <>
                     {isLoading ? (
                       <Loader2
-                        className="h-4 w-4 shrink-0 animate-spin text-[color:var(--accent)]"
+                        className="h-[18px] w-[18px] shrink-0 animate-spin text-[color:var(--accent)]"
                         strokeWidth={1.75}
                       />
                     ) : isLive ? (
@@ -478,7 +479,7 @@ export function Sidebar(): React.JSX.Element {
                     ) : (
                       <Icon
                         className={cn(
-                          'h-4 w-4 shrink-0 transition-colors duration-150',
+                          'h-[18px] w-[18px] shrink-0 transition-colors duration-200',
                           active ? 'text-[color:var(--accent)]' : 'text-white/50'
                         )}
                         strokeWidth={1.75}
@@ -523,13 +524,13 @@ export function Sidebar(): React.JSX.Element {
             <>
               {loadingNav === '/persona' ? (
                 <Loader2
-                  className="h-4 w-4 shrink-0 animate-spin text-[color:var(--accent)]"
+                  className="h-[18px] w-[18px] shrink-0 animate-spin text-[color:var(--accent)]"
                   strokeWidth={1.75}
                 />
               ) : (
                 <UserIcon
                   className={cn(
-                    'h-4 w-4 shrink-0 transition-colors duration-150',
+                    'h-[18px] w-[18px] shrink-0 transition-colors duration-200',
                     isActive ? 'text-[color:var(--accent)]' : 'text-white/50'
                   )}
                   strokeWidth={1.75}
@@ -691,12 +692,12 @@ export function Sidebar(): React.JSX.Element {
               to={to}
               title={collapsed ? text : undefined}
               className={cn(
-                'flex items-center rounded-xl px-2.5 py-1.5 text-sm transition-colors duration-150',
+                'flex items-center rounded-xl px-4 py-1.5 text-[13px] transition-colors duration-200',
                 !collapsed && 'gap-3',
                 active ? 'nav-active' : cn('text-white/40 hover:text-white/70', HOVER)
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+              <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
               {label(text)}
             </Link>
           )
