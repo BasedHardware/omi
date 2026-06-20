@@ -110,9 +110,35 @@ export type ClaudeAcpChatResponse = {
   text: string
 }
 
-export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
+export type ByokProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'deepgram'
+  | 'openrouter'
+  | 'elevenlabs'
 
-export type ByokChatProvider = Exclude<ByokProvider, 'deepgram'>
+export type ByokChatProvider = Exclude<ByokProvider, 'deepgram' | 'elevenlabs'>
+
+export type ModelPurpose = 'chat' | 'agent' | 'memory'
+
+export type ModelProvider = 'omi' | ByokChatProvider
+
+export type AvailableModel = {
+  id: string
+  provider: ModelProvider
+  providerLabel: string
+  model: string
+  label: string
+  configured: boolean
+  source: 'hosted' | 'byok'
+  reason?: string
+}
+
+export type ModelListResult = {
+  models: AvailableModel[]
+  fetchedAt: number
+}
 
 export type ByokProviderStatus = {
   provider: ByokProvider
@@ -152,6 +178,7 @@ export type ByokValidationResult = {
 
 export type ByokChatRequest = {
   messages: ChatMessage[]
+  modelId?: string
 }
 
 export type ByokChatResponse = {
@@ -203,9 +230,9 @@ export type LocalConversation = {
 }
 
 export type ListenSource = 'mic' | 'system'
-export type TranscriptionBackend = 'omi' | 'local-parakeet'
-export type SttMode = 'auto' | 'cloud' | 'local-parakeet'
-export type RealtimeVoiceProvider = 'omi-relay' | 'openai-byok' | 'local-kokoro'
+export type TranscriptionBackend = 'omi' | 'local-parakeet' | 'elevenlabs'
+export type SttMode = 'auto' | 'cloud' | 'local-parakeet' | 'elevenlabs'
+export type RealtimeVoiceProvider = 'omi-relay' | 'openai-byok' | 'local-kokoro' | 'elevenlabs'
 
 export type LocalSttStatus = {
   backend: 'parakeet'
@@ -260,6 +287,19 @@ export type LocalTtsSynthesizeResult = {
   audioPath: string
   audioUrl: string
   mimeType: 'audio/wav'
+}
+
+export type ElevenLabsTtsSynthesizeRequest = {
+  text: string
+  voiceId?: string
+  modelId?: string
+  outputFormat?: string
+}
+
+export type ElevenLabsTtsSynthesizeResult = {
+  audioPath: string
+  audioUrl: string
+  mimeType: 'audio/mpeg'
 }
 
 export type ListenStartArgs = {
@@ -403,6 +443,9 @@ export type OmiBridgeApi = {
   /** Probe the local Kokoro TTS runtime used for on-device assistant speech. */
   localTtsStatus: () => Promise<LocalTtsStatus>
   localTtsSynthesize: (request: LocalTtsSynthesizeRequest) => Promise<LocalTtsSynthesizeResult>
+  elevenLabsTtsSynthesize: (
+    request: ElevenLabsTtsSynthesizeRequest
+  ) => Promise<ElevenLabsTtsSynthesizeResult>
   observabilityCapture: (event: ObservabilityEvent) => void
   observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) => void
   localAgentStatus: () => Promise<LocalAgentStatus>
@@ -484,6 +527,7 @@ export type OmiBridgeApi = {
   byokTest: (request: ByokTestRequest) => Promise<ByokValidationResult>
   byokUse: (request: ByokUseRequest) => Promise<ByokStatus>
   byokChatSend: (request: ByokChatRequest) => Promise<ByokChatResponse>
+  byokListModels: () => Promise<ModelListResult>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
