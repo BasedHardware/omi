@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2 } from 'lucide-react'
+import {
+  Monitor,
+  Clock,
+  CalendarClock,
+  Ban,
+  Brain,
+  Lightbulb,
+  X,
+  Mic,
+  Trash2,
+  Activity
+} from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
@@ -7,6 +18,7 @@ import { Toggle } from '../Toggle'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import type {
   RewindSettings,
+  RewindStatus,
   ScreenSynthState,
   InsightSettings
 } from '../../../../../shared/types'
@@ -15,8 +27,42 @@ import type {
 // call via Omi's proxy, so longer intervals mean less backend cost.
 const INSIGHT_INTERVALS = [15, 20, 30, 60]
 
+function formatStatusTime(ts: number | null): string {
+  if (ts == null) return 'No frames yet'
+  return new Date(ts).toLocaleString()
+}
+
+function retentionLabel(status: RewindStatus | null, days: number | undefined): string {
+  const retentionDays = days ?? 14
+  if (!status || status.totalFrameCount === 0) return `${retentionDays} days, no stored frames`
+  const oldest = formatStatusTime(status.oldestFrameTs)
+  return `${retentionDays} days, oldest ${oldest}`
+}
+
+function StatusTile({
+  label,
+  value,
+  tone = 'neutral'
+}: {
+  label: string
+  value: string
+  tone?: 'good' | 'warn' | 'neutral'
+}): React.JSX.Element {
+  const dot = tone === 'good' ? 'bg-emerald-400' : tone === 'warn' ? 'bg-amber-300' : 'bg-white/30'
+  return (
+    <div className="min-w-0 rounded-lg bg-white/[0.04] px-3 py-2">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-text-tertiary">
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-1 truncate text-sm text-text-secondary">{value}</div>
+    </div>
+  )
+}
+
 export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
+  const [rewindStatus, setRewindStatus] = useState<RewindStatus | null>(null)
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
@@ -38,13 +84,17 @@ export function RewindTab(): React.JSX.Element {
 
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
+    void window.omi.rewindStatus().then(setRewindStatus)
     void window.omi.screenSynthGetState().then(setScreenSynth)
     void window.omi.insightGetSettings().then(setInsight)
   }, [])
 
   const saveRewind = (next: RewindSettings): void => {
     setRewind(next) // optimistic
-    void window.omi.rewindSetSettings(next).then(setRewind)
+    void window.omi.rewindSetSettings(next).then((saved) => {
+      setRewind(saved)
+      void window.omi.rewindStatus().then(setRewindStatus)
+    })
   }
   const addExcludedApp = (): void => {
     const name = newExcluded.trim()
@@ -67,6 +117,13 @@ export function RewindTab(): React.JSX.Element {
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
     setInsight(await window.omi.insightSetSettings(patch))
   }
+  const refreshRewindStatus = async (): Promise<void> => {
+    setRewindStatus(await window.omi.rewindStatus())
+  }
+  const pruneRewindNow = async (): Promise<void> => {
+    await window.omi.rewindPruneNow()
+    await refreshRewindStatus()
+  }
 
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
@@ -85,11 +142,7 @@ export function RewindTab(): React.JSX.Element {
         subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
         keywords="continuous recording microphone audio always-on"
         control={
-          <Toggle
-            on={continuousRec}
-            onChange={toggleContinuous}
-            label="Continuous recording"
-          />
+          <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
         }
       />
       <SettingRow
@@ -137,14 +190,24 @@ export function RewindTab(): React.JSX.Element {
         control={
           <select
             value={rewind?.intervalMs ?? 1000}
-            onChange={(e) => rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })}
+            onChange={(e) =>
+              rewind && saveRewind({ ...rewind, intervalMs: Number(e.target.value) })
+            }
             disabled={!rewind}
             className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-40"
           >
-            <option value={1000} className="bg-neutral-900">Every 1s</option>
-            <option value={2000} className="bg-neutral-900">Every 2s</option>
-            <option value={5000} className="bg-neutral-900">Every 5s</option>
-            <option value={10000} className="bg-neutral-900">Every 10s</option>
+            <option value={1000} className="bg-neutral-900">
+              Every 1s
+            </option>
+            <option value={2000} className="bg-neutral-900">
+              Every 2s
+            </option>
+            <option value={5000} className="bg-neutral-900">
+              Every 5s
+            </option>
+            <option value={10000} className="bg-neutral-900">
+              Every 10s
+            </option>
           </select>
         }
       />
@@ -172,6 +235,56 @@ export function RewindTab(): React.JSX.Element {
         }
       />
       <SettingRow
+        icon={Activity}
+        dot={rewind?.captureEnabled ? 'on' : 'off'}
+        title="Rewind status"
+        subtitle="Capture, OCR, retention, and search-index health for this PC."
+        keywords="rewind status diagnostics ocr indexed frames capture retention"
+        control={
+          <button onClick={() => void refreshRewindStatus()} className="btn-ghost">
+            Refresh
+          </button>
+        }
+      >
+        <div className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StatusTile
+              label="Capture"
+              value={rewind == null ? 'Loading...' : rewind.captureEnabled ? 'Enabled' : 'Disabled'}
+              tone={rewind == null ? 'neutral' : rewind.captureEnabled ? 'good' : 'warn'}
+            />
+            <StatusTile
+              label="Last frame"
+              value={formatStatusTime(rewindStatus?.latestFrameTs ?? null)}
+              tone={rewindStatus?.latestFrameTs ? 'good' : 'warn'}
+            />
+            <StatusTile
+              label="OCR backlog"
+              value={`${rewindStatus?.ocrBacklogCount ?? 0} frame${(rewindStatus?.ocrBacklogCount ?? 0) === 1 ? '' : 's'}`}
+              tone={(rewindStatus?.ocrBacklogCount ?? 0) > 0 ? 'warn' : 'good'}
+            />
+            <StatusTile
+              label="Retention"
+              value={retentionLabel(rewindStatus, rewind?.retentionDays)}
+              tone="neutral"
+            />
+            <StatusTile
+              label="Indexed frames"
+              value={`${rewindStatus?.indexedFrameCount ?? 0} of ${rewindStatus?.totalFrameCount ?? 0}`}
+              tone={(rewindStatus?.indexedFrameCount ?? 0) > 0 ? 'good' : 'neutral'}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3 text-xs text-text-tertiary">
+            <span>
+              Search uses indexed OCR text; backlog frames may not appear in text search yet.
+            </span>
+            <button onClick={() => void pruneRewindNow()} className="btn-ghost shrink-0">
+              Prune now
+            </button>
+          </div>
+        </div>
+      </SettingRow>
+      <SettingRow
         icon={Ban}
         title="Excluded apps"
         subtitle="Rewind never screenshots while one of these apps is in focus. Matched loosely (e.g. “chrome” covers Google Chrome)."
@@ -191,7 +304,11 @@ export function RewindTab(): React.JSX.Element {
               placeholder="App name (e.g. Banking)"
               className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={addExcludedApp} disabled={!newExcluded.trim()} className="btn-ghost disabled:opacity-40">
+            <button
+              onClick={addExcludedApp}
+              disabled={!newExcluded.trim()}
+              className="btn-ghost disabled:opacity-40"
+            >
               Add
             </button>
           </div>
@@ -250,7 +367,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={screenSynth.denylist.join('\n')}
               onBlur={(e) =>
                 void patchScreenSynth({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
@@ -311,8 +431,12 @@ export function RewindTab(): React.JSX.Element {
                 }
                 className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
               >
-                <option value="omi" className="bg-neutral-900">Omi notification</option>
-                <option value="native" className="bg-neutral-900">Windows notification</option>
+                <option value="omi" className="bg-neutral-900">
+                  Omi notification
+                </option>
+                <option value="native" className="bg-neutral-900">
+                  Windows notification
+                </option>
               </select>
             </label>
             <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
@@ -324,7 +448,10 @@ export function RewindTab(): React.JSX.Element {
               defaultValue={insight.denylist.join('\n')}
               onBlur={(e) =>
                 void patchInsight({
-                  denylist: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean)
+                  denylist: e.target.value
+                    .split('\n')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
                 })
               }
               className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"

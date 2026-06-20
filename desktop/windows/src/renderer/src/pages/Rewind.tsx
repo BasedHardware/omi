@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { RewindFrame } from '../../../shared/types'
 import { useRewind } from '../hooks/useRewind'
 import { RewindPlayer } from '../components/rewind/RewindPlayer'
@@ -21,6 +22,7 @@ function uniqueFrames(frames: RewindFrame[]): RewindFrame[] {
 
 export function Rewind(): React.JSX.Element {
   const r = useRewind()
+  const navigate = useNavigate()
   const { frames, bounds, cursorTs, setCursorTs, playing, setPlaying, results, search } = r
   const [activeQuery, setActiveQuery] = useState('')
   const [searching, setSearching] = useState(false)
@@ -92,7 +94,11 @@ export function Rewind(): React.JSX.Element {
         {searchError && <div className="mt-2 text-xs text-red-300">{searchError}</div>}
       </div>
 
-      <RewindPlayer frames={playerFrames} cursorTs={cursorTs} />
+      <RewindPlayer
+        frames={playerFrames}
+        cursorTs={cursorTs}
+        onOpenSettings={() => navigate('/settings?tab=rewind')}
+      />
 
       <div className="flex h-44 shrink-0 flex-col gap-2 overflow-hidden">
         {inSearchMode ? (
@@ -100,6 +106,7 @@ export function Rewind(): React.JSX.Element {
             groups={results}
             query={activeQuery}
             searching={searching}
+            onOpenSettings={() => navigate('/settings?tab=rewind')}
             onJump={(ts) => {
               setCursorTs(ts)
             }}

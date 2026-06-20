@@ -46,12 +46,14 @@ export function SearchResultsFilmstrip({
   groups,
   onJump,
   query,
-  searching
+  searching,
+  onOpenSettings
 }: {
   groups: RewindSearchGroup[]
   query: string
   searching: boolean
   onJump: (ts: number) => void
+  onOpenSettings?: () => void
 }): React.JSX.Element {
   if (searching) {
     return (
@@ -63,8 +65,13 @@ export function SearchResultsFilmstrip({
 
   if (groups.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded bg-white/5 px-4 text-center text-sm text-white/45">
-        No Rewind OCR matches for &quot;{query}&quot;.
+      <div className="flex h-full flex-col items-center justify-center gap-2 rounded bg-white/5 px-4 text-center text-sm text-white/45">
+        <span>No Rewind OCR matches for &quot;{query}&quot;.</span>
+        {onOpenSettings && (
+          <button onClick={onOpenSettings} className="btn-ghost">
+            Check Rewind settings
+          </button>
+        )}
       </div>
     )
   }

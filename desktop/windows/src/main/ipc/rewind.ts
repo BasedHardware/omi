@@ -1,7 +1,13 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import { getPrimarySourceId } from '../rewind/sourceId'
-import { getRewindFrame, listRewindFrames, searchRewindFrames, rewindDayBounds } from './db'
+import {
+  getRewindFrame,
+  listRewindFrames,
+  searchRewindFrames,
+  rewindDayBounds,
+  rewindStatusStats
+} from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
   getRewindSettings,
@@ -46,6 +52,7 @@ export function registerRewindHandlers(): void {
     }
     return current
   })
+  ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this

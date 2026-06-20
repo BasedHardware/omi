@@ -245,6 +245,7 @@ export type OmiBridgeApi = {
   rewindFrameById: (id: number) => Promise<RewindFrameImageResult>
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
+  rewindStatus: () => Promise<RewindStatus>
   rewindPruneNow: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
@@ -642,6 +643,14 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+}
+
+export type RewindStatus = {
+  latestFrameTs: number | null
+  oldestFrameTs: number | null
+  totalFrameCount: number
+  indexedFrameCount: number
+  ocrBacklogCount: number
 }
 
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---
