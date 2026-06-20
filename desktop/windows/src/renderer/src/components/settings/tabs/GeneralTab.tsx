@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react'
-import { MessagesSquare, ZoomIn } from 'lucide-react'
+import { MessagesSquare, ZoomIn, LogIn, Pin, Bell } from 'lucide-react'
 import { getPreferences, setPreferences, onPreferencesChange } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
+import { Toggle } from '../Toggle'
 
 export function GeneralTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
   const [fontScale, setFontScale] = useState(getPreferences().fontScale ?? 1.0)
-  useEffect(() => onPreferencesChange((p) => setFontScale(p.fontScale ?? 1.0)), [])
+  const [launchAtStartup, setLaunchAtStartup] = useState<boolean>(false)
+  const [alwaysOnTop, setAlwaysOnTop] = useState<boolean>(false)
+  const [notifSounds, setNotifSounds] = useState<boolean>(getPreferences().notificationSounds ?? true)
+
+  useEffect(() => onPreferencesChange((p) => {
+    setFontScale(p.fontScale ?? 1.0)
+    setNotifSounds(p.notificationSounds ?? true)
+  }), [])
+
+  useEffect(() => {
+    void window.omi.getLoginItem?.().then((v) => setLaunchAtStartup(v ?? false))
+    void window.omi.getAlwaysOnTop?.().then((v) => setAlwaysOnTop(v ?? false))
+  }, [])
 
   return (
     <>
@@ -34,6 +47,61 @@ export function GeneralTab(): React.JSX.Element {
           </select>
         }
       />
+
+      <SettingRow
+        icon={LogIn}
+        dot={launchAtStartup ? 'on' : 'off'}
+        title="Launch at startup"
+        subtitle="Start Omi automatically when you log in to Windows so it's always ready in the system tray."
+        keywords="startup login launch boot autostart windows"
+        control={
+          <Toggle
+            on={launchAtStartup}
+            onChange={async (on) => {
+              setLaunchAtStartup(on)
+              await window.omi.setLoginItem?.(on)
+            }}
+            label="Launch at startup"
+          />
+        }
+      />
+
+      <SettingRow
+        icon={Pin}
+        dot={alwaysOnTop ? 'on' : 'off'}
+        title="Always on top"
+        subtitle="Keep the Omi window floating above all other apps — useful when referencing Omi while working in another application."
+        keywords="always on top float window pin foreground"
+        control={
+          <Toggle
+            on={alwaysOnTop}
+            onChange={async (on) => {
+              setAlwaysOnTop(on)
+              await window.omi.setAlwaysOnTop?.(on)
+            }}
+            label="Always on top"
+          />
+        }
+      />
+
+      <SettingRow
+        icon={Bell}
+        dot={notifSounds ? 'on' : 'off'}
+        title="Notification sounds"
+        subtitle="Play a sound when Omi sends a system notification (e.g. insight alerts, recording saved)."
+        keywords="notification sound bell audio alert chime"
+        control={
+          <Toggle
+            on={notifSounds}
+            onChange={(on) => {
+              setNotifSounds(on)
+              setPreferences({ notificationSounds: on })
+            }}
+            label="Notification sounds"
+          />
+        }
+      />
+
       <SettingRow
         icon={ZoomIn}
         title="Font scale"

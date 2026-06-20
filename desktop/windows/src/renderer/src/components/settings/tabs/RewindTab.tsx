@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2 } from 'lucide-react'
+import { Monitor, Clock, CalendarClock, Ban, Brain, Lightbulb, X, Mic, Trash2, BatteryLow, Activity } from 'lucide-react'
 import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
@@ -8,12 +8,20 @@ import { getPreferences, setPreferences } from '../../../lib/preferences'
 import type {
   RewindSettings,
   ScreenSynthState,
-  InsightSettings
+  InsightSettings,
+  AppUsageRecord
 } from '../../../../../shared/types'
 
-// Preset cadences offered for proactive insights (minutes). Each run is a Gemini
-// call via Omi's proxy, so longer intervals mean less backend cost.
 const INSIGHT_INTERVALS = [15, 20, 30, 60]
+
+// Extract the friendly app name from an exeName (e.g. "chrome.exe" → "Chrome")
+function friendlyName(record: AppUsageRecord): string {
+  return record.exeName
+    .replace(/\.exe$/i, '')
+    .replace(/[._-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim()
+}
 
 export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
@@ -36,22 +44,52 @@ export function RewindTab(): React.JSX.Element {
     setPreferences({ retentionMode: mode })
   }
 
+  // Battery optimization: reduce capture frequency on battery power
+  const [batteryOpt, setBatteryOpt] = useState(() => getPreferences().rewindBatteryOpt ?? true)
+  const [onBattery, setOnBattery] = useState<boolean | null>(null)
+
+  // Currently running apps (from usage tracker) — shown as quick-add pills
+  const [runningApps, setRunningApps] = useState<string[]>([])
+
   useEffect(() => {
     void window.omi.rewindGetSettings().then(setRewind)
     void window.omi.screenSynthGetState().then(setScreenSynth)
     void window.omi.insightGetSettings().then(setInsight)
+
+    // Load recently used apps for quick exclusion pills
+    void window.omi.getAppUsage().then((records) => {
+      const recentMs = Date.now() - 60 * 60 * 1000 // last 1 hour
+      const names = records
+        .filter((r) => r.lastUsed > recentMs && !BUILT_IN_EXCLUDED_APPS.includes(r.exeName.toLowerCase()))
+        .sort((a, b) => b.lastUsed - a.lastUsed)
+        .slice(0, 12)
+        .map(friendlyName)
+        .filter((n, i, arr) => n.length > 1 && arr.indexOf(n) === i)
+      setRunningApps(names)
+    }).catch(() => {})
+
+    // Check battery status
+    if ('getBattery' in navigator) {
+      void (navigator as unknown as { getBattery: () => Promise<{ charging: boolean; addEventListener: (e: string, cb: () => void) => void }> })
+        .getBattery()
+        .then((batt) => {
+          setOnBattery(!batt.charging)
+          batt.addEventListener('chargingchange', () => setOnBattery(!batt.charging))
+        })
+        .catch(() => {})
+    }
   }, [])
 
   const saveRewind = (next: RewindSettings): void => {
-    setRewind(next) // optimistic
+    setRewind(next)
     void window.omi.rewindSetSettings(next).then(setRewind)
   }
-  const addExcludedApp = (): void => {
-    const name = newExcluded.trim()
-    if (!rewind || !name) return
-    setNewExcluded('')
-    if (rewind.excludedApps.some((a) => a.toLowerCase() === name.toLowerCase())) return
-    saveRewind({ ...rewind, excludedApps: [...rewind.excludedApps, name] })
+  const addExcludedApp = (name?: string): void => {
+    const appName = (name ?? newExcluded).trim()
+    if (!rewind || !appName) return
+    if (!name) setNewExcluded('')
+    if (rewind.excludedApps.some((a) => a.toLowerCase() === appName.toLowerCase())) return
+    saveRewind({ ...rewind, excludedApps: [...rewind.excludedApps, appName] })
   }
   const removeExcludedApp = (app: string): void => {
     if (!rewind) return
@@ -68,13 +106,14 @@ export function RewindTab(): React.JSX.Element {
     setInsight(await window.omi.insightSetSettings(patch))
   }
 
-  // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
-  // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
   useEffect(() => {
     if (insight && !INSIGHT_INTERVALS.includes(insight.intervalMin)) {
       void patchInsight({ intervalMin: 15 })
     }
   }, [insight])
+
+  const isExcluded = (name: string): boolean =>
+    !!rewind?.excludedApps.some((a) => a.toLowerCase() === name.toLowerCase())
 
   return (
     <>
@@ -114,6 +153,8 @@ export function RewindTab(): React.JSX.Element {
           ))}
         </div>
       </SettingRow>
+
+      {/* Screen capture toggle (with monitoring status) */}
       <SettingRow
         icon={Monitor}
         dot={rewind?.captureEnabled ? 'on' : 'off'}
@@ -129,6 +170,46 @@ export function RewindTab(): React.JSX.Element {
           />
         }
       />
+
+      {/* Monitoring status row */}
+      {rewind?.captureEnabled && (
+        <SettingRow
+          icon={Activity}
+          dot={rewind.captureEnabled ? 'on' : 'off'}
+          title="Monitoring active"
+          subtitle="Rewind is actively capturing your screen. Frames are stored locally and OCR'd for search."
+          keywords="rewind monitoring active status running"
+        >
+          <div className="flex items-center gap-2 rounded-xl bg-green-500/10 px-4 py-3">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+            <span className="text-sm text-green-400">Screen recording is running</span>
+          </div>
+        </SettingRow>
+      )}
+
+      {/* Battery optimization */}
+      <SettingRow
+        icon={BatteryLow}
+        dot={batteryOpt ? 'on' : 'off'}
+        title="Battery optimization"
+        subtitle={
+          onBattery === true
+            ? 'Running on battery — capture interval is doubled to save power.'
+            : 'Reduce Rewind capture frequency when running on battery power.'
+        }
+        keywords="battery power saving optimization laptop"
+        control={
+          <Toggle
+            on={batteryOpt}
+            onChange={(on) => {
+              setBatteryOpt(on)
+              setPreferences({ rewindBatteryOpt: on })
+            }}
+            label="Battery optimization"
+          />
+        }
+      />
+
       <SettingRow
         icon={Clock}
         title="Capture interval"
@@ -174,7 +255,7 @@ export function RewindTab(): React.JSX.Element {
       <SettingRow
         icon={Ban}
         title="Excluded apps"
-        subtitle="Rewind never screenshots while one of these apps is in focus. Matched loosely (e.g. “chrome” covers Google Chrome)."
+        subtitle='Rewind never screenshots while one of these apps is in focus. Matched loosely (e.g. "chrome" covers Google Chrome).'
         keywords="rewind exclude block private app capture"
       >
         <div className="space-y-3">
@@ -191,10 +272,37 @@ export function RewindTab(): React.JSX.Element {
               placeholder="App name (e.g. Banking)"
               className="flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
             />
-            <button onClick={addExcludedApp} disabled={!newExcluded.trim()} className="btn-ghost disabled:opacity-40">
+            <button onClick={() => addExcludedApp()} disabled={!newExcluded.trim()} className="btn-ghost disabled:opacity-40">
               Add
             </button>
           </div>
+
+          {/* Currently Running Apps pills for quick exclusion */}
+          {runningApps.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs text-text-quaternary">Currently active — click to exclude:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {runningApps.map((app) => {
+                  const excluded = isExcluded(app)
+                  return (
+                    <button
+                      key={app}
+                      onClick={() => excluded ? removeExcludedApp(app) : addExcludedApp(app)}
+                      className={[
+                        'rounded-full px-2.5 py-1 text-xs transition-colors',
+                        excluded
+                          ? 'bg-red-500/20 text-red-300 line-through opacity-60'
+                          : 'bg-white/[0.07] text-text-tertiary hover:bg-white/[0.12] hover:text-text-secondary'
+                      ].join(' ')}
+                    >
+                      {app}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* User additions — removable. */}
           {rewind && rewind.excludedApps.length > 0 && (
             <ul className="flex flex-wrap gap-2">

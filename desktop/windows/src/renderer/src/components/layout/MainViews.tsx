@@ -12,6 +12,10 @@ import { Rewind } from '../../pages/Rewind'
 import { Insights } from '../../pages/Insights'
 import { Focus } from '../../pages/Focus'
 import { LiveConversation } from '../../pages/LiveConversation'
+import { Chat } from '../../pages/Chat'
+import { Persona } from '../../pages/Persona'
+import { Permissions } from '../../pages/Permissions'
+import { Help } from '../../pages/Help'
 
 // Every page stays mounted (inactive ones are just hidden) so switching tabs is
 // instant. But the pages take no props, so without memo they ALL re-render on
@@ -30,6 +34,10 @@ const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
 const FocusPanel = memo(Focus)
+const ChatPanel = memo(Chat)
+const PersonaPanel = memo(Persona)
+const PermissionsPanel = memo(Permissions)
+const HelpPanel = memo(Help)
 
 function panelClass(active: boolean): string {
   return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
@@ -53,8 +61,7 @@ export function MainViews(): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [])
 
-  // Home merges the old Chat and Record screens.
-  if (pathname === '/' || pathname === '/live' || pathname === '/chat') {
+  if (pathname === '/' || pathname === '/live') {
     return <Navigate to="/home" replace />
   }
 
@@ -77,6 +84,10 @@ export function MainViews(): React.JSX.Element {
   const isRewind = pathname === '/rewind'
   const isInsights = pathname === '/insights'
   const isFocus = pathname === '/focus'
+  const isChat = pathname === '/chat'
+  const isPersona = pathname === '/persona'
+  const isPermissions = pathname === '/permissions'
+  const isHelp = pathname === '/help'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -96,6 +107,12 @@ export function MainViews(): React.JSX.Element {
       <div className={panelClass(isRewind)}>{(isRewind || hydrateAll) && <RewindPanel />}</div>
       <div className={panelClass(isInsights)}>{(isInsights || hydrateAll) && <InsightsPanel />}</div>
       <div className={panelClass(isFocus)}>{(isFocus || hydrateAll) && <FocusPanel />}</div>
+      <div className={panelClass(isChat)}>{(isChat || hydrateAll) && <ChatPanel />}</div>
+      <div className={panelClass(isPersona)}>{(isPersona || hydrateAll) && <PersonaPanel />}</div>
+      <div className={panelClass(isPermissions)}>
+        {(isPermissions || hydrateAll) && <PermissionsPanel />}
+      </div>
+      <div className={panelClass(isHelp)}>{(isHelp || hydrateAll) && <HelpPanel />}</div>
     </div>
   )
 }

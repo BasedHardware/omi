@@ -15,6 +15,9 @@ import { SupportTab } from '../components/settings/tabs/SupportTab'
 import { BYOKTab } from '../components/settings/tabs/BYOKTab'
 import { NotificationsTab } from '../components/settings/tabs/NotificationsTab'
 import { DevicesTab } from '../components/settings/tabs/DevicesTab'
+import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
+import { AIChatTab } from '../components/settings/tabs/AIChatTab'
+import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { Memories } from './Memories'
 
 // The Memories tab renders the full Memories page (its own layout, brain map and
@@ -24,6 +27,7 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   general: GeneralTab,
   memories: undefined, // full-page — handled separately below
   rewind: RewindTab,
+  transcription: TranscriptionTab,
   integrations: IntegrationsTab,
   shortcuts: ShortcutsTab,
   privacy: PrivacyTab,
@@ -31,8 +35,10 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   advanced: AdvancedTab,
   notifications: NotificationsTab,
   devices: DevicesTab,
+  aichat: AIChatTab,
   byok: BYOKTab,
-  support: SupportTab
+  support: SupportTab,
+  about: AboutTab
 }
 
 const SETTINGS_TAB_KEY = 'omi.settings.lastTab'
