@@ -797,6 +797,30 @@ CURSOR_SECRET_PRODUCTION_READINESS_PROOF = {
     ],
 }
 
+RUNTIME_CONFIG_SOURCE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_runtime_config_source_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_runtime_config_source_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Server-owned route-scoped runtime control/config source selection is defined for the global read gate "
+        "and write-convergence gate, but production-safe backend service-principal reads remain optional/explicit "
+        "and no route wiring or rollout approval is claimed."
+    ),
+    "covered_defaults": [
+        "route_scoped_global_read_gate_and_write_convergence_config_sources_selected",
+        "explicit_env_gates_required_before_any_production_config_read",
+        "backend_service_principal_read_only_config_source_proof",
+        "no_uid_session_memory_request_payload_cursor_token_or_client_override_dimensions",
+        "missing_stale_malformed_config_fails_closed",
+        "valid_config_source_selection_does_not_claim_runtime_wiring_or_rollout_approval",
+    ],
+}
+
 OBSERVABILITY_APPROVAL_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_observability_approval_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_observability_approval_readiness.py",
@@ -969,6 +993,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "write_convergence_tombstone_matrix_proof": WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
         "cursor_secret_readiness_proof": CURSOR_SECRET_READINESS_PROOF,
         "cursor_secret_production_readiness_proof": CURSOR_SECRET_PRODUCTION_READINESS_PROOF,
+        "runtime_config_source_readiness_proof": RUNTIME_CONFIG_SOURCE_READINESS_PROOF,
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
         "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
@@ -1010,6 +1035,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "write_convergence_tombstone_matrix_proof_present": True,
             "cursor_secret_readiness_proof_present": True,
             "cursor_secret_production_readiness_proof_present": True,
+            "runtime_config_source_readiness_proof_present": True,
             "observability_approval_readiness_proof_present": True,
             "canary_approval_source_readiness_proof_present": True,
             "canary_approval_production_readiness_proof_present": True,

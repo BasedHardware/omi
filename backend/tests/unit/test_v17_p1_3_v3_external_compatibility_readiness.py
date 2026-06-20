@@ -380,6 +380,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "write_convergence_tombstone_matrix_proof_present": True,
         "cursor_secret_readiness_proof_present": True,
         "cursor_secret_production_readiness_proof_present": True,
+        "runtime_config_source_readiness_proof_present": True,
         "observability_approval_readiness_proof_present": True,
         "canary_approval_source_readiness_proof_present": True,
         "canary_approval_production_readiness_proof_present": True,
