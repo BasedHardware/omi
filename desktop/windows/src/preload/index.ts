@@ -21,7 +21,12 @@ import type {
   LocalAgentChatToolName,
   LocalAgentSetupPromptArgs,
   LocalAgentToolArguments,
-  PiChatRequest
+  PiChatRequest,
+  ByokProvider,
+  ByokSaveRequest,
+  ByokTestRequest,
+  ByokUseRequest,
+  ByokChatRequest
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -85,6 +90,12 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
   piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1',
   piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
+  byokStatus: () => ipcRenderer.invoke('byok:status'),
+  byokSave: (request: ByokSaveRequest) => ipcRenderer.invoke('byok:save', request),
+  byokDelete: (provider: ByokProvider) => ipcRenderer.invoke('byok:delete', provider),
+  byokTest: (request: ByokTestRequest) => ipcRenderer.invoke('byok:test', request),
+  byokUse: (request: ByokUseRequest) => ipcRenderer.invoke('byok:use', request),
+  byokChatSend: (request: ByokChatRequest) => ipcRenderer.invoke('byok:chatSend', request),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),

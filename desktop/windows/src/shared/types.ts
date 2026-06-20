@@ -75,6 +75,56 @@ export type PiChatResponse = {
   toolCalls: PiChatToolCall[]
 }
 
+export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
+
+export type ByokChatProvider = Exclude<ByokProvider, 'deepgram'>
+
+export type ByokProviderStatus = {
+  provider: ByokProvider
+  configured: boolean
+  maskedKey?: string
+  updatedAt?: number
+  lastValidatedAt?: number
+  lastValidationOk?: boolean
+  lastValidationError?: string
+}
+
+export type ByokStatus = {
+  activeChatProvider: ByokChatProvider | null
+  providers: Record<ByokProvider, ByokProviderStatus>
+}
+
+export type ByokSaveRequest = {
+  provider: ByokProvider
+  key: string
+}
+
+export type ByokTestRequest = {
+  provider: ByokProvider
+  /** Optional unsaved key to validate. When omitted, main validates the stored key. */
+  key?: string
+}
+
+export type ByokUseRequest = {
+  provider: ByokChatProvider | null
+}
+
+export type ByokValidationResult = {
+  ok: boolean
+  status?: number
+  error?: string
+}
+
+export type ByokChatRequest = {
+  messages: ChatMessage[]
+}
+
+export type ByokChatResponse = {
+  provider: ByokChatProvider
+  text: string
+  usage: PiChatUsage
+}
+
 export type McpKeyRecord = {
   id: string
   name: string
@@ -298,6 +348,12 @@ export type OmiBridgeApi = {
   /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
   piChatEnabled: boolean
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
+  byokStatus: () => Promise<ByokStatus>
+  byokSave: (request: ByokSaveRequest) => Promise<ByokStatus>
+  byokDelete: (provider: ByokProvider) => Promise<ByokStatus>
+  byokTest: (request: ByokTestRequest) => Promise<ByokValidationResult>
+  byokUse: (request: ByokUseRequest) => Promise<ByokStatus>
+  byokChatSend: (request: ByokChatRequest) => Promise<ByokChatResponse>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
