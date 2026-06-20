@@ -176,6 +176,7 @@ class BackgroundService {
 
   void stop() {
     Logger.debug("invoke stop");
+    if (_status == null) return;
     _service.invoke("stop");
   }
 
@@ -229,6 +230,7 @@ class BackgroundService {
   }
 
   void stopRecorder() {
+    if (_status == null) return;
     _service.invoke("recorder.stop");
   }
 }
