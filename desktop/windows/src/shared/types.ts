@@ -63,6 +63,8 @@ export type PiChatRequest = {
   messages: ChatMessage[]
   /** Skill ids selected in the Skills tab; main reads the corresponding SKILL.md files. */
   skillIds?: string[]
+  /** Optional model selection id, e.g. openrouter:anthropic/claude-3.5-sonnet. */
+  modelId?: string
 }
 
 export type PiChatUsage = {
