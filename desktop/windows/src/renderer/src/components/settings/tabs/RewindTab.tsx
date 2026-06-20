@@ -7,7 +7,6 @@ import {
   Brain,
   Lightbulb,
   X,
-  Mic,
   Trash2,
   Activity
 } from 'lucide-react'
@@ -15,13 +14,8 @@ import { runScreenSynthesisOnce } from '../../../lib/screenSynthesis'
 import { BUILT_IN_EXCLUDED_APPS } from '../../../../../shared/rewindExclusions'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { StatusTile } from '../StatusTile'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
-import {
-  formatRecordingStatusTime,
-  useContinuousRecordingStatus,
-  websocketStateLabel,
-  websocketStateTone
-} from '../../../lib/continuousRecordingStatus'
 import type {
   RewindSettings,
   RewindStatus,
@@ -45,52 +39,12 @@ function retentionLabel(status: RewindStatus | null, days: number | undefined): 
   return `${retentionDays} days, oldest ${oldest}`
 }
 
-function StatusTile({
-  label,
-  value,
-  tone = 'neutral'
-}: {
-  label: string
-  value: string
-  tone?: 'good' | 'warn' | 'neutral'
-}): React.JSX.Element {
-  const dot = tone === 'good' ? 'bg-emerald-400' : tone === 'warn' ? 'bg-amber-300' : 'bg-white/30'
-  return (
-    <div className="min-w-0 rounded-lg bg-white/[0.04] px-3 py-2">
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-text-tertiary">
-        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-1 truncate text-sm text-text-secondary">{value}</div>
-    </div>
-  )
-}
-
-function continuousRecordingDot(
-  signedIn: boolean,
-  enabled: boolean,
-  websocketTone: 'good' | 'warn' | 'neutral'
-): 'on' | 'off' | 'warn' {
-  if (!enabled) return 'off'
-  if (!signedIn || websocketTone === 'warn') return 'warn'
-  return websocketTone === 'good' ? 'on' : 'warn'
-}
-
 export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   const [rewindStatus, setRewindStatus] = useState<RewindStatus | null>(null)
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
-  const recordingStatus = useContinuousRecordingStatus()
   const [newExcluded, setNewExcluded] = useState('')
-  const [continuousRec, setContinuousRec] = useState<boolean>(
-    () => !!getPreferences().continuousRecording
-  )
-  const toggleContinuous = (): void => {
-    const next = !continuousRec
-    setContinuousRec(next)
-    setPreferences({ continuousRecording: next })
-  }
   const [retention, setRetention] = useState<'off' | 'dry-run' | 'live'>(
     () => getPreferences().retentionMode ?? 'dry-run'
   )
@@ -141,29 +95,6 @@ export function RewindTab(): React.JSX.Element {
     await window.omi.rewindPruneNow()
     await refreshRewindStatus()
   }
-  const socketTone = websocketStateTone(recordingStatus.websocketState)
-  const authValue = recordingStatus.signedIn
-    ? recordingStatus.authEmail
-      ? `Signed in as ${recordingStatus.authEmail}`
-      : 'Signed in'
-    : 'Not signed in'
-  const recordingValue = !recordingStatus.recordingEnabled
-    ? 'Off'
-    : recordingStatus.sessionActive
-      ? 'Enabled, session active'
-      : recordingStatus.signedIn
-        ? 'Enabled, waiting'
-        : 'Enabled, sign-in required'
-  const websocketValue = `${websocketStateLabel(recordingStatus.websocketState)}${
-    recordingStatus.websocketUpdatedAt
-      ? `, updated ${formatRecordingStatusTime(recordingStatus.websocketUpdatedAt)}`
-      : ''
-  }`
-  const boundaryValue = recordingStatus.lastConversationBoundaryAt
-    ? formatRecordingStatusTime(recordingStatus.lastConversationBoundaryAt)
-    : recordingStatus.lastEventType
-      ? recordingStatus.lastEventType
-      : 'None'
 
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
   // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
@@ -175,69 +106,6 @@ export function RewindTab(): React.JSX.Element {
 
   return (
     <>
-      <SettingRow
-        icon={Mic}
-        dot={continuousRec ? 'on' : 'off'}
-        title="Continuous recording"
-        subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
-        keywords="continuous recording microphone audio always-on"
-        control={
-          <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
-        }
-      />
-      <SettingRow
-        icon={Activity}
-        dot={continuousRecordingDot(
-          recordingStatus.signedIn,
-          recordingStatus.recordingEnabled,
-          socketTone
-        )}
-        title="Continuous recording status"
-        subtitle="Auth, microphone, Omi listen socket, and latest transcript/conversation refresh."
-        keywords="continuous recording status microphone websocket listen transcript sync auth"
-      >
-        <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <StatusTile
-              label="Auth"
-              value={authValue}
-              tone={recordingStatus.signedIn ? 'good' : 'warn'}
-            />
-            <StatusTile
-              label="Recording"
-              value={recordingValue}
-              tone={
-                !recordingStatus.recordingEnabled
-                  ? 'neutral'
-                  : recordingStatus.sessionActive
-                    ? 'good'
-                    : 'warn'
-              }
-            />
-            <StatusTile label="WebSocket" value={websocketValue} tone={socketTone} />
-            <StatusTile
-              label="Last transcript"
-              value={formatRecordingStatusTime(recordingStatus.lastTranscriptAt)}
-              tone={recordingStatus.lastTranscriptAt ? 'good' : 'neutral'}
-            />
-            <StatusTile
-              label="Last conversation sync"
-              value={formatRecordingStatusTime(recordingStatus.lastConversationSyncAt)}
-              tone={recordingStatus.lastConversationSyncAt ? 'good' : 'neutral'}
-            />
-            <StatusTile
-              label="Last boundary"
-              value={boundaryValue}
-              tone={recordingStatus.lastConversationBoundaryAt ? 'good' : 'neutral'}
-            />
-          </div>
-          {recordingStatus.lastError && (
-            <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
-              Last listen error: {recordingStatus.lastError}
-            </div>
-          )}
-        </div>
-      </SettingRow>
       <SettingRow
         icon={Trash2}
         title="Auto-cleanup"

@@ -476,7 +476,7 @@ export function AdvancedTab(): React.JSX.Element {
         icon={Network}
         title="Local Agent Access"
         subtitle={localAgentSubtitle}
-        keywords="local agent api bearer token codex claude chatgpt tools mcp loopback localhost port"
+        keywords="local api local agent api local agent settings agent settings bearer token codex claude chatgpt tools mcp loopback localhost port"
         dot={!localAgent ? 'off' : localAgent.running ? 'on' : localAgent.enabled ? 'warn' : 'off'}
         control={
           <Toggle
