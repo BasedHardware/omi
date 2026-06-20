@@ -32,6 +32,22 @@ describe('BYOK validation', () => {
     expect(buildByokValidationRequest('deepgram', 'dg-secret').init.headers).toMatchObject({
       authorization: 'Token dg-secret'
     })
+
+    expect(buildByokValidationRequest('openrouter', 'sk-or-secret').url).toBe(
+      'https://openrouter.ai/api/v1/key'
+    )
+    expect(buildByokValidationRequest('openrouter', 'sk-or-secret').init.headers).toMatchObject({
+      authorization: 'Bearer sk-or-secret'
+    })
+
+    expect(buildByokValidationRequest('elevenlabs', 'sk_eleven-secret').url).toBe(
+      'https://api.elevenlabs.io/v1/models'
+    )
+    expect(buildByokValidationRequest('elevenlabs', 'sk_eleven-secret').init.headers).toMatchObject(
+      {
+        'xi-api-key': 'sk_eleven-secret'
+      }
+    )
   })
 
   it('rejects obvious format mismatches before network use', async () => {
