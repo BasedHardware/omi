@@ -752,9 +752,14 @@ class TranslationService:
         # so downstream consumers can rely on positional mapping.
         results: list[tuple[str, str, str] | None] = [None] * len(units)  # pre-allocate for in-order assembly
 
+        # Map each unit_id back to its original index in `units` (needed because
+        # unit_sentences is compacted — cache-hit units are excluded).
+        _unit_id_to_orig_idx = {uid: i for i, (uid, _) in enumerate(units)}
+
         for unit_idx, (unit_id, original_text, sentences) in enumerate(unit_sentences):
+            orig_idx = _unit_id_to_orig_idx[unit_id]
             if not sentences:
-                results[unit_idx] = (unit_id, original_text, '')
+                results[orig_idx] = (unit_id, original_text, '')
                 continue
 
             translated_parts = []
@@ -788,7 +793,7 @@ class TranslationService:
                 self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
                 cache_translation(text_hash, dest_language, assembled, dominant_lang)
 
-            results[unit_idx] = (unit_id, assembled, dominant_lang)
+            results[orig_idx] = (unit_id, assembled, dominant_lang)
 
         # Fill in any units that hit the full-text cache in Phase -1
         # (they were skipped during sentence splitting)
