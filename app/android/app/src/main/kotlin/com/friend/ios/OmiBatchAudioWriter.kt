@@ -226,6 +226,7 @@ class OmiBatchAudioWriter(private val context: Context) {
                 val renamed = partFile.renameTo(finalFile)
                 if (!renamed) Log.w(TAG, "failed to finalize ${partFile.name}")
                 Log.i(TAG, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
+                if (renamed) notifyFinalized(finalFile.name)
             } else {
                 partFile.delete() // nothing written — drop the empty placeholder
             }
@@ -236,6 +237,14 @@ class OmiBatchAudioWriter(private val context: Context) {
         currentBytes = 0
         currentFrames = 0
         lastFrameMs = 0
+    }
+
+    /** Notify Dart (when the engine is alive) that a file finalized, so the
+     *  recordings list rescans without waiting for a BLE disconnect. */
+    private fun notifyFinalized(fileName: String) {
+        if (!OmiBleManager.isFlutterAlive) return
+        val mgr = OmiBleManager.instance
+        mgr.mainHandler.post { mgr.flutterApi?.onBatchRecordingFinalized(fileName) {} }
     }
 
     // ── Crash recovery ──
