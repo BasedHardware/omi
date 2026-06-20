@@ -1924,3 +1924,103 @@ Proceed with the framework-independent composed service. Keep **NO-GO** for rout
 
 I could not directly inspect commit `9d81b81e…` because the repository path was unavailable in this session; F2-specific conclusions therefore rely on your supplied milestone summary plus the uploaded repository bundle.
 
+## Oracle milestone review: F3 before F4 real-router default-off wiring (2026-06-20)
+
+Oracle caveat: browser model selection reported `requested=Pro; resolved=(unavailable); strategy=current; verified=no`. Treat as architecture/code-review advice, not runtime evidence.
+
+According to a document from June 20, 2026, **LIMITED GO for F4**—strictly for a real-router, GET-only branch that is structurally unreachable in production and exercised only through TestClient dependency overrides.
+
+## 1. Verdict
+
+**LIMITED GO: F4 default-off wiring only.**
+
+F4 may modify `GET /v3/memories` to delegate to F3 when a server-owned dependency selects the new path. The production implementation of that dependency must unconditionally return disabled in F4; an environment variable, request parameter, header, persisted control record, or existing rollout flag must not be capable of activating it.
+
+The default-off path must remain behaviorally identical to the current route: `offset=0` forces the legacy `limit=5000`, nonzero offsets preserve the supplied limit, and the route directly calls the legacy reader.
+
+**Still NO-GO:** activation, shadow reads against real services, canary, external readiness, production control/projection reads, writes, telemetry sinks, or authoritative read cutover. The unresolved V17-read/legacy-write split-brain remains a cutover blocker.
+
+After F4, readiness should say:
+
+* `route_wiring=true`
+* `runtime_wiring_changed=true`
+* `effective_runtime_behavior_changed=false`
+* `production_rollout_approved=false`
+* overall status remains `BLOCKED / NO-GO`
+
+## 2. Highest-risk gaps
+
+No separate F3 blocker is evident from the supplied results, but F4 must close four boundary risks:
+
+1. **Mode-dependent validation:** do not put `ge/le` constraints on the shared FastAPI `limit` or `offset` parameters. That would change legacy behavior before source selection and could return 422 instead of the required V17 400. Perform V17 limits inside F3.
+2. **No exception-driven downgrade:** never implement `try V17; except: legacy`. Only an explicit typed `LEGACY_PRIMARY` decision may call legacy.
+3. **Structural default-off:** inject a lazy runtime/service bundle. Do not instantiate Firestore clients, cursor keyrings, projection adapters, or telemetry emitters at module import.
+4. **HTTP boundary mapping:** map F3’s typed status/body/headers directly; do not reinterpret malformed, denied, empty, or exhausted outcomes in the router.
+
+The existing contract already distinguishes non-enrolled legacy-primary from enrolled read-mode fail-closed behavior.
+
+## 3. Tight F4 acceptance criteria
+
+### Real-router TestClient matrix
+
+Use a minimal FastAPI app including the real `routers.memories.router`, under the existing unsafe-import stubs. Prior proof already identifies this controlled pattern and current GET behavior.
+
+Required cases:
+
+* **Production/default dependency disabled:** default request, explicit `limit`, `offset=0`, and `offset>0` exactly match current legacy calls and bodies; every V17 adapter has zero calls.
+* **Test-enabled, non-enrolled:** legacy exactly once; projection zero calls; existing offset and 5000 behavior preserved.
+* **Enrolled but effective mode off/shadow/write:** legacy may be selected only as `ROLLOUT_LEGACY_AUTHORITATIVE`; this is primary-source selection, not fallback.
+* **Enrolled effective read mode:** once selected, legacy call count is always zero—including no grant, revoked grant, malformed state, contradiction, adapter exception, unavailable projection, invalid cursor, deadline/budget exhaustion, and empty result.
+* **Status contract:** no/revoked explicit grant → 403; invalid offset/cursor/context mismatch → 400; malformed control/dependency or unavailable required source → 503; enabled-empty → `200 []`.
+* **Response:** body remains `List[MemoryDB]`; V17-only fields are stripped; only allowlisted additive headers are emitted; next cursor does not mutate the body.
+* **Isolation:** POST/PATCH/DELETE are not executed and their handler source/dependencies remain unchanged.
+
+### Pagination
+
+For V17 mode only:
+
+* Default `limit=100`; accepted range `1..500`; `0`, negative, `501`, and `5000` → 400.
+* `offset=0` is accepted and ignored.
+* `offset>0` → 400, with zero projection and legacy reads.
+* Tampered, expired, wrong-subject, generation, commit, filter, archive-intent, read-mode, grant-epoch, or config-epoch cursors → 400.
+* Current secret works; previous secret works only within its configured overlap and cursor expiry.
+* Prove deterministic multi-page ordering, no duplicates/omissions, and advancement from the **last scanned row**, including filtered-row/refill cases.
+
+### Dependency overrides
+
+Prefer two explicit FastAPI overrides:
+
+* `auth.get_current_user_uid`
+* one exported `get_v17_v3_get_runtime()` dependency returning an immutable bundle containing the composed service, source selector/control reader, legacy reader, projection reader, cursor keyring/codec, clocks/deadline, and no-op observer
+
+Tests should override the exact callable used by `Depends`; avoid monkeypatching module-global production clients.
+
+### Logging and sanitization
+
+Capture logs and assert absence of sentinel values representing:
+
+* uid/auth data
+* memory IDs or content
+* raw filters
+* cursor/token/signature
+* cursor secrets
+* grant/config epochs
+* raw adapter exception messages
+
+Permit only bounded fields such as route, selected source, status, and allowlisted decision code. No telemetry sink calls in F4.
+
+### Import/runtime safety
+
+* Importing `routers.memories` with defaults performs no Firestore, provider, vector, network, secret, or telemetry action.
+* No `backend/main.py` startup in the proof.
+* No new forbidden imports in the F3 core.
+* The production default dependency cannot activate V17.
+* Full V17 regression, focused real-router tests, `git diff --check`, and existing readiness scripts remain green while reporting `BLOCKED`.
+
+## 4. Another hardening ticket?
+
+**No.** Proceed directly to F4.
+
+Split out a small F3.5 only if implementation reveals that the runtime bundle cannot be constructed lazily, F3 lacks a terminal typed outcome for every path, or preserving legacy parameter behavior would require global FastAPI validation. Otherwise, those are properly F4 router-boundary concerns.
+
+This is an architecture verdict based on the supplied F3 evidence and retrieved router/control artifacts, not execution of commit `e9487137`.
