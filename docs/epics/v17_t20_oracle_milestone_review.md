@@ -1582,3 +1582,25 @@ Added the next real-service-adjacent readiness artifact for future Firestore-emu
 - Local detection found the checked-in Firebase emulator configuration/rules harness shape, but no control-reader emulator harness/script is claimed. `/v3` runtime remains **BLOCKED / NO-GO**.
 
 Verification for this slice is recorded in the subagent handoff: RED focused test `6 failed`; final focused/linked tests, full V17 regression, readiness summaries, async scan, docs hygiene, and commit SHA are attached there. Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-20 — Oracle follow-up: reuse existing rollout control state for `/v3`
+
+Consulted Oracle after David asked whether the codebase already had phased rollout and partial migration tracking. Oracle's prescriptive answer: the codebase already has the necessary primitives, and the `/v3` integration must reuse the existing canonical state instead of inventing a parallel control document.
+
+- Canonical source is resolved to `users/{uid}/memory_control/state` via `V17Collections(uid).memory_control_state`.
+- Existing rollout/migration primitives are `V17Mode.off/shadow/write/read`, `V17RolloutState`, `stage_gates`, `mode_epoch`, `cutover_epoch`, `account_generation`, `fallback_projection_ready`, `persistent_v17_writes_started`, `writes_blocked`, and `grants`.
+- Added `backend/utils/memory/v17_v3_control_state_adapter.py`, which maps the existing persisted rollout state into the `/v3` control contract without reading `memory_items`, wiring routers, starting cloud/emulator services, or mutating state.
+- Updated `backend/utils/memory/v17_v3_control_reader_contract.py` to use a `V17V3ControlReadResult` envelope so non-enrolled users can skip control reads while enrolled users with missing/malformed state fail closed.
+- Effective mode is the lower-ranked value of configured global mode and persisted per-user mode. `off`, `shadow`, and `write` are legacy-primary; effective `read` requires global read gate, `omi_chat` default-memory grant, write convergence, projection readiness, account-generation equality, cursor secret, and Archive capability when explicitly requested.
+- Removed synthetic route-control concepts that do not exist in the persisted rollout document: `control_generation`, `source_generation`, and Short-term freshness/default-visibility control fields. Stale Short-term remains a read-service/item-filtering concern, not a route-control gate.
+- Readiness artifacts now mark the canonical source/path decision as locally resolved while preserving overall `/v3` runtime **BLOCKED / NO-GO** for emulator/API proof, rules/IAM, production reader, projection store, runtime wiring, observability, benchmark, and approval gates.
+
+Verification for this slice:
+
+- RED: focused adapter/contract tests failed before implementation with missing `utils.memory.v17_v3_control_state_adapter` and missing `V17V3ControlReadResult` imports (`2 errors in 0.16s`).
+- Focused linked GREEN: `68 passed in 0.26s` for default rollout, adapter, contract, control-reader readiness, emulator readiness, runtime-wiring readiness, and external compatibility readiness tests.
+- Full normal-env V17 regression: `509 passed, 3 warnings in 8.97s`.
+- Readiness summaries: control reader `BLOCKED` with local adapter proof and canonical source resolved; emulator `BLOCKED` with persisted rollout fixture schema and no emulator harness claim.
+- Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`.
+- Docs hygiene `docs_hygiene 16 BAD=[]`.
+- Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

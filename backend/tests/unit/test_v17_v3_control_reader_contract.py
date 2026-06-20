@@ -1,7 +1,9 @@
 import inspect
 
+from config.v17_memory import V17Mode
 from utils.memory.v17_v3_control_reader_contract import (
     V17V3ControlDecisionReason,
+    V17V3ControlReadResult,
     V17V3ControlReaderRequest,
     V17V3ControlRouteFamily,
     V17V3ControlState,
@@ -21,28 +23,42 @@ def _request(**overrides):
     return V17V3ControlReaderRequest(**values)
 
 
-def _control(**overrides):
+def _state(**overrides):
     values = {
         'uid': 'uid-a',
-        'cohort_enrolled': True,
-        'default_memory_grant': True,
+        'schema_version': 1,
+        'configured_mode': V17Mode.read,
+        'persisted_mode': V17Mode.read,
+        'effective_mode': V17Mode.read,
+        'mode_epoch': 1,
+        'cutover_epoch': 1,
         'account_generation': 7,
-        'control_generation': 7,
-        'projection_ready': True,
-        'write_convergence_ready': True,
+        'default_memory_grant': True,
         'archive_allowed': False,
-        'short_term_freshness_default_visible': True,
+        'rollout_write_ready': True,
+        'projection_ready': True,
+        'global_read_gate_open': True,
+        'write_convergence_ready': True,
     }
     values.update(overrides)
     return V17V3ControlState(**values)
 
 
+def _result(**overrides):
+    values = {
+        'cohort_enrolled': True,
+        'source_path': 'users/uid-a/memory_control/state',
+        'state': _state(),
+        'read_error_reason': None,
+    }
+    values.update(overrides)
+    return V17V3ControlReadResult(**values)
+
+
 def test_non_enrolled_allows_legacy_route_marker_only_and_leaves_offset_compatibility_outside_contract():
     decision = decide_v17_v3_control_route(
         _request(cursor_v17_read_requested=False, cursor_secret_config_present=False),
-        _control(
-            cohort_enrolled=False, default_memory_grant=False, projection_ready=False, write_convergence_ready=False
-        ),
+        _result(cohort_enrolled=False, state=None),
     )
 
     assert decision.route_family == V17V3ControlRouteFamily.LEGACY_PRIMARY
@@ -52,12 +68,11 @@ def test_non_enrolled_allows_legacy_route_marker_only_and_leaves_offset_compatib
     assert decision.requires_legacy_reader is True
     assert decision.requires_projection_reader is False
     assert decision.archive_default_available is False
-    assert decision.stale_short_term_default_visible is False
     assert decision.legacy_offset_behavior_preserved_outside_contract is True
 
 
 def test_enrolled_all_gates_ready_allows_v17_projection_without_legacy_fallback():
-    decision = decide_v17_v3_control_route(_request(), _control())
+    decision = decide_v17_v3_control_route(_request(), _result())
 
     assert decision.route_family == V17V3ControlRouteFamily.V17_PROJECTION
     assert decision.allowed is True
@@ -66,11 +81,10 @@ def test_enrolled_all_gates_ready_allows_v17_projection_without_legacy_fallback(
     assert decision.requires_projection_reader is True
     assert decision.requires_legacy_reader is False
     assert decision.archive_default_available is False
-    assert decision.stale_short_term_default_visible is True
 
 
-def test_missing_control_doc_fails_closed_without_legacy_fallback_for_unknown_gated_path():
-    decision = decide_v17_v3_control_route(_request(), None)
+def test_enrolled_missing_control_doc_fails_closed_without_legacy_fallback():
+    decision = decide_v17_v3_control_route(_request(), _result(state=None))
 
     assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
     assert decision.allowed is False
@@ -80,62 +94,110 @@ def test_missing_control_doc_fails_closed_without_legacy_fallback_for_unknown_ga
     assert decision.requires_legacy_reader is False
 
 
-def test_enrolled_fail_closed_reasons_never_fall_back_to_legacy():
+def test_enrolled_read_errors_map_to_typed_fail_closed_reasons():
+    for reason in (
+        V17V3ControlDecisionReason.CONTROL_READ_FAILED,
+        V17V3ControlDecisionReason.MALFORMED_CONTROL_DOC,
+        V17V3ControlDecisionReason.UNSUPPORTED_CONTROL_SCHEMA,
+    ):
+        decision = decide_v17_v3_control_route(_request(), _result(state=None, read_error_reason=reason))
+        assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
+        assert decision.reason == reason
+        assert decision.fallback_to_legacy_allowed is False
+
+
+def test_uid_mismatch_fails_closed_before_mode_or_grant_checks():
+    decision = decide_v17_v3_control_route(
+        _request(uid='uid-a'),
+        _result(state=_state(uid='uid-b', effective_mode=V17Mode.off, default_memory_grant=False)),
+    )
+
+    assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
+    assert decision.reason == V17V3ControlDecisionReason.UID_MISMATCH
+    assert decision.fallback_to_legacy_allowed is False
+
+
+def test_enrolled_off_shadow_write_are_legacy_authoritative_not_fallback():
+    for mode in (V17Mode.off, V17Mode.shadow, V17Mode.write):
+        decision = decide_v17_v3_control_route(_request(), _result(state=_state(effective_mode=mode)))
+        assert decision.route_family == V17V3ControlRouteFamily.LEGACY_PRIMARY
+        assert decision.allowed is True
+        assert decision.reason == V17V3ControlDecisionReason.ROLLOUT_LEGACY_AUTHORITATIVE
+        assert decision.fallback_to_legacy_allowed is False
+        assert decision.requires_legacy_reader is True
+
+
+def test_account_generation_only_expected_generation_comparison():
+    control = _state(mode_epoch=1, cutover_epoch=1, account_generation=50)
+    decision = decide_v17_v3_control_route(_request(expected_account_generation=50), _result(state=control))
+
+    assert decision.route_family == V17V3ControlRouteFamily.V17_PROJECTION
+    assert decision.allowed is True
+
+
+def test_enrolled_read_fail_closed_reasons_never_fall_back_to_legacy():
     cases = [
-        (_control(control_generation=6), V17V3ControlDecisionReason.STALE_GENERATION),
-        (_control(default_memory_grant=False), V17V3ControlDecisionReason.NO_DEFAULT_MEMORY_GRANT),
-        (_control(projection_ready=False), V17V3ControlDecisionReason.PROJECTION_NOT_READY),
-        (_control(write_convergence_ready=False), V17V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY),
-        (
-            _control(short_term_freshness_default_visible=False),
-            V17V3ControlDecisionReason.STALE_SHORT_TERM_DEFAULT_HIDDEN,
-        ),
+        (_state(account_generation=6), V17V3ControlDecisionReason.STALE_GENERATION, 503),
+        (_state(global_read_gate_open=False), V17V3ControlDecisionReason.GLOBAL_READ_GATE_CLOSED, 503),
+        (_state(default_memory_grant=False), V17V3ControlDecisionReason.NO_DEFAULT_MEMORY_GRANT, 403),
+        (_state(rollout_write_ready=False), V17V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY, 503),
+        (_state(write_convergence_ready=False), V17V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY, 503),
+        (_state(projection_ready=False), V17V3ControlDecisionReason.PROJECTION_NOT_READY, 503),
     ]
 
-    for control, reason in cases:
-        decision = decide_v17_v3_control_route(_request(), control)
+    for control, reason, status in cases:
+        decision = decide_v17_v3_control_route(_request(), _result(state=control))
 
         assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
         assert decision.allowed is False
         assert decision.reason == reason
+        assert decision.http_status == status
         assert decision.fallback_to_legacy_allowed is False
         assert decision.requires_projection_reader is False
         assert decision.requires_legacy_reader is False
         assert decision.archive_default_available is False
-        assert decision.stale_short_term_default_visible is False
 
 
 def test_cursor_v17_reads_fail_closed_when_cursor_secret_config_is_missing_or_invalid():
-    decision = decide_v17_v3_control_route(_request(cursor_secret_config_present=False), _control())
+    decision = decide_v17_v3_control_route(_request(cursor_secret_config_present=False), _result())
 
     assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
     assert decision.allowed is False
     assert decision.reason == V17V3ControlDecisionReason.INVALID_OR_MISSING_CURSOR_SECRET
     assert decision.fallback_to_legacy_allowed is False
-    assert decision.requires_projection_reader is False
-    assert decision.requires_legacy_reader is False
 
 
-def test_archive_request_fails_closed_and_archive_is_default_unavailable_when_not_allowed():
-    decision = decide_v17_v3_control_route(_request(archive_requested=True), _control(archive_allowed=False))
+def test_archive_request_fails_closed_403_and_archive_is_default_unavailable_when_not_allowed():
+    decision = decide_v17_v3_control_route(
+        _request(archive_requested=True), _result(state=_state(archive_allowed=False))
+    )
 
     assert decision.route_family == V17V3ControlRouteFamily.FAIL_CLOSED
     assert decision.allowed is False
+    assert decision.http_status == 403
     assert decision.reason == V17V3ControlDecisionReason.ARCHIVE_NOT_ALLOWED
     assert decision.fallback_to_legacy_allowed is False
     assert decision.archive_default_available is False
-    assert decision.requires_projection_reader is False
+
+
+def test_stale_short_term_is_absent_from_control_matrix():
+    state_fields = set(V17V3ControlState.__dataclass_fields__)
+    decision_fields = set(decide_v17_v3_control_route(_request(), _result()).__dataclass_fields__)
+
+    assert 'short_term_freshness_default_visible' not in state_fields
+    assert 'stale_short_term_default_visible' not in state_fields
+    assert 'stale_short_term_default_visible' not in decision_fields
+    assert not any('SHORT_TERM' in item.name for item in V17V3ControlDecisionReason)
 
 
 def test_control_reader_contract_is_pure_local_fake_injectable_and_has_stable_decision_fields():
-    decision_fields = set(decide_v17_v3_control_route(_request(), _control()).__dataclass_fields__)
+    decision_fields = set(decide_v17_v3_control_route(_request(), _result()).__dataclass_fields__)
     assert {
         'route_family',
         'allowed',
         'reason',
         'fallback_to_legacy_allowed',
         'archive_default_available',
-        'stale_short_term_default_visible',
         'requires_projection_reader',
         'requires_legacy_reader',
     }.issubset(decision_fields)

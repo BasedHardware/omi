@@ -555,7 +555,7 @@ def read_v17_archive_read_rollout(*, uid: str, db_client, consumer: str) -> V17D
     return normalize_v17_archive_read_rollout_decision(uid=uid, source_path=source_path, consumer=consumer, data=data)
 
 
-def _read_v17_default_rollout_state_doc(*, uid: str, db_client):
+def read_v17_rollout_state_doc(*, uid: str, db_client):
     source_path = V17Collections(uid=uid).memory_control_state
     try:
         snapshot = _get_firestore_document_snapshot(db_client.document(source_path))
@@ -565,6 +565,10 @@ def _read_v17_default_rollout_state_doc(*, uid: str, db_client):
     except Exception:
         return source_path, None, 'rollout_read_failed'
     return source_path, data, None
+
+
+def _read_v17_default_rollout_state_doc(*, uid: str, db_client):
+    return read_v17_rollout_state_doc(uid=uid, db_client=db_client)
 
 
 def read_v17_default_read_rollout_decisions(

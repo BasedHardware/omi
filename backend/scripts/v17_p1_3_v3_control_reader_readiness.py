@@ -58,29 +58,33 @@ EXISTING_LOCAL_PROOF_ARTIFACTS = {
 
 FAIL_CLOSED_REASONS = [
     "missing_control_doc",
+    "control_read_failed",
+    "malformed_control_doc",
+    "uid_mismatch",
+    "unsupported_control_schema",
+    "global_read_gate_closed",
     "stale_generation",
     "no_default_memory_grant",
     "projection_not_ready",
     "write_convergence_not_ready",
     "invalid_or_missing_cursor_secret",
     "archive_not_allowed",
-    "stale_short_term_default_hidden",
 ]
 
 CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "canonical_control_source_path_api",
-        "status": "BLOCKED",
-        "required_contract": "Choose the canonical server-side control source/path/API for V17 `/v3` cohort enrollment and per-user read control.",
-        "canonical_path": None,
-        "explicit_blocker": "canonical_control_source_not_chosen",
-        "candidate_paths": [
-            "users/{uid}/memory_control/state",
-            "users/{uid}/v17_control/state",
-            "server-owned read API wrapping rollout/cohort/grant sources",
+        "status": "READY_LOCAL_ADAPTER_PROVEN",
+        "required_contract": "Reuse the existing canonical server-side V17 rollout state path for `/v3` cohort enrollment and per-user read control.",
+        "canonical_path": "users/{uid}/memory_control/state",
+        "explicit_blocker": None,
+        "candidate_paths": ["users/{uid}/memory_control/state"],
+        "evidence_sources": [
+            "control_reader_state_adapter_proof",
+            "decision_service_proof",
+            "get_runtime_wiring_readiness_proof",
         ],
-        "evidence_sources": ["decision_service_proof", "get_runtime_wiring_readiness_proof"],
-        "missing_real_firestore_api_emulator_rules_iam_evidence": True,
+        "missing_real_firestore_api_emulator_rules_iam_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -118,7 +122,7 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "fail_closed_decision_matrix",
         "status": "BLOCKED",
-        "required_contract": "Enrolled V17 users must fail closed or privacy-deny for missing/stale/no-grant/projection/write/cursor/archive/Short-term gates.",
+        "required_contract": "Enrolled effective-read V17 users must fail closed or privacy-deny for control-read, schema, uid, global gate, stale-generation, no-grant, projection, write, cursor, or archive failures. Stale Short-term filtering is item/read-service state, not route-control state.",
         "fail_closed_reasons": FAIL_CLOSED_REASONS,
         "evidence_sources": [
             "decision_service_proof",
@@ -154,7 +158,7 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "enrolled_no_legacy_fallback_on_gate_failure",
         "status": "BLOCKED",
-        "required_contract": "Enrolled users must not fall back to legacy reads on V17 control, grant, projection, write-convergence, cursor, Archive, or Short-term failures.",
+        "required_contract": "Enrolled effective-read users must not fall back to legacy reads on V17 control, grant, projection, write-convergence, cursor, or Archive failures. Effective off/shadow/write keeps legacy primary authoritative, not fallback.",
         "legacy_fallback_allowed_for_enrolled_gate_failures": False,
         "legacy_v17_result_merge_allowed": False,
         "exception_downgrade_to_legacy_allowed": False,
@@ -200,31 +204,73 @@ CONTROL_READER_REQUIREMENTS = [
 ]
 
 FAKE_INJECTABLE_CONTROL_READER_INTERFACE = {
-    "interface_name": "V17V3CohortControlReader",
-    "method": "read_control_state",
-    "input_fields": ["uid", "request_id", "now", "expected_schema_version", "cursor_secret_config_present"],
+    "interface_name": "V17V3ControlReader",
+    "method": "read_v17_v3_control",
+    "input_fields": ["uid", "db_client", "rollout_config", "consumer"],
     "output_fields": [
+        "cohort_enrolled",
+        "source_path",
         "uid",
         "schema_version",
-        "cohort_enrolled",
+        "configured_mode",
+        "persisted_mode",
+        "effective_mode",
+        "mode_epoch",
+        "cutover_epoch",
         "default_memory_grant",
         "account_generation",
-        "control_generation",
         "projection_ready",
+        "rollout_write_ready",
+        "global_read_gate_open",
         "write_convergence_ready",
         "archive_allowed",
-        "short_term_freshness_default_visible",
         "decision",
         "fail_closed_reason",
     ],
     "fake_injectable": True,
-    "production_firestore_reader_implemented": False,
+    "production_firestore_reader_implemented": True,
+    "canonical_source_path": "users/{uid}/memory_control/state",
     "runtime_route_wiring_now": False,
 }
 
 FAIL_CLOSED_DECISION_MATRIX = [
     {
         "reason": "missing_control_doc",
+        "enrolled_decision": "FAIL_CLOSED",
+        "http_status": 503,
+        "legacy_fallback_allowed": False,
+        "required_before_runtime_change": True,
+    },
+    {
+        "reason": "control_read_failed",
+        "enrolled_decision": "FAIL_CLOSED",
+        "http_status": 503,
+        "legacy_fallback_allowed": False,
+        "required_before_runtime_change": True,
+    },
+    {
+        "reason": "malformed_control_doc",
+        "enrolled_decision": "FAIL_CLOSED",
+        "http_status": 503,
+        "legacy_fallback_allowed": False,
+        "required_before_runtime_change": True,
+    },
+    {
+        "reason": "uid_mismatch",
+        "enrolled_decision": "FAIL_CLOSED",
+        "http_status": 503,
+        "legacy_fallback_allowed": False,
+        "required_before_runtime_change": True,
+    },
+    {
+        "reason": "unsupported_control_schema",
+        "enrolled_decision": "FAIL_CLOSED",
+        "http_status": 503,
+        "legacy_fallback_allowed": False,
+        "required_before_runtime_change": True,
+    },
+    {
+        "reason": "global_read_gate_closed",
         "enrolled_decision": "FAIL_CLOSED",
         "http_status": 503,
         "legacy_fallback_allowed": False,
@@ -271,14 +317,6 @@ FAIL_CLOSED_DECISION_MATRIX = [
         "http_status": 403,
         "legacy_fallback_allowed": False,
         "archive_default_available": False,
-        "required_before_runtime_change": True,
-    },
-    {
-        "reason": "stale_short_term_default_hidden",
-        "enrolled_decision": "HIDE",
-        "http_status": 200,
-        "legacy_fallback_allowed": False,
-        "stale_short_term_default_visible": False,
         "required_before_runtime_change": True,
     },
 ]

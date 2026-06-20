@@ -60,28 +60,25 @@ CONTROL_READER_EMULATOR_READINESS_PROOF = {
 CONTROL_FIXTURE_SCHEMA_FIELDS = [
     "uid",
     "schema_version",
-    "cohort_enrolled",
-    "default_memory_grant",
+    "mode",
+    "mode_epoch",
+    "cutover_epoch",
     "account_generation",
-    "control_generation",
-    "projection_ready",
-    "write_convergence_ready",
-    "archive_allowed",
-    "short_term_freshness_default_visible",
+    "fallback_projection_ready",
+    "persistent_v17_writes_started",
+    "writes_blocked",
+    "stage_gates",
+    "grants",
 ]
 
 EMULATOR_API_PROOF_PREREQUISITES = [
     {
         "prerequisite_id": "canonical_server_control_source_path_api",
-        "status": "BLOCKED",
-        "explicit_blocker": "canonical_control_source_not_chosen",
+        "status": "READY_LOCAL_ADAPTER_PROVEN",
+        "explicit_blocker": None,
         "required_before_emulator_or_api_proof": True,
-        "canonical_path": None,
-        "candidate_paths": [
-            "users/{uid}/memory_control/state",
-            "users/{uid}/v17_control/state",
-            "server-owned read API wrapping rollout/cohort/grant sources",
-        ],
+        "canonical_path": "users/{uid}/memory_control/state",
+        "candidate_paths": ["users/{uid}/memory_control/state"],
         "must_match_contract": "utils/memory/v17_v3_control_reader_contract.py",
         "runtime_wired": False,
         "approval_claimed": False,
@@ -101,11 +98,10 @@ EMULATOR_API_PROOF_PREREQUISITES = [
         "prerequisite_id": "control_reader_fixture_schema",
         "status": "BLOCKED",
         "required_before_emulator_or_api_proof": True,
-        "fixture_path_template_blocked_until_chosen": "<canonical-control-source> for uid={uid}",
+        "fixture_path_template": "users/{uid}/memory_control/state",
         "required_fields": CONTROL_FIXTURE_SCHEMA_FIELDS,
         "default_denials": {
-            "archive_allowed": False,
-            "short_term_freshness_default_visible": False,
+            "grants.omi_chat.archive": False,
         },
         "runtime_wired": False,
         "approval_claimed": False,
@@ -174,18 +170,19 @@ REQUIRED_CONTRACT_PROOF_CASES = [
         "case_id": "non_enrolled_legacy_allowed",
         "expected_route_family": "legacy_primary",
         "legacy_fallback_allowed": True,
-        "required_fixture_overrides": {"cohort_enrolled": False},
+        "required_fixture_overrides": {"cohort_enrolled": False, "firestore_read_expected": False},
     },
     {
         "case_id": "v17_projection_allowed",
         "expected_route_family": "v17_projection",
         "legacy_fallback_allowed": False,
         "required_fixture_overrides": {
-            "cohort_enrolled": True,
-            "default_memory_grant": True,
-            "projection_ready": True,
+            "mode": "read",
+            "grants.omi_chat.default_memory": True,
+            "fallback_projection_ready": True,
+            "stage_gates.read": "passed",
+            "global_read_gate_open": True,
             "write_convergence_ready": True,
-            "short_term_freshness_default_visible": True,
         },
     },
     {
@@ -198,19 +195,19 @@ REQUIRED_CONTRACT_PROOF_CASES = [
         "case_id": "stale_generation",
         "expected_route_family": "fail_closed",
         "legacy_fallback_allowed": False,
-        "required_fixture_overrides": {"control_generation": "less_than_expected_account_generation"},
+        "required_fixture_overrides": {"account_generation": "not_equal_expected_account_generation"},
     },
     {
         "case_id": "no_default_memory_grant",
         "expected_route_family": "fail_closed",
         "legacy_fallback_allowed": False,
-        "required_fixture_overrides": {"default_memory_grant": False},
+        "required_fixture_overrides": {"grants.omi_chat.default_memory": False},
     },
     {
         "case_id": "projection_not_ready",
         "expected_route_family": "fail_closed",
         "legacy_fallback_allowed": False,
-        "required_fixture_overrides": {"projection_ready": False},
+        "required_fixture_overrides": {"fallback_projection_ready": False},
     },
     {
         "case_id": "write_convergence_not_ready",
@@ -229,13 +226,7 @@ REQUIRED_CONTRACT_PROOF_CASES = [
         "expected_route_family": "fail_closed",
         "legacy_fallback_allowed": False,
         "required_request_overrides": {"archive_requested": True},
-        "required_fixture_overrides": {"archive_allowed": False},
-    },
-    {
-        "case_id": "stale_short_term_default_hidden",
-        "expected_route_family": "fail_closed",
-        "legacy_fallback_allowed": False,
-        "required_fixture_overrides": {"short_term_freshness_default_visible": False},
+        "required_fixture_overrides": {"grants.omi_chat.archive": False},
     },
 ]
 
@@ -245,7 +236,7 @@ LEGACY_BOUNDARY_CONTRACT = {
     "enrolled_no_legacy_fallback_on_gate_failure": True,
     "legacy_v17_result_merge_allowed": False,
     "archive_default_available": False,
-    "stale_short_term_default_visible": False,
+    "stale_short_term_control_state_absent": True,
 }
 
 

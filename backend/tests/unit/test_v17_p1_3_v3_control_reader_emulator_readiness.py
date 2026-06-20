@@ -5,14 +5,15 @@ from pathlib import Path
 REQUIRED_SCHEMA_FIELDS = [
     "uid",
     "schema_version",
-    "cohort_enrolled",
-    "default_memory_grant",
+    "mode",
+    "mode_epoch",
+    "cutover_epoch",
     "account_generation",
-    "control_generation",
-    "projection_ready",
-    "write_convergence_ready",
-    "archive_allowed",
-    "short_term_freshness_default_visible",
+    "fallback_projection_ready",
+    "persistent_v17_writes_started",
+    "writes_blocked",
+    "stage_gates",
+    "grants",
 ]
 
 REQUIRED_PROOF_CASES = [
@@ -25,7 +26,6 @@ REQUIRED_PROOF_CASES = [
     "write_convergence_not_ready",
     "invalid_or_missing_cursor_secret",
     "archive_not_allowed",
-    "stale_short_term_default_hidden",
 ]
 
 REQUIRED_LINKED_PROOFS = {
@@ -99,9 +99,11 @@ def test_control_reader_emulator_readiness_pins_prerequisites_and_fixture_schema
         "api_backed_server_reader_harness",
         "security_rules_and_iam_evidence_separation",
     ]
-    assert prerequisites["canonical_server_control_source_path_api"]["status"] == "BLOCKED"
-    assert prerequisites["canonical_server_control_source_path_api"]["explicit_blocker"] == (
-        "canonical_control_source_not_chosen"
+    assert prerequisites["canonical_server_control_source_path_api"]["status"] == "READY_LOCAL_ADAPTER_PROVEN"
+    assert prerequisites["canonical_server_control_source_path_api"]["explicit_blocker"] is None
+    assert (
+        prerequisites["canonical_server_control_source_path_api"]["canonical_path"]
+        == "users/{uid}/memory_control/state"
     )
     assert prerequisites["control_reader_fixture_schema"]["required_fields"] == REQUIRED_SCHEMA_FIELDS
     assert prerequisites["firestore_emulator_config_and_cli"]["requires_firestore_emulator_host"] is True
@@ -141,7 +143,7 @@ def test_control_reader_emulator_readiness_maps_contract_decision_cases_and_boun
         assert cases[case_id]["expected_route_family"] == "fail_closed", case_id
         assert cases[case_id]["legacy_fallback_allowed"] is False, case_id
     assert report["legacy_boundary_contract"]["enrolled_no_legacy_fallback_on_gate_failure"] is True
-    assert report["legacy_boundary_contract"]["stale_short_term_default_visible"] is False
+    assert report["legacy_boundary_contract"]["stale_short_term_control_state_absent"] is True
     assert report["legacy_boundary_contract"]["archive_default_available"] is False
 
 
@@ -176,9 +178,9 @@ def test_control_reader_emulator_readiness_links_readiness_chain_docs_and_summar
         "production_control_reader_implemented": False,
         "approval_claimed": False,
         "prerequisite_count": 5,
-        "blocked_prerequisite_count": 5,
-        "fixture_schema_field_count": 10,
-        "required_contract_case_count": 10,
+        "blocked_prerequisite_count": 4,
+        "fixture_schema_field_count": 11,
+        "required_contract_case_count": 9,
         "security_iam_evidence_requirement_count": 4,
         "linked_readiness_proof_count": 4,
         "control_reader_emulator_harness_present": False,

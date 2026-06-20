@@ -15,13 +15,17 @@ REQUIRED_REQUIREMENT_IDS = [
 
 REQUIRED_FAIL_CLOSED_REASONS = [
     "missing_control_doc",
+    "control_read_failed",
+    "malformed_control_doc",
+    "uid_mismatch",
+    "unsupported_control_schema",
+    "global_read_gate_closed",
     "stale_generation",
     "no_default_memory_grant",
     "projection_not_ready",
     "write_convergence_not_ready",
     "invalid_or_missing_cursor_secret",
     "archive_not_allowed",
-    "stale_short_term_default_hidden",
 ]
 
 REQUIRED_PROOF_KEYS = {
@@ -87,18 +91,19 @@ def test_control_reader_readiness_inventories_exact_requirements():
     assert list(requirements) == REQUIRED_REQUIREMENT_IDS
 
     for requirement_id, requirement in requirements.items():
-        assert requirement["status"] == "BLOCKED", requirement_id
+        assert requirement["status"] in {"BLOCKED", "READY_LOCAL_ADAPTER_PROVEN"}, requirement_id
         assert requirement["required_before_runtime_change"] is True
         assert requirement["runtime_wired"] is False
         assert requirement["approval_claimed"] is False
-        assert requirement["missing_real_firestore_api_emulator_rules_iam_evidence"] is True
+        if requirement_id == "canonical_control_source_path_api":
+            assert requirement["missing_real_firestore_api_emulator_rules_iam_evidence"] is False
+        else:
+            assert requirement["missing_real_firestore_api_emulator_rules_iam_evidence"] is True
         assert requirement["evidence_sources"], requirement_id
 
-    assert requirements["canonical_control_source_path_api"]["canonical_path"] is None
-    assert (
-        requirements["canonical_control_source_path_api"]["explicit_blocker"] == "canonical_control_source_not_chosen"
-    )
-    assert "users/{uid}/memory_control/state" in requirements["canonical_control_source_path_api"]["candidate_paths"]
+    assert requirements["canonical_control_source_path_api"]["canonical_path"] == "users/{uid}/memory_control/state"
+    assert requirements["canonical_control_source_path_api"]["explicit_blocker"] is None
+    assert requirements["canonical_control_source_path_api"]["candidate_paths"] == ["users/{uid}/memory_control/state"]
     assert requirements["server_owned_control_reads_only"]["direct_client_control_reads_allowed"] is False
     assert requirements["fake_injectable_control_reader_interface"]["runtime_route_wiring_now"] is False
     assert requirements["fail_closed_decision_matrix"]["fail_closed_reasons"] == REQUIRED_FAIL_CLOSED_REASONS
@@ -119,25 +124,32 @@ def test_control_reader_readiness_defines_fake_injectable_interface_without_rout
     interface = report["fake_injectable_control_reader_interface"]
 
     assert interface == {
-        "interface_name": "V17V3CohortControlReader",
-        "method": "read_control_state",
-        "input_fields": ["uid", "request_id", "now", "expected_schema_version", "cursor_secret_config_present"],
+        "interface_name": "V17V3ControlReader",
+        "method": "read_v17_v3_control",
+        "input_fields": ["uid", "db_client", "rollout_config", "consumer"],
         "output_fields": [
+            "cohort_enrolled",
+            "source_path",
             "uid",
             "schema_version",
-            "cohort_enrolled",
+            "configured_mode",
+            "persisted_mode",
+            "effective_mode",
+            "mode_epoch",
+            "cutover_epoch",
             "default_memory_grant",
             "account_generation",
-            "control_generation",
             "projection_ready",
+            "rollout_write_ready",
+            "global_read_gate_open",
             "write_convergence_ready",
             "archive_allowed",
-            "short_term_freshness_default_visible",
             "decision",
             "fail_closed_reason",
         ],
         "fake_injectable": True,
-        "production_firestore_reader_implemented": False,
+        "production_firestore_reader_implemented": True,
+        "canonical_source_path": "users/{uid}/memory_control/state",
         "runtime_route_wiring_now": False,
     }
 
@@ -154,7 +166,6 @@ def test_control_reader_readiness_pins_fail_closed_semantics_and_legacy_boundari
 
     assert matrix["no_default_memory_grant"]["http_status"] == 403
     assert matrix["archive_not_allowed"]["archive_default_available"] is False
-    assert matrix["stale_short_term_default_hidden"]["stale_short_term_default_visible"] is False
 
     legacy = report["legacy_boundary_contract"]
     assert legacy["non_enrolled_read_path"] == "legacy_primary"
@@ -208,10 +219,10 @@ def test_control_reader_readiness_json_summary_is_stable():
         "status": "BLOCKED",
         "proof_status": "BLOCKED",
         "requirement_count": 8,
-        "blocked_requirement_count": 8,
-        "fail_closed_reason_count": 8,
+        "blocked_requirement_count": 7,
+        "fail_closed_reason_count": 12,
         "existing_local_proof_count": 14,
-        "missing_real_evidence_requirement_count": 8,
+        "missing_real_evidence_requirement_count": 7,
         "read_only": True,
         "mutation_allowed": False,
         "runtime_wiring_changed": False,
