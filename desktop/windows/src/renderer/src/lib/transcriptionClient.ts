@@ -11,6 +11,7 @@ import type {
 } from '../../../shared/types'
 
 const CLOUD_CONNECT_TIMEOUT_MS = 3000
+const ELEVENLABS_CONNECT_TIMEOUT_MS = 5000
 const LOCAL_CONNECT_TIMEOUT_MS = 5 * 60_000
 
 export type TranscriptionCallbacks = {
@@ -77,7 +78,9 @@ const QUOTA_MESSAGE =
   'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
 
 function modeForBackend(backend: TranscriptionBackend): SttMode {
-  return backend === 'local-parakeet' ? 'local-parakeet' : 'cloud'
+  if (backend === 'local-parakeet') return 'local-parakeet'
+  if (backend === 'elevenlabs') return 'elevenlabs'
+  return 'cloud'
 }
 
 async function localSttAvailable(): Promise<boolean> {
@@ -89,13 +92,35 @@ async function localSttAvailable(): Promise<boolean> {
   }
 }
 
+async function elevenLabsSttAvailable(): Promise<boolean> {
+  try {
+    const status = await window.omi.byokStatus()
+    return !!status.providers.elevenlabs.configured
+  } catch {
+    return false
+  }
+}
+
 async function initialBackendOrder(): Promise<TranscriptionBackend[]> {
   const preference = getPreferences().sttMode ?? 'auto'
   if (preference === 'cloud') {
     return (await localSttAvailable()) ? ['omi', 'local-parakeet'] : ['omi']
   }
   if (preference === 'local-parakeet') return ['local-parakeet', 'omi']
+  if (preference === 'elevenlabs') {
+    return (await elevenLabsSttAvailable()) ? ['elevenlabs', 'omi'] : ['omi']
+  }
   return (await localSttAvailable()) ? ['local-parakeet', 'omi'] : ['omi']
+}
+
+function connectTimeoutForBackend(backend: TranscriptionBackend): number {
+  if (backend === 'local-parakeet') return LOCAL_CONNECT_TIMEOUT_MS
+  if (backend === 'elevenlabs') return ELEVENLABS_CONNECT_TIMEOUT_MS
+  return CLOUD_CONNECT_TIMEOUT_MS
+}
+
+function fallbackForBackend(backend: TranscriptionBackend): TranscriptionBackend {
+  return backend === 'omi' ? 'local-parakeet' : 'omi'
 }
 
 /**
@@ -115,15 +140,12 @@ async function startWithBackend(
   let outcome: 'pending' | 'connected' | 'failed' = 'pending'
   return new Promise<OmiListenHandle | null>((resolve) => {
     let handle: OmiListenHandle | null = null
-    const timeout = setTimeout(
-      () => {
-        if (outcome !== 'pending') return
-        outcome = 'failed'
-        void handle?.stop().catch(() => undefined)
-        resolve(null)
-      },
-      backend === 'local-parakeet' ? LOCAL_CONNECT_TIMEOUT_MS : CLOUD_CONNECT_TIMEOUT_MS
-    )
+    const timeout = setTimeout(() => {
+      if (outcome !== 'pending') return
+      outcome = 'failed'
+      void handle?.stop().catch(() => undefined)
+      resolve(null)
+    }, connectTimeoutForBackend(backend))
 
     startOmiListen(
       source,
@@ -159,7 +181,9 @@ async function startWithBackend(
               ? isQuotaClose(code, reason)
                 ? QUOTA_MESSAGE
                 : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
-              : `Local Parakeet STT closed (${code})${reason ? ` ${reason}` : ''}`
+              : backend === 'elevenlabs'
+                ? `ElevenLabs STT closed (${code})${reason ? ` ${reason}` : ''}`
+                : `Local Parakeet STT closed (${code})${reason ? ` ${reason}` : ''}`
           onLost(message, backend)
         },
         onError: (err, fatal) => {
@@ -226,7 +250,7 @@ export async function startTranscription(
       cb,
       (reason, lostBackend) => {
         if (stopped) return
-        const fallback: TranscriptionBackend = lostBackend === 'omi' ? 'local-parakeet' : 'omi'
+        const fallback = fallbackForBackend(lostBackend)
         void (async () => {
           if (fallback === 'local-parakeet' && !(await localSttAvailable())) {
             cb.onError(new Error(`Transcription stopped: ${reason}`))
