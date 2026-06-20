@@ -1,6 +1,13 @@
 import { auth } from './firebase'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
+import {
+  noteListenWebSocketClosed,
+  noteListenWebSocketConnecting,
+  noteListenWebSocketError,
+  noteListenWebSocketOpen
+} from './continuousRecordingStatus'
+import type { RecordingDiagnosticsScope } from './continuousRecordingStatus'
 
 export type OmiListenCallbacks = {
   /** Fires once when the v4/listen WS reaches OPEN. */
@@ -57,17 +64,27 @@ async function getSystemAudioStream(): Promise<MediaStream> {
  */
 export async function startOmiListen(
   source: ListenSource,
-  cb: OmiListenCallbacks
+  cb: OmiListenCallbacks,
+  diagnosticsScope: RecordingDiagnosticsScope = 'recorder'
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
   if (!user) throw new Error('Omi v4/listen requires sign-in.')
   const token = await user.getIdToken()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
+  const trackDiagnostics = diagnosticsScope === 'live-mic'
 
-  const stream =
-    source === 'mic'
-      ? await navigator.mediaDevices.getUserMedia({ audio: true })
-      : await getSystemAudioStream()
+  if (trackDiagnostics) noteListenWebSocketConnecting(sessionId)
+
+  let stream: MediaStream
+  try {
+    stream =
+      source === 'mic'
+        ? await navigator.mediaDevices.getUserMedia({ audio: true })
+        : await getSystemAudioStream()
+  } catch (e) {
+    if (trackDiagnostics) noteListenWebSocketError(sessionId, (e as Error).message)
+    throw e
+  }
 
   const audioCtx = new AudioContext({ sampleRate: 16000 })
   const node = audioCtx.createMediaStreamSource(stream)
@@ -81,15 +98,18 @@ export async function startOmiListen(
     if (msg.sessionId !== sessionId) return
     if (msg.kind === 'connected') {
       connected = true
+      if (trackDiagnostics) noteListenWebSocketOpen(sessionId)
       cb.onConnected()
     } else if (msg.kind === 'segments') {
       cb.onSegments(msg.segments)
     } else if (msg.kind === 'event') {
       cb.onEvent(msg.event)
     } else if (msg.kind === 'error') {
+      if (trackDiagnostics) noteListenWebSocketError(sessionId, msg.message)
       cb.onError(new Error(msg.message), msg.fatal)
     } else if (msg.kind === 'closed') {
       if (stopped) return
+      if (trackDiagnostics) noteListenWebSocketClosed(sessionId, msg.code, msg.reason)
       if (connected) {
         // Connected then dropped (clean, quota, or abnormal) → let the caller
         // end the session and surface an error. Pass the reason so a 1008
@@ -111,6 +131,7 @@ export async function startOmiListen(
       language: getPreferences().language
     })
   } catch (e) {
+    if (trackDiagnostics) noteListenWebSocketError(sessionId, (e as Error).message)
     unsub()
     try {
       processor.disconnect()

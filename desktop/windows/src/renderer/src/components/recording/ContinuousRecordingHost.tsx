@@ -2,6 +2,11 @@ import { useEffect, useState } from 'react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
 import { startLiveMicSession } from '../../lib/liveMicSession'
+import {
+  setContinuousRecordingAuth,
+  setContinuousRecordingPreference,
+  setContinuousRecordingSession
+} from '../../lib/continuousRecordingStatus'
 
 // Always-on microphone capture. Mounted once in the authed app shell (like
 // RewindCaptureHost) so it runs regardless of the active tab. When the
@@ -14,13 +19,36 @@ export function ContinuousRecordingHost(): React.JSX.Element | null {
   const [enabled, setEnabled] = useState(() => !!getPreferences().continuousRecording)
   const [signedIn, setSignedIn] = useState(() => !!auth.currentUser)
 
-  useEffect(() => onPreferencesChange((p) => setEnabled(!!p.continuousRecording)), [])
-  useEffect(() => onAuthStateChanged(auth, (u) => setSignedIn(!!u)), [])
+  useEffect(() => {
+    setContinuousRecordingPreference(!!getPreferences().continuousRecording)
+    return onPreferencesChange((p) => {
+      const next = !!p.continuousRecording
+      setEnabled(next)
+      setContinuousRecordingPreference(next)
+    })
+  }, [])
+  useEffect(() => {
+    setContinuousRecordingAuth({
+      signedIn: !!auth.currentUser,
+      email: auth.currentUser?.email ?? null
+    })
+    return onAuthStateChanged(auth, (u) => {
+      setSignedIn(!!u)
+      setContinuousRecordingAuth({ signedIn: !!u, email: u?.email ?? null })
+    })
+  }, [])
 
   useEffect(() => {
-    if (!enabled || !signedIn) return
+    if (!enabled || !signedIn) {
+      setContinuousRecordingSession(false)
+      return
+    }
+    setContinuousRecordingSession(true)
     const session = startLiveMicSession()
-    return () => session.stop()
+    return () => {
+      setContinuousRecordingSession(false)
+      session.stop()
+    }
   }, [enabled, signedIn])
 
   return null

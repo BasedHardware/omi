@@ -4,6 +4,12 @@ import { refreshCloudConversations } from './pageCache'
 import { createPendingConversation } from './pendingConversations'
 import { transcriptWordCount } from './retentionRules'
 import { buildLocalGraph } from './kgSynthesis'
+import {
+  noteContinuousRecordingConversationSync,
+  noteContinuousRecordingEvent,
+  noteContinuousRecordingTranscript,
+  setContinuousRecordingSession
+} from './continuousRecordingStatus'
 
 // Force a local-KG rebuild so conversation-derived memories reach the brain map,
 // throttled to once per 30 min (the rebuild is two LLM calls). Delayed so the
@@ -50,12 +56,17 @@ export function startLiveMicSession(): LiveMicController {
     silenceTimer = null
   }
 
+  const refreshRecordingConversations = (): void => {
+    noteContinuousRecordingConversationSync()
+    refreshCloudConversations()
+  }
+
   // Re-fetch /v1/conversations now and a few times after, so a just-finalized
   // conversation appears (and its title/emoji fill in) without a manual refresh.
   const pollForNewConversation = (): void => {
-    refreshCloudConversations()
+    refreshRecordingConversations()
     for (const delay of [4000, 12000, 30000]) {
-      timers.push(setTimeout(() => refreshCloudConversations(), delay))
+      timers.push(setTimeout(refreshRecordingConversations, delay))
     }
   }
 
@@ -100,7 +111,11 @@ export function startLiveMicSession(): LiveMicController {
     }
     hasSpeech = false
     clearSilence()
-    try { handle?.stop() } catch { /* ignore */ }
+    try {
+      handle?.stop()
+    } catch {
+      /* ignore */
+    }
     handle = null
     saveCurrent()
     attempt = 0
@@ -109,41 +124,51 @@ export function startLiveMicSession(): LiveMicController {
 
   const startSession = (): void => {
     liveConversation.setStatus('connecting')
-    void startTranscription('mic', {
-      onLine: (line) => {
-        if (cancelled) return
-        liveConversation.setStatus('live')
-        liveConversation.appendLine(line)
-        hasSpeech = true
-        armSilence() // reset the silence countdown on each new utterance
-      },
-      onInterim: () => {},
-      onBackend: () => {
-        if (!cancelled) liveConversation.setStatus('live')
-      },
-      onEvent: (ev) => {
-        if (cancelled) return
-        if (isConversationBoundary(ev)) {
-          // Backend finalized on its own (beat our silence timer). Skip trivial
-          // blips; otherwise keep the transcript shown as saved.
-          clearSilence()
-          hasSpeech = false
-          if (liveWordCount() >= 5) saveCurrent()
+    void startTranscription(
+      'mic',
+      {
+        onLine: (line) => {
+          if (cancelled) return
+          liveConversation.setStatus('live')
+          noteContinuousRecordingTranscript()
+          liveConversation.appendLine(line)
+          hasSpeech = true
+          armSilence() // reset the silence countdown on each new utterance
+        },
+        onInterim: () => {},
+        onBackend: () => {
+          if (!cancelled) liveConversation.setStatus('live')
+        },
+        onEvent: (ev) => {
+          if (cancelled) return
+          noteContinuousRecordingEvent(ev.type)
+          if (isConversationBoundary(ev)) {
+            // Backend finalized on its own (beat our silence timer). Skip trivial
+            // blips; otherwise keep the transcript shown as saved.
+            clearSilence()
+            hasSpeech = false
+            if (liveWordCount() >= 5) saveCurrent()
+          }
+        },
+        onError: (e) => {
+          if (cancelled) return
+          if (attempt < MAX_ATTEMPTS) {
+            attempt++
+            liveConversation.setStatus('connecting')
+            timers.push(setTimeout(startSession, 800 * attempt))
+          } else {
+            liveConversation.setStatus('error', (e as Error).message)
+          }
         }
       },
-      onError: (e) => {
-        if (cancelled) return
-        if (attempt < MAX_ATTEMPTS) {
-          attempt++
-          liveConversation.setStatus('connecting')
-          timers.push(setTimeout(startSession, 800 * attempt))
-        } else {
-          liveConversation.setStatus('error', (e as Error).message)
-        }
-      }
-    }).then((h) => {
+      'live-mic'
+    ).then((h) => {
       if (cancelled) {
-        try { h.stop() } catch { /* ignore */ }
+        try {
+          h.stop()
+        } catch {
+          /* ignore */
+        }
         return
       }
       handle = h
@@ -163,10 +188,15 @@ export function startLiveMicSession(): LiveMicController {
       clearSilence()
       timers.forEach(clearTimeout)
       unsubFinalize()
-      try { handle?.stop() } catch { /* ignore */ }
+      try {
+        handle?.stop()
+      } catch {
+        /* ignore */
+      }
       handle = null
       liveConversation.reset()
-      refreshCloudConversations()
+      setContinuousRecordingSession(false)
+      refreshRecordingConversations()
     }
   }
 }
