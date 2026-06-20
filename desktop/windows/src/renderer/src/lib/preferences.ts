@@ -16,6 +16,9 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  // Runtime backing chat and agent tasks. 'auto' preserves the prior order:
+  // Pi/Omi when explicitly enabled, then BYOK, then Omi hosted.
+  chatRuntimeMode: 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
@@ -34,6 +37,10 @@ export type Preferences = {
   // Set by the onboarding opt-in step; toggled in Settings → Rewind. Undefined =
   // off (opt-in), so existing users are unaffected until they enable it.
   continuousRecording?: boolean
+  // Opt-in realtime voice path. Separate from /v4/listen transcription so
+  // continuous recording remains available even when voice is off/unavailable.
+  realtimeVoiceEnabled?: boolean
+  realtimeVoiceProvider?: 'omi-relay' | 'openai-byok'
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.
@@ -49,7 +56,9 @@ const defaults: Preferences = {
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you
   // scroll up). Users can switch back to 'per-launch' in Settings.
-  chatHistoryMode: 'infinite'
+  chatHistoryMode: 'infinite',
+  chatRuntimeMode: 'auto',
+  realtimeVoiceProvider: 'omi-relay'
 }
 
 function load(): Preferences {
