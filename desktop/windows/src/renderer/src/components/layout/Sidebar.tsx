@@ -150,6 +150,7 @@ export function Sidebar(): React.JSX.Element {
     name: string
     id: string
     seenAt: number
+    batteryLevel?: number
   } | null>(null)
   const [showGetOmi, setShowGetOmi] = useState(
     () => localStorage.getItem(GET_OMI_DISMISSED_KEY) !== '1'
@@ -412,7 +413,7 @@ export function Sidebar(): React.JSX.Element {
     <nav
       className={cn(
         'slide-in-left relative z-50 flex h-full shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a] px-2 py-3',
-        'transition-[width] duration-200 ease-out',
+        'transition-[width] duration-200 ease-in-out',
         collapsed ? 'w-16' : 'w-[260px]'
       )}
     >
@@ -577,8 +578,23 @@ export function Sidebar(): React.JSX.Element {
             <>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-white/80">{pairedDevice.name}</p>
-                <p className={cn('text-[10px]', deviceIsRecent ? 'text-green-500' : 'text-orange-400')}>
-                  {deviceIsRecent ? 'Connected' : 'Last paired'}
+                <p className={cn(
+                  'text-[10px]',
+                  !deviceIsRecent
+                    ? 'text-orange-400'
+                    : pairedDevice.batteryLevel != null && pairedDevice.batteryLevel >= 0
+                      ? pairedDevice.batteryLevel < 20
+                        ? 'text-red-500'
+                        : pairedDevice.batteryLevel < 40
+                          ? 'text-orange-400'
+                          : 'text-green-500'
+                      : 'text-green-500'
+                )}>
+                  {deviceIsRecent
+                    ? pairedDevice.batteryLevel != null && pairedDevice.batteryLevel >= 0
+                      ? `${pairedDevice.batteryLevel}%`
+                      : 'Connected'
+                    : 'Last paired'}
                 </p>
               </div>
               <ChevronRight className="h-3 w-3 shrink-0 text-white/25" strokeWidth={2} />
