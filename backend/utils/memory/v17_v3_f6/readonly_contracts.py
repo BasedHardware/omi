@@ -1,9 +1,4 @@
-"""Compatibility facade for V17-V3-F6 local-only read-only evidence contracts.
-
-Canonical implementations live under :mod:`utils.memory.v17_v3_f6`.
-This facade preserves the original public import surface, including helper
-functions used by tests.
-"""
+"""Canonical V17-V3-F6 read-only contract exports."""
 
 from __future__ import annotations
 

@@ -1,12 +1,13 @@
-"""Compatibility facade for V17-V3-F6 local-only read-only evidence contracts.
-
-Canonical implementations live under :mod:`utils.memory.v17_v3_f6`.
-This facade preserves the original public import surface, including helper
-functions used by tests.
-"""
+"""Canonical V17-V3-F6 package exports."""
 
 from __future__ import annotations
 
+from utils.memory.v17_v3_f6.aggregate import (
+    F6_LOCAL_GATE_IDS,
+    GCP_ACCESS_GATE_IDS,
+    NON_CLAIMS,
+    build_pre_gcp_aggregate_report,
+)
 from utils.memory.v17_v3_f6.audit import (
     WRITE_METHOD_MARKERS,
     AuditCorrelationResult,
@@ -48,16 +49,19 @@ __all__ = [
     "AuditLogEvent",
     "AuditQuery",
     "EvidenceClientConfig",
+    "F6_LOCAL_GATE_IDS",
     "FORBIDDEN_BROAD_ROLES",
     "FORBIDDEN_WRITE_PERMISSIONS",
     "FakeAuditLogClient",
     "FakeIdentityIamSource",
     "FakeReadEvidenceTransport",
+    "GCP_ACCESS_GATE_IDS",
     "GENERIC_OR_RAW_METHODS",
     "IdentityIamSource",
     "IdentityIamTarget",
     "IdentityIamVerificationResult",
     "MUTATOR_TOKENS",
+    "NON_CLAIMS",
     "REQUIRED_READ_PERMISSIONS",
     "ReadEvidenceRequest",
     "ReadEvidenceTransport",
@@ -68,5 +72,15 @@ __all__ = [
     "_method_family",
     "_method_is_forbidden",
     "assess_audit_correlation",
+    "build_pre_gcp_aggregate_report",
+    "build_report_from_current_local_contracts",
     "verify_identity_iam",
 ]
+
+
+def __getattr__(name: str):
+    if name == "build_report_from_current_local_contracts":
+        from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts
+
+        return build_report_from_current_local_contracts
+    raise AttributeError(name)

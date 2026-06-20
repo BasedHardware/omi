@@ -1,13 +1,38 @@
-from utils.memory.v17_v3_f6_pre_gcp_aggregate import (
+import ast
+from pathlib import Path
+
+from utils.memory.v17_v3_f6.aggregate import (
     F6_LOCAL_GATE_IDS,
     GCP_ACCESS_GATE_IDS,
     build_pre_gcp_aggregate_report,
-    build_report_from_current_local_contracts,
 )
+from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts
+from utils.memory import v17_v3_f6_pre_gcp_aggregate as compatibility_facade
 
 
 def _all_passed_local_proofs():
     return {gate_id: {"status": "PASS", "evidence": f"{gate_id} proof"} for gate_id in F6_LOCAL_GATE_IDS}
+
+
+def test_f6h_aggregate_module_stays_pure_and_local_only():
+    aggregate_path = Path(__file__).resolve().parents[2] / "utils" / "memory" / "v17_v3_f6" / "aggregate.py"
+    tree = ast.parse(aggregate_path.read_text())
+
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imports.extend(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imports.append(node.module)
+
+    assert imports == ["__future__", "typing"]
+
+
+def test_f6h_compatibility_facade_re_exports_old_public_symbols():
+    assert compatibility_facade.F6_LOCAL_GATE_IDS is F6_LOCAL_GATE_IDS
+    assert compatibility_facade.GCP_ACCESS_GATE_IDS is GCP_ACCESS_GATE_IDS
+    assert compatibility_facade.build_pre_gcp_aggregate_report is build_pre_gcp_aggregate_report
+    assert compatibility_facade.build_report_from_current_local_contracts is build_report_from_current_local_contracts
 
 
 def test_f6h_aggregate_requires_every_local_f6_gate_before_pre_gcp_ready():
