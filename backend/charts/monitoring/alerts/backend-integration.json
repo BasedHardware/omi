@@ -263,7 +263,7 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  80
                 ],
                 "type": "gt"
               },

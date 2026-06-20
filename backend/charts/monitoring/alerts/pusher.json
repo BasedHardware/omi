@@ -138,52 +138,22 @@
     "data": [
       {
         "refId": "A",
-        "queryType": "timeSeriesList",
+        "queryType": "",
         "relativeTimeRange": {
-          "from": 21600,
+          "from": 900,
           "to": 0
         },
-        "datasourceUid": "beuxmaq8oxhq8e",
+        "datasourceUid": "prometheus",
         "model": {
-          "aliasBy": "p99",
           "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "instant": false,
+          "expr": "max(pusher_active_ws_connections{pod=~\"prod-omi-pusher.*\"})",
+          "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
-            "filters": [
-              "resource.label.location",
-              "=",
-              "us-central1",
-              "AND",
-              "resource.label.project_id",
-              "=",
-              "based-hardware",
-              "AND",
-              "resource.label.service_name",
-              "=",
-              "pusher",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/container/max_request_concurrencies"
-            ],
-            "groupBys": [
-              "resource.label.service_name"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
+          "refId": "A"
         }
       },
       {
@@ -206,7 +176,7 @@
               },
               "query": {
                 "params": [
-                  "D"
+                  "B"
                 ]
               },
               "reducer": {
@@ -250,7 +220,7 @@
               },
               "query": {
                 "params": [
-                  "E"
+                  "C"
                 ]
               },
               "reducer": {

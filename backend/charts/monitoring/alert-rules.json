@@ -1,5 +1,1285 @@
 [
   {
+    "uid": "dew91uem0dnggb",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher RPS is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  10
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "42",
+      "threshold": "10"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "few91zm7mujggb",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher max concurrent requests are high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pusher_active_ws_connections{pod=~\"prod-omi-pusher.*\"})",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  30
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "43",
+      "threshold": "30"
+    },
+    "isPaused": true,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "cew923rcn3ncwb",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - 4XX error rate is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\",response_code_class=\"400\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "45",
+      "threshold": "1"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "aew926uoh6o00c",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher - 5XX error rate is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\",response_code_class=\"500\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  1
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "3m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "45",
+      "threshold": "1"
+    },
+    "labels": {
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "dew92a2egu8sge",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Pusher",
+    "title": "Pusher instance count is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "range",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(kube_deployment_status_replicas{deployment=\"prod-omi-pusher\"})",
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  40
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "69",
+      "threshold": "40"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "bew9aeqgx2w3kf",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "VAD",
+    "title": "VAD RPS is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  10
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "49",
+      "threshold": "2"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "eew9ai0vlsyrke",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "VAD",
+    "title": "VAD request latency is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\"}[5m])))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  2500
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "50",
+      "threshold": "2500ms (2.5s)"
+    },
+    "isPaused": true,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "dew9ala448r9cc",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "VAD",
+    "title": "VAD - 4XX error rate is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\",response_code_class=\"400\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.1
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "51",
+      "threshold": "0.1"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "few9anlyv16v4a",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "VAD",
+    "title": "VAD - 5XX error rate is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\",response_code_class=\"500\"}[5m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0.1
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "3m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "51",
+      "threshold": "0.1"
+    },
+    "labels": {
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "cew9aupbed0xsd",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "VAD",
+    "title": "VAD replica count is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 86400,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "adhocFilters": [],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(kube_deployment_status_replicas{deployment=\"prod-omi-vad\"})",
+          "instant": false,
+          "interval": "",
+          "intervalMs": 30000,
+          "legendFormat": "Current replicas",
+          "maxDataPoints": 43200,
+          "range": true,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  3
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "53",
+      "threshold": "3"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
     "uid": "cew4a2kdopb0ga",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -1051,31 +2331,53 @@
     "record": null
   },
   {
-    "uid": "dew91uem0dnggb",
+    "uid": "cew97d5vd0ttse",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Pusher",
-    "title": "Pusher RPS is high",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync RPS is high",
     "condition": "C",
     "data": [
       {
         "refId": "A",
-        "queryType": "",
+        "queryType": "timeSeriesList",
         "relativeTimeRange": {
-          "from": 900,
+          "from": 86400,
           "to": 0
         },
-        "datasourceUid": "prometheus",
+        "datasourceUid": "beuxmaq8oxhq8e",
         "model": {
+          "aliasBy": "RPS",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
           },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\"}[5m]))",
-          "instant": true,
+          "instant": false,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "A"
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-sync-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [
+              "resource.label.backend_target_name"
+            ],
+            "perSeriesAligner": "ALIGN_NONE",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
         }
       },
       {
@@ -1133,7 +2435,7 @@
             {
               "evaluator": {
                 "params": [
-                  10
+                  5
                 ],
                 "type": "gt"
               },
@@ -1170,8 +2472,8 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "42",
-      "threshold": "10"
+      "__panelId__": "31",
+      "threshold": "5 RPS"
     },
     "isPaused": false,
     "notification_settings": {
@@ -1180,18 +2482,18 @@
     "record": null
   },
   {
-    "uid": "few91zm7mujggb",
+    "uid": "dew97fqr33oxsd",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Pusher",
-    "title": "Pusher max concurrent requests are high",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync max concurrent requests are high",
     "condition": "C",
     "data": [
       {
         "refId": "A",
         "queryType": "timeSeriesList",
         "relativeTimeRange": {
-          "from": 21600,
+          "from": 86400,
           "to": 0
         },
         "datasourceUid": "beuxmaq8oxhq8e",
@@ -1221,7 +2523,7 @@
               "AND",
               "resource.label.service_name",
               "=",
-              "pusher",
+              "backend-sync",
               "AND",
               "metric.type",
               "=",
@@ -1329,8 +2631,167 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "43",
+      "__panelId__": "32",
       "threshold": "30"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "bew97osjuu22of",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync request latency is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 86400,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "p99",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
+            "filters": [
+              "resource.label.location",
+              "=",
+              "us-central1",
+              "AND",
+              "resource.label.project_id",
+              "=",
+              "based-hardware",
+              "AND",
+              "resource.label.service_name",
+              "=",
+              "backend-sync",
+              "AND",
+              "metric.type",
+              "=",
+              "run.googleapis.com/request_latencies"
+            ],
+            "groupBys": [
+              "resource.label.service_name"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  180000
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "E"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "33",
+      "threshold": "180000ms (3m)"
     },
     "isPaused": true,
     "notification_settings": {
@@ -1339,31 +2800,366 @@
     "record": null
   },
   {
-    "uid": "cew923rcn3ncwb",
+    "uid": "cew97rzyegdtsa",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Pusher",
-    "title": "Pusher - 4XX error rate is high",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync - 4XX error rate is high",
     "condition": "C",
     "data": [
       {
         "refId": "A",
-        "queryType": "",
+        "queryType": "timeSeriesList",
         "relativeTimeRange": {
-          "from": 900,
+          "from": 86400,
           "to": 0
         },
-        "datasourceUid": "prometheus",
+        "datasourceUid": "beuxmaq8oxhq8e",
         "model": {
+          "aliasBy": "4XX",
           "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
           },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\",response_code_class=\"400\"}[5m])) or vector(0)",
-          "instant": true,
+          "instant": false,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
-          "refId": "A"
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-sync-49a4-be",
+              "AND",
+              "metric.label.response_code_class",
+              "=",
+              "400",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [
+              "metric.label.response_code_class"
+            ],
+            "perSeriesAligner": "ALIGN_NONE",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  2
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "34",
+      "threshold": "1"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "cew97uqu791q8a",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync - 5XX error rate is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 86400,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "5XX",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-sync-49a4-be",
+              "AND",
+              "metric.label.response_code_class",
+              "=",
+              "500",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [
+              "metric.label.response_code_class"
+            ],
+            "perSeriesAligner": "ALIGN_SUM",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  2
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "3m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "34",
+      "threshold": "1"
+    },
+    "labels": {
+      "instatus_component": "api"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "cew97x299of7kb",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Backend-sync instance count is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 86400,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "{{metric.label.state}}",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_MAX",
+            "filters": [
+              "resource.label.service_name",
+              "=",
+              "backend-sync",
+              "AND",
+              "metric.type",
+              "=",
+              "run.googleapis.com/container/instance_count"
+            ],
+            "groupBys": [
+              "metric.label.state"
+            ],
+            "perSeriesAligner": "ALIGN_MEAN",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
         }
       },
       {
@@ -1421,7 +3217,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  20
                 ],
                 "type": "gt"
               },
@@ -1458,8 +3254,8 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "45",
-      "threshold": "1"
+      "__panelId__": "36",
+      "threshold": "20 instances (80% of max)"
     },
     "isPaused": false,
     "notification_settings": {
@@ -1468,11 +3264,11 @@
     "record": null
   },
   {
-    "uid": "aew926uoh6o00c",
+    "uid": "dfpgfzd3t1m9sf",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Pusher",
-    "title": "Pusher - 5XX error rate is high",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - 5XX error rate is high",
     "condition": "C",
     "data": [
       {
@@ -1488,7 +3284,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-pusher-2b11u6i0\",response_code_class=\"500\"}[5m])) or vector(0)",
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\",response_code_class=\"500\"}[5m])) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1550,7 +3346,7 @@
             {
               "evaluator": {
                 "params": [
-                  1
+                  0.1
                 ],
                 "type": "gt"
               },
@@ -1586,12 +3382,12 @@
     "for": "3m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "45",
-      "threshold": "1"
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "7",
+      "threshold": "0.1"
     },
     "labels": {
-      "instatus_component": "live-transcription"
+      "instatus_component": "speech-processing"
     },
     "isPaused": false,
     "notification_settings": {
@@ -1600,18 +3396,18 @@
     "record": null
   },
   {
-    "uid": "dew92a2egu8sge",
+    "uid": "efpgg049laqyof",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Pusher",
-    "title": "Pusher instance count is high",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - request latency is high",
     "condition": "C",
     "data": [
       {
         "refId": "A",
-        "queryType": "range",
+        "queryType": "",
         "relativeTimeRange": {
-          "from": 600,
+          "from": 900,
           "to": 0
         },
         "datasourceUid": "prometheus",
@@ -1620,8 +3416,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_deployment_status_replicas{deployment=\"prod-omi-pusher\"})",
-          "instant": false,
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m])))",
+          "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "A"
@@ -1636,6 +3432,27 @@
         },
         "datasourceUid": "__expr__",
         "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
           "datasource": {
             "type": "__expr__",
             "uid": "__expr__"
@@ -1661,7 +3478,7 @@
             {
               "evaluator": {
                 "params": [
-                  40
+                  30000
                 ],
                 "type": "gt"
               },
@@ -1697,9 +3514,275 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "69",
-      "threshold": "40"
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "6",
+      "threshold": "30000ms"
+    },
+    "labels": {
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "efpgg1kfjglj4d",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet RPS is high",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  5
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "5",
+      "threshold": "5 req/s"
+    },
+    "labels": {
+      "instatus_component": "speech-processing"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "efpnx71qc88aob",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet - pod restart detected (possible OOMKill)",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(kube_pod_container_status_restarts_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[10m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "0s",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
+      "__panelId__": "113"
+    },
+    "labels": {
+      "instatus_component": "speech-processing"
     },
     "isPaused": false,
     "notification_settings": {
@@ -3203,659 +5286,6 @@
     "record": null
   },
   {
-    "uid": "bew9aeqgx2w3kf",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "VAD",
-    "title": "VAD RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  10
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "49",
-      "threshold": "2"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "eew9ai0vlsyrke",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "VAD",
-    "title": "VAD request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\"}[5m])))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  2500
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "50",
-      "threshold": "2500ms (2.5s)"
-    },
-    "isPaused": true,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "dew9ala448r9cc",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "VAD",
-    "title": "VAD - 4XX error rate is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\",response_code_class=\"400\"}[5m])) or vector(0)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0.1
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "51",
-      "threshold": "0.1"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "few9anlyv16v4a",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "VAD",
-    "title": "VAD - 5XX error rate is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-vad-snzro08u\",response_code_class=\"500\"}[5m])) or vector(0)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0.1
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "3m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "51",
-      "threshold": "0.1"
-    },
-    "labels": {
-      "instatus_component": "speech-processing"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "cew9aupbed0xsd",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "VAD",
-    "title": "VAD replica count is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "adhocFilters": [],
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum(kube_deployment_status_replicas{deployment=\"prod-omi-vad\"})",
-          "instant": false,
-          "interval": "",
-          "intervalMs": 30000,
-          "legendFormat": "Current replicas",
-          "maxDataPoints": 43200,
-          "range": true,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  3
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "53",
-      "threshold": "3"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
     "uid": "bew95or0pnke8c",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -4119,7 +5549,7 @@
             {
               "evaluator": {
                 "params": [
-                  50
+                  80
                 ],
                 "type": "gt"
               },
@@ -4793,939 +6223,6 @@
     "record": null
   },
   {
-    "uid": "cew97d5vd0ttse",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "RPS",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_SUM",
-            "filters": [
-              "resource.label.backend_target_name",
-              "=",
-              "custom-domains-api-omi-me-backend-sync-49a4-be",
-              "AND",
-              "metric.type",
-              "=",
-              "loadbalancing.googleapis.com/https/backend_request_count"
-            ],
-            "groupBys": [
-              "resource.label.backend_target_name"
-            ],
-            "perSeriesAligner": "ALIGN_NONE",
-            "preprocessor": "rate",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  5
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "31",
-      "threshold": "5 RPS"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "dew97fqr33oxsd",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync max concurrent requests are high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "p99",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
-            "filters": [
-              "resource.label.location",
-              "=",
-              "us-central1",
-              "AND",
-              "resource.label.project_id",
-              "=",
-              "based-hardware",
-              "AND",
-              "resource.label.service_name",
-              "=",
-              "backend-sync",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/container/max_request_concurrencies"
-            ],
-            "groupBys": [
-              "resource.label.service_name"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  30
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "32",
-      "threshold": "30"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "bew97osjuu22of",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "p99",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
-            "filters": [
-              "resource.label.location",
-              "=",
-              "us-central1",
-              "AND",
-              "resource.label.project_id",
-              "=",
-              "based-hardware",
-              "AND",
-              "resource.label.service_name",
-              "=",
-              "backend-sync",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/request_latencies"
-            ],
-            "groupBys": [
-              "resource.label.service_name"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  180000
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "E"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "33",
-      "threshold": "180000ms (3m)"
-    },
-    "isPaused": true,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "cew97rzyegdtsa",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync - 4XX error rate is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "4XX",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_SUM",
-            "filters": [
-              "resource.label.backend_target_name",
-              "=",
-              "custom-domains-api-omi-me-backend-sync-49a4-be",
-              "AND",
-              "metric.label.response_code_class",
-              "=",
-              "400",
-              "AND",
-              "metric.type",
-              "=",
-              "loadbalancing.googleapis.com/https/backend_request_count"
-            ],
-            "groupBys": [
-              "metric.label.response_code_class"
-            ],
-            "perSeriesAligner": "ALIGN_NONE",
-            "preprocessor": "rate",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  2
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "34",
-      "threshold": "1"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "cew97uqu791q8a",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync - 5XX error rate is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "5XX",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_SUM",
-            "filters": [
-              "resource.label.backend_target_name",
-              "=",
-              "custom-domains-api-omi-me-backend-sync-49a4-be",
-              "AND",
-              "metric.label.response_code_class",
-              "=",
-              "500",
-              "AND",
-              "metric.type",
-              "=",
-              "loadbalancing.googleapis.com/https/backend_request_count"
-            ],
-            "groupBys": [
-              "metric.label.response_code_class"
-            ],
-            "perSeriesAligner": "ALIGN_SUM",
-            "preprocessor": "rate",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  2
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "3m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "34",
-      "threshold": "1"
-    },
-    "labels": {
-      "instatus_component": "api"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "cew97x299of7kb",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Backend-sync",
-    "title": "Backend-sync instance count is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "timeSeriesList",
-        "relativeTimeRange": {
-          "from": 86400,
-          "to": 0
-        },
-        "datasourceUid": "beuxmaq8oxhq8e",
-        "model": {
-          "aliasBy": "{{metric.label.state}}",
-          "datasource": {
-            "type": "stackdriver",
-            "uid": "beuxmaq8oxhq8e"
-          },
-          "instant": false,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "queryType": "timeSeriesList",
-          "range": true,
-          "refId": "A",
-          "timeSeriesList": {
-            "alignmentPeriod": "cloud-monitoring-auto",
-            "crossSeriesReducer": "REDUCE_MAX",
-            "filters": [
-              "resource.label.service_name",
-              "=",
-              "backend-sync",
-              "AND",
-              "metric.type",
-              "=",
-              "run.googleapis.com/container/instance_count"
-            ],
-            "groupBys": [
-              "metric.label.state"
-            ],
-            "perSeriesAligner": "ALIGN_MEAN",
-            "preprocessor": "none",
-            "projectName": "based-hardware",
-            "view": "FULL"
-          }
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  20
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "36",
-      "threshold": "20 instances (80% of max)"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
     "uid": "dew9b4o7boa2oe",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -5863,533 +6360,6 @@
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "__panelId__": "57",
       "threshold": "1"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "dfpgfzd3t1m9sf",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - 5XX error rate is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\",response_code_class=\"500\"}[5m])) or vector(0)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0.1
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "3m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "7",
-      "threshold": "0.1"
-    },
-    "labels": {
-      "instatus_component": "speech-processing"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "efpgg049laqyof",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - request latency is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.99, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m])))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  30000
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "6",
-      "threshold": "30000ms"
-    },
-    "labels": {
-      "instatus_component": "speech-processing"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "efpgg1kfjglj4d",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet RPS is high",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=\"k8s2-fr-heiog7uv-prod-omi-backend-prod-omi-parakeet-g38rzz69\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  5
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "5",
-      "threshold": "5 req/s"
-    },
-    "labels": {
-      "instatus_component": "speech-processing"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "efpnx71qc88aob",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Parakeet",
-    "title": "Parakeet - pod restart detected (possible OOMKill)",
-    "condition": "C",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 900,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(kube_pod_container_status_restarts_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[10m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "B"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "A",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "B",
-          "type": "reduce"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [
-                  0
-                ],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "C"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "B",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "threshold"
-        }
-      }
-    ],
-    "noDataState": "Alerting",
-    "execErrState": "Error",
-    "for": "0s",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "__dashboardUid__": "07e4c65f-ae79-414d-bf05-99468267d199",
-      "__panelId__": "113"
-    },
-    "labels": {
-      "instatus_component": "speech-processing"
     },
     "isPaused": false,
     "notification_settings": {
