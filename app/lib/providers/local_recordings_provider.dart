@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/batch_recording.dart';
@@ -28,6 +29,10 @@ import 'package:omi/utils/waveform_utils.dart';
 /// tiny sidecar (SharedPreferences) so an app-kill mid-processing reconciles on
 /// next launch, and the local file is deleted only once the job reports
 /// `completed` (never fire-and-forget).
+/// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
+/// react (fair-use message, generic error, or navigate away) instead of guessing.
+enum LocalUploadOutcome { started, rateLimited, failed, busy }
+
 class LocalRecordingsProvider extends ChangeNotifier {
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
 
@@ -54,6 +59,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   LocalRecordingsProvider() {
     _audio.addListener(_onAudioChanged);
+    // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
+    // rotated recording surfaces without waiting for a BLE disconnect.
+    BleBridge.instance.batchRecordingFinalizedCallback = (_) => refresh();
     _jobs = _loadJobs();
     refresh();
     if (_jobs.isNotEmpty) {
@@ -136,11 +144,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// Upload a single recording → backend transcribes it into a conversation.
   /// 200 fast-path: delete the file + surface the conversation immediately.
   /// 202 queued: persist the jobId and let the reconciler finish it.
-  Future<void> upload(LocalRecording rec) async {
-    if (_isUploading || rec.isBusy) return;
+  Future<LocalUploadOutcome> upload(LocalRecording rec) async {
+    if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
     if (SyncRateLimiter.instance.isLimited) {
       notifyListeners();
-      return;
+      return LocalUploadOutcome.rateLimited;
     }
 
     _isUploading = true;
@@ -148,33 +156,39 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _failedName = null;
     await refresh();
 
+    var outcome = LocalUploadOutcome.started;
     try {
       final file = File(rec.filePath);
       if (!file.existsSync()) {
         Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
-        return;
-      }
-      final result = await uploadLocalFilesV2([file]);
-      SyncRateLimiter.instance.clear();
+        _failedName = rec.fileName;
+        outcome = LocalUploadOutcome.failed;
+      } else {
+        final result = await uploadLocalFilesV2([file]);
+        SyncRateLimiter.instance.clear();
 
-      if (result.completed != null) {
-        await _deleteFileOnly(rec.fileName);
-        await _surface(result.completed!.newConversationIds, result.completed!.updatedConversationIds);
-      } else if (result.jobId != null) {
-        _jobs[rec.fileName] = result.jobId!;
-        await _saveJobs();
-        _startReconcileTimer();
+        if (result.completed != null) {
+          await _deleteFileOnly(rec.fileName);
+          await _surface(result.completed!.newConversationIds, result.completed!.updatedConversationIds);
+        } else if (result.jobId != null) {
+          _jobs[rec.fileName] = result.jobId!;
+          await _saveJobs();
+          _startReconcileTimer();
+        }
       }
     } on SyncRateLimitedException catch (e) {
       SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
+      outcome = LocalUploadOutcome.rateLimited;
     } catch (e) {
       _failedName = rec.fileName;
       Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
+      outcome = LocalUploadOutcome.failed;
     } finally {
       _isUploading = false;
       _uploadingName = null;
       await refresh();
     }
+    return outcome;
   }
 
   // ───────────────────────── reconcile ─────────────────────────
@@ -348,6 +362,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _stopReconcileTimer();
+    BleBridge.instance.batchRecordingFinalizedCallback = null;
     _audio.removeListener(_onAudioChanged);
     super.dispose();
   }
