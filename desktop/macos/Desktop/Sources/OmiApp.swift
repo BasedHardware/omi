@@ -105,6 +105,7 @@ struct OMIApp: App {
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
         .withFontScaling()
+        .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
@@ -244,6 +245,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
+
+    // After a Sparkle update, show a small "what's new" card in the corner of the
+    // main window once. Delayed so the window/overlay exist to render it.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+      WhatsNewToast.shared.presentIfUpdated()
+    }
 
     // Proactive notifications are now OFF by default for everyone. Run the one-time
     // migration before any assistant can fire, so existing users are flipped to Off

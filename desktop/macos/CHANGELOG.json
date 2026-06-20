@@ -1,5 +1,8 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a What's New link in Settings \u2192 About that opens the release notes for your version",
+    "Show a What's New popup in the corner after the app updates to a new version"
+  ],
   "releases": [
     {
       "version": "0.11.481",
