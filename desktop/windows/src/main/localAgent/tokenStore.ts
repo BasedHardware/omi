@@ -45,6 +45,12 @@ export function ensureLocalAgentToken(): string {
   return token
 }
 
+export function rotateLocalAgentToken(): string {
+  const token = createToken()
+  saveLocalAgentToken(token)
+  return token
+}
+
 export function clearLocalAgentToken(): void {
   try {
     rmSync(file(), { force: true })
