@@ -149,11 +149,16 @@ def test_conversation_id_is_deterministic_and_timestamp_keyed():
     assert limitless.conversation_id_for_lifelog("user-xyz", FN_A) != id1
 
 
-def test_unparseable_filename_falls_back_to_full_name():
+def test_unparseable_filename_falls_back_to_full_path():
+    # Deterministic for the same path; distinct for different paths.
     a = limitless.conversation_id_for_lifelog(UID, "no-timestamp.md")
     b = limitless.conversation_id_for_lifelog(UID, "no-timestamp.md")
     c = limitless.conversation_id_for_lifelog(UID, "other-no-timestamp.md")
     assert a == b and a != c
+    # Same basename under different folders must NOT collide (full path is the fallback).
+    d = limitless.conversation_id_for_lifelog(UID, "a/lifelogs/note.md")
+    e = limitless.conversation_id_for_lifelog(UID, "b/lifelogs/note.md")
+    assert d != e
 
 
 # --------------------------------------------------------------------------- #
@@ -225,6 +230,22 @@ def test_duplicate_basename_in_archive_does_not_overwrite(tmp_path):
     assert len(_store.docs) == 1, "same-identity entries collapse to one conversation"
     (conv_id,) = list(_store.docs)
     assert _store.docs[conv_id]["transcript_segments"][0]["text"] == "FIRST occurrence content."
+
+
+def test_nested_unparseable_basenames_do_not_collide(tmp_path):
+    """Distinct lifelogs with unparseable names sharing a basename under different
+    folders must both import (full path is the fallback identity, not the basename)."""
+    _store.reset()
+    zip_data = _zip_bytes(
+        {
+            "a/lifelogs/note.md": _lifelog_md("Folder A content."),
+            "b/lifelogs/note.md": _lifelog_md("Folder B content."),
+        }
+    )
+
+    _run_import(tmp_path, zip_data)
+
+    assert len(_store.docs) == 2, "same basename in different folders must not be deduped when unparseable"
 
 
 def test_persisted_id_is_deterministic_not_random(tmp_path):
