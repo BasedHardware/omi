@@ -35,7 +35,7 @@ final class BatchAudioWriter {
     private var lastFsyncMs: Int64 = 0
     private var storageFull = false
     private var recovered = false
-    private var diagLoggedNoConfig = false
+    private var wasEnabled = false
     private var diagLoggedMatch = false
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
@@ -60,15 +60,15 @@ final class BatchAudioWriter {
     @discardableResult
     func handle(peripheralUuid: String, serviceUuid: String, characteristicUuid: String, value: Data) -> Bool {
         guard let config = loadConfig() else {
-            if !diagLoggedNoConfig {
-                diagLoggedNoConfig = true
-                let d = UserDefaults.standard
-                NSLog("[BatchWriter] no config: batchModeEnabled=\(d.bool(forKey: "flutter.batchModeEnabled")) dir=\(d.string(forKey: "flutter.batchAudioDir") ?? "nil") hasStreamConfig=\(d.string(forKey: "flutter.nativeBleStreamConfig") != nil)")
+            // Offline mode is off (the common case). Finalize an in-progress file only on the
+            // enabled->disabled edge — never schedule per-packet work on the BLE hot path.
+            if wasEnabled {
+                wasEnabled = false
+                queue.async { self.closeCurrentLocked("disabled") }
             }
-            queue.async { self.closeCurrentLocked("disabled") }
             return false
         }
-        diagLoggedNoConfig = false
+        wasEnabled = true
         guard config.deviceId.lowercased() == peripheralUuid.lowercased() else { return false }
         guard config.serviceUuid == serviceUuid.lowercased(),
             config.characteristicUuid == characteristicUuid.lowercased() else { return false }
