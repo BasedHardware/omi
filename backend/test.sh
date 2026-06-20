@@ -89,6 +89,7 @@ pytest tests/unit/test_v17_v3_write_convergence.py -v
 pytest tests/unit/test_v17_v3_response_adapter.py -v
 pytest tests/unit/test_v17_v3_request_adapter.py -v
 pytest tests/unit/test_v17_v3_route_planner.py -v
+pytest tests/unit/test_v17_v3_control_reader_contract.py -v
 pytest tests/unit/test_v17_p1_3_v3_route_signature_integration.py -v
 pytest tests/unit/test_v17_p1_3_v3_fastapi_route_contract.py -v
 pytest tests/unit/test_v17_p1_3_v3_real_router_dependency_map.py -v

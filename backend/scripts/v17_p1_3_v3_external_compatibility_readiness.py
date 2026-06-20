@@ -661,6 +661,22 @@ CONTROL_READER_READINESS_PROOF = {
     ],
 }
 
+CONTROL_READER_CONTRACT_PROOF = {
+    "service": "backend/utils/memory/v17_v3_control_reader_contract.py",
+    "test": "backend/tests/unit/test_v17_v3_control_reader_contract.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "pure_fake_injectable_server_control_reader_protocol_and_decision_contract",
+        "non_enrolled_legacy_primary_allowed_marker_without_route_wiring",
+        "enrolled_all_gates_ready_allows_v17_projection_marker_without_legacy_fallback",
+        "missing_control_doc_stale_generation_no_grant_projection_write_cursor_archive_short_term_fail_closed",
+        "archive_default_unavailable_and_stale_short_term_default_hidden",
+        "no_fastapi_firestore_pinecone_provider_cloud_network_imports_or_runtime_wiring",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -718,6 +734,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
+        "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -748,6 +765,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "get_dependency_auth_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
             "control_reader_readiness_proof_present": True,
+            "control_reader_contract_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

@@ -47,6 +47,7 @@ PROOF_CONSTANTS = {
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
     "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
+    "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
 }
 
 
@@ -83,6 +84,7 @@ REMAINING_GATES = [
             "memory_read_service_proof",
             "route_planner_proof",
             "control_reader_readiness_proof",
+            "control_reader_contract_proof",
         ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,

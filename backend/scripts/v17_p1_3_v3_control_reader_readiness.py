@@ -43,6 +43,7 @@ PROOF_CONSTANTS = {
     "fastapi_route_contract_proof": _EXTERNAL.FASTAPI_ROUTE_CONTRACT_PROOF,
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
+    "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
     "get_runtime_wiring_readiness_proof": _EXTERNAL.GET_RUNTIME_WIRING_READINESS_PROOF,
 }
 
@@ -102,7 +103,12 @@ CONTROL_READER_REQUIREMENTS = [
         "required_contract": "Define a fake-injectable server control reader interface shape for future route wiring, without wiring it now.",
         "runtime_route_wiring_now": False,
         "production_firestore_reader_implemented": False,
-        "evidence_sources": ["memory_read_service_proof", "route_planner_proof", "get_runtime_wiring_readiness_proof"],
+        "evidence_sources": [
+            "control_reader_contract_proof",
+            "memory_read_service_proof",
+            "route_planner_proof",
+            "get_runtime_wiring_readiness_proof",
+        ],
         "missing_real_firestore_api_emulator_rules_iam_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
@@ -115,6 +121,7 @@ CONTROL_READER_REQUIREMENTS = [
         "fail_closed_reasons": FAIL_CLOSED_REASONS,
         "evidence_sources": [
             "decision_service_proof",
+            "control_reader_contract_proof",
             "cursor_service_proof",
             "projection_readiness_proof",
             "write_convergence_proof",
@@ -150,7 +157,12 @@ CONTROL_READER_REQUIREMENTS = [
         "legacy_fallback_allowed_for_enrolled_gate_failures": False,
         "legacy_v17_result_merge_allowed": False,
         "exception_downgrade_to_legacy_allowed": False,
-        "evidence_sources": ["decision_service_proof", "memory_read_service_proof", "route_planner_proof"],
+        "evidence_sources": [
+            "decision_service_proof",
+            "control_reader_contract_proof",
+            "memory_read_service_proof",
+            "route_planner_proof",
+        ],
         "missing_real_firestore_api_emulator_rules_iam_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
@@ -359,6 +371,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "production_control_reader_implemented": False,
             "approval_claimed": False,
             "safe_next_step_count": len(PROPOSED_NEXT_SAFE_STEPS),
+            "control_reader_contract_proof_present": True,
         },
     }
 

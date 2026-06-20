@@ -36,6 +36,7 @@ REQUIRED_PROOF_KEYS = {
     "fastapi_route_contract_proof",
     "get_dependency_auth_readiness_proof",
     "projection_store_readiness_proof",
+    "control_reader_contract_proof",
     "get_runtime_wiring_readiness_proof",
 }
 
@@ -208,7 +209,7 @@ def test_control_reader_readiness_json_summary_is_stable():
         "requirement_count": 8,
         "blocked_requirement_count": 8,
         "fail_closed_reason_count": 8,
-        "existing_local_proof_count": 12,
+        "existing_local_proof_count": 13,
         "missing_real_evidence_requirement_count": 8,
         "read_only": True,
         "mutation_allowed": False,
@@ -216,6 +217,7 @@ def test_control_reader_readiness_json_summary_is_stable():
         "production_control_reader_implemented": False,
         "approval_claimed": False,
         "safe_next_step_count": 5,
+        "control_reader_contract_proof_present": True,
     }
 
 
