@@ -37,6 +37,7 @@ function timed<T>(name: string, fn: () => T): T {
 
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
+let rewindFtsAvailable: boolean | null = null
 
 // Add a column only if it doesn't already exist, so existing databases (which
 // predate the `kind`/`messages` columns) migrate forward without data loss.
@@ -54,9 +55,7 @@ function ensureColumn(d: Database.Database, table: string, col: string, decl: st
 // silently broke every INSERT. These tables are a derived cache with no user
 // data worth migrating, so recreating them is safe.
 function dropIfMissingColumn(d: Database.Database, table: string, col: string): void {
-  const exists = d
-    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
-    .get(table)
+  const exists = d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)
   if (!exists) return
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
@@ -171,7 +170,6 @@ function get(): Database.Database {
       indexed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_rewind_frames_ts ON rewind_frames(ts);
-    CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed);
 
     CREATE TABLE IF NOT EXISTS insights (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +193,18 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // Older Windows Rewind databases predate app/window/OCR/indexed metadata.
+  // Additive defaults keep captured frames searchable without data loss.
+  ensureColumn(db, 'rewind_frames', 'app', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'window_title', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'process_name', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'ocr_text', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'image_path', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'width', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'rewind_frames', 'height', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'rewind_frames', 'indexed', 'INTEGER NOT NULL DEFAULT 0')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed)')
+  ensureRewindSearchIndex(db)
   return db
 }
 
@@ -260,7 +270,9 @@ export function getLocalConversation(id: string): LocalConversation | null {
 export function listLocalConversations(): LocalConversation[] {
   return timed('listLocalConversations', () => {
     const rows = get()
-      .prepare(`SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`)
+      .prepare(
+        `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
+      )
       .all() as LocalConversationRow[]
     return rows.map(mapLocalConversation)
   })
@@ -269,7 +281,6 @@ export function listLocalConversations(): LocalConversation[] {
 export function deleteLocalConversation(id: string): void {
   get().prepare('DELETE FROM local_conversation WHERE id = ?').run(id)
 }
-
 
 export function remapConversationId(fromId: string, toId: string): number {
   const r = get()
@@ -465,9 +476,7 @@ function getReadonly(): Database.Database {
 export function execSafeSelect(sql: string): KgSqlResult {
   const stmt = getReadonly().prepare(sql)
   const rows = stmt.all() as Record<string, unknown>[]
-  const columns = rows.length
-    ? Object.keys(rows[0])
-    : (stmt.columns().map((c) => c.name) ?? [])
+  const columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map((c) => c.name) ?? [])
   return { columns, rows }
 }
 
@@ -546,11 +555,7 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
 
 // indexed_files whose filename/folder match q. Excludes apps (file_type
 // 'application') unless explicitly requested via fileType.
-export function searchIndexedFiles(
-  q: string,
-  fileType?: string,
-  limit = 20
-): IndexedFileRecord[] {
+export function searchIndexedFiles(q: string, fileType?: string, limit = 20): IndexedFileRecord[] {
   const like = `%${q}%`
   const cols =
     'path, filename, extension, file_type AS fileType, size_bytes AS sizeBytes, folder, depth, created_at AS createdAt, modified_at AS modifiedAt'
@@ -716,41 +721,132 @@ export function clearLocalGraph(): void {
 const REWIND_COLUMNS =
   'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
 
+const REWIND_FTS_TABLE = 'rewind_frames_fts'
+
+function ensureRewindSearchIndex(d: Database.Database): boolean {
+  if (process.env.OMI_REWIND_DISABLE_FTS === '1') {
+    rewindFtsAvailable = false
+    return false
+  }
+  if (rewindFtsAvailable != null) return rewindFtsAvailable
+  try {
+    d.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS ${REWIND_FTS_TABLE}
+      USING fts5(app, window_title, ocr_text);
+    `)
+    const frameCount = (d.prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number })
+      .n
+    const ftsCount = (
+      d.prepare(`SELECT COUNT(*) AS n FROM ${REWIND_FTS_TABLE}`).get() as { n: number }
+    ).n
+    if (frameCount !== ftsCount) rebuildRewindSearchIndex(d)
+    rewindFtsAvailable = true
+  } catch (err) {
+    console.warn('[rewind] FTS search unavailable; falling back to LIKE search', err)
+    rewindFtsAvailable = false
+  }
+  return rewindFtsAvailable
+}
+
+function rebuildRewindSearchIndex(d: Database.Database): void {
+  d.exec(`DELETE FROM ${REWIND_FTS_TABLE}`)
+  d.exec(`
+    INSERT INTO ${REWIND_FTS_TABLE} (rowid, app, window_title, ocr_text)
+    SELECT id, app, window_title, ocr_text FROM rewind_frames
+  `)
+}
+
+function syncRewindSearchRow(d: Database.Database, id: number): void {
+  if (!ensureRewindSearchIndex(d)) return
+  d.prepare(
+    `INSERT OR REPLACE INTO ${REWIND_FTS_TABLE} (rowid, app, window_title, ocr_text)
+     SELECT id, app, window_title, ocr_text FROM rewind_frames WHERE id = ?`
+  ).run(id)
+}
+
+function deleteRewindSearchRows(d: Database.Database, ids: number[]): void {
+  if (ids.length === 0 || !ensureRewindSearchIndex(d)) return
+  const del = d.prepare(`DELETE FROM ${REWIND_FTS_TABLE} WHERE rowid = ?`)
+  for (const id of ids) del.run(id)
+}
+
+function ftsQuery(query: string): string | null {
+  const tokens = query.match(/[\p{L}\p{N}_]+/gu) ?? []
+  const safe = tokens.map((t) => t.replace(/"/g, '""')).filter((t) => t.length > 0)
+  return safe.length > 0 ? safe.map((t) => `"${t}"*`).join(' AND ') : null
+}
+
+function searchRewindFramesLike(d: Database.Database, query: string, limit: number): RewindFrame[] {
+  const like = `%${query}%`
+  return d
+    .prepare(
+      `SELECT ${REWIND_COLUMNS} FROM rewind_frames
+       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
+       ORDER BY ts DESC LIMIT ?`
+    )
+    .all(like, like, like, limit) as RewindFrame[]
+}
+
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
-  const r = get()
+  const d = get()
+  const r = d
     .prepare(
       `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)
        VALUES (@ts, @app, @windowTitle, @processName, @ocrText, @imagePath, @width, @height, @indexed)`
     )
     .run(f)
-  return r.lastInsertRowid as number
+  const id = r.lastInsertRowid as number
+  syncRewindSearchRow(d, id)
+  return id
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
   )
 }
 
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const like = `%${query}%`
-    return get()
-      .prepare(
-        `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
-       ORDER BY ts DESC LIMIT ?`
-      )
-      .all(like, like, like, limit) as RewindFrame[]
+    const d = get()
+    const match = ftsQuery(query)
+    if (match && ensureRewindSearchIndex(d)) {
+      try {
+        return d
+          .prepare(
+            `SELECT ${REWIND_COLUMNS}
+               FROM rewind_frames
+              WHERE id IN (
+                SELECT rowid FROM ${REWIND_FTS_TABLE}
+                 WHERE ${REWIND_FTS_TABLE} MATCH ?
+              )
+              ORDER BY ts DESC LIMIT ?`
+          )
+          .all(match, limit) as RewindFrame[]
+      } catch (err) {
+        console.warn('[rewind] FTS query failed; falling back to LIKE search', err)
+      }
+    }
+    return searchRewindFramesLike(d, query, limit)
   })
 }
 
+export function getRewindFrame(id: number): RewindFrame | null {
+  const row = get().prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id = ?`).get(id) as
+    | RewindFrame
+    | undefined
+  return row ?? null
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
-  const row = get()
-    .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')
-    .get() as { min: number | null; max: number | null }
+  const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
+    min: number | null
+    max: number | null
+  }
   return row.min == null || row.max == null ? null : { min: row.min, max: row.max }
 }
 
@@ -770,7 +866,9 @@ export function unindexedRewindFrames(limit = 20): RewindFrame[] {
 }
 
 export function setRewindFrameOcr(id: number, ocrText: string): void {
-  get().prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+  const d = get()
+  d.prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+  syncRewindSearchRow(d, id)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
@@ -779,6 +877,10 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const del = d.prepare('DELETE FROM rewind_frames WHERE ts < ?')
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
+    deleteRewindSearchRows(
+      d,
+      doomed.map((f) => f.id).filter((id): id is number => id != null)
+    )
     del.run(cutoff)
     return doomed // caller deletes the image files
   })

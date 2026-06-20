@@ -44,4 +44,17 @@ describe('groupFrames', () => {
     expect(groups[0].representative.id).toBe(2)
     expect(groups[0].matchSnippet.toLowerCase()).toContain('world')
   })
+  it('uses app/window matches as representatives when OCR is empty', () => {
+    const groups = groupFrames(
+      [
+        frame({ id: 1, ts: 1000, ocrText: '', app: 'Notepad.exe', windowTitle: 'Meeting notes' }),
+        frame({ id: 2, ts: 2000, ocrText: '', app: 'Notepad.exe', windowTitle: 'Meeting notes' })
+      ],
+      'meeting'
+    )
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].representative.id).toBe(1)
+    expect(groups[0].matchSnippet.toLowerCase()).toContain('meeting')
+  })
 })

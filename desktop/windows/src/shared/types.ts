@@ -242,6 +242,7 @@ export type OmiBridgeApi = {
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
   rewindFrameImage: (imagePath: string) => Promise<string>
+  rewindFrameById: (id: number) => Promise<RewindFrameImageResult>
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
   rewindPruneNow: () => Promise<number>
@@ -603,6 +604,25 @@ export type RewindFrame = {
   height: number
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
 }
+
+export type RewindFrameImageOk = {
+  ok: true
+  id: number
+  ts: number
+  app: string
+  windowTitle: string
+  ocrPreview: string
+  imageMimeType: string
+  imageBase64: string
+}
+
+export type RewindFrameImageNotFound = {
+  ok: false
+  code: 'not_found'
+  message: string
+}
+
+export type RewindFrameImageResult = RewindFrameImageOk | RewindFrameImageNotFound
 
 export type RewindSearchGroup = {
   id: string
