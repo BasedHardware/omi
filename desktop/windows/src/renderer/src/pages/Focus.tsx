@@ -8,7 +8,9 @@ import {
   ChevronUp,
   Clock,
   Loader,
-  Brain
+  Brain,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import type { RewindFrame } from '../../../shared/types'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -221,8 +223,8 @@ const METHOD_LABEL: Record<FocusObservation['method'], string> = {
 function ObsRow({ obs }: { obs: FocusObservation }): React.JSX.Element {
   const cfg = STATUS_CONFIG[obs.status]
   return (
-    <div className="flex items-start gap-3 px-3 py-2.5">
-      <div className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', cfg.dot.replace(' animate-pulse', ''))} />
+    <div className="flex items-start gap-3 rounded-lg bg-[#252525]/40 px-3 py-2.5 transition-colors hover:bg-[#252525]">
+      <div className={cn('mt-1.5 h-[10px] w-[10px] shrink-0 rounded-full', cfg.dot.replace(' animate-pulse', ''))} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={cn('text-sm font-medium', cfg.text)}>{cfg.label}</span>
@@ -549,12 +551,12 @@ export function Focus(): React.JSX.Element {
       {/* Focus Analysis Card — always visible ─────────────────────────────── */}
       <div
         className={cn(
-          'mb-6 surface-card p-5 transition-shadow duration-700',
-          latestObs && latestObs.status !== 'neutral'
-            ? latestObs.status === 'distracted'
-              ? 'ring-1 ring-orange-500/15 shadow-[0_0_25px_rgba(249,115,22,0.09)]'
-              : 'ring-1 ring-green-500/15 shadow-[0_0_25px_rgba(74,222,128,0.09)]'
-            : ''
+          'mb-6 rounded-[16px] border p-5 transition-all duration-700',
+          latestObs && latestObs.status === 'focused'
+            ? 'border-green-500/20 bg-green-500/[0.08]'
+            : latestObs && latestObs.status === 'distracted'
+              ? 'border-orange-500/20 bg-orange-500/[0.08]'
+              : 'border-white/[0.08] bg-[#252525]/40'
         )}
       >
         {/* Header row: title + status badge + Analyze now */}
@@ -623,15 +625,39 @@ export function Focus(): React.JSX.Element {
           <p className="text-sm text-orange-400/80">{analysisError}</p>
         ) : latestObs ? (
           <div>
+            {/* macOS-style status hero row — 56×56 circle icon + title + app + pulse dot */}
+            <div className="mb-4 flex items-center gap-4">
+              <div className={cn(
+                'flex h-14 w-14 shrink-0 items-center justify-center rounded-full',
+                latestObs.status === 'focused' ? 'bg-green-500/20'
+                : latestObs.status === 'distracted' ? 'bg-orange-500/20'
+                : 'bg-white/10'
+              )}>
+                {latestObs.status === 'focused' ? (
+                  <Eye className={cn('h-6 w-6', STATUS_CONFIG[latestObs.status].text)} strokeWidth={1.75} />
+                ) : latestObs.status === 'distracted' ? (
+                  <EyeOff className={cn('h-6 w-6', STATUS_CONFIG[latestObs.status].text)} strokeWidth={1.75} />
+                ) : (
+                  <Clock className={cn('h-6 w-6', STATUS_CONFIG[latestObs.status].text)} strokeWidth={1.75} />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className={cn('text-xl font-semibold', STATUS_CONFIG[latestObs.status].text)}>
+                  {STATUS_CONFIG[latestObs.status].label}
+                </p>
+                {latestObs.app && (
+                  <p className="text-[13px] text-white/50">{latestObs.app}</p>
+                )}
+              </div>
+              <div className={cn(
+                'h-3 w-3 shrink-0 rounded-full opacity-80',
+                latestObs.status === 'focused' ? 'bg-green-500 animate-pulse'
+                : latestObs.status === 'distracted' ? 'bg-orange-500 animate-pulse'
+                : 'bg-white/30'
+              )} />
+            </div>
+            {/* Detail row */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <div className={cn('h-2.5 w-2.5 rounded-full', STATUS_CONFIG[latestObs.status].dot)} />
-              <p className={cn('text-sm font-semibold', STATUS_CONFIG[latestObs.status].text)}>
-                {STATUS_CONFIG[latestObs.status].label}
-              </p>
-              {latestObs.app && (
-                <span className="text-xs text-text-quaternary">{latestObs.app}</span>
-              )}
-              <span className="text-xs text-text-quaternary">·</span>
               <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] text-text-quaternary">
                 {latestObs.method === 'vision'
                   ? '🔭 Vision'
