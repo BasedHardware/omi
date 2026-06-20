@@ -254,7 +254,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         const result = await window.omi.piChatSend({
           token: token ?? '',
           messages: [...baseHistory, userMsg],
-          skillIds: prefs.enabledSkillIds ?? []
+          skillIds: prefs.enabledSkillIds ?? [],
+          modelId: prefs.defaultModelByPurpose?.chat
         })
         assistantText = result.text
         setHistory((h) => {
