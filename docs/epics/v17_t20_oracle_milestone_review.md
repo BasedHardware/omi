@@ -2037,3 +2037,39 @@ Implemented the F4 router-boundary slice under Oracle's LIMITED GO while preserv
 - Runtime readiness now distinguishes the router seam from production behavior: `route_wiring=true`, `runtime_wiring_changed=true`, `effective_runtime_behavior_changed=false`, `production_rollout_approved=false`, overall `BLOCKED` / NO-GO.
 
 No activation, canary, shadow reads against real services, production control/projection reads, writes, telemetry sink calls, external readiness, or authoritative read cutover are claimed.
+
+## Oracle milestone review: F4 before F5 real-service evidence (2026-06-20)
+
+Oracle caveat: browser model selection reported `requested=Pro; resolved=(unavailable); strategy=current; verified=no`. Treat as architecture/code-review advice, not runtime evidence.
+
+According to a document from June 20, 2026, the surrounding `/v3` readiness remains BLOCKED with real Firestore/API/cloud evidence still missing.  I could not inspect commit `b4ba2f0...` directly because the workspace is not mounted here; this verdict is based on your F4 description and the available readiness artifacts.
+
+### 1. Verdict
+
+* **F5 script preparation: GO.** Write the isolated read-only runner, static mutation guards, fake/emulator tests, redaction, documentation, and default `NOT_RUN` output.
+* **Shared non-production service execution: LIMITED GO**, only after Oracle review, exact-project gating, and least-privilege identity verification.
+* **Production `--execute`: NO-GO now.** It may become a tightly bounded LIMITED GO only after Oracle plus explicit human platform/security approval of the exact script, principal, project, paths, deadlines, and evidence subject.
+* **Runtime activation/canary/shadow/cutover: NO-GO**, regardless of F5 outcome. Existing precedent correctly uses `NOT_RUN`, read-only mode, prerequisite failure, and no mutating API calls.
+
+### 2. F4 risks to close before F5 execution
+
+No obvious F4 P0 blocks **writing** F5. Before any real read, add or confirm:
+
+1. **Structural-disable proof:** repository-wide assertion that production code never overrides `get_v17_v3_get_runtime`, reads activation state, or constructs `v17_read`; malformed/unknown runtime values must fail closed rather than select legacy.
+2. **Pagination branch-order proof:** V17 must receive default `100`/max `500` semantics before the legacy `offset=0 → limit=5000` rewrite; prove `offset=0` no-op, `offset>0` 400, and no legacy call on grant denial, cursor failure, timeout, or service exception.
+3. **Read-only call graph:** the F4→F3 path must have no reachable writer, repair/outbox callback, telemetry sink, or mutating provider client. Keep the exact response-header allowlist and add `Cache-Control: no-store` if absent.
+
+### 3. F5 acceptance criteria
+
+* **Gating:** no arguments means `NOT_RUN` and constructs no cloud client. `--execute` additionally requires explicit environment, project ID and project number, expected service-account identity, approved metadata subject/path set, and approval artifact. Any mismatch exits nonzero as `NOT_RUN/BLOCKED`.
+* **Identity/IAM:** use a dedicated evidence principal. Verify the effective principal and exact required read permissions; fail if it has Owner/Editor or any relevant create/update/delete permissions. Cursor-secret checks may read metadata/version state only—never secret payload bytes.
+* **Scope:** metadata-only bounded reads for control/config, cursor-secret metadata, projection state, canary approval, IAM, and index state. No raw memory content, arbitrary user sampling, collection scans, route calls, vector mutations, or production app import.
+* **Zero-write proof:** static AST mutation denylist; runtime clients wrapped so mutators raise before RPC; IAM write-permission intersection must be empty; post-run audit evidence must show zero write methods for the principal/run window. Never attempt a write merely to prove denial. Missing audit proof means `INCONCLUSIVE/BLOCKED`, not PASS.
+* **Deadlines:** explicit per-RPC timeout, overall monotonic deadline, bounded retries/backoff, and bounded query/document counts. Timeout or partial service failure yields `BLOCKED/INCONCLUSIVE`; no legacy fallback, alternate project, broader scan, or retry without limit.
+* **Indexes/schema:** read index definitions through the administrative read API; require exact required fields/order/scope and ready state. Validate only field names, types, epochs/generations, and status—not document contents. Missing/malformed schema or index is BLOCKED.
+* **Redaction:** HMAC/fingerprint project, principal, UID, document, commit, and approval identifiers. Remove tokens, cursor values, secret names/values, raw exceptions, URLs, headers, and memory content. Fail closed if an output field is not explicitly allowlisted.
+* **Non-activation:** the runner must not import the production app/router, set dependency overrides, patch environment/runtime configuration, alter control/canary documents, emit telemetry, or automatically update readiness. Even a fully successful run leaves runtime/external/aggregate readiness **BLOCKED/NO-GO**. Earlier artifacts likewise keep production rollout blocked despite safe evidence tooling.
+
+### 4. Oracle
+
+**Yes—Oracle review should be mandatory before the first actual `--execute` against any shared or production service.** Review the exact diff, command gates, IAM allowlist, redaction output, deadline behavior, zero-write mechanism, and runbook. Oracle review is necessary but not sufficient; production execution also needs named human approval.
