@@ -54,6 +54,7 @@ def get_memories_text(
         limit=limit,
         offset=offset,
         db_client=firestore_db,
+        allow_legacy_safe_fallback=True,
     )
     if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
         logger.info("get_memories_text - using V17 default chat memory list results")
@@ -119,6 +120,7 @@ def search_memories_text(
         query=query,
         limit=limit,
         db_client=firestore_db,
+        allow_legacy_safe_fallback=True,
     )
     if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
         logger.info("search_memories_text - using V17 default chat vector memory results")

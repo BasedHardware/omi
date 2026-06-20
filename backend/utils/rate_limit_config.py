@@ -69,6 +69,8 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "memories:batch": (30, 3600),
     # Memory mutations — lightweight Firestore writes
     "memories:modify": (120, 3600),
+    # Memory review queue — lightweight read/resolve workflow over review artifacts
+    "memories:review": (120, 3600),
     # Memory deletes — destructive operations
     "memories:delete": (60, 3600),
     # Delete-all is extremely destructive; tight cap with one retry cushion

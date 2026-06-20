@@ -68,6 +68,12 @@ class TestMemoriesRateLimitPolicies:
         assert max_req == 2
         assert window == 3600
 
+    def test_memories_review_policy_exists(self):
+        assert "memories:review" in RATE_POLICIES
+        max_req, window = RATE_POLICIES["memories:review"]
+        assert max_req == 120
+        assert window == 3600
+
 
 # ---------------------------------------------------------------------------
 # Rate limit wiring tests (source-level grep)
@@ -92,8 +98,12 @@ class TestMemoriesRateLimitWiring:
         assert len(matches) == 1, f"DELETE /v3/memories must have memories:delete_all, found: {matches}"
 
     def test_review_endpoint_has_rate_limit(self):
+        matches = _grep_router(r"with_rate_limit.*memories:review")
+        assert len(matches) == 2, f"Review queue endpoints must have memories:review, found: {matches}"
+
+    def test_modify_endpoints_have_rate_limit(self):
         matches = _grep_router(r"with_rate_limit.*memories:modify")
-        assert len(matches) >= 1, f"Review/edit/visibility must have memories:modify, found: {matches}"
+        assert len(matches) >= 1, f"Edit/visibility must have memories:modify, found: {matches}"
 
     def test_all_write_endpoints_rate_limited(self):
         """Every write endpoint in memories.py must use with_rate_limit."""
@@ -210,6 +220,13 @@ class TestPolicyBoundaries:
 
     def test_all_memory_policies_use_1h_window(self):
         """All memory policies should use consistent 1-hour windows."""
-        for name in ["memories:create", "memories:batch", "memories:modify", "memories:delete", "memories:delete_all"]:
+        for name in [
+            "memories:create",
+            "memories:batch",
+            "memories:modify",
+            "memories:review",
+            "memories:delete",
+            "memories:delete_all",
+        ]:
             _, window = RATE_POLICIES[name]
             assert window == 3600, f"{name} window is {window}, expected 3600"

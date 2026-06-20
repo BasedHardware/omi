@@ -1645,7 +1645,7 @@ Accepted default: non-enrolled callers retain current legacy offset behavior. En
 
 These decisions supersede any wording that implied separate non-production-only code clients, shadow-mode requirements, or scattered hard-coded GCP identifiers.
 
-- **Test harness:** backend `test.sh` remains the repo/CI source of truth. The F5 runner default is safe because it constructs no external client, not because it runs inside a separate hermetic harness. If a future hermetic/pinned harness is introduced, the evidence runner should use it; until then, keep normal backend regression under the repo's documented test runner and use the backend venv only for optional FastAPI/TestClient proofs that require those installed deps.
+- **Test harness:** backend `test.sh` remains the unit/regression source of truth, and PR #8004 adds the `backend/testing/e2e` Hermetic Backend E2E harness for real FastAPI app import with faked/disabled external dependencies and a local-only socket guard. Future `/v3` route/runtime work should use both: targeted unit/readiness tests plus `test.sh` for regression, and the hermetic E2E harness for route/app boot proof when the change touches actual FastAPI runtime behavior. The F5 runner default is still safe because it constructs no external client by default; the hermetic harness is an additional app-level verification gate, not permission for real GCP execution.
 - **GCP target config:** consolidate every GCP/environment-specific value into a config/constant-driven target registry instead of scattering hard-coded values across scripts. The next GCP evidence ticket should define dev and prod target entries for project id, project number, principal, approved metadata paths, audit/log settings, limits, and index expectations. Tests should prove fake/prep placeholder targets cannot authorize real execution.
 - **Single evidence client:** use one config-driven GCP evidence client implementation for dev and prod. Do not create separate nonprod/prod client code paths; the target config and approval artifact select environment-specific project/principal/path/audit values.
 - **Approval meaning:** a future real GCP evidence run needs an explicit approval artifact only to authorize a bounded evidence read, not to approve runtime rollout. The artifact should name approvers/roles, target, execution window, commit, runner/helper hashes, approved paths, and one-run scope.
@@ -1654,3 +1654,78 @@ These decisions supersede any wording that implied separate non-production-only 
 - **Read RPC allowlist:** before real GCP execution, add a positive allowlist of permitted read RPCs for the evidence runner. The existing mutator denylist/wrapper stays defense-in-depth, but unknown/generic/raw transport methods must fail closed.
 - **Rollout model:** no shadow mode is required. The desired rollout path is server-owned incremental rollout by user/cohort with per-user allowlist, per-user rollback/disable, global kill switch, rollout stage, config/generation epoch, and audit metadata.
 - **Readiness posture:** all GCP evidence and rollout work remains NOT_RUN/BLOCKED/NO_GO until real target config, approval, IAM, audit-log, and allowlist gates are implemented and reviewed.
+
+### Master GCP launch checklist for `/v3` evidence and rollout
+
+Use this as the single ordered checklist before any dev GCP test or prod read-only evidence run. Keep the implementation config/constant driven; do not reintroduce scattered hard-coded project/principal/path values.
+
+#### A. Harness and local proof gates
+
+- [ ] Run the existing unit/readiness regression suite for V17 changes (`backend/test.sh` for full CI parity, or focused `tests/unit/test_v17_*.py` during iteration).
+- [ ] Run `backend/testing/e2e/run.sh` for changes that touch actual FastAPI route/runtime behavior; add `/v3/memories` scenarios to the hermetic harness before relying on it for V17 route coverage.
+- [ ] Confirm the evidence runner default remains `NOT_RUN`, constructs no client, and performs no network/provider/Firestore/vector/telemetry calls.
+- [ ] Confirm runtime/external/aggregate readiness remains `BLOCKED` / `NO_GO` before any real GCP execution.
+
+#### B. Target registry and config
+
+- [ ] Define a checked-in target schema for `dev` and `prod` entries.
+- [ ] For each target, configure project ID, project number, environment label, evidence principal, approved metadata paths, required index definitions, audit log settings, and timeout/retry/count limits.
+- [ ] Reject unknown targets and incomplete target configs.
+- [ ] Reject fake/prep placeholder targets for real execution.
+- [ ] Ensure dev and prod use the same evidence client implementation selected by target config.
+
+#### C. Approval artifact for real GCP reads
+
+- [ ] Define an approval artifact schema for bounded evidence reads; this is not rollout approval.
+- [ ] Require named approver(s), role/authority, approval timestamp, expiry, one-run scope, target name, project ID/number, principal, approved paths, commit SHA, runner/helper hashes, and execution window.
+- [ ] Reject missing, expired, mismatched, or broad approval artifacts before client construction.
+
+#### D. Identity and IAM
+
+- [ ] Decide whether the existing read-only GCP profile is sufficient or whether a dedicated evidence-read principal per environment is needed.
+- [ ] Discover the effective active project and principal at runtime.
+- [ ] Require exact equality with target config and approval artifact.
+- [ ] Prove the principal has required read permissions and lacks Owner/Editor or relevant write permissions.
+- [ ] Prove secret payload access is unavailable; cursor-secret checks may read metadata/version state only.
+
+#### E. Read RPC allowlist and client boundary
+
+- [ ] Implement one config-driven GCP evidence client for dev/prod.
+- [ ] Add a positive allowlist of permitted read RPCs; unknown methods, raw transports, generic request methods, and unwrapped clients fail closed.
+- [ ] Keep mutator denylist/runtime wrapper as defense in depth only.
+- [ ] Enforce immutable limits: 5s per RPC, 30s overall, 2 attempts, max 25 returned items unless target config explicitly changes them and review approves the change.
+
+#### F. Existing audit/log infrastructure
+
+- [ ] Confirm existing Cloud Audit Logs / data-access logs are enabled for each target service needed by the evidence run.
+- [ ] Generate a unique run ID and UTC start/end window.
+- [ ] Query existing logs by project, principal, API/service, method family, and run window.
+- [ ] Treat missing/delayed/incomplete audit coverage as `INCONCLUSIVE`, not PASS.
+- [ ] Do not build new product logging solely for this evidence run unless existing audit logs are insufficient and the gap is explicitly approved.
+
+#### G. Redaction and output contract
+
+- [ ] Fingerprint project, principal, document/path identifiers, commit, approval, and run IDs with keyed HMAC or equivalent.
+- [ ] Do not output raw memory content, secret payloads, cursor tokens, auth headers, URLs, arbitrary user identifiers, raw query values, access tokens, credentials, or request/response bodies.
+- [ ] Fail closed on unknown output fields rather than best-effort redaction.
+
+#### H. Dev GCP evidence run gate
+
+- [ ] Complete A-G for the `dev` target.
+- [ ] Run Oracle/code review on the exact target config, approval artifact, client allowlist, and command.
+- [ ] Execute exactly one bounded evidence run only after approval.
+- [ ] Capture sanitized evidence and keep final readiness `BLOCKED` / `NO_GO` unless a separate rollout gate is approved.
+
+#### I. Prod read-only evidence gate
+
+- [ ] Complete A-G separately for `prod`.
+- [ ] Require named platform/security approval for the exact prod target, principal, commit, runner/helper hashes, paths, and execution window.
+- [ ] Run Oracle/code review again for prod.
+- [ ] Execute exactly one bounded read-only evidence run only after approval.
+- [ ] Keep production activation/cutover disabled regardless of read-only evidence outcome.
+
+#### J. Staged rollout infrastructure, later and separate from evidence reads
+
+- [ ] No shadow mode requirement.
+- [ ] Implement server-owned staged rollout by user/cohort: per-user allowlist, cohort stage, per-user rollback/disable, global kill switch, rollout config/generation epoch, reason/audit metadata.
+- [ ] Require separate product/platform readiness and approval before any user-visible V17 `/v3` read behavior change.

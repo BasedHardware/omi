@@ -48,7 +48,7 @@ class _UnexpectedLegacyVectorDb:
         raise AssertionError('legacy vector search must not run for V17 denied/enabled tools REST reads')
 
 
-def test_tools_rest_get_memories_text_uses_v17_decision_without_legacy_fallback(monkeypatch):
+def test_tools_rest_get_memories_text_requests_legacy_safe_v17_decision(monkeypatch):
     memory_services = _load_memory_services(monkeypatch)
     captured = []
     v17_text = (
@@ -80,6 +80,7 @@ def test_tools_rest_get_memories_text_uses_v17_decision_without_legacy_fallback(
             'limit': 5000,
             'offset': 0,
             'db_client': memory_services.firestore_db,
+            'allow_legacy_safe_fallback': True,
         }
     ]
     assert result == v17_text
@@ -89,7 +90,7 @@ def test_tools_rest_get_memories_text_uses_v17_decision_without_legacy_fallback(
     assert 'archive_default_visible=False' in result
 
 
-def test_tools_rest_get_memories_text_denied_or_empty_v17_states_do_not_fall_back_to_legacy(monkeypatch):
+def test_tools_rest_get_memories_text_preserves_adapter_denied_or_empty_v17_states(monkeypatch):
     memory_services = _load_memory_services(monkeypatch)
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
 
@@ -116,7 +117,7 @@ def test_tools_rest_get_memories_text_denied_or_empty_v17_states_do_not_fall_bac
     assert memory_services.get_memories_text(uid='uid-rest') == 'No V17 default memories found.'
 
 
-def test_tools_rest_search_memories_text_uses_v17_vector_decision_without_legacy_fallback(monkeypatch):
+def test_tools_rest_search_memories_text_requests_legacy_safe_v17_vector_decision(monkeypatch):
     memory_services = _load_memory_services(monkeypatch)
     captured = []
     v17_text = (
@@ -149,6 +150,7 @@ def test_tools_rest_search_memories_text_uses_v17_vector_decision_without_legacy
             'query': 'coffee',
             'limit': 20,
             'db_client': memory_services.firestore_db,
+            'allow_legacy_safe_fallback': True,
         }
     ]
     assert result == v17_text
@@ -158,7 +160,7 @@ def test_tools_rest_search_memories_text_uses_v17_vector_decision_without_legacy
     assert 'archive_default_visible=False' in result
 
 
-def test_tools_rest_search_memories_text_denied_or_empty_v17_states_do_not_fall_back_to_legacy(monkeypatch):
+def test_tools_rest_search_memories_text_preserves_adapter_denied_or_empty_v17_states(monkeypatch):
     memory_services = _load_memory_services(monkeypatch)
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
     monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
