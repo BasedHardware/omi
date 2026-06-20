@@ -21,10 +21,21 @@ const BYOK_SYSTEM_PROMPT = [
 const DEFAULT_MODELS: Record<ByokChatProvider, string> = {
   openai: 'gpt-4o-mini',
   anthropic: 'claude-3-5-sonnet-latest',
-  gemini: 'gemini-1.5-flash'
+  gemini: 'gemini-1.5-flash',
+  openrouter: 'openrouter/auto'
 }
 
-function modelFor(provider: ByokChatProvider): string {
+function normalizeModelOverride(provider: ByokChatProvider, modelId?: string): string | null {
+  if (!modelId) return null
+  const prefix = `${provider}:`
+  if (modelId.startsWith(prefix)) return modelId.slice(prefix.length)
+  return null
+}
+
+function modelFor(provider: ByokChatProvider, modelId?: string): string {
+  const override = normalizeModelOverride(provider, modelId)
+  if (override) return override
+
   switch (provider) {
     case 'openai':
       return process.env.OMI_BYOK_OPENAI_MODEL || DEFAULT_MODELS.openai
@@ -32,6 +43,8 @@ function modelFor(provider: ByokChatProvider): string {
       return process.env.OMI_BYOK_ANTHROPIC_MODEL || DEFAULT_MODELS.anthropic
     case 'gemini':
       return process.env.OMI_BYOK_GEMINI_MODEL || DEFAULT_MODELS.gemini
+    case 'openrouter':
+      return process.env.OMI_BYOK_OPENROUTER_MODEL || DEFAULT_MODELS.openrouter
   }
 }
 
@@ -85,9 +98,10 @@ function textFromContentParts(parts: unknown): string {
 export function buildByokChatRequest(
   provider: ByokChatProvider,
   key: string,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  modelId?: string
 ): { url: string; init: RequestInit } {
-  const model = modelFor(provider)
+  const model = modelFor(provider, modelId)
   const thread = chatMessages(messages)
 
   switch (provider) {
@@ -145,12 +159,36 @@ export function buildByokChatRequest(
           })
         }
       }
+    case 'openrouter':
+      return {
+        url: 'https://openrouter.ai/api/v1/chat/completions',
+        init: {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${key}`,
+            'HTTP-Referer': 'https://omi.me',
+            'X-Title': 'Omi Windows'
+          },
+          body: JSON.stringify({
+            model,
+            stream: false,
+            messages: [{ role: 'system', content: BYOK_SYSTEM_PROMPT }, ...thread]
+          })
+        }
+      }
   }
 }
 
 function responseText(provider: ByokChatProvider, raw: JsonRecord): string {
   switch (provider) {
     case 'openai': {
+      const choices = raw.choices
+      if (!Array.isArray(choices)) return ''
+      const message = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
+      return typeof message?.content === 'string' ? message.content : ''
+    }
+    case 'openrouter': {
       const choices = raw.choices
       if (!Array.isArray(choices)) return ''
       const message = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
@@ -171,6 +209,8 @@ function responseUsage(provider: ByokChatProvider, raw: JsonRecord): PiChatUsage
   switch (provider) {
     case 'openai':
       return usageFromOpenAi(raw.usage as JsonRecord | undefined)
+    case 'openrouter':
+      return usageFromOpenAi(raw.usage as JsonRecord | undefined)
     case 'anthropic':
       return usageFromAnthropic(raw.usage as JsonRecord | undefined)
     case 'gemini':
@@ -182,6 +222,7 @@ export async function sendByokChat(
   provider: ByokChatProvider,
   key: string,
   messages: ChatMessage[],
+  modelId?: string,
   options: ByokChatOptions = {}
 ): Promise<ByokChatResponse> {
   const trimmed = key.trim()
@@ -189,7 +230,7 @@ export async function sendByokChat(
   if (chatMessages(messages).length === 0) throw new Error('BYOK chat requires messages')
 
   const fetchImpl = options.fetchImpl ?? fetch
-  const request = buildByokChatRequest(provider, trimmed, messages)
+  const request = buildByokChatRequest(provider, trimmed, messages, modelId)
   const response = await fetchImpl(request.url, request.init)
   if (!response.ok) {
     throw new Error(`BYOK chat request failed with HTTP ${response.status}`)
