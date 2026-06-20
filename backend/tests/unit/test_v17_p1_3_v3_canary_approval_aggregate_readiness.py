@@ -69,8 +69,10 @@ def test_aggregate_runner_exists_and_is_no_go_safe_by_default():
     assert report["route_scope"] == EXPECTED_ROUTE_SCOPE
     assert report["read_only"] is True
     assert report["mutation_allowed"] is False
-    assert report["runtime_wiring_changed"] is False
-    assert report["routers_memories_modified"] is False
+    assert report["route_wiring"] is True
+    assert report["runtime_wiring_changed"] is True
+    assert report["effective_runtime_behavior_changed"] is False
+    assert report["routers_memories_modified"] is True
     assert report["network_or_provider_calls_executed"] is False
     assert report["provider_calls_executed"] is False
     assert report["firestore_reads_executed"] is False
@@ -88,8 +90,10 @@ def test_aggregate_execute_remains_local_no_go_without_production_calls_or_route
     assert report["decision"] == "NO_GO"
     assert report["proof_status"] == "BLOCKED"
     assert report["execute"] is True
-    assert report["runtime_wiring_changed"] is False
-    assert report["routers_memories_modified"] is False
+    assert report["route_wiring"] is True
+    assert report["runtime_wiring_changed"] is True
+    assert report["effective_runtime_behavior_changed"] is False
+    assert report["routers_memories_modified"] is True
     assert report["network_or_provider_calls_executed"] is False
     assert report["firestore_reads_executed"] is False
     assert report["firestore_writes_executed"] is False
@@ -107,7 +111,9 @@ def test_aggregate_execute_remains_local_no_go_without_production_calls_or_route
         "ready_gate_count": 2,
         "blocked_gate_count": 5,
         "remaining_blocker_count": 5,
-        "runtime_wiring_changed": False,
+        "route_wiring": True,
+        "runtime_wiring_changed": True,
+        "effective_runtime_behavior_changed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
     }
@@ -132,7 +138,9 @@ def test_aggregate_gate_rows_consolidate_schema_source_production_lifecycle_obse
     assert gates["observability_telemetry_approval_blocked"]["status"] == "BLOCKED"
     assert gates["observability_telemetry_approval_blocked"]["telemetry_sink_calls_executed"] is False
     assert gates["runtime_wiring_blocked"]["status"] == "BLOCKED"
-    assert gates["runtime_wiring_blocked"]["runtime_wiring_changed"] is False
+    assert gates["runtime_wiring_blocked"]["route_wiring"] is True
+    assert gates["runtime_wiring_blocked"]["runtime_wiring_changed"] is True
+    assert gates["runtime_wiring_blocked"]["effective_runtime_behavior_changed"] is False
     assert gates["external_compatibility_blocked"]["status"] == "BLOCKED"
     assert gates["external_compatibility_blocked"]["gap_count"] == 7
 
@@ -151,7 +159,10 @@ def test_aggregate_remaining_blockers_and_non_claims_preserve_no_go_boundaries()
         assert blocker["required_before_go"] is True
 
     non_claims = set(report["non_claims"])
-    assert "No backend/routers/memories.py change." in non_claims
+    assert (
+        "Default-off backend/routers/memories.py GET seam exists, but no effective runtime /v3 behavior change."
+        in non_claims
+    )
     assert "No runtime /v3 behavior change." in non_claims
     assert "No production rollout approval." in non_claims
     assert (

@@ -46,13 +46,22 @@ def test_route_signature_integration_pins_current_v3_route_signatures_and_body_m
     assert get_route["response_model"] == "List[MemoryDB]"
     assert get_route["body_model"] is None
     assert get_route["params"] == [
+        {"name": "response", "annotation": "Response", "default": None, "dependency": None, "kind": "query"},
         {"name": "limit", "annotation": "int", "default": "100", "dependency": None, "kind": "query"},
         {"name": "offset", "annotation": "int", "default": "0", "dependency": None, "kind": "query"},
+        {"name": "cursor", "annotation": "Optional[str]", "default": "None", "dependency": None, "kind": "query"},
         {
             "name": "uid",
             "annotation": "str",
             "default": "Depends(auth.get_current_user_uid)",
             "dependency": "auth.get_current_user_uid",
+            "kind": "dependency",
+        },
+        {
+            "name": "v17_runtime",
+            "annotation": "V17V3GetRuntime",
+            "default": "Depends(get_v17_v3_get_runtime)",
+            "dependency": "get_v17_v3_get_runtime",
             "kind": "dependency",
         },
     ]
@@ -92,8 +101,9 @@ def test_route_signature_integration_pins_legacy_runtime_calls_and_no_cutover_cl
     ]
     assert report["runtime_cutover_claimed"] is False
     assert report["current_runtime_summary"] == (
-        "Current /v3 routes remain legacy-wired: GET reads users/{uid}/memories through memories_db, "
-        "POST writes legacy memory plus vector upsert, and DELETE validates/deletes legacy memory plus vector delete."
+        "GET /v3/memories now has a hard default-off V17 dependency branch: production/default and "
+        "non-enrolled legacy-primary reads preserve legacy memories_db semantics, while TestClient-only "
+        "V17 read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
     )
 
 
@@ -110,8 +120,8 @@ def test_route_signature_integration_maps_get_params_to_adapter_contract_and_blo
     assert (
         mapping["offset"]["blocked_reason"] == "offset is legacy-primary only; V17 cohort requires signed cursor mode"
     )
-    assert mapping["cursor"]["current_route_param_present"] is False
-    assert mapping["cursor"]["future_only"] is True
+    assert mapping["cursor"]["current_route_param_present"] is True
+    assert mapping["cursor"]["future_only"] is False
     assert mapping["include_archive"]["safe_to_map"] is False
     assert mapping["include_archive"]["blocked_reason"] == "Archive default-unavailable for /v3 default reads"
 

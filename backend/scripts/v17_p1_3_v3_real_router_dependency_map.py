@@ -261,7 +261,7 @@ def _probe_code() -> str:
         setattr(database_pkg, "vector_db", vector_db)
 
         utils_pkg = types.ModuleType("utils")
-        utils_pkg.__path__ = []
+        utils_pkg.__path__ = ["utils"]
         sys.modules["utils"] = utils_pkg
 
         executors = types.ModuleType("utils.executors")

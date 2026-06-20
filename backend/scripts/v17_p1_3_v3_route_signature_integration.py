@@ -23,8 +23,9 @@ TARGET_ROUTES = {
 }
 
 CURRENT_RUNTIME_SUMMARY = (
-    "Current /v3 routes remain legacy-wired: GET reads users/{uid}/memories through memories_db, "
-    "POST writes legacy memory plus vector upsert, and DELETE validates/deletes legacy memory plus vector delete."
+    "GET /v3/memories now has a hard default-off V17 dependency branch: production/default and "
+    "non-enrolled legacy-primary reads preserve legacy memories_db semantics, while TestClient-only "
+    "V17 read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
 )
 
 FUTURE_WIRING_SEAM = [
@@ -60,10 +61,10 @@ GET_PARAM_CONTRACT_MAPPING = [
     },
     {
         "route_param": "cursor",
-        "current_route_param_present": False,
+        "current_route_param_present": True,
         "request_adapter_field": "cursor",
         "safe_to_map": True,
-        "future_only": True,
+        "future_only": False,
         "v17_constraint": "additive opaque HMAC keyset cursor bound to uid/account/projection/filter/source/read-mode",
         "blocked_reason": None,
     },
@@ -90,7 +91,7 @@ GET_PARAM_CONTRACT_MAPPING = [
 ROUTE_SIGNATURE_INTEGRATION_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_route_signature_integration.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_route_signature_integration.py",
-    "runtime_wired": False,
+    "runtime_wired": True,
     "production_rollout_approved": False,
     "external_calls": [],
     "covered_defaults": [
@@ -188,8 +189,8 @@ def _params(
 def _legacy_runtime_calls(route: str, source_segment: str) -> list[str]:
     if route == 'GET /v3/memories':
         required = [
-            ("if offset == 0", "if offset == 0: limit = 5000"),
-            ("memories_db.get_memories(uid, limit, offset)", "memories_db.get_memories(uid, limit, offset)"),
+            ("_legacy_get_memories(uid, limit, offset)", "if offset == 0: limit = 5000"),
+            ("_legacy_get_memories(uid, limit, offset)", "memories_db.get_memories(uid, limit, offset)"),
         ]
     elif route == 'POST /v3/memories':
         required = [
@@ -245,7 +246,7 @@ def inspect_route_signatures(router_source_path: Path | None = None) -> list[dic
                     "legacy_runtime_calls": _legacy_runtime_calls(route, source_segment),
                     "source_file": "backend/routers/memories.py",
                     "static_source_inspection": True,
-                    "runtime_wired_to_v17": False,
+                    "runtime_wired_to_v17": route == 'GET /v3/memories',
                 }
             )
     return sorted(routes, key=lambda item: (item['method'], item['path']))

@@ -2024,3 +2024,16 @@ Permit only bounded fields such as route, selected source, status, and allowlist
 Split out a small F3.5 only if implementation reveals that the runtime bundle cannot be constructed lazily, F3 lacks a terminal typed outcome for every path, or preserving legacy parameter behavior would require global FastAPI validation. Otherwise, those are properly F4 router-boundary concerns.
 
 This is an architecture verdict based on the supplied F3 evidence and retrieved router/control artifacts, not execution of commit `e9487137`.
+
+### 2026-06-20 — V17-V3-F4 default-off router seam completion
+
+Implemented the F4 router-boundary slice under Oracle's LIMITED GO while preserving the NO-GO activation posture:
+
+- `GET /v3/memories` now has a default-off V17 runtime seam in `backend/routers/memories.py`.
+- The production/default `get_v17_v3_get_runtime()` dependency is structurally disabled and cannot be activated by env vars, request inputs, headers, persisted control records, or rollout flags.
+- Default/disabled behavior still calls legacy `memories_db.get_memories(uid, limit, offset)` with existing legacy pagination semantics, including `offset=0 -> limit=5000`.
+- TestClient overrides can exercise `legacy_primary` and `v17_read`; once in `v17_read`, the router maps the composed service result directly and never falls back to legacy.
+- F4 tests cover default-off legacy compatibility, non-enrolled legacy-primary, enrolled no-legacy success/fail-closed states, pagination rejection behavior, sanitized logs, allowlisted headers, unchanged mutating routes, and import/runtime safety.
+- Runtime readiness now distinguishes the router seam from production behavior: `route_wiring=true`, `runtime_wiring_changed=true`, `effective_runtime_behavior_changed=false`, `production_rollout_approved=false`, overall `BLOCKED` / NO-GO.
+
+No activation, canary, shadow reads against real services, production control/projection reads, writes, telemetry sink calls, external readiness, or authoritative read cutover are claimed.

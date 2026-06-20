@@ -77,7 +77,9 @@ def test_get_runtime_wiring_readiness_runner_exists_and_is_safe_by_default():
     assert report["provider_calls_executed"] is False
     assert report["firestore_reads_executed"] is False
     assert report["firestore_writes_executed"] is False
-    assert report["runtime_wiring_changed"] is False
+    assert report["route_wiring"] is True
+    assert report["runtime_wiring_changed"] is True
+    assert report["effective_runtime_behavior_changed"] is False
     assert report["production_rollout_approved"] is False
     assert report["approval_claimed"] is False
     assert report["execute"] is False
@@ -123,8 +125,9 @@ def test_get_runtime_wiring_readiness_links_current_proofs_and_marks_runtime_evi
     proofs = report["existing_local_proof_artifacts"]
 
     assert set(proofs) == REQUIRED_EXISTING_PROOF_KEYS
-    assert proofs["real_router_get_testclient_proof"]["current_runtime_behavior_proven"] == (
-        "GET /v3/memories still calls stubbed legacy memories_db.get_memories(uid, limit, offset)"
+    assert (
+        "legacy memories_db.get_memories"
+        in proofs["real_router_get_testclient_proof"]["current_runtime_behavior_proven"]
     )
     assert proofs["real_router_get_testclient_proof"]["runtime_wired"] is False
     assert proofs["real_router_get_testclient_proof"]["missing_real_service_runtime_evidence"] is True
@@ -191,7 +194,9 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,
-        "runtime_wiring_changed": False,
+        "route_wiring": True,
+        "runtime_wiring_changed": True,
+        "effective_runtime_behavior_changed": False,
         "approval_claimed": False,
         "safe_cutover_step_count": 8,
     }

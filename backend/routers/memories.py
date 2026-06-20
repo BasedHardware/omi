@@ -1,9 +1,10 @@
 import logging
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Literal, Optional
 
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
@@ -16,6 +17,7 @@ from database.vector_db import (
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
+from utils.memory.v17_v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,54 @@ router = APIRouter()
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
+
+V17V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'v17_read']
+
+_V17_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
+    {
+        'X-Omi-Memory-Read-Source',
+        'X-Omi-Memory-Read-Decision',
+        'X-Omi-Memory-Next-Cursor',
+        'Link',
+    }
+)
+
+
+@dataclass(frozen=True)
+class V17V3GetRuntime:
+    """Lazy, overrideable F4 runtime bundle for GET `/v3/memories`.
+
+    The production/default dependency below is structurally disabled in F4. TestClient
+    may override the exact dependency to supply a composed service and typed source
+    decision. This bundle intentionally does not construct Firestore clients, cursor
+    keyrings, projection adapters, production readers, or telemetry emitters at import.
+    """
+
+    enabled: bool = False
+    source_decision: V17V3GetSourceDecision = 'disabled'
+    service: Optional[Callable[[V17V3ComposedRequestParams, object], V17V3ComposedResponse]] = None
+    adapters: object = None
+    source_selector: object = None
+    control_reader: object = None
+    legacy_reader: object = None
+    projection_reader: object = None
+    cursor_keyring: object = None
+    cursor_codec: object = None
+    clock: object = None
+    deadline: object = None
+    observer: object = None
+
+
+def get_v17_v3_get_runtime() -> V17V3GetRuntime:
+    """Return the F4 production/default runtime bundle.
+
+    F4 is hard default-off: no environment variable, request input, header,
+    persisted control record, rollout flag, or production dependency can activate
+    V17. Only FastAPI TestClient dependency overrides can replace this callable's
+    return value.
+    """
+
+    return V17V3GetRuntime(enabled=False, source_decision='disabled')
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -44,6 +94,49 @@ class ReviewResolutionRequest(BaseModel):
     correction: Optional[Dict[str, Any]] = None
     reason: str = ''
     current_veracity: Optional[float] = None
+
+
+def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
+    # Use high limits for the first page
+    # Warn: should remove
+    if offset == 0:
+        limit = 5000
+    memories = memories_db.get_memories(uid, limit, offset)
+
+    valid_memories = []
+    for memory in memories:
+        if memory.get('is_locked', False):
+            content = memory.get('content', '')
+            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+        try:
+            valid_memories.append(MemoryDB.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
+
+
+def _apply_v17_response_headers(http_response: Response, v17_response: V17V3ComposedResponse) -> None:
+    for name, value in v17_response.headers.items():
+        if name in _V17_GET_ALLOWLISTED_RESPONSE_HEADERS:
+            http_response.headers[name] = value
+
+
+def _v17_allowlisted_headers(v17_response: V17V3ComposedResponse) -> Dict[str, str]:
+    return {
+        name: value for name, value in v17_response.headers.items() if name in _V17_GET_ALLOWLISTED_RESPONSE_HEADERS
+    }
+
+
+def _raise_v17_http_exception(v17_response: V17V3ComposedResponse) -> None:
+    raise HTTPException(
+        status_code=v17_response.http_status,
+        detail=v17_response.public_error or 'v17_read_failed',
+        headers=_v17_allowlisted_headers(v17_response),
+    )
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -165,27 +258,40 @@ async def create_memories_batch(
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
-def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
-    # Use high limits for the first page
-    # Warn: should remove
-    if offset == 0:
-        limit = 5000
-    memories = memories_db.get_memories(uid, limit, offset)
+def get_memories(
+    response: Response,
+    limit: int = 100,
+    offset: int = 0,
+    cursor: Optional[str] = None,
+    uid: str = Depends(auth.get_current_user_uid),
+    v17_runtime: V17V3GetRuntime = Depends(get_v17_v3_get_runtime),
+):
+    if not v17_runtime.enabled or v17_runtime.source_decision == 'disabled':
+        return _legacy_get_memories(uid, limit, offset)
 
-    valid_memories = []
-    for memory in memories:
-        if memory.get('is_locked', False):
-            content = memory.get('content', '')
-            memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-        try:
-            valid_memories.append(MemoryDB.model_validate(memory))
-        except ValidationError as e:
-            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
-            logger.warning(
-                f"Skipping invalid memory doc {memory.get('id', 'unknown')}: missing/invalid fields {missing_fields}"
-            )
-            continue
-    return valid_memories
+    if v17_runtime.source_decision == 'legacy_primary':
+        return _legacy_get_memories(uid, limit, offset)
+
+    if v17_runtime.source_decision != 'v17_read' or v17_runtime.service is None:
+        logger.info("v17_v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
+        raise HTTPException(status_code=503, detail='infrastructure_failure')
+
+    params = V17V3ComposedRequestParams(limit=limit, offset=offset, cursor=cursor)
+    v17_response = v17_runtime.service(params, v17_runtime.adapters)
+    if not isinstance(v17_response, V17V3ComposedResponse):
+        logger.info("v17_v3_get route=GET /v3/memories source=none status=503 decision=adapter_contract")
+        raise HTTPException(status_code=503, detail='infrastructure_failure')
+
+    _apply_v17_response_headers(response, v17_response)
+    logger.info(
+        "v17_v3_get route=GET /v3/memories source=%s status=%s decision=%s",
+        v17_response.source,
+        v17_response.http_status,
+        v17_response.public_error or v17_response.decision,
+    )
+    if v17_response.http_status != 200:
+        _raise_v17_http_exception(v17_response)
+    return [MemoryDB.model_validate(item) for item in v17_response.body or []]
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'])

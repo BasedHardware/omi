@@ -61,7 +61,7 @@ TELEMETRY_PRIVACY_LABEL_CONTRACT = {
 }
 
 NON_CLAIMS = [
-    "No backend/routers/memories.py change.",
+    "Default-off backend/routers/memories.py GET seam exists, but no effective runtime /v3 behavior change.",
     "No runtime /v3 behavior change.",
     "No production rollout approval.",
     "No production Firestore writes/cloud/provider/vector/network calls by default or with --execute.",
@@ -154,7 +154,9 @@ def _gate_rows(reports: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
             "source_artifact": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
             "remaining_gate_count": runtime_summary["remaining_gate_count"],
             "blocked_gate_count": runtime_summary["blocked_gate_count"],
+            "route_wiring": runtime_summary.get("route_wiring", False),
             "runtime_wiring_changed": runtime_summary["runtime_wiring_changed"],
+            "effective_runtime_behavior_changed": runtime_summary.get("effective_runtime_behavior_changed", False),
             "required_before_go": True,
             "approval_claimed": False,
         },
@@ -221,6 +223,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_gate_count = sum(1 for gate in gates if gate["status"] == "BLOCKED")
     blockers = _remaining_blockers()
     proof_status = "BLOCKED" if execute else "NOT_RUN"
+    runtime_summary = reports["runtime"]["summary"]
     return {
         "artifact": "v17_p1_3_v3_canary_approval_aggregate_readiness",
         "status": "BLOCKED",
@@ -230,8 +233,10 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "route_scope": ROUTE_SCOPE,
         "read_only": True,
         "mutation_allowed": False,
-        "runtime_wiring_changed": False,
-        "routers_memories_modified": False,
+        "route_wiring": runtime_summary.get("route_wiring", False),
+        "runtime_wiring_changed": runtime_summary["runtime_wiring_changed"],
+        "effective_runtime_behavior_changed": runtime_summary.get("effective_runtime_behavior_changed", False),
+        "routers_memories_modified": runtime_summary.get("route_wiring", False),
         "network_or_provider_calls_executed": False,
         "provider_calls_executed": False,
         "firestore_reads_executed": False,
@@ -256,7 +261,9 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "ready_gate_count": ready_gate_count,
             "blocked_gate_count": blocked_gate_count,
             "remaining_blocker_count": len(blockers),
-            "runtime_wiring_changed": False,
+            "route_wiring": runtime_summary.get("route_wiring", False),
+            "runtime_wiring_changed": runtime_summary["runtime_wiring_changed"],
+            "effective_runtime_behavior_changed": runtime_summary.get("effective_runtime_behavior_changed", False),
             "production_rollout_approved": False,
             "approval_claimed": False,
         },

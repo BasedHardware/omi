@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Safe Oracle P1-3 `/v3` GET runtime-wiring remaining-gates readiness artifact.
 
-This is a read-only gate inventory for the future `GET /v3/memories` V17
-runtime cutover. It intentionally does not import FastAPI routers, read
-Firestore, call providers, mutate state, change `backend/routers/memories.py`,
-or claim approval. It ties the current local proof chain to the remaining real
-service/runtime evidence that must exist before route wiring changes.
+This is a read-only gate inventory for the `GET /v3/memories` V17 runtime
+cutover. F4 added a structurally default-off router seam, but this artifact
+intentionally does not import FastAPI routers, read Firestore, call providers,
+mutate state, or claim approval. It ties the current local proof chain to the
+remaining real service/runtime evidence that must exist before effective runtime
+behavior changes.
 """
 
 from __future__ import annotations
@@ -75,7 +76,8 @@ EXISTING_LOCAL_PROOF_ARTIFACTS = {
         **(
             {
                 "current_runtime_behavior_proven": (
-                    "GET /v3/memories still calls stubbed legacy memories_db.get_memories(uid, limit, offset)"
+                    "GET /v3/memories production/default runtime remains disabled and calls stubbed legacy "
+                    "memories_db.get_memories(uid, limit, offset)"
                 )
             }
             if key == "real_router_get_testclient_proof"
@@ -116,8 +118,8 @@ REMAINING_GATES = [
         "required_evidence": (
             "Future GET must read expected_account_generation from the independent server-owned "
             "users/{uid}/memory_state/head source, then require trusted == control == projection == cursor generation; "
-            "local writer/emulator evidence now exists, but route integration and remaining runtime gates are still "
-            "required before route wiring."
+            "local writer/emulator evidence now exists, but real-service runtime gates are still required before "
+            "effective V17 read behavior."
         ),
         "existing_local_proofs": [
             "account_generation_readiness_proof",
@@ -324,7 +326,7 @@ PROPOSED_SAFE_CUTOVER_SEQUENCE = [
     },
     {
         "step_id": "wire_get_route_behind_fail_closed_planner",
-        "description": "Only after gates pass, route GET through request adapter -> planner -> read service -> response adapter.",
+        "description": "Only after gates pass, make the default-off GET seam effectively route real traffic through V17.",
         "implements_runtime_wiring_now": False,
         "must_preserve": [
             "non_enrolled_legacy_primary_current_limit_offset_behavior",
@@ -357,8 +359,10 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "execute": execute,
         "read_only": True,
         "mutation_allowed": False,
-        "runtime_wiring_changed": False,
-        "routers_memories_modified": False,
+        "route_wiring": True,
+        "runtime_wiring_changed": True,
+        "effective_runtime_behavior_changed": False,
+        "routers_memories_modified": True,
         "network_or_provider_calls_executed": False,
         "provider_calls_executed": False,
         "firestore_reads_executed": False,
@@ -366,13 +370,14 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "pinecone_calls_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Remaining gates before changing backend/routers/memories.py GET /v3/memories runtime wiring.",
+        "scope": "Remaining gates before the default-off backend/routers/memories.py GET /v3/memories seam can change effective runtime behavior.",
         "current_runtime_baseline": {
             "source": "backend/scripts/v17_p1_3_v3_real_router_get_testclient.py",
             "status": "BLOCKED",
             "proven_behavior": (
-                "GET /v3/memories currently invokes legacy memories_db.get_memories(uid, limit, offset); "
-                "offset=0 is coerced to limit=5000; nonzero limit/offset are preserved; V17 adapters are not invoked."
+                "GET /v3/memories production/default runtime remains structurally disabled and invokes legacy "
+                "memories_db.get_memories(uid, limit, offset); offset=0 is coerced to limit=5000; nonzero "
+                "limit/offset are preserved; V17 is only exercisable through TestClient dependency overrides."
             ),
             "runtime_cutover_claimed": False,
         },
@@ -380,7 +385,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "existing_local_proof_artifacts": EXISTING_LOCAL_PROOF_ARTIFACTS,
         "proposed_safe_cutover_sequence": PROPOSED_SAFE_CUTOVER_SEQUENCE,
         "non_claims": [
-            "No backend/routers/memories.py runtime wiring changed.",
+            "A default-off backend/routers/memories.py GET seam exists, but effective production runtime behavior did not change.",
             "No production traffic, Firestore, Pinecone, cloud, provider, or network calls executed.",
             "No mutations or approval claimed.",
             "Readiness/unit proofs are not production evidence for real service runtime gates.",
@@ -394,7 +399,9 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "missing_real_service_runtime_evidence_count": missing_runtime_evidence_count,
             "read_only": True,
             "mutation_allowed": False,
-            "runtime_wiring_changed": False,
+            "route_wiring": True,
+            "runtime_wiring_changed": True,
+            "effective_runtime_behavior_changed": False,
             "approval_claimed": False,
             "safe_cutover_step_count": len(PROPOSED_SAFE_CUTOVER_SEQUENCE),
         },

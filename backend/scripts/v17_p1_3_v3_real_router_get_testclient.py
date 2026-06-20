@@ -181,6 +181,32 @@ def _probe_code() -> str:
         utils_pkg.__path__ = []
         sys.modules["utils"] = utils_pkg
 
+        memory_pkg = types.ModuleType("utils.memory")
+        memory_pkg.__path__ = []
+        sys.modules["utils.memory"] = memory_pkg
+        setattr(utils_pkg, "memory", memory_pkg)
+
+        composed = types.ModuleType("utils.memory.v17_v3_composed_get_service")
+        class V17V3ComposedRequestParams:
+            def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
+                self.limit = limit
+                self.offset = offset
+                self.cursor = cursor
+                self.include_archive = include_archive
+                self.include_historical = include_historical
+        class V17V3ComposedResponse:
+            def __init__(self, http_status=200, body=None, public_error=None, headers=None, source="none", decision="ok"):
+                self.http_status = http_status
+                self.body = body
+                self.public_error = public_error
+                self.headers = headers or {}
+                self.source = source
+                self.decision = decision
+        composed.V17V3ComposedRequestParams = V17V3ComposedRequestParams
+        composed.V17V3ComposedResponse = V17V3ComposedResponse
+        sys.modules["utils.memory.v17_v3_composed_get_service"] = composed
+        setattr(memory_pkg, "v17_v3_composed_get_service", composed)
+
         executors = types.ModuleType("utils.executors")
         executors.db_executor = StubExecutor()
         executors.postprocess_executor = StubExecutor()
