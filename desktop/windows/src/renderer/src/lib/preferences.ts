@@ -2,7 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
-import type { SttMode } from '../../../shared/types'
+import type { RealtimeVoiceProvider, SttMode } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -38,6 +38,11 @@ export type Preferences = {
   // Speech-to-text runtime. 'auto' prefers local Parakeet only when a healthy
   // supported local runtime is present, otherwise hosted /v4/listen.
   sttMode?: SttMode
+  // Opt-in realtime voice path. Separate from /v4/listen transcription so
+  // continuous recording remains available even when voice is off/unavailable.
+  realtimeVoiceEnabled?: boolean
+  realtimeVoiceProvider?: RealtimeVoiceProvider
+  localTtsVoice?: string
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.

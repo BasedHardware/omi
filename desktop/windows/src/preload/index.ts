@@ -7,6 +7,7 @@ import type {
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  LocalTtsSynthesizeRequest,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
@@ -46,6 +47,9 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
   localSttStatus: () => ipcRenderer.invoke('omi-local-stt:status'),
+  localTtsStatus: () => ipcRenderer.invoke('omi-local-tts:status'),
+  localTtsSynthesize: (request: LocalTtsSynthesizeRequest) =>
+    ipcRenderer.invoke('omi-local-tts:synthesize', request),
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
