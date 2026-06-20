@@ -2,6 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { SttMode } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -34,6 +35,9 @@ export type Preferences = {
   // Set by the onboarding opt-in step; toggled in Settings → Rewind. Undefined =
   // off (opt-in), so existing users are unaffected until they enable it.
   continuousRecording?: boolean
+  // Speech-to-text runtime. 'auto' prefers local Parakeet only when a healthy
+  // supported local runtime is present, otherwise hosted /v4/listen.
+  sttMode?: SttMode
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.
