@@ -363,6 +363,11 @@ def split_into_sentences(text: str) -> List[str]:
     _ABBREV_PATTERNS = [
         # Country codes: U.S. → UⓐⓑⓒS. (internal period protected, trailing period kept)
         (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
+        # Extended multi-part acronyms: U.S.A. → UⓐⓑⓒSⓐⓑⓒA.
+        (
+            re.compile(r'\b([A-Z])\.([A-Z])\.([A-Z])\.'),
+            lambda m: m.group(1) + _ABBR + m.group(2) + _ABBR + m.group(3) + '.',
+        ),
         # Decimal/version numbers: 3.14 → 3ⓓⓔⓕ14
         (re.compile(r'(?<=\d)\.(?=\d)'), _DEC),
         # Latin abbreviations: e.g. → eⓛⓐⓣg.
@@ -413,35 +418,52 @@ def _should_merge(prev: str, nxt: str) -> bool:
     Returns True when prev ends with a sentence-ending punctuation mark but
     appears to be a fragment rather than a complete sentence (e.g., an
     abbreviation tail like 'U.S.' or a short title like 'Dr.').
+
+    This function is pure regex-based (no PySBD) and thread-safe.
     """
-    if not prev or prev[-1] not in '.!?。！？':
+    if not prev or prev[-1] not in '.!?。！？؟۔।॥':
         return False
     if not nxt:
         return False
 
-    # Next segment is a lone lowercase word/fragment — not a real sentence
+    # Next segment starts with a capitalized word — likely a real new sentence.
+    # Exception: single lowercase word/fragment that's clearly not a sentence.
     nxt_body = nxt.rstrip('.!?。！؟؟۔।॥ ')
-    if len(nxt_body) <= 15 and nxt and nxt[0].islower():
-        return True
+    nxt_stripped = nxt.lstrip()
+
+    # Only merge lowercase continuations that look like abbreviation fragments
+    # (e.g., "Smith" after "Dr.", "García" after "Sr.") — NOT full sentences
+    # like "Gracias." after "Sí." or "thanks." after "I agree."
+    if len(nxt_body) <= 15 and nxt_stripped and nxt_stripped[0].islower():
+        # Must be a single token (name/word), not a multi-word phrase
+        if ' ' not in nxt_body:
+            return True
 
     # Prev ends with a known abbreviation pattern (short token + period)
     # Only merge if prev looks like an abbreviation (Dr., Mr., U.S., etc.)
-    # NOT for generic short sentences like "Sí." or "OK." followed by real text
-    prev_body = prev.rstrip('.!?。！؟ ')
+    # NOT for generic short sentences followed by real text
+    prev_body = prev.rstrip('.!?。！؟۔। ')
     # Extract the last token — embedded abbreviations like "I spoke to Dr."
     # have a long prev_body but the trailing token is still a title/latin abbrev.
     _last_token = prev_body.rsplit(None, 1)[-1] if prev_body else ''
-    if len(_last_token) <= 6 and _last_token:
+    if len(_last_token) <= 8 and _last_token:
         # Must look like an abbreviation: single uppercase letter(s), title prefix,
-        # latin abbrev, or version/decimal pattern
+        # latin abbrev, version/decimal pattern, or multi-part acronym
         is_abbrev_like = (
             _last_token.isupper()
-            and len(_last_token) <= 3  # U.S., UK, Dr
-            or _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
+            and len(_last_token) <= 5  # U.S.A., F.B.I., UK, Dr
+            or _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof', 'Sr')  # Title abbrevs
             or _last_token in ('etc', 'vs')  # Latin abbrevs
             or (_last_token[0].isupper() and len(_last_token) > 1 and _last_token[1:].isdigit())  # v2, V3
         )
         if is_abbrev_like:
+            # But DON'T merge if next starts capitalized and looks like a new sentence
+            # (e.g., "U.K. She likes tea." → keep separate)
+            if nxt_stripped and nxt_stripped[0].isupper() and ' ' in nxt_body:
+                return False
+            # Also don't merge after etc./vs. when next starts a new sentence
+            if _last_token in ('etc', 'vs') and nxt_stripped and nxt_stripped[0].isupper():
+                return False
             return True
 
     return False

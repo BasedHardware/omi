@@ -199,6 +199,14 @@ class TranslationCoordinator:
 
             # Prefix-safe check: if prefix changed, reset
             if state.committed_text and not text.startswith(state.committed_text):
+                # Bump version and invalidate batch buffer BEFORE Redis lookup so
+                # any in-flight batch job is rejected immediately as stale.
+                state.version = self._next_version()
+                self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                if self._batch_task and not self._batch_task.done():
+                    self._batch_task.cancel()
+                    self._batch_task = None
+
                 # Check if the new merged text was already translated (Redis cache)
                 text_hash = hashlib.md5(text.encode()).hexdigest()
                 redis_cached = await run_blocking(db_executor, get_cached_translation, text_hash, self.target_language)
@@ -206,6 +214,16 @@ class TranslationCoordinator:
                     # Found in Redis — adopt as committed, skip re-translation
                     translated_text = redis_cached['text']
                     detected_lang = redis_cached.get('detected_lang', '')
+                    # Apply cached detected language to conversation state so the
+                    # monolingual gate doesn't incorrectly stay enabled for foreign text.
+                    # Use the same logic as observe() but with known detected_lang.
+                    if detected_lang:
+                        _det_base = _normalize_base_language(detected_lang) or ''
+                        if _det_base and _det_base != self.language_state.target_base:
+                            # Foreign-language cache hit — exit monolingual gate
+                            self.language_state.monolingual = False
+                            self.language_state.consecutive_target = 0
+
                     # Guard: skip no-op "translations" that would spam UI badges.
                     if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
                         state.committed_text = text
@@ -224,15 +242,6 @@ class TranslationCoordinator:
                     state.committed_text = text
                     state.assembled_translation = translated_text
                     state.detected_lang = detected_lang
-                    # Bump version so any in-flight batch job is rejected as stale.
-                    state.version = self._next_version()
-                    # Invalidate any pending batch entries for this segment so
-                    # _flush_batch() does not overwrite with stale buffered text.
-                    self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
-                    # Cancel any in-flight batch task to prevent stale overwrite
-                    if self._batch_task and not self._batch_task.done():
-                        self._batch_task.cancel()
-                        self._batch_task = None
                     state.latest_text = text
                     state.last_update_at = now
                     await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
@@ -381,11 +390,17 @@ class TranslationCoordinator:
                 # Check if translation is meaningful
                 target_base = self.target_base
                 if not should_persist_translation(original_text, translated_text, detected_lang, target_base):
-                    # No-op translation — set negative cache
-                    text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                    set_negative_cache(text_hash, self.target_language)
-                    self.metrics['negative_cache_sets'] += 1
-                    state.committed_text = original_text
+                    # Distinguish real no-op (target-language text) from translation failure.
+                    # A failure returns original_text with empty detected_lang — do NOT
+                    # set negative cache or advance committed_text, so the segment can
+                    # be retried on the next cycle.
+                    if detected_lang:
+                        # Genuine no-op: source is already in target language
+                        text_hash = hashlib.md5(original_text.encode()).hexdigest()
+                        set_negative_cache(text_hash, self.target_language)
+                        self.metrics['negative_cache_sets'] += 1
+                        state.committed_text = original_text
+                    # else: translation failure — skip silently, allow retry
                     continue
 
                 # Update state
