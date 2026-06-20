@@ -6,6 +6,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -265,8 +266,18 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
   }
 
   Future<void> _handleTranscribe(LocalRecordingsProvider provider, LocalRecording rec) async {
-    await provider.upload(rec);
-    if (mounted) Navigator.of(context).maybePop();
+    final outcome = await provider.upload(rec);
+    if (!mounted) return;
+    switch (outcome) {
+      case LocalUploadOutcome.rateLimited:
+        AppSnackbar.showSnackbarError(context.l10n.fairUseBudgetExhausted, duration: const Duration(seconds: 4));
+      case LocalUploadOutcome.failed:
+        AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+      case LocalUploadOutcome.busy:
+        break;
+      case LocalUploadOutcome.started:
+        Navigator.of(context).maybePop();
+    }
   }
 
   void _showOptionsMenu(BuildContext context) {
