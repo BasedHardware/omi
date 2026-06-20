@@ -1568,3 +1568,17 @@ Verification for this slice:
 - Readiness summaries: control reader `BLOCKED BLOCKED True False False False 8 8 8 12 5 7`; GET runtime-wiring `BLOCKED BLOCKED True False False False 9 15 8 4`; `/v3` external compatibility `BLOCKED True False False False False False False False 7 7 True`.
 - Async scan remains pre-existing `HIGH async helpers with blocking: 41`, `STRUCTURAL mixed await+sync DB: 10`; docs hygiene `docs_hygiene 16 BAD=[]`.
 - Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
+### 2026-06-20 — P1-3 `/v3` Firestore-emulator/security control reader readiness
+
+Added the next real-service-adjacent readiness artifact for future Firestore-emulator/API-backed validation of the server-side V17 `/v3` control reader, without requiring cloud credentials or changing runtime behavior:
+
+- Added `backend/scripts/v17_p1_3_v3_control_reader_emulator_readiness.py`, a safe default `BLOCKED`/`NOT_RUN` inventory that never starts Firestore emulators, reads or writes Firestore cloud/emulator data, calls cloud/provider/network services, mutates state, implements a production reader, wires routes, or claims approval.
+- Added `backend/tests/unit/test_v17_p1_3_v3_control_reader_emulator_readiness.py` and registered it in `backend/test.sh`.
+- Linked `control_reader_emulator_readiness_proof` from the `/v3` external compatibility readiness, control-reader readiness, and GET runtime-wiring readiness chains.
+- The artifact records the exact prerequisites for a future emulator/API-backed proof: canonical server-side control source/path/API still blocked until chosen; Firestore emulator config/env/tooling; control-doc fixture schema with `uid`, `schema_version`, `cohort_enrolled`, `default_memory_grant`, `account_generation`, `control_generation`, `projection_ready`, `write_convergence_ready`, `archive_allowed`, and `short_term_freshness_default_visible`; an API-backed server-reader harness; and separate static rules, emulator-denial, and cloud IAM evidence.
+- Security/IAM evidence requirements explicitly disallow direct client control reads, require future server-principal allowed evidence, and keep rules-static, emulator, and cloud IAM proofs separate.
+- Required proof cases are pinned to `v17_v3_control_reader_contract.py`: non-enrolled legacy boundary, enrolled V17 projection allowed only when all gates are ready, and fail-closed/no-fallback cases for missing control doc, stale generation, no grant, projection not ready, write convergence not ready, invalid/missing cursor secret, Archive not allowed, and stale Short-term default-hidden.
+- Local detection found the checked-in Firebase emulator configuration/rules harness shape, but no control-reader emulator harness/script is claimed. `/v3` runtime remains **BLOCKED / NO-GO**.
+
+Verification for this slice is recorded in the subagent handoff: RED focused test `6 failed`; final focused/linked tests, full V17 regression, readiness summaries, async scan, docs hygiene, and commit SHA are attached there. Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.

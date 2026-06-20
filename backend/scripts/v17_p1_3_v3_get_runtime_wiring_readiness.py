@@ -48,6 +48,7 @@ PROOF_CONSTANTS = {
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
     "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
     "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
+    "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
 }
 
 

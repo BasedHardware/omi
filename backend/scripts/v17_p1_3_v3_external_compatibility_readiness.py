@@ -677,6 +677,24 @@ CONTROL_READER_CONTRACT_PROOF = {
     ],
 }
 
+CONTROL_READER_EMULATOR_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_control_reader_emulator_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_control_reader_emulator_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "safe_default_blocked_not_run_no_cloud_or_emulator_side_effects",
+        "local_firestore_emulator_harness_config_inventory_without_starting_services",
+        "canonical_server_control_source_path_api_still_blocked_until_chosen",
+        "control_doc_fixture_schema_uid_generation_grant_projection_write_archive_short_term_fields",
+        "security_iam_evidence_no_direct_client_control_reads_server_principal_allowed",
+        "rules_static_emulator_and_cloud_iam_proof_separation",
+        "contract_decision_case_inventory_matches_v17_v3_control_reader_contract",
+        "non_enrolled_legacy_boundary_and_enrolled_no_legacy_fallback_constraints",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -735,6 +753,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
+        "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",

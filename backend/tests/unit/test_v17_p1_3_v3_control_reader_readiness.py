@@ -37,6 +37,7 @@ REQUIRED_PROOF_KEYS = {
     "get_dependency_auth_readiness_proof",
     "projection_store_readiness_proof",
     "control_reader_contract_proof",
+    "control_reader_emulator_readiness_proof",
     "get_runtime_wiring_readiness_proof",
 }
 
@@ -209,7 +210,7 @@ def test_control_reader_readiness_json_summary_is_stable():
         "requirement_count": 8,
         "blocked_requirement_count": 8,
         "fail_closed_reason_count": 8,
-        "existing_local_proof_count": 13,
+        "existing_local_proof_count": 14,
         "missing_real_evidence_requirement_count": 8,
         "read_only": True,
         "mutation_allowed": False,

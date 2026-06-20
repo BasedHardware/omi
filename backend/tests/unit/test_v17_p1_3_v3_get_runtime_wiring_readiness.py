@@ -31,6 +31,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "projection_store_readiness_proof",
     "control_reader_readiness_proof",
     "control_reader_contract_proof",
+    "control_reader_emulator_readiness_proof",
 }
 
 
@@ -156,7 +157,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 9,
         "blocked_gate_count": 9,
-        "existing_local_proof_count": 16,
+        "existing_local_proof_count": 17,
         "missing_real_service_runtime_evidence_count": 9,
         "read_only": True,
         "mutation_allowed": False,
