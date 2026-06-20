@@ -25,7 +25,7 @@ def test_f6h_aggregate_module_stays_pure_and_local_only():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imports.append(node.module)
 
-    assert imports == ["__future__", "typing"]
+    assert imports == ["__future__", "typing", "utils.memory.v17_v3_f6.protocol"]
 
 
 def test_f6h_compatibility_facade_re_exports_old_public_symbols():

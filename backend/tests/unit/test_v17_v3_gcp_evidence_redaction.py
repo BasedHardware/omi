@@ -31,6 +31,12 @@ def _safe_report():
     }
 
 
+def _assert_exact_error(call, error_type: type[Exception], message: str) -> None:
+    with pytest.raises(error_type) as exc_info:
+        call()
+    assert str(exc_info.value) == message
+
+
 def test_render_redacted_output_uses_keyed_fingerprints_and_stable_safe_json():
     rendered = render_redacted_evidence_json(_safe_report())
     decoded = json.loads(rendered)
@@ -68,8 +74,36 @@ def test_redaction_contract_blocks_raw_urls_tokens_credentials_query_values_and_
         "uid_1234567890",
         "raw query value coffee shop near home",
     ]
+
     for value in forbidden_values:
         report = _safe_report()
         report["observations"][0]["metadata"] = {"note": value}
         with pytest.raises(RedactionContractError):
             render_redacted_evidence_json(report)
+
+
+def test_redaction_exact_field_errors_preserve_type_message_and_order():
+    report = _safe_report()
+    report.pop("audit")
+    report["debug"] = "not allowlisted"
+    _assert_exact_error(
+        lambda: validate_redacted_evidence(report),
+        RedactionContractError,
+        "missing fields: ['audit']",
+    )
+
+    report = _safe_report()
+    report["read_bounds"] = {"max_documents_per_path": 25, "surprise": True}
+    _assert_exact_error(
+        lambda: validate_redacted_evidence(report),
+        RedactionContractError,
+        "read_bounds unknown fields: ['surprise']",
+    )
+
+    report = _safe_report()
+    report["audit"] = {"surprise": True}
+    _assert_exact_error(
+        lambda: validate_redacted_evidence(report),
+        RedactionContractError,
+        "audit unknown fields: ['surprise']",
+    )

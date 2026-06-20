@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from utils.memory.v17_v3_f6.protocol import (
+    ARTIFACT_VERSION_F6H,
+    DECISION_BLOCKED_ON_GCP_ACCESS,
+    DECISION_NO_GO,
+    STATUS_BLOCKED,
+    STATUS_BLOCKED_ON_GCP_ACCESS,
+    STATUS_MISSING,
+    STATUS_PASS,
+    STATUS_PRE_GCP_READY,
+)
+
 F6_LOCAL_GATE_IDS = (
     "f6a_target_registry_config_schema",
     "f6b_approval_run_record_artifact",
@@ -36,12 +47,14 @@ def build_pre_gcp_aggregate_report(*, local_proofs: dict[str, dict[str, Any]]) -
     missing = sorted(known - provided)
     unknown = sorted(provided - known)
     failed = sorted(
-        gate_id for gate_id in known & provided if local_proofs[gate_id].get("status") not in {"PASS", "PRE_GCP_READY"}
+        gate_id
+        for gate_id in known & provided
+        if local_proofs[gate_id].get("status") not in {STATUS_PASS, STATUS_PRE_GCP_READY}
     )
     local_rows = [
         {
             "gate_id": gate_id,
-            "status": local_proofs.get(gate_id, {}).get("status", "MISSING"),
+            "status": local_proofs.get(gate_id, {}).get("status", STATUS_MISSING),
             "evidence": local_proofs.get(gate_id, {}).get("evidence"),
         }
         for gate_id in F6_LOCAL_GATE_IDS
@@ -49,16 +62,16 @@ def build_pre_gcp_aggregate_report(*, local_proofs: dict[str, dict[str, Any]]) -
     gcp_rows = [
         {
             "gate_id": gate_id,
-            "status": "BLOCKED_ON_GCP_ACCESS",
+            "status": STATUS_BLOCKED_ON_GCP_ACCESS,
             "evidence": None,
         }
         for gate_id in GCP_ACCESS_GATE_IDS
     ]
     local_ready = not missing and not unknown and not failed
     return {
-        "artifact_version": "V17-V3-F6H",
-        "status": "PRE_GCP_READY" if local_ready else "BLOCKED",
-        "decision": "BLOCKED_ON_GCP_ACCESS" if local_ready else "NO_GO",
+        "artifact_version": ARTIFACT_VERSION_F6H,
+        "status": STATUS_PRE_GCP_READY if local_ready else STATUS_BLOCKED,
+        "decision": DECISION_BLOCKED_ON_GCP_ACCESS if local_ready else DECISION_NO_GO,
         "local_gates": local_rows,
         "gcp_access_gates": gcp_rows,
         "missing_local_gates": missing,

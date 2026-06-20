@@ -47,6 +47,28 @@ def test_registry_rejects_unknown_target_and_unknown_or_incomplete_schema_fields
         EvidenceTargetRegistry.from_dict(incomplete)
 
 
+def test_registry_exact_field_errors_preserve_type_message_and_order():
+    both_missing_and_unknown = {
+        "dev": {
+            **{k: v for k, v in DEFAULT_EVIDENCE_TARGETS["dev"].items() if k != "limits"},
+            "unexpected": "closed",
+        }
+    }
+    with pytest.raises(ValidationError) as exc_info:
+        EvidenceTargetRegistry.from_dict(both_missing_and_unknown)
+    assert str(exc_info.value) == "target dev missing fields: ['limits']"
+
+    bad_audit = {
+        "dev": {
+            **DEFAULT_EVIDENCE_TARGETS["dev"],
+            "audit_settings": {"enabled": True, "surprise": True},
+        }
+    }
+    with pytest.raises(ValidationError) as exc_info:
+        EvidenceTargetRegistry.from_dict(bad_audit)
+    assert str(exc_info.value) == "audit_settings missing fields: ['log_name', 'require_zero_write_methods']"
+
+
 def test_concrete_target_allows_real_execution_only_on_exact_project_and_principal():
     concrete = {
         "dev": {

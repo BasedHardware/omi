@@ -79,6 +79,27 @@ def test_run_record_fails_closed_on_unknown_fields_unapproved_paths_unbounded_re
         validate_run_record(_record(project_id="omi-memory-prod-456"), _concrete_registry())
 
 
+def test_run_record_exact_field_errors_preserve_type_message_and_order():
+    raw = _record(unexpected="closed")
+    raw.pop("approvals")
+    with pytest.raises(RunRecordValidationError) as exc_info:
+        validate_run_record(raw, _concrete_registry())
+    assert str(exc_info.value) == "run record missing fields: ['approvals']"
+
+    raw = _record(read_bounds={"surprise": True})
+    with pytest.raises(RunRecordValidationError) as exc_info:
+        validate_run_record(raw, _concrete_registry())
+    assert (
+        str(exc_info.value)
+        == "read_bounds missing fields: ['allow_collection_scans', 'max_documents_per_path', 'max_paths']"
+    )
+
+    raw = _record(approvals=[{"role": "platform", "unexpected": "closed"}])
+    with pytest.raises(RunRecordValidationError) as exc_info:
+        validate_run_record(raw, _concrete_registry())
+    assert str(exc_info.value) == "approval missing fields: ['approved_at', 'approver']"
+
+
 def test_prod_run_record_requires_named_platform_and_security_approvals():
     with pytest.raises(RunRecordValidationError, match="prod requires"):
         validate_run_record(_record("prod"), _concrete_registry())
