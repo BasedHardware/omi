@@ -26,6 +26,34 @@ function continuousRecordingDot(
   return websocketTone === 'good' ? 'on' : 'warn'
 }
 
+function localRuntimeValue(status: LocalSttStatus | null): string {
+  const state = status?.runtime.installState
+  if (!state) return 'Checking'
+  if (state === 'installed' || state === 'running') return 'Installed'
+  if (state === 'installing') return 'Installing'
+  if (state === 'not_installed') return 'Installs on first use'
+  if (state === 'unsupported') return 'Unavailable'
+  return 'Needs attention'
+}
+
+function localRuntimeSubtitle(sttMode: SttMode, status: LocalSttStatus | null): string {
+  if (sttMode === 'cloud') return 'Hosted Omi /v4/listen'
+  if (!status) return 'Checking local Parakeet'
+  if (status.available) return 'Local Parakeet ready'
+  if (status.runtime.installState === 'installing') return 'Installing local Parakeet'
+  if (status.runtime.canInstall) return 'Local Parakeet installs on first use'
+  return status.reason ?? 'Local Parakeet unavailable'
+}
+
+function localRuntimeTone(
+  status: LocalSttStatus | null,
+  sttMode: SttMode
+): 'good' | 'warn' | 'neutral' {
+  if (status?.available) return 'good'
+  if (sttMode === 'local-parakeet' || status?.runtime.installState === 'error') return 'warn'
+  return 'neutral'
+}
+
 export function TranscriptionTab(): React.JSX.Element {
   const [language, setLanguage] = useState(getPreferences().language)
   const [continuousRec, setContinuousRec] = useState<boolean>(
@@ -179,13 +207,7 @@ export function TranscriptionTab(): React.JSX.Element {
                 : 'off'
         }
         title="Speech-to-text runtime"
-        subtitle={
-          sttMode === 'cloud'
-            ? 'Hosted Omi /v4/listen'
-            : localSttStatus?.available
-              ? 'Local Parakeet ready'
-              : (localSttStatus?.reason ?? 'Checking local Parakeet')
-        }
+        subtitle={localRuntimeSubtitle(sttMode, localSttStatus)}
         keywords="local stt parakeet nvidia cuda offline speech transcription runtime"
       >
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
@@ -209,20 +231,18 @@ export function TranscriptionTab(): React.JSX.Element {
             value={
               localSttStatus?.available
                 ? 'Ready'
-                : localSttStatus?.healthy
-                  ? 'GPU check failed'
+                : localSttStatus?.runtime.canInstall
+                  ? 'First-use install'
                   : 'Unavailable'
             }
-            tone={
-              localSttStatus?.available ? 'good' : sttMode === 'local-parakeet' ? 'warn' : 'neutral'
-            }
+            tone={localRuntimeTone(localSttStatus, sttMode)}
           />
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <StatusTile
-            label="Runtime"
-            value={localSttStatus?.configuredUrl ?? 'Not checked'}
-            tone={localSttStatus?.healthy ? 'good' : 'neutral'}
+            label="Local runtime"
+            value={localRuntimeValue(localSttStatus)}
+            tone={localRuntimeTone(localSttStatus, sttMode)}
           />
           <StatusTile
             label="NVIDIA"

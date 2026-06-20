@@ -193,11 +193,27 @@ export type SttMode = 'auto' | 'cloud' | 'local-parakeet'
 
 export type LocalSttStatus = {
   backend: 'parakeet'
-  configuredUrl: string
-  healthUrl: string
+  /** Internal only. Settings must not expose implementation URLs to end users. */
+  configuredUrl?: string
+  healthUrl?: string
   healthy: boolean
   available: boolean
   nvidiaAvailable: boolean | null
+  managed: boolean
+  runtime: {
+    kind: 'parakeet.cpp'
+    installState:
+      | 'unsupported'
+      | 'not_installed'
+      | 'installing'
+      | 'installed'
+      | 'starting'
+      | 'running'
+      | 'error'
+    variant: 'cuda' | 'cpu' | null
+    model: string
+    canInstall: boolean
+  }
   reason?: string
   checkedAt: number
 }

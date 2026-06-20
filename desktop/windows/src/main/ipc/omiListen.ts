@@ -6,7 +6,11 @@ import type {
   ListenMessage,
   ListenStartArgs
 } from '../../shared/types'
-import { ParakeetStreamSession } from '../localStt/parakeetSession'
+import { ParakeetCppSession } from '../localStt/parakeetCppSession'
+import {
+  ensureManagedParakeetRuntime,
+  type ManagedParakeetRuntime
+} from '../localStt/parakeetCppRuntime'
 import { getLocalSttStatus } from '../localStt/status'
 
 function buildEndpoint(language: string): string {
@@ -25,7 +29,7 @@ function buildEndpoint(language: string): string {
 type Session = {
   backend: 'omi' | 'local-parakeet'
   ws?: WebSocket
-  local?: ParakeetStreamSession
+  local?: ParakeetCppSession
   ownerId: number // webContents id for routing replies back
   source: 'mic' | 'system'
   closed: boolean
@@ -66,8 +70,33 @@ async function startSession(args: ListenStartArgs, owner: WebContents): Promise<
   const mode = args.sttMode ?? 'auto'
   if (mode === 'local-parakeet' || mode === 'auto') {
     const status = await getLocalSttStatus()
-    if (status.available) {
-      startLocalSession(args, owner, status.configuredUrl, mode === 'auto')
+    if (status.available || status.runtime.canInstall) {
+      try {
+        if (!status.available) {
+          emit(owner.id, {
+            sessionId: args.sessionId,
+            kind: 'event',
+            event: {
+              type: 'local_stt_installing',
+              raw: { runtime: status.runtime.kind, model: status.runtime.model }
+            }
+          })
+        }
+        const runtime = await ensureManagedParakeetRuntime()
+        await startLocalSession(args, owner, runtime, mode === 'auto')
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'local Parakeet STT unavailable'
+        if (mode === 'auto') {
+          emit(owner.id, {
+            sessionId: args.sessionId,
+            kind: 'event',
+            event: { type: 'local_stt_fallback_cloud', raw: { reason: message } }
+          })
+          startCloudSession(args, owner)
+          return
+        }
+        emit(owner.id, { sessionId: args.sessionId, kind: 'error', message, fatal: true })
+      }
       return
     } else if (mode === 'local-parakeet') {
       emit(owner.id, {
@@ -83,22 +112,23 @@ async function startSession(args: ListenStartArgs, owner: WebContents): Promise<
   startCloudSession(args, owner)
 }
 
-function startLocalSession(
+async function startLocalSession(
   args: ListenStartArgs,
   owner: WebContents,
-  baseUrl: string,
+  runtime: ManagedParakeetRuntime,
   fallbackCloudOnStartupFailure: boolean
-): void {
+): Promise<void> {
   const session: Session = {
     backend: 'local-parakeet',
     ownerId: owner.id,
     source: args.source,
     closed: false
   }
-  const local = new ParakeetStreamSession({
+  const local = new ParakeetCppSession({
     sessionId: args.sessionId,
     source: args.source,
-    baseUrl,
+    language: args.language,
+    runtime,
     handlers: {
       onConnected: () => {
         emit(session.ownerId, {
@@ -123,7 +153,7 @@ function startLocalSession(
   })
   session.local = local
   sessions.set(args.sessionId, session)
-  void local.start().catch((err) => {
+  await local.start().catch((err) => {
     if (session.closed) return
     sessions.delete(args.sessionId)
     session.closed = true

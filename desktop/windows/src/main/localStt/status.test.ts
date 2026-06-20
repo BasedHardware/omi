@@ -1,34 +1,76 @@
-import { describe, expect, it, vi } from 'vitest'
-import { getLocalSttStatus, localParakeetBaseUrl } from './status'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { getLocalSttStatus } from './status'
+import { resetManagedParakeetRuntimeStateForTests } from './parakeetCppRuntime'
 
-function okFetch(): typeof fetch {
-  return vi
-    .fn()
-    .mockResolvedValue(new Response(JSON.stringify({ status: 'healthy' }), { status: 200 }))
-}
+let root = ''
+
+beforeEach(async () => {
+  resetManagedParakeetRuntimeStateForTests()
+  root = await mkdtemp(join(tmpdir(), 'omi-local-stt-status-'))
+})
+
+afterEach(async () => {
+  resetManagedParakeetRuntimeStateForTests()
+  if (root) await rm(root, { recursive: true, force: true })
+  root = ''
+})
 
 describe('local STT status', () => {
-  it('uses the configured local Parakeet URL without trailing slashes', () => {
-    expect(localParakeetBaseUrl({ OMI_LOCAL_PARAKEET_URL: 'http://127.0.0.1:9000/' })).toBe(
-      'http://127.0.0.1:9000'
-    )
-  })
-
-  it('is available when health passes and NVIDIA is detected on Windows', async () => {
+  it('ignores externally configured localhost services and reports managed first-use install', async () => {
     const status = await getLocalSttStatus({
-      env: { OMI_LOCAL_PARAKEET_URL: 'http://127.0.0.1:9000' },
+      env: { OMI_LOCAL_PARAKEET_URL: 'http://127.0.0.1:9000' } as NodeJS.ProcessEnv,
       platform: 'win32',
-      fetchImpl: okFetch(),
+      arch: 'x64',
+      rootDir: root,
       detectNvidiaGpu: async () => true,
       now: () => 123
     })
 
     expect(status).toMatchObject({
-      configuredUrl: 'http://127.0.0.1:9000',
+      healthy: false,
+      available: false,
+      nvidiaAvailable: true,
+      managed: true,
+      runtime: {
+        kind: 'parakeet.cpp',
+        installState: 'not_installed',
+        variant: 'cuda',
+        canInstall: true
+      },
+      checkedAt: 123
+    })
+    expect(status.configuredUrl).toBeUndefined()
+    expect(status.healthUrl).toBeUndefined()
+    expect(status.reason).toBe('Local Parakeet will install on first use')
+  })
+
+  it('is available when the app-owned runtime and model are installed', async () => {
+    await mkdir(join(root, 'bin'), { recursive: true })
+    await mkdir(join(root, 'models'), { recursive: true })
+    await writeFile(join(root, 'bin', 'parakeet-cli.exe'), 'exe')
+    await writeFile(join(root, 'models', 'tdt_ctc-110m-q8_0.gguf'), 'model')
+
+    const status = await getLocalSttStatus({
+      env: {},
+      platform: 'win32',
+      arch: 'x64',
+      rootDir: root,
+      detectNvidiaGpu: async () => true
+    })
+
+    expect(status).toMatchObject({
       healthy: true,
       available: true,
       nvidiaAvailable: true,
-      checkedAt: 123
+      managed: true,
+      runtime: {
+        installState: 'installed',
+        variant: 'cuda',
+        canInstall: true
+      }
     })
   })
 
@@ -36,25 +78,30 @@ describe('local STT status', () => {
     const status = await getLocalSttStatus({
       env: {},
       platform: 'win32',
-      fetchImpl: okFetch(),
+      arch: 'x64',
+      rootDir: root,
       detectNvidiaGpu: async () => false
     })
 
     expect(status.available).toBe(false)
-    expect(status.healthy).toBe(true)
+    expect(status.healthy).toBe(false)
+    expect(status.runtime.installState).toBe('unsupported')
+    expect(status.runtime.canInstall).toBe(false)
     expect(status.reason).toBe('NVIDIA GPU not detected')
   })
 
-  it('fails closed when health does not pass', async () => {
+  it('fails closed when local STT is disabled', async () => {
     const status = await getLocalSttStatus({
-      env: {},
+      env: { OMI_LOCAL_STT_DISABLED: '1' },
       platform: 'win32',
-      fetchImpl: vi.fn().mockResolvedValue(new Response('', { status: 503 })),
+      arch: 'x64',
+      rootDir: root,
       detectNvidiaGpu: async () => true
     })
 
     expect(status.available).toBe(false)
     expect(status.healthy).toBe(false)
-    expect(status.reason).toContain('Parakeet runtime is not healthy')
+    expect(status.runtime.canInstall).toBe(false)
+    expect(status.reason).toBe('local STT disabled')
   })
 })
