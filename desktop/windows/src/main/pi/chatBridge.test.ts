@@ -52,6 +52,11 @@ vi.mock('../localAgent/tools', () => ({
   })
 }))
 
+vi.mock('../observability', () => ({
+  addObservabilityBreadcrumb: vi.fn(),
+  captureMainException: vi.fn()
+}))
+
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
