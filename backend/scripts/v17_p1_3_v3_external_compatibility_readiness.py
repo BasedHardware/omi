@@ -695,6 +695,23 @@ CONTROL_READER_EMULATOR_READINESS_PROOF = {
     ],
 }
 
+ACCOUNT_GENERATION_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_account_generation_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_account_generation_readiness.py",
+    "contract": "backend/utils/memory/v17_v3_account_generation_source.py",
+    "contract_test": "backend/tests/unit/test_v17_v3_account_generation_source.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "trusted_server_owned_memory_state_head_reader_contract",
+        "expected_account_generation_not_copied_from_control_or_projection",
+        "missing_malformed_uid_source_schema_generation_read_failures_fail_closed",
+        "future_route_requires_trusted_control_projection_cursor_generation_equality",
+        "runtime_blocked_until_state_head_writer_and_integration_evidence_exists",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -754,6 +771,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
+        "account_generation_readiness_proof": ACCOUNT_GENERATION_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -785,6 +803,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "projection_store_readiness_proof_present": True,
             "control_reader_readiness_proof_present": True,
             "control_reader_contract_proof_present": True,
+            "account_generation_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

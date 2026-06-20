@@ -1,0 +1,233 @@
+import os
+import sys
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+sys.modules["database._client"] = MagicMock()
+
+from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
+from utils.memory.v17_v3_account_generation_source import (
+    V17V3AccountGenerationFailureReason,
+    V17V3TrustedAccountGenerationReadError,
+    read_v17_v3_trusted_account_generation,
+)
+from utils.memory.v17_v3_projection_reader_contract import (
+    V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+    V17_V3_COMPATIBILITY_PROJECTION_SOURCE,
+    V17_V3_COMPATIBILITY_PROJECTION_VERSION,
+    V17V3ProjectionFailureReason,
+    V17V3ProjectionReadError,
+    V17V3ProjectionReadRequest,
+)
+
+
+class _FakeSnapshot:
+    def __init__(self, data, exists=True):
+        self._data = data
+        self.exists = exists
+
+    def to_dict(self):
+        return self._data
+
+
+class _FakeDocumentRef:
+    def __init__(self, path, db):
+        self.path = path
+        self._db = db
+
+    def get(self, transaction=None):
+        if self.path not in self._db.docs:
+            return _FakeSnapshot(None, exists=False)
+        value = self._db.docs[self.path]
+        if isinstance(value, BaseException):
+            raise value
+        return _FakeSnapshot(value, exists=True)
+
+
+class _FakeQuery:
+    def __init__(self, docs):
+        self._docs = docs
+
+    def where(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def start_after(self, *args, **kwargs):
+        return self
+
+    def limit(self, *args, **kwargs):
+        return self
+
+    def stream(self):
+        return []
+
+
+class _FakeDb:
+    def __init__(self, docs):
+        self.docs = docs
+        self.document_reads = []
+
+    def document(self, path):
+        self.document_reads.append(path)
+        return _FakeDocumentRef(path, self)
+
+    def collection(self, path):
+        return _FakeQuery([])
+
+
+def _head_doc(**overrides):
+    data = {
+        "schema_version": 1,
+        "uid": "u1",
+        "source": "v17_memory_state_head",
+        "account_generation": 7,
+        "head_commit_id": "head7",
+        "commit_sequence": 11,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    data.update(overrides)
+    return data
+
+
+def _projection_state(**overrides):
+    data = {
+        "schema_version": V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+        "ready": True,
+        "uid": "u1",
+        "source": V17_V3_COMPATIBILITY_PROJECTION_SOURCE,
+        "account_generation": 7,
+        "projection_generation": 7,
+        "freshness_fence_generation": 7,
+        "tombstone_fence_generation": 7,
+        "vector_cleanup_fence_generation": 7,
+        "source_commit_id": "source-7",
+        "source_version": "v17",
+        "projection_commit_id": "commit-7",
+        "projection_version": V17_V3_COMPATIBILITY_PROJECTION_VERSION,
+        "source_evidence_fence": "evidence-7",
+        "projection_evidence_fence": "evidence-7",
+        "write_convergence_complete": True,
+        "delete_convergence_complete": True,
+        "tombstone_convergence_complete": True,
+        "empty_projection": True,
+    }
+    data.update(overrides)
+    return data
+
+
+def test_trusted_account_generation_reads_independent_memory_state_head_path():
+    db = _FakeDb({"users/u1/memory_state/head": _head_doc(account_generation=8)})
+
+    result = read_v17_v3_trusted_account_generation(uid="u1", db_client=db)
+
+    assert result.account_generation == 8
+    assert result.source_path == "users/u1/memory_state/head"
+    assert result.head_commit_id == "head7"
+    assert result.source == "v17_memory_state_head"
+    assert result.read_error_reason is None
+    assert db.document_reads == ["users/u1/memory_state/head"]
+
+
+@pytest.mark.parametrize(
+    "docs, reason",
+    [
+        ({}, V17V3AccountGenerationFailureReason.MISSING_STATE_HEAD),
+        (
+            {"users/u1/memory_state/head": ["not", "a", "dict"]},
+            V17V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD,
+        ),
+        ({"users/u1/memory_state/head": _head_doc(uid="other")}, V17V3AccountGenerationFailureReason.UID_MISMATCH),
+        (
+            {"users/u1/memory_state/head": _head_doc(source="memory_control_state")},
+            V17V3AccountGenerationFailureReason.SOURCE_MISMATCH,
+        ),
+        (
+            {"users/u1/memory_state/head": _head_doc(schema_version=0)},
+            V17V3AccountGenerationFailureReason.UNSUPPORTED_SCHEMA,
+        ),
+        (
+            {"users/u1/memory_state/head": _head_doc(account_generation="7")},
+            V17V3AccountGenerationFailureReason.MALFORMED_ACCOUNT_GENERATION,
+        ),
+        (
+            {"users/u1/memory_state/head": _head_doc(account_generation=-1)},
+            V17V3AccountGenerationFailureReason.MALFORMED_ACCOUNT_GENERATION,
+        ),
+        (
+            {"users/u1/memory_state/head": _head_doc(head_commit_id="")},
+            V17V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD,
+        ),
+        ({"users/u1/memory_state/head": RuntimeError("boom")}, V17V3AccountGenerationFailureReason.READ_FAILED),
+    ],
+)
+def test_trusted_account_generation_fails_closed_for_missing_malformed_or_untrusted_head(docs, reason):
+    result = read_v17_v3_trusted_account_generation(uid="u1", db_client=_FakeDb(docs))
+
+    assert result.account_generation is None
+    assert result.read_error_reason == reason
+    with pytest.raises(V17V3TrustedAccountGenerationReadError) as exc:
+        result.require_account_generation()
+    assert exc.value.reason == reason
+
+
+def test_projection_expected_generation_must_come_from_trusted_head_not_control_or_projection_self_compare():
+    db = _FakeDb(
+        {
+            "users/u1/memory_state/head": _head_doc(account_generation=9),
+            "users/u1/memory_control/state": {"uid": "u1", "account_generation": 3},
+            "users/u1/v3_compatibility_projection/state": _projection_state(
+                account_generation=3, projection_generation=9
+            ),
+        }
+    )
+
+    trusted = read_v17_v3_trusted_account_generation(uid="u1", db_client=db)
+    assert trusted.account_generation == 9
+
+    with pytest.raises(V17V3ProjectionReadError) as exc:
+        read_v17_v3_compatibility_projection_page(
+            db_client=db,
+            request=V17V3ProjectionReadRequest(
+                uid="u1",
+                limit=10,
+                expected_account_generation=trusted.require_account_generation(),
+            ),
+        )
+
+    assert exc.value.reason == V17V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH
+
+
+def test_trusted_head_control_projection_and_cursor_generations_can_be_compared_as_distinct_sources():
+    db = _FakeDb(
+        {
+            "users/u1/memory_state/head": _head_doc(account_generation=7),
+            "users/u1/memory_control/state": {"uid": "u1", "account_generation": 7},
+            "users/u1/v3_compatibility_projection/state": _projection_state(
+                account_generation=7, projection_generation=7
+            ),
+        }
+    )
+
+    trusted = read_v17_v3_trusted_account_generation(uid="u1", db_client=db)
+    page = read_v17_v3_compatibility_projection_page(
+        db_client=db,
+        request=V17V3ProjectionReadRequest(
+            uid="u1",
+            limit=10,
+            expected_account_generation=trusted.require_account_generation(),
+        ),
+    )
+
+    assert page.items == []
+    assert trusted.account_generation == 7
+    assert page.account_generation == 7
+    assert "users/u1/memory_control/state" not in db.document_reads[:1]

@@ -1637,3 +1637,16 @@ Verification for this slice:
 - RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_v3_compatibility_projection.py -q` initially failed with `ModuleNotFoundError: No module named 'database.v17_v3_compatibility_projection'`.
 - GREEN/focused/full/emulator/readiness/async/docs hygiene and commit SHA are recorded in the subagent handoff for this slice.
 - Non-claims preserved: no `backend/routers/memories.py`, `backend/main.py`, POST/PATCH/DELETE route change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore/cloud/provider/vector calls, no Archive default visibility, no stale Short-term default visibility, no legacy fallback/merge for V17 projection failures, and no client-supplied generation trust.
+
+### 2026-06-20 — P1-3 `/v3` trusted account-generation source/readiness
+
+Added the next safe V17 `/v3` gate for trusted account-generation sourcing without changing `backend/routers/memories.py` or runtime behavior:
+
+- Added `backend/utils/memory/v17_v3_account_generation_source.py`, a fake-injectable reader for the independent server-owned `users/{uid}/memory_state/head` account-generation source.
+- Added `backend/tests/unit/test_v17_v3_account_generation_source.py` covering missing/malformed state head, uid mismatch, source mismatch, unsupported schema, malformed generation, read failure, and distinct state-head/control/projection documents.
+- Added `backend/scripts/v17_p1_3_v3_account_generation_readiness.py` plus `backend/tests/unit/test_v17_p1_3_v3_account_generation_readiness.py`; registered both new tests in `backend/test.sh`.
+- Linked `account_generation_readiness_proof` from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`. Runtime readiness now has an explicit `real_trusted_account_generation_source` BLOCKED gate.
+- Future `GET /v3/memories` must derive `expected_account_generation` from the trusted state-head reader, then require trusted account generation == control account generation == projection account generation == cursor account generation when a cursor is present. Copying control/projection generation into the expected-generation request remains explicitly forbidden.
+- Runtime remains **BLOCKED / NO-GO** pending state-head writer/emulator/runtime integration evidence proving the source is maintained by the server-owned account lifecycle/apply path and stays in lockstep with control/projection/cursor generations.
+
+Verification for this slice is recorded in `docs/epics/v17_memory_implementation_tickets.md` and the local commit summary. Preserved non-claims: no route wiring, no production Firestore/cloud/provider/vector calls, no production rollout approval, no client-supplied generation trust, and no legacy fallback/merge for V17 failures.

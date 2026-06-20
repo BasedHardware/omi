@@ -4,6 +4,7 @@ from pathlib import Path
 
 REQUIRED_GATE_IDS = [
     "real_v17_control_read_fail_closed",
+    "real_trusted_account_generation_source",
     "real_v17_compatibility_projection_read_api_store",
     "real_external_write_convergence_source_of_truth",
     "real_cursor_secret_validation_integration",
@@ -32,6 +33,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "control_reader_readiness_proof",
     "control_reader_contract_proof",
     "control_reader_emulator_readiness_proof",
+    "account_generation_readiness_proof",
 }
 
 
@@ -85,6 +87,11 @@ def test_get_runtime_wiring_readiness_inventories_exact_remaining_gates():
 
     assert "server-side" in gates["real_v17_control_read_fail_closed"]["required_evidence"]
     assert "without client-side direct control reads" in gates["real_v17_control_read_fail_closed"]["required_evidence"]
+    assert "expected_account_generation" in gates["real_trusted_account_generation_source"]["required_evidence"]
+    assert (
+        "trusted == control == projection == cursor"
+        in gates["real_trusted_account_generation_source"]["required_evidence"]
+    )
     assert "MemoryDB-compatible" in gates["real_v17_compatibility_projection_read_api_store"]["required_evidence"]
     assert "empty projection state" in gates["real_v17_compatibility_projection_read_api_store"]["required_evidence"]
     assert "create/update/delete" in gates["real_external_write_convergence_source_of_truth"]["required_evidence"]
@@ -116,6 +123,10 @@ def test_get_runtime_wiring_readiness_links_current_proofs_and_marks_runtime_evi
         "backend/scripts/v17_p1_3_v3_control_reader_readiness.py"
     )
     assert proofs["control_reader_readiness_proof"]["runtime_wired"] is False
+    assert proofs["account_generation_readiness_proof"]["service"] == (
+        "backend/scripts/v17_p1_3_v3_account_generation_readiness.py"
+    )
+    assert proofs["account_generation_readiness_proof"]["runtime_wired"] is False
     assert proofs["real_router_dependency_map_proof"]["imports_real_router_under_stubs"] is True
     assert proofs["route_planner_proof"]["runtime_wired"] is False
     assert proofs["memory_read_service_proof"]["runtime_wired"] is False
@@ -155,10 +166,10 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
     assert decoded["summary"] == {
         "status": "BLOCKED",
         "proof_status": "BLOCKED",
-        "remaining_gate_count": 9,
-        "blocked_gate_count": 9,
-        "existing_local_proof_count": 17,
-        "missing_real_service_runtime_evidence_count": 9,
+        "remaining_gate_count": 10,
+        "blocked_gate_count": 10,
+        "existing_local_proof_count": 18,
+        "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,
         "runtime_wiring_changed": False,
@@ -175,11 +186,15 @@ def test_get_runtime_wiring_readiness_is_registered_in_test_runner_and_docs():
 
     assert "test_v17_p1_3_v3_get_runtime_wiring_readiness.py" in test_sh
     assert "test_v17_p1_3_v3_get_dependency_auth_readiness.py" in test_sh
+    assert "test_v17_p1_3_v3_account_generation_readiness.py" in test_sh
+    assert "test_v17_v3_account_generation_source.py" in test_sh
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in ticket_doc
     assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in ticket_doc
+    assert "v17_p1_3_v3_account_generation_readiness.py" in ticket_doc
     assert "GET runtime-wiring remaining-gates readiness" in ticket_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in oracle_doc
     assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in oracle_doc
+    assert "v17_p1_3_v3_account_generation_readiness.py" in oracle_doc
     assert "GET runtime-wiring remaining-gates readiness" in oracle_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in (
         root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py"

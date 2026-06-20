@@ -49,6 +49,7 @@ PROOF_CONSTANTS = {
     "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
     "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
     "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
+    "account_generation_readiness_proof": _EXTERNAL.ACCOUNT_GENERATION_READINESS_PROOF,
 }
 
 
@@ -86,6 +87,26 @@ REMAINING_GATES = [
             "route_planner_proof",
             "control_reader_readiness_proof",
             "control_reader_contract_proof",
+        ],
+        "missing_real_service_runtime_evidence": True,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "gate_id": "real_trusted_account_generation_source",
+        "status": "BLOCKED",
+        "route_refs": ["GET /v3/memories"],
+        "required_evidence": (
+            "Future GET must read expected_account_generation from the independent server-owned "
+            "users/{uid}/memory_state/head source, then require trusted == control == projection == cursor generation; "
+            "writer/emulator/runtime integration evidence is still required before route wiring."
+        ),
+        "existing_local_proofs": [
+            "account_generation_readiness_proof",
+            "projection_store_readiness_proof",
+            "control_reader_contract_proof",
+            "cursor_service_proof",
         ],
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
