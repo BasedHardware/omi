@@ -86,6 +86,7 @@ export function Insights(): React.JSX.Element {
   const [loading, setLoading] = useState(true)
   const [category, setCategory] = useState<InsightCategory | 'all'>('all')
   const [query, setQuery] = useState('')
+  const [showDismissed, setShowDismissed] = useState(false)
 
   const load = async (): Promise<void> => {
     setLoading(true)
@@ -100,7 +101,7 @@ export function Insights(): React.JSX.Element {
   useEffect(() => { void load() }, [])
 
   const filtered = useMemo(() => {
-    let list = records
+    let list = records.filter((r) => showDismissed || r.dismissed === 0)
     if (category !== 'all') list = list.filter((r) => r.category === category)
     const q = query.trim().toLowerCase()
     if (q) {
@@ -112,7 +113,7 @@ export function Insights(): React.JSX.Element {
       )
     }
     return list
-  }, [records, category, query])
+  }, [records, category, query, showDismissed])
 
   const subtitle = loading ? 'Loading…' : `${filtered.length} insight${filtered.length === 1 ? '' : 's'}`
 
@@ -122,9 +123,18 @@ export function Insights(): React.JSX.Element {
         title="Insights"
         subtitle={subtitle}
         actions={
-          <button onClick={() => void load()} className="btn-ghost px-3 py-2" disabled={loading} title="Refresh">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowDismissed((v) => !v)}
+              className={`btn-ghost px-3 py-2 text-xs ${showDismissed ? 'text-white/90' : 'text-white/50'}`}
+              title={showDismissed ? 'Hide dismissed' : 'Show dismissed'}
+            >
+              {showDismissed ? 'Hide dismissed' : 'Show dismissed'}
+            </button>
+            <button onClick={() => void load()} className="btn-ghost px-3 py-2" disabled={loading} title="Refresh">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         }
       />
 
