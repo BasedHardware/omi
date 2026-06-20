@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Activity, Languages, Mic, Radio } from 'lucide-react'
-import type { ByokStatus } from '../../../../../shared/types'
+import { Activity, Cpu, Languages, Mic, Radio } from 'lucide-react'
+import type { ByokStatus, LocalSttStatus, SttMode } from '../../../../../shared/types'
 import { LANGUAGES, languageLabel } from '../../../lib/languages'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { realtimeVoiceReadiness, type RealtimeVoiceProvider } from '../../../lib/realtimeVoice'
@@ -31,6 +31,8 @@ export function TranscriptionTab(): React.JSX.Element {
   const [continuousRec, setContinuousRec] = useState<boolean>(
     () => !!getPreferences().continuousRecording
   )
+  const [sttMode, setSttMode] = useState<SttMode>(() => getPreferences().sttMode ?? 'auto')
+  const [localSttStatus, setLocalSttStatus] = useState<LocalSttStatus | null>(null)
   const [realtimeVoiceEnabled, setRealtimeVoiceEnabled] = useState<boolean>(
     () => !!getPreferences().realtimeVoiceEnabled
   )
@@ -75,6 +77,11 @@ export function TranscriptionTab(): React.JSX.Element {
     setPreferences({ realtimeVoiceEnabled: next })
   }
 
+  const saveSttMode = (next: SttMode): void => {
+    setSttMode(next)
+    setPreferences({ sttMode: next })
+  }
+
   const voiceReadiness = realtimeVoiceReadiness(
     {
       ...getPreferences(),
@@ -96,6 +103,26 @@ export function TranscriptionTab(): React.JSX.Element {
       })
     return () => {
       canceled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let canceled = false
+    const refresh = (): void => {
+      window.omi
+        .localSttStatus()
+        .then((status) => {
+          if (!canceled) setLocalSttStatus(status)
+        })
+        .catch(() => {
+          if (!canceled) setLocalSttStatus(null)
+        })
+    }
+    refresh()
+    const timer = setInterval(refresh, 15000)
+    return () => {
+      canceled = true
+      clearInterval(timer)
     }
   }, [])
 
@@ -140,6 +167,82 @@ export function TranscriptionTab(): React.JSX.Element {
           <Toggle on={continuousRec} onChange={toggleContinuous} label="Continuous recording" />
         }
       />
+      <SettingRow
+        icon={Cpu}
+        dot={
+          sttMode === 'cloud'
+            ? 'off'
+            : localSttStatus?.available
+              ? 'on'
+              : sttMode === 'local-parakeet'
+                ? 'warn'
+                : 'off'
+        }
+        title="Speech-to-text runtime"
+        subtitle={
+          sttMode === 'cloud'
+            ? 'Hosted Omi /v4/listen'
+            : localSttStatus?.available
+              ? 'Local Parakeet ready'
+              : (localSttStatus?.reason ?? 'Checking local Parakeet')
+        }
+        keywords="local stt parakeet nvidia cuda offline speech transcription runtime"
+      >
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+          <select
+            value={sttMode}
+            onChange={(e) => saveSttMode(e.target.value as SttMode)}
+            className="glass-subtle min-w-0 rounded-lg px-4 py-3 text-sm text-text-secondary focus:outline-none"
+          >
+            <option value="auto" className="bg-neutral-900">
+              Auto
+            </option>
+            <option value="cloud" className="bg-neutral-900">
+              Hosted Omi
+            </option>
+            <option value="local-parakeet" className="bg-neutral-900">
+              Local Parakeet
+            </option>
+          </select>
+          <StatusTile
+            label="Local STT"
+            value={
+              localSttStatus?.available
+                ? 'Ready'
+                : localSttStatus?.healthy
+                  ? 'GPU check failed'
+                  : 'Unavailable'
+            }
+            tone={
+              localSttStatus?.available ? 'good' : sttMode === 'local-parakeet' ? 'warn' : 'neutral'
+            }
+          />
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <StatusTile
+            label="Runtime"
+            value={localSttStatus?.configuredUrl ?? 'Not checked'}
+            tone={localSttStatus?.healthy ? 'good' : 'neutral'}
+          />
+          <StatusTile
+            label="NVIDIA"
+            value={
+              localSttStatus?.nvidiaAvailable == null
+                ? 'Not checked'
+                : localSttStatus.nvidiaAvailable
+                  ? 'Detected'
+                  : 'Not detected'
+            }
+            tone={
+              localSttStatus?.nvidiaAvailable == null
+                ? 'neutral'
+                : localSttStatus.nvidiaAvailable
+                  ? 'good'
+                  : 'warn'
+            }
+          />
+        </div>
+      </SettingRow>
       <SettingRow
         icon={Radio}
         dot={!realtimeVoiceEnabled ? 'off' : voiceReadiness.ready ? 'on' : 'warn'}
