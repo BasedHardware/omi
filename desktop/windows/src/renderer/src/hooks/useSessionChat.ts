@@ -83,30 +83,25 @@ export function useSessionChat(sessionId: string | null): {
 
     let assistantText = ''
     try {
-      const t0 = performance.now()
       const token = await auth.currentUser?.getIdToken()
       const [screenContext, localContext] = await Promise.all([
         readCurrentScreen(),
         gatherLocalContext(userMsg.content)
       ])
-      console.log(`[chat:perf] pre-flight total: ${(performance.now() - t0).toFixed(0)}ms`)
       const contextParts = [screenContext, localContext].filter(Boolean)
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
-      const t1 = performance.now()
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: textToSend })
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-      console.log(`[chat:perf] TTFB (Omi): ${(performance.now() - t1).toFixed(0)}ms`)
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let firstChunk = true
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -119,7 +114,6 @@ export function useSessionChat(sessionId: string | null): {
           if (content.startsWith('think:')) continue
           const chunk = content.replace(/__CRLF__/g, '\n')
           if (!chunk) continue
-          if (firstChunk) { console.log(`[chat:perf] TTFT: ${(performance.now() - t1).toFixed(0)}ms`); firstChunk = false }
           assistantText += chunk
           setHistory((h) => {
             const next = [...h]
@@ -128,7 +122,6 @@ export function useSessionChat(sessionId: string | null): {
           })
         }
       }
-      console.log(`[chat:perf] stream done: ${(performance.now() - t1).toFixed(0)}ms total`)
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
       setHistory((h) => {

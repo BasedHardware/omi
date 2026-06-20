@@ -109,18 +109,6 @@ export function createOverlayWindow(): BrowserWindow {
     console.error('[overlay] did-fail-load', code, desc, url)
   )
 
-  // In dev, pipe overlay console messages to the main-process stdout so we can
-  // diagnose issues (e.g. emoji encoding) without opening a second DevTools.
-  if (is.dev) {
-    win.webContents.on('console-message', (_e, level, message, line, source) => {
-      if (!message.includes('[chat:')) return
-      const tag = source?.split('/').pop() ?? '?'
-      const prefix = `[overlay:${tag}:${line}]`
-      if (level >= 2) console.error(prefix, message)
-      else console.log(prefix, message)
-    })
-  }
-
   // Must load from the same origin as the main window (dev server or the
   // production loopback server) — auth/localStorage state is per-origin, so a
   // file:// overlay would always look signed out.

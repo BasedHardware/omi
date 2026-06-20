@@ -256,19 +256,11 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
     let assistantText = ''
     try {
-      const t0 = performance.now()
-      // All pre-flight in parallel. Each component is individually timed so the
-      // console shows exactly where time goes (token refresh, OCR cache, KG query).
-      const time = <T>(label: string, p: Promise<T>): Promise<T> => {
-        const ts = performance.now()
-        return p.then((v) => { console.log(`[chat:perf]   ${label}: ${(performance.now() - ts).toFixed(0)}ms`); return v })
-      }
       const [token, screenContext, localContext] = await Promise.all([
-        time('auth-token', auth.currentUser?.getIdToken() ?? Promise.resolve('')),
-        time('screen-ocr', readCurrentScreen()),
-        time('kg-query',   gatherLocalContext(userMsg.content))
+        auth.currentUser?.getIdToken() ?? Promise.resolve(''),
+        readCurrentScreen(),
+        gatherLocalContext(userMsg.content)
       ])
-      console.log(`[chat:perf] pre-flight total: ${(performance.now() - t0).toFixed(0)}ms`)
 
       const contextParts = [localContext, screenContext].filter(Boolean)
       const t1 = performance.now()
@@ -281,12 +273,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         body: JSON.stringify({ text: textToSend })
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-      console.log(`[chat:perf] TTFB (Omi): ${(performance.now() - t1).toFixed(0)}ms`)
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
-      let firstChunk = true
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -299,13 +289,11 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           if (content.startsWith('think:')) continue
           const chunk = content.replace(/__CRLF__/g, '\n')
           if (!chunk) continue
-          if (firstChunk) { console.log(`[chat:perf] TTFT: ${(performance.now() - t1).toFixed(0)}ms`); firstChunk = false }
           assistantText += chunk
           setHistory((h) => { const next = [...h]; next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }; return next })
         }
         if (Date.now() - lastPersist > 1500) { lastPersist = Date.now(); void persistChat(buildThread(assistantText)) }
       }
-      console.log(`[chat:perf] stream done: ${(performance.now() - t1).toFixed(0)}ms total`)
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
       setHistory((h) => {
