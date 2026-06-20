@@ -52,6 +52,29 @@ export type ConversationPayload = {
 
 export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
 
+export type PiChatRequest = {
+  /** Firebase ID token. Main fails closed when this is absent or blank. */
+  token: string
+  messages: ChatMessage[]
+}
+
+export type PiChatUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export type PiChatToolCall = {
+  id: string
+  name: string
+}
+
+export type PiChatResponse = {
+  text: string
+  usage: PiChatUsage
+  toolCalls: PiChatToolCall[]
+}
+
 export type McpKeyRecord = {
   id: string
   name: string
@@ -272,6 +295,9 @@ export type OmiBridgeApi = {
     name: LocalAgentChatToolName,
     args?: LocalAgentToolArguments
   ) => Promise<LocalAgentChatToolResponse>
+  /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
+  piChatEnabled: boolean
+  piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
