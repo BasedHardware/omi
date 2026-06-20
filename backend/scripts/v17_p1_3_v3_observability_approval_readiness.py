@@ -32,6 +32,21 @@ CANARY_APPROVAL_SOURCE_READINESS_PROOF = {
     ),
 }
 
+CANARY_APPROVAL_PRODUCTION_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_canary_approval_production_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_canary_approval_production_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Production-safe backend service-principal artifact read and artifact-existence proof is available as a "
+        "disabled-by-default read-only runner; no product/privacy/ops rollout approval is claimed."
+    ),
+}
+
 REQUIRED_TELEMETRY_FIELDS = [
     {
         "field_id": "read_source",
@@ -531,6 +546,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "static_guardrails": STATIC_GUARDRAILS,
         "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
         "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
+        "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",
