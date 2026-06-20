@@ -1704,3 +1704,13 @@ Added a safe pre-runtime readiness proof for future `/v3` cursor-secret/source i
 - The readiness artifact does not read environment secret values and does not invent production secret material. It records the exact blocker: no existing runtime-owned V17 `/v3` cursor signing secret/config source is wired; a server-owned `V17_V3_CURSOR_SIGNING_SECRET` or managed secret must be injected before runtime route changes.
 - Under fake server-owned secret material only, the pure cursor matrix proves first-page no-cursor needs no client-secret trust; signed cursors preserve account generation, projection generation, source, and keyset; and tampered, expired, account/projection generation mismatch, source mismatch, wrong-secret, and client-supplied-secret cases fail closed without legacy fallback.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production secret read, no production Firestore/cloud/provider/vector call, no client-supplied cursor secret trust, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
+
+### 2026-06-20 — P1-3 `/v3` local telemetry API/sink and rollback/read-disable config seam
+
+Added the local pure seam behind the observability/approval readiness gate without changing `backend/routers/memories.py` or runtime behavior:
+
+- Added `backend/utils/memory/v17_v3_local_telemetry.py` and `backend/tests/unit/test_v17_v3_local_telemetry.py`.
+- The telemetry seam builds a sanitized low-cardinality future `GET /v3/memories` decision event, defaults to a no-op sink, and supports only injected fake sinks in tests; it rejects raw memory content, cursor tokens, secret material, user/session identifiers, arbitrary extra labels, and high-cardinality failure reasons.
+- The rollback/read-disable seam is pure/config-shaped: enrolled V17 users fail closed for missing, malformed, disabled, or emergency-disabled server-owned config, while non-enrolled callers remain outside the V17 read seam.
+- `backend/scripts/v17_p1_3_v3_observability_approval_readiness.py` now links this local proof as `v17_v3_local_telemetry_and_rollback_seam`; remaining blockers are real route wiring, real telemetry sink/config source, canary enrollment artifact, rollback gate wiring, and explicit product/privacy/ops approval.
+- Runtime remains **BLOCKED / NO-GO**. No production telemetry sink, Firestore/cloud/provider/vector call, PII/raw memory telemetry, secret/cursor-token logging, Archive default visibility, stale Short-term default visibility, legacy fallback/merge, or production approval is claimed.

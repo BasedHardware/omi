@@ -123,6 +123,15 @@ def test_observability_approval_readiness_links_existing_mechanisms_and_exact_bl
     assert mechanisms["log_sanitizer"]["status"] == "EXISTS_REQUIRED_FOR_FUTURE_WIRING"
     assert mechanisms["v17_read_decision_model"]["source"] == "backend/utils/memory/v17_default_read_rollout.py"
     assert mechanisms["v17_read_decision_model"]["status"] == "EXISTS_NOT_V3_GET_WIRED"
+    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["source"] == (
+        "backend/utils/memory/v17_v3_local_telemetry.py"
+    )
+    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["test"] == (
+        "backend/tests/unit/test_v17_v3_local_telemetry.py"
+    )
+    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["status"] == ("LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED")
+    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["production_call_executed"] is False
+    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["runtime_wired_to_v3_get"] is False
 
     blockers = {blocker["blocker_id"]: blocker for blocker in report["blockers"]}
     assert set(blockers) == REQUIRED_BLOCKER_IDS
@@ -160,7 +169,7 @@ def test_observability_approval_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "telemetry_field_count": 20,
         "blocked_or_not_run_field_count": 20,
-        "existing_mechanism_count": 3,
+        "existing_mechanism_count": 4,
         "blocker_count": 6,
         "guardrail_count": 5,
         "telemetry_sink_calls_executed": False,
@@ -182,6 +191,7 @@ def test_observability_approval_readiness_registered_in_test_runner_docs_and_par
     )
 
     assert "test_v17_p1_3_v3_observability_approval_readiness.py" in test_sh
+    assert "test_v17_v3_local_telemetry.py" in test_sh
     assert "v17_p1_3_v3_observability_approval_readiness.py" in ticket_doc
     assert "observability/telemetry approval readiness" in ticket_doc
     assert "v17_p1_3_v3_observability_approval_readiness.py" in oracle_doc

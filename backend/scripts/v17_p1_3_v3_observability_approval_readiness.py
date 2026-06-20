@@ -349,6 +349,15 @@ EXISTING_MECHANISMS = [
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
+    {
+        "mechanism_id": "v17_v3_local_telemetry_and_rollback_seam",
+        "status": "LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_v3_local_telemetry.py",
+        "test": "backend/tests/unit/test_v17_v3_local_telemetry.py",
+        "details": "Local pure/fake-injectable seam builds sanitized low-cardinality V17 /v3 GET telemetry events, defaults to a no-op sink, and decides rollback/read-disable config without reading production state.",
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
 ]
 
 BLOCKERS = [
@@ -438,6 +447,8 @@ OBSERVABILITY_APPROVAL_READINESS_PROOF = {
         "read_source_route_decision_failure_reason_required_before_v3_get_cutover",
         "control_projection_account_generation_labels_required_and_bounded",
         "cursor_validation_result_reason_without_token_or_secret_logging",
+        "local_pure_telemetry_event_builder_and_noop_fake_sink_proved",
+        "local_pure_rollback_read_disable_config_decision_proved",
         "canary_enrollment_and_rollback_read_disable_gate_required",
         "no_legacy_fallback_marker_required_for_v17_failures",
         "archive_default_unavailable_and_stale_short_term_hidden_markers_required",
