@@ -65,6 +65,9 @@ class OmiBatchAudioWriter(private val context: Context) {
     private var storageFull = false
     private var recovered = false
 
+    @Volatile
+    private var wasEnabled = false
+
     /** Audio target for this device if batch mode is on — used by the foreground
      *  service to subscribe to the audio characteristic when Flutter is dead. */
     fun configuredAudioTargetFor(address: String): Pair<String, String>? {
@@ -76,10 +79,15 @@ class OmiBatchAudioWriter(private val context: Context) {
     fun handleCharacteristic(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray) {
         val config = loadConfig()
         if (config == null) {
-            // Batch mode disabled — finalize any open file so it can be ingested.
-            closeCurrent("disabled")
+            // Offline mode is off (the common case). Finalize an in-progress file only on the
+            // enabled->disabled edge — don't take the lock on every packet when batch mode is off.
+            if (wasEnabled) {
+                wasEnabled = false
+                closeCurrent("disabled")
+            }
             return
         }
+        wasEnabled = true
         if (!config.deviceId.equals(address, ignoreCase = true)) return
         if (!matches(config, serviceUuid, characteristicUuid)) return
 
