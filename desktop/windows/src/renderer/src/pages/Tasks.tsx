@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
+import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2, MessageCircle, Send } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
+import { useAppState } from '../state/AppStateProvider'
+import { ChatMessages } from '../components/chat/ChatMessages'
 
 // First-class action item, as returned by GET /v1/action-items. This is the
 // same source the Omi webapp reads from — so manually-created tasks and due
@@ -140,6 +142,70 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   nodate: 'No due date'
 }
 
+function TaskChatPanel({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const { chat } = useAppState()
+  const [input, setInput] = useState('')
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [chat.history])
+
+  const send = (): void => {
+    const text = input.trim()
+    if (!text || chat.sending) return
+    setInput('')
+    void chat.send(text)
+  }
+
+  return (
+    <div className="flex w-80 shrink-0 flex-col border-l border-white/[0.07] bg-[#070707] animate-fade-in">
+      <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-4 py-3">
+        <span className="text-sm font-semibold text-white/80">Chat with Omi</span>
+        <button
+          onClick={onClose}
+          className="rounded-lg p-1 text-white/40 hover:bg-white/[0.06] hover:text-white/70"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        {chat.history.length === 0 ? (
+          <div className="mt-10 px-2 text-center text-xs text-white/30 leading-relaxed">
+            Ask Omi about your tasks, deadlines, or priorities.
+          </div>
+        ) : (
+          <ChatMessages messages={chat.history} sending={chat.sending} variant="main" />
+        )}
+      </div>
+      <div className="shrink-0 border-t border-white/[0.06] px-3 py-2.5">
+        <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1.5">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                send()
+              }
+            }}
+            placeholder="Ask about tasks…"
+            className="flex-1 border-0 bg-transparent text-sm text-white placeholder:text-white/30 focus:outline-none"
+          />
+          <button
+            onClick={send}
+            disabled={chat.sending || !input.trim()}
+            className="shrink-0 rounded-lg p-1.5 text-white/50 transition-colors hover:text-white/90 disabled:opacity-30"
+          >
+            <Send className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Tasks(): React.JSX.Element {
   const [items, setItems] = useState<ActionItem[]>(cache.items ?? [])
   const [convs, setConvs] = useState<Record<string, ConvMeta>>(cache.convs)
@@ -147,6 +213,8 @@ export function Tasks(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<'all' | 'open' | 'done'>('open')
+
+  const [chatOpen, setChatOpen] = useState(false)
 
   const [composing, setComposing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -475,9 +543,17 @@ export function Tasks(): React.JSX.Element {
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
+            <button
+              onClick={() => setChatOpen((c) => !c)}
+              title="Chat with Omi about tasks"
+              className={`btn-ghost px-3 py-2 ${chatOpen ? 'bg-white/10 text-white' : ''}`}
+            >
+              <MessageCircle className="h-4 w-4" />
+            </button>
           </div>
         }
       />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {composing && (
           <div className="mx-auto mb-5 max-w-3xl">
@@ -585,6 +661,8 @@ export function Tasks(): React.JSX.Element {
             )}
           </div>
         )}
+      </div>
+      {chatOpen && <TaskChatPanel onClose={() => setChatOpen(false)} />}
       </div>
     </div>
   )

@@ -63,6 +63,21 @@ export type Preferences = {
   // text utilities scale uniformly. Range: 0.85–1.25. Default (undefined) = 1.0.
   // Changed via Ctrl+= / Ctrl+- / Ctrl+0 keyboard shortcuts.
   fontScale?: number
+  // Transcription settings
+  vadEnabled?: boolean
+  // AI Chat settings
+  chatScreenContext?: boolean
+  chatMemoryContext?: boolean
+  chatWorkspaceDir?: string
+  // Push-to-Talk shortcut (Electron accelerator string, e.g. "CommandOrControl+Shift+Space")
+  pttShortcut?: string
+  pttEnabled?: boolean
+  pttSounds?: boolean
+  pttLockedMode?: boolean
+  // Rewind battery optimization — reduce capture interval on battery power
+  rewindBatteryOpt?: boolean
+  // Play a sound when a Windows notification fires (default on)
+  notificationSounds?: boolean
 }
 
 const defaults: Preferences = {

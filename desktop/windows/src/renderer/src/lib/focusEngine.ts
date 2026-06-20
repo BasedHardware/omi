@@ -24,6 +24,8 @@ export type FocusObservation = {
   method: 'vision' | 'llm' | 'heuristic'
   /** One-sentence visual description returned by Gemini Vision (vision method only). */
   visualEvidence?: string
+  /** Why Vision or Text-OCR was not used (set on heuristic/llm fallback paths). */
+  fallbackReason?: string
 }
 
 const OBS_KEY = 'omi.focus.observations.v1'
@@ -295,6 +297,11 @@ export async function analyzeFocus(
   const cutoff = ts - LOOKBACK_MS
   const frames = allFrames.filter((f) => f.ts >= cutoff)
 
+  if (import.meta.env.DEV) {
+    const withImage = frames.filter((f) => f.imagePath).length
+    console.log(`[focusEngine] analyzeFocus: ${frames.length} frames (${withImage} with imagePath), useVision=${useVision}`)
+  }
+
   if (frames.length === 0) {
     return {
       ts,
@@ -302,22 +309,49 @@ export async function analyzeFocus(
       reasoning: 'No recent screen activity',
       app: '',
       confidence: 0,
-      method: 'heuristic'
+      method: 'heuristic',
+      fallbackReason: 'No recent Rewind frames'
     }
   }
 
   // Tier 1: Gemini Vision (sampled screenshots)
   if (useVision) {
-    const visionObs = await analyzeFocusVision(frames)
-    if (visionObs) return visionObs
-    console.info('[focusEngine] vision failed — falling back to text analysis')
+    const eligible = frames.filter((f) => f.imagePath && f.imagePath.length > 0)
+    if (import.meta.env.DEV) {
+      console.log(`[focusEngine] vision tier: ${eligible.length} frames with imagePath`)
+    }
+    if (eligible.length === 0) {
+      if (import.meta.env.DEV) console.log('[focusEngine] vision skipped — no frames with imagePath')
+    } else {
+      const visionObs = await analyzeFocusVision(frames)
+      if (import.meta.env.DEV) console.log(`[focusEngine] vision result: ${visionObs ? visionObs.method : 'null (failed)'}`)
+      if (visionObs) return visionObs
+    }
   }
 
   // Tier 2: Gemini text (OCR + app/window summary)
   const textObs = await analyzeFocusText(frames)
-  if (textObs) return textObs
+  if (textObs) {
+    const visionSkipReason = !useVision
+      ? 'Vision disabled'
+      : frames.filter((f) => f.imagePath).length === 0
+        ? 'No screenshots in Rewind frames'
+        : 'Vision failed (Gemini timeout or API error)'
+    return { ...textObs, fallbackReason: visionSkipReason }
+  }
 
   // Tier 3: keyword heuristic
+  if (import.meta.env.DEV) console.log('[focusEngine] text LLM failed — using heuristic')
+  const visionReason = !useVision
+    ? 'Vision disabled'
+    : frames.filter((f) => f.imagePath).length === 0
+      ? 'No screenshots in Rewind frames'
+      : 'Vision failed (Gemini timeout or API error)'
   const h = heuristicClassify(frames)
-  return { ts, method: 'heuristic', ...h }
+  return {
+    ts,
+    method: 'heuristic',
+    ...h,
+    fallbackReason: `${visionReason} · Gemini text analysis also failed`
+  }
 }

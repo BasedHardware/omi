@@ -20,7 +20,7 @@ import {
   type FocusObservation,
   type FocusStatus
 } from '../lib/focusEngine'
-import { getPreferences, onPreferencesChange } from '../lib/preferences'
+import { getPreferences, onPreferencesChange, setPreferences } from '../lib/preferences'
 
 // ── App classification (for Rewind activity breakdown) ──────────────────────
 const FOCUS_PATTERNS = [
@@ -282,6 +282,7 @@ export function Focus(): React.JSX.Element {
     () => getPreferences().focusVisionEnabled ?? false
   )
   const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [latestObs, setLatestObs] = useState<FocusObservation | null>(null)
   const [observations, setObservations] = useState<FocusObservation[]>(() => loadObservations())
   const [showAllObs, setShowAllObs] = useState(false)
@@ -324,6 +325,7 @@ export function Focus(): React.JSX.Element {
   const runAnalysis = useCallback(async (): Promise<void> => {
     if (analyzing) return
     setAnalyzing(true)
+    setAnalysisError(null)
     try {
       // Use allFrames if loaded; otherwise fetch fresh (includes imagePath for vision)
       const frames =
@@ -355,6 +357,9 @@ export function Focus(): React.JSX.Element {
       prevStatusRef.current = obs.status
     } catch (e) {
       console.warn('[focus] analysis failed', e)
+      setAnalysisError(
+        e instanceof Error && e.message ? e.message : 'Analysis failed — no screen data or API error.'
+      )
     } finally {
       setAnalyzing(false)
     }
@@ -455,7 +460,18 @@ export function Focus(): React.JSX.Element {
   const visibleObs = showAllObs ? observations : observations.slice(0, 8)
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-6">
+    <div className="relative flex h-full flex-col overflow-y-auto p-6">
+      {/* Ambient glow when session is running */}
+      {timerRunning && (
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-0 h-80 transition-opacity duration-1000',
+            latestObs?.status === 'distracted'
+              ? 'bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgba(249,115,22,0.08),transparent)]'
+              : 'bg-[radial-gradient(ellipse_70%_100%_at_50%_0%,rgba(74,222,128,0.08),transparent)]'
+          )}
+        />
+      )}
       <div className="mb-6 flex items-center gap-3 px-1">
         <Target className="h-6 w-6 shrink-0 text-green-400" />
         <div>
@@ -464,94 +480,17 @@ export function Focus(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Proactive Analysis Card ─────────────────────────────────────────── */}
-      {analysisEnabled && (
-        <div className="mb-6 surface-card p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Brain className="h-4 w-4 text-text-quaternary" />
-              <h2 className="font-display text-base font-semibold text-text-primary">
-                Focus Analysis
-              </h2>
-              {latestObs && (
-                <span
-                  className={cn(
-                    'rounded-full px-2 py-0.5 text-xs font-medium',
-                    STATUS_CONFIG[latestObs.status].badge
-                  )}
-                >
-                  {STATUS_CONFIG[latestObs.status].label}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => void runAnalysis()}
-              disabled={analyzing}
-              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs text-text-quaternary hover:bg-white/[0.06] hover:text-text-tertiary disabled:opacity-40"
-            >
-              {analyzing ? (
-                <Loader className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Brain className="h-3.5 w-3.5" />
-              )}
-              {analyzing ? 'Analyzing…' : 'Analyze now'}
-            </button>
-          </div>
-
-          {latestObs ? (
-            <div>
-              <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    'h-2.5 w-2.5 rounded-full',
-                    STATUS_CONFIG[latestObs.status].dot
-                  )}
-                />
-                <p className={cn('text-sm font-medium', STATUS_CONFIG[latestObs.status].text)}>
-                  {latestObs.app || 'Unknown app'}
-                </p>
-                <span className="text-xs text-text-quaternary">·</span>
-                <span className="text-xs text-text-quaternary">
-                  {Math.round(latestObs.confidence * 100)}% confidence
-                </span>
-                <span className="text-xs text-text-quaternary">·</span>
-                <span className="text-xs text-text-quaternary">
-                  {latestObs.method === 'vision'
-                    ? 'Vision'
-                    : latestObs.method === 'llm'
-                      ? 'Text-OCR'
-                      : 'Heuristic'}
-                </span>
-              </div>
-              {latestObs.reasoning && (
-                <p className="mt-1.5 text-xs text-text-quaternary">{latestObs.reasoning}</p>
-              )}
-              {latestObs.visualEvidence && (
-                <p className="mt-1 text-xs italic text-text-quaternary opacity-70">
-                  📷 {latestObs.visualEvidence}
-                </p>
-              )}
-              {visionEnabled && latestObs.method !== 'vision' && (
-                <p className="mt-1 text-xs text-text-quaternary opacity-50">
-                  Vision unavailable — used {latestObs.method === 'llm' ? 'text-OCR' : 'heuristic'} fallback
-                </p>
-              )}
-              <p className="mt-1.5 text-xs text-text-quaternary opacity-60">
-                Last checked {fmtTime(latestObs.ts)} · checks every {analysisIntervalMin} min
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-text-quaternary">
-              {analyzing
-                ? 'Analyzing recent screen activity…'
-                : 'Click "Analyze now" to detect your current focus state.'}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* Manual Timer ─────────────────────────────────────────────────────── */}
-      <div className="mb-6 surface-card p-5">
+      <div
+        className={cn(
+          'mb-6 surface-card p-5 transition-shadow duration-700',
+          timerRunning
+            ? latestObs?.status === 'distracted'
+              ? 'ring-1 ring-orange-500/20 shadow-[0_0_35px_rgba(249,115,22,0.14)]'
+              : 'ring-1 ring-green-500/20 shadow-[0_0_35px_rgba(74,222,128,0.14)]'
+            : ''
+        )}
+      >
         <div className="mb-4 flex items-center gap-3">
           <div
             className={cn(
@@ -605,6 +544,137 @@ export function Focus(): React.JSX.Element {
             <span className="text-sm text-text-secondary">{label}</span>
           )}
         </div>
+      </div>
+
+      {/* Focus Analysis Card — always visible ─────────────────────────────── */}
+      <div
+        className={cn(
+          'mb-6 surface-card p-5 transition-shadow duration-700',
+          latestObs && latestObs.status !== 'neutral'
+            ? latestObs.status === 'distracted'
+              ? 'ring-1 ring-orange-500/15 shadow-[0_0_25px_rgba(249,115,22,0.09)]'
+              : 'ring-1 ring-green-500/15 shadow-[0_0_25px_rgba(74,222,128,0.09)]'
+            : ''
+        )}
+      >
+        {/* Header row: title + status badge + Analyze now */}
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Brain className="h-4 w-4 text-text-quaternary" />
+            <h2 className="font-display text-base font-semibold text-text-primary">
+              Focus Analysis
+            </h2>
+            {latestObs && (
+              <span
+                className={cn(
+                  'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                  STATUS_CONFIG[latestObs.status].badge
+                )}
+              >
+                {STATUS_CONFIG[latestObs.status].label}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => void runAnalysis()}
+            disabled={analyzing}
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-text-tertiary transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {analyzing ? (
+              <Loader className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Brain className="h-3.5 w-3.5" />
+            )}
+            {analyzing ? 'Analyzing…' : 'Analyze now'}
+          </button>
+        </div>
+
+        {/* Inline Vision toggle — visible directly on the card */}
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            role="switch"
+            aria-checked={visionEnabled}
+            onClick={() => {
+              const next = !visionEnabled
+              setVisionEnabled(next)
+              setPreferences({ focusVisionEnabled: next })
+            }}
+            className={cn(
+              'relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors focus:outline-none',
+              visionEnabled ? 'bg-[color:var(--accent)]' : 'bg-white/20'
+            )}
+          >
+            <span
+              className={cn(
+                'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
+                visionEnabled ? 'translate-x-3.5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+          <span className="text-xs text-text-tertiary">
+            Use Vision (screenshot analysis)
+            {!visionEnabled && (
+              <span className="ml-1 text-text-quaternary">— enable for 🔭 method</span>
+            )}
+          </span>
+        </div>
+
+        {analysisError ? (
+          <p className="text-sm text-orange-400/80">{analysisError}</p>
+        ) : latestObs ? (
+          <div>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <div className={cn('h-2.5 w-2.5 rounded-full', STATUS_CONFIG[latestObs.status].dot)} />
+              <p className={cn('text-sm font-semibold', STATUS_CONFIG[latestObs.status].text)}>
+                {STATUS_CONFIG[latestObs.status].label}
+              </p>
+              {latestObs.app && (
+                <span className="text-xs text-text-quaternary">{latestObs.app}</span>
+              )}
+              <span className="text-xs text-text-quaternary">·</span>
+              <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] text-text-quaternary">
+                {latestObs.method === 'vision'
+                  ? '🔭 Vision'
+                  : latestObs.method === 'llm'
+                    ? '📝 Text-OCR'
+                    : '📊 Heuristic'}
+              </span>
+              <span className="text-xs text-text-quaternary">
+                {Math.round(latestObs.confidence * 100)}% confidence
+              </span>
+            </div>
+            {latestObs.reasoning && (
+              <p className="mt-2 text-xs text-text-secondary">{latestObs.reasoning}</p>
+            )}
+            {latestObs.visualEvidence && (
+              <p className="mt-1 text-xs italic text-text-quaternary">
+                📷 {latestObs.visualEvidence}
+              </p>
+            )}
+            {latestObs.fallbackReason && latestObs.method !== 'vision' && (
+              <p className="mt-1.5 rounded-md bg-white/[0.04] px-2 py-1 text-[11px] text-text-quaternary">
+                ℹ️ {latestObs.fallbackReason}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] text-text-quaternary opacity-60">
+              Last checked {fmtTime(latestObs.ts)}
+              {analysisEnabled ? ` · auto-checks every ${analysisIntervalMin} min` : ''}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-text-quaternary">
+              {analyzing
+                ? 'Analyzing recent screen activity…'
+                : 'No analysis yet. Click "Analyze now" to detect your current focus state.'}
+            </p>
+            {!analysisEnabled && !analyzing && (
+              <p className="text-xs text-text-quaternary opacity-60">
+                Enable auto-analysis in Settings → Notifications for periodic checks.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Today's Activity (Rewind-powered) ────────────────────────────────── */}
