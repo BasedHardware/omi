@@ -809,6 +809,36 @@ def decode_files_to_wav(files_path: List[str]):
     return wav_files
 
 
+# Max length of a single VAD segment / STT transcribe request. Bounds GPU memory on the
+# STT worker (~0.5 GiB VRAM per audio minute), which CUDA-OOMs on long continuous audio.
+MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
+
+
+def _merge_and_cap_vad_segments(voice_segments: list) -> list:
+    merged = []
+    for segment in voice_segments:
+        if (
+            merged
+            and (segment['start'] - merged[-1]['end']) < 120
+            and (segment['end'] - merged[-1]['start']) <= MAX_VAD_SEGMENT_SECONDS
+        ):
+            merged[-1]['end'] = segment['end']
+        else:
+            merged.append(dict(segment))
+
+    segments = []
+    for segment in merged:
+        if segment['end'] - segment['start'] <= MAX_VAD_SEGMENT_SECONDS:
+            segments.append(segment)
+        else:
+            chunk_start = segment['start']
+            while chunk_start < segment['end']:
+                chunk_end = min(chunk_start + MAX_VAD_SEGMENT_SECONDS, segment['end'])
+                segments.append({'start': chunk_start, 'end': chunk_end})
+                chunk_start = chunk_end
+    return segments
+
+
 def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
     try:
         start_timestamp = get_timestamp_from_path(path)
@@ -820,22 +850,7 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
 
-    segments = []
-    # should we merge more aggressively, to avoid too many small segments? ~ not for now
-    # Pros -> lesser segments, faster, less concurrency
-    # Cons -> less accuracy.
-
-    # edge case, multiple small segments that map towards the same memory .-.
-    # so ... let's merge them if distance < 120 seconds
-    # a better option would be to keep here 1s, and merge them like that after transcribing
-    # but FAL has 10 RPS limit, **let's merge it here for simplicity for now**
-
-    for i, segment in enumerate(voice_segments):
-        if segments and (segment['start'] - segments[-1]['end']) < 120:
-            segments[-1]['end'] = segment['end']
-        else:
-            segments.append(segment)
-
+    segments = _merge_and_cap_vad_segments(voice_segments)
     logger.info(f"{path} {len(segments)}")
 
     aseg = AudioSegment.from_wav(path)
