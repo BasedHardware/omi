@@ -139,6 +139,7 @@ const omi: OmiBridgeApi = {
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindStatus: () => ipcRenderer.invoke('rewind:status'),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
+  rewindDeleteAll: () => ipcRenderer.invoke('rewind:deleteAll'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
@@ -151,6 +152,11 @@ const omi: OmiBridgeApi = {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
+  },
+  onRewindCleared: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:cleared', listener)
+    return () => ipcRenderer.removeListener('rewind:cleared', listener)
   },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),

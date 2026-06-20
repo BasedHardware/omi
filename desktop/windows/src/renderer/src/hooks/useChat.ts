@@ -11,7 +11,7 @@ import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
 export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
 
-const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
+const OMI_BASE = import.meta.env.VITE_OMI_API_BASE || 'https://api.omi.me'
 
 export type UseChat = {
   history: ChatMsg[]

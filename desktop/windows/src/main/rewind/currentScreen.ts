@@ -26,6 +26,11 @@ export function setCurrentScreen(t: string): void {
   ts = Date.now()
 }
 
+export function clearCurrentScreen(): void {
+  text = ''
+  ts = 0
+}
+
 export function getCurrentScreen(): { text: string; ts: number } {
   return { text, ts }
 }

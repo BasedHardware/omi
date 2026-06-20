@@ -16,6 +16,7 @@ import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
 import { StatusTile } from '../StatusTile'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
+import { toast } from '../../../lib/toast'
 import type {
   RewindSettings,
   RewindStatus,
@@ -45,6 +46,7 @@ export function RewindTab(): React.JSX.Element {
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
+  const [deletingRewind, setDeletingRewind] = useState(false)
   const [retention, setRetention] = useState<'off' | 'dry-run' | 'live'>(
     () => getPreferences().retentionMode ?? 'dry-run'
   )
@@ -94,6 +96,24 @@ export function RewindTab(): React.JSX.Element {
   const pruneRewindNow = async (): Promise<void> => {
     await window.omi.rewindPruneNow()
     await refreshRewindStatus()
+  }
+  const deleteAllRewind = async (): Promise<void> => {
+    if (deletingRewind) return
+    const ok = window.confirm(
+      'Delete all Rewind screenshots and screen text stored on this PC? This cannot be undone.'
+    )
+    if (!ok) return
+    setDeletingRewind(true)
+    try {
+      const deleted = await window.omi.rewindDeleteAll()
+      toast(`Deleted ${deleted.toLocaleString()} Rewind frame${deleted === 1 ? '' : 's'}`, {
+        tone: 'success'
+      })
+    } catch (e) {
+      toast('Could not delete Rewind history', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setDeletingRewind(false)
+    }
   }
 
   // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
@@ -245,6 +265,21 @@ export function RewindTab(): React.JSX.Element {
           </div>
         </div>
       </SettingRow>
+      <SettingRow
+        icon={Trash2}
+        title="Delete all Rewind history"
+        subtitle="Deletes every local Rewind screenshot and its OCR text from this PC."
+        keywords="rewind delete all screenshots history clear"
+        control={
+          <button
+            onClick={() => void deleteAllRewind()}
+            disabled={deletingRewind}
+            className="rounded-md border border-red-400/30 bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-200 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deletingRewind ? 'Deleting...' : 'Delete all'}
+          </button>
+        }
+      />
       <SettingRow
         icon={Ban}
         title="Excluded apps"

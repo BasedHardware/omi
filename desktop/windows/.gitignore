@@ -50,3 +50,6 @@ resources/win-ocr-helper/*.pdb
 src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
+
+# Generated from @koromix/koffi-win32-x64 during postinstall
+resources/koffi/

@@ -19,7 +19,13 @@ asarUnpack:
   # koffi loads its native .node at runtime, resolved relative to its own package
   # dir — it must live outside the asar archive or the foreground monitor fails.
   - node_modules/koffi/**
+extraResources:
+  - from: resources/koffi
+    to: koffi
+    filter:
+      - '**/*'
 win:
+  icon: resources/icon.ico
   executableName: omi-windows
   target:
     - target: nsis

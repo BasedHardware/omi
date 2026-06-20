@@ -1,7 +1,8 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readFile } from 'fs/promises'
+import { readFile, rm } from 'fs/promises'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
+  deleteAllRewindFrames,
   getRewindFrame,
   listRewindFrames,
   searchRewindFrames,
@@ -18,6 +19,7 @@ import { readRewindFrameImage, resolveFrameImagePath } from '../rewind/frameImag
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
+import { clearCurrentScreen } from '../rewind/currentScreen'
 
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
@@ -54,6 +56,15 @@ export function registerRewindHandlers(): void {
   })
   ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
+  ipcMain.handle('rewind:deleteAll', async () => {
+    const deleted = deleteAllRewindFrames()
+    await rm(rewindRoot(), { recursive: true, force: true })
+    clearCurrentScreen()
+    for (const w of BrowserWindow.getAllWindows()) {
+      w.webContents.send('rewind:cleared')
+    }
+    return deleted
+  })
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
   // is an instant cache hit in the normal case.

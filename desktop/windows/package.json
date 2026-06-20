@@ -16,7 +16,7 @@
     "build": "npm run typecheck && electron-vite build",
     "rebuild:sqlite": "electron-rebuild -f -w better-sqlite3",
     "build:ocr-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-ocr-helper.ps1",
-    "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3 && node scripts/ensure-ocr-helper.mjs",
+    "postinstall": "electron-builder install-app-deps && electron-rebuild -f -w better-sqlite3 && node scripts/ensure-ocr-helper.mjs && node scripts/ensure-koffi-win32-native.mjs",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win --x64",
     "build:mac": "electron-vite build && electron-builder --mac",

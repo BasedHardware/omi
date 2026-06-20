@@ -3,13 +3,13 @@ import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import type { RewindSettings } from '../../shared/types'
 
-// Rewind capture is ON by default — screen history is a core feature, so a fresh
-// install (no settings file yet) starts capturing. Once the user changes a
-// setting it is persisted and these defaults no longer apply. excludedApps holds
-// only USER additions; the built-in screenshot-tool exclusions live in
-// shared/rewindExclusions and are merged in at capture time.
+// Rewind capture is opt-in. A fresh install, corrupt settings file, or skipped
+// onboarding permission must never start taking screenshots until the user
+// grants/turns on screen capture. excludedApps holds only USER additions; the
+// built-in screenshot-tool exclusions live in shared/rewindExclusions and are
+// merged in at capture time.
 const DEFAULTS: RewindSettings = {
-  captureEnabled: true,
+  captureEnabled: false,
   intervalMs: 1000,
   retentionDays: 14,
   excludedApps: []
@@ -38,15 +38,14 @@ function sanitize(raw: Partial<RewindSettings>): RewindSettings {
         .filter(Boolean)
     : []
   return {
-    // Default ON: only an explicit `false` disables capture.
-    captureEnabled: raw.captureEnabled !== false,
+    captureEnabled: raw.captureEnabled === true,
     intervalMs,
     retentionDays,
     excludedApps
   }
 }
 
-// Read the persisted settings, defaulting to capture-on. Never throws — a
+// Read the persisted settings, defaulting to capture-off. Never throws — a
 // missing/corrupt file yields the defaults.
 export function getPersistedRewindSettings(): RewindSettings {
   try {

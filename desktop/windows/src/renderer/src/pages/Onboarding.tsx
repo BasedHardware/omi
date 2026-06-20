@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { getPreferences, setPreferences, completeOnboarding, setPendingRoute } from '../lib/preferences'
+import {
+  getPreferences,
+  setPreferences,
+  completeOnboarding,
+  setPendingRoute
+} from '../lib/preferences'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
@@ -47,6 +52,32 @@ export function Onboarding(): React.JSX.Element {
 
   const next = (): void => setStep((s) => Math.min(s + 1, TOTAL_STEPS - 1))
   const back = (): void => setStep((s) => Math.max(s - 1, 0))
+
+  const disableScreenCapture = async (): Promise<void> => {
+    try {
+      const current = await window.omi.rewindGetSettings()
+      if (current.captureEnabled) {
+        await window.omi.rewindSetSettings({ ...current, captureEnabled: false })
+      }
+    } catch {
+      /* best-effort: fresh installs already default to capture off */
+    }
+  }
+
+  const skipScreenPermission = (): void => {
+    void disableScreenCapture()
+    next()
+  }
+
+  const skipMicPermission = (): void => {
+    setPreferences({ continuousRecording: false })
+    next()
+  }
+
+  const skipAutomationPermission = (): void => {
+    setPreferences({ automationConsentedAt: undefined })
+    next()
+  }
 
   const handleName = (name: string): void => {
     setPreferences({ displayName: name })
@@ -141,7 +172,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={4}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
-          onSkip={next}
+          onSkip={skipScreenPermission}
         />
       )
     }
@@ -154,7 +185,12 @@ export function Onboarding(): React.JSX.Element {
     }
     if (step === 6) {
       return (
-        <MicPermissionStep stepIndex={6} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
+        <MicPermissionStep
+          stepIndex={6}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={skipMicPermission}
+        />
       )
     }
     if (step === 7) {
@@ -163,7 +199,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={7}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
-          onSkip={next}
+          onSkip={skipAutomationPermission}
         />
       )
     }
@@ -182,9 +218,7 @@ export function Onboarding(): React.JSX.Element {
     if (step === 10) {
       // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
       // reveals, then advances to the goal step.
-      return (
-        <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
+      return <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
     }
     if (step === 11) {
       return (
