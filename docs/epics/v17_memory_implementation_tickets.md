@@ -1742,8 +1742,8 @@ Use this as the single ordered checklist before any dev GCP test or prod read-on
 
 ### Final Oracle review — F6 local pre-GCP readiness (2026-06-20)
 
-**Oracle session:** `final-prescripti-review-use-only`  
-**Reviewed commit:** `ffb0746e1c200f6fc6f90f669065da35b48fa2c1` (`v17: add pre-gcp evidence readiness gates`)  
+**Oracle session:** `final-prescripti-review-use-only`
+**Reviewed commit:** `ffb0746e1c200f6fc6f90f669065da35b48fa2c1` (`v17: add pre-gcp evidence readiness gates`)
 **Model caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`, but returned an answer under `gpt-5.5-pro[browser]`.
 
 **Verdict:** local `PRE_GCP_READY` for the defined F6A-F6H contracts.
@@ -1759,3 +1759,29 @@ Oracle's answer, quoted:
 > Avoid saying actual IAM or audit-log readiness is already proven: those remain cloud-side validations, not merely configuration entry.
 
 Posture after this review: the branch is locally ready to move to the GCP-access host for the next bounded readonly evidence step. Remaining blockers are actual GCP access/profile/project/log/approval values and live verification, not missing local F6A-F6H implementation.
+
+### Three-wave Oracle-guided F6 platonic cleanup (2026-06-20)
+
+Goal: make the local F6 pre-GCP readiness package maintainable as a future migration foundation, not merely working.
+
+**Wave 1 Oracle session:** `wave-1-platonic-ideal-architectu`
+**Wave 1 commit:** `5df9cbc39901ca3fa1f7765775f169f4a9233763` (`refactor(v17): split f6 readiness contracts`)
+**Result:** split pure aggregate/local smoke and split readonly contracts into capability modules (`identity_iam`, `read_evidence`, `audit`, `run_context`, `local_doubles`) with compatibility facades and boundary tests.
+
+**Wave 2 Oracle session:** `wave-2-platonic-ideal-cleanup` stalled in browser past local timeouts; implementation proceeded from Wave 1 Oracle's already-prescribed P1 list and was verified locally.
+**Wave 2 commit:** `3bd53e733ad85e8919e39c3a7a924176310f41d0` (`refactor(v17): canonicalize f6 evidence modules`)
+**Result:** added shared validation/protocol modules; split config/local defaults, run-record, fingerprints, and redaction into canonical modules; retained old import facades; added old/new identity, byte-stable redaction, known-vector fingerprint, no-network import, and no-mutation aggregate characterization tests.
+
+**Wave 3 Oracle session:** `wave-3-final-platonic-ideal`
+**Wave 3 verdict:** no remaining P0 maintainability issues; do not schedule another structural cleanup wave. Only P1 spot-check was deterministic local smoke clock.
+**Wave 3 commit:** `60d73cb8b2f7b233a564ad5bfa55d72fc1d90570` (`refactor(v17): pin f6 local smoke clock`).
+
+Wave 3 Oracle explicitly advised not to make additional structural churn now: keep broad `__init__.py` exports as compatibility surface, keep `local_doubles.py` in the package for executable local smoke, keep protocols beside their consumers, do not rename run-record classes or forbidden-permission constants before handoff, and retain all legacy facades until a later import-migration window.
+
+Final verified cleanup posture:
+
+- Focused Wave 3: `13 passed` and F6H CLI `V17-V3-F6H PRE_GCP_READY BLOCKED_ON_GCP_ACCESS ['gcp_access']`.
+- Full V17/F6 regression: `784 passed, 1 skipped, 3 warnings`.
+- Full hermetic backend E2E: `77 passed, 6 skipped, 45 warnings`.
+
+Post-cleanup stop condition: freeze the local F6 package structure and proceed to the separately gated read-only GCP handoff. Remaining blockers are still actual GCP access/profile/project/log/approval values and live verification.

@@ -196,3 +196,21 @@ def test_canonical_config_run_record_redaction_fingerprint_and_aggregate_static_
                 offenders.append(f"{module_path.relative_to(BACKEND_DIR)} imports {imported}")
 
     assert offenders == []
+
+
+def test_local_smoke_supplies_explicit_deterministic_run_record_clock(monkeypatch):
+    from utils.memory.v17_v3_f6 import local_smoke
+
+    observed: dict[str, object] = {}
+    real_validate = local_smoke.validate_run_record
+
+    def spy_validate_run_record(raw, registry, *, now=None):
+        observed["now"] = now
+        return real_validate(raw, registry, now=now)
+
+    monkeypatch.setattr(local_smoke, "validate_run_record", spy_validate_run_record)
+
+    report = local_smoke.build_report_from_current_local_contracts()
+
+    assert report["status"] == "PRE_GCP_READY"
+    assert observed["now"] == local_smoke._LOCAL_SMOKE_NOW

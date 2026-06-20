@@ -21,6 +21,8 @@ from utils.memory.v17_v3_f6.local_defaults import DEFAULT_EVIDENCE_TARGETS
 from utils.memory.v17_v3_f6.redaction import fingerprint, validate_redacted_evidence
 from utils.memory.v17_v3_f6.run_record import validate_run_record
 
+_LOCAL_SMOKE_NOW = datetime(2026, 6, 20, 0, 0, 15, tzinfo=timezone.utc)
+
 
 def _hash64(ch: str) -> str:
     return ch * 64
@@ -75,7 +77,7 @@ def _smoke_current_local_contracts() -> dict[str, dict[str, Any]]:
         evidence_principal=target.evidence_principal,
     )
 
-    record = validate_run_record(_sample_run_record(TARGET_DEV, registry), registry)
+    record = validate_run_record(_sample_run_record(TARGET_DEV, registry), registry, now=_LOCAL_SMOKE_NOW)
 
     iam = verify_identity_iam(
         IdentityIamTarget(project_id=target.project_id, principal=target.evidence_principal),
