@@ -56,6 +56,7 @@ export type PiChatRequest = {
   /** Firebase ID token. Main fails closed when this is absent or blank. */
   token: string
   messages: ChatMessage[]
+  skillIds?: string[]
 }
 
 export type PiChatUsage = {

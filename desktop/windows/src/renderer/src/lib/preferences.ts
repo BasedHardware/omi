@@ -16,6 +16,11 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  // Runtime backing chat and agent tasks. 'auto' uses native Pi/Omi first, then
+  // Omi hosted if Pi is explicitly disabled; BYOK is handled by its own split.
+  chatRuntimeMode: 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
+  // Skills selected in Integrations -> Skills. Optional until the skills UI split lands.
+  enabledSkillIds?: string[]
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
@@ -49,7 +54,8 @@ const defaults: Preferences = {
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you
   // scroll up). Users can switch back to 'per-launch' in Settings.
-  chatHistoryMode: 'infinite'
+  chatHistoryMode: 'infinite',
+  chatRuntimeMode: 'auto'
 }
 
 function load(): Preferences {
