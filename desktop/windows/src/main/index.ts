@@ -37,6 +37,7 @@ import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
+import { startLocalAgentServerIfEnabled, stopLocalAgentServer } from './localAgent/server'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -205,6 +206,9 @@ app.whenReady().then(async () => {
   }
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.omiwindows.app')
+  void startLocalAgentServerIfEnabled().catch((e) => {
+    console.error('[local-agent] failed to start:', e)
+  })
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -450,6 +454,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   unregisterOverlayShortcut()
   flushPerfMarks()
+  void stopLocalAgentServer()
   automationBridge.dispose()
   stopAutomationTargetTracker()
 })
