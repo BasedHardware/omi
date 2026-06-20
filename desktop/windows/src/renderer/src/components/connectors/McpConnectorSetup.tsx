@@ -20,6 +20,7 @@ import {
   testHostedMcpConnection,
   type McpDestination
 } from '../../lib/mcpDestinations'
+import { addObservabilityBreadcrumb } from '../../lib/observability'
 
 type CopyState = {
   target: string
@@ -187,12 +188,27 @@ export function McpConnectorSetup({
   }
 
   const createAndStoreHostedKey = async (): Promise<McpKeyRecord> => {
-    const record = await createWindowsMcpKey()
-    await window.omi.mcpKeyCreate(record)
-    setStoredKey(record)
-    onKeyStateChange?.(true)
-    setShowKey(false)
-    return record
+    addObservabilityBreadcrumb(
+      'mcp_key.create_started',
+      { hadExistingKey: Boolean(storedKey?.key) },
+      { category: 'mcp' }
+    )
+    try {
+      const record = await createWindowsMcpKey()
+      await window.omi.mcpKeyCreate(record)
+      setStoredKey(record)
+      onKeyStateChange?.(true)
+      setShowKey(false)
+      addObservabilityBreadcrumb('mcp_key.create_finished', { ok: true }, { category: 'mcp' })
+      return record
+    } catch (error) {
+      addObservabilityBreadcrumb(
+        'mcp_key.create_finished',
+        { ok: false, errorMessage: (error as Error).message },
+        { category: 'mcp', level: 'warning' }
+      )
+      throw error
+    }
   }
 
   const ensureHostedKey = async (): Promise<McpKeyRecord> => {
@@ -234,14 +250,25 @@ export function McpConnectorSetup({
 
   const testConnection = async (): Promise<void> => {
     if (!storedKey?.key || testState.kind === 'running') return
+    addObservabilityBreadcrumb('mcp_key.test_started', {}, { category: 'mcp' })
     setTestState({ kind: 'running', message: 'Testing hosted MCP...' })
     try {
       const result = await testHostedMcpConnection(storedKey.key)
+      addObservabilityBreadcrumb(
+        'mcp_key.test_finished',
+        { ok: true, memoryCount: result.memoryCount },
+        { category: 'mcp' }
+      )
       setTestState({
         kind: 'success',
         message: `Connected. get_memories returned ${result.memoryCount} memor${result.memoryCount === 1 ? 'y' : 'ies'}.`
       })
     } catch (error) {
+      addObservabilityBreadcrumb(
+        'mcp_key.test_finished',
+        { ok: false, errorMessage: (error as Error).message },
+        { category: 'mcp', level: 'warning' }
+      )
       setTestState({ kind: 'error', message: (error as Error).message })
     }
   }

@@ -7,6 +7,7 @@ import { RewindTimelineBar } from '../components/rewind/RewindTimelineBar'
 import { RewindThumbnailStrip } from '../components/rewind/RewindThumbnailStrip'
 import { RewindSearchBar } from '../components/rewind/RewindSearchBar'
 import { SearchResultsFilmstrip } from '../components/rewind/SearchResultsFilmstrip'
+import { addObservabilityBreadcrumb } from '../lib/observability'
 
 function uniqueFrames(frames: RewindFrame[]): RewindFrame[] {
   const seen = new Set<string>()
@@ -57,7 +58,16 @@ export function Rewind(): React.JSX.Element {
     setSearchError(null)
     setSearching(true)
     void search(trimmed)
-      .catch(() => {
+      .catch((error) => {
+        addObservabilityBreadcrumb(
+          'rewind.search_failed',
+          {
+            queryLength: trimmed.length,
+            sequence: seq,
+            errorMessage: error instanceof Error ? error.message : String(error)
+          },
+          { category: 'rewind', level: 'warning' }
+        )
         if (searchSeq.current === seq) setSearchError('Search failed. Try again.')
       })
       .finally(() => {

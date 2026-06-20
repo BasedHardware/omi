@@ -26,7 +26,9 @@ import type {
   ByokSaveRequest,
   ByokTestRequest,
   ByokUseRequest,
-  ByokChatRequest
+  ByokChatRequest,
+  ObservabilityBreadcrumb,
+  ObservabilityEvent
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -55,6 +57,10 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  observabilityCapture: (event: ObservabilityEvent) =>
+    ipcRenderer.send('observability:capture', event),
+  observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) =>
+    ipcRenderer.send('observability:breadcrumb', breadcrumb),
   localAgentStatus: () => ipcRenderer.invoke('localAgent:status'),
   localAgentSetEnabled: (enabled: boolean) => ipcRenderer.invoke('localAgent:setEnabled', enabled),
   localAgentSetPort: (port: number) => ipcRenderer.invoke('localAgent:setPort', port),

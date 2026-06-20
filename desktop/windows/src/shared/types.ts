@@ -208,6 +208,31 @@ export type LocalAgentToolsTestResult = {
   error?: string
 }
 
+export type ObservabilityLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal'
+
+export type ObservabilitySource = 'main' | 'renderer'
+
+export type ObservabilityBreadcrumb = {
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  data?: Record<string, unknown>
+  ts?: number
+}
+
+export type ObservabilityEvent = {
+  source?: ObservabilitySource
+  kind: 'breadcrumb' | 'exception' | 'error' | 'crash' | 'unhandled-rejection' | 'warning'
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  message?: string
+  error?: unknown
+  data?: Record<string, unknown>
+  breadcrumbs?: ObservabilityBreadcrumb[]
+  ts?: number
+}
+
 export type OmiOverlayApi = {
   /** Subscribe to summon events; callback fires each time the overlay is shown. Returns an unsubscribe fn. */
   onShown: (cb: () => void) => () => void
@@ -278,6 +303,8 @@ export type OmiBridgeApi = {
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  observabilityCapture: (event: ObservabilityEvent) => void
+  observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) => void
   localAgentStatus: () => Promise<LocalAgentStatus>
   localAgentSetEnabled: (enabled: boolean) => Promise<LocalAgentStatus>
   localAgentSetPort: (port: number) => Promise<LocalAgentStatus>

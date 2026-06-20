@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'net'
 import { getLocalAgentSettings, LOCAL_AGENT_DEFAULT_PORT } from './settings'
 import { ensureLocalAgentToken } from './tokenStore'
+import { addObservabilityBreadcrumb, captureMainException } from '../observability'
 import {
   errorResponseBody,
   listLocalAgentTools,
@@ -215,6 +216,12 @@ export async function startLocalAgentServer(
   const preferredPort = options.preferredPort ?? LOCAL_AGENT_DEFAULT_PORT
   const serverFactory = options.serverFactory ?? createServer
 
+  addObservabilityBreadcrumb(
+    'local_agent.server_start_requested',
+    { preferredPort },
+    { category: 'local_agent' }
+  )
+
   let lastError: unknown = null
   for (let offset = 0; offset < MAX_PORT_ATTEMPTS; offset += 1) {
     const port = preferredPort + offset
@@ -230,6 +237,11 @@ export async function startLocalAgentServer(
       }
       runningServer = server
       runningInfo = info
+      addObservabilityBreadcrumb(
+        'local_agent.server_started',
+        { port: info.port },
+        { category: 'local_agent' }
+      )
       console.log(`[local-agent] listening on ${info.localUrl}`)
       return info
     } catch (e) {
@@ -238,7 +250,13 @@ export async function startLocalAgentServer(
     }
   }
 
-  throw lastError instanceof Error ? lastError : new Error('local agent server failed to start')
+  const error =
+    lastError instanceof Error ? lastError : new Error('local agent server failed to start')
+  captureMainException('local_agent.server_start_failed', error, {
+    preferredPort,
+    attempts: MAX_PORT_ATTEMPTS
+  })
+  throw error
 }
 
 export async function startLocalAgentServerIfEnabled(): Promise<LocalAgentServerInfo | null> {
@@ -253,7 +271,15 @@ export function getLocalAgentServerInfo(): LocalAgentServerInfo | null {
 
 export async function stopLocalAgentServer(): Promise<void> {
   const server = runningServer
+  const info = runningInfo
   runningServer = null
   runningInfo = null
-  if (server) await closeServer(server)
+  if (server) {
+    await closeServer(server)
+    addObservabilityBreadcrumb(
+      'local_agent.server_stopped',
+      { port: info?.port ?? null },
+      { category: 'local_agent' }
+    )
+  }
 }
