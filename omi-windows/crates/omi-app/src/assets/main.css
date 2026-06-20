@@ -947,6 +947,15 @@ body {
 
 .fbar-btn:active { transform: scale(0.95); }
 
+.fbar-btn-active {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+.fbar-btn-active:hover {
+  background: var(--accent-hover) !important;
+}
+
 .fbar-btn-record {
   background: var(--accent);
   color: #fff;

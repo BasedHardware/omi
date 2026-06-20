@@ -199,7 +199,7 @@ pub fn AgentPage() -> Element {
         }
 
         let runtime_ref = runtime.clone();
-        let cfg = config.read().clone();
+
         let mut msgs = messages.clone();
         let mut hist = history.clone();
         let mut loading = is_loading.clone();

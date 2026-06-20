@@ -212,6 +212,7 @@ pub async fn run_deepgram_stream(
                                         let start = resp.start.unwrap_or(0.0);
                                         let duration = resp.duration.unwrap_or(0.0);
                                         let is_final = resp.is_final.unwrap_or(false);
+                                        let speech_final = resp.speech_final.unwrap_or(false);
 
                                         // Only use diarization speaker IDs when diarize is enabled.
                                         // When off, always speaker=0 to avoid spurious multi-speaker splits.
@@ -234,6 +235,7 @@ pub async fn run_deepgram_stream(
                                             start,
                                             end: start + duration,
                                             is_final,
+                                            speech_final,
                                         };
 
                                         tracing::info!(

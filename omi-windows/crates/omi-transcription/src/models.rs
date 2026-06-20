@@ -9,6 +9,7 @@ pub struct TranscriptSegment {
     pub start: f64,
     pub end: f64,
     pub is_final: bool,
+    pub speech_final: bool,
 }
 
 /// Translation of a segment into another language

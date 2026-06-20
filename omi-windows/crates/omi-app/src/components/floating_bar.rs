@@ -28,6 +28,7 @@ pub fn FloatingBar() -> Element {
     // Agent suggestions (pills)
     let suggestions: Signal<Vec<Suggestion>> = use_context();
     let suggestion_prompt: Signal<Option<String>> = use_context();
+    let mut continuous_voice_mode: Signal<bool> = use_context();
     let nav = use_navigator();
 
     let is_recording = matches!(*recording_status.read(), RecordingStatus::Recording { .. });
@@ -112,6 +113,16 @@ pub fn FloatingBar() -> Element {
                     },
                     "● Rec"
                 }
+            }
+
+            button {
+                class: if *continuous_voice_mode.read() { "fbar-btn fbar-btn-active" } else { "fbar-btn" },
+                title: "Voice Chat Mode (Ctrl+Shift+V)\nOmi will auto-reply and restart recording.",
+                onclick: move |_| {
+                    let cur = *continuous_voice_mode.read();
+                    continuous_voice_mode.set(!cur);
+                },
+                "Chat"
             }
 
             // ── Quick AI prompt ───────────────────────────────────────────────

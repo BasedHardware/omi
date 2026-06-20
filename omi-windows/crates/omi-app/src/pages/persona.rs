@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use crate::app::Db;
+
 use crate::config::AppConfig;
 
 #[component]

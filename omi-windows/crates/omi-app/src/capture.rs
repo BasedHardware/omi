@@ -48,11 +48,12 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
             if !cfg.ocr_enabled {
                 record.ocr_text = None;
             } else if let Some(ref mut text) = record.ocr_text {
-                // Truncate OCR text per-config to avoid huge payloads
-                let max_chars = cfg.ocr_summary_max_chars.min(5000).max(64);
-                if text.len() > max_chars {
-                    text.truncate(max_chars);
-                    text.push_str("...");
+                let max_chars = cfg.ocr_summary_max_chars.min(5000).max(64) as usize;
+                if text.chars().count() > max_chars {
+                    if let Some((byte_idx, _)) = text.char_indices().nth(max_chars) {
+                        text.truncate(byte_idx);
+                        text.push_str("...");
+                    }
                 }
             }
 

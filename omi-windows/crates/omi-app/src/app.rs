@@ -139,6 +139,9 @@ pub fn App() -> Element {
         }
     };
 
+    let ptt_active = use_signal(|| false);
+    let agent_query_pending = use_signal(|| false);
+
     // Provide all as global context
     use_context_provider(|| config);
     use_context_provider(|| auth_status);
@@ -152,6 +155,7 @@ pub fn App() -> Element {
     use_context_provider(|| proactive_engine_signal);
     use_context_provider(|| suggestions);
     use_context_provider(|| suggestion_prompt);
+    use_context_provider(|| continuous_voice_mode);
 
     // ── Hotkey + tray listeners (use_hook = called once on mount) ───────────────
     {
@@ -163,6 +167,8 @@ pub fn App() -> Element {
         let db_hk = db.clone();
         let proactive_hk = proactive_engine.clone();
         let mut cvm = continuous_voice_mode.clone();
+        let mut ptt = ptt_active.clone();
+        let mut aq_pending = agent_query_pending.clone();
 
         use_hook(move || {
             let (hk_tx, mut hk_rx) = tokio::sync::broadcast::channel::<HotkeyAction>(8);
@@ -202,6 +208,48 @@ pub fn App() -> Element {
                         }
                         Ok(HotkeyAction::StopRecord) => {
                             if matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
+                                if let Some(handle) = stop_h.write().take() {
+                                    handle.stop();
+                                }
+                            }
+                        }
+                        Ok(HotkeyAction::ToggleVoiceChat) => {
+                            let cur = *cvm.peek();
+                            tracing::info!("[APP] Toggled Voice Chat Mode: {}", !cur);
+                            cvm.set(!cur);
+                        }
+                        Ok(HotkeyAction::PttPressed) => {
+                            if !*ptt.read() {
+                                ptt.set(true);
+                                cvm.set(false); // Disable Voice Chat Mode
+                                
+                                if !matches!(*rec_status.peek(), RecordingStatus::Recording { .. }) {
+                                    tracing::info!("[APP] PTT Pressed: starting recording");
+                                    let api_key = cfg_hk.read().deepgram_api_key.clone();
+                                    let diarize = cfg_hk.read().diarize_speakers;
+                                    let cfg = cfg_hk.read().clone();
+                                    let db_val = db_hk.read().clone();
+                                    let mut status = rec_status.clone();
+                                    let mut transcript = live_t.clone();
+                                    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+                                    stop_h.set(Some(StopRecording::new(stop_tx)));
+                                    let pe = Some(proactive_hk.clone());
+                                    spawn(async move {
+                                        crate::recording::start_recording_with_proactive(
+                                            api_key, diarize, db_val, cfg,
+                                            stop_rx, &mut status, &mut transcript, pe,
+                                        )
+                                        .await;
+                                    });
+                                }
+                            }
+                        }
+                        Ok(HotkeyAction::PttReleased) => {
+                            if *ptt.read() {
+                                tracing::info!("[APP] PTT Released: stopping recording to query agent");
+                                ptt.set(false);
+                                // Queue an agent query, then stop recording
+                                aq_pending.set(true);
                                 if let Some(handle) = stop_h.write().take() {
                                     handle.stop();
                                 }
@@ -278,6 +326,8 @@ pub fn App() -> Element {
                         let mut list = sug_sig.read().clone();
                         // Evict expired and keep max 5
                         list.retain(|x: &crate::proactive::Suggestion| !x.is_expired());
+                        // Deduplicate: remove any existing suggestion with the exact same text
+                        list.retain(|x| x.text != s.text);
                         list.push(s);
                         list.sort_by(|a, b| b.priority.cmp(&a.priority));
                         list.truncate(5);
@@ -535,7 +585,7 @@ pub fn App() -> Element {
 
     // Silence detection: watch live_transcript for changes
     let live_t = live_transcript.clone();
-    let stop_h_silence = stop_handle.clone();
+    let mut stop_h_silence = stop_handle.clone();
     let cvm_silence = continuous_voice_mode.clone();
     use_effect(move || {
         if !*cvm_silence.read() {
@@ -543,30 +593,11 @@ pub fn App() -> Element {
         }
         let segments = live_t.read().segments.clone();
         if let Some(last_seg) = segments.last() {
-            if last_seg.is_final {
-                let last_text = last_seg.text.clone();
-                let last_start = last_seg.start;
-                let mut stop_h = stop_h_silence.clone();
-                let live_t = live_t.clone();
-                let cvm = cvm_silence.clone();
-                
-                spawn(async move {
-                    tokio::time::sleep(tokio::time::Duration::from_millis(1800)).await;
-                    
-                    if !*cvm.read() {
-                        return;
-                    }
-                    
-                    let current_segments = live_t.read().segments.clone();
-                    if let Some(curr_last) = current_segments.last() {
-                        if curr_last.text == last_text && curr_last.start == last_start {
-                            tracing::info!("[SILENCE] Silence detected. Stopping recording.");
-                            if let Some(handle) = stop_h.write().take() {
-                                handle.stop();
-                            }
-                        }
-                    }
-                });
+            if last_seg.speech_final {
+                tracing::info!("[SILENCE] speech_final detected. Stopping recording to query Agent.");
+                if let Some(handle) = stop_h_silence.write().take() {
+                    handle.stop();
+                }
             }
         }
     });
@@ -575,6 +606,7 @@ pub fn App() -> Element {
     let rec_status = recording_status.clone();
     let live_t_agent = live_transcript.clone();
     let cvm_agent = continuous_voice_mode.clone();
+    let mut aq_pending = agent_query_pending.clone();
     let mut vh_agent = voice_history.clone();
     let rt_agent = runtime.clone();
     let cfg_agent = config.clone();
@@ -588,7 +620,9 @@ pub fn App() -> Element {
         let is_rec = matches!(status, RecordingStatus::Recording { .. });
         prev_was_recording.set(is_rec);
 
-        if was_rec && !is_rec && *cvm_agent.read() {
+        if was_rec && !is_rec && (*cvm_agent.read() || *aq_pending.read()) {
+            aq_pending.set(false);
+
             let user_text: String = live_t_agent.read().segments.iter()
                 .filter(|s| s.is_final)
                 .map(|s| s.text.as_str())
@@ -597,7 +631,7 @@ pub fn App() -> Element {
 
             let user_text = user_text.trim().to_string();
             if user_text.is_empty() {
-                tracing::info!("[APP] Continuous mode: user text empty. Auto-restarting recording.");
+                tracing::info!("[APP] User text empty. Auto-restarting if in continuous mode.");
                 let cvm_clone = cvm_agent.clone();
                 let mut start_rec_clone = start_rec_agent.clone();
                 spawn(async move {

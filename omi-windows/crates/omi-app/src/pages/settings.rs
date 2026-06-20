@@ -232,7 +232,7 @@ pub fn SettingsPage() -> Element {
                             let _ = config.read().save();
                         },
                         option { value: "auto", "Auto Fallback" }
-                        option { value: "openai", "OpenAI / Azure" }
+                        option { value: "openai", "OpenAI" }
                         option { value: "anthropic", "Anthropic" }
                         option { value: "groq", "Groq" }
                     }
@@ -247,7 +247,7 @@ pub fn SettingsPage() -> Element {
                             let _ = config.read().save();
                         },
                         option { value: "auto", "Auto Fallback" }
-                        option { value: "openai", "OpenAI / Azure" }
+                        option { value: "openai", "OpenAI" }
                         option { value: "anthropic", "Anthropic" }
                         option { value: "groq", "Groq" }
                     }
@@ -588,7 +588,7 @@ pub fn SettingsPage() -> Element {
             section { class: "settings-section",
                 h2 { "🔊 Voice (TTS)" }
                 p { class: "settings-desc",
-                    "Omi speaks responses aloud using your OpenAI API key. No Firebase login required."
+                    "Omi speaks responses aloud. Uses Google TTS for free by default, or OpenAI TTS if you provide an API key."
                 }
                 div { class: "settings-row",
                     label { class: "settings-label", "TTS Voice" }
@@ -611,7 +611,7 @@ pub fn SettingsPage() -> Element {
                     span { class: "settings-label", "Status" }
                     span { class: "settings-value",
                         if config.read().openai_api_key.is_empty() {
-                            "⚠️ Set OpenAI API key above to enable TTS"
+                            "✅ Using Free Google TTS fallback"
                         } else {
                             "✅ OpenAI TTS ready"
                         }
