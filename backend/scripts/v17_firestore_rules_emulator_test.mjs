@@ -11,6 +11,8 @@ const V17_PROTECTED_COLLECTIONS = [
   'memory_state',
   'memory_commits',
   'memory_evidence',
+  'v3_compatibility_projection',
+  'v3_compatibility_projection_items',
   'short_term_lifecycle_transitions',
 ];
 
@@ -90,7 +92,7 @@ try {
   await assertClientDeniedForV3ControlReaderState(db);
   await assertClientCannotSelfGrantV17AppKeyMemoryAccess(db);
 
-  assert.equal(V17_PROTECTED_COLLECTIONS.length, 8);
+  assert.equal(V17_PROTECTED_COLLECTIONS.length, 10);
   console.log(
     `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, and V17 app/key memory grant self-grant path`,
   );

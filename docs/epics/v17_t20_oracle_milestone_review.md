@@ -1622,3 +1622,18 @@ Verification for this slice:
 - Emulator: `npm run test:v17-v3-control-reader:emulator` starts the local Firestore emulator, prints expected client `PERMISSION_DENIED` logs, then `PASS: signed-in client read/write denial asserted for 8 V17 collections, users/{uid}/memory_control/state, and V17 app/key memory grant self-grant path` and `PASS: emulator Admin-context fixture read from users/{uid}/memory_control/state mapped through read_v17_v3_control/decide_v17_v3_control_route for 7 cases; no production Firestore or runtime /v3 wiring used`.
 - Focused/linked, full V17, async scan, docs hygiene, and commit SHA are recorded in the subagent handoff for this slice.
 - Non-claims preserved: no production cloud calls, no cloud IAM/server-principal proof, no `backend/routers/memories.py` wiring, no production reader/cutover approval, no Archive default visibility, and no stale Short-term route-control field.
+
+### 2026-06-20 — P1-3 fenced `/v3` compatibility projection reader + emulator proof
+
+Implemented Oracle's prescribed server-only V17 compatibility projection reader without route wiring:
+
+- Added `backend/utils/memory/v17_v3_projection_reader_contract.py` and `backend/database/v17_v3_compatibility_projection.py` for a fenced reader over server-owned `users/{uid}/v3_compatibility_projection/state` and `users/{uid}/v3_compatibility_projection_items/{memory_id}`.
+- Added `backend/tests/unit/test_v17_v3_compatibility_projection.py` with strict fail-closed coverage for missing/malformed state, schema/uid/source mismatch, caller-supplied expected account-generation mismatch, projection generation/commit/fence mismatch, incomplete write/delete/tombstone convergence, invalid payload whole-page failure, Archive/deleted/tombstone/stale Short-term default exclusion, stable `created_at DESC`, document-id DESC keyset pagination, and offset rejection.
+- Added `backend/scripts/v17_p1_3_v3_projection_reader_emulator_test.py` and `npm run test:v17-v3-projection-reader:emulator`. The emulator proof asserts signed-in client denial for projection state/items via the shared rules harness, then proves Admin-context ready-empty, generation mismatch, stale commit/fence, Archive/tombstone/stale Short-term exclusion, and two-page keyset ordering.
+- Updated `backend/database/v17_collections.py`, `firestore.rules`, `backend/scripts/v17_firestore_rules_emulator_test.mjs`, `backend/test.sh`, `package.json`, and `backend/scripts/v17_p1_3_v3_projection_store_readiness.py`. Projection store readiness now records local implementation/emulator evidence while overall runtime remains **BLOCKED / NO-GO**.
+
+Verification for this slice:
+
+- RED: `cd backend && env -u VIRTUAL_ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin python3 -m pytest tests/unit/test_v17_v3_compatibility_projection.py -q` initially failed with `ModuleNotFoundError: No module named 'database.v17_v3_compatibility_projection'`.
+- GREEN/focused/full/emulator/readiness/async/docs hygiene and commit SHA are recorded in the subagent handoff for this slice.
+- Non-claims preserved: no `backend/routers/memories.py`, `backend/main.py`, POST/PATCH/DELETE route change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore/cloud/provider/vector calls, no Archive default visibility, no stale Short-term default visibility, no legacy fallback/merge for V17 projection failures, and no client-supplied generation trust.

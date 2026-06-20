@@ -68,21 +68,27 @@ def test_projection_store_readiness_inventories_exact_store_api_requirements():
     report = _report(execute=True)
 
     assert report["status"] == "BLOCKED"
-    assert report["proof_status"] == "BLOCKED"
+    assert report["proof_status"] == "LOCAL_IMPLEMENTATION_PROVED"
     requirements = {item["requirement_id"]: item for item in report["store_api_requirements"]}
     assert list(requirements) == REQUIRED_REQUIREMENT_IDS
 
     for requirement_id, requirement in requirements.items():
-        assert requirement["status"] == "BLOCKED", requirement_id
+        assert requirement["status"].startswith("LOCAL_"), requirement_id
         assert requirement["required_before_runtime_change"] is True
         assert requirement["runtime_wired"] is False
         assert requirement["approval_claimed"] is False
-        assert requirement["missing_real_firestore_or_api_evidence"] is True
+        assert requirement["missing_real_firestore_or_api_evidence"] is False
         assert requirement["evidence_sources"], requirement_id
 
-    assert requirements["canonical_projection_path_api"]["canonical_path"] is None
-    assert requirements["canonical_projection_path_api"]["explicit_blocker"] == "canonical_projection_path_not_chosen"
-    assert "users/{uid}/memories" in requirements["canonical_projection_path_api"]["candidate_paths"]
+    assert (
+        requirements["canonical_projection_path_api"]["canonical_state_path"]
+        == "users/{uid}/v3_compatibility_projection/state"
+    )
+    assert (
+        requirements["canonical_projection_path_api"]["canonical_items_path"]
+        == "users/{uid}/v3_compatibility_projection_items/{memory_id}"
+    )
+    assert requirements["canonical_projection_path_api"]["explicit_blocker"] is None
     assert "List[MemoryDB]" in requirements["memorydb_materialization_fields"]["required_contract"]
     assert requirements["memorydb_materialization_fields"]["v17_only_body_fields_forbidden"] == [
         "memory_item_id",
@@ -136,7 +142,10 @@ def test_projection_store_readiness_defines_fake_injectable_read_interface_witho
             "empty_projection",
         ],
         "fake_injectable": True,
-        "production_firestore_reader_implemented": False,
+        "production_firestore_reader_implemented": True,
+        "implementation": "backend/database/v17_v3_compatibility_projection.py",
+        "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+        "emulator_proof": "backend/scripts/v17_p1_3_v3_projection_reader_emulator_test.py",
         "runtime_route_wiring_now": False,
     }
 
@@ -172,8 +181,13 @@ def test_projection_store_readiness_records_safe_next_steps_and_non_claims():
     assert all(step["implements_runtime_wiring_now"] is False for step in report["proposed_next_safe_steps"])
     assert all(step["implements_production_writes_now"] is False for step in report["proposed_next_safe_steps"])
     assert "No production compatibility projection store writes implemented." in report["non_claims"]
-    assert "No real Firestore/API/emulator/cloud evidence collected." in report["non_claims"]
+    assert (
+        "Local Firestore emulator evidence collected only by npm run test:v17-v3-projection-reader:emulator; no production cloud evidence collected."
+        in report["non_claims"]
+    )
     assert "No `/v3` route wiring changed." in report["non_claims"]
+    assert report["local_implementation_evidence"]["reader"] == "backend/database/v17_v3_compatibility_projection.py"
+    assert report["local_implementation_evidence"]["npm_command"] == "npm run test:v17-v3-projection-reader:emulator"
 
 
 def test_projection_store_readiness_json_summary_is_stable():
@@ -181,11 +195,12 @@ def test_projection_store_readiness_json_summary_is_stable():
 
     assert decoded["summary"] == {
         "status": "BLOCKED",
-        "proof_status": "BLOCKED",
+        "proof_status": "LOCAL_IMPLEMENTATION_PROVED",
         "requirement_count": 9,
-        "blocked_requirement_count": 9,
+        "blocked_requirement_count": 0,
+        "local_implementation_requirement_count": 9,
         "existing_local_proof_count": 9,
-        "missing_real_firestore_or_api_evidence_count": 9,
+        "missing_real_firestore_or_api_evidence_count": 0,
         "read_only": True,
         "mutation_allowed": False,
         "runtime_wiring_changed": False,
@@ -206,9 +221,12 @@ def test_projection_store_readiness_is_registered_in_test_runner_docs_and_parent
     )
 
     assert "test_v17_p1_3_v3_projection_store_readiness.py" in test_sh
+    assert "test_v17_v3_compatibility_projection.py" in test_sh
     assert "v17_p1_3_v3_projection_store_readiness.py" in ticket_doc
+    assert "v17_p1_3_v3_projection_reader_emulator_test.py" in ticket_doc
     assert "projection store/API readiness" in ticket_doc
     assert "v17_p1_3_v3_projection_store_readiness.py" in oracle_doc
+    assert "test:v17-v3-projection-reader:emulator" in oracle_doc
     assert "projection store/API readiness" in oracle_doc
     assert "projection_store_readiness_proof" in runtime_readiness
     assert "projection_store_readiness_proof" in external_readiness

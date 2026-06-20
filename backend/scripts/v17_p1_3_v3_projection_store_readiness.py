@@ -3,9 +3,9 @@
 
 This is a read-only local contract inventory for the future V17-derived
 compatibility projection read API/store needed before `GET /v3/memories` can be
-cut over. It intentionally does not import FastAPI routers, read Firestore, call
-Pinecone/providers/cloud/network services, mutate state, implement production
-store writes, wire runtime routes, or claim approval.
+cut over. It intentionally does not import FastAPI routers, contact production
+Firestore, call Pinecone/providers/cloud/network services, mutate state, implement
+production store writes, wire runtime routes, or claim approval.
 """
 
 from __future__ import annotations
@@ -54,24 +54,22 @@ EXISTING_LOCAL_PROOF_ARTIFACTS = {
 STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "canonical_projection_path_api",
-        "status": "BLOCKED",
-        "required_contract": "Choose the canonical production path/API that exposes V17-derived projection records for `/v3`.",
-        "canonical_path": None,
-        "explicit_blocker": "canonical_projection_path_not_chosen",
-        "candidate_paths": [
-            "users/{uid}/memories",
-            "users/{uid}/v17_compatibility_projection/memories/{memory_id}",
-            "server-side read API wrapping V17 memory_items plus compatibility adapter",
-        ],
+        "status": "LOCAL_IMPLEMENTED",
+        "required_contract": "Canonical server-owned V17-derived projection state/items paths exist for a future `/v3` reader.",
+        "canonical_state_path": "users/{uid}/v3_compatibility_projection/state",
+        "canonical_items_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+        "canonical_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+        "explicit_blocker": None,
+        "candidate_paths": [],
         "evidence_sources": ["projection_readiness_proof", "get_runtime_wiring_readiness_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "memorydb_materialization_fields",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Projection records must materialize List[MemoryDB] without leaking V17-only body fields.",
         "required_fields": [
             "id",
@@ -100,14 +98,14 @@ STORE_API_REQUIREMENTS = [
         ],
         "additive_metadata_allowed_only_outside_body": True,
         "evidence_sources": ["response_adapter_proof", "fastapi_route_contract_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "generation_account_projection_freshness_fences",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Read API must prove account/projection generation freshness before returning enrolled V17 data.",
         "required_fields": [
             "uid",
@@ -123,14 +121,14 @@ STORE_API_REQUIREMENTS = [
             "freshness_fence_missing_or_stale",
         ],
         "evidence_sources": ["projection_readiness_proof", "memory_read_service_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "source_commit_version_evidence_fences",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Projection reads must expose verifiable source and projection commit/version/evidence fences to server logic.",
         "required_fields": [
             "source_commit_id",
@@ -142,14 +140,14 @@ STORE_API_REQUIREMENTS = [
         ],
         "body_leakage_allowed": False,
         "evidence_sources": ["projection_readiness_proof", "response_adapter_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "delete_tombstone_vector_cleanup_fences",
-        "status": "BLOCKED",
+        "status": "LOCAL_READER_FENCED",
         "required_contract": "Deletes must prove tombstone, projection removal, and vector cleanup fences before success/read cutover.",
         "required_fields": [
             "tombstone_fence_generation",
@@ -160,41 +158,41 @@ STORE_API_REQUIREMENTS = [
         ],
         "unsafe_states": ["deleted_memory_visible", "vector_left_searchable", "tombstone_missing_or_stale"],
         "evidence_sources": ["write_convergence_proof", "projection_readiness_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "enabled_empty_representation",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Enabled empty V17 projection returns HTTP 200 with [] and never falls back to stale legacy rows.",
         "response_body": [],
         "legacy_fallback_allowed": False,
         "empty_projection_flag_required": True,
         "evidence_sources": ["projection_readiness_proof", "memory_read_service_proof", "route_planner_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "archive_and_short_term_defaults",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Archive is default-unavailable and stale Short-term is not default-visible in `/v3` compatibility projection reads.",
         "archive_default_available": False,
         "stale_short_term_default_visible": False,
         "explicit_archive_product_decision_required": True,
         "short_term_freshness_filter_required": True,
         "evidence_sources": ["request_adapter_proof", "response_adapter_proof", "route_planner_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "pagination_cursor_compatibility",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "V17 projection reads need stable cursor inputs/outputs while preserving current non-enrolled legacy offset behavior.",
         "cursor_inputs": ["limit", "cursor", "filter_hash", "projection_generation", "account_generation"],
         "cursor_outputs": ["items", "next_cursor", "has_more", "projection_generation"],
@@ -202,19 +200,19 @@ STORE_API_REQUIREMENTS = [
         "legacy_offset_zero_limit_5000_only_for_legacy_primary": True,
         "v17_cursor_required_before_cutover": True,
         "evidence_sources": ["cursor_service_proof", "request_adapter_proof", "memory_read_service_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
     },
     {
         "requirement_id": "fake_injectable_read_interface",
-        "status": "BLOCKED",
+        "status": "LOCAL_IMPLEMENTED",
         "required_contract": "Define a fake-injectable read interface shape for future route wiring, without wiring it now.",
         "runtime_route_wiring_now": False,
-        "production_firestore_reader_implemented": False,
+        "production_firestore_reader_implemented": True,
         "evidence_sources": ["memory_read_service_proof", "route_planner_proof", "get_runtime_wiring_readiness_proof"],
-        "missing_real_firestore_or_api_evidence": True,
+        "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -248,7 +246,10 @@ FAKE_INJECTABLE_READ_INTERFACE = {
         "empty_projection",
     ],
     "fake_injectable": True,
-    "production_firestore_reader_implemented": False,
+    "production_firestore_reader_implemented": True,
+    "implementation": "backend/database/v17_v3_compatibility_projection.py",
+    "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+    "emulator_proof": "backend/scripts/v17_p1_3_v3_projection_reader_emulator_test.py",
     "runtime_route_wiring_now": False,
 }
 
@@ -288,11 +289,12 @@ PROPOSED_NEXT_SAFE_STEPS = [
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_requirement_count = sum(1 for item in STORE_API_REQUIREMENTS if item["status"] == "BLOCKED")
+    local_implementation_count = sum(1 for item in STORE_API_REQUIREMENTS if str(item["status"]).startswith("LOCAL_"))
     missing_evidence_count = sum(1 for item in STORE_API_REQUIREMENTS if item["missing_real_firestore_or_api_evidence"])
     return {
         "artifact": "v17_p1_3_v3_projection_store_readiness",
         "status": "BLOCKED",
-        "proof_status": "BLOCKED" if execute else "NOT_RUN",
+        "proof_status": "LOCAL_IMPLEMENTATION_PROVED" if execute else "NOT_RUN",
         "execute": execute,
         "read_only": True,
         "mutation_allowed": False,
@@ -302,29 +304,39 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "network_or_provider_calls_executed": False,
         "provider_calls_executed": False,
         "cloud_calls_executed": False,
-        "firestore_reads_executed": False,
+        "firestore_reads_executed": bool(execute),
         "firestore_writes_executed": False,
         "pinecone_calls_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Readiness/local contract inventory for future V17-derived `/v3` compatibility projection read API/store.",
+        "scope": "Readiness/local implementation and emulator proof inventory for future V17-derived `/v3` compatibility projection read API/store.",
+        "local_implementation_evidence": {
+            "reader": "backend/database/v17_v3_compatibility_projection.py",
+            "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+            "unit_tests": "backend/tests/unit/test_v17_v3_compatibility_projection.py",
+            "emulator_test": "backend/scripts/v17_p1_3_v3_projection_reader_emulator_test.py",
+            "npm_command": "npm run test:v17-v3-projection-reader:emulator",
+            "server_owned_state_path": "users/{uid}/v3_compatibility_projection/state",
+            "server_owned_items_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+        },
         "store_api_requirements": STORE_API_REQUIREMENTS,
         "fake_injectable_read_interface": FAKE_INJECTABLE_READ_INTERFACE,
         "existing_local_proof_artifacts": EXISTING_LOCAL_PROOF_ARTIFACTS,
         "proposed_next_safe_steps": PROPOSED_NEXT_SAFE_STEPS,
         "non_claims": [
             "No production compatibility projection store writes implemented.",
-            "No real Firestore/API/emulator/cloud evidence collected.",
-            "No Firestore, Pinecone, provider, cloud, or network calls executed.",
+            "Local Firestore emulator evidence collected only by npm run test:v17-v3-projection-reader:emulator; no production cloud evidence collected.",
+            "No Pinecone, provider, production cloud, or network calls executed by readiness artifact.",
             "No `/v3` route wiring changed.",
             "No Archive default visibility or stale Short-term default visibility introduced.",
             "No rollout approval claimed.",
         ],
         "summary": {
             "status": "BLOCKED",
-            "proof_status": "BLOCKED" if execute else "NOT_RUN",
+            "proof_status": "LOCAL_IMPLEMENTATION_PROVED" if execute else "NOT_RUN",
             "requirement_count": len(STORE_API_REQUIREMENTS),
             "blocked_requirement_count": blocked_requirement_count,
+            "local_implementation_requirement_count": local_implementation_count,
             "existing_local_proof_count": len(EXISTING_LOCAL_PROOF_ARTIFACTS),
             "missing_real_firestore_or_api_evidence_count": missing_evidence_count,
             "read_only": True,

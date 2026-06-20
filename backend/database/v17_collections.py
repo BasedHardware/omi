@@ -57,6 +57,14 @@ class V17Collections:
     def memory_state_head(self) -> str:
         return f"{self.user_root}/memory_state/head"
 
+    @property
+    def v3_compatibility_projection_state(self) -> str:
+        return f"{self.user_root}/v3_compatibility_projection/state"
+
+    @property
+    def v3_compatibility_projection_items(self) -> str:
+        return f"{self.user_root}/v3_compatibility_projection_items"
+
     def all_collection_paths(self) -> list[str]:
         return [
             self.memory_items,
@@ -69,4 +77,5 @@ class V17Collections:
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,
             self.memory_commits,
+            self.v3_compatibility_projection_items,
         ]
