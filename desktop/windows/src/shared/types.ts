@@ -58,6 +58,21 @@ export type McpKeyRecord = {
   key: string
 }
 
+export type LocalAgentChatToolName =
+  | 'get_local_status'
+  | 'search_screen_history'
+  | 'execute_sql'
+  | 'get_screenshot'
+
+export type LocalAgentToolArguments = Record<string, unknown>
+
+export type LocalAgentChatToolResponse = {
+  ok: true
+  name: string
+  content_type: string
+  result: unknown
+}
+
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
 // transcribed independently).
@@ -246,6 +261,11 @@ export type OmiBridgeApi = {
   kgSearchFiles: (q: string, fileType?: string, limit?: number) => Promise<IndexedFileRecord[]>
   /** Run a single read-only SELECT against the local DB (sqlGuard-validated). */
   kgExecuteSql: (sql: string) => Promise<KgSqlResult>
+  /** Chat-only local tool bridge. Main process enforces the read-only allowlist. */
+  localAgentChatTool: (
+    name: LocalAgentChatToolName,
+    args?: LocalAgentToolArguments
+  ) => Promise<LocalAgentChatToolResponse>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
