@@ -8,6 +8,21 @@ import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
 
+// Settings gear for the overlay header row — mirrors macOS floating bar.
+// Opens Settings in the main window. Shows on hover over the close button area.
+function SettingsGear(): React.JSX.Element {
+  return (
+    <button
+      onClick={() => window.omiOverlay.openMainRoute('/settings')}
+      aria-label="Settings"
+      title="Open Settings"
+      className="overlay-no-drag absolute left-2 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-md text-xs leading-none text-neutral-600 transition-colors hover:bg-neutral-700/50 hover:text-neutral-300"
+    >
+      ⚙
+    </button>
+  )
+}
+
 /** Slim draggable strip with a centered grab handle. The whole strip is a drag
  *  region (-webkit-app-region: drag); the handle just signals that it's movable. */
 function DragHandle(): React.JSX.Element {
@@ -56,7 +71,7 @@ function ResizeGrip(): React.JSX.Element {
   return (
     <div
       aria-hidden
-      className="overlay-no-drag pointer-events-none absolute bottom-1 right-1.5 opacity-20"
+      className="overlay-no-drag pointer-events-none absolute bottom-1 right-1.5 opacity-50"
     >
       <svg viewBox="0 0 10 10" width="12" height="12" fill="white">
         <circle cx="9" cy="9" r="1.2" />
@@ -196,6 +211,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
       className={`overlay-panel relative ${leaving ? 'overlay-leave' : ''} flex flex-col text-neutral-100`}
     >
       <DragHandle />
+      <SettingsGear />
       <button
         onClick={dismiss}
         aria-label="Close"
