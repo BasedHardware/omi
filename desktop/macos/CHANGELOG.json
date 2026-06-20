@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Screen recordings are now actually deleted once they pass your Data Retention window (cleanup was never running, so recordings accumulated indefinitely)"
+    "Screen recordings are now actually deleted once they pass your Data Retention window (cleanup was never running, so recordings accumulated indefinitely)",
+    "Fixed the \"What omi knows\" dashboard under-counting Conversations, Memories, and Tasks (it showed only the loaded page instead of your real totals)"
   ],
   "releases": [
     {

@@ -205,6 +205,11 @@ struct DashboardPage: View {
     @State private var citedConversation: ServerConversation? = nil
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
+    // True totals for the "What omi knows" tiles. Without these the tiles showed
+    // only the loaded page (~50 conversations, ~100 memories), badly undercounting.
+    @State private var conversationCount: Int?
+    @State private var memoryCount: Int?
+    @State private var taskCount: Int?
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -275,12 +280,14 @@ struct DashboardPage: View {
             }
             syncCaptureState()
             Task { await loadScreenshotCount() }
+            Task { await loadKnowledgeCounts() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
             Task { await loadScreenshotCount() }
+            Task { await loadKnowledgeCounts() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -556,13 +563,15 @@ struct DashboardPage: View {
             HStack(spacing: 8) {
                 HomeCenterMetricTile(
                     title: "Conversations",
-                    value: formattedCount(appState.conversations.count),
+                    value: formattedCount(
+                        conversationCount ?? appState.totalConversationsCount
+                            ?? appState.conversations.count),
                     systemImage: "text.bubble.fill",
                     action: { navigate(to: .conversations) }
                 )
                 HomeCenterMetricTile(
                     title: "Tasks",
-                    value: formattedCount(incompleteTaskCount),
+                    value: formattedCount(taskCount ?? incompleteTaskCount),
                     systemImage: "checklist",
                     action: { navigate(to: .tasks) }
                 )
@@ -571,7 +580,11 @@ struct DashboardPage: View {
             HStack(spacing: 8) {
                 HomeCenterMetricTile(
                     title: "Memories",
-                    value: formattedCount(memoriesViewModel.memories.count),
+                    value: formattedCount(
+                        memoryCount
+                            ?? (memoriesViewModel.totalMemoriesCount > 0
+                                ? memoriesViewModel.totalMemoriesCount
+                                : memoriesViewModel.memories.count)),
                     systemImage: "brain",
                     action: { navigate(to: .memories) }
                 )
@@ -710,6 +723,23 @@ struct DashboardPage: View {
         let stats = await RewindIndexer.shared.getStats()
         await MainActor.run {
             screenshotCount = stats?.total
+        }
+    }
+
+    /// Load the true totals behind the "What omi knows" tiles. Conversations come
+    /// from the server count endpoint (not stored locally); memories and tasks are
+    /// counted from the synced local DB — the same totals the detail pages show.
+    private func loadKnowledgeCounts() async {
+        async let convos = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
+        async let mems = try? MemoryStorage.shared.getLocalMemoriesCount()
+        // Open tasks only (matches the "Tasks" label and the old tile's intent —
+        // the old value just under-counted, capping each bucket at a 7-day window).
+        async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
+        let (c, m, t) = await (convos, mems, tasks)
+        await MainActor.run {
+            if let c { conversationCount = c }
+            if let m { memoryCount = m }
+            if let t { taskCount = t }
         }
     }
 
