@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { LayoutGrid, RefreshCw, Star, Check, Plus, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
+import {
+  LayoutGrid,
+  RefreshCw,
+  Star,
+  Check,
+  Plus,
+  Loader2,
+  Search,
+  SlidersHorizontal,
+  X
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
+import { McpConnectorSetup } from '../components/connectors/McpConnectorSetup'
 
 type AppEntry = {
   id: string
@@ -27,7 +38,17 @@ function formatCategory(raw: string): string {
     .join(' ')
 }
 
-function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean; isBusy: boolean; onToggle: (a: AppEntry) => void }): React.JSX.Element {
+function AppCard({
+  app,
+  isOn,
+  isBusy,
+  onToggle
+}: {
+  app: AppEntry
+  isOn: boolean
+  isBusy: boolean
+  onToggle: (a: AppEntry) => void
+}): React.JSX.Element {
   return (
     <div className="surface-card flex flex-col p-5 animate-fade-in">
       <div className="mb-3 flex items-start gap-3">
@@ -47,9 +68,7 @@ function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean
         )}
         <div className="min-w-0 flex-1">
           <div className="font-display font-semibold text-white/95">{app.name}</div>
-          {app.author && (
-            <div className="text-[11px] text-white/45">{app.author}</div>
-          )}
+          {app.author && <div className="text-[11px] text-white/45">{app.author}</div>}
         </div>
       </div>
       <p className="mb-4 line-clamp-3 flex-1 text-xs leading-relaxed text-white/65">
@@ -279,6 +298,9 @@ export function Apps(): React.JSX.Element {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
+        <div className="mx-auto mb-8 max-w-5xl">
+          <McpConnectorSetup />
+        </div>
         {loading && (
           <div className="mx-auto grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -299,9 +321,7 @@ export function Apps(): React.JSX.Element {
             ))}
           </div>
         )}
-        {error && (
-          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>
-        )}
+        {error && <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
         {!loading && !error && (
           <div className="mx-auto max-w-5xl space-y-5">
             <div className="flex items-center gap-2">
@@ -424,22 +444,45 @@ export function Apps(): React.JSX.Element {
 
             {query.trim() ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {categorized.search?.map((a) => <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />)}
+                {categorized.search?.map((a) => (
+                  <AppCard
+                    key={a.id}
+                    app={a}
+                    isOn={enabled.has(a.id)}
+                    isBusy={busy.has(a.id)}
+                    onToggle={toggle}
+                  />
+                ))}
               </div>
             ) : (
               Object.entries(categorized)
                 .sort(([catA], [catB]) => {
-                  const order = ['Most Popular', 'Featured', 'Integrations', 'Chat Assistants', 'Summary Apps', 'Notifications']
+                  const order = [
+                    'Most Popular',
+                    'Featured',
+                    'Integrations',
+                    'Chat Assistants',
+                    'Summary Apps',
+                    'Notifications'
+                  ]
                   const aIdx = order.indexOf(formatCategory(catA))
                   const bIdx = order.indexOf(formatCategory(catB))
                   return (aIdx === -1 ? Infinity : aIdx) - (bIdx === -1 ? Infinity : bIdx)
                 })
                 .map(([category, categoryApps]) => (
                   <div key={category} className="space-y-3">
-                    <h2 className="text-sm font-semibold text-white/80">{formatCategory(category)}</h2>
+                    <h2 className="text-sm font-semibold text-white/80">
+                      {formatCategory(category)}
+                    </h2>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {categoryApps.map((a) => (
-                        <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />
+                        <AppCard
+                          key={a.id}
+                          app={a}
+                          isOn={enabled.has(a.id)}
+                          isBusy={busy.has(a.id)}
+                          onToggle={toggle}
+                        />
                       ))}
                     </div>
                   </div>
