@@ -59,7 +59,11 @@
   #root {
     height: 100%;
     margin: 0;
-    background: #000000;
+    /* Semi-transparent so the Win11 Mica/Acrylic DWM backdrop shows through.
+       82% opaque keeps the dark theme intent; 18% lets Mica add depth.
+       Fallback on systems without Mica: composites over the window's
+       backgroundColor (#121212) → looks identical to the old solid black. */
+    background: rgba(5, 5, 5, 0.82);
     background-attachment: fixed;
     color: rgba(255, 255, 255, 0.92);
     font-family:
@@ -94,8 +98,9 @@
     pointer-events: none;
     z-index: 0;
     /* Full-screen gradient (same as the tabs) so there's no black gap behind the
-       sidebar while it slides in. */
-    background: linear-gradient(135deg, var(--nav-sel) 0%, #000000 70%);
+       sidebar while it slides in. Semi-transparent so the Win11 Mica backdrop
+       composites through — opaque values would completely block the material. */
+    background: linear-gradient(135deg, rgba(20, 20, 20, 0.88) 0%, rgba(0, 0, 0, 0.82) 70%);
   }
 
   @keyframes auraDrift {

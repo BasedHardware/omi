@@ -539,6 +539,22 @@ app.whenReady().then(async () => {
 
   const mainWindow = createWindow()
 
+  // Apply Win11 Mica/Acrylic DWM backdrop to the main window — same technique as
+  // the overlay (applyOverlayMaterial). The renderer body uses a semi-transparent
+  // background so the material peeks through, giving native-vibrancy depth.
+  // Wrapped in try/catch: setBackgroundMaterial throws on Win10 / old Electron.
+  if (process.platform === 'win32') {
+    const tryMaterial = (m: 'acrylic' | 'mica'): boolean => {
+      try {
+        const w = mainWindow as BrowserWindow & { setBackgroundMaterial?: (m: string) => void }
+        if (typeof w.setBackgroundMaterial !== 'function') return false
+        w.setBackgroundMaterial(m)
+        return true
+      } catch { return false }
+    }
+    if (!tryMaterial('acrylic')) tryMaterial('mica')
+  }
+
   // Window-specific IPC — needs mainWindow reference.
   ipcMain.handle('window:getAlwaysOnTop', () => mainWindow.isAlwaysOnTop())
   ipcMain.handle('window:setAlwaysOnTop', (_e, enabled: boolean) => {
