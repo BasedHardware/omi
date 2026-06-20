@@ -3,7 +3,7 @@ import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
-import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
+import { looksLikeAction, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
@@ -256,123 +256,37 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
     let assistantText = ''
     try {
-      const token = await auth.currentUser?.getIdToken()
-      // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
-      // persist). Both are best-effort ('' on failure) and run concurrently so the
-      // send isn't serialized behind them:
-      //   • current screen — the current screen's OCR text, attached as ambient
-      //     context to EVERY message. It's framed so the model ignores it unless the
-      //     message is actually about the screen, so it doesn't bloat answers. This
-      //     is an instant hot-cache read, so normal messages don't pay a capture cost;
-      //   • local KG/file context — apps/projects/tech the chat is grounded in.
-      const [screenContext, localContext] = await Promise.all([
-        readCurrentScreen(),
-        gatherLocalContext(userMsg.content)
+      const t0 = performance.now()
+      // All pre-flight in parallel. Each component is individually timed so the
+      // console shows exactly where time goes (token refresh, OCR cache, KG query).
+      const time = <T>(label: string, p: Promise<T>): Promise<T> => {
+        const ts = performance.now()
+        return p.then((v) => { console.log(`[chat:perf]   ${label}: ${(performance.now() - ts).toFixed(0)}ms`); return v })
+      }
+      const [token, screenContext, localContext] = await Promise.all([
+        time('auth-token', auth.currentUser?.getIdToken() ?? Promise.resolve('')),
+        time('screen-ocr', readCurrentScreen()),
+        time('kg-query',   gatherLocalContext(userMsg.content))
       ])
-      const contextParts = [screenContext, localContext].filter(Boolean)
+      console.log(`[chat:perf] pre-flight total: ${(performance.now() - t0).toFixed(0)}ms`)
+
+      const contextParts = [localContext, screenContext].filter(Boolean)
+      const t1 = performance.now()
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: textToSend })
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
-
-      // Each SSE line arrives as `data: <chunk>` (with `done:` marking the end).
-      // Strip the field prefix before appending, otherwise the literal "data:"
-      // leaks into the rendered reply. The backend also (a) emits ephemeral
-      // "thinking" status events whose payload starts with `think:` ("Checking
-      // action items", "Searching memories") — those aren't part of the reply,
-      // so drop them — and (b) encodes reply newlines as the literal token
-      // `__CRLF__` so they survive single-line SSE framing; restore those.
-      // (c) The `done:` line carries a base64-encoded ResponseMessage JSON with
-      // the `memories` field — cited conversations for citation cards.
-      // The backend strips [N] citation markers from the text before encoding, so
-      // `json.text` is the clean version; we replace assistantText with it after
-      // the stream so markers don't stay visible. Memories may use field names:
-      //   memories[] / citations[] / sources[]
-      //   id / memory_id / conversation_id
-      //   title at root or under structured.title
-      //   emoji at root or under structured.emoji
-      //   created_at at root; overview/text/content for preview snippet
-      let citationsFromDone: ChatCitation[] = []
-      let cleanTextFromDone: string | null = null
-      const parseDone = (line: string): void => {
-        try {
-          const b64 = line.slice('done:'.length).trim()
-          if (!b64) return
-          const json = JSON.parse(atob(b64)) as Record<string, unknown>
-
-          // Capture the backend-cleaned text (citation markers stripped).
-          if (typeof json.text === 'string' && json.text.trim()) {
-            cleanTextFromDone = json.text.trim()
-          }
-
-          // Tolerate memories / citations / sources as the container field name.
-          const list = (json.memories ?? json.citations ?? json.sources ?? []) as unknown[]
-          citationsFromDone = (Array.isArray(list) ? list : [])
-            .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
-            .map((m) => {
-              const structured = m.structured as Record<string, unknown> | undefined
-              // id may be 'id', 'memory_id', or 'conversation_id'
-              const id = (m.id ?? m.memory_id ?? m.conversation_id ?? '') as string
-              // title: prefer root-level, then structured, then friendly fallback
-              const rawTitle = (m.title ?? structured?.title ?? null) as string | null
-              const title = rawTitle && rawTitle.trim() ? rawTitle.trim() : 'Conversation source'
-              // emoji: prefer root-level, then structured
-              const emoji = (m.emoji ?? structured?.emoji ?? undefined) as string | undefined
-              const created_at = (m.created_at ?? undefined) as string | undefined
-              // preview: short text from overview or content fields
-              const rawPreview = (
-                structured?.overview ??
-                m.overview ??
-                m.text ??
-                m.content ??
-                null
-              ) as string | null
-              const preview =
-                rawPreview && typeof rawPreview === 'string' && rawPreview.trim()
-                  ? rawPreview.trim().slice(0, 120)
-                  : undefined
-              return { id, title, emoji: emoji || undefined, created_at, preview }
-            })
-            .filter((c) => !!c.id)
-
-          // Always log citation diagnostics so DevTools shows what the backend sent.
-          console.error(
-            '[chat:done] memories from backend:',
-            Array.isArray(list) ? list.length : 0,
-            '→ citations after parse:',
-            citationsFromDone.length,
-            citationsFromDone.length > 0
-              ? citationsFromDone.map((c) => ({ id: c.id, title: c.title }))
-              : Array.isArray(list) && list.length > 0
-                ? { raw: list[0] }
-                : '(backend sent empty memories)'
-          )
-        } catch (e) {
-          if (import.meta.env.DEV) console.warn('[chat:done] failed to parse done payload:', e)
-        }
-      }
-      const parseChunk = (line: string): string | null => {
-        if (!line) return null
-        if (line.startsWith('done:')) {
-          parseDone(line)
-          return null
-        }
-        const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
-        if (content.startsWith('think:')) return null
-        return content.replace(/__CRLF__/g, '\n')
-      }
+      console.log(`[chat:perf] TTFB (Omi): ${(performance.now() - t1).toFixed(0)}ms`)
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let firstChunk = true
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -380,64 +294,18 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
-          const chunk = parseChunk(line)
-          if (chunk === null) continue
+          if (!line || line.startsWith('done:') || line.startsWith('think:')) continue
+          const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
+          if (content.startsWith('think:')) continue
+          const chunk = content.replace(/__CRLF__/g, '\n')
+          if (!chunk) continue
+          if (firstChunk) { console.log(`[chat:perf] TTFT: ${(performance.now() - t1).toFixed(0)}ms`); firstChunk = false }
           assistantText += chunk
-          setHistory((h) => {
-            const next = [...h]
-            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-            return next
-          })
+          setHistory((h) => { const next = [...h]; next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }; return next })
         }
-        if (Date.now() - lastPersist > 1500) {
-          lastPersist = Date.now()
-          void persistChat(buildThread(assistantText))
-        }
+        if (Date.now() - lastPersist > 1500) { lastPersist = Date.now(); void persistChat(buildThread(assistantText)) }
       }
-      const tail = parseChunk(buffer)
-      if (tail !== null) {
-        assistantText += tail
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
-      }
-      // The conversational backend sometimes answers an action-intent message
-      // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
-      // keyword-less follow-up like "again"). Don't render that raw in the thread.
-      if (looksLikeRawPlan(assistantText)) {
-        assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
-      }
-      // Apply the backend-cleaned text from the `done:` payload.
-      // The backend strips [N] citation markers before encoding so the final
-      // stored text is clean. Replacing here ensures the UI matches what is
-      // stored and avoids dangling [1] markers with no corresponding cards.
-      if (cleanTextFromDone && cleanTextFromDone !== assistantText && !looksLikeRawPlan(cleanTextFromDone)) {
-        assistantText = cleanTextFromDone
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
-      }
-      // Attach citations from the done: payload to the final assistant message.
-      if (citationsFromDone.length > 0) {
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = {
-            ...next[next.length - 1],
-            citations: citationsFromDone
-          }
-          return next
-        })
-      }
+      console.log(`[chat:perf] stream done: ${(performance.now() - t1).toFixed(0)}ms total`)
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
       setHistory((h) => {
@@ -493,7 +361,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           if (!line) continue
           if (line.startsWith('message:')) {
             try {
-              const payload = JSON.parse(atob(line.slice('message:'.length).trim())) as { text?: string }
+              const raw = atob(line.slice('message:'.length).trim())
+              const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(raw, (c) => c.charCodeAt(0)))) as { text?: string }
               if (payload.text) {
                 userText = payload.text
                 setHistory((h) => {
