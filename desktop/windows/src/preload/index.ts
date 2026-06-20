@@ -22,6 +22,7 @@ import type {
   LocalAgentSetupPromptArgs,
   LocalAgentToolArguments,
   PiChatRequest,
+  ClaudeAcpChatRequest,
   ByokProvider,
   ByokSaveRequest,
   ByokTestRequest,
@@ -96,6 +97,9 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
   piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1',
   piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
+  claudeAcpStatus: () => ipcRenderer.invoke('claudeAcp:status'),
+  claudeAcpChatSend: (request: ClaudeAcpChatRequest) =>
+    ipcRenderer.invoke('claudeAcp:chatSend', request),
   byokStatus: () => ipcRenderer.invoke('byok:status'),
   byokSave: (request: ByokSaveRequest) => ipcRenderer.invoke('byok:save', request),
   byokDelete: (provider: ByokProvider) => ipcRenderer.invoke('byok:delete', provider),
