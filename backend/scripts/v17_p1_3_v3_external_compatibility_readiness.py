@@ -1059,6 +1059,20 @@ GET_RUNTIME_WIRING_READINESS_PROOF = {
     ],
 }
 
+F5_REAL_SERVICE_EVIDENCE_PREPARATION_PROOF = {
+    "artifact": "backend/scripts/v17_v3_f5_real_service_evidence_readiness.py",
+    "service": "backend/scripts/v17_v3_f5_real_service_evidence_readiness.py",
+    "test": "backend/tests/unit/test_v17_v3_f5_real_service_evidence_readiness.py",
+    "status": "BLOCKED",
+    "decision": "NO_GO",
+    "default_mode": "NOT_RUN",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "execute_requires_oracle_review_before_shared_or_production_service_reads": True,
+}
+f5_real_service_evidence_preparation_proof = F5_REAL_SERVICE_EVIDENCE_PREPARATION_PROOF
+
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     return {
@@ -1118,6 +1132,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
         "canary_approval_aggregate_readiness_proof": CANARY_APPROVAL_AGGREGATE_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
+        "f5_real_service_evidence_preparation_proof": F5_REAL_SERVICE_EVIDENCE_PREPARATION_PROOF,
         "non_claims": [
             "No production traffic executed.",
             "No Firestore, Pinecone, cloud, provider, or network calls executed.",
@@ -1163,6 +1178,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "canary_approval_source_readiness_proof_present": True,
             "canary_approval_production_readiness_proof_present": True,
             "canary_approval_lifecycle_readiness_proof_present": True,
+            "f5_real_service_evidence_preparation_proof_present": True,
+            "f5_real_service_evidence_default_mode": "NOT_RUN",
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

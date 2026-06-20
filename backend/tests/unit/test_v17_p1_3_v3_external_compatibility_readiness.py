@@ -390,6 +390,8 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "canary_approval_source_readiness_proof_present": True,
         "canary_approval_production_readiness_proof_present": True,
         "canary_approval_lifecycle_readiness_proof_present": True,
+        "f5_real_service_evidence_preparation_proof_present": True,
+        "f5_real_service_evidence_default_mode": "NOT_RUN",
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,

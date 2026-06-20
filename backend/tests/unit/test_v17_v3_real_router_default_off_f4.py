@@ -243,6 +243,7 @@ def test_enrolled_v17_never_calls_legacy_for_success_or_fail_closed_cases(monkey
             assert "v17_only" not in item
         assert "X-Omi-Memory-Read-Source" in result.headers
         assert "X-Omi-Memory-Read-Decision" in result.headers
+        assert result.headers["Cache-Control"] == "no-store"
         assert "cursor-token-signature" not in result.text
 
 

@@ -66,6 +66,7 @@ PROOF_CONSTANTS = {
     "canary_approval_production_readiness_proof": _EXTERNAL.CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
     "canary_approval_lifecycle_readiness_proof": _EXTERNAL.CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
     "canary_approval_aggregate_readiness_proof": _EXTERNAL.CANARY_APPROVAL_AGGREGATE_READINESS_PROOF,
+    "f5_real_service_evidence_preparation_proof": _EXTERNAL.F5_REAL_SERVICE_EVIDENCE_PREPARATION_PROOF,
 }
 
 
@@ -404,6 +405,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "effective_runtime_behavior_changed": False,
             "approval_claimed": False,
             "safe_cutover_step_count": len(PROPOSED_SAFE_CUTOVER_SEQUENCE),
+            "f5_real_service_evidence_preparation_proof_present": True,
+            "f5_real_service_evidence_default_mode": "NOT_RUN",
         },
     }
 

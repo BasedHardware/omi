@@ -49,6 +49,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "canary_approval_production_readiness_proof",
     "canary_approval_lifecycle_readiness_proof",
     "canary_approval_aggregate_readiness_proof",
+    "f5_real_service_evidence_preparation_proof",
 }
 
 
@@ -131,6 +132,8 @@ def test_get_runtime_wiring_readiness_links_current_proofs_and_marks_runtime_evi
     )
     assert proofs["real_router_get_testclient_proof"]["runtime_wired"] is False
     assert proofs["real_router_get_testclient_proof"]["missing_real_service_runtime_evidence"] is True
+    assert proofs["f5_real_service_evidence_preparation_proof"]["default_mode"] == "NOT_RUN"
+    assert proofs["f5_real_service_evidence_preparation_proof"]["decision"] == "NO_GO"
     assert proofs["get_dependency_auth_readiness_proof"]["controlled_testclient_under_stubs"] is True
     assert proofs["get_dependency_auth_readiness_proof"]["runtime_wired"] is False
     assert proofs["route_dependency_contract_readiness_proof"]["service"] == (
@@ -190,7 +193,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 10,
         "blocked_gate_count": 10,
-        "existing_local_proof_count": 33,
+        "existing_local_proof_count": 34,
         "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,
@@ -199,6 +202,8 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "effective_runtime_behavior_changed": False,
         "approval_claimed": False,
         "safe_cutover_step_count": 8,
+        "f5_real_service_evidence_preparation_proof_present": True,
+        "f5_real_service_evidence_default_mode": "NOT_RUN",
     }
 
 

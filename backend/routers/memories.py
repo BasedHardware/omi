@@ -36,6 +36,7 @@ _V17_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Read-Decision',
         'X-Omi-Memory-Next-Cursor',
         'Link',
+        'Cache-Control',
     }
 )
 
@@ -123,6 +124,7 @@ def _apply_v17_response_headers(http_response: Response, v17_response: V17V3Comp
     for name, value in v17_response.headers.items():
         if name in _V17_GET_ALLOWLISTED_RESPONSE_HEADERS:
             http_response.headers[name] = value
+    http_response.headers['Cache-Control'] = 'no-store'
 
 
 def _v17_allowlisted_headers(v17_response: V17V3ComposedResponse) -> Dict[str, str]:
