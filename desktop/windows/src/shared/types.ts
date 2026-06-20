@@ -58,9 +58,35 @@ export type PiChatUsage = {
   totalTokens: number
 }
 
-export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
+export type ByokProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'deepgram'
+  | 'openrouter'
+  | 'elevenlabs'
 
-export type ByokChatProvider = Exclude<ByokProvider, 'deepgram'>
+export type ByokChatProvider = Exclude<ByokProvider, 'deepgram' | 'elevenlabs'>
+
+export type ModelPurpose = 'chat' | 'agent' | 'memory'
+
+export type ModelProvider = 'omi' | ByokChatProvider
+
+export type AvailableModel = {
+  id: string
+  provider: ModelProvider
+  providerLabel: string
+  model: string
+  label: string
+  configured: boolean
+  source: 'hosted' | 'byok'
+  reason?: string
+}
+
+export type ModelListResult = {
+  models: AvailableModel[]
+  fetchedAt: number
+}
 
 export type ByokProviderStatus = {
   provider: ByokProvider
@@ -100,6 +126,7 @@ export type ByokValidationResult = {
 
 export type ByokChatRequest = {
   messages: ChatMessage[]
+  modelId?: string
 }
 
 export type ByokChatResponse = {
@@ -278,6 +305,7 @@ export type OmiBridgeApi = {
   byokTest: (request: ByokTestRequest) => Promise<ByokValidationResult>
   byokUse: (request: ByokUseRequest) => Promise<ByokStatus>
   byokChatSend: (request: ByokChatRequest) => Promise<ByokChatResponse>
+  byokListModels: () => Promise<ModelListResult>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
