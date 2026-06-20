@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildHostedMcpHealthRequest,
+  mcpDestinations,
   parseHostedMcpMemoryCount,
   testHostedMcpConnection
 } from './mcpDestinations'
@@ -56,5 +57,18 @@ describe('hosted MCP health check', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
 
     vi.unstubAllGlobals()
+  })
+
+  it('marks AI Agents as a sensitive full setup prompt', () => {
+    const agents = mcpDestinations.find((destination) => destination.id === 'agents')
+    if (!agents) throw new Error('expected AI Agents destination')
+
+    const setup = agents.setup('omi_secret')
+
+    expect(setup.agentPrompt).toBe(true)
+    expect(setup.copyText).toBeUndefined()
+    expect(setup.copyTitle).toBe('Copy setup prompt')
+    expect(setup.securityWarning).toContain('includes your hosted MCP key and local bearer token')
+    expect(setup.steps.join(' ')).toContain('hosted and local access keys')
   })
 })

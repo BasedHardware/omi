@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Bot,
   Check,
   Clipboard,
@@ -9,6 +10,7 @@ import {
   KeyRound,
   Loader2,
   Server,
+  Sparkles,
   TestTube2
 } from 'lucide-react'
 import type { McpKeyRecord } from '../../../../shared/types'
@@ -126,6 +128,7 @@ export function McpConnectorSetup({
   const [storedKey, setStoredKey] = useState<McpKeyRecord | null>(null)
   const [loadingKey, setLoadingKey] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [agentPromptBusy, setAgentPromptBusy] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>(null)
   const [testState, setTestState] = useState<{
@@ -176,21 +179,56 @@ export function McpConnectorSetup({
     }, 1800)
   }
 
+  const markCopied = (target: string, label: string): void => {
+    setCopyState({ target, label })
+    window.setTimeout(() => {
+      setCopyState((current) => (current?.target === target ? null : current))
+    }, 1800)
+  }
+
+  const createAndStoreHostedKey = async (): Promise<McpKeyRecord> => {
+    const record = await createWindowsMcpKey()
+    await window.omi.mcpKeyCreate(record)
+    setStoredKey(record)
+    onKeyStateChange?.(true)
+    setShowKey(false)
+    return record
+  }
+
+  const ensureHostedKey = async (): Promise<McpKeyRecord> => {
+    if (storedKey?.key) return storedKey
+    return createAndStoreHostedKey()
+  }
+
   const generateKey = async (): Promise<void> => {
     if (generating) return
     setGenerating(true)
     setKeyError(null)
     setTestState({ kind: 'idle', message: '' })
     try {
-      const record = await createWindowsMcpKey()
-      await window.omi.mcpKeyCreate(record)
-      setStoredKey(record)
-      onKeyStateChange?.(true)
-      setShowKey(false)
+      await createAndStoreHostedKey()
     } catch (error) {
       setKeyError((error as Error).message)
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const copyAgentSetupPrompt = async (): Promise<void> => {
+    if (agentPromptBusy || loadingKey || generating) return
+    setAgentPromptBusy(true)
+    setKeyError(null)
+    try {
+      const record = await ensureHostedKey()
+      await window.omi.localAgentCopySetupPrompt({
+        hostedServerUrl: setup.serverURL,
+        hostedKey: record.key
+      })
+      markCopied('agent-prompt', 'Agent prompt')
+    } catch (error) {
+      setKeyError(`Could not copy agent setup prompt: ${(error as Error).message}`)
+    } finally {
+      setAgentPromptBusy(false)
     }
   }
 
@@ -227,7 +265,7 @@ export function McpConnectorSetup({
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={generateKey}
-            disabled={loadingKey || generating}
+            disabled={loadingKey || generating || agentPromptBusy}
             className="btn-primary inline-flex items-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
           >
             {generating ? (
@@ -336,7 +374,28 @@ export function McpConnectorSetup({
                 Generate a key to enable secure key copy and destination-specific commands.
               </div>
             )}
-            {setup.copyText && (
+            {setup.agentPrompt && setup.securityWarning && (
+              <div className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs leading-relaxed text-amber-100/90">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>{setup.securityWarning}</span>
+                </div>
+              </div>
+            )}
+            {setup.agentPrompt ? (
+              <button
+                onClick={copyAgentSetupPrompt}
+                disabled={loadingKey || generating || agentPromptBusy}
+                className="btn-primary inline-flex w-full items-center justify-center gap-2 px-3 py-2 text-xs disabled:opacity-50"
+              >
+                {agentPromptBusy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5" />
+                )}
+                {agentPromptBusy ? 'Preparing prompt...' : (setup.copyTitle ?? 'Copy setup prompt')}
+              </button>
+            ) : setup.copyText ? (
               <CodeBlock
                 title={setup.copyTitle ?? 'Setup text'}
                 value={setup.copyText}
@@ -344,7 +403,7 @@ export function McpConnectorSetup({
                 disabled={!hasKey}
                 onCopy={copy}
               />
-            )}
+            ) : null}
             {copyState && (
               <div className="flex items-center gap-2 text-xs text-emerald-200/90">
                 <Check className="h-3.5 w-3.5" />

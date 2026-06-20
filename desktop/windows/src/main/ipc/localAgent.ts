@@ -1,11 +1,13 @@
 import { app, ipcMain } from 'electron'
 import type {
   LocalAgentChatToolName,
+  LocalAgentSetupPromptArgs,
   LocalAgentStatus,
   LocalAgentToolArguments,
   LocalAgentToolsTestResult
 } from '../../shared/types'
 import {
+  copyLocalAgentSetupPrompt,
   copyLocalAgentToken,
   getLocalAgentStatus,
   rotateLocalAgentAccessToken,
@@ -56,6 +58,11 @@ export function registerLocalAgentHandlers(): void {
   ipcMain.handle(
     'localAgent:testTools',
     async (): Promise<LocalAgentToolsTestResult> => testLocalAgentTools()
+  )
+  ipcMain.handle(
+    'localAgent:copySetupPrompt',
+    async (_e, args: LocalAgentSetupPromptArgs): Promise<LocalAgentStatus> =>
+      copyLocalAgentSetupPrompt(args)
   )
   ipcMain.handle(
     'localAgent:chatTool',

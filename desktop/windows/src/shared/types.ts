@@ -123,6 +123,11 @@ export type LocalAgentStatus = {
   hasToken: boolean
 }
 
+export type LocalAgentSetupPromptArgs = {
+  hostedServerUrl: string
+  hostedKey: string
+}
+
 export type LocalAgentToolsTestResult = {
   ok: boolean
   status?: number
@@ -206,6 +211,7 @@ export type OmiBridgeApi = {
   localAgentCopyToken: () => Promise<LocalAgentStatus>
   localAgentRotateToken: () => Promise<LocalAgentStatus>
   localAgentTestTools: () => Promise<LocalAgentToolsTestResult>
+  localAgentCopySetupPrompt: (args: LocalAgentSetupPromptArgs) => Promise<LocalAgentStatus>
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */
