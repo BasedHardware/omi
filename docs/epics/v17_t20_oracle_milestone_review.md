@@ -1705,6 +1705,17 @@ Added a safe pre-runtime readiness proof for future `/v3` cursor-secret/source i
 - Under fake server-owned secret material only, the pure cursor matrix proves first-page no-cursor needs no client-secret trust; signed cursors preserve account generation, projection generation, source, and keyset; and tampered, expired, account/projection generation mismatch, source mismatch, wrong-secret, and client-supplied-secret cases fail closed without legacy fallback.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production secret read, no production Firestore/cloud/provider/vector call, no client-supplied cursor secret trust, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
 
+### 2026-06-20 — P1-3 `/v3` canary enrollment and approval artifact schema seam
+
+Added the local-only canary/approval artifact seam behind the observability approval gate without changing `backend/routers/memories.py` or runtime behavior:
+
+- Added `backend/utils/memory/v17_v3_canary_approval.py` and `backend/tests/unit/test_v17_v3_canary_approval_artifact.py`.
+- The schema pins server-owned artifact fields for future `GET /v3/memories`: exact route scope, bounded cohorts (`shadow`, `canary_1`, `canary_5`, `canary_25`), owner/status fields, rollback plan, monitoring gates, expiration/issued timestamps, and approval ids/timestamps as metadata only.
+- Validation fails closed for missing/malformed artifacts, unsupported or mismatched cohorts, missing rollback plans, missing monitoring gates, pending/rejected/missing approvals, stale artifacts, route mismatches, and high-cardinality/sensitive key or value misuse (user/session ids, cursor tokens, secrets, request payloads, raw memory content).
+- Approved artifacts produce only bounded telemetry labels (`canary_cohort`, `canary_enrollment`, `approval_owner`, `approval_status`, `approval_artifact_status`, `route_scope`), with no raw user ids, memory content, secrets, cursor tokens, or request payloads.
+- `backend/scripts/v17_p1_3_v3_observability_approval_readiness.py` now links the local proof as `v17_v3_canary_approval_artifact_schema_seam` while keeping readiness **BLOCKED** and preserving no production rollout approval.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production telemetry sink, no production Firestore/cloud/provider/vector calls, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge is claimed.
+
 ### 2026-06-20 — P1-3 `/v3` local telemetry API/sink and rollback/read-disable config seam
 
 Added the local pure seam behind the observability/approval readiness gate without changing `backend/routers/memories.py` or runtime behavior:
