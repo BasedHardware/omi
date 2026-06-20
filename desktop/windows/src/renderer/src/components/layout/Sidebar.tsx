@@ -4,6 +4,7 @@ import {
   House,
   GanttChartSquare,
   ListChecks,
+  Brain,
   LayoutGrid,
   History,
   Monitor,
@@ -21,6 +22,7 @@ const navItems = [
   { label: 'Home', to: '/home', Icon: House },
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
+  { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Rewind', to: '/rewind', Icon: History },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid }
 ]
