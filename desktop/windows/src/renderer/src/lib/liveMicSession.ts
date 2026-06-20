@@ -2,6 +2,8 @@ import { startTranscription, type TranscriptionHandle } from './transcriptionCli
 import { liveConversation, isConversationBoundary, onFinalizeRequest } from './liveConversation'
 import { refreshCloudConversations } from './pageCache'
 import { createPendingConversation } from './pendingConversations'
+import { getPreferences } from './preferences'
+import { uploadConversationFromSegments } from './localSttUpload'
 import { transcriptWordCount } from './retentionRules'
 import { buildLocalGraph } from './kgSynthesis'
 
@@ -42,6 +44,9 @@ export function startLiveMicSession(): LiveMicController {
   let handle: TranscriptionHandle | null = null
   let attempt = 0
   let hasSpeech = false
+  let finalizing = false
+  let currentBackend: 'omi' | 'local-parakeet' | null = null
+  let currentStartedAt = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
   const timers: ReturnType<typeof setTimeout>[] = []
 
@@ -79,10 +84,29 @@ export function startLiveMicSession(): LiveMicController {
   // Save the just-spoken transcript as its own conversation: show it in the list
   // instantly (titled client-side), keep it on the live screen flagged "saved",
   // and start a fresh session so capture continues.
-  const saveCurrent = (): void => {
-    createPendingConversation(liveConversation.getSegments())
+  const saveCurrent = (args: {
+    backend: 'omi' | 'local-parakeet' | null
+    startedAt: number
+    finishedAt: number
+  }): void => {
+    const segments = [...liveConversation.getSegments()]
+    createPendingConversation(segments)
     liveConversation.markSaved()
-    pollForNewConversation()
+    if (args.backend === 'local-parakeet') {
+      void uploadConversationFromSegments({
+        lines: segments,
+        startedAt: args.startedAt,
+        finishedAt: args.finishedAt,
+        language: getPreferences().language
+        })
+        .catch((e) => {
+          const message = e instanceof Error ? e.message : String(e)
+          console.warn('[local-stt] conversation upload failed:', message)
+        })
+        .finally(pollForNewConversation)
+    } else {
+      pollForNewConversation()
+    }
     // New conversation-derived memories should reach the brain map without waiting
     // for the next launch; force a throttled KG rebuild (helper above).
     requestKgRebuild()
@@ -91,59 +115,88 @@ export function startLiveMicSession(): LiveMicController {
   // Finalize on the silence timeout or "Save now": end the session (the backend
   // stores it), then restart. No-op if nothing was said since the last finalize.
   const finalize = (): void => {
-    if (cancelled || !hasSpeech) return
+    void finalizeAsync()
+  }
+
+  const finalizeAsync = async (): Promise<void> => {
+    if (cancelled || !hasSpeech || finalizing) return
     // Don't make a conversation out of a trivial blip (< 5 words) — keep
     // listening so it merges into the next real one.
     if (liveWordCount() < 5) {
       armSilence()
       return
     }
+    finalizing = true
     hasSpeech = false
     clearSilence()
-    try { handle?.stop() } catch { /* ignore */ }
+    const backend = currentBackend
+    const startedAt = currentStartedAt
+    try {
+      await handle?.stop()
+    } catch {
+      /* ignore */
+    }
+    const finishedAt = Date.now()
     handle = null
-    saveCurrent()
+    saveCurrent({ backend, startedAt, finishedAt })
     attempt = 0
+    finalizing = false
     startSession()
   }
 
   const startSession = (): void => {
     liveConversation.setStatus('connecting')
-    void startTranscription('mic', {
-      onLine: (line) => {
-        if (cancelled) return
-        liveConversation.setStatus('live')
-        liveConversation.appendLine(line)
-        hasSpeech = true
-        armSilence() // reset the silence countdown on each new utterance
-      },
-      onInterim: () => {},
-      onBackend: () => {
-        if (!cancelled) liveConversation.setStatus('live')
-      },
-      onEvent: (ev) => {
-        if (cancelled) return
-        if (isConversationBoundary(ev)) {
-          // Backend finalized on its own (beat our silence timer). Skip trivial
-          // blips; otherwise keep the transcript shown as saved.
-          clearSilence()
-          hasSpeech = false
-          if (liveWordCount() >= 5) saveCurrent()
-        }
-      },
-      onError: (e) => {
-        if (cancelled) return
-        if (attempt < MAX_ATTEMPTS) {
-          attempt++
-          liveConversation.setStatus('connecting')
-          timers.push(setTimeout(startSession, 800 * attempt))
-        } else {
-          liveConversation.setStatus('error', (e as Error).message)
+    currentBackend = null
+    currentStartedAt = Date.now()
+    void startTranscription(
+      'mic',
+      {
+        onLine: (line) => {
+          if (cancelled) return
+          liveConversation.setStatus('live')
+          liveConversation.appendLine(line)
+          hasSpeech = true
+          armSilence() // reset the silence countdown on each new utterance
+        },
+        onInterim: () => {},
+        onBackend: (backend) => {
+          currentBackend = backend
+          if (!cancelled) liveConversation.setStatus('live')
+        },
+        onEvent: (ev) => {
+          if (cancelled) return
+          if (isConversationBoundary(ev)) {
+            // Backend finalized on its own (beat our silence timer). Skip trivial
+            // blips; otherwise keep the transcript shown as saved.
+            clearSilence()
+            hasSpeech = false
+            if (liveWordCount() >= 5) {
+              saveCurrent({
+                backend: currentBackend,
+                startedAt: currentStartedAt,
+                finishedAt: Date.now()
+              })
+            }
+          }
+        },
+        onError: (e) => {
+          if (cancelled) return
+          if (attempt < MAX_ATTEMPTS) {
+            attempt++
+            liveConversation.setStatus('connecting')
+            timers.push(setTimeout(startSession, 800 * attempt))
+          } else {
+            liveConversation.setStatus('error', (e as Error).message)
+          }
         }
       }
-    }).then((h) => {
+    ).then((h) => {
       if (cancelled) {
-        try { h.stop() } catch { /* ignore */ }
+        try {
+          void h.stop()
+        } catch {
+          /* ignore */
+        }
         return
       }
       handle = h
@@ -163,7 +216,11 @@ export function startLiveMicSession(): LiveMicController {
       clearSilence()
       timers.forEach(clearTimeout)
       unsubFinalize()
-      try { handle?.stop() } catch { /* ignore */ }
+      try {
+        void handle?.stop()
+      } catch {
+        /* ignore */
+      }
       handle = null
       liveConversation.reset()
       refreshCloudConversations()
