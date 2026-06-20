@@ -78,10 +78,10 @@ function TopChrome(props: { activeNav?: NavId; settingsOpen: boolean }): React.J
               aria-pressed={active}
               title={item.label}
               className={cn(
-                'group relative flex h-14 w-14 items-center justify-center rounded-2xl border transition-all duration-200',
+                'group relative flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200',
                 active
-                  ? 'border-white/15 bg-white/[0.08] text-white shadow-[0_12px_30px_rgba(91,2,224,0.35)]'
-                  : 'border-white/10 bg-black/20 text-white/55 hover:border-white/[0.18] hover:bg-white/[0.04] hover:text-white/85'
+                  ? 'text-[color:var(--accent)] drop-shadow-[0_0_16px_rgba(168,85,247,0.85)]'
+                  : 'text-white/55 hover:bg-white/[0.04] hover:text-white/85'
               )}
             >
               <Icon className="h-6 w-6" strokeWidth={active ? 2.2 : 1.9} />
@@ -99,10 +99,10 @@ function TopChrome(props: { activeNav?: NavId; settingsOpen: boolean }): React.J
         aria-pressed={settingsOpen}
         title="Settings"
         className={cn(
-          'pointer-events-auto flex h-12 w-12 items-center justify-center rounded-2xl border transition-all duration-200',
+          'pointer-events-auto flex h-12 w-12 items-center justify-center rounded-full transition-all duration-200',
           settingsOpen
-            ? 'border-white/15 bg-white/[0.08] text-white shadow-[0_0_26px_rgba(91,2,224,0.85)]'
-            : 'border-transparent bg-transparent text-white/65 hover:bg-white/[0.04] hover:text-white'
+            ? 'text-[color:var(--accent)] drop-shadow-[0_0_18px_rgba(168,85,247,0.9)]'
+            : 'text-white/65 hover:bg-white/[0.04] hover:text-white'
         )}
       >
         <SettingsIcon className="h-6 w-6" strokeWidth={2} />
@@ -144,7 +144,7 @@ function ModalFrame(props: {
 function SettingsDrawer(props: { onClose: () => void; open: boolean }): React.JSX.Element | null {
   if (!props.open) return null
   return (
-    <aside className="fixed bottom-8 right-8 top-28 z-40 w-[min(720px,42vw)] min-w-[520px] overflow-hidden rounded-[1.35rem] border border-white/[0.12] bg-black/50 shadow-[0_28px_80px_rgba(0,0,0,0.48)] backdrop-blur-2xl">
+    <aside className="fixed bottom-8 left-8 right-8 top-28 z-40 overflow-hidden">
       <SettingsPanel onClose={props.onClose} />
     </aside>
   )
