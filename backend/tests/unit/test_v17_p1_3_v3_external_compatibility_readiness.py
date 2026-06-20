@@ -379,6 +379,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "real_router_fail_closed_matrix_proof_present": True,
         "write_convergence_tombstone_matrix_proof_present": True,
         "cursor_secret_readiness_proof_present": True,
+        "observability_approval_readiness_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,

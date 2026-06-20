@@ -53,6 +53,7 @@ PROOF_CONSTANTS = {
     "real_router_fail_closed_matrix_proof": _EXTERNAL.REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
     "write_convergence_tombstone_matrix_proof": _EXTERNAL.WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
     "cursor_secret_readiness_proof": _EXTERNAL.CURSOR_SECRET_READINESS_PROOF,
+    "observability_approval_readiness_proof": _EXTERNAL.OBSERVABILITY_APPROVAL_READINESS_PROOF,
 }
 
 
@@ -255,7 +256,12 @@ REMAINING_GATES = [
             "Observability/telemetry gates and explicit approval gates must exist for read source, decision, failure "
             "reason, projection generation, cursor validation, canary cohort, rollback, and product/privacy approval."
         ),
-        "existing_local_proofs": ["response_adapter_proof", "memory_read_service_proof"],
+        "existing_local_proofs": [
+            "response_adapter_proof",
+            "memory_read_service_proof",
+            "observability_approval_readiness_proof",
+        ],
+        "observability_approval_readiness_proof": "backend/scripts/v17_p1_3_v3_observability_approval_readiness.py",
         "missing_real_service_runtime_evidence": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,

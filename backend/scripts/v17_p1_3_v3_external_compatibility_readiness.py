@@ -775,6 +775,28 @@ CURSOR_SECRET_READINESS_PROOF = {
     ],
 }
 
+OBSERVABILITY_APPROVAL_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_observability_approval_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_observability_approval_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "telemetry_sink_calls_executed": False,
+    "approval_claimed": False,
+    "blocker": "No V17 /v3 GET telemetry sink, canary/rollback gate, or approval artifact is runtime-wired.",
+    "covered_defaults": [
+        "read_source_route_decision_failure_reason_required_before_v3_get_cutover",
+        "control_projection_account_generation_labels_required_and_bounded",
+        "cursor_validation_result_reason_without_token_or_secret_logging",
+        "canary_enrollment_and_rollback_read_disable_gate_required",
+        "no_legacy_fallback_marker_required_for_v17_failures",
+        "archive_default_unavailable_and_stale_short_term_hidden_markers_required",
+        "product_privacy_operational_approval_artifact_missing",
+        "no_pii_raw_memory_content_or_high_cardinality_labels",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -787,6 +809,7 @@ GET_RUNTIME_WIRING_READINESS_PROOF = {
         "non_enrolled_legacy_primary_offset_zero_limit_5000_must_be_preserved",
         "enrolled_fail_closed_no_grant_projection_not_ready_write_not_ready_no_legacy_fallback",
         "real_cursor_secret_control_projection_write_convergence_auth_rate_limit_telemetry_approval_gates_missing",
+        "observability_approval_readiness_matrix_present_but_blocked",
         "archive_default_unavailable_no_stale_short_term_default_visible",
         "safe_future_cutover_sequence_documented_without_runtime_wiring",
     ],
@@ -838,6 +861,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_fail_closed_matrix_proof": REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
         "write_convergence_tombstone_matrix_proof": WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF,
         "cursor_secret_readiness_proof": CURSOR_SECRET_READINESS_PROOF,
+        "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -873,6 +897,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_fail_closed_matrix_proof_present": True,
             "write_convergence_tombstone_matrix_proof_present": True,
             "cursor_secret_readiness_proof_present": True,
+            "observability_approval_readiness_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

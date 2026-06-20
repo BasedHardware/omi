@@ -37,6 +37,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "real_router_fail_closed_matrix_proof",
     "write_convergence_tombstone_matrix_proof",
     "cursor_secret_readiness_proof",
+    "observability_approval_readiness_proof",
 }
 
 
@@ -171,7 +172,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 10,
         "blocked_gate_count": 10,
-        "existing_local_proof_count": 21,
+        "existing_local_proof_count": 22,
         "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,
