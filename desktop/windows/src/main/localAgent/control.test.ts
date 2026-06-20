@@ -168,6 +168,10 @@ describe('local agent controls', () => {
     expect(prompt).toContain('Authorization: Bearer hosted_secret')
     expect(prompt).toContain('Authorization: Bearer local_secret')
     expect(prompt).toContain('GET http://127.0.0.1:47778/v1/local/tools')
+    expect(prompt).toContain('Direct HTTP is the primary path. No CLI is required')
+    expect(prompt).toContain('Optional CLI compatibility')
+    expect(prompt).toContain('fall back to direct HTTP if the CLI is absent or fails')
+    expect(prompt).not.toContain('pipx install omi-cli')
     expect(prompt).toContain('same-Windows-PC context')
     expect(prompt).toContain(
       'Do not create, edit, complete, or delete Omi memories or local tasks unless the user clearly asked for that change.'

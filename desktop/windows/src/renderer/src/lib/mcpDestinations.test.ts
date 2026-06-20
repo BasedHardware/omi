@@ -70,5 +70,7 @@ describe('hosted MCP health check', () => {
     expect(setup.copyTitle).toBe('Copy setup prompt')
     expect(setup.securityWarning).toContain('includes your hosted MCP key and local bearer token')
     expect(setup.steps.join(' ')).toContain('hosted and local access keys')
+    expect(setup.steps.join(' ')).toContain('no CLI is required')
+    expect(setup.steps.join(' ')).toContain('only if that agent already has one installed')
   })
 })
