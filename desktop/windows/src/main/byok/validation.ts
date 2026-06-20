@@ -21,6 +21,10 @@ function keyFormatError(provider: ByokProvider): string {
       return 'Gemini keys should be a Google API key'
     case 'deepgram':
       return 'Deepgram keys should be a token with no spaces'
+    case 'openrouter':
+      return 'OpenRouter keys should be a token with no spaces'
+    case 'elevenlabs':
+      return 'ElevenLabs keys should be a token with no spaces'
   }
 }
 
@@ -39,6 +43,10 @@ function looksLikeProviderKey(provider: ByokProvider, key: string): boolean {
       return key.startsWith('AIza') || /^[A-Za-z0-9_-]{24,}$/.test(key)
     case 'deepgram':
       return /^[A-Za-z0-9._-]{20,}$/.test(key)
+    case 'openrouter':
+      return key.startsWith('sk-or-') || /^[A-Za-z0-9._-]{20,}$/.test(key)
+    case 'elevenlabs':
+      return key.startsWith('sk_') || /^[A-Za-z0-9._-]{20,}$/.test(key)
   }
 }
 
@@ -82,6 +90,26 @@ export function buildByokValidationRequest(provider: ByokProvider, key: string):
           method: 'GET',
           headers: {
             authorization: `Token ${key}`
+          }
+        }
+      }
+    case 'openrouter':
+      return {
+        url: 'https://openrouter.ai/api/v1/key',
+        init: {
+          method: 'GET',
+          headers: {
+            authorization: `Bearer ${key}`
+          }
+        }
+      }
+    case 'elevenlabs':
+      return {
+        url: 'https://api.elevenlabs.io/v1/models',
+        init: {
+          method: 'GET',
+          headers: {
+            'xi-api-key': key
           }
         }
       }
