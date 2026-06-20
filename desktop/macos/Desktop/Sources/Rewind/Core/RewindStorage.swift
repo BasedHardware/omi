@@ -438,6 +438,10 @@ actor RewindStorage {
     }
 
     private func cleanupEmptySubdirectories(in directory: URL) throws {
+        // The legacy Screenshots dir may not exist for video-only users — skip it
+        // rather than aborting the whole cleanup sweep.
+        guard fileManager.fileExists(atPath: directory.path) else { return }
+
         let contents = try fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
