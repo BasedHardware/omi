@@ -2,7 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
-import type { RealtimeVoiceProvider, SttMode } from '../../../shared/types'
+import type { ModelPurpose, RealtimeVoiceProvider, SttMode } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -23,6 +23,8 @@ export type Preferences = {
   // Skills selected in Integrations -> Skills. Main reads the corresponding
   // SKILL.md files and injects them into the native Pi context.
   enabledSkillIds?: string[]
+  modelPurpose?: ModelPurpose
+  defaultModelByPurpose?: Partial<Record<ModelPurpose, string>>
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
@@ -49,6 +51,7 @@ export type Preferences = {
   realtimeVoiceEnabled?: boolean
   realtimeVoiceProvider?: RealtimeVoiceProvider
   localTtsVoice?: string
+  elevenLabsVoiceId?: string
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.
