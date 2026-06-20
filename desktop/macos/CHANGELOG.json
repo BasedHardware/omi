@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Added a What's New link in Settings \u2192 About that opens the release notes for your version",
-    "Show a What's New popup in the corner after the app updates to a new version"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.483",
+      "date": "2026-06-20",
+      "changes": [
+        "Added a What's New link in Settings \u2192 About that opens the release notes for your version",
+        "Show a What's New popup in the corner after the app updates to a new version"
+      ]
+    },
     {
       "version": "0.11.481",
       "date": "2026-06-20",
