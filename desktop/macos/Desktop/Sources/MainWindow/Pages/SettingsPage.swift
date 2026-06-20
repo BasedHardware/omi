@@ -6134,6 +6134,7 @@ struct SettingsContentView: View {
             .background(OmiColors.backgroundQuaternary)
 
           // Links
+          linkRow(title: "What's New", url: AppBuild.changelogURLString)
           linkRow(title: "Visit Website", url: "https://omi.me")
           linkRow(title: "Help Center", url: "https://help.omi.me")
           Button(action: {
