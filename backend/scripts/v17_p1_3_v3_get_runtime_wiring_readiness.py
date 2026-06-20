@@ -50,6 +50,7 @@ PROOF_CONSTANTS = {
     "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
     "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
     "account_generation_readiness_proof": _EXTERNAL.ACCOUNT_GENERATION_READINESS_PROOF,
+    "real_router_fail_closed_matrix_proof": _EXTERNAL.REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
 }
 
 

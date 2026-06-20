@@ -1669,3 +1669,13 @@ Verification for this slice:
 - Full normal-env V17 regression: `549 passed, 3 warnings in 8.87s`.
 - Emulator proof: `npm run test:v17-v3-state-head:emulator` -> client PERMISSION_DENIED logs expected, `PASS: signed-in client read/write denial asserted for 10 V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, and V17 app/key memory grant self-grant path`; `PASS: Python apply_long_term_patch_firestore committed and replayed V17 docs on Firestore emulator including users/{uid}/memory_state/head trusted account-generation state-head (...)`.
 - Production rollout remains **BLOCKED / NO-GO**; no runtime `/v3` behavior, route wiring, production Firestore/cloud/provider/vector call, client-supplied generation trust, control/projection self-compare, or legacy fallback/merge was introduced.
+
+### 2026-06-20 — P1-3 `/v3` real-router pre-wiring/fail-closed matrix proof
+
+Added a safe pre-wiring proof that makes the future `GET /v3/memories` dispatcher behavior concrete while preserving current runtime behavior:
+
+- Added `backend/scripts/v17_p1_3_v3_real_router_fail_closed_matrix.py` and `backend/tests/unit/test_v17_p1_3_v3_real_router_fail_closed_matrix.py`; registered the test in `backend/test.sh`.
+- Linked `real_router_fail_closed_matrix_proof` from `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`.
+- Current real-router baseline remains legacy-only under stubs via the existing TestClient proof: `offset=0 -> limit=5000`, explicit nonzero `limit`/`offset` preserved, no V17 adapters invoked, and no mutating routes executed.
+- Future dispatcher matrix is intentionally proven only at a pure helper/route-planner seam with fake readers: non-enrolled legacy calls legacy only; enrolled projection success calls projection reader only; fail-closed states call neither legacy nor projection; no-grant/archive denial returns 403; projection/control/account/cursor mismatch fails closed; enabled-empty returns `[]` with no legacy fallback.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore/cloud/provider/vector call, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.

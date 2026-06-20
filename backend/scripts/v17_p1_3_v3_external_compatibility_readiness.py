@@ -720,6 +720,24 @@ ACCOUNT_GENERATION_READINESS_PROOF = {
     ],
 }
 
+REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_real_router_fail_closed_matrix.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_real_router_fail_closed_matrix.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "covered_defaults": [
+        "current_real_router_get_remains_legacy_only_under_stubs",
+        "non_enrolled_legacy_preserves_limit_offset_and_offset_zero_limit_5000",
+        "enrolled_projection_success_calls_projection_reader_only",
+        "enrolled_fail_closed_states_call_no_reader_and_never_legacy_fallback",
+        "no_grant_and_archive_denial_return_403_without_body_or_legacy_fallback",
+        "projection_control_account_cursor_mismatch_fail_closed_without_legacy_fallback",
+        "enabled_empty_returns_empty_list_with_no_legacy_fallback",
+        "future_dispatcher_matrix_proven_only_at_pure_helper_route_planner_seam",
+    ],
+}
+
 GET_RUNTIME_WIRING_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_get_runtime_wiring_readiness.py",
@@ -780,6 +798,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
         "account_generation_readiness_proof": ACCOUNT_GENERATION_READINESS_PROOF,
+        "real_router_fail_closed_matrix_proof": REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF,
         "get_runtime_wiring_readiness_proof": GET_RUNTIME_WIRING_READINESS_PROOF,
         "non_claims": [
             "No production traffic executed.",
@@ -812,6 +831,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "control_reader_readiness_proof_present": True,
             "control_reader_contract_proof_present": True,
             "account_generation_readiness_proof_present": True,
+            "real_router_fail_closed_matrix_proof_present": True,
             "read_only": True,
             "mutation_allowed": False,
             "approval_claimed": False,

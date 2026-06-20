@@ -376,6 +376,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "control_reader_readiness_proof_present": True,
         "control_reader_contract_proof_present": True,
         "account_generation_readiness_proof_present": True,
+        "real_router_fail_closed_matrix_proof_present": True,
         "read_only": True,
         "mutation_allowed": False,
         "approval_claimed": False,
