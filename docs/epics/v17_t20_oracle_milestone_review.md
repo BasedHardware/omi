@@ -85,6 +85,17 @@ Oracle affirmed the foundation that vector candidates hydrate through authoritat
 
 ## Follow-up implementation slices after Oracle review
 
+### 2026-06-20 — P1-3 `/v3` pre-wiring GET dependency seam/adapter readiness
+
+Implemented the next safe pre-runtime dependency seam slice without changing the production rollout verdict:
+
+- Added `backend/utils/memory/v17_v3_get_dependency_seam.py` with a pure adapter composition contract for future GET `/v3/memories` dependencies. The seam executes authenticated subject binding first, rejects client uid override before control/read selection, preserves non-enrolled legacy-primary-only without V17/legacy merge, validates enrollment/control/config/cursor/projection source, and applies rate-limit/backpressure before allowing projection reads.
+- Added `backend/scripts/v17_p1_3_v3_get_dependency_seam_readiness.py` as a read-only BLOCKED readiness artifact plus unit coverage in `backend/tests/unit/test_v17_v3_get_dependency_seam.py` and `backend/tests/unit/test_v17_p1_3_v3_get_dependency_seam_readiness.py`.
+- Registered both tests in `backend/test.sh` and linked `get_dependency_seam_readiness_proof` from external compatibility and GET runtime-wiring readiness.
+- Preserved all non-claims: no `backend/routers/memories.py` edit, no runtime `/v3` behavior change, no production approval, no Firestore/provider/vector/network/telemetry sink calls, no mutating calls, no secret/cursor/user-content logging, no legacy fallback/merge for enrolled V17 failures, no Archive default visibility, and no stale Short-term default visibility.
+
+Runtime remains **BLOCKED / NO-GO** until real route wiring, service evidence, approval, telemetry, and rollback gates are complete.
+
 ### 2026-06-19 — first narrow P0-1/P0-2 fix slice
 
 Implemented a small local code slice after this review, without changing the production rollout verdict:

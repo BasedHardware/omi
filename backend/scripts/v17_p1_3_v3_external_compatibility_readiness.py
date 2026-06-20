@@ -643,6 +643,28 @@ ROUTE_DEPENDENCY_CONTRACT_READINESS_PROOF = {
     ],
 }
 
+GET_DEPENDENCY_SEAM_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_get_dependency_seam_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_get_dependency_seam_readiness.py",
+    "utility": "backend/utils/memory/v17_v3_get_dependency_seam.py",
+    "utility_test": "backend/tests/unit/test_v17_v3_get_dependency_seam.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "covered_defaults": [
+        "authenticated_subject_first",
+        "client_uid_override_rejected_before_control_or_reads",
+        "non_enrolled_legacy_primary_only_without_v17_legacy_merge",
+        "control_config_cursor_projection_source_validated_before_reads",
+        "rate_limit_backpressure_before_projection_read",
+        "missing_invalid_auth_control_cursor_config_source_backpressure_fail_closed",
+        "bounded_low_cardinality_decision_codes_no_secret_cursor_content_logging",
+    ],
+}
+
 PROJECTION_STORE_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_projection_store_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_projection_store_readiness.py",
@@ -1056,6 +1078,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "route_dependency_contract_readiness_proof": ROUTE_DEPENDENCY_CONTRACT_READINESS_PROOF,
+        "get_dependency_seam_readiness_proof": GET_DEPENDENCY_SEAM_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "projection_read_source_readiness_proof": PROJECTION_READ_SOURCE_READINESS_PROOF,
         "projection_write_convergence_readiness_proof": PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF,
@@ -1102,6 +1125,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_get_testclient_proof_present": True,
             "get_dependency_auth_readiness_proof_present": True,
             "route_dependency_contract_readiness_proof_present": True,
+            "get_dependency_seam_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
             "projection_read_source_readiness_proof_present": True,
             "projection_write_convergence_readiness_proof_present": True,

@@ -373,6 +373,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "real_router_get_testclient_proof_present": True,
         "get_dependency_auth_readiness_proof_present": True,
         "route_dependency_contract_readiness_proof_present": True,
+        "get_dependency_seam_readiness_proof_present": True,
         "projection_store_readiness_proof_present": True,
         "projection_read_source_readiness_proof_present": True,
         "projection_write_convergence_readiness_proof_present": True,
@@ -414,6 +415,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "test_v17_p1_3_v3_real_router_get_testclient.py" in test_sh
     assert "test_v17_p1_3_v3_get_dependency_auth_readiness.py" in test_sh
     assert "test_v17_p1_3_v3_route_dependency_contract_readiness.py" in test_sh
+    assert "test_v17_p1_3_v3_get_dependency_seam_readiness.py" in test_sh
     assert "test_v17_p1_3_v3_projection_store_readiness.py" in test_sh
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in ticket_doc
     assert "backend/utils/memory/v17_v3_compatibility.py" in ticket_doc
@@ -429,6 +431,7 @@ def test_v3_readiness_is_registered_in_test_runner_and_oracle_docs():
     assert "v17_p1_3_v3_real_router_get_testclient.py" in ticket_doc
     assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in ticket_doc
     assert "v17_p1_3_v3_route_dependency_contract_readiness.py" in ticket_doc
+    assert "v17_p1_3_v3_get_dependency_seam_readiness.py" in ticket_doc
     assert "v17_p1_3_v3_projection_store_readiness.py" in ticket_doc
     assert "Oracle P1-3 `/v3` external compatibility readiness slice" in ticket_doc
     assert "v17_p1_3_v3_external_compatibility_readiness.py" in oracle_doc

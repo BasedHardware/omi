@@ -89,6 +89,7 @@ pytest tests/unit/test_v17_v3_write_convergence.py -v
 pytest tests/unit/test_v17_v3_response_adapter.py -v
 pytest tests/unit/test_v17_v3_request_adapter.py -v
 pytest tests/unit/test_v17_v3_route_planner.py -v
+pytest tests/unit/test_v17_v3_get_dependency_seam.py -v
 pytest tests/unit/test_v17_v3_local_telemetry.py -v
 # V17 /v3 canary approval schema + fake-injectable reader readiness seam.
 pytest tests/unit/test_v17_v3_canary_approval_artifact.py -v
@@ -114,6 +115,7 @@ pytest tests/unit/test_v17_p1_3_v3_canary_approval_aggregate_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_observability_approval_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_get_dependency_auth_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_route_dependency_contract_readiness.py -v
+pytest tests/unit/test_v17_p1_3_v3_get_dependency_seam_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_projection_store_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_control_reader_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_control_reader_emulator_readiness.py -v
