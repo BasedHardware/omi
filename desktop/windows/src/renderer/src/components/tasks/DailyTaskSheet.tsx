@@ -44,7 +44,7 @@ export function DailyTaskSheet({ onClose, onCreate }: Props): React.JSX.Element 
       onClick={onClose}
     >
       <div
-        className="glass-strong w-[450px] max-w-[calc(100vw-2rem)] rounded-2xl shadow-2xl"
+        className="glass-strong w-[450px] max-w-[calc(100vw-2rem)] animate-spring-enter rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

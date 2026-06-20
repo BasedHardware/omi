@@ -81,7 +81,10 @@
       BlinkMacSystemFont,
       'Segoe UI Variable',
       system-ui,
-      sans-serif;
+      sans-serif,
+      'Segoe UI Emoji',
+      'Apple Color Emoji',
+      'Noto Color Emoji';
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }

@@ -7,7 +7,9 @@
 
 // Cap the wait so the chat send never stalls on a slow capture/OCR. The main
 // handler has its own backstop too; this is the renderer-side ceiling.
-const SCREEN_TIMEOUT_MS = 4000
+// Warm cache (Rewind running): instant. Cold cache (first message / capture paused):
+// fail fast rather than block the chat send for 4 seconds.
+const SCREEN_TIMEOUT_MS = 200
 // OCR of a full screen can be long; cap what we prepend so it can't dominate the
 // prompt. The model only needs the gist of what's visible.
 const MAX_SCREEN_CHARS = 4000

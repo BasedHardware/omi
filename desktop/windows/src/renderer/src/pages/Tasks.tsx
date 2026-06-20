@@ -198,7 +198,7 @@ function matchFilter(item: ActionItem, filterId: string): boolean {
     case 'open': return !item.completed
     case 'in-progress': return !item.completed && !!item.source // heuristic: has a source = started
     case 'done': return item.completed
-    case 'canceled': return item.completed && item.source?.toLowerCase().includes('cancel')
+    case 'canceled': return item.completed && (item.source?.toLowerCase().includes('cancel') ?? false)
     // Date
     case 'due-today': {
       if (!item.due_at) return false
@@ -483,7 +483,6 @@ export function Tasks(): React.JSX.Element {
   const visible = useMemo(() => applyFilters(items, activeFilters), [items, activeFilters])
 
   // Group open items by due bucket; show done items flat below
-  const hasStatusFilter = activeFilters.has('open') || activeFilters.has('done') || activeFilters.size === 0
   const showOpen = activeFilters.size === 0 || activeFilters.has('open') || (!activeFilters.has('done'))
   const showDone = activeFilters.has('done')
 

@@ -41,7 +41,12 @@ export default {
           'BlinkMacSystemFont',
           '"Segoe UI Variable"',
           'system-ui',
-          'sans-serif'
+          'sans-serif',
+          // Emoji fallback — must be listed so Windows renders emoji glyphs
+          // instead of falling back to raw UTF-8 bytes shown as â characters
+          '"Segoe UI Emoji"',
+          '"Apple Color Emoji"',
+          '"Noto Color Emoji"'
         ],
         body: [
           '"SF Pro Display"',
@@ -50,7 +55,10 @@ export default {
           'BlinkMacSystemFont',
           '"Segoe UI Variable"',
           'system-ui',
-          'sans-serif'
+          'sans-serif',
+          '"Segoe UI Emoji"',
+          '"Apple Color Emoji"',
+          '"Noto Color Emoji"'
         ]
       },
       backdropBlur: {
@@ -78,13 +86,30 @@ export default {
         slideInRight: {
           '0%': { opacity: '0', transform: 'translateX(32px)' },
           '100%': { opacity: '1', transform: 'translateX(0)' }
+        },
+        // SwiftUI .spring(response:0.4, dampingFraction:0.72) equivalent
+        springEnter: {
+          '0%': { opacity: '0', transform: 'scale(0.92) translateY(8px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' }
+        },
+        springSlideUp: {
+          '0%': { opacity: '0', transform: 'translateY(24px) scale(0.96)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' }
+        },
+        speakerPulse: {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.45' }
         }
       },
       animation: {
         'fade-in': 'fadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
         shimmer: 'shimmer 2s ease-in-out infinite',
         'pulse-ring': 'pulseRing 2s ease-in-out infinite',
-        'slide-in-right': 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both'
+        'slide-in-right': 'slideInRight 0.28s cubic-bezier(0.22, 1, 0.36, 1) both',
+        // Spring modal entrance — matches SwiftUI spring(response:0.38, damping:0.7)
+        'spring-enter': 'springEnter 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'spring-slide-up': 'springSlideUp 0.34s cubic-bezier(0.34, 1.56, 0.64, 1) both',
+        'speaker-pulse': 'speakerPulse 1.4s ease-in-out infinite'
       }
     }
   },

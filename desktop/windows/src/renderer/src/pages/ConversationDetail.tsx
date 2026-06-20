@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, ScrollText, X } from 'lucide-react'
+import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, ScrollText, X, ChevronDown } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
@@ -111,7 +111,7 @@ function formatStart(seconds?: number): string {
 // Transcript drawer — right-side slide-in panel matching macOS .move(edge:.trailing)
 function TranscriptDrawer({
   display,
-  people,
+  people: _people,
   onClose,
   onOpenNameSheet
 }: {
@@ -212,6 +212,10 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [showAppPicker, setShowAppPicker] = useState(false)
+  const [enabledApps, setEnabledApps] = useState<{ id: string; name?: string; image?: string | null }[]>([])
+  const [appsLoading, setAppsLoading] = useState(false)
+  const appPickerRef = useRef<HTMLDivElement>(null)
   const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Speaker assignment — people from /v1/users/people
@@ -383,12 +387,17 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     }
   }
 
-  const onReprocess = async (): Promise<void> => {
+  const onReprocess = async (appId?: string): Promise<void> => {
     if (!id || reprocessing) return
     setReprocessing(true)
+    setShowAppPicker(false)
     try {
-      await omiApi.post(`/v1/conversations/${id}/reprocess`)
-      toast('Reprocessing', { tone: 'info', body: 'Omi is regenerating the summary.' })
+      await omiApi.post(`/v1/conversations/${id}/reprocess`, appId ? { app_id: appId } : undefined)
+      const appName = appId ? enabledApps.find((a) => a.id === appId)?.name : undefined
+      toast('Reprocessing', {
+        tone: 'info',
+        body: appName ? `Regenerating summary with ${appName}.` : 'Omi is regenerating the summary.'
+      })
       setDisplay((d) => (d ? { ...d, processing: true, status: 'processing' } : d))
     } catch (e) {
       toast('Reprocess failed', { tone: 'error', body: (e as Error).message })
@@ -396,6 +405,37 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       setReprocessing(false)
     }
   }
+
+  const openAppPicker = async (): Promise<void> => {
+    setShowAppPicker((v) => !v)
+    if (enabledApps.length > 0) return
+    setAppsLoading(true)
+    try {
+      const [appsRes, enabledRes] = await Promise.all([
+        omiApi.get<{ id: string; name?: string; image?: string | null }[]>('/v1/apps', { params: { include_reviews: false } }),
+        omiApi.get<string[]>('/v1/apps/enabled').catch(() => ({ data: [] as string[] }))
+      ])
+      const enabledIds = new Set(Array.isArray(enabledRes.data) ? enabledRes.data : [])
+      const all = Array.isArray(appsRes.data) ? appsRes.data : []
+      setEnabledApps(all.filter((a) => enabledIds.has(a.id)))
+    } catch {
+      /* non-fatal */
+    } finally {
+      setAppsLoading(false)
+    }
+  }
+
+  // Close app picker on outside click
+  useEffect(() => {
+    if (!showAppPicker) return
+    const handler = (e: MouseEvent): void => {
+      if (appPickerRef.current && !appPickerRef.current.contains(e.target as Node)) {
+        setShowAppPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAppPicker])
 
   const assignSpeaker = async (rawLabel: string, personId: string | null, isUser: boolean, allSegments: boolean): Promise<void> => {
     if (!id || assigningLabel) return
@@ -553,14 +593,60 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
               </>
             ) : (
               <>
-                <button
-                  onClick={onReprocess}
-                  disabled={reprocessing || display.processing}
-                  className="btn-ghost px-3 py-2 disabled:opacity-50"
-                  title="Re-run Omi's summarization"
-                >
-                  <Sparkles className={`h-4 w-4 ${reprocessing ? 'animate-pulse' : ''}`} />
-                </button>
+                {/* Reprocess split button — left fires default, right opens app picker */}
+                <div ref={appPickerRef} className="relative flex">
+                  <button
+                    onClick={() => void onReprocess()}
+                    disabled={reprocessing || display.processing}
+                    className="btn-ghost rounded-r-none border-r border-white/[0.06] px-3 py-2 disabled:opacity-50"
+                    title="Re-run Omi's summarization"
+                  >
+                    <Sparkles className={`h-4 w-4 ${reprocessing ? 'animate-pulse' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => void openAppPicker()}
+                    disabled={reprocessing || display.processing}
+                    className="btn-ghost rounded-l-none px-1.5 py-2 disabled:opacity-50"
+                    title="Reprocess with specific app context"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                  {showAppPicker && (
+                    <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-xl border border-white/10 bg-[#1a1a1a]/95 py-1.5 shadow-xl backdrop-blur-md">
+                      <p className="px-3 pb-1 pt-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+                        Reprocess with…
+                      </p>
+                      <button
+                        onClick={() => void onReprocess()}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-white"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 shrink-0 text-white/40" />
+                        Default (no plugin)
+                      </button>
+                      {appsLoading && (
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs text-white/35">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Loading plugins…
+                        </div>
+                      )}
+                      {enabledApps.map((app) => (
+                        <button
+                          key={app.id}
+                          onClick={() => void onReprocess(app.id)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-white/70 hover:bg-white/8 hover:text-white"
+                        >
+                          {app.image
+                            ? <img src={app.image} alt="" className="h-4 w-4 shrink-0 rounded-md object-cover" />
+                            : <span className="h-4 w-4 shrink-0 rounded-md bg-white/10" />}
+                          <span className="truncate">{app.name ?? app.id}</span>
+                        </button>
+                      ))}
+                      {!appsLoading && enabledApps.length === 0 && (
+                        <p className="px-3 py-1.5 text-xs text-white/30">No plugins installed</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={onRefresh}
                   disabled={refreshing}

@@ -77,7 +77,7 @@ export function TaskDetailModal({ task, convMeta, onClose, onToggleComplete, onD
       onClick={onClose}
     >
       <div
-        className="glass-strong flex max-h-[80vh] w-[550px] max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-2xl shadow-2xl"
+        className="glass-strong flex max-h-[80vh] w-[550px] max-w-[calc(100vw-2rem)] animate-spring-enter flex-col overflow-hidden rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

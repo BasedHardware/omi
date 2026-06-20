@@ -134,7 +134,7 @@ export function ChatSessionsSidebar({
   }
 
   return (
-    <div className="flex h-full w-[220px] shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a]">
+    <div className="hidden h-full w-[190px] shrink-0 flex-col border-r border-white/10 bg-[#0a0a0a] sm:flex">
       {/* Top controls */}
       <div className="flex flex-col gap-2 p-3">
         <button

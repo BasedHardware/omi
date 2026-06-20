@@ -9,18 +9,61 @@ function fmtTime(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 }
 
+// Normalize raw speaker labels from Deepgram/Omi to a short display string
+// "SPEAKER_00" → "S0", "Speaker 1" → "S1", "you" → "You", arbitrary → keep
+function normalizeSpeaker(raw: string): string {
+  const lower = raw.toLowerCase().trim()
+  if (lower === 'you' || lower === 'user') return 'You'
+  // Deepgram: SPEAKER_00, SPEAKER_01 …
+  const dgMatch = raw.match(/^SPEAKER[_ ](\d+)$/i)
+  if (dgMatch) return `S${parseInt(dgMatch[1], 10)}`
+  // "Speaker 0", "Speaker 1"
+  const spMatch = raw.match(/^Speaker\s+(\d+)$/i)
+  if (spMatch) return `S${parseInt(spMatch[1], 10)}`
+  return raw
+}
+
+// Stable per-speaker color palette matching macOS speakerColor() palette
+// Maps canonical key (normalized label) → hue index
+const SPEAKER_HUES = [
+  { bg: 'bg-blue-500/25', text: 'text-blue-300', avatar: 'bg-blue-500/40', dot: 'bg-blue-400' },
+  { bg: 'bg-violet-500/25', text: 'text-violet-300', avatar: 'bg-violet-500/40', dot: 'bg-violet-400' },
+  { bg: 'bg-emerald-500/25', text: 'text-emerald-300', avatar: 'bg-emerald-500/40', dot: 'bg-emerald-400' },
+  { bg: 'bg-amber-500/25', text: 'text-amber-300', avatar: 'bg-amber-500/40', dot: 'bg-amber-400' },
+  { bg: 'bg-rose-500/25', text: 'text-rose-300', avatar: 'bg-rose-500/40', dot: 'bg-rose-400' },
+  { bg: 'bg-cyan-500/25', text: 'text-cyan-300', avatar: 'bg-cyan-500/40', dot: 'bg-cyan-400' },
+]
+const USER_COLOR = { bg: 'bg-[color:var(--accent)]/20', text: 'text-white/80', avatar: 'bg-[color:var(--accent)]/50', dot: 'bg-white/60' }
+
+function useSpeakerColors(): (key: string, isUser: boolean) => typeof USER_COLOR {
+  const mapRef = useRef<Map<string, number>>(new Map())
+  return (key: string, isUser: boolean) => {
+    if (isUser) return USER_COLOR
+    if (!mapRef.current.has(key)) {
+      mapRef.current.set(key, mapRef.current.size % SPEAKER_HUES.length)
+    }
+    return SPEAKER_HUES[mapRef.current.get(key)!]
+  }
+}
+
 function SpeakerBubble({
   line,
   speakerNames,
+  isActive,
+  getColor,
   onRename
 }: {
   line: TranscriptLine
   speakerNames: Record<string, string>
+  isActive: boolean
+  getColor: (key: string, isUser: boolean) => typeof USER_COLOR
   onRename: (original: string, name: string) => void
 }): React.JSX.Element {
   const rawSpeaker = line.speaker ?? 'Unknown'
-  const displaySpeaker = speakerNames[rawSpeaker] ?? rawSpeaker
-  const isUser = displaySpeaker === 'You' || rawSpeaker === 'You'
+  const normalized = normalizeSpeaker(rawSpeaker)
+  const displaySpeaker = speakerNames[rawSpeaker] ?? normalized
+  const isUser = displaySpeaker === 'You' || normalized === 'You'
+  const colorSet = getColor(rawSpeaker, isUser)
   const initial = displaySpeaker ? displaySpeaker[0].toUpperCase() : '?'
 
   const [editing, setEditing] = useState(false)
@@ -41,48 +84,57 @@ function SpeakerBubble({
 
   return (
     <div className={cn('flex items-end gap-2', isUser ? 'flex-row-reverse' : 'flex-row')}>
-      {/* Avatar */}
+      {/* Colored avatar */}
       <div
         className={cn(
-          'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white',
-          isUser ? 'bg-[color:var(--accent)]' : 'bg-white/20'
+          'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white',
+          colorSet.avatar
         )}
       >
         {initial}
       </div>
 
       <div className={cn('flex max-w-[75%] flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
-        {/* Speaker label — click to rename */}
+        {/* Speaker chip with active pulse dot */}
         {line.speaker && (
-          editing ? (
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commit()
-                else if (e.key === 'Escape') setEditing(false)
-              }}
-              className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white focus:border-white/50 focus:outline-none"
-              style={{ width: `${Math.max(60, draft.length * 8)}px` }}
-            />
-          ) : (
-            <button
-              onClick={startEdit}
-              title="Click to rename speaker"
-              className="cursor-pointer rounded px-1 text-[10px] text-white/40 hover:bg-white/[0.06] hover:text-white/70"
-            >
-              {displaySpeaker}
-            </button>
-          )
+          <div className="flex items-center gap-1">
+            {isActive && (
+              <span className={cn('h-1.5 w-1.5 rounded-full animate-speaker-pulse', colorSet.dot)} />
+            )}
+            {editing ? (
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onBlur={commit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commit()
+                  else if (e.key === 'Escape') setEditing(false)
+                }}
+                className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white focus:border-white/50 focus:outline-none"
+                style={{ width: `${Math.max(60, draft.length * 8)}px` }}
+              />
+            ) : (
+              <button
+                onClick={startEdit}
+                title="Click to rename speaker"
+                className={cn(
+                  'cursor-pointer rounded-full px-2 py-0.5 text-[10px] font-semibold transition-opacity',
+                  colorSet.bg,
+                  colorSet.text
+                )}
+              >
+                {displaySpeaker}
+              </button>
+            )}
+          </div>
         )}
         {/* Bubble */}
         <div
           className={cn(
             'rounded-2xl px-3 py-2 text-xs leading-relaxed text-white/90',
             isUser
-              ? 'rounded-br-sm bg-[color:var(--accent)]/30'
+              ? cn('rounded-br-sm', colorSet.bg)
               : 'rounded-bl-sm bg-white/10'
           )}
         >
@@ -96,7 +148,8 @@ function SpeakerBubble({
 /**
  * Floating live transcript panel — mirrors macOS LiveTranscriptPanel.
  * Shown at the bottom-right while recording is active; collapses to a pill.
- * Speaker labels are clickable to rename (e.g. "Speaker 1" → "Alice").
+ * Speaker labels are colored per-speaker (matching macOS speakerColor() palette)
+ * and clickable to rename. The active speaker shows a pulsing dot.
  */
 export function LiveTranscriptPanel(): React.JSX.Element | null {
   const [status, setStatus] = useState<LiveStatus>(() => liveConversation.getStatus())
@@ -104,10 +157,10 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
   const [collapsed, setCollapsed] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const [elapsed, setElapsed] = useState(0)
-  // Persistent speaker name map for this session: "Speaker 1" → "Alice"
   const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({})
   const startRef = useRef<number | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const getColor = useSpeakerColors()
 
   useEffect(() => {
     return liveConversation.subscribe(() => {
@@ -118,7 +171,6 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
 
   const isActive = status === 'live' || status === 'connecting'
 
-  // Reset dismissed state and speaker names when a new session starts
   useEffect(() => {
     if (isActive) {
       setDismissed(false)
@@ -132,7 +184,6 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
     return undefined
   }, [isActive])
 
-  // Auto-scroll to bottom when new segments arrive
   useEffect(() => {
     if (!collapsed && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -145,9 +196,12 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
 
   if (!isActive || dismissed) return null
 
+  // Most recent speaker — shown with pulse indicator
+  const activeSpeaker = segments.length > 0 ? (segments[segments.length - 1].speaker ?? null) : null
+
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-40 w-72 max-w-[calc(100vw-2rem)]">
-      <div className="pointer-events-auto glass-strong overflow-hidden rounded-2xl shadow-2xl">
+      <div className="pointer-events-auto glass-strong animate-spring-enter overflow-hidden rounded-2xl shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
           <span className="relative flex h-2 w-2 shrink-0">
@@ -191,6 +245,8 @@ export function LiveTranscriptPanel(): React.JSX.Element | null {
                   key={i}
                   line={seg}
                   speakerNames={speakerNames}
+                  isActive={seg.speaker === activeSpeaker && i === segments.length - 1}
+                  getColor={getColor}
                   onRename={handleRename}
                 />
               ))

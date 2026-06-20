@@ -78,6 +78,11 @@ export type Preferences = {
   rewindBatteryOpt?: boolean
   // Play a sound when a Windows notification fires (default on)
   notificationSounds?: boolean
+  // Per-type notification toggles (mirrors macOS per-category notification prefs)
+  notifyDailySummary?: boolean
+  notifyTaskDue?: boolean
+  notifyNewMemory?: boolean
+  notifyConversationStarted?: boolean
 }
 
 const defaults: Preferences = {

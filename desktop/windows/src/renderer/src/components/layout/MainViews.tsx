@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react'
-import { Navigate, useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Home } from '../../pages/Home'
 import { Conversations } from '../../pages/Conversations'
 import { Memories } from '../../pages/Memories'
@@ -49,6 +49,7 @@ function panelClass(active: boolean): string {
 
 export function MainViews(): React.JSX.Element {
   const { pathname } = useLocation()
+  const navigate = useNavigate()
 
   // Mounting every panel up front (incl. the heavy Memories R3F brain map) on
   // first render blocks the main thread during the startup entrance animations
@@ -65,11 +66,14 @@ export function MainViews(): React.JSX.Element {
     return () => clearTimeout(timer)
   }, [])
 
-  if (pathname === '/' || pathname === '/live') {
-    return <Navigate to="/home" replace />
-  }
+  // Fix blank startup: redirect '/' to '/home' via effect so content renders
+  // immediately on the same frame instead of returning a Navigate (which leaves
+  // the main pane blank for one render cycle before the route updates).
+  useEffect(() => {
+    if (pathname === '/') navigate('/home', { replace: true })
+  }, [pathname, navigate])
 
-  if (pathname === '/conversations/live') {
+  if (pathname === '/conversations/live' || pathname === '/live') {
     return <LiveConversation />
   }
 
@@ -78,7 +82,7 @@ export function MainViews(): React.JSX.Element {
     return <ConversationDetail conversationId={detailMatch[1]} />
   }
 
-  const isHome = pathname === '/home'
+  const isHome = pathname === '/home' || pathname === '/'
   const isConversations = pathname === '/conversations'
   const isMemories = pathname === '/memories'
   const isSettings = pathname === '/settings'

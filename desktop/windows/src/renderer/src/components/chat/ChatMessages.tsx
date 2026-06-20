@@ -9,6 +9,15 @@ import { Markdown } from '../Markdown'
 const REVEAL_MS = 16
 const REVEAL_MIN_CHARS = 2
 
+// Snap a code-unit index to a safe boundary so we never slice inside a
+// surrogate pair (emoji above U+FFFF). If the character just before `n` is a
+// high surrogate, advance by 1 to include its paired low surrogate.
+function snapBoundary(text: string, n: number): number {
+  if (n <= 0 || n >= text.length) return n
+  const code = text.charCodeAt(n - 1)
+  return code >= 0xd800 && code <= 0xdbff ? n + 1 : n
+}
+
 function RevealMarkdown({
   text,
   startRevealed
@@ -30,7 +39,7 @@ function RevealMarkdown({
     }, REVEAL_MS)
     return () => clearInterval(id)
   }, [])
-  return <Markdown text={text.slice(0, shown)} />
+  return <Markdown text={text.slice(0, snapBoundary(text, shown))} />
 }
 
 /** Animated 3-dot typing indicator — mirrors macOS TypingIndicator component */
