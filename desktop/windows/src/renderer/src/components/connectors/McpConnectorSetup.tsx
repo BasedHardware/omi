@@ -117,7 +117,11 @@ function DestinationButton({
   )
 }
 
-export function McpConnectorSetup(): React.JSX.Element {
+export function McpConnectorSetup({
+  onKeyStateChange
+}: {
+  onKeyStateChange?: (hasKey: boolean) => void
+} = {}): React.JSX.Element {
   const [selectedId, setSelectedId] = useState(mcpDestinations[0].id)
   const [storedKey, setStoredKey] = useState<McpKeyRecord | null>(null)
   const [loadingKey, setLoadingKey] = useState(true)
@@ -138,7 +142,10 @@ export function McpConnectorSetup(): React.JSX.Element {
     window.omi
       .mcpKeyRead()
       .then((record) => {
-        if (!cancelled) setStoredKey(record)
+        if (!cancelled) {
+          setStoredKey(record)
+          onKeyStateChange?.(Boolean(record?.key))
+        }
       })
       .catch((error) => {
         if (!cancelled) setKeyError((error as Error).message)
@@ -149,7 +156,7 @@ export function McpConnectorSetup(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [onKeyStateChange])
 
   const selectedDestination = useMemo(
     () =>
@@ -178,6 +185,7 @@ export function McpConnectorSetup(): React.JSX.Element {
       const record = await createWindowsMcpKey()
       await window.omi.mcpKeyCreate(record)
       setStoredKey(record)
+      onKeyStateChange?.(true)
       setShowKey(false)
     } catch (error) {
       setKeyError((error as Error).message)
