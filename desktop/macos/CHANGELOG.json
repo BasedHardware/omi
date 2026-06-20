@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Voice replies now follow your language setting by default (fixes occasional replies in the wrong language) while still letting you switch languages mid-conversation"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.481",
+      "date": "2026-06-20",
+      "changes": [
+        "Voice replies now follow your language setting by default (fixes occasional replies in the wrong language) while still letting you switch languages mid-conversation"
+      ]
+    },
     {
       "version": "0.11.480",
       "date": "2026-06-20",
