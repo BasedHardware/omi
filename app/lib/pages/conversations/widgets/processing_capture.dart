@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +31,26 @@ class ConversationCaptureWidget extends StatefulWidget {
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isPhoneMicPaused = false;
+  Timer? _offlineTicker;
+
+  @override
+  void initState() {
+    super.initState();
+    // Drive the "captured so far" timer on the offline capture card. Cheap no-op
+    // (just a null check) whenever an offline recording session isn't active.
+    _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (context.read<CaptureProvider>().offlineRecordingStartedAt != null) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _offlineTicker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +75,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
         return GestureDetector(
           onTap: () async {
+            // Offline/batch mode has no live transcript — tapping opens an explainer
+            // instead of the (empty) capturing page.
+            if (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice) {
+              _showOfflineModeInfoSheet(context);
+              return;
+            }
             final isCaptureActive = provider.recordingState == RecordingState.record ||
                 provider.recordingState == RecordingState.systemAudioRecord ||
                 provider.recordingState == RecordingState.deviceRecord ||
@@ -284,6 +312,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
     bool isDeviceRecording = provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
+
+    // Offline/batch mode: device audio is saved locally with no live transcription, so
+    // show a dedicated, self-explanatory card instead of the "Listening" + transcript UI.
+    if (isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) {
+      return _buildBatchRecordingUI(provider);
+    }
+
     bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
@@ -462,6 +497,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       }
 
       return Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: statusRow);
+    } else if (provider.havingRecordingDevice && SharedPreferencesUtil().batchModeEnabled) {
+      // Device connected in offline mode but not yet in the recording state above.
+      return _buildBatchRecordingUI(provider);
     } else {
       // For non-recording states, show the original header-based UI
       return Column(
@@ -476,6 +514,130 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ],
       );
     }
+  }
+
+  /// Offline/batch-mode capture card. Self-explanatory and informational only —
+  /// there is no live transcript and no pause control (the native writer keeps
+  /// saving regardless of the Dart stream). Shows a live "captured so far" timer
+  /// for the current session. Tapping opens [_showOfflineModeInfoSheet].
+  Widget _buildBatchRecordingUI(CaptureProvider provider) {
+    final startedAt = provider.offlineRecordingStartedAt;
+    String? elapsedLabel;
+    if (startedAt != null) {
+      final secs = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - startedAt;
+      if (secs >= 0) {
+        final m = secs ~/ 60;
+        final s = secs % 60;
+        elapsedLabel = '${m}m ${s.toString().padLeft(2, '0')}s';
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_rounded, size: 14, color: Colors.deepPurpleAccent),
+                    const SizedBox(width: 6),
+                    Text(
+                      context.l10n.offlineModeTitle,
+                      style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(color: Colors.deepPurpleAccent, shape: BoxShape.circle),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (elapsedLabel != null) ...[
+                Text(
+                  elapsedLabel,
+                  style: const TextStyle(
+                    color: Color(0xFFC9CBCF),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Icon(Icons.info_outline, size: 18, color: Colors.grey.shade500),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            context.l10n.offlineModeNote,
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showOfflineModeInfoSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F25),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.cloud_off_rounded, color: Colors.deepPurpleAccent, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    context.l10n.offlineModeTitle,
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                context.l10n.offlineModeDescription,
+                style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurpleAccent,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    context.l10n.close,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
