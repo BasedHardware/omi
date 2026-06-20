@@ -1,20 +1,55 @@
+import {
+  Agent,
+  type AgentEvent,
+  type AgentMessage,
+  type AgentTool,
+  type AgentToolResult
+} from '@earendil-works/pi-agent-core/base'
+import {
+  createAssistantMessageEventStream,
+  Type,
+  type AssistantMessage,
+  type AssistantMessageEventStream,
+  type Context,
+  type Message,
+  type Model,
+  type TextContent,
+  type ToolCall,
+  type ToolResultMessage,
+  type Usage
+} from '@earendil-works/pi-ai/base'
+import type { TSchema } from '@earendil-works/pi-ai/base'
 import type { LocalAgentRuntimeContext, LocalAgentToolDefinition } from '../localAgent/tools'
-import { errorResponseBody, listLocalAgentTools, runLocalAgentTool } from '../localAgent/tools'
+import { listLocalAgentTools, runLocalAgentTool } from '../localAgent/tools'
 import type { ChatMessage, PiChatResponse, PiChatToolCall, PiChatUsage } from '../../shared/types'
+import { loadSkillPromptSections } from '../skills/loader'
 import { addObservabilityBreadcrumb, captureMainException } from '../observability'
 
 const DEFAULT_DESKTOP_API_BASE = 'https://desktop-backend-hhibjajaja-uc.a.run.app'
-const PI_CHAT_MODEL = 'omi-sonnet'
-const MAX_TOOL_ROUNDS = 6
+const PI_MODEL_ID = 'omi-sonnet'
+const PI_MODEL_NAME = 'Omi Sonnet'
+const OMI_PI_API = 'omi-chat-completions'
+const OMI_PI_PROVIDER = 'omi'
+const MAX_TOOL_RESULT_CHARS = 24_000
 
-const PI_CHAT_SYSTEM_PROMPT = [
+const EMPTY_USAGE: Usage = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+}
+
+const BASE_SYSTEM_PROMPT = [
   'You are Omi on Windows.',
+  'You are running through Pi native agent core inside the Electron main process.',
   'Answer conversationally and use the provided local Windows tools when they help.',
   'Local tools can inspect local Omi status, screen history, screenshots, read-only SQL, daily recaps, and best-effort local task tables.',
   'Do not claim that unavailable or rejected tool actions succeeded.'
 ].join('\n')
 
-const PI_CHAT_TOOL_NAMES = new Set([
+const NATIVE_PI_TOOL_NAMES = new Set([
   'get_local_status',
   'execute_sql',
   'search_screen_history',
@@ -25,12 +60,14 @@ const PI_CHAT_TOOL_NAMES = new Set([
 ])
 
 type JsonRecord = Record<string, unknown>
+type FetchLike = typeof fetch
 
 type OpenAiChatMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content?: string | null
   tool_calls?: OpenAiToolCall[]
   tool_call_id?: string
+  name?: string
 }
 
 type OpenAiTool = {
@@ -69,23 +106,23 @@ type OpenAiChatCompletion = {
   usage?: OpenAiUsage
 }
 
-type FetchLike = typeof fetch
-
 export type PiChatBridgeOptions = {
   fetchImpl?: FetchLike
   desktopApiBaseUrl?: string
   toolDefinitions?: () => LocalAgentToolDefinition[]
   runTool?: typeof runLocalAgentTool
   runtimeContext?: LocalAgentRuntimeContext
+  loadSkillSections?: typeof loadSkillPromptSections
 }
 
 export type PiChatSendRequest = {
   token: string
   messages: ChatMessage[]
+  skillIds?: string[]
 }
 
 export function isPiChatEnabled(): boolean {
-  return process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1'
+  return process.env.OMI_WINDOWS_PI_CHAT !== '0' && process.env.OMI_PI_CHAT !== '0'
 }
 
 function desktopApiBaseUrl(): string {
@@ -100,15 +137,33 @@ export function chatCompletionsUrl(baseUrl = desktopApiBaseUrl()): string {
   return `${baseUrl.replace(/\/+$/, '')}/v2/chat/completions`
 }
 
-function usageFrom(raw?: OpenAiUsage): PiChatUsage {
+function piModel(baseUrl = desktopApiBaseUrl()): Model<string> {
   return {
-    promptTokens: raw?.prompt_tokens ?? 0,
-    completionTokens: raw?.completion_tokens ?? 0,
-    totalTokens: raw?.total_tokens ?? 0
+    id: PI_MODEL_ID,
+    name: PI_MODEL_NAME,
+    api: OMI_PI_API,
+    provider: OMI_PI_PROVIDER,
+    baseUrl: chatCompletionsUrl(baseUrl),
+    reasoning: false,
+    input: ['text'],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 200_000,
+    maxTokens: 8192
   }
 }
 
-function addUsage(a: PiChatUsage, b: PiChatUsage): PiChatUsage {
+function usageFrom(raw?: OpenAiUsage): Usage {
+  return {
+    input: raw?.prompt_tokens ?? 0,
+    output: raw?.completion_tokens ?? 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: raw?.total_tokens ?? (raw?.prompt_tokens ?? 0) + (raw?.completion_tokens ?? 0),
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+  }
+}
+
+function addResponseUsage(a: PiChatUsage, b: PiChatUsage): PiChatUsage {
   return {
     promptTokens: a.promptTokens + b.promptTokens,
     completionTokens: a.completionTokens + b.completionTokens,
@@ -116,38 +171,100 @@ function addUsage(a: PiChatUsage, b: PiChatUsage): PiChatUsage {
   }
 }
 
-function messagesForPi(messages: ChatMessage[]): OpenAiChatMessage[] {
-  return [
-    { role: 'system', content: PI_CHAT_SYSTEM_PROMPT },
-    ...messages
-      .filter((message) => message.role === 'user' || message.role === 'assistant')
-      .map((message) => ({
-        role: message.role,
-        content: message.content
-      }))
-  ]
+function textBlocksToString(content: readonly { type: string }[]): string {
+  return content
+    .map((block) => {
+      if (block.type === 'text' && 'text' in block) return String(block.text)
+      return ''
+    })
+    .filter(Boolean)
+    .join('\n')
 }
 
-function toolsForPi(definitions: LocalAgentToolDefinition[]): OpenAiTool[] {
-  return definitions
-    .filter((tool) => PI_CHAT_TOOL_NAMES.has(tool.name))
-    .map((tool) => ({
+function messageText(message: AgentMessage | ToolResultMessage): string {
+  if (message.role === 'user') {
+    if (typeof message.content === 'string') return message.content
+    return textBlocksToString(message.content)
+  }
+  if (message.role === 'assistant') {
+    return textBlocksToString(message.content)
+  }
+  if (message.role === 'toolResult' && 'content' in message) {
+    return textBlocksToString(message.content)
+  }
+  return ''
+}
+
+function toolCallsFromAssistant(message: AgentMessage): OpenAiToolCall[] {
+  if (message.role !== 'assistant' || !('content' in message)) return []
+  return message.content
+    .filter((block): block is ToolCall => block.type === 'toolCall')
+    .map((block) => ({
+      id: block.id,
       type: 'function',
       function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema
+        name: block.name,
+        arguments: JSON.stringify(block.arguments ?? {})
       }
     }))
 }
 
+function openAiMessagesForContext(context: Context): OpenAiChatMessage[] {
+  const messages: OpenAiChatMessage[] = []
+  if (context.systemPrompt?.trim()) {
+    messages.push({ role: 'system', content: context.systemPrompt.trim() })
+  }
+  for (const message of context.messages) {
+    if (message.role === 'user') {
+      messages.push({ role: 'user', content: messageText(message) })
+      continue
+    }
+    if (message.role === 'assistant') {
+      const toolCalls = toolCallsFromAssistant(message)
+      messages.push({
+        role: 'assistant',
+        content: messageText(message) || null,
+        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {})
+      })
+      continue
+    }
+    messages.push({
+      role: 'tool',
+      tool_call_id: message.toolCallId,
+      name: message.toolName,
+      content: messageText(message)
+    })
+  }
+  return messages
+}
+
+function openAiToolsForContext(context: Context): OpenAiTool[] {
+  return (context.tools ?? []).map((tool) => ({
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters as unknown as JsonRecord
+    }
+  }))
+}
+
 export function buildPiChatRequest(messages: ChatMessage[]): JsonRecord {
+  const context: Context = {
+    systemPrompt: BASE_SYSTEM_PROMPT,
+    messages: messages.map(chatMessageToAgentMessage),
+    tools: nativePiTools()
+  }
+  return buildOmiChatCompletionBody(context)
+}
+
+function buildOmiChatCompletionBody(context: Context): JsonRecord {
+  const tools = openAiToolsForContext(context)
   return {
-    model: PI_CHAT_MODEL,
+    model: PI_MODEL_ID,
     stream: false,
-    messages: messagesForPi(messages),
-    tools: toolsForPi(listLocalAgentTools()),
-    tool_choice: 'auto'
+    messages: openAiMessagesForContext(context),
+    ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {})
   }
 }
 
@@ -161,20 +278,225 @@ function parseToolArguments(call: OpenAiToolCall): JsonRecord {
   return parsed as JsonRecord
 }
 
-function resultToToolContent(value: unknown): string {
-  if (typeof value === 'string') return value
-  return JSON.stringify(value)
+function stopReason(
+  finishReason?: string | null,
+  hasToolCalls = false
+): AssistantMessage['stopReason'] {
+  if (hasToolCalls || finishReason === 'tool_calls') return 'toolUse'
+  if (finishReason === 'length') return 'length'
+  return 'stop'
 }
 
-function toolErrorContent(error: unknown): string {
-  const { body } = errorResponseBody(error)
-  return `Error: ${body.error.code}: ${body.error.message}`
+function assistantMessageFromCompletion(completion: OpenAiChatCompletion): AssistantMessage {
+  const choice = completion.choices?.[0]
+  const message = choice?.message
+  if (!message) throw new Error('Omi chat returned no message')
+
+  const toolCalls = message.tool_calls ?? []
+  const content: AssistantMessage['content'] = []
+  if (typeof message.content === 'string' && message.content.length > 0) {
+    content.push({ type: 'text', text: message.content })
+  }
+  for (const call of toolCalls) {
+    content.push({
+      type: 'toolCall',
+      id: call.id,
+      name: call.function.name,
+      arguments: parseToolArguments(call)
+    })
+  }
+
+  return {
+    role: 'assistant',
+    content,
+    api: OMI_PI_API,
+    provider: OMI_PI_PROVIDER,
+    model: PI_MODEL_ID,
+    usage: usageFrom(completion.usage),
+    stopReason: stopReason(choice.finish_reason, toolCalls.length > 0),
+    timestamp: Date.now()
+  }
+}
+
+function cloneAssistant(message: AssistantMessage): AssistantMessage {
+  return {
+    ...message,
+    content: message.content.map((block) => ({ ...block }))
+  }
+}
+
+function emitAssistantMessage(
+  stream: AssistantMessageEventStream,
+  message: AssistantMessage
+): void {
+  const partial: AssistantMessage = { ...message, content: [] }
+  stream.push({ type: 'start', partial: cloneAssistant(partial) })
+  message.content.forEach((block, index) => {
+    if (block.type === 'text') {
+      partial.content = [...partial.content, { type: 'text', text: '' }]
+      stream.push({ type: 'text_start', contentIndex: index, partial: cloneAssistant(partial) })
+      ;(partial.content[index] as TextContent).text = block.text
+      stream.push({
+        type: 'text_delta',
+        contentIndex: index,
+        delta: block.text,
+        partial: cloneAssistant(partial)
+      })
+      stream.push({
+        type: 'text_end',
+        contentIndex: index,
+        content: block.text,
+        partial: cloneAssistant(partial)
+      })
+      return
+    }
+    if (block.type !== 'toolCall') return
+    partial.content = [
+      ...partial.content,
+      { type: 'toolCall', id: block.id, name: block.name, arguments: {} }
+    ]
+    stream.push({ type: 'toolcall_start', contentIndex: index, partial: cloneAssistant(partial) })
+    ;(partial.content[index] as ToolCall).arguments = block.arguments
+    stream.push({
+      type: 'toolcall_delta',
+      contentIndex: index,
+      delta: JSON.stringify(block.arguments ?? {}),
+      partial: cloneAssistant(partial)
+    })
+    stream.push({
+      type: 'toolcall_end',
+      contentIndex: index,
+      toolCall: block,
+      partial: cloneAssistant(partial)
+    })
+  })
+  stream.push({
+    type: 'done',
+    reason:
+      message.stopReason === 'toolUse' || message.stopReason === 'length'
+        ? message.stopReason
+        : 'stop',
+    message
+  })
+  stream.end(message)
+}
+
+function errorAssistantMessage(error: unknown): AssistantMessage {
+  return {
+    role: 'assistant',
+    content: [],
+    api: OMI_PI_API,
+    provider: OMI_PI_PROVIDER,
+    model: PI_MODEL_ID,
+    usage: EMPTY_USAGE,
+    stopReason: 'error',
+    errorMessage: error instanceof Error ? error.message : String(error),
+    timestamp: Date.now()
+  }
+}
+
+async function callOmiChatCompletions(
+  context: Context,
+  token: string,
+  options: PiChatBridgeOptions
+): Promise<OpenAiChatCompletion> {
+  const response = await (options.fetchImpl ?? fetch)(
+    chatCompletionsUrl(options.desktopApiBaseUrl),
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(buildOmiChatCompletionBody(context))
+    }
+  )
+  if (!response.ok) {
+    throw new Error(`Omi Pi provider request failed with HTTP ${response.status}`)
+  }
+  return (await response.json()) as OpenAiChatCompletion
+}
+
+function createOmiStreamFn(token: string, options: PiChatBridgeOptions) {
+  return (_model: Model<string>, context: Context): AssistantMessageEventStream => {
+    const stream = createAssistantMessageEventStream()
+    void (async () => {
+      try {
+        const completion = await callOmiChatCompletions(context, token, options)
+        emitAssistantMessage(stream, assistantMessageFromCompletion(completion))
+      } catch (error) {
+        const message = errorAssistantMessage(error)
+        stream.push({ type: 'error', reason: 'error', error: message })
+        stream.end(message)
+      }
+    })()
+    return stream
+  }
+}
+
+function truncateForToolResult(text: string): string {
+  if (text.length <= MAX_TOOL_RESULT_CHARS) return text
+  return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n\n[truncated ${text.length - MAX_TOOL_RESULT_CHARS} chars]`
+}
+
+function resultToToolContent(value: unknown): string {
+  const text = typeof value === 'string' ? value : JSON.stringify(value)
+  return truncateForToolResult(text)
+}
+
+function prepareToolArgs(args: unknown): Record<string, unknown> {
+  if (args == null) return {}
+  if (typeof args === 'object' && !Array.isArray(args)) return args as Record<string, unknown>
+  throw new Error('tool arguments must be a JSON object')
+}
+
+function nativePiTool(
+  definition: LocalAgentToolDefinition,
+  options: PiChatBridgeOptions
+): AgentTool<TSchema> {
+  const runTool = options.runTool ?? runLocalAgentTool
+  const runtimeContext = options.runtimeContext ?? defaultRuntimeContext()
+  return {
+    name: definition.name,
+    label: definition.name
+      .split('_')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' '),
+    description: definition.description,
+    parameters: Type.Unsafe(definition.inputSchema as unknown as TSchema),
+    prepareArguments: prepareToolArgs,
+    executionMode: 'sequential',
+    execute: async (_toolCallId, params): Promise<AgentToolResult<unknown>> => {
+      addObservabilityBreadcrumb(
+        'native_pi.tool_call_started',
+        { toolName: definition.name },
+        { category: 'native_pi' }
+      )
+      const result = await runTool(definition.name, params, runtimeContext)
+      addObservabilityBreadcrumb(
+        'native_pi.tool_call_finished',
+        { ok: true, toolName: definition.name },
+        { category: 'native_pi' }
+      )
+      return {
+        content: [{ type: 'text', text: resultToToolContent(result) }],
+        details: result
+      }
+    }
+  }
+}
+
+function nativePiTools(options: PiChatBridgeOptions = {}): AgentTool<TSchema>[] {
+  const toolDefinitions = options.toolDefinitions ?? listLocalAgentTools
+  return toolDefinitions()
+    .filter((tool) => NATIVE_PI_TOOL_NAMES.has(tool.name))
+    .map((tool) => nativePiTool(tool, options))
 }
 
 function defaultRuntimeContext(): LocalAgentRuntimeContext {
   return {
     localUrl: 'omi://local-agent',
-    toolEndpoint: 'omi://local-agent/pi-chat-tool',
+    toolEndpoint: 'omi://native-pi-tool',
     app: {
       name: 'Omi Windows',
       version: '1.0.0',
@@ -183,69 +505,59 @@ function defaultRuntimeContext(): LocalAgentRuntimeContext {
   }
 }
 
-async function callChatCompletions(
-  request: JsonRecord,
-  token: string,
-  options: PiChatBridgeOptions
-): Promise<OpenAiChatCompletion> {
-  const fetchImpl = options.fetchImpl ?? fetch
-  const response = await fetchImpl(chatCompletionsUrl(options.desktopApiBaseUrl), {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(request)
-  })
-  if (!response.ok) {
-    throw new Error(`Pi/Omi chat request failed with HTTP ${response.status}`)
+function chatMessageToAgentMessage(message: ChatMessage, index = 0): Message {
+  const timestamp = Date.now() + index
+  if (message.role === 'user') {
+    return {
+      role: 'user',
+      content: [{ type: 'text', text: message.content }],
+      timestamp
+    }
   }
-  return (await response.json()) as OpenAiChatCompletion
+  return {
+    role: 'assistant',
+    content: message.content ? [{ type: 'text', text: message.content }] : [],
+    api: OMI_PI_API,
+    provider: OMI_PI_PROVIDER,
+    model: PI_MODEL_ID,
+    usage: EMPTY_USAGE,
+    stopReason: 'stop',
+    timestamp
+  }
 }
 
-async function executeToolCall(
-  call: OpenAiToolCall,
-  options: PiChatBridgeOptions
-): Promise<OpenAiChatMessage> {
-  const runTool = options.runTool ?? runLocalAgentTool
-  const context = options.runtimeContext ?? defaultRuntimeContext()
+function assistantText(message: AgentMessage): string {
+  return message.role === 'assistant' && 'content' in message ? messageText(message) : ''
+}
 
-  let content = ''
-  addObservabilityBreadcrumb(
-    'pi_chat.tool_call_started',
-    { toolName: call.function.name },
-    { category: 'pi_chat' }
-  )
-  try {
-    if (!PI_CHAT_TOOL_NAMES.has(call.function.name)) {
-      throw new Error(`Local tool is not available to Pi/Omi chat: ${call.function.name}`)
-    }
-    const args = parseToolArguments(call)
-    const result = await runTool(call.function.name, args, context)
-    content = resultToToolContent(result)
-    addObservabilityBreadcrumb(
-      'pi_chat.tool_call_finished',
-      { ok: true, toolName: call.function.name },
-      { category: 'pi_chat' }
-    )
-  } catch (error) {
-    content = toolErrorContent(error)
-    addObservabilityBreadcrumb(
-      'pi_chat.tool_call_finished',
-      {
-        ok: false,
-        toolName: call.function.name,
-        errorMessage: error instanceof Error ? error.message : String(error)
-      },
-      { category: 'pi_chat', level: 'warning' }
-    )
+function usageFromAssistant(message: AgentMessage): PiChatUsage {
+  if (message.role !== 'assistant' || !('usage' in message)) {
+    return { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   }
-
   return {
-    role: 'tool',
-    tool_call_id: call.id,
-    content
+    promptTokens: message.usage.input + message.usage.cacheRead + message.usage.cacheWrite,
+    completionTokens: message.usage.output,
+    totalTokens: message.usage.totalTokens
   }
+}
+
+function systemPromptWithSkills(skillSections: string[]): string {
+  if (skillSections.length === 0) return BASE_SYSTEM_PROMPT
+  return [
+    BASE_SYSTEM_PROMPT,
+    'Use these selected skills as additional operating instructions when relevant:',
+    skillSections.join('\n\n---\n\n')
+  ].join('\n\n')
+}
+
+async function loadSelectedSkillSections(
+  request: PiChatSendRequest,
+  options: PiChatBridgeOptions
+): Promise<string[]> {
+  const ids = request.skillIds?.filter((id) => typeof id === 'string' && id.trim()) ?? []
+  if (ids.length === 0) return []
+  const load = options.loadSkillSections ?? loadSkillPromptSections
+  return load(ids)
 }
 
 export async function sendPiChat(
@@ -257,77 +569,61 @@ export async function sendPiChat(
     throw new Error('Pi/Omi chat requires a Firebase ID token')
   }
 
-  const toolDefinitions = options.toolDefinitions ?? listLocalAgentTools
-  const conversation: OpenAiChatMessage[] = messagesForPi(request.messages)
-  const tools = toolsForPi(toolDefinitions())
-  const toolCalls: PiChatToolCall[] = []
-  let usage: PiChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  const skillSections = await loadSelectedSkillSections(request, options)
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: systemPromptWithSkills(skillSections),
+      model: piModel(options.desktopApiBaseUrl),
+      tools: nativePiTools(options),
+      thinkingLevel: 'off'
+    },
+    streamFn: createOmiStreamFn(token, options),
+    toolExecution: 'sequential',
+    transport: 'sse'
+  })
+
   let finalText = ''
+  let usage: PiChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+  const toolCalls: PiChatToolCall[] = []
+
+  agent.subscribe((event: AgentEvent) => {
+    if (event.type === 'tool_execution_start') {
+      toolCalls.push({ id: event.toolCallId, name: event.toolName })
+      return
+    }
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      finalText = assistantText(event.message)
+      usage = addResponseUsage(usage, usageFromAssistant(event.message))
+    }
+  })
 
   addObservabilityBreadcrumb(
-    'pi_chat.send_started',
-    { messageCount: request.messages.length, toolCount: tools.length },
-    { category: 'pi_chat' }
+    'native_pi.send_started',
+    {
+      messageCount: request.messages.length,
+      toolCount: agent.state.tools.length,
+      skillCount: skillSections.length
+    },
+    { category: 'native_pi' }
   )
 
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    const body: JsonRecord = {
-      model: PI_CHAT_MODEL,
-      stream: false,
-      messages: conversation,
-      tools,
-      tool_choice: 'auto'
-    }
-    let completion: OpenAiChatCompletion
-    try {
-      completion = await callChatCompletions(body, token, options)
-    } catch (error) {
-      captureMainException('pi_chat.request_failed', error, { round })
-      throw error
-    }
-    usage = addUsage(usage, usageFrom(completion.usage))
-    const message = completion.choices?.[0]?.message
-    if (!message) throw new Error('Pi/Omi chat returned no message')
-
-    const assistantText = typeof message.content === 'string' ? message.content : ''
-    const calls = message.tool_calls ?? []
-    addObservabilityBreadcrumb(
-      'pi_chat.round_finished',
-      {
-        round,
-        toolCallCount: calls.length,
-        hasFinalText: calls.length === 0 && assistantText.length > 0
-      },
-      { category: 'pi_chat' }
-    )
-    if (calls.length === 0) {
-      finalText = assistantText
-      break
-    }
-
-    conversation.push({
-      role: 'assistant',
-      content: assistantText || null,
-      tool_calls: calls
+  try {
+    await agent.prompt(request.messages.map(chatMessageToAgentMessage))
+  } catch (error) {
+    captureMainException('native_pi.send_failed', error, {
+      messageCount: request.messages.length,
+      toolCallCount: toolCalls.length
     })
-
-    for (const call of calls) {
-      toolCalls.push({ id: call.id, name: call.function.name })
-      conversation.push(await executeToolCall(call, options))
-    }
+    throw error
   }
 
-  if (!finalText && toolCalls.length > 0) {
-    addObservabilityBreadcrumb(
-      'pi_chat.send_finished',
-      { ok: false, toolCallCount: toolCalls.length, reason: 'tool_round_limit' },
-      { category: 'pi_chat', level: 'warning' }
-    )
-    throw new Error('Pi/Omi chat exceeded the local tool-call round limit')
+  const errorMessage = agent.state.errorMessage
+  if (errorMessage) {
+    throw new Error(errorMessage)
   }
 
   addObservabilityBreadcrumb(
-    'pi_chat.send_finished',
+    'native_pi.send_finished',
     {
       ok: true,
       toolCallCount: toolCalls.length,
@@ -335,7 +631,7 @@ export async function sendPiChat(
       completionTokens: usage.completionTokens,
       totalTokens: usage.totalTokens
     },
-    { category: 'pi_chat' }
+    { category: 'native_pi' }
   )
 
   return {

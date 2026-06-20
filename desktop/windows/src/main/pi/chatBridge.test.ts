@@ -251,13 +251,11 @@ describe('Pi/Omi chat bridge', () => {
     )
 
     expect(runTool).not.toHaveBeenCalled()
-    expect(
-      (requests[1] as { messages: { role: string; content?: string }[] }).messages
-    ).toEqual(
+    expect((requests[1] as { messages: { role: string; content?: string }[] }).messages).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           role: 'tool',
-          content: expect.stringContaining('Local tool is not available to Pi/Omi chat')
+          content: expect.stringContaining('Tool delete_task not found')
         })
       ])
     )
