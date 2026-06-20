@@ -1,4 +1,14 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  ipcMain,
+  session,
+  nativeImage,
+  desktopCapturer,
+  Menu,
+  Tray
+} from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
@@ -84,6 +94,8 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
 }
 
 const icon = nativeImage.createFromPath(iconPath)
+let tray: Tray | null = null
+let quitting = false
 import {
   remapConversationId,
   insertLocalConversation,
@@ -182,6 +194,40 @@ function createWindow(): BrowserWindow {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
   return mainWindow
+}
+
+function showMainWindow(mainWindow: BrowserWindow): void {
+  if (mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
+
+function createTray(mainWindow: BrowserWindow): void {
+  if (tray || process.platform !== 'win32') return
+  const trayIcon = icon.isEmpty()
+    ? nativeImage.createFromPath(iconPath)
+    : icon.resize({ width: 16, height: 16 })
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Omi')
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: 'Show Omi',
+        click: () => showMainWindow(mainWindow)
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit Omi',
+        click: () => {
+          quitting = true
+          app.quit()
+        }
+      }
+    ])
+  )
+  tray.on('click', () => showMainWindow(mainWindow))
+  tray.on('double-click', () => showMainWindow(mainWindow))
 }
 
 // This method will be called when Electron has finished
@@ -316,6 +362,7 @@ app.whenReady().then(async () => {
   registerScreenSynthHandlers()
 
   const mainWindow = createWindow()
+  createTray(mainWindow)
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind
@@ -328,8 +375,9 @@ app.whenReady().then(async () => {
     // Track the last non-Omi foreground window so the automation planner snapshots
     // the app the user was actually using (Omi is foreground once they click chat).
     if (AUTOMATION_ENABLED) startAutomationTargetTracker()
-    // Load the user's persisted Rewind settings — capture is ON by default for a
-    // fresh install, and any change the user makes in Settings survives restarts.
+    // Load the user's persisted Rewind settings. Fresh installs default to
+    // capture-off until the user grants/turns on screen capture, and any change
+    // the user makes in Settings survives restarts.
     // OCR/retention loops are cheap no-ops until frames exist.
     startRewindCapture()
     startRewindOcr()
@@ -354,12 +402,16 @@ app.whenReady().then(async () => {
       '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
     )
   }
-  // Closing the main window must also tear down the always-alive (hidden) overlay
-  // window — otherwise it keeps a window open, 'window-all-closed' never fires, and
-  // the app lingers as an invisible background process (overlay has skipTaskbar).
+  // On actual quit, tear down the always-alive (hidden) overlay window too.
+  // A normal Windows close is intercepted below and only hides to the tray.
   mainWindow.on('closed', () => {
     const overlay = getOverlayWindow()
     if (overlay && !overlay.isDestroyed()) overlay.destroy()
+  })
+  mainWindow.on('close', (event) => {
+    if (quitting || process.platform !== 'win32') return
+    event.preventDefault()
+    mainWindow.hide()
   })
 
   // Bench mode: after the renderer has loaded, run the fixed DB + IPC workload,
@@ -443,6 +495,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  quitting = true
 })
 
 // On a normal shutdown: flush buffered perf marks, release the overlay shortcut,
