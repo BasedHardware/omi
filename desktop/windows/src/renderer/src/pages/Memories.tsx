@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check } from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -8,6 +8,7 @@ import { useMemoryGraph } from '../hooks/useMemoryGraph'
 import { toast } from '../lib/toast'
 import { fetchAllMemories, deleteMemoriesPaced } from '../lib/memoriesBulk'
 import { isAppIndexMemory } from '../lib/memoryCleanup'
+import { MemoryExportModal } from '../components/memories/MemoryExportModal'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
 // selection still operates on the full (filtered) set, not just what's rendered.
@@ -36,6 +37,7 @@ export function Memories(): React.JSX.Element {
   const [editingMemId, setEditingMemId] = useState<string | null>(null)
   const [editMemText, setEditMemText] = useState('')
   const [savingMem, setSavingMem] = useState(false)
+  const [showExport, setShowExport] = useState(false)
 
   // Collect unique category labels from the loaded set for the filter tabs.
   const categories = useMemo(() => {
@@ -186,6 +188,10 @@ export function Memories(): React.JSX.Element {
               <button onClick={enterManage} className="btn-ghost px-3 py-2" title="Select & delete memories">
                 <CheckSquare className="h-4 w-4" />
                 Select
+              </button>
+              <button onClick={() => setShowExport(true)} className="btn-ghost px-3 py-2" title="Export memories">
+                <Download className="h-4 w-4" />
+                Export
               </button>
               <button onClick={() => setComposing((c) => !c)} className="btn-primary px-3 py-2" title="Create a memory">
                 <Plus className="h-4 w-4" />
@@ -404,6 +410,9 @@ export function Memories(): React.JSX.Element {
           </p>
         )}
       </div>
+      {showExport && (
+        <MemoryExportModal memories={memories} onClose={() => setShowExport(false)} />
+      )}
     </div>
   )
 }
