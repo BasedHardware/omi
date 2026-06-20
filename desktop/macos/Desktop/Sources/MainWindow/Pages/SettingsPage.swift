@@ -272,7 +272,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
-  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.gptRealtime2.rawValue
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
