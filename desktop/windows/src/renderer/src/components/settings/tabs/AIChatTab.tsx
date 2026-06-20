@@ -1,51 +1,20 @@
-import {
-  BotMessageSquare,
-  CheckCircle2,
-  Cpu,
-  KeyRound,
-  MessagesSquare,
-  RefreshCw,
-  Trash2
-} from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { BotMessageSquare, Cpu, MessagesSquare, RefreshCw } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
-  ByokChatProvider,
-  ByokProvider,
-  ByokProviderStatus,
-  ByokStatus,
-  ClaudeAcpStatus
+  AvailableModel,
+  ClaudeAcpStatus,
+  ModelListResult,
+  ModelPurpose
 } from '../../../../../shared/types'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
 
-type ProviderConfig = {
-  id: ByokProvider
-  label: string
-  placeholder: string
-  chat: boolean
-}
-
-const PROVIDERS: ProviderConfig[] = [
-  { id: 'openai', label: 'OpenAI', placeholder: 'sk-...', chat: true },
-  { id: 'anthropic', label: 'Anthropic', placeholder: 'sk-ant-...', chat: true },
-  { id: 'gemini', label: 'Gemini', placeholder: 'AIza...', chat: true },
-  { id: 'deepgram', label: 'Deepgram', placeholder: 'Deepgram API key', chat: false }
+const MODEL_PURPOSES: { id: ModelPurpose; label: string }[] = [
+  { id: 'chat', label: 'Chat' },
+  { id: 'agent', label: 'Agent tasks' },
+  { id: 'memory', label: 'Memory extraction' }
 ]
-
-const EMPTY_DRAFT_KEYS: Record<ByokProvider, string> = {
-  openai: '',
-  anthropic: '',
-  gemini: '',
-  deepgram: ''
-}
-
-function statusText(status: ByokProviderStatus | undefined): string {
-  if (!status?.configured) return 'Not saved'
-  if (status.lastValidationOk === true) return `Saved, validated (${status.maskedKey})`
-  if (status.lastValidationOk === false) return `Saved, validation failed (${status.maskedKey})`
-  return `Saved (${status.maskedKey})`
-}
 
 function claudeStatusText(status: ClaudeAcpStatus | null): string {
   if (!status) return 'Not checked'
@@ -53,39 +22,70 @@ function claudeStatusText(status: ClaudeAcpStatus | null): string {
   return status.reason ?? 'Not available'
 }
 
+function modelLabel(model: AvailableModel): string {
+  return `${model.providerLabel} · ${model.label}`
+}
+
+function currentModelLabel(models: AvailableModel[], modelId: string | undefined): string {
+  if (!modelId) return 'Omi Sonnet'
+  const model = models.find((candidate) => candidate.id === modelId)
+  return model ? modelLabel(model) : 'Saved model unavailable'
+}
+
 export function AIChatTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
   const [chatRuntimeMode, setChatRuntimeMode] = useState(getPreferences().chatRuntimeMode)
-  const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
+  const [modelPurpose, setModelPurpose] = useState<ModelPurpose>(
+    () => getPreferences().modelPurpose ?? 'chat'
+  )
+  const [defaultModelByPurpose, setDefaultModelByPurpose] = useState<
+    Partial<Record<ModelPurpose, string>>
+  >(() => getPreferences().defaultModelByPurpose ?? {})
+  const [modelList, setModelList] = useState<ModelListResult | null>(null)
+  const [modelsBusy, setModelsBusy] = useState(false)
   const [claudeStatus, setClaudeStatus] = useState<ClaudeAcpStatus | null>(null)
-  const [draftKeys, setDraftKeys] = useState<Record<ByokProvider, string>>(EMPTY_DRAFT_KEYS)
-  const [byokBusy, setByokBusy] = useState('')
   const [claudeBusy, setClaudeBusy] = useState(false)
 
-  const refreshByokStatus = async (): Promise<void> => {
+  const selectedModelId = defaultModelByPurpose[modelPurpose]
+  const models = modelList?.models ?? []
+  const selectableModels = models.filter((model) => model.id !== 'omi:omi-sonnet')
+  const selectedModelLabel = useMemo(
+    () => currentModelLabel(models, selectedModelId),
+    [models, selectedModelId]
+  )
+
+  const refreshModels = async (): Promise<void> => {
+    setModelsBusy(true)
     try {
-      setByokStatus(await window.omi.byokStatus())
+      setModelList(await window.omi.byokListModels())
     } catch (e) {
-      toast('Could not read BYOK settings', { tone: 'error', body: (e as Error).message })
+      toast('Could not load models', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setModelsBusy(false)
     }
   }
 
   useEffect(() => {
-    let canceled = false
-    window.omi
-      .byokStatus()
-      .then((status) => {
-        if (!canceled) setByokStatus(status)
-      })
-      .catch((e) => {
-        if (!canceled) {
-          toast('Could not read BYOK settings', { tone: 'error', body: (e as Error).message })
-        }
-      })
-    return () => {
-      canceled = true
-    }
+    void refreshModels()
   }, [])
+
+  const saveModelPurpose = (next: ModelPurpose): void => {
+    setModelPurpose(next)
+    setPreferences({ modelPurpose: next })
+  }
+
+  const saveDefaultModel = (modelId: string): void => {
+    const current = getPreferences().defaultModelByPurpose ?? {}
+    const next = { ...current }
+    if (modelId) {
+      next[modelPurpose] = modelId
+    } else {
+      delete next[modelPurpose]
+    }
+    setDefaultModelByPurpose(next)
+    setPreferences({ defaultModelByPurpose: next })
+    toast('Default model saved', { tone: 'success' })
+  }
 
   const refreshClaudeStatus = async (): Promise<void> => {
     setClaudeBusy(true)
@@ -100,75 +100,6 @@ export function AIChatTab(): React.JSX.Element {
       toast('Could not check Claude account', { tone: 'error', body: (e as Error).message })
     } finally {
       setClaudeBusy(false)
-    }
-  }
-
-  const saveProvider = async (provider: ByokProvider): Promise<void> => {
-    const key = draftKeys[provider].trim()
-    if (!key) {
-      toast('Paste a key before saving', { tone: 'warn' })
-      return
-    }
-    setByokBusy(`${provider}:save`)
-    try {
-      setByokStatus(await window.omi.byokSave({ provider, key }))
-      setDraftKeys((current) => ({ ...current, [provider]: '' }))
-      toast(`${PROVIDERS.find((p) => p.id === provider)?.label ?? provider} key saved`, {
-        tone: 'success'
-      })
-    } catch (e) {
-      toast('Could not save key', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setByokBusy('')
-    }
-  }
-
-  const testProvider = async (provider: ByokProvider): Promise<void> => {
-    const key = draftKeys[provider].trim()
-    setByokBusy(`${provider}:test`)
-    try {
-      const result = await window.omi.byokTest({ provider, key: key || undefined })
-      if (!key) await refreshByokStatus()
-      if (result.ok) {
-        toast(`${PROVIDERS.find((p) => p.id === provider)?.label ?? provider} key validated`, {
-          tone: 'success'
-        })
-      } else {
-        toast('Key validation failed', { tone: 'error', body: result.error })
-      }
-    } catch (e) {
-      toast('Key validation failed', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setByokBusy('')
-    }
-  }
-
-  const deleteProvider = async (provider: ByokProvider): Promise<void> => {
-    setByokBusy(`${provider}:delete`)
-    try {
-      setByokStatus(await window.omi.byokDelete(provider))
-      setDraftKeys((current) => ({ ...current, [provider]: '' }))
-      toast(`${PROVIDERS.find((p) => p.id === provider)?.label ?? provider} key removed`, {
-        tone: 'success'
-      })
-    } catch (e) {
-      toast('Could not remove key', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setByokBusy('')
-    }
-  }
-
-  const selectChatProvider = async (provider: ByokChatProvider | null): Promise<void> => {
-    setByokBusy('use')
-    try {
-      setByokStatus(await window.omi.byokUse({ provider }))
-      toast(provider ? 'BYOK chat provider selected' : 'Omi hosted chat selected', {
-        tone: 'success'
-      })
-    } catch (e) {
-      toast('Could not change chat provider', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setByokBusy('')
     }
   }
 
@@ -203,7 +134,7 @@ export function AIChatTab(): React.JSX.Element {
         title="Chat runtime"
         subtitle={
           chatRuntimeMode === 'auto'
-            ? 'Use native Pi/Omi, then your selected BYOK provider, then hosted Omi chat.'
+            ? 'Use native Pi/Omi, then BYOK if configured, then hosted Omi chat.'
             : chatRuntimeMode === 'claude-acp'
               ? 'Use the local Claude account runtime on this Windows machine.'
               : chatRuntimeMode === 'pi'
@@ -258,99 +189,52 @@ export function AIChatTab(): React.JSX.Element {
       </SettingRow>
       <SettingRow
         icon={BotMessageSquare}
-        title="Model and provider"
-        subtitle={
-          byokStatus?.activeChatProvider
-            ? `Chat uses your ${PROVIDERS.find((p) => p.id === byokStatus.activeChatProvider)?.label} key.`
-            : "Windows chat uses Omi's hosted model path for the main and floating chat surfaces."
-        }
-        keywords="ai chat model provider llm hosted omi account claude openai gemini anthropic deepgram byok key"
+        title="Default model"
+        subtitle={`${MODEL_PURPOSES.find((purpose) => purpose.id === modelPurpose)?.label}: ${selectedModelLabel}`}
+        keywords="ai chat model purpose default selected dropdown openrouter byok provider"
         control={
-          <select
-            value={byokStatus?.activeChatProvider ?? ''}
-            disabled={byokBusy === 'use'}
-            onChange={(e) => {
-              const provider = e.target.value ? (e.target.value as ByokChatProvider) : null
-              void selectChatProvider(provider)
-            }}
-            className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-50"
+          <button
+            type="button"
+            disabled={modelsBusy}
+            onClick={() => void refreshModels()}
+            className="btn-ghost inline-flex min-h-9 items-center gap-1.5 disabled:opacity-50"
           >
-            <option value="" className="bg-neutral-900">
-              Omi hosted chat
-            </option>
-            {PROVIDERS.filter((provider) => provider.chat).map((provider) => (
-              <option
-                key={provider.id}
-                value={provider.id}
-                disabled={!byokStatus?.providers[provider.id].configured}
-                className="bg-neutral-900"
-              >
-                {provider.label}
+            <RefreshCw className={`h-4 w-4 ${modelsBusy ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <select
+            value={modelPurpose}
+            onChange={(e) => saveModelPurpose(e.target.value as ModelPurpose)}
+            className="glass-subtle min-w-0 rounded-lg px-4 py-3 text-sm text-text-secondary focus:outline-none"
+          >
+            {MODEL_PURPOSES.map((purpose) => (
+              <option key={purpose.id} value={purpose.id} className="bg-neutral-900">
+                {purpose.label}
               </option>
             ))}
           </select>
-        }
-      >
-        <div className="space-y-3">
-          {PROVIDERS.map((provider) => {
-            const status = byokStatus?.providers[provider.id]
-            const busyPrefix = `${provider.id}:`
-            const busy = byokBusy.startsWith(busyPrefix)
-            return (
-              <div
-                key={provider.id}
-                className="grid gap-3 rounded-md border border-white/[0.08] bg-white/[0.03] p-3 lg:grid-cols-[150px_minmax(220px,1fr)_auto]"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <KeyRound className="h-4 w-4 shrink-0 text-white/50" strokeWidth={1.75} />
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-text-primary">{provider.label}</div>
-                    <div className="truncate text-xs text-text-tertiary">{statusText(status)}</div>
-                  </div>
-                </div>
-                <input
-                  type="password"
-                  autoComplete="off"
-                  value={draftKeys[provider.id]}
-                  onChange={(e) =>
-                    setDraftKeys((current) => ({ ...current, [provider.id]: e.target.value }))
-                  }
-                  placeholder={provider.placeholder}
-                  className="min-h-9 min-w-0 rounded-md border border-white/[0.08] bg-black/20 px-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-[color:var(--accent)]"
-                />
-                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                  <button
-                    type="button"
-                    disabled={busy || !draftKeys[provider.id].trim()}
-                    onClick={() => void saveProvider(provider.id)}
-                    className="btn-ghost inline-flex min-h-9 items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy || (!draftKeys[provider.id].trim() && !status?.configured)}
-                    onClick={() => void testProvider(provider.id)}
-                    className="btn-ghost inline-flex min-h-9 items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Test
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${provider.label} key`}
-                    disabled={busy || !status?.configured}
-                    onClick={() => void deleteProvider(provider.id)}
-                    className="btn-ghost inline-flex min-h-9 items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Remove
-                  </button>
-                </div>
-              </div>
-            )
-          })}
+          <select
+            value={selectedModelId ?? ''}
+            onChange={(e) => saveDefaultModel(e.target.value)}
+            className="glass-subtle min-w-0 rounded-lg px-4 py-3 text-sm text-text-secondary focus:outline-none"
+          >
+            <option value="" className="bg-neutral-900">
+              Omi Sonnet
+            </option>
+            {selectedModelId && !models.some((model) => model.id === selectedModelId) && (
+              <option value={selectedModelId} className="bg-neutral-900">
+                Saved model unavailable
+              </option>
+            )}
+            {selectableModels.map((model) => (
+              <option key={model.id} value={model.id} className="bg-neutral-900">
+                {modelLabel(model)}
+              </option>
+            ))}
+          </select>
         </div>
       </SettingRow>
       <SettingRow
