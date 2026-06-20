@@ -191,7 +191,8 @@ args = ["-y", "mcp-remote", "${mcpServerURL}", "--header", "Authorization: Beare
         'The setup prompt includes your hosted MCP key and local bearer token. Only paste it into an agent you trust.',
       steps: [
         'Copy the setup prompt. Omi reuses or creates your hosted MCP key and enables the local Omi Windows API.',
-        'Paste it into a trusted agent. The prompt includes hosted and local access keys.',
+        'Paste it into a trusted agent. The prompt includes hosted and local access keys; no CLI is required.',
+        'Use any Omi CLI wrapper only if that agent already has one installed for this Windows local API.',
         'Have the agent list hosted MCP tools and call the local tools endpoint before using Omi context.'
       ]
     })
