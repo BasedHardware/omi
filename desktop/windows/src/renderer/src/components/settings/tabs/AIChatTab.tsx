@@ -203,11 +203,11 @@ export function AIChatTab(): React.JSX.Element {
         title="Chat runtime"
         subtitle={
           chatRuntimeMode === 'auto'
-            ? 'Use Pi/Omi when enabled, otherwise your selected BYOK provider, otherwise hosted Omi chat.'
+            ? 'Use native Pi/Omi, then your selected BYOK provider, then hosted Omi chat.'
             : chatRuntimeMode === 'claude-acp'
               ? 'Use the local Claude account runtime on this Windows machine.'
               : chatRuntimeMode === 'pi'
-                ? 'Use the Pi/Omi tool bridge when this build enables it.'
+                ? 'Use the native Pi/Omi agent runtime.'
                 : 'Use Omi hosted chat only.'
         }
         keywords="ai chat runtime pi omi claude acp local account hosted provider"

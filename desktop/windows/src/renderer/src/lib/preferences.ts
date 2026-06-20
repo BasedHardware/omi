@@ -17,9 +17,12 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
-  // Runtime backing chat and agent tasks. 'auto' preserves the prior order:
-  // Pi/Omi when explicitly enabled, then BYOK, then Omi hosted.
+  // Runtime backing chat and agent tasks. 'auto' uses native Pi/Omi first, then
+  // BYOK, then Omi hosted if Pi is explicitly disabled.
   chatRuntimeMode: 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
+  // Skills selected in Integrations -> Skills. Main reads the corresponding
+  // SKILL.md files and injects them into the native Pi context.
+  enabledSkillIds?: string[]
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
