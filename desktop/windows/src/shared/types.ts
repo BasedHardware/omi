@@ -97,6 +97,24 @@ export type ListenMessage =
   | { sessionId: string; kind: 'error'; message: string; fatal: boolean }
   | { sessionId: string; kind: 'closed'; code: number; reason: string }
 
+export type LocalAgentStatus = {
+  enabled: boolean
+  running: boolean
+  host: string
+  configuredPort: number
+  currentPort: number | null
+  localUrl: string | null
+  toolEndpoint: string | null
+  hasToken: boolean
+}
+
+export type LocalAgentToolsTestResult = {
+  ok: boolean
+  status?: number
+  toolCount?: number
+  error?: string
+}
+
 export type OmiOverlayApi = {
   /** Subscribe to summon events; callback fires each time the overlay is shown. Returns an unsubscribe fn. */
   onShown: (cb: () => void) => () => void
@@ -167,6 +185,12 @@ export type OmiBridgeApi = {
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  localAgentStatus: () => Promise<LocalAgentStatus>
+  localAgentSetEnabled: (enabled: boolean) => Promise<LocalAgentStatus>
+  localAgentSetPort: (port: number) => Promise<LocalAgentStatus>
+  localAgentCopyToken: () => Promise<LocalAgentStatus>
+  localAgentRotateToken: () => Promise<LocalAgentStatus>
+  localAgentTestTools: () => Promise<LocalAgentToolsTestResult>
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */

@@ -46,6 +46,12 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  localAgentStatus: () => ipcRenderer.invoke('localAgent:status'),
+  localAgentSetEnabled: (enabled: boolean) => ipcRenderer.invoke('localAgent:setEnabled', enabled),
+  localAgentSetPort: (port: number) => ipcRenderer.invoke('localAgent:setPort', port),
+  localAgentCopyToken: () => ipcRenderer.invoke('localAgent:copyToken'),
+  localAgentRotateToken: () => ipcRenderer.invoke('localAgent:rotateToken'),
+  localAgentTestTools: () => ipcRenderer.invoke('localAgent:testTools'),
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
