@@ -24,6 +24,7 @@ import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { GoalCelebration } from './components/ui/GoalCelebration'
+import { LiveTranscriptPanel } from './components/recording/LiveTranscriptPanel'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -142,6 +143,8 @@ function AppShellInner(): React.JSX.Element {
       <ContinuousRecordingHost />
       {/* Goal completion celebration — fullscreen confetti + text overlay. */}
       <GoalCelebration />
+      {/* Floating live transcript panel — mirrors macOS LiveTranscriptPanel. */}
+      <LiveTranscriptPanel />
     </div>
   )
 }
