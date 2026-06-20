@@ -268,10 +268,11 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
   @AppStorage("conversationsCompactView") private var conversationsCompactView = true
+  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
-  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.gptRealtime2.rawValue
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -5042,6 +5043,31 @@ struct SettingsContentView: View {
 
           Toggle("", isOn: $multiChatEnabled)
             .toggleStyle(.switch)
+            .labelsHidden()
+        }
+      }
+
+      settingsCard(settingId: "advanced.preferences.legacyhome") {
+        HStack(spacing: 16) {
+          Image(systemName: "rectangle.split.2x1")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Use old Home design")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text("Show the previous chat-first dashboard instead of the simplified Home")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $useLegacyHomeDesign)
+            .toggleStyle(.checkbox)
             .labelsHidden()
         }
       }

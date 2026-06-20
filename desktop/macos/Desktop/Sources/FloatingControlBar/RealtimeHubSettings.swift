@@ -47,6 +47,16 @@ enum RealtimeHubProvider: String, Sendable {
     case .gemini: return .gemini
     }
   }
+
+  /// The other realtime provider — used by the hub's failover chain: when the
+  /// Auto-selected provider can't connect, the hub tries this one before dropping to
+  /// the legacy Claude cascade.
+  var alternate: RealtimeHubProvider {
+    switch self {
+    case .openai: return .gemini
+    case .gemini: return .openai
+    }
+  }
 }
 
 @MainActor

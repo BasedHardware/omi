@@ -1,9 +1,29 @@
 {
   "unreleased": [
-    "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat",
     "Screen recordings are now actually deleted once they pass your Data Retention window (cleanup was never running, so recordings accumulated indefinitely)"
   ],
   "releases": [
+    {
+      "version": "0.11.476",
+      "date": "2026-06-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.474",
+      "date": "2026-06-19",
+      "changes": [
+        "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
+      ]
+    },
+    {
+      "version": "0.11.473",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.11.472",
       "date": "2026-06-19",

@@ -1,0 +1,91 @@
+# Pre-commit hooks for BasedHardware/omi
+#
+# Install:  pip install pre-commit && pre-commit install
+# Run all:  pre-commit run --all-files
+# Run one:  pre-commit run black --files backend/utils/translation.py
+#
+# Timing (warm cache, M2 MacBook):
+#   black           ~0.3s   ruff            ~0.4s
+#   detect-secrets  ~1.2s   pre-commit-hooks ~0.1s
+#   Total:          ~2.0s
+#
+# Pre-push hook runs pytest on changed files (~10-30s).
+# See: .git/hooks/pre-push
+
+repos:
+  # ── Python formatting (mirrors CI: black --line-length 120) ──
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        name: black (format)
+        language_version: python3.9
+        args: [--line-length=120, --skip-string-normalization]
+        types_or: [python]
+
+  # ── Python linting + import sorting (NOT in CI — free bug finding) ──
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.4
+    hooks:
+      # Lint + auto-fix (unused imports, undefined names, noqa abuse)
+      # Note: formatting handled by black above — ruff-format intentionally
+      # omitted to avoid conflicts when black and ruff-format disagree on output
+      - id: ruff
+        name: ruff (lint + fix)
+        args: [--fix, --exit-non-zero-on-fix, --target-version, py39]
+        types_or: [python]
+
+  # ── Secret detection (critical for open-source repo with creds in history) ──
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        name: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: |
+          (?x)^(
+            .secrets.baseline|
+            poetry\.lock|
+            package-lock\.json|
+            yarn\.lock|
+            \.git/
+          )$
+
+  # ── Safety rails (instant, zero-config) ──
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      # Block direct commits to main/master
+      - id: no-commit-to-branch
+        name: no-commit-to-main
+        args: [--branch, main, --branch, master]
+
+      # Auto-fix whitespace noise
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+      # Validate config files
+      - id: check-yaml
+        args: [--unsafe]  # allow custom tags in workflows
+      - id: check-json
+        exclude: |
+          (?x)^(
+            \.firebase/.*\.json|    # Firebase config (may have comments)
+            \.idea/.*\.json|       # IDE config
+            .*lock\.json|          # Lock files
+            app/lib/.*\.g\.json|   # Dart codegen generated JSON
+            app/.*arb              # App resource bundles (not strict JSON)
+          )$
+      - id: check-toml
+
+      # Catch common mistakes
+      - id: check-merge-conflict
+      - id: debug-statements       # no breakpoint() / pdb.set_trace()
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-case-conflict     # catch case-insensitive fs issues
+
+ci:
+  autofix_commit_msg: |
+    style: auto-fix by pre-commit hooks
+  autoupdate_schedule: monthly
