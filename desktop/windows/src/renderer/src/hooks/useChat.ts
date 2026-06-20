@@ -242,7 +242,13 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let assistantText = ''
     try {
       const token = await auth.currentUser?.getIdToken()
-      if (window.omi.piChatEnabled) {
+      const prefs = getPreferences()
+      const runtimeMode = prefs.chatRuntimeMode
+      const usePi = runtimeMode === 'pi' || (runtimeMode === 'auto' && window.omi.piChatEnabled)
+      if (usePi) {
+        if (!window.omi.piChatEnabled) {
+          throw new Error('Pi/Omi chat is not enabled in this build.')
+        }
         const result = await window.omi.piChatSend({
           token: token ?? '',
           messages: [...baseHistory, userMsg]
@@ -271,8 +277,23 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
+
+      if (runtimeMode === 'claude-acp') {
+        const result = await window.omi.claudeAcpChatSend({
+          messages: [...baseHistory, { ...userMsg, content: textToSend }]
+        })
+        assistantText = result.text
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+        return
+      }
+
       const byokStatus = await window.omi.byokStatus().catch(() => null)
       if (
+        runtimeMode !== 'omi-hosted' &&
         byokStatus?.activeChatProvider &&
         byokStatus.providers[byokStatus.activeChatProvider]?.configured
       ) {
