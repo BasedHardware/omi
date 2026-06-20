@@ -428,15 +428,18 @@ def _should_merge(prev: str, nxt: str) -> bool:
     # Only merge if prev looks like an abbreviation (Dr., Mr., U.S., etc.)
     # NOT for generic short sentences like "Sí." or "OK." followed by real text
     prev_body = prev.rstrip('.!?。！؟ ')
-    if len(prev_body) <= 6:
+    # Extract the last token — embedded abbreviations like "I spoke to Dr."
+    # have a long prev_body but the trailing token is still a title/latin abbrev.
+    _last_token = prev_body.rsplit(None, 1)[-1] if prev_body else ''
+    if len(_last_token) <= 6 and _last_token:
         # Must look like an abbreviation: single uppercase letter(s), title prefix,
         # latin abbrev, or version/decimal pattern
         is_abbrev_like = (
-            prev_body.isupper()
-            and len(prev_body) <= 3  # U.S., UK, Dr
-            or prev_body in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
-            or prev_body in ('etc', 'vs')  # Latin abbrevs
-            or (prev_body[0].isupper() and len(prev_body) > 1 and prev_body[1:].isdigit())  # v2, V3
+            _last_token.isupper()
+            and len(_last_token) <= 3  # U.S., UK, Dr
+            or _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
+            or _last_token in ('etc', 'vs')  # Latin abbrevs
+            or (_last_token[0].isupper() and len(_last_token) > 1 and _last_token[1:].isdigit())  # v2, V3
         )
         if is_abbrev_like:
             return True
@@ -793,7 +796,14 @@ class TranslationService:
                 self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
                 cache_translation(text_hash, dest_language, assembled, dominant_lang)
 
-            results[orig_idx] = (unit_id, assembled, dominant_lang)
+            # When any sentence fell back or failed, return original text rather
+            # than a partial/mixed assembly — otherwise the caller persists the
+            # incomplete translation and advances committed_text, preventing
+            # retry on transient API failures.
+            if _any_failure:
+                results[orig_idx] = (unit_id, original_text, '')
+            else:
+                results[orig_idx] = (unit_id, assembled, dominant_lang)
 
         # Fill in any units that hit the full-text cache in Phase -1
         # (they were skipped during sentence splitting)
