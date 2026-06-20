@@ -1,12 +1,12 @@
 import Foundation
 import Network
 
-// MARK: - Realtime Hub Session (Phase 1, CLIENT-DIRECT)
+// MARK: - Realtime Hub Session
 //
-// One persistent WebSocket to a realtime provider, opened with the user's own
-// BYOK key (dev/test only — gated by RealtimeHubSettings.canConnect). The model
-// is the hub: it does in-session STT + reasoning + routing (via tool calls) and
-// speaks the answer.
+// One persistent WebSocket to a realtime provider, opened either with the user's
+// own BYOK key (client-direct, gated by RealtimeHubSettings.canConnect) or with a
+// server-minted ephemeral token (managed users). The model is the hub: it does
+// in-session STT + reasoning + routing (via tool calls) and speaks the answer.
 //
 // Two providers, normalized to ONE internal stream surface
 // (RealtimeHubSessionDelegate):
@@ -62,6 +62,7 @@ enum HubAuth {
 final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
+  private let instructions: String
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -118,9 +119,10 @@ final class RealtimeHubSession: NSObject {
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, auth: HubAuth, delegate: RealtimeHubSessionDelegate) {
+  init(provider: RealtimeHubProvider, auth: HubAuth, instructions: String, delegate: RealtimeHubSessionDelegate) {
     self.provider = provider
     self.auth = auth
+    self.instructions = instructions
     self.delegate = delegate
     super.init()
   }
@@ -402,7 +404,7 @@ final class RealtimeHubSession: NSObject {
         "type": "session.update",
         "session": [
           "type": "realtime",
-          "instructions": RealtimeHubTools.systemInstruction,
+          "instructions": instructions,
           "output_modalities": ["audio"],
           "audio": [
             "input": [
@@ -431,7 +433,7 @@ final class RealtimeHubSession: NSObject {
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
           ],
-          "systemInstruction": ["parts": [["text": RealtimeHubTools.systemInstruction]]],
+          "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],

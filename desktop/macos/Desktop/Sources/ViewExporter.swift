@@ -59,6 +59,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
+              memoriesViewModel: MemoriesViewModel(),
               selectedIndex: .constant(0)))
         },
         CGSize(width: 900, height: 700)
@@ -107,12 +108,6 @@ enum ViewExporter {
       ),
 
       (
-        "10-device-settings",
-        { AnyView(DeviceSettingsPage()) },
-        CGSize(width: 900, height: 700)
-      ),
-
-      (
         "11-desktop-home",
         { AnyView(DesktopHomeView()) },
         CGSize(width: 1200, height: 800)
@@ -153,7 +148,7 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 15 }
+  static var standaloneViewCount: Int { 14 }
 
   private static let onboardingExportSteps: [(String, Int)] = [
     ("01-name", 0),
@@ -287,6 +282,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
+              memoriesViewModel: previewMemoriesViewModel(),
               selectedIndex: .constant(0)))
         }
       ),
@@ -319,19 +315,15 @@ enum ViewExporter {
         }
       ),
       ("full-permissions", 10, { AnyView(PermissionsPage(appState: AppState())) }),
-      ("full-device", 11, { AnyView(DeviceSettingsPage()) }),
     ]
 
     guard index >= 0 && index < pages.count else { return nil }
     let entry = pages[index]
-    let sidebarIndex = entry.1
     let pageContent = entry.2()
 
     // Compose: mock sidebar + rounded content area (mirrors DesktopHomeView layout)
     let fullView = AnyView(
       HStack(spacing: 0) {
-        ExportSidebarMock(selectedIndex: sidebarIndex)
-
         ZStack {
           RoundedRectangle(cornerRadius: 16)
             .fill(
@@ -353,7 +345,7 @@ enum ViewExporter {
     return (entry.0, fullView, CGSize(width: 1200, height: 800))
   }
 
-  static var fullPageCount: Int { 11 }
+  static var fullPageCount: Int { 10 }
 
   private static func previewChatProvider() -> ChatProvider {
     let provider = ChatProvider()

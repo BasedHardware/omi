@@ -364,7 +364,9 @@ async def _run_anthropic_agent_stream(
     and feeds results back until the model stops requesting tools.
     """
     # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
+    # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
+    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
     loop_iteration = 0
 

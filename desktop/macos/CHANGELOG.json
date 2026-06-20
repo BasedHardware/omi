@@ -2,6 +2,56 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.478",
+      "date": "2026-06-20",
+      "changes": [
+        "Screen recordings are now actually deleted once they pass your Data Retention window (cleanup was never running, so recordings accumulated indefinitely)",
+        "Fixed the \"What omi knows\" dashboard under-counting Conversations, Memories, and Tasks (it showed only the loaded page instead of your real totals)"
+      ]
+    },
+    {
+      "version": "0.11.476",
+      "date": "2026-06-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.474",
+      "date": "2026-06-19",
+      "changes": [
+        "Fixed paid subscribers seeing a bogus \"Upgrade Required\" prompt when opening or using chat"
+      ]
+    },
+    {
+      "version": "0.11.473",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.472",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.471",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.470",
+      "date": "2026-06-19",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.469",
       "date": "2026-06-18",
       "changes": [

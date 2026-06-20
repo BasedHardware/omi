@@ -144,6 +144,7 @@ pytest tests/unit/test_v17_review_queue_non_active_routes.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
+pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_high_priority_usage_tracking.py -v
 pytest tests/unit/test_new_usage_tracking_gaps.py -v
@@ -164,6 +165,7 @@ pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
+pytest tests/unit/test_firestore_cache.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v

@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -361,6 +363,19 @@ def _build_test_app():
     return app, TestClient(app)
 
 
+def _build_memories_test_app():
+    """Build a minimal FastAPI app for Developer API memories routes."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.developer import router as developer_router
+    from dependencies import get_uid_with_memories_read
+
+    app = FastAPI()
+    app.include_router(developer_router)
+    app.dependency_overrides[get_uid_with_memories_read] = lambda: 'uid1'
+    return app, TestClient(app, raise_server_exceptions=False)
+
+
 class TestDevApiHttpLayer:
     """HTTP layer tests using FastAPI TestClient."""
 
@@ -461,3 +476,118 @@ class TestDevApiHttpLayer:
         assert len(body) == 1
         assert body[0]['id'] == 'f1'
         assert body[0]['name'] == 'Work'
+
+
+class TestDevApiMemoriesHttpLayer:
+    """HTTP layer tests for Developer API memory list resilience."""
+
+    def setup_method(self):
+        import database.memories as memories_db
+
+        memories_db.get_memories = MagicMock()
+
+    def test_memories_page_tolerates_legacy_malformed_record(self):
+        """A single legacy record must not turn an offset page into HTTP 500."""
+        import database.memories as memories_db
+
+        now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        memories_db.get_memories.return_value = [
+            {
+                'id': 'mem-ok',
+                'content': 'normal memory',
+                'category': 'manual',
+                'visibility': 'private',
+                'tags': ['source'],
+                'created_at': now,
+                'updated_at': now,
+                'manually_added': True,
+                'scoring': '01_998_1736935200',
+                'reviewed': True,
+                'user_review': True,
+                'edited': False,
+            },
+            {
+                'id': 'mem-legacy',
+                'content': 'legacy memory',
+                'category': 'unexpected-legacy-category',
+                'visibility': None,
+                'tags': None,
+                'created_at': 'not-a-date',
+                'updated_at': {'bad': 'date'},
+                'user_review': 'yes',
+            },
+            {
+                'id': 'mem-locked-legacy',
+                'content': None,
+                'category': None,
+                'is_locked': True,
+                'scoring': 123,
+            },
+            {
+                'content': 'no id should be skipped',
+                'category': 'manual',
+            },
+        ]
+
+        _, client = _build_memories_test_app()
+        resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 3
+        legacy = body[1]
+        assert legacy['id'] == 'mem-legacy'
+        assert legacy['content'] == 'legacy memory'
+        assert legacy['category'] == 'interesting'
+        assert legacy['visibility'] == 'private'
+        assert legacy['tags'] == []
+        assert legacy['created_at'] is None
+        assert legacy['updated_at'] is None
+        assert legacy['manually_added'] is False
+        assert legacy['reviewed'] is False
+        assert legacy['user_review'] is True
+        assert legacy['edited'] is False
+
+        locked_legacy = body[2]
+        assert locked_legacy['id'] == 'mem-locked-legacy'
+        assert locked_legacy['content'] == ''
+        assert locked_legacy['category'] == 'interesting'
+        assert locked_legacy['scoring'] == '123'
+
+    def test_cleaner_memory_coerces_edge_values(self):
+        """CleanerMemory validators should be resilient outside the endpoint pre-filter too."""
+        from routers.developer import CleanerMemory
+
+        memory = CleanerMemory(
+            id='mem-edge',
+            content=None,
+            category=None,
+            created_at=1736935200,
+            updated_at=[],
+            manually_added='1',
+            reviewed='true',
+            user_review='no',
+            edited='',
+        )
+
+        assert memory.id == 'mem-edge'
+        assert memory.content == ''
+        assert memory.category == 'interesting'
+        assert memory.created_at == datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert memory.updated_at is None
+        assert memory.manually_added is True
+        assert memory.reviewed is True
+        assert memory.user_review is False
+        assert memory.edited is False
+
+    def test_cleaner_memory_rejects_empty_id(self):
+        """CleanerMemory should not serialize malformed responses with an empty id."""
+        from pydantic import ValidationError
+        from routers.developer import CleanerMemory
+
+        with pytest.raises(ValidationError):
+            CleanerMemory(
+                id=None,
+                content='legacy memory',
+                category='manual',
+            )

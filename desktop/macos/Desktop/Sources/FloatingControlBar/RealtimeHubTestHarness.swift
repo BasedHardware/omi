@@ -44,7 +44,10 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
   }
 
   func run(timeoutSeconds: Double) async -> [String: String] {
-    let s = RealtimeHubSession(provider: provider, auth: auth, delegate: self)
+    let s = RealtimeHubSession(
+      provider: provider, auth: auth,
+      instructions: RealtimeHubTools.systemInstruction(aboutUser: ""),
+      delegate: self)
     session = s
     let rate = s.requiredInputSampleRate
     let audio = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
@@ -118,7 +121,16 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     let stub: String
     switch HubTool(rawValue: name) {
     case .askHigherModel: stub = "Paris is the capital of France."
-    case .getTasks: stub = "Due today (1):\n- Example task"
+    case .getTasks: stub = "Due today (1):\n- Example task [id:task_123]"
+    case .getMemories: stub = "You live in San Francisco and prefer concise answers."
+    case .searchMemories: stub = "Your dog's name is Rex."
+    case .searchConversations: stub = "On Monday you discussed the launch timeline."
+    case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
+    case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
+    case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
+    case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
+    case .createActionItem: stub = "Created task: Example task."
+    case .updateActionItem: stub = "Updated the task."
     case .spawnAgent: stub = "Started a background agent."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."

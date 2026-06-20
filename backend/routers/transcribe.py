@@ -356,10 +356,13 @@ async def _stream_handler(
         lc3_chunk_size = 30  # 30 bytes per frame
         lc3_frame_duration_us = 10000  # 10ms = 10000 microseconds
 
-    # Fetch user transcription preferences
+    # Fetch user transcription preferences once and reuse its embedded language
+    # projection below for translation targeting. Avoid a second user preference
+    # read on the hot WebSocket startup path.
     transcription_prefs = get_user_transcription_preferences(uid)
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
+    user_language_preference = transcription_prefs.get('language', '')
 
     # Stamp mobile custom-STT usage onto the user doc so these users are queryable
     # and meterable (#7690) — the app otherwise only signals it per-session via the
@@ -405,7 +408,6 @@ async def _stream_handler(
         translation_language = None
     elif stt_language == 'multi':
         if language == "multi":
-            user_language_preference = user_db.get_user_language_preference(uid)
             if user_language_preference:
                 translation_language = user_language_preference
         else:
