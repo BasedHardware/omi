@@ -20,6 +20,20 @@ declare namespace NodeJS {
     OMI_PERF_LOG?: string
     /** Override the SQLite file path (used to point at the throwaway bench DB). */
     OMI_DB_PATH?: string
+    /** Force hosted/cloud STT even when a local Parakeet runtime is healthy. */
+    OMI_FORCE_CLOUD_STT?: string
+    /** Test hook mirroring macOS: make local Parakeet report unavailable. */
+    OMI_FORCE_PARAKEET_FAIL?: string
+    /** Disable the Windows local Parakeet STT adapter entirely. */
+    OMI_LOCAL_STT_DISABLED?: string
+    /** Base URL for the local Parakeet service, e.g. http://127.0.0.1:8765. */
+    OMI_LOCAL_PARAKEET_URL?: string
+    /** Alias for OMI_LOCAL_PARAKEET_URL. */
+    OMI_PARAKEET_URL?: string
+    /** Test/dev override for machines where nvidia-smi is unavailable. */
+    OMI_LOCAL_STT_ASSUME_NVIDIA?: string
+    /** Allow a healthy Parakeet runtime even when nvidia-smi is absent. */
+    OMI_LOCAL_STT_ALLOW_NON_NVIDIA?: string
     /** The desktop-automation bridge (snapshot → plan → approve → execute real
      *  Windows UI actions) is ON by default. Set OMI_AUTOMATION='0' to disable it
      *  (kill-switch for builds that don't want the experimental feature). */
