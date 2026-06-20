@@ -1,10 +1,19 @@
-import { BotMessageSquare, CheckCircle2, Cpu, KeyRound, MessagesSquare, Trash2 } from 'lucide-react'
+import {
+  BotMessageSquare,
+  CheckCircle2,
+  Cpu,
+  KeyRound,
+  MessagesSquare,
+  RefreshCw,
+  Trash2
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type {
   ByokChatProvider,
   ByokProvider,
   ByokProviderStatus,
-  ByokStatus
+  ByokStatus,
+  ClaudeAcpStatus
 } from '../../../../../shared/types'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
@@ -38,11 +47,20 @@ function statusText(status: ByokProviderStatus | undefined): string {
   return `Saved (${status.maskedKey})`
 }
 
+function claudeStatusText(status: ClaudeAcpStatus | null): string {
+  if (!status) return 'Not checked'
+  if (status.configured) return `Available via ${status.command}`
+  return status.reason ?? 'Not available'
+}
+
 export function AIChatTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
+  const [chatRuntimeMode, setChatRuntimeMode] = useState(getPreferences().chatRuntimeMode)
   const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
+  const [claudeStatus, setClaudeStatus] = useState<ClaudeAcpStatus | null>(null)
   const [draftKeys, setDraftKeys] = useState<Record<ByokProvider, string>>(EMPTY_DRAFT_KEYS)
   const [byokBusy, setByokBusy] = useState('')
+  const [claudeBusy, setClaudeBusy] = useState(false)
 
   const refreshByokStatus = async (): Promise<void> => {
     try {
@@ -68,6 +86,22 @@ export function AIChatTab(): React.JSX.Element {
       canceled = true
     }
   }, [])
+
+  const refreshClaudeStatus = async (): Promise<void> => {
+    setClaudeBusy(true)
+    try {
+      const status = await window.omi.claudeAcpStatus()
+      setClaudeStatus(status)
+      toast(status.configured ? 'Claude account runtime available' : 'Claude account unavailable', {
+        tone: status.configured ? 'success' : 'warn',
+        body: status.reason
+      })
+    } catch (e) {
+      toast('Could not check Claude account', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setClaudeBusy(false)
+    }
+  }
 
   const saveProvider = async (provider: ByokProvider): Promise<void> => {
     const key = draftKeys[provider].trim()
@@ -164,6 +198,64 @@ export function AIChatTab(): React.JSX.Element {
           </select>
         }
       />
+      <SettingRow
+        icon={Cpu}
+        title="Chat runtime"
+        subtitle={
+          chatRuntimeMode === 'auto'
+            ? 'Use Pi/Omi when enabled, otherwise your selected BYOK provider, otherwise hosted Omi chat.'
+            : chatRuntimeMode === 'claude-acp'
+              ? 'Use the local Claude account runtime on this Windows machine.'
+              : chatRuntimeMode === 'pi'
+                ? 'Use the Pi/Omi tool bridge when this build enables it.'
+                : 'Use Omi hosted chat only.'
+        }
+        keywords="ai chat runtime pi omi claude acp local account hosted provider"
+        control={
+          <select
+            value={chatRuntimeMode}
+            onChange={(e) => {
+              const v = e.target.value as typeof chatRuntimeMode
+              setChatRuntimeMode(v)
+              setPreferences({ chatRuntimeMode: v })
+            }}
+            className="rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none"
+          >
+            <option value="auto" className="bg-neutral-900">
+              Auto
+            </option>
+            <option value="omi-hosted" className="bg-neutral-900">
+              Omi hosted
+            </option>
+            <option value="pi" className="bg-neutral-900">
+              Pi/Omi
+            </option>
+            <option value="claude-acp" className="bg-neutral-900">
+              Claude account
+            </option>
+          </select>
+        }
+      >
+        {chatRuntimeMode === 'claude-acp' && (
+          <div className="flex flex-col gap-3 rounded-md border border-white/[0.08] bg-white/[0.03] p-3 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-text-primary">Claude account status</div>
+              <div className="mt-0.5 text-xs text-text-tertiary">
+                {claudeStatusText(claudeStatus)}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={claudeBusy}
+              onClick={() => void refreshClaudeStatus()}
+              className="btn-ghost inline-flex min-h-9 items-center gap-1.5 disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${claudeBusy ? 'animate-spin' : ''}`} />
+              Check
+            </button>
+          </div>
+        )}
+      </SettingRow>
       <SettingRow
         icon={BotMessageSquare}
         title="Model and provider"
