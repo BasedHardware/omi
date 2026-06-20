@@ -2079,3 +2079,63 @@ No obvious F4 P0 blocks **writing** F5. Before any real read, add or confirm:
 Implemented preparation/default-NOT_RUN-only F5 evidence tooling in `backend/scripts/v17_v3_f5_real_service_evidence_readiness.py` with pure helpers in `backend/utils/memory/v17_v3_f5_evidence.py` and tests in `backend/tests/unit/test_v17_v3_f5_real_service_evidence_readiness.py`. Default invocation returns NOT_RUN, constructs no cloud client, performs no network/provider/Firestore/vector/telemetry calls, imports no production app/router, and leaves runtime/external/aggregate readiness BLOCKED/NO_GO. `--execute` is exact-gated on shared-nonprod environment, project id/number, dedicated service-account principal, approval subject/path set, approval artifact path, and Oracle review artifact; fake-only tests prove mismatches block before client construction. Covered F4 Oracle criteria: dedicated least-privilege identity/IAM with Owner/Editor/write-permission rejection, metadata-only scope including cursor-secret metadata/version state without payload bytes, static/runtime zero-write guards plus audit-zero-write inconclusive semantics, bounded deadlines/retries/counts, index/schema metadata checks, HMAC/fail-closed redaction, non-activation, and F4 structural-disable/pagination/call-graph confirmations.
 
 Oracle status remains unchanged: F5 script preparation is GO; first shared non-production service execution still requires another Oracle review, exact-project gating, and least-privilege identity verification. Production `--execute` remains NO-GO without Oracle plus named human platform/security approval of exact script/principal/project/paths/deadlines/evidence subject. Runtime activation/canary/shadow/cutover remains NO-GO regardless of F5 outcome.
+
+## Oracle milestone review: F5 exact script before shared-service execute (2026-06-20)
+
+Oracle caveat: browser model selection reported `requested=Pro; resolved=(unavailable); strategy=current; verified=no`. Treat as architecture/code-review advice, not runtime evidence.
+
+## Verdicts
+
+1. **First shared-nonprod `--execute`: NO-GO in the current state.** The target tuple is explicitly described as a fake/preparation contract, and named human platform/security approval has not been demonstrated. After the blockers below are closed, the maximum appropriate verdict is **LIMITED GO for one bounded, evidence-only run**.
+
+2. **Production `--execute`: NO-GO.** Nothing described authorizes production access, activation, canarying, shadowing, read cutover, or external readiness.
+
+## Preconditions for a future LIMITED GO
+
+* Replace or formally confirm every fake/prep identifier with the actual approved shared-nonprod environment, project ID/number, and dedicated principal.
+* Obtain named human platform and security approval, bound to:
+
+  * commit `81f90b7e537072782680561725c982e113c7eb4a`;
+  * hashes of the runner and helper;
+  * the exact project/principal and seven approved paths;
+  * a short execution window and one-run scope.
+* Discover the active project and principal at runtime and require exact equality. No fallback, ADC ambiguity, alternate project, or production credentials may be reachable.
+* Verify the principal is technically incapable of relevant writes at IAM level; the Python wrapper is defense in depth, not the primary control.
+* Ensure authoritative audit logs are enabled and queryable for the principal, project, APIs, and execution window. Missing or delayed proof must remain `INCONCLUSIVE`.
+* Ensure the runtime client exposes an explicit positive allowlist of permitted read RPCs. Unknown methods or generic client/transport forwarding must fail closed.
+* Keep all limits immutable: 5-second RPC timeout, 30-second overall deadline, two attempts, 25-item maximum, no external retry wrapper or parallel runs.
+
+The executable line should be only:
+
+```bash
+python3 backend/scripts/v17_v3_f5_real_service_evidence_readiness.py --execute
+```
+
+Run it from the exact clean commit using the same pinned interpreter environment used for verification. Do not add target overrides, retry it automatically, or run it from CI with broader credentials. A successful evidence run must still finish **BLOCKED/NO_GO** for activation.
+
+## Required fixes before shared-nonprod execution
+
+1. **Bind the run to real approved identifiers.** A fake/prep project tuple cannot authorize real shared-service access.
+2. **Validate substantive approval, not merely an artifact path and subject string.** Require named approvers, approval timestamp/expiry, commit and artifact hashes, target tuple, approved paths, and one-run scope.
+3. **Use a read-RPC allowlist rather than relying on a mutator denylist.** There must be no `__getattr__`-style escape, raw transport access, generic request method, or unwrapped cloud client.
+4. **Make zero-write audit correlation explicit.** Record a unique run ID and exact UTC window, query every relevant mutation log family for the principal/project, and treat incomplete log coverage or ingestion uncertainty as `INCONCLUSIVE`.
+
+I have not inspected the actual source files, so this is a contract-level review rather than confirmation that those properties are implemented without bypasses.
+
+## Evidence to capture
+
+Capture only sanitized metadata:
+
+* commit SHA, clean-tree result, runner/helper/test hashes, Python/dependency-lock fingerprint;
+* command, UTC start/end, run ID, exit code;
+* approval artifact and oracle-review digests plus named approval roles/timestamps;
+* fingerprints of environment, project ID/number, and active principal;
+* IAM roles and permission-check outcomes, including Owner/Editor and write-intersection results;
+* permitted RPC method name, service, attempt count, status, latency, and returned-item count;
+* metadata-state results for configuration, cursor-secret versions, projection state, canary approval, IAM, index state, and audit reads;
+* normalized index fields/order/scope/state;
+* exact audit window, covered services/log categories, mutating-entry count, and audit-query fingerprint;
+* local blocked-mutator count and unexpected-endpoint count;
+* every check’s `PASS`/`FAIL`/`INCONCLUSIVE` result and final `BLOCKED/NO_GO` decision.
+
+Do **not capture at all**: memory content, secret payloads, cursor tokens, authorization material, request/response bodies, URLs, document names or paths, arbitrary user identifiers, raw query values, access tokens, or credentials. Use keyed HMAC fingerprints for sensitive identifiers, retain only the key identifier—not the key—and reject unknown output fields rather than attempting best-effort redaction.
