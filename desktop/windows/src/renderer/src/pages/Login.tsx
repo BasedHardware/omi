@@ -15,9 +15,7 @@ export function Login(): React.JSX.Element {
       
       // Auto-populate the user's display name from their Google account
       // so they don't have to re-type it during onboarding
-      if (user.displayName) {
-        setPreferences({ displayName: user.displayName })
-      }
+      setPreferences({ displayName: user.displayName ?? '' })
     } catch (e) {
       console.error('Sign-in failed:', e)
       alert(`Sign-in failed: ${(e as Error).message}`)
