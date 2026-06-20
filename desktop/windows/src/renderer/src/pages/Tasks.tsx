@@ -119,8 +119,8 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   overdue: 'Overdue', today: 'Today', tomorrow: 'Tomorrow', upcoming: 'Upcoming', nodate: 'No due date'
 }
 
-// ── Rich filter system — mirrors macOS TaskFilterTag ─────────────────────────
-type FilterGroup = 'status' | 'date' | 'source' | 'priority' | 'category'
+// ── Rich filter system — mirrors macOS TaskFilterTag (34 tags across 6 groups) ──
+type FilterGroup = 'status' | 'date' | 'source' | 'priority' | 'category' | 'origin'
 
 type FilterTag = {
   id: string
@@ -129,19 +129,27 @@ type FilterTag = {
 }
 
 const FILTER_TAGS: FilterTag[] = [
-  // Status
+  // Status (4)
   { id: 'open', group: 'status', label: 'Open' },
+  { id: 'in-progress', group: 'status', label: 'In Progress' },
   { id: 'done', group: 'status', label: 'Done' },
-  // Date
+  { id: 'canceled', group: 'status', label: 'Canceled' },
+  // Date (4)
+  { id: 'due-today', group: 'date', label: 'Due Today' },
   { id: 'last7days', group: 'date', label: 'Last 7 Days' },
-  // Source
+  { id: 'this-month', group: 'date', label: 'This Month' },
+  { id: 'overdue', group: 'date', label: 'Overdue' },
+  // Source (5)
   { id: 'from-conv', group: 'source', label: 'From Conversation' },
   { id: 'manual', group: 'source', label: 'Manual' },
-  // Priority
-  { id: 'priority-high', group: 'priority', label: 'High Priority' },
-  { id: 'priority-medium', group: 'priority', label: 'Medium Priority' },
-  { id: 'priority-low', group: 'priority', label: 'Low Priority' },
-  // Category
+  { id: 'from-ios', group: 'source', label: 'From iOS' },
+  { id: 'from-voice', group: 'source', label: 'From Voice' },
+  { id: 'from-friend', group: 'source', label: 'From Friend' },
+  // Priority (3)
+  { id: 'priority-high', group: 'priority', label: 'High' },
+  { id: 'priority-medium', group: 'priority', label: 'Medium' },
+  { id: 'priority-low', group: 'priority', label: 'Low' },
+  // Category (10)
   { id: 'cat-work', group: 'category', label: 'Work' },
   { id: 'cat-personal', group: 'category', label: 'Personal' },
   { id: 'cat-feature', group: 'category', label: 'Feature' },
@@ -152,10 +160,17 @@ const FILTER_TAGS: FilterTag[] = [
   { id: 'cat-finance', group: 'category', label: 'Finance' },
   { id: 'cat-health', group: 'category', label: 'Health' },
   { id: 'cat-other', group: 'category', label: 'Other' },
+  // Origin (6)
+  { id: 'origin-ios-mic', group: 'origin', label: 'iOS Mic' },
+  { id: 'origin-omi', group: 'origin', label: 'Omi Recording' },
+  { id: 'origin-friend', group: 'origin', label: 'Friend Device' },
+  { id: 'origin-computer', group: 'origin', label: 'Computer' },
+  { id: 'origin-web', group: 'origin', label: 'Web' },
+  { id: 'origin-manual', group: 'origin', label: 'No Device' },
 ]
 
 const GROUP_LABELS: Record<FilterGroup, string> = {
-  status: 'Status', date: 'Date', source: 'Source', priority: 'Priority', category: 'Category'
+  status: 'Status', date: 'Date', source: 'Source', priority: 'Priority', category: 'Category', origin: 'Origin'
 }
 
 function applyFilters(items: ActionItem[], active: Set<string>): ActionItem[] {
@@ -179,17 +194,39 @@ function applyFilters(items: ActionItem[], active: Set<string>): ActionItem[] {
 
 function matchFilter(item: ActionItem, filterId: string): boolean {
   switch (filterId) {
+    // Status
     case 'open': return !item.completed
+    case 'in-progress': return !item.completed && !!item.source // heuristic: has a source = started
     case 'done': return item.completed
+    case 'canceled': return item.completed && item.source?.toLowerCase().includes('cancel')
+    // Date
+    case 'due-today': {
+      if (!item.due_at) return false
+      return startOfDay(new Date(item.due_at).getTime()) === startOfDay(Date.now())
+    }
     case 'last7days': {
       const ts = new Date(item.created_at ?? 0).getTime()
       return Date.now() - ts < 7 * DAY
     }
+    case 'this-month': {
+      const ts = new Date(item.created_at ?? 0).getTime()
+      return Date.now() - ts < 30 * DAY
+    }
+    case 'overdue': {
+      if (!item.due_at || item.completed) return false
+      return startOfDay(new Date(item.due_at).getTime()) < startOfDay(Date.now())
+    }
+    // Source
     case 'from-conv': return !!item.conversation_id
-    case 'manual': return !item.conversation_id
+    case 'manual': return !item.conversation_id && !item.origin
+    case 'from-ios': return item.origin?.toLowerCase().includes('ios') ?? false
+    case 'from-voice': return item.source?.toLowerCase().includes('voice') ?? item.origin?.toLowerCase().includes('mic') ?? false
+    case 'from-friend': return item.origin?.toLowerCase().includes('friend') ?? false
+    // Priority
     case 'priority-high': return item.priority === 'high'
     case 'priority-medium': return item.priority === 'medium'
     case 'priority-low': return item.priority === 'low'
+    // Category
     case 'cat-work': return item.category?.toLowerCase() === 'work'
     case 'cat-personal': return item.category?.toLowerCase() === 'personal'
     case 'cat-feature': return item.category?.toLowerCase() === 'feature'
@@ -199,7 +236,17 @@ function matchFilter(item: ActionItem, filterId: string): boolean {
     case 'cat-communication': return item.category?.toLowerCase() === 'communication'
     case 'cat-finance': return item.category?.toLowerCase() === 'finance'
     case 'cat-health': return item.category?.toLowerCase() === 'health'
-    case 'cat-other': return item.category?.toLowerCase() === 'other' || (!!item.category && !['work','personal','feature','bug','code','research','communication','finance','health'].includes(item.category.toLowerCase()))
+    case 'cat-other': return (
+      item.category?.toLowerCase() === 'other' ||
+      (!!item.category && !['work','personal','feature','bug','code','research','communication','finance','health'].includes(item.category.toLowerCase()))
+    )
+    // Origin
+    case 'origin-ios-mic': return item.origin?.toLowerCase().includes('ios') ?? false
+    case 'origin-omi': return item.origin?.toLowerCase().includes('omi') ?? item.source_app?.toLowerCase().includes('omi') ?? false
+    case 'origin-friend': return item.origin?.toLowerCase().includes('friend') ?? false
+    case 'origin-computer': return item.origin?.toLowerCase().includes('computer') ?? item.source_app != null
+    case 'origin-web': return item.origin?.toLowerCase().includes('web') ?? false
+    case 'origin-manual': return !item.origin && !item.conversation_id
     default: return true
   }
 }

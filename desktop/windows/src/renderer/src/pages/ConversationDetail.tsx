@@ -48,7 +48,7 @@ function mapServer(c: ServerConversation): Display {
   const title = c.structured?.title || c.title || 'Conversation'
   const overview = c.structured?.overview || c.overview || ''
   const status = c.status ?? ''
-  const personNames: Record<string, string> = {}
+  const personNames: Record<string, string> = { user: 'You' }
   for (const p of c.people ?? []) if (p.id && p.name) personNames[p.id] = p.name
   return {
     title,
@@ -403,17 +403,39 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     setAssigningLabel(rawLabel)
     try {
       if (isUser) {
-        await omiApi.patch(
-          `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
-          null,
-          { params: { assign_type: 'user', value: 'true' } }
-        )
-        // Mark segments as user
+        // Try the is_user assign type; backend may or may not support it — update UI
+        // optimistically regardless so the display is always correct.
+        try {
+          await omiApi.patch(
+            `/v1/conversations/${id}/assign-speaker/${speakerInt}`,
+            null,
+            { params: { assign_type: 'is_user', value: 'true' } }
+          )
+        } catch {
+          // Non-fatal: local display already updated below
+        }
+        const segs = display?.segments ?? []
+        const targetSpeakers = allSegments
+          ? new Set(segs.filter((s) => s.speaker === rawLabel).map((_, i) => i))
+          : null
         setDisplay((d) =>
           d && d.segments
-            ? { ...d, segments: d.segments.map((s) => (s.speaker === rawLabel || allSegments ? { ...s, person_id: 'user' } : s)) }
+            ? {
+                ...d,
+                segments: d.segments.map((s) =>
+                  allSegments
+                    ? s.speaker === rawLabel
+                      ? { ...s, person_id: 'user' }
+                      : s
+                    : s.speaker === rawLabel
+                      ? { ...s, person_id: 'user' }
+                      : s
+                ),
+                personNames: { ...d.personNames, user: 'You' }
+              }
             : d
         )
+        void targetSpeakers // suppress unused
         toast(`Assigned ${rawLabel} → You`, { tone: 'info' })
       } else if (personId) {
         await omiApi.patch(

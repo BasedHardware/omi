@@ -84,8 +84,32 @@ function DragHandle(): React.JSX.Element {
 
 type PillState = 'idle' | 'recording' | 'finalizing' | 'sending'
 
-/** Active-agent indicator — mirrors macOS agent pills row. State changes to
- *  reflect recording / transcribing / thinking so the user always knows what Omi is doing. */
+/** Single agent pill — used in the agent pills row below. */
+function AgentPill({
+  label,
+  dotClass,
+  active
+}: {
+  label: string
+  dotClass?: string
+  active?: boolean
+}): React.JSX.Element {
+  return (
+    <div
+      className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-all duration-200 ${
+        active
+          ? 'border-white/[0.12] bg-white/[0.08]'
+          : 'border-white/[0.06] bg-white/[0.03]'
+      }`}
+    >
+      {dotClass && <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${dotClass}`} />}
+      <span className="text-[10px] font-medium leading-none text-neutral-400">{label}</span>
+    </div>
+  )
+}
+
+/** Agent pills row — mirrors macOS FloatingBarAgentPillsView.
+ *  Shows Omi pill with live state + always-on capability pills (Memory, Screen). */
 function OmiPill({ state }: { state: PillState }): React.JSX.Element {
   const dotClass =
     state === 'idle'
@@ -104,11 +128,10 @@ function OmiPill({ state }: { state: PillState }): React.JSX.Element {
           ? 'Transcribing…'
           : 'Thinking…'
   return (
-    <div className="overlay-no-drag flex items-center pb-0.5">
-      <div className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.05] px-2 py-0.5 transition-all duration-200">
-        <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${dotClass}`} />
-        <span className="text-[10px] font-medium leading-none text-neutral-400">{label}</span>
-      </div>
+    <div className="overlay-no-drag flex items-center gap-1.5 pb-0.5">
+      <AgentPill label={label} dotClass={dotClass} active={state !== 'idle'} />
+      <AgentPill label="Memory" active={false} />
+      <AgentPill label="Screen" active={false} />
     </div>
   )
 }
