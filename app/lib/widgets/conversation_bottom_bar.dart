@@ -209,7 +209,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Future<void> _initAudioIfNeeded() async {
     if (!mounted) return;
-    if (_isAudioInitialized || widget.conversation == null || !widget.conversation!.hasAudio()) {
+    if (_isAudioInitialized || _isAudioLoading || widget.conversation == null || !widget.conversation!.hasAudio()) {
       return;
     }
 
