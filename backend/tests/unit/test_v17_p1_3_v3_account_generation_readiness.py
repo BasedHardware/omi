@@ -35,10 +35,12 @@ def test_account_generation_readiness_is_safe_and_blocked_by_default():
 def test_account_generation_readiness_identifies_independent_state_head_and_remaining_blocker():
     report = _report(execute=True)
 
-    assert report["proof_status"] == "LOCAL_CONTRACT_PROVED_RUNTIME_BLOCKED"
+    assert report["proof_status"] == "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED"
     source = report["trusted_account_generation_source"]
     assert source["canonical_path"] == "users/{uid}/memory_state/head"
     assert source["reader_contract"] == "backend/utils/memory/v17_v3_account_generation_source.py"
+    assert source["writer"] == "backend/database/v17_memory_apply_store.py"
+    assert source["npm_emulator_command"] == "npm run test:v17-v3-state-head:emulator"
     assert source["server_owned"] is True
     assert source["independent_from_control_doc"] is True
     assert source["independent_from_projection_doc"] is True
@@ -48,8 +50,25 @@ def test_account_generation_readiness_identifies_independent_state_head_and_rema
 
     blocker = report["remaining_runtime_blocker"]
     assert blocker["status"] == "BLOCKED"
-    assert "writer/emulator evidence" in blocker["required_before_runtime_change"]
+    assert blocker["safe_local_writer_emulator_proved"] is True
+    assert "backend/routers/memories.py" in blocker["required_before_runtime_change"]
     assert blocker["runtime_wired"] is False
+
+
+def test_account_generation_readiness_records_state_head_writer_and_emulator_evidence():
+    report = _report(execute=True)
+    evidence = report["state_head_writer_emulator_evidence"]
+
+    assert evidence["status"] == "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED"
+    assert evidence["writer_path"] == "backend/database/v17_memory_apply_store.py"
+    assert evidence["writer_function"] == "_write_apply_result"
+    assert evidence["server_owned"] is True
+    assert evidence["client_rules_denial_proof"] == "backend/scripts/v17_firestore_rules_emulator_test.mjs"
+    assert (
+        evidence["admin_emulator_writer_reader_proof"] == "backend/scripts/v17_firestore_python_apply_emulator_test.py"
+    )
+    assert evidence["npm_emulator_command"] == "npm run test:v17-v3-state-head:emulator"
+    assert evidence["runtime_wired"] is False
 
 
 def test_account_generation_readiness_requires_four_way_generation_equality_without_self_compare():
@@ -84,12 +103,13 @@ def test_account_generation_readiness_json_summary_and_docs_registration_are_sta
     decoded = json.loads(json.dumps(_report(execute=True), sort_keys=True))
     assert decoded["summary"] == {
         "status": "BLOCKED",
-        "proof_status": "LOCAL_CONTRACT_PROVED_RUNTIME_BLOCKED",
+        "proof_status": "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED",
         "read_only": True,
         "mutation_allowed": False,
         "runtime_wiring_changed": False,
         "approval_claimed": False,
         "trusted_source_identified": True,
+        "state_head_writer_emulator_proved": True,
         "remaining_runtime_blocker_count": 1,
     }
 

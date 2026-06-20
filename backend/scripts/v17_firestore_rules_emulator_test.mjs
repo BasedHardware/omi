@@ -49,6 +49,23 @@ async function assertClientDeniedForV3ControlReaderState(db) {
   await assertFails(deleteDoc(controlStateDoc));
 }
 
+async function assertClientDeniedForV3MemoryStateHead(db) {
+  const stateHeadDoc = doc(db, 'users/v17-emulator-user/memory_state/head');
+  const stateHead = {
+    schema_version: 1,
+    uid: 'v17-emulator-user',
+    source: 'v17_memory_state_head',
+    account_generation: 50,
+    head_commit_id: 'commit-client-forbidden',
+    commit_sequence: 50,
+  };
+
+  await assertFails(getDoc(stateHeadDoc));
+  await assertFails(setDoc(stateHeadDoc, stateHead));
+  await assertFails(updateDoc(stateHeadDoc, { account_generation: 51 }));
+  await assertFails(deleteDoc(stateHeadDoc));
+}
+
 async function assertClientCannotSelfGrantV17AppKeyMemoryAccess(db) {
   const grantDoc = doc(db, 'users/v17-emulator-user/memory_control/v17_app_key_memory_grants');
   const selfGrant = {
@@ -90,11 +107,12 @@ try {
     await assertClientDeniedForProtectedCollection(db, collection);
   }
   await assertClientDeniedForV3ControlReaderState(db);
+  await assertClientDeniedForV3MemoryStateHead(db);
   await assertClientCannotSelfGrantV17AppKeyMemoryAccess(db);
 
   assert.equal(V17_PROTECTED_COLLECTIONS.length, 10);
   console.log(
-    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, and V17 app/key memory grant self-grant path`,
+    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, and V17 app/key memory grant self-grant path`,
   );
 } finally {
   await testEnv.cleanup();

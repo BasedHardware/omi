@@ -16,6 +16,7 @@ sys.modules["database._client"] = MagicMock()
 
 from database.v17_memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
+from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
@@ -196,6 +197,24 @@ def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_o
     assert any(path.startswith("users/u1/memory_items/") for path in written_paths)
     assert any(path.startswith("users/u1/memory_outbox/") for path in written_paths)
     assert any(path.startswith("users/u1/memory_commits/") for path in written_paths)
+    assert "users/u1/memory_state/head" in written_paths
+
+    state_head = db.docs["users/u1/memory_state/head"]
+    assert state_head == {
+        "schema_version": 1,
+        "uid": "u1",
+        "source": "v17_memory_state_head",
+        "account_generation": result.control_state.account_generation,
+        "head_commit_id": result.control_state.head_commit_id,
+        "commit_sequence": result.control_state.commit_sequence,
+        "updated_at": result.control_state.updated_at,
+    }
+
+    trusted = read_v17_v3_trusted_account_generation(uid="u1", db_client=db)
+    assert trusted.read_error_reason is None
+    assert trusted.account_generation == result.control_state.account_generation
+    assert trusted.head_commit_id == result.control_state.head_commit_id
+    assert trusted.commit_sequence == result.control_state.commit_sequence
 
 
 def test_firestore_apply_uses_stored_evidence_not_caller_payload_and_does_not_write_domain_rows_when_source_purged():

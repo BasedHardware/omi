@@ -100,7 +100,8 @@ REMAINING_GATES = [
         "required_evidence": (
             "Future GET must read expected_account_generation from the independent server-owned "
             "users/{uid}/memory_state/head source, then require trusted == control == projection == cursor generation; "
-            "writer/emulator/runtime integration evidence is still required before route wiring."
+            "local writer/emulator evidence now exists, but route integration and remaining runtime gates are still "
+            "required before route wiring."
         ),
         "existing_local_proofs": [
             "account_generation_readiness_proof",

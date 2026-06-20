@@ -20,6 +20,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
+from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
 
 
 def _stored_model(model):
@@ -104,6 +105,7 @@ def main() -> int:
     stored_operation = _required_doc(db_client, f"{collections.memory_operations}/{operation.operation_id}")
     stored_memory = _required_doc(db_client, f"{collections.memory_items}/{result.memory_items[0].memory_id}")
     stored_commit = _required_doc(db_client, f"{collections.memory_commits}/{result.control_state.head_commit_id}")
+    stored_state_head = _required_doc(db_client, collections.memory_state_head)
     stored_outbox = [
         _required_doc(db_client, f"{collections.memory_outbox}/{event.event_id}") for event in result.outbox_events
     ]
@@ -120,6 +122,24 @@ def main() -> int:
         raise AssertionError("materialized memory item lost account generation fence")
     if stored_commit["memory_item_ids"] != [result.memory_items[0].memory_id]:
         raise AssertionError("commit document did not record materialized memory identity")
+    expected_state_head = {
+        "schema_version": 1,
+        "uid": uid,
+        "source": "v17_memory_state_head",
+        "account_generation": result.control_state.account_generation,
+        "head_commit_id": result.control_state.head_commit_id,
+        "commit_sequence": result.control_state.commit_sequence,
+    }
+    for key, value in expected_state_head.items():
+        if stored_state_head.get(key) != value:
+            raise AssertionError(f"state-head {key} mismatch: {stored_state_head.get(key)!r} != {value!r}")
+    trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    if trusted.read_error_reason is not None:
+        raise AssertionError(f"trusted account-generation reader failed: {trusted.read_error_reason}")
+    if trusted.account_generation != result.control_state.account_generation:
+        raise AssertionError("trusted account-generation reader did not return committed generation")
+    if trusted.head_commit_id != result.control_state.head_commit_id:
+        raise AssertionError("trusted account-generation reader did not return committed head")
     if sorted(event["event_type"] for event in stored_outbox) != ["projection_sync", "vector_sync"]:
         raise AssertionError("outbox did not contain projection and vector sync events")
 
@@ -136,6 +156,7 @@ def main() -> int:
 
     print(
         "PASS: Python apply_long_term_patch_firestore committed and replayed V17 docs on Firestore emulator "
+        "including users/{uid}/memory_state/head trusted account-generation state-head "
         f"(uid={uid}, operation={operation.operation_id}, commit={result.control_state.head_commit_id})"
     )
     return 0

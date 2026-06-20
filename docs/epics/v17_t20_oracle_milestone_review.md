@@ -1650,3 +1650,22 @@ Added the next safe V17 `/v3` gate for trusted account-generation sourcing witho
 - Runtime remains **BLOCKED / NO-GO** pending state-head writer/emulator/runtime integration evidence proving the source is maintained by the server-owned account lifecycle/apply path and stays in lockstep with control/projection/cursor generations.
 
 Verification for this slice is recorded in `docs/epics/v17_memory_implementation_tickets.md` and the local commit summary. Preserved non-claims: no route wiring, no production Firestore/cloud/provider/vector calls, no production rollout approval, no client-supplied generation trust, and no legacy fallback/merge for V17 failures.
+
+### 2026-06-20 — P1-3 `/v3` state-head writer/emulator integration
+
+Completed the next safe trusted account-generation source proof without changing `backend/routers/memories.py` or runtime behavior:
+
+- Updated `backend/database/v17_memory_apply_store.py` so committed V17 apply writes `users/{uid}/memory_state/head` from committed server-owned `MemoryControlState` in the same transaction as `memory_control/state`, `memory_commits/{commit_id}`, `memory_items/*`, and `memory_outbox/*`.
+- The state-head contains `schema_version`, `uid`, `source='v17_memory_state_head'`, `account_generation`, `head_commit_id`, `commit_sequence`, and `updated_at`, matching `read_v17_v3_trusted_account_generation(...)`.
+- Extended `backend/tests/unit/test_v17_firestore_apply_store.py` to prove the written state-head is readable by the trusted generation reader.
+- Extended `backend/scripts/v17_firestore_rules_emulator_test.mjs` to deny signed-in client direct `get`/`set`/`update`/`delete` on `users/{uid}/memory_state/head`.
+- Extended `backend/scripts/v17_firestore_python_apply_emulator_test.py` and added `npm run test:v17-v3-state-head:emulator` to prove Admin/server apply writes the state-head on the local Firestore emulator and the trusted reader returns the committed account generation/head commit.
+- Updated account-generation and runtime-readiness artifacts to record local writer/emulator evidence while preserving overall `/v3` runtime **BLOCKED / NO-GO** until route integration, remaining gates, telemetry, rollback, and approval are complete.
+
+Verification for this slice:
+
+- RED: `pytest tests/unit/test_v17_firestore_apply_store.py -q` -> `1 failed, 5 passed`, because `users/u1/memory_state/head` was not written.
+- Focused GREEN: `52 passed in 0.30s`.
+- Full normal-env V17 regression: `549 passed, 3 warnings in 8.87s`.
+- Emulator proof: `npm run test:v17-v3-state-head:emulator` -> client PERMISSION_DENIED logs expected, `PASS: signed-in client read/write denial asserted for 10 V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, and V17 app/key memory grant self-grant path`; `PASS: Python apply_long_term_patch_firestore committed and replayed V17 docs on Firestore emulator including users/{uid}/memory_state/head trusted account-generation state-head (...)`.
+- Production rollout remains **BLOCKED / NO-GO**; no runtime `/v3` behavior, route wiring, production Firestore/cloud/provider/vector call, client-supplied generation trust, control/projection self-compare, or legacy fallback/merge was introduced.

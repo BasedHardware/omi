@@ -40,6 +40,10 @@ from models.v17_memory_apply import (
 )
 from models.v17_memory_operations import MemoryOperation
 from models.v17_product_memory import MemoryItemStatus, V17MemoryItem
+from utils.memory.v17_v3_account_generation_source import (
+    V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
+    V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
+)
 
 
 class V17FirestoreApplyError(Exception):
@@ -230,7 +234,9 @@ def _write_apply_result(
 
     control_ref = db_client.document(collections.memory_control_state)
     commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
+    state_head_ref = db_client.document(collections.memory_state_head)
     transaction.set(control_ref, _firestore_data(result.control_state))
+    transaction.set(state_head_ref, _firestore_data(_memory_state_head_from_control(result.control_state)))
     transaction.set(
         commit_ref,
         _firestore_data(
@@ -253,6 +259,18 @@ def _write_apply_result(
     for event in result.outbox_events:
         event_ref = db_client.document(f"{collections.memory_outbox}/{event.event_id}")
         transaction.set(event_ref, _firestore_data(event))
+
+
+def _memory_state_head_from_control(control_state: MemoryControlState) -> Dict[str, Any]:
+    return {
+        "schema_version": V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
+        "uid": control_state.uid,
+        "source": V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
+        "account_generation": control_state.account_generation,
+        "head_commit_id": control_state.head_commit_id,
+        "commit_sequence": control_state.commit_sequence,
+        "updated_at": control_state.updated_at,
+    }
 
 
 def _required_model(*, ref, transaction, model, label: str):

@@ -2,9 +2,10 @@
 """Safe V17 `/v3` trusted account-generation source/readiness artifact.
 
 This artifact identifies the independent server-owned account-generation source
-that future `GET /v3/memories` wiring must use for `expected_account_generation`.
-It intentionally does not import FastAPI routers, read Firestore, call providers,
-mutate state, wire runtime behavior, or claim production rollout approval.
+that future `GET /v3/memories` wiring must use for `expected_account_generation`
+and records local writer/emulator evidence for its state-head document. It
+intentionally does not import FastAPI routers, call providers, wire runtime
+behavior, or claim production rollout approval.
 """
 
 from __future__ import annotations
@@ -17,7 +18,12 @@ TRUSTED_ACCOUNT_GENERATION_SOURCE = {
     "source_id": "trusted_memory_state_head",
     "canonical_path": "users/{uid}/memory_state/head",
     "reader_contract": "backend/utils/memory/v17_v3_account_generation_source.py",
+    "writer": "backend/database/v17_memory_apply_store.py",
     "unit_test": "backend/tests/unit/test_v17_v3_account_generation_source.py",
+    "writer_unit_test": "backend/tests/unit/test_v17_firestore_apply_store.py",
+    "emulator_test": "backend/scripts/v17_firestore_python_apply_emulator_test.py",
+    "rules_emulator_test": "backend/scripts/v17_firestore_rules_emulator_test.mjs",
+    "npm_emulator_command": "npm run test:v17-v3-state-head:emulator",
     "schema_version": 1,
     "required_source_field": "v17_memory_state_head",
     "required_fields": ["uid", "schema_version", "source", "account_generation", "head_commit_id", "commit_sequence"],
@@ -26,6 +32,21 @@ TRUSTED_ACCOUNT_GENERATION_SOURCE = {
     "independent_from_projection_doc": True,
     "client_supplied_generation_trusted": False,
     "used_for_runtime_expected_generation_now": False,
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+}
+
+STATE_HEAD_WRITER_EMULATOR_EVIDENCE = {
+    "status": "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED",
+    "writer_path": "backend/database/v17_memory_apply_store.py",
+    "writer_function": "_write_apply_result",
+    "materializes_from": "committed MemoryControlState returned by apply_long_term_patch_transaction",
+    "lockstep_fields": ["uid", "account_generation", "head_commit_id", "commit_sequence", "updated_at"],
+    "reader_contract_fields": TRUSTED_ACCOUNT_GENERATION_SOURCE["required_fields"],
+    "server_owned": True,
+    "client_rules_denial_proof": "backend/scripts/v17_firestore_rules_emulator_test.mjs",
+    "admin_emulator_writer_reader_proof": "backend/scripts/v17_firestore_python_apply_emulator_test.py",
+    "npm_emulator_command": "npm run test:v17-v3-state-head:emulator",
     "runtime_wired": False,
     "production_rollout_approved": False,
 }
@@ -57,13 +78,14 @@ FUTURE_ROUTE_GENERATION_REQUIREMENTS = {
 }
 
 REMAINING_RUNTIME_BLOCKER = {
-    "blocker_id": "state_head_writer_and_runtime_integration_evidence_missing",
+    "blocker_id": "runtime_route_integration_and_remaining_gates_missing",
     "status": "BLOCKED",
     "required_before_runtime_change": (
-        "Real state-head writer/emulator evidence must prove users/{uid}/memory_state/head is maintained by the "
-        "server-owned account lifecycle/apply path and stays in lockstep with control/projection/cursor generations."
+        "Runtime GET /v3 route wiring, remaining gate evidence, telemetry/approval, and real route fail-closed "
+        "integration are still required before changing backend/routers/memories.py."
     ),
     "safe_local_contract_proved": True,
+    "safe_local_writer_emulator_proved": True,
     "runtime_wired": False,
     "approval_claimed": False,
 }
@@ -80,7 +102,7 @@ NON_CLAIMS = [
 
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
-    proof_status = "LOCAL_CONTRACT_PROVED_RUNTIME_BLOCKED" if execute else "NOT_RUN"
+    proof_status = "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED" if execute else "NOT_RUN"
     return {
         "artifact": "v17_p1_3_v3_account_generation_readiness",
         "status": "BLOCKED",
@@ -98,6 +120,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "production_rollout_approved": False,
         "approval_claimed": False,
         "trusted_account_generation_source": TRUSTED_ACCOUNT_GENERATION_SOURCE,
+        "state_head_writer_emulator_evidence": STATE_HEAD_WRITER_EMULATOR_EVIDENCE,
         "future_route_generation_requirements": FUTURE_ROUTE_GENERATION_REQUIREMENTS,
         "remaining_runtime_blocker": REMAINING_RUNTIME_BLOCKER,
         "non_claims": NON_CLAIMS,
@@ -109,6 +132,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "runtime_wiring_changed": False,
             "approval_claimed": False,
             "trusted_source_identified": True,
+            "state_head_writer_emulator_proved": execute,
             "remaining_runtime_blocker_count": 1,
         },
     }
