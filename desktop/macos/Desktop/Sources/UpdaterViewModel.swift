@@ -21,10 +21,16 @@ enum UpdateChannel: String, CaseIterable {
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta
+  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta.
+  /// Local hot-swap builds (self-beta.sh) stamp `OMISelfBuild=true` into Info.plist, so
+  /// they show "Omi Beta (dev)" — a clear signal you're on a locally-rebuilt bundle, not a
+  /// Codemagic-distributed one. A real Codemagic build never sets the key, and when it later
+  /// replaces the hot-swap bundle via Sparkle the suffix disappears.
   static var appDisplayName: String {
     let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    return (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    let base = (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    let isSelfBuild = (Bundle.main.object(forInfoDictionaryKey: "OMISelfBuild") as? Bool) ?? false
+    return isSelfBuild ? "\(base) (dev)" : base
   }
 }
 
