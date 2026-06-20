@@ -587,6 +587,13 @@ class PushToTalkManager: ObservableObject {
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
+      // The relay already died this turn (omniDidError nilled it) — don't wait on a dead
+      // socket; transcribe the buffered turn audio via Deepgram now so PTT still answers.
+      if realtimeOmniService == nil {
+        log("PushToTalkManager: omni relay unavailable — transcribing turn via Deepgram")
+        fallBackToDeepgram()
+        return
+      }
       // QueryTracer: the omni provider's post-commit finalization (VAD close +
       // final STT inference + round-trip) — closed at the top of sendTranscript().
       activeTracer?.begin(
@@ -596,8 +603,11 @@ class PushToTalkManager: ObservableObject {
       let timeout = DispatchWorkItem { [weak self] in
         Task { @MainActor in
           guard let self, self.state == .finalizing else { return }
-          log("PushToTalkManager: omni finalization timeout — sending transcript")
-          self.sendTranscript()
+          // No clean final transcript from the relay in time — don't ship the garbage
+          // interim it may have left behind; fall back to Deepgram on the full buffered
+          // turn audio. fallBackToDeepgram() no-ops if the turn was already sent.
+          log("PushToTalkManager: omni finalization timeout — falling back to Deepgram")
+          self.fallBackToDeepgram()
         }
       }
       liveFinalizationTimeout = timeout
@@ -1174,14 +1184,23 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   func omniDidError(_ message: String) {
     logError("PushToTalkManager: omni STT error: \(message)")
-    // If the omni model already gave us a transcript this turn, the error is a
-    // benign teardown — ignore it. Otherwise the relay is unreachable (e.g. the
-    // backend isn't on prod yet): fall back to Deepgram so PTT never breaks.
-    guard !omniReceivedTranscript,
+    // Benign ONLY if the turn already completed (final transcript sent). A mid-turn relay
+    // death — even after a spurious interim like "Olha olha" that set omniReceivedTranscript
+    // — must NOT be ignored, or the turn is lost (garbage/no reply). The full turn audio is
+    // always buffered in batchAudioBuffer, so we re-transcribe it via Deepgram.
+    guard !omniTurnSent,
           state == .listening || state == .lockedListening
             || state == .pendingLockDecision || state == .finalizing
     else { return }
-    fallBackToDeepgram()
+    // Kill the dead relay so finalize() doesn't wait on it; the mic keeps buffering.
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    // If the user already released, transcribe the buffered turn now. If they're still
+    // holding, keep capturing — finalize()'s dead-relay branch falls back to Deepgram with
+    // the full turn audio (avoids cutting them off mid-sentence).
+    if state == .finalizing {
+      fallBackToDeepgram()
+    }
   }
 
   /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
