@@ -37,7 +37,6 @@ def _safe_id(value: Any) -> str:
 
 def _sanitized_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     return {
-        'memory_id': _safe_id(decision.get('memory_id')),
         'memory_layer': decision.get('memory_layer') or 'unknown',
         'visibility': decision.get('visibility') or 'unknown',
         'source_freshness': decision.get('source_freshness') or 'unknown',
@@ -53,7 +52,12 @@ def _drop_sensitive_fields(record: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def decide_default_visibility(
-    record: Dict[str, Any], *, include_archive: bool = False, include_historical: bool = False
+    record: Dict[str, Any],
+    *,
+    include_archive: bool = False,
+    include_historical: bool = False,
+    server_archive_capability: bool = False,
+    server_historical_capability: bool = False,
 ) -> Dict[str, Any]:
     """Pure readiness-only default visibility decision for future GET /v3/memories.
 
@@ -91,14 +95,20 @@ def decide_default_visibility(
 
     if visibility == 'archived_evidence' or memory_layer == 'l1_archive':
         if include_archive and include_historical:
-            decision['opt_in_visible'] = True
-            decision['agent_use'] = 'archived_evidence_not_stable_profile'
-            decision['reason'] = 'archive_visible_only_by_explicit_opt_in'
+            if server_archive_capability and server_historical_capability:
+                decision['opt_in_visible'] = True
+                decision['agent_use'] = 'archived_evidence_not_stable_profile'
+                decision['reason'] = 'archive_visible_only_by_explicit_opt_in'
+            else:
+                decision['reason'] = 'archive_requires_server_capability'
         else:
             decision['reason'] = 'archive_requires_explicit_opt_in'
         return decision
 
     if visibility == 'short_term':
+        if lifecycle != 'working':
+            decision['reason'] = 'short_term_requires_approved_working_lifecycle'
+            return decision
         if source_freshness == 'stale':
             if include_historical:
                 decision['opt_in_visible'] = True
@@ -176,8 +186,12 @@ def evaluate_archive_short_term_visibility_readiness(
     records = list(sample_records) if sample_records is not None else _sample_records()
     decisions = [decide_default_visibility(record) for record in records]
     sanitized_decisions = [_sanitized_decision(decision) for decision in decisions]
-    default_visible_ids = [decision['memory_id'] for decision in sanitized_decisions if decision['default_visible']]
-    blocked_ids = [decision['memory_id'] for decision in sanitized_decisions if not decision['default_visible']]
+    reason_counts: Dict[str, int] = {}
+    for decision in sanitized_decisions:
+        reason = decision['reason']
+        reason_counts[reason] = reason_counts.get(reason, 0) + 1
+    default_visible_count = sum(1 for decision in sanitized_decisions if decision['default_visible'])
+    opt_in_visible_count = sum(1 for decision in sanitized_decisions if decision['opt_in_visible'])
 
     return {
         'script': 'v17_p1_3_v3_archive_short_term_visibility_readiness',
@@ -195,8 +209,10 @@ def evaluate_archive_short_term_visibility_readiness(
         'provider_or_vector_call_count': 0,
         'legacy_fallback_or_merge': False,
         'case_count': len(sanitized_decisions),
-        'default_visible_ids': default_visible_ids,
-        'blocked_or_opt_in_required_ids': blocked_ids,
+        'default_visible_count': default_visible_count,
+        'blocked_or_opt_in_required_count': len(sanitized_decisions) - default_visible_count,
+        'opt_in_visible_count': opt_in_visible_count,
+        'reason_counts': reason_counts,
         'decisions': sanitized_decisions,
         'contract': {
             'archive_default_visible': False,
@@ -207,6 +223,14 @@ def evaluate_archive_short_term_visibility_readiness(
             'long_term_active_stable_synthesis_allowed': True,
             'unknown_visibility_lifecycle_or_freshness_fail_closed': True,
             'v17_failure_legacy_fallback_or_merge_allowed': False,
+        },
+        'summary': {
+            'status': BLOCKED,
+            'case_count': len(sanitized_decisions),
+            'default_visible_count': default_visible_count,
+            'blocked_or_opt_in_required_count': len(sanitized_decisions) - default_visible_count,
+            'archive_opt_in_required_count': reason_counts.get('archive_requires_explicit_opt_in', 0),
+            'server_capability_required_count': reason_counts.get('archive_requires_server_capability', 0),
         },
         'remaining_blocker': 'future GET /v3/memories route wiring and real service runtime evidence are intentionally absent',
     }

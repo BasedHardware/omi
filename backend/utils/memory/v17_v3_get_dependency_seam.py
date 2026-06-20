@@ -31,8 +31,16 @@ LOW_CARDINALITY_DECISION_CODES = frozenset(
         'rate_limit_backpressure_ok',
         'backpressure_denied',
         'non_enrolled_legacy_primary',
+        'dependency_adapter_exception',
+        'dependency_adapter_timeout',
+        'dependency_adapter_malformed_return',
+        'dependency_contract_violation',
     }
 )
+
+_VALID_DECISION_KINDS = {'allow', 'fail_closed', 'legacy_primary_only'}
+
+_NON_ENROLLED_LEGACY_BOUNDARY = 'load_enrollment_control'
 
 
 @dataclass(frozen=True)
@@ -161,6 +169,98 @@ def _result(
     )
 
 
+def _contract_violation_result(
+    context: V17V3GetDependencyContext,
+    *,
+    public_step: str,
+    executed_steps: tuple[str, ...],
+    subject_uid: str | None,
+) -> V17V3GetDependencyChainResult:
+    return _result(
+        context,
+        status='BLOCKED',
+        http_status=500,
+        decision_code='dependency_contract_violation',
+        dependency_step=public_step,
+        executed_steps=executed_steps,
+        subject_uid=subject_uid,
+    )
+
+
+def _normalize_adapter_decision(
+    context: V17V3GetDependencyContext,
+    adapter: DependencyAdapter,
+    *,
+    public_step: str,
+    executed_steps: tuple[str, ...],
+    subject_uid: str | None,
+) -> V17V3GetDependencyDecision | V17V3GetDependencyChainResult:
+    try:
+        decision = adapter(context)
+    except TimeoutError:
+        return _result(
+            context,
+            status='BLOCKED',
+            http_status=504,
+            decision_code='dependency_adapter_timeout',
+            dependency_step=public_step,
+            executed_steps=executed_steps,
+            subject_uid=subject_uid,
+        )
+    except Exception:
+        return _result(
+            context,
+            status='BLOCKED',
+            http_status=503,
+            decision_code='dependency_adapter_exception',
+            dependency_step=public_step,
+            executed_steps=executed_steps,
+            subject_uid=subject_uid,
+        )
+
+    if not isinstance(decision, V17V3GetDependencyDecision):
+        return _result(
+            context,
+            status='BLOCKED',
+            http_status=503,
+            decision_code='dependency_adapter_malformed_return',
+            dependency_step=public_step,
+            executed_steps=executed_steps,
+            subject_uid=subject_uid,
+        )
+    return decision
+
+
+def _decision_contract_valid(
+    decision: V17V3GetDependencyDecision, *, adapter_attr: str, subject_uid: str | None
+) -> bool:
+    if decision.kind not in _VALID_DECISION_KINDS:
+        return False
+    try:
+        _assert_low_cardinality(decision.decision_code)
+    except ValueError:
+        return False
+    if decision.kind == 'allow':
+        if decision.http_status != 200:
+            return False
+        if adapter_attr == 'authenticate_subject' and not decision.subject_uid:
+            return False
+        if adapter_attr != 'authenticate_subject' and decision.subject_uid is not None:
+            return False
+        return True
+    if decision.kind == 'fail_closed':
+        return 400 <= decision.http_status <= 599 and decision.subject_uid is None
+    if decision.kind == 'legacy_primary_only':
+        return (
+            adapter_attr == _NON_ENROLLED_LEGACY_BOUNDARY
+            and subject_uid is not None
+            and decision.http_status == 200
+            and decision.subject_uid is None
+            and decision.decision_code == 'non_enrolled_legacy_primary'
+        )
+    return False
+
+
 def plan_v17_v3_get_dependency_chain(
     context: V17V3GetDependencyContext,
     adapters: V17V3GetDependencyAdapters,
@@ -178,9 +278,22 @@ def plan_v17_v3_get_dependency_chain(
     subject_uid: str | None = None
 
     for adapter_attr, public_step in _ORDER:
-        decision = getattr(adapters, adapter_attr)(context)
         executed_steps.append(public_step)
-        _assert_low_cardinality(decision.decision_code)
+        decision_or_result = _normalize_adapter_decision(
+            context,
+            getattr(adapters, adapter_attr),
+            public_step=public_step,
+            executed_steps=tuple(executed_steps),
+            subject_uid=subject_uid,
+        )
+        if isinstance(decision_or_result, V17V3GetDependencyChainResult):
+            return decision_or_result
+        decision = decision_or_result
+
+        if not _decision_contract_valid(decision, adapter_attr=adapter_attr, subject_uid=subject_uid):
+            return _contract_violation_result(
+                context, public_step=public_step, executed_steps=tuple(executed_steps), subject_uid=subject_uid
+            )
 
         if adapter_attr == 'authenticate_subject':
             subject_uid = decision.subject_uid

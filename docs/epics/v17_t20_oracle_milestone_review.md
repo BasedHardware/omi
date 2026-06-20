@@ -1855,12 +1855,24 @@ Oracle: **GO to begin a default-off wiring implementation; NO-GO to enable the V
 - Rename no-I/O `--execute` scripts to `--report` or contract artifacts where appropriate.
 - Reduce tests that only assert `proof_present=True` or doc strings; keep a smaller documentation-link lint.
 
+### 2026-06-20 — V17-V3-F1 seam invariant hardening
+
+Implemented the first follow-up hardening slice while preserving the runtime `BLOCKED` / NO-GO posture:
+
+- `legacy_primary_only` is now valid only at the non-enrolled enrollment boundary; later legacy decisions fail closed as internal dependency contract violations.
+- Adapter exceptions, `TimeoutError`s, and malformed returns normalize into typed, low-cardinality, bounded fail-closed outcomes with no secret/content/cursor/user ID logging.
+- Dependency decisions now validate kind, HTTP status, authenticated-subject, and legacy-origin invariants before any read decision can be returned.
+- Fresh source-backed Short-term memories require explicit approved `working` lifecycle before default visibility.
+- Archive/historical visibility is modeled as request intent plus server capability; request opt-in alone is not authorization.
+- Archive visibility readiness output now reports counts/reason codes only and omits memory IDs.
+
+No `backend/routers/memories.py` edits, runtime route wiring, production calls, Firestore writes, provider/vector/network calls, telemetry sink calls, rollout approval, legacy fallback/merge, Archive default visibility, or stale Short-term default visibility are claimed.
+
 ### Recommended next slices
 
-1. Harden pure seams: legacy restriction, decision invariants, exception normalization, Short-term lifecycle, archive capability, no identifiers in reports.
-2. Add a typed request-scoped `V17V3GetRuntimeSnapshot` with subject/control/config/account generation/projection generation/convergence/cursor/archive capability/deadline/read timestamp coherence.
-3. Build a framework-independent composed service entry point before route wiring.
-4. First router commit should be default-off, legacy-byte-preserving for non-enrolled callers, V17-only for enrolled callers, dependency-overrideable in TestClient, and never fallback to legacy after V17 entry.
+1. Add a typed request-scoped `V17V3GetRuntimeSnapshot` with subject/control/config/account generation/projection generation/convergence/cursor/archive capability/deadline/read timestamp coherence.
+2. Build a framework-independent composed service entry point before route wiring.
+3. First router commit should be default-off, legacy-byte-preserving for non-enrolled callers, V17-only for enrolled callers, dependency-overrideable in TestClient, and never fallback to legacy after V17 entry.
 
 ### Minimal decisions for David
 

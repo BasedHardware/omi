@@ -72,12 +72,41 @@ def test_explicit_archive_historical_opt_in_does_not_make_archive_default_visibl
     }
 
     default_decision = decide_default_visibility(archive)
-    opt_in_decision = decide_default_visibility(archive, include_archive=True, include_historical=True)
+    request_only_decision = decide_default_visibility(archive, include_archive=True, include_historical=True)
+    opt_in_decision = decide_default_visibility(
+        archive,
+        include_archive=True,
+        include_historical=True,
+        server_archive_capability=True,
+        server_historical_capability=True,
+    )
 
     assert default_decision['default_visible'] is False
+    assert request_only_decision['opt_in_visible'] is False
+    assert request_only_decision['reason'] == 'archive_requires_server_capability'
     assert opt_in_decision['default_visible'] is False
     assert opt_in_decision['opt_in_visible'] is True
     assert opt_in_decision['reason'] == 'archive_visible_only_by_explicit_opt_in'
+
+
+def test_fresh_short_term_requires_explicit_approved_working_lifecycle_before_default_visible():
+    base = {
+        'memory_id': 'short_missing_lifecycle',
+        'memory_layer': 'working',
+        'visibility': 'short_term',
+        'source_freshness': 'fresh',
+        'source_backed_projection': True,
+    }
+
+    missing_lifecycle = decide_default_visibility(base)
+    review_lifecycle = decide_default_visibility({**base, 'lifecycle_status': 'review'})
+    working_lifecycle = decide_default_visibility({**base, 'lifecycle_status': 'working'})
+
+    assert missing_lifecycle['default_visible'] is False
+    assert missing_lifecycle['reason'] == 'short_term_requires_approved_working_lifecycle'
+    assert review_lifecycle['default_visible'] is False
+    assert review_lifecycle['reason'] == 'short_term_requires_approved_working_lifecycle'
+    assert working_lifecycle['default_visible'] is True
 
 
 @pytest.mark.parametrize(
@@ -166,6 +195,12 @@ def test_readiness_report_is_blocked_read_only_and_sanitized():
     assert 'raw user content' not in encoded
     assert 'cursor_secret' not in encoded
     assert 'sk-secret' not in encoded
+    assert 'secret_user_text_must_not_leak' not in encoded
+    assert 'default_visible_ids' not in report
+    assert 'blocked_or_opt_in_required_ids' not in report
+    assert report['summary']['default_visible_count'] == 0
+    assert report['summary']['archive_opt_in_required_count'] == 1
+    assert all('memory_id' not in decision for decision in report['decisions'])
 
 
 def test_readiness_module_and_script_do_not_import_memories_router():

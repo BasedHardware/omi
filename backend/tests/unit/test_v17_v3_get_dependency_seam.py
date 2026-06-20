@@ -186,3 +186,88 @@ def test_dependency_seam_uses_bounded_low_cardinality_decision_codes_only():
     }
     assert 'server-uid' not in repr(result.logged_fields)
     assert 'cursor' not in ''.join(result.logged_fields.values())
+
+
+def test_dependency_seam_normalizes_adapter_exceptions_timeouts_and_malformed_returns():
+    cases = [
+        (
+            'adapter_exception',
+            lambda context: (_ for _ in ()).throw(RuntimeError('provider exploded with user-secret')),
+            'dependency_adapter_exception',
+            503,
+        ),
+        (
+            'adapter_timeout',
+            lambda context: (_ for _ in ()).throw(TimeoutError('cursor token timed out')),
+            'dependency_adapter_timeout',
+            504,
+        ),
+        ('adapter_malformed', lambda context: {'kind': 'allow'}, 'dependency_adapter_malformed_return', 503),
+    ]
+    for case_id, adapter, expected_code, expected_status in cases:
+        events = []
+        result = plan_v17_v3_get_dependency_chain(_context(), _adapters(events, validate_runtime_config=adapter))
+
+        assert result.status == 'BLOCKED', case_id
+        assert result.http_status == expected_status
+        assert result.decision_code == expected_code
+        assert result.dependency_step == 'config'
+        assert result.should_fetch_v17_projection is False
+        assert result.should_fetch_legacy is False
+        assert 'secret' not in repr(result.logged_fields)
+        assert 'token' not in repr(result.logged_fields)
+
+
+def test_dependency_seam_restricts_legacy_primary_to_non_enrolled_enrollment_boundary():
+    events = []
+    result = plan_v17_v3_get_dependency_chain(
+        _context(),
+        _adapters(
+            events,
+            validate_runtime_config=lambda context: V17V3GetDependencyDecision.legacy('non_enrolled_legacy_primary'),
+        ),
+    )
+
+    assert result.status == 'BLOCKED'
+    assert result.http_status == 500
+    assert result.decision_code == 'dependency_contract_violation'
+    assert result.dependency_step == 'config'
+    assert result.should_fetch_legacy is False
+    assert result.should_fetch_v17_projection is False
+
+
+def test_dependency_seam_validates_decision_kind_status_and_subject_invariants():
+    bad_auth_subject = plan_v17_v3_get_dependency_chain(
+        _context(),
+        _adapters([], authenticate_subject=lambda context: V17V3GetDependencyDecision.allowed('auth_ok')),
+    )
+    bad_fail_status = plan_v17_v3_get_dependency_chain(
+        _context(),
+        _adapters(
+            [],
+            validate_cursor=lambda context: V17V3GetDependencyDecision.fail_closed('cursor_invalid', http_status=200),
+        ),
+    )
+    bad_allow_status = plan_v17_v3_get_dependency_chain(
+        _context(),
+        _adapters(
+            [],
+            validate_cursor=lambda context: V17V3GetDependencyDecision(
+                kind='allow', decision_code='cursor_ok', http_status=503
+            ),
+        ),
+    )
+    bad_kind = plan_v17_v3_get_dependency_chain(
+        _context(),
+        _adapters(
+            [],
+            validate_cursor=lambda context: V17V3GetDependencyDecision(kind='maybe', decision_code='cursor_ok'),  # type: ignore[arg-type]
+        ),
+    )
+
+    assert bad_auth_subject.status == 'BLOCKED'
+    assert bad_auth_subject.decision_code == 'dependency_contract_violation'
+    assert bad_auth_subject.http_status == 500
+    assert bad_fail_status.decision_code == 'dependency_contract_violation'
+    assert bad_allow_status.decision_code == 'dependency_contract_violation'
+    assert bad_kind.decision_code == 'dependency_contract_violation'
