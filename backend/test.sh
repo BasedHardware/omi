@@ -48,6 +48,7 @@ pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_conversation_model_split.py -v
+pytest tests/unit/test_limitless_import_idempotency.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
 pytest tests/unit/test_pusher_private_cloud_data_protection.py -v
 pytest tests/unit/test_pusher_batch_upload.py -v

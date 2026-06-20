@@ -107,6 +107,7 @@ def get_import_jobs(
             total_files=job.get('total_files'),
             processed_files=job.get('processed_files'),
             conversations_created=job.get('conversations_created'),
+            conversations_skipped=job.get('conversations_skipped'),
             created_at=job.get('created_at'),
             error=job.get('error'),
         )
@@ -147,6 +148,7 @@ def get_import_job_status(
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
+        conversations_skipped=job.get('conversations_skipped'),
         created_at=job.get('created_at'),
         error=job.get('error'),
     )

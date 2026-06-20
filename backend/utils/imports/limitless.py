@@ -16,6 +16,7 @@ from zipfile import ZipFile
 
 import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
+from database._client import document_id_from_seed
 from models.conversation import AppResult, Conversation
 from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
 from models.structured import Structured
@@ -198,6 +199,33 @@ def _create_overview_from_transcript(segments: List[TranscriptSegment], max_char
     return overview if overview else "Imported from Limitless"
 
 
+# Namespace prefix for deterministic Limitless conversation IDs. NEVER CHANGE this
+# string: it is baked into the ID of every already-imported conversation, so a new
+# value would orphan them and re-create duplicates on the next import.
+LIMITLESS_IMPORT_ID_NAMESPACE = "limitless"
+
+
+def conversation_id_for_lifelog(uid: str, filename: str) -> str:
+    """Deterministic conversation ID for a Limitless lifelog file.
+
+    Keyed on (uid, stable lifelog identity) via the shared ``document_id_from_seed``
+    primitive, so re-importing the same export resolves to the same ID and the
+    importer can skip lifelogs it has already stored (idempotent import).
+
+    The identity is the lifelog's start timestamp parsed from the filename
+    (e.g. ``2025-10-08_07h00m25s_Title-slug.md`` -> ``2025-10-08T07:00:25+00:00``).
+    The mutable title slug is deliberately excluded so that if Limitless
+    regenerates a lifelog's title between exports, the re-import still maps to the
+    same conversation instead of creating a near-duplicate. A single pendant cannot
+    start two lifelogs in the same second, so the timestamp alone identifies a
+    lifelog. If the filename carries no parseable timestamp, the full filename is
+    used as a fallback identity.
+    """
+    started_at, _title_slug = parse_lifelog_filename(filename)
+    identity = started_at.isoformat() if started_at else filename
+    return document_id_from_seed(f"{LIMITLESS_IMPORT_ID_NAMESPACE}:{uid}:{identity}")
+
+
 def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code: str = 'en') -> None:
     """
     Background worker to process a Limitless ZIP export using LIGHT IMPORT mode.
@@ -266,6 +294,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             processed_files = 0
             conversations_created = 0
+            conversations_skipped = 0
             errors = []
 
             for lifelog_path in lifelog_files:
@@ -281,6 +310,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         processed_files += 1
                         import_jobs_db.update_import_job(job_id, {'processed_files': processed_files})
                         continue
+
+                    # Deterministic, idempotent conversation ID (keyed on lifelog identity).
+                    conversation_id = conversation_id_for_lifelog(uid, filename)
 
                     # Calculate finished_at from last segment
                     if segments and started_at:
@@ -311,9 +343,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         events=[],
                     )
 
-                    # Create conversation object directly
+                    # Create conversation object directly (no AI processing).
                     conversation = Conversation(
-                        id=str(uuid.uuid4()),
+                        id=conversation_id,
                         created_at=started_at,  # Use started_at as created_at for proper ordering
                         started_at=started_at,
                         finished_at=finished_at,
@@ -326,9 +358,16 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         discarded=False,
                     )
 
-                    # Save directly to database (skip all AI processing)
-                    conversations_db.upsert_conversation(uid, conversation.dict())
-                    conversations_created += 1
+                    # Create-if-absent so re-importing the same export skips lifelogs already
+                    # stored instead of overwriting them. This is atomic (Firestore create()),
+                    # so it never duplicates and never clobbers edits a user may have made to a
+                    # previously-imported conversation ("first import wins"). Picking up
+                    # Limitless's own later edits to a lifelog is intentionally out of scope.
+                    if conversations_db.create_conversation_if_absent(uid, conversation.dict()):
+                        conversations_created += 1
+                    else:
+                        conversations_skipped += 1
+                        logger.info(f"[Limitless Import] Skipped already-imported lifelog: {filename}")
 
                 except Exception as e:
                     error_msg = f"Error processing {lifelog_path}: {str(e)}"
@@ -344,15 +383,23 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                         {
                             'processed_files': processed_files,
                             'conversations_created': conversations_created,
+                            'conversations_skipped': conversations_skipped,
                         },
                     )
+
+            logger.info(
+                f"[Limitless Import] Done: {conversations_created} created, "
+                f"{conversations_skipped} skipped (already imported), {len(errors)} errors"
+            )
 
             # Mark as completed
             final_status = ImportJobStatus.completed.value
             error_msg = None
 
             if errors:
-                if conversations_created == 0:
+                # Only a hard failure if nothing was created and nothing was skipped
+                # (a re-import that skips everything is a success, not a failure).
+                if conversations_created == 0 and conversations_skipped == 0:
                     final_status = ImportJobStatus.failed.value
                     error_msg = f"All files failed to process. First error: {errors[0]}"
                 else:
@@ -365,19 +412,32 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     'status': final_status,
                     'completed_at': datetime.now(timezone.utc).isoformat(),
                     'error': error_msg,
+                    # Authoritative final counts (the periodic update can lag if the last
+                    # files were skipped/empty and short-circuited before it ran).
+                    'conversations_created': conversations_created,
+                    'conversations_skipped': conversations_skipped,
                 },
             )
 
             # Send push notification
             if final_status == ImportJobStatus.completed.value:
+                complete_body = f"Successfully imported {conversations_created} conversations from your Limitless data."
+                if conversations_skipped:
+                    complete_body = (
+                        f"Imported {conversations_created} new conversations "
+                        f"({conversations_skipped} already imported) from your Limitless data."
+                    )
+                if errors:
+                    complete_body += f" {len(errors)} file(s) could not be processed."
                 send_notification(
                     user_id=uid,
                     title="Limitless Import Complete! 🎉",
-                    body=f"Successfully imported {conversations_created} conversations from your Limitless data.",
+                    body=complete_body,
                     data={
                         'type': 'import_complete',
                         'job_id': job_id,
                         'conversations_created': str(conversations_created),
+                        'conversations_skipped': str(conversations_skipped),
                     },
                 )
             else:

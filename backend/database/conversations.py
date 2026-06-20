@@ -5,7 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -169,6 +169,38 @@ def get_conversation(uid, conversation_id):
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = conversation_ref.get().to_dict()
     return conversation_data
+
+
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+def _create_conversation_doc(uid: str, conversation_data: dict):
+    # Decorated for the same encryption / data-protection preparation as
+    # upsert_conversation. Uses Firestore create() which raises AlreadyExists if the
+    # document already exists; that exception propagates to create_conversation_if_absent.
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    conversation_ref.create(conversation_data)
+
+
+def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
+    """Atomically create a conversation; return True if created, False if it already exists.
+
+    Backed by Firestore document.create(), so concurrent writers can't overwrite each
+    other — true create-if-absent semantics (unlike upsert_conversation, which does a
+    last-writer-wins set()).
+    """
+    try:
+        _create_conversation_doc(uid, conversation_data)
+        return True
+    except Conflict:
+        # Firestore create() raises Conflict (its AlreadyExists subclass on gRPC) when
+        # the document already exists. Catching the base Conflict covers both transports.
+        return False
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
