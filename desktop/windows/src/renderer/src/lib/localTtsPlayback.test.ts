@@ -103,4 +103,47 @@ describe('speakAssistantText', () => {
     expect(result).toBe('failed')
     expect(localTtsSynthesize).not.toHaveBeenCalled()
   })
+
+  it('synthesizes assistant text through ElevenLabs when selected', async () => {
+    const playAudio = vi.fn(async () => undefined)
+    const elevenLabsTtsSynthesize = vi.fn(async () => ({
+      audioPath: 'C:\\Users\\me\\AppData\\Local\\Omi\\elevenlabs-tts\\reply.mp3',
+      audioUrl: 'file:///C:/Users/me/AppData/Local/Omi/elevenlabs-tts/reply.mp3',
+      mimeType: 'audio/mpeg' as const
+    }))
+    ;(globalThis as { window?: unknown }).window = {
+      omi: {
+        byokStatus: vi.fn(async () => ({
+          activeChatProvider: null,
+          providers: {
+            openai: { provider: 'openai', configured: false },
+            anthropic: { provider: 'anthropic', configured: false },
+            gemini: { provider: 'gemini', configured: false },
+            openrouter: { provider: 'openrouter', configured: false },
+            deepgram: { provider: 'deepgram', configured: false },
+            elevenlabs: { provider: 'elevenlabs', configured: true }
+          }
+        })),
+        elevenLabsTtsSynthesize
+      }
+    }
+
+    const result = await speakAssistantText(' assistant reply ', {
+      getPrefs: () => ({
+        ...enabledPrefs,
+        realtimeVoiceProvider: 'elevenlabs',
+        elevenLabsVoiceId: 'voice_123'
+      }),
+      playAudio
+    })
+
+    expect(result).toBe('played')
+    expect(elevenLabsTtsSynthesize).toHaveBeenCalledWith({
+      text: 'assistant reply',
+      voiceId: 'voice_123'
+    })
+    expect(playAudio).toHaveBeenCalledWith(
+      'file:///C:/Users/me/AppData/Local/Omi/elevenlabs-tts/reply.mp3'
+    )
+  })
 })
