@@ -242,6 +242,19 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let assistantText = ''
     try {
       const token = await auth.currentUser?.getIdToken()
+      if (window.omi.piChatEnabled) {
+        const result = await window.omi.piChatSend({
+          token: token ?? '',
+          messages: [...baseHistory, userMsg]
+        })
+        assistantText = result.text
+        setHistory((h) => {
+          const next = [...h]
+          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+          return next
+        })
+        return
+      }
       // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
       // persist). Both are best-effort ('' on failure) and run concurrently so the
       // send isn't serialized behind them:
@@ -320,7 +333,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }

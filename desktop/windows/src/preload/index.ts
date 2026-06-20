@@ -16,7 +16,8 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  PiChatRequest
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -74,6 +75,8 @@ const omi: OmiBridgeApi = {
   kgQueryNodes: (q, limit?) => ipcRenderer.invoke('kg:queryNodes', q, limit),
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
+  piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT === '1' || process.env.OMI_PI_CHAT === '1',
+  piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),

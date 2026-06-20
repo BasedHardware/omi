@@ -33,6 +33,7 @@ import {
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerLocalAgentHandlers } from './ipc/localAgent'
+import { registerPiChatHandlers } from './ipc/piChat'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -292,6 +293,7 @@ app.whenReady().then(async () => {
   registerKgHandlers()
   registerIntegrationsHandlers()
   registerLocalAgentHandlers()
+  registerPiChatHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
   registerRewindHandlers()
