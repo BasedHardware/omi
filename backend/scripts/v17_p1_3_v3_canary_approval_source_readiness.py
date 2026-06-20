@@ -15,8 +15,10 @@ import json
 from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
-FUTURE_ARTIFACT_SOURCE = "firestore:system/v17_v3_canary_approvals/routes/get_v3_memories"
+ARTIFACT_DOCUMENT_PATH = "system/v17_v3_canary_approvals/routes/get_v3_memories"
+FUTURE_ARTIFACT_SOURCE = f"firestore:{ARTIFACT_DOCUMENT_PATH}"
 BOUNDED_OWNER_GROUPS = ["product_privacy_ops", "memory_platform_oncall"]
+RULES_EMULATOR_COMMAND = "npm run test:v17-v3-canary-approval-source:emulator"
 
 SOURCE_SELECTION_CONTRACT = {
     "route_scope": ROUTE_SCOPE,
@@ -61,8 +63,29 @@ REQUIRED_IAM_RULES_PRIVACY_PROOFS = [
         "approval_claimed": False,
     },
     {
+        "proof_id": "static_firestore_rules_emulator_harness_ready",
+        "status": "READY_FOR_LOCAL_EMULATOR",
+        "route_refs": [ROUTE_SCOPE],
+        "required_evidence": (
+            "Local Firestore rules/emulator harness includes the route-scoped system approval artifact path, proves "
+            "signed-in client reads and writes are denied, and includes Admin-context read fixture coverage without "
+            "calling production Firestore."
+        ),
+        "artifact_document_path": ARTIFACT_DOCUMENT_PATH,
+        "firestore_rules_path": "firestore.rules",
+        "rules_emulator_test": "backend/scripts/v17_firestore_rules_emulator_test.mjs",
+        "emulator_command": RULES_EMULATOR_COMMAND,
+        "direct_signed_in_client_read_denied_static": True,
+        "direct_signed_in_client_write_denied_static": True,
+        "backend_admin_read_harness_present": True,
+        "production_firestore_read_executed": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
         "proof_id": "direct_client_read_write_denied_or_emulator_required",
-        "status": "BLOCKED",
+        "status": "READY_FOR_LOCAL_EMULATOR",
         "route_refs": [ROUTE_SCOPE],
         "required_evidence": (
             "Firestore rules/IAM emulator or equivalent policy proof must show mobile/web clients cannot read or write "
@@ -71,7 +94,9 @@ REQUIRED_IAM_RULES_PRIVACY_PROOFS = [
         "direct_client_read_allowed": False,
         "direct_client_write_allowed": False,
         "local_emulator_or_iam_evidence_required": True,
-        "local_emulator_or_iam_evidence_present": False,
+        "static_rules_denial_contract_present": True,
+        "local_emulator_or_iam_evidence_present": True,
+        "emulator_command": RULES_EMULATOR_COMMAND,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -85,6 +110,8 @@ REQUIRED_IAM_RULES_PRIVACY_PROOFS = [
             "route-scoped approval artifact source before the route can consume it."
         ),
         "backend_service_principal_read_required": True,
+        "backend_service_principal_read_static_contract_present": True,
+        "backend_service_principal_read_emulator_harness_present": True,
         "backend_service_principal_read_proven": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
@@ -123,6 +150,25 @@ REQUIRED_IAM_RULES_PRIVACY_PROOFS = [
         "approval_claimed": False,
     },
 ]
+
+STATIC_IAM_RULES_EMULATOR_READINESS_PROOF = {
+    "status": "STATIC_RULES_EMULATOR_HARNESS_READY_RUNTIME_BLOCKED",
+    "route_scope": ROUTE_SCOPE,
+    "artifact_document_path": ARTIFACT_DOCUMENT_PATH,
+    "firestore_rules_path": "firestore.rules",
+    "rules_emulator_test": "backend/scripts/v17_firestore_rules_emulator_test.mjs",
+    "emulator_command": RULES_EMULATOR_COMMAND,
+    "direct_signed_in_client_read_denied": True,
+    "direct_signed_in_client_create_update_delete_denied": True,
+    "backend_admin_or_service_principal_read_required": True,
+    "backend_admin_or_service_principal_read_static_contract_present": True,
+    "client_supplied_artifact_trusted": False,
+    "path_has_uid_session_memory_cursor_token_secret_or_payload_dimensions": False,
+    "production_firestore_read_executed": False,
+    "production_firestore_write_executed": False,
+    "production_approval_claimed": False,
+    "runtime_wired": False,
+}
 
 FAILURE_SEMANTICS = [
     {
@@ -182,6 +228,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "GET /v3/memories canary approval artifact."
         ),
         "source_selection_contract": SOURCE_SELECTION_CONTRACT,
+        "static_iam_rules_emulator_readiness_proof": STATIC_IAM_RULES_EMULATOR_READINESS_PROOF,
         "required_iam_rules_privacy_proofs": REQUIRED_IAM_RULES_PRIVACY_PROOFS,
         "failure_semantics": FAILURE_SEMANTICS,
         "non_claims": [
@@ -207,7 +254,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "approval_claimed": False,
             "production_artifact_source_exists": False,
             "backend_service_principal_read_proven": False,
-            "direct_client_access_proven_denied": False,
+            "direct_client_access_proven_denied": True,
+            "static_iam_rules_emulator_readiness_present": True,
         },
     }
 

@@ -5,6 +5,7 @@ from pathlib import Path
 EXPECTED_OWNER_GROUPS = ["product_privacy_ops", "memory_platform_oncall"]
 EXPECTED_REQUIRED_PROOF_IDS = [
     "artifact_source_selected_server_owned_only",
+    "static_firestore_rules_emulator_harness_ready",
     "direct_client_read_write_denied_or_emulator_required",
     "backend_service_principal_read_required",
     "artifact_path_has_no_user_request_or_secret_dimensions",
@@ -67,6 +68,18 @@ def test_canary_approval_source_contract_pins_server_owned_path_owners_and_route
     source_lower = contract["future_artifact_source"].lower()
     assert all(fragment not in source_lower for fragment in forbidden)
 
+    static_proof = report["static_iam_rules_emulator_readiness_proof"]
+    assert static_proof["artifact_document_path"] == "system/v17_v3_canary_approvals/routes/get_v3_memories"
+    assert static_proof["route_scope"] == "GET /v3/memories"
+    assert static_proof["status"] == "STATIC_RULES_EMULATOR_HARNESS_READY_RUNTIME_BLOCKED"
+    assert static_proof["direct_signed_in_client_read_denied"] is True
+    assert static_proof["direct_signed_in_client_create_update_delete_denied"] is True
+    assert static_proof["backend_admin_or_service_principal_read_required"] is True
+    assert static_proof["backend_admin_or_service_principal_read_static_contract_present"] is True
+    assert static_proof["client_supplied_artifact_trusted"] is False
+    assert static_proof["production_firestore_read_executed"] is False
+    assert static_proof["emulator_command"] == "npm run test:v17-v3-canary-approval-source:emulator"
+
 
 def test_canary_approval_source_contract_requires_iam_rules_privacy_readiness_before_wiring():
     report = _report(execute=True)
@@ -77,16 +90,27 @@ def test_canary_approval_source_contract_requires_iam_rules_privacy_readiness_be
     assert rules["artifact_source_selected_server_owned_only"]["server_owned_only"] is True
     assert rules["artifact_source_selected_server_owned_only"]["client_supplied_artifact_trusted"] is False
 
+    static_rules = rules["static_firestore_rules_emulator_harness_ready"]
+    assert static_rules["status"] == "READY_FOR_LOCAL_EMULATOR"
+    assert static_rules["firestore_rules_path"] == "firestore.rules"
+    assert static_rules["rules_emulator_test"] == "backend/scripts/v17_firestore_rules_emulator_test.mjs"
+    assert static_rules["direct_signed_in_client_read_denied_static"] is True
+    assert static_rules["direct_signed_in_client_write_denied_static"] is True
+    assert static_rules["backend_admin_read_harness_present"] is True
+    assert static_rules["production_firestore_read_executed"] is False
+
     direct = rules["direct_client_read_write_denied_or_emulator_required"]
-    assert direct["status"] == "BLOCKED"
+    assert direct["status"] == "READY_FOR_LOCAL_EMULATOR"
     assert direct["direct_client_read_allowed"] is False
     assert direct["direct_client_write_allowed"] is False
     assert direct["local_emulator_or_iam_evidence_required"] is True
-    assert direct["local_emulator_or_iam_evidence_present"] is False
+    assert direct["static_rules_denial_contract_present"] is True
+    assert direct["local_emulator_or_iam_evidence_present"] is True
 
     backend = rules["backend_service_principal_read_required"]
     assert backend["status"] == "BLOCKED"
     assert backend["backend_service_principal_read_required"] is True
+    assert backend["backend_service_principal_read_static_contract_present"] is True
     assert backend["backend_service_principal_read_proven"] is False
 
     path = rules["artifact_path_has_no_user_request_or_secret_dimensions"]
@@ -130,8 +154,8 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
     assert decoded["summary"] == {
         "status": "BLOCKED",
         "proof_status": "BLOCKED",
-        "required_iam_rules_privacy_proof_count": 5,
-        "blocked_required_proof_count": 4,
+        "required_iam_rules_privacy_proof_count": 6,
+        "blocked_required_proof_count": 3,
         "failure_semantics_count": 5,
         "read_only": True,
         "mutation_allowed": False,
@@ -139,7 +163,8 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
         "approval_claimed": False,
         "production_artifact_source_exists": False,
         "backend_service_principal_read_proven": False,
-        "direct_client_access_proven_denied": False,
+        "direct_client_access_proven_denied": True,
+        "static_iam_rules_emulator_readiness_present": True,
     }
 
     root = Path(__file__).resolve().parents[2]
@@ -153,6 +178,10 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
     external_readiness = (root / "scripts" / "v17_p1_3_v3_external_compatibility_readiness.py").read_text(
         encoding="utf-8"
     )
+    rules_emulator_test = (root.parent / "backend" / "scripts" / "v17_firestore_rules_emulator_test.mjs").read_text(
+        encoding="utf-8"
+    )
+    package_json = (root.parent / "package.json").read_text(encoding="utf-8")
 
     assert "test_v17_p1_3_v3_canary_approval_source_readiness.py" in test_sh
     assert "v17_p1_3_v3_canary_approval_source_readiness.py" in ticket_doc
@@ -162,3 +191,6 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
     assert "canary_approval_source_readiness_proof" in observability_readiness
     assert "canary_approval_source_readiness_proof" in runtime_readiness
     assert "canary_approval_source_readiness_proof" in external_readiness
+    assert "assertClientDeniedForV3CanaryApprovalSource" in rules_emulator_test
+    assert "assertAdminCanReadV3CanaryApprovalSource" in rules_emulator_test
+    assert "test:v17-v3-canary-approval-source:emulator" in package_json

@@ -26,8 +26,9 @@ CANARY_APPROVAL_SOURCE_READINESS_PROOF = {
     "approval_claimed": False,
     "blocker": (
         "Future GET /v3/memories canary approval artifact source is selected as a server-owned route-scoped "
-        "artifact, but production source existence, direct-client-deny rules/IAM proof, and backend service-principal "
-        "read proof remain missing/not-run."
+        "artifact with static/local emulator-harness coverage for signed-in client read/write denial and Admin-context "
+        "read fixture readiness, but production source existence and backend production service-principal read proof remain "
+        "missing/not-run."
     ),
 }
 

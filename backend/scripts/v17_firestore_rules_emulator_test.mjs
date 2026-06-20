@@ -98,6 +98,39 @@ async function assertClientCannotSelfGrantV17AppKeyMemoryAccess(db) {
   await assertFails(deleteDoc(grantDoc));
 }
 
+async function assertClientDeniedForV3CanaryApprovalSource(db) {
+  const approvalDoc = doc(db, 'system/v17_v3_canary_approvals/routes/get_v3_memories');
+  const approvalArtifact = {
+    route_scope: 'GET /v3/memories',
+    approval_claimed: false,
+    owner_groups: ['product_privacy_ops', 'memory_platform_oncall'],
+    probe: 'client-forbidden',
+  };
+
+  await assertFails(getDoc(approvalDoc));
+  await assertFails(setDoc(approvalDoc, approvalArtifact));
+  await assertFails(updateDoc(approvalDoc, { approval_claimed: true }));
+  await assertFails(deleteDoc(approvalDoc));
+}
+
+async function assertAdminCanReadV3CanaryApprovalSource(testEnv) {
+  const approvalArtifact = {
+    route_scope: 'GET /v3/memories',
+    approval_claimed: false,
+    owner_groups: ['product_privacy_ops', 'memory_platform_oncall'],
+    probe: 'admin-service-principal-read-fixture',
+  };
+
+  await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    const approvalDoc = doc(adminContext.firestore(), 'system/v17_v3_canary_approvals/routes/get_v3_memories');
+    await setDoc(approvalDoc, approvalArtifact);
+    const snapshot = await getDoc(approvalDoc);
+    assert.equal(snapshot.exists(), true);
+    assert.equal(snapshot.data().route_scope, 'GET /v3/memories');
+    await deleteDoc(approvalDoc);
+  });
+}
+
 const testEnv = await initializeTestEnvironment({ projectId: PROJECT_ID });
 
 try {
@@ -109,10 +142,12 @@ try {
   await assertClientDeniedForV3ControlReaderState(db);
   await assertClientDeniedForV3MemoryStateHead(db);
   await assertClientCannotSelfGrantV17AppKeyMemoryAccess(db);
+  await assertClientDeniedForV3CanaryApprovalSource(db);
+  await assertAdminCanReadV3CanaryApprovalSource(testEnv);
 
   assert.equal(V17_PROTECTED_COLLECTIONS.length, 10);
   console.log(
-    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, and V17 app/key memory grant self-grant path`,
+    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, V17 app/key memory grant self-grant path, and system/v17_v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
   );
 } finally {
   await testEnv.cleanup();
