@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 
 ROUTE_SCOPE = 'GET /v3/memories'
 SCHEMA_VERSION = 1
@@ -144,6 +144,53 @@ class V17V3CanaryApprovalDecision:
     runtime_wired: bool = False
     production_rollout_approved: bool = False
     approval_claimed: bool = False
+
+
+class V17V3CanaryApprovalArtifactReader(Protocol):
+    """Fake-injectable future server-owned artifact reader shape."""
+
+    production_reader_call: bool
+    reader_name: str
+
+    def read_canary_approval_artifact(self, *, route_scope: str, cohort: str) -> dict[str, Any] | None:
+        """Return a caller-injected artifact dict for local validation."""
+        ...
+
+
+def read_v17_v3_canary_approval_artifact_decision(
+    *,
+    reader: V17V3CanaryApprovalArtifactReader | None,
+    requested_route_scope: str,
+    requested_cohort: str,
+    now: datetime,
+) -> V17V3CanaryApprovalDecision:
+    """Read an injected canary/approval artifact and validate it fail-closed.
+
+    This is a readiness seam only. The reader is supplied by tests or future
+    approved server-owned wiring; this function does not construct production
+    clients, import routers, call Firestore/cloud/provider/network services, or
+    emit telemetry. Missing readers, reader exceptions/timeouts, production-reader
+    markers, and invalid artifacts all fail closed before any runtime approval is
+    claimed.
+    """
+
+    if reader is None:
+        return _blocked('artifact_reader_missing', requested_cohort=requested_cohort)
+    if getattr(reader, 'production_reader_call', False) is True:
+        return _blocked('artifact_reader_production_call_disallowed', requested_cohort=requested_cohort)
+    try:
+        artifact = reader.read_canary_approval_artifact(
+            route_scope=requested_route_scope,
+            cohort=requested_cohort,
+        )
+    except Exception:
+        return _blocked('artifact_reader_failed', requested_cohort=requested_cohort)
+    return validate_v17_v3_canary_approval_artifact(
+        artifact,
+        requested_route_scope=requested_route_scope,
+        requested_cohort=requested_cohort,
+        now=now,
+    )
 
 
 def validate_v17_v3_canary_approval_artifact(

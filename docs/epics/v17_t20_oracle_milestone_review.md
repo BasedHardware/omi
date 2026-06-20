@@ -1705,6 +1705,16 @@ Added a safe pre-runtime readiness proof for future `/v3` cursor-secret/source i
 - Under fake server-owned secret material only, the pure cursor matrix proves first-page no-cursor needs no client-secret trust; signed cursors preserve account generation, projection generation, source, and keyset; and tampered, expired, account/projection generation mismatch, source mismatch, wrong-secret, and client-supplied-secret cases fail closed without legacy fallback.
 - Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production secret read, no production Firestore/cloud/provider/vector call, no client-supplied cursor secret trust, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge for V17 failures is claimed.
 
+### 2026-06-20 — P1-3 `/v3` canary/approval artifact reader readiness seam
+
+Extended the local canary/approval proof from schema-only validation to an injected reader readiness seam without changing `backend/routers/memories.py` or runtime behavior:
+
+- Extended `backend/utils/memory/v17_v3_canary_approval.py` with `V17V3CanaryApprovalArtifactReader` and `read_v17_v3_canary_approval_artifact_decision(...)`; the function accepts only an injected reader/fake and delegates artifact validation to `validate_v17_v3_canary_approval_artifact(...)`.
+- Extended `backend/tests/unit/test_v17_v3_canary_approval_artifact.py` to prove missing reader/source, reader exception/timeout-ish sentinel, malformed artifact, route mismatch, unsupported or mismatched cohort, stale artifact, pending/rejected approval, and sensitive/high-cardinality metadata all fail closed.
+- The approved fake-artifact path yields only bounded labels through `build_v17_v3_canary_approval_telemetry_labels(...)` and does not expose uid/session/memory content/cursor/secret/request payload metadata.
+- `backend/scripts/v17_p1_3_v3_observability_approval_readiness.py` now links `v17_v3_canary_approval_artifact_reader_seam`; external/runtime readiness inherit the proof through `observability_approval_readiness_proof`, but remain **BLOCKED**.
+- Runtime remains **BLOCKED / NO-GO**. No `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production telemetry sink, no production Firestore/cloud/provider/vector/network calls, no production approval, no Archive default visibility, no stale Short-term default visibility, and no legacy fallback/merge is claimed.
+
 ### 2026-06-20 — P1-3 `/v3` canary enrollment and approval artifact schema seam
 
 Added the local-only canary/approval artifact seam behind the observability approval gate without changing `backend/routers/memories.py` or runtime behavior:

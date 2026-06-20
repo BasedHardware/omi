@@ -371,6 +371,19 @@ EXISTING_MECHANISMS = [
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
+    {
+        "mechanism_id": "v17_v3_canary_approval_artifact_reader_seam",
+        "status": "LOCAL_READER_SEAM_PROVED_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_v3_canary_approval.py",
+        "test": "backend/tests/unit/test_v17_v3_canary_approval_artifact.py",
+        "details": (
+            "Local fake-injectable reader protocol consumes the schema validator for a future server-owned "
+            "canary/approval artifact source, fails closed for missing reader/source, reader exception/timeout, "
+            "malformed/mismatched/stale/unapproved/sensitive artifacts, and exposes only bounded labels."
+        ),
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
 ]
 
 BLOCKERS = [
@@ -463,6 +476,7 @@ OBSERVABILITY_APPROVAL_READINESS_PROOF = {
         "local_pure_telemetry_event_builder_and_noop_fake_sink_proved",
         "local_pure_rollback_read_disable_config_decision_proved",
         "local_pure_canary_approval_artifact_schema_validation_proved",
+        "local_pure_canary_approval_artifact_reader_validation_proved",
         "approved_artifact_produces_bounded_labels_only_without_pii_or_payloads",
         "canary_enrollment_and_rollback_read_disable_gate_required",
         "no_legacy_fallback_marker_required_for_v17_failures",

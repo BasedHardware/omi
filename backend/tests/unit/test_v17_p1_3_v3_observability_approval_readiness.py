@@ -143,6 +143,17 @@ def test_observability_approval_readiness_links_existing_mechanisms_and_exact_bl
     )
     assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["production_call_executed"] is False
     assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["runtime_wired_to_v3_get"] is False
+    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["source"] == (
+        "backend/utils/memory/v17_v3_canary_approval.py"
+    )
+    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["test"] == (
+        "backend/tests/unit/test_v17_v3_canary_approval_artifact.py"
+    )
+    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["status"] == (
+        "LOCAL_READER_SEAM_PROVED_NOT_V3_GET_WIRED"
+    )
+    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["production_call_executed"] is False
+    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["runtime_wired_to_v3_get"] is False
 
     blockers = {blocker["blocker_id"]: blocker for blocker in report["blockers"]}
     assert set(blockers) == REQUIRED_BLOCKER_IDS
@@ -180,7 +191,7 @@ def test_observability_approval_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "telemetry_field_count": 20,
         "blocked_or_not_run_field_count": 20,
-        "existing_mechanism_count": 5,
+        "existing_mechanism_count": 6,
         "blocker_count": 6,
         "guardrail_count": 5,
         "telemetry_sink_calls_executed": False,
