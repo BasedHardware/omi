@@ -5,6 +5,7 @@ import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
 import { GeneralTab } from '../components/settings/tabs/GeneralTab'
+import { ByokTab } from '../components/settings/tabs/ByokTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
@@ -16,6 +17,7 @@ import { Memories } from './Memories'
 // separately below and is intentionally absent from this map.
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
   general: GeneralTab,
+  byok: ByokTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
   account: AccountTab,
