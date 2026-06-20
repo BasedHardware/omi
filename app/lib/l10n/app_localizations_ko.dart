@@ -9173,4 +9173,45 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.';
+
+  @override
+  String get trash => 'Trash';
+
+  @override
+  String get trashIsEmpty => 'Trash is empty';
+
+  @override
+  String get deletedConversationsAppearHere => 'Deleted conversations appear here';
+
+  @override
+  String get deletePermanentlyTitle => 'Delete permanently?';
+
+  @override
+  String get deletePermanentlyMessage => 'This conversation will be permanently deleted and cannot be recovered.';
+
+  @override
+  String get deletePermanently => 'Delete';
+
+  @override
+  String get emptyTrash => 'Empty Trash';
+
+  @override
+  String get emptyTrashTitle => 'Empty Trash?';
+
+  @override
+  String get emptyTrashMessage => 'All trashed conversations will be permanently deleted.';
+
+  @override
+  String deletedDate(Object date) {
+    return 'Deleted $date';
+  }
+
+  @override
+  String get restore => 'Restore';
+
+  @override
+  String get deletePermanentlyTooltip => 'Delete permanently';
+
+  @override
+  String get recently => 'Recently';
 }

@@ -17378,6 +17378,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
   String get syncCustomSttWarningMessage;
+
+  /// Navigation label for the trash / soft-delete page
+  ///
+  /// In en, this message translates to:
+  /// **'Trash'**
+  String get trash;
+
+  /// Placeholder text when there are no trashed conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Trash is empty'**
+  String get trashIsEmpty;
+
+  /// Subtitle placeholder when trash is empty
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted conversations appear here'**
+  String get deletedConversationsAppearHere;
+
+  /// Title for permanent delete confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently?'**
+  String get deletePermanentlyTitle;
+
+  /// Message for permanent delete confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'This conversation will be permanently deleted and cannot be recovered.'**
+  String get deletePermanentlyMessage;
+
+  /// Button label to permanently delete a conversation from trash
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get deletePermanently;
+
+  /// Button label to empty all trashed conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Empty Trash'**
+  String get emptyTrash;
+
+  /// Title for empty trash confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Empty Trash?'**
+  String get emptyTrashTitle;
+
+  /// Message for empty trash confirmation dialog
+  ///
+  /// In en, this message translates to:
+  /// **'All trashed conversations will be permanently deleted.'**
+  String get emptyTrashMessage;
+
+  /// Shows when a conversation was deleted, e.g. 'Deleted 15/3/2025'
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {date}'**
+  String deletedDate(Object date);
+
+  /// Tooltip for restore button
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get restore;
+
+  /// Tooltip for permanent delete button
+  ///
+  /// In en, this message translates to:
+  /// **'Delete permanently'**
+  String get deletePermanentlyTooltip;
+
+  /// Label shown when deletion date is not available
+  ///
+  /// In en, this message translates to:
+  /// **'Recently'**
+  String get recently;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

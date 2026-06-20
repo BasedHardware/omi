@@ -384,27 +384,71 @@ def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
     cascade: bool = Query(False),
+    permanent: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
-    conversations_db.delete_conversation(uid, conversation_id)
-    delete_vector(uid, conversation_id)
-    delete_transcript_chunk_vectors(uid, conversation_id)
+    logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade} permanent={permanent}')
 
-    if cascade:
-        # Delete audio files
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+    if permanent:
+        conversations_db.delete_conversation(uid, conversation_id)
+        delete_vector(uid, conversation_id)
+        delete_transcript_chunk_vectors(uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
-
-        # Delete associated action items
-        action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        if cascade:
+            background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+            memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
+            memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in memory_ids:
+                background_tasks.add_task(delete_memory_vector, uid, memory_id)
+            action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+    else:
+        conversations_db.set_conversation_as_trashed(uid, conversation_id)
 
     return {"status": "Ok"}
+
+
+# **************************************
+# ********* TRASH / SOFT DELETE ********
+# **************************************
+
+
+@router.get("/v1/trash/conversations", response_model=List[Conversation], tags=['conversations', 'trash'])
+def get_trashed_conversations(limit: int = Query(50, le=200), uid: str = Depends(auth.get_current_user_uid)):
+    """Return trashed conversations ordered by deleted_at descending."""
+    raw = conversations_db.get_trashed_conversations(uid, limit)
+    return [Conversation(id=doc.get('id', ''), **doc) for doc in raw]
+
+
+@router.post("/v1/trash/conversations/{conversation_id}/restore", status_code=204, tags=['conversations', 'trash'])
+def restore_trashed_conversation(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Restore a trashed conversation."""
+    conversations_db.restore_conversation(uid, conversation_id)
+
+
+@router.delete("/v1/trash/conversations/{conversation_id}", status_code=204, tags=['conversations', 'trash'])
+def permanently_delete_trashed_conversation(
+    conversation_id: str,
+    background_tasks: BackgroundTasks,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Permanently delete a specific trashed conversation."""
+    delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
+    background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+    conversations_db.delete_conversation(uid, conversation_id)
+
+
+@router.delete("/v1/trash/conversations", status_code=204, tags=['conversations', 'trash'])
+def empty_trash(
+    background_tasks: BackgroundTasks,
+    older_than_days: int = Query(0, ge=0, le=365),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Permanently delete trashed conversations. If older_than_days=0, empties all trash."""
+    deleted_ids = conversations_db.empty_trash(uid, older_than_days or 0)
+    for cid in deleted_ids:
+        background_tasks.add_task(delete_conversation_audio_files, uid, cid)
+    logger.info(f'emptied trash for {uid}: {len(deleted_ids)} conversations permanently deleted')
 
 
 @router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
