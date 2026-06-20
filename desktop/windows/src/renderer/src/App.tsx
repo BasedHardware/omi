@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
 import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
+import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider, useAppState } from './state/AppStateProvider'
@@ -73,6 +74,10 @@ function AppShellInner(): React.JSX.Element {
   // here so this window's Conversations tab refreshes without a relaunch.
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
 
+  // Overlay citation cards call openMainRoute() → main sends 'overlay:mainRoute' here.
+  // Navigate the main window to the target route (e.g. /conversations/:id).
+  useEffect(() => window.omi.onOverlayRoute((route) => navigate(route)), [navigate])
+
   // Font scale — applies the persisted scale to the root element so all
   // rem-based Tailwind text utilities scale uniformly. Matches macOS Cmd++/−.
   // Only runs in the main app shell (not the overlay window, which bypasses
@@ -112,7 +117,7 @@ function AppShellInner(): React.JSX.Element {
   }, [])
 
   return (
-    <div className="app-canvas flex h-full min-h-0">
+    <div className="app-canvas flex h-full min-h-0 pt-8">
       {!hideSidebar && <Sidebar />}
       <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
         <MainViews />
@@ -153,6 +158,14 @@ function AppShell(): React.JSX.Element {
   )
 }
 
+// Renders the custom title bar on all routes except the overlay/insight windows,
+// which run in their own BrowserWindow with titleBarStyle:'hidden' + no caption buttons.
+function ConditionalTitleBar(): React.JSX.Element | null {
+  const { pathname } = useLocation()
+  if (pathname === '/overlay' || pathname === '/insight-toast') return null
+  return <TitleBar />
+}
+
 function App(): React.JSX.Element {
   const { user, loading } = useAuth()
   // Under the perf bench, treat the user as already onboarded so the authed
@@ -179,16 +192,22 @@ function App(): React.JSX.Element {
   }, [])
 
   if (loading) {
+    const isSpecialWindow =
+      window.location.hash.includes('overlay') || window.location.hash.includes('insight-toast')
     return (
-      <div className="app-canvas flex h-full items-center justify-center">
-        <SandboxBadge />
-        <Spinner label="Loading Omi…" />
+      <div className="flex h-full flex-col">
+        {!isSpecialWindow && <TitleBar />}
+        <div className="app-canvas flex flex-1 items-center justify-center">
+          <SandboxBadge />
+          <Spinner label="Loading Omi…" />
+        </div>
       </div>
     )
   }
 
   return (
     <HashRouter>
+      <ConditionalTitleBar />
       <SandboxBadge />
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />

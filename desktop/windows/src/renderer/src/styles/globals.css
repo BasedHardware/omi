@@ -63,6 +63,7 @@
     background-attachment: fixed;
     color: rgba(255, 255, 255, 0.92);
     font-family:
+      'Inter',
       'SF Pro Display',
       'SF Pro Text',
       -apple-system,
@@ -406,18 +407,19 @@
 }
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 999px;
+  transition: background 0.15s;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.32);
 }
 
 /* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned

@@ -150,6 +150,16 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('conversations:changed', listener)
     return () => ipcRenderer.removeListener('conversations:changed', listener)
+  },
+  onBluetoothNoDevices: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('bluetooth:noDevicesFound', listener)
+    return () => ipcRenderer.removeListener('bluetooth:noDevicesFound', listener)
+  },
+  onOverlayRoute: (cb: (route: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, route: string): void => cb(route)
+    ipcRenderer.on('overlay:mainRoute', listener)
+    return () => ipcRenderer.removeListener('overlay:mainRoute', listener)
   }
 }
 
@@ -201,8 +211,36 @@ const omiOverlay: OmiOverlayApi = {
     const listener = (): void => cb()
     ipcRenderer.on('overlay:asked', listener)
     return () => ipcRenderer.removeListener('overlay:asked', listener)
-  }
+  },
+  openMainRoute: (route: string) => ipcRenderer.send('overlay:openMainRoute', route)
 }
+
+// Extend the omi bridge with optional convenience methods (shell, app info).
+// Cast to `any` here so we can add properties not in the frozen OmiBridgeApi type.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).openExternal = (url: string): void => {
+  ipcRenderer.send('shell:openExternal', url)
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).getAppVersion = (): Promise<string> => ipcRenderer.invoke('app:getVersion')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).checkForUpdates = (): Promise<void> => ipcRenderer.invoke('app:checkForUpdates')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).pickDirectory = (): Promise<string | null> => ipcRenderer.invoke('dialog:pickDirectory')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).getLoginItem = (): Promise<boolean> => ipcRenderer.invoke('app:getLoginItem')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).setLoginItem = (enabled: boolean): Promise<void> => ipcRenderer.invoke('app:setLoginItem', enabled)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).setAlwaysOnTop = (enabled: boolean): Promise<void> => ipcRenderer.invoke('window:setAlwaysOnTop', enabled)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).getAlwaysOnTop = (): Promise<boolean> => ipcRenderer.invoke('window:getAlwaysOnTop')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).winMinimize = (): void => ipcRenderer.send('win:minimize')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).winMaximize = (): void => ipcRenderer.send('win:maximize')
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(omi as any).winClose = (): void => ipcRenderer.send('win:close')
 
 if (process.contextIsolated) {
   try {

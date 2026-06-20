@@ -137,6 +137,9 @@ export type OmiOverlayApi = {
   /** Subscribe to overlay "asked" events — any message sent from the bar
    *  (broadcast to every window). Returns an unsubscribe fn. */
   onAsked: (cb: () => void) => () => void
+  /** Hide the overlay, focus the main window, and navigate it to a route.
+   *  Main relays the route via 'overlay:mainRoute' to the main window renderer. */
+  openMainRoute: (route: string) => void
 }
 
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
@@ -294,6 +297,34 @@ export type OmiBridgeApi = {
   screenSynthSetState: (patch: Partial<ScreenSynthState>) => Promise<ScreenSynthState>
   screenSynthAdvanceWatermark: (ts: number) => Promise<void>
   screenSynthRecordRun: (run: ScreenSynthRun) => Promise<void>
+  /** Fires when the BLE scan finishes with zero devices found (before NotFoundError
+   *  is thrown by requestDevice). Lets the renderer distinguish "no devices found"
+   *  from "user dismissed the picker". Returns an unsubscribe fn. */
+  onBluetoothNoDevices: (cb: () => void) => () => void
+  /** Subscribe to route navigation requests from the overlay window.
+   *  When an overlay citation card is clicked, main fires this in the main window
+   *  so the React Router can navigate to the target route. Returns an unsubscribe fn. */
+  onOverlayRoute: (cb: (route: string) => void) => () => void
+  /** Open a URL in the system browser (http/https/mailto only — others are blocked). */
+  openExternal?: (url: string) => void
+  /** Get the app version string (e.g. "1.0.0"). */
+  getAppVersion?: () => Promise<string>
+  /** Trigger an update check (resolves when check completes or times out). */
+  checkForUpdates?: () => Promise<void>
+  /** Open a native folder picker dialog; resolves to the chosen path or null. */
+  pickDirectory?: () => Promise<string | null>
+  /** Get whether the app is set to launch at Windows startup. */
+  getLoginItem?: () => Promise<boolean>
+  /** Enable or disable launch at Windows startup. */
+  setLoginItem?: (enabled: boolean) => Promise<void>
+  /** Set the main window to always-on-top floating mode. */
+  setAlwaysOnTop?: (enabled: boolean) => Promise<void>
+  /** Get whether the main window is currently set to always-on-top. */
+  getAlwaysOnTop?: () => Promise<boolean>
+  /** Custom window controls (titleBar: 'hidden' removes native buttons). */
+  winMinimize?: () => void
+  winMaximize?: () => void
+  winClose?: () => void
 }
 
 // --- Screen activity → memories (Rewind OCR synthesis) ---

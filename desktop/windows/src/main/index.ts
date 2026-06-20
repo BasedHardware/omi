@@ -101,6 +101,12 @@ let bluetoothDialogOpen = false
 
 // Build (or rebuild) the tray context menu, reading live settings each time
 // so the checked state reflects the current toggle value.
+function navigateMain(mainWindow: BrowserWindow, route: string): void {
+  mainWindow.show()
+  mainWindow.focus()
+  void mainWindow.webContents.executeJavaScript(`window.location.hash = "#${route}"`)
+}
+
 function buildTrayMenu(mainWindow: BrowserWindow): Electron.Menu {
   const settings = getPersistedRewindSettings()
   return Menu.buildFromTemplate([
@@ -119,13 +125,29 @@ function buildTrayMenu(mainWindow: BrowserWindow): Electron.Menu {
       click: () => {
         const current = getPersistedRewindSettings()
         const updated = persistRewindSettings({ ...current, captureEnabled: !current.captureEnabled })
-        // Broadcast the new settings to all renderer windows (same event that
-        // rewind:setSettings uses) so the sidebar toggle stays in phase.
         for (const w of BrowserWindow.getAllWindows()) {
           if (!w.isDestroyed()) w.webContents.send('rewind:settings', updated)
         }
         tray?.setContextMenu(buildTrayMenu(mainWindow))
       }
+    },
+    { type: 'separator' },
+    {
+      label: 'Open Chat',
+      click: () => navigateMain(mainWindow, '/chat')
+    },
+    {
+      label: 'Open Rewind',
+      click: () => navigateMain(mainWindow, '/rewind')
+    },
+    {
+      label: 'Open Focus',
+      click: () => navigateMain(mainWindow, '/focus')
+    },
+    { type: 'separator' },
+    {
+      label: 'Settings',
+      click: () => navigateMain(mainWindow, '/settings')
     },
     { type: 'separator' },
     {
@@ -198,7 +220,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    frame: true,
+    titleBarStyle: 'hidden',
     transparent: false,
     backgroundColor: '#121212',
     icon,
@@ -266,7 +288,9 @@ function createWindow(): BrowserWindow {
   })
 
   // Bluetooth: handle device picker for Web Bluetooth requestDevice() calls.
-  // Collects nearby devices for up to 3 s, then presents a native dialog.
+  // Collects nearby devices for 2 s (debounce), shows one filtered picker.
+  // Guard stays true through the dialog so a second event can never open a
+  // second dialog while the user is already looking at the first one.
   mainWindow.webContents.on(
     'select-bluetooth-device',
     async (event, deviceList, callback) => {
@@ -279,37 +303,54 @@ function createWindow(): BrowserWindow {
       }
       bluetoothCallback = callback
 
-      // Debounce: show the dialog 2 s after the last discovery event so we
-      // collect a richer device list before presenting it to the user.
+      // One dialog at a time — guard stays true until cb() is called below.
       if (bluetoothDialogOpen) return
       bluetoothDialogOpen = true
+
+      // Debounce: wait 2 s so scanning can collect a richer device list.
       await new Promise<void>((r) => setTimeout(r, 2000))
-      bluetoothDialogOpen = false
 
       const devs = bluetoothDeviceList
       const cb = bluetoothCallback
       bluetoothDeviceList = []
       bluetoothCallback = null
-      if (!cb) return
+
+      const done = (id: string): void => {
+        bluetoothDialogOpen = false
+        if (cb) cb(id)
+      }
+
+      if (!cb) { bluetoothDialogOpen = false; return }
 
       if (devs.length === 0) {
-        cb('') // no devices found
+        // Notify renderer so it can distinguish "no devices nearby" from "user cancelled".
+        mainWindow.webContents.send('bluetooth:noDevicesFound')
+        done('')
         return
       }
 
+      // Named first; hide unnamed rows when at least one named device exists.
+      const named = devs.filter((d) => d.deviceName?.trim())
+      const displayDevs = named.length > 0 ? named : devs
+      const hiddenCount = devs.length - displayDevs.length
+
       const buttons = [
-        ...devs.map((d) => d.deviceName || `Unknown (${d.deviceId.slice(0, 8)})`),
+        ...displayDevs.map((d) => d.deviceName || `Device (${d.deviceId.slice(0, 8)})`),
         'Cancel'
       ]
+      const detail = hiddenCount > 0
+        ? `${hiddenCount} unnamed device${hiddenCount !== 1 ? 's' : ''} not shown.`
+        : undefined
       const { response } = await dialog.showMessageBox(mainWindow, {
-        title: 'Bluetooth Devices Found',
-        message: `Found ${devs.length} nearby device${devs.length === 1 ? '' : 's'}.\nSelect one to use:`,
+        title: 'Select a Bluetooth device',
+        message: `${displayDevs.length} device${displayDevs.length !== 1 ? 's' : ''} found. Choose your Omi or compatible device, or Cancel.`,
+        detail,
         type: 'question',
         buttons,
-        cancelId: devs.length,
+        cancelId: displayDevs.length,
         defaultId: 0
       })
-      cb(response < devs.length ? devs[response].deviceId : '')
+      done(response < displayDevs.length ? displayDevs[response].deviceId : '')
     }
   )
 
@@ -472,7 +513,43 @@ app.whenReady().then(async () => {
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
 
+  // Shell / app-info / dialog convenience handlers for the renderer.
+  ipcMain.on('shell:openExternal', (_e, url: string) => {
+    try {
+      const scheme = new URL(url).protocol
+      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+        void shell.openExternal(url)
+      }
+    } catch {
+      console.warn('[main] blocked external open of unparseable URL')
+    }
+  })
+  ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:checkForUpdates', async () => {
+    // No auto-updater wired yet — resolve immediately.
+  })
+  ipcMain.handle('dialog:pickDirectory', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+  ipcMain.handle('app:getLoginItem', () => app.getLoginItemSettings().openAtLogin)
+  ipcMain.handle('app:setLoginItem', (_e, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  })
+
   const mainWindow = createWindow()
+
+  // Window-specific IPC — needs mainWindow reference.
+  ipcMain.handle('window:getAlwaysOnTop', () => mainWindow.isAlwaysOnTop())
+  ipcMain.handle('window:setAlwaysOnTop', (_e, enabled: boolean) => {
+    mainWindow.setAlwaysOnTop(enabled, 'floating')
+  })
+  ipcMain.on('win:minimize', () => mainWindow.minimize())
+  ipcMain.on('win:maximize', () => {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.on('win:close', () => mainWindow.close())
 
   // System tray — mirrors macOS menu bar icon. Created immediately so the tray
   // appears as soon as the app launches. Left-click and "Open Omi" show the window.
