@@ -29,6 +29,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
     "real_router_dependency_map_proof",
     "real_router_get_testclient_proof",
     "get_dependency_auth_readiness_proof",
+    "route_dependency_contract_readiness_proof",
     "projection_store_readiness_proof",
     "projection_read_source_readiness_proof",
     "projection_write_convergence_readiness_proof",
@@ -127,6 +128,10 @@ def test_get_runtime_wiring_readiness_links_current_proofs_and_marks_runtime_evi
     assert proofs["real_router_get_testclient_proof"]["missing_real_service_runtime_evidence"] is True
     assert proofs["get_dependency_auth_readiness_proof"]["controlled_testclient_under_stubs"] is True
     assert proofs["get_dependency_auth_readiness_proof"]["runtime_wired"] is False
+    assert proofs["route_dependency_contract_readiness_proof"]["service"] == (
+        "backend/scripts/v17_p1_3_v3_route_dependency_contract_readiness.py"
+    )
+    assert proofs["route_dependency_contract_readiness_proof"]["runtime_wired"] is False
     assert proofs["projection_store_readiness_proof"]["service"] == (
         "backend/scripts/v17_p1_3_v3_projection_store_readiness.py"
     )
@@ -180,7 +185,7 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
         "proof_status": "BLOCKED",
         "remaining_gate_count": 10,
         "blocked_gate_count": 10,
-        "existing_local_proof_count": 30,
+        "existing_local_proof_count": 31,
         "missing_real_service_runtime_evidence_count": 10,
         "read_only": True,
         "mutation_allowed": False,
@@ -198,14 +203,17 @@ def test_get_runtime_wiring_readiness_is_registered_in_test_runner_and_docs():
 
     assert "test_v17_p1_3_v3_get_runtime_wiring_readiness.py" in test_sh
     assert "test_v17_p1_3_v3_get_dependency_auth_readiness.py" in test_sh
+    assert "test_v17_p1_3_v3_route_dependency_contract_readiness.py" in test_sh
     assert "test_v17_p1_3_v3_account_generation_readiness.py" in test_sh
     assert "test_v17_v3_account_generation_source.py" in test_sh
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in ticket_doc
     assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in ticket_doc
+    assert "v17_p1_3_v3_route_dependency_contract_readiness.py" in ticket_doc
     assert "v17_p1_3_v3_account_generation_readiness.py" in ticket_doc
     assert "GET runtime-wiring remaining-gates readiness" in ticket_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in oracle_doc
     assert "v17_p1_3_v3_get_dependency_auth_readiness.py" in oracle_doc
+    assert "v17_p1_3_v3_route_dependency_contract_readiness.py" in oracle_doc
     assert "v17_p1_3_v3_account_generation_readiness.py" in oracle_doc
     assert "GET runtime-wiring remaining-gates readiness" in oracle_doc
     assert "v17_p1_3_v3_get_runtime_wiring_readiness.py" in (

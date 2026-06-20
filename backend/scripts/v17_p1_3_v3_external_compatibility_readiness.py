@@ -623,6 +623,26 @@ GET_DEPENDENCY_AUTH_READINESS_PROOF = {
     ],
 }
 
+ROUTE_DEPENDENCY_CONTRACT_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_route_dependency_contract_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_route_dependency_contract_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "covered_defaults": [
+        "authenticated_subject_binding_required_before_any_read",
+        "legacy_token_api_key_mcp_auth_behavior_inventory_required",
+        "client_uid_override_rejected_before_read_source_selection",
+        "non_enrolled_legacy_boundary_and_enrolled_v17_boundary_required",
+        "rate_limit_or_backpressure_dependency_hook_required_for_get",
+        "missing_invalid_auth_control_cursor_config_fail_closed_required",
+        "real_testclient_scenarios_blocked_until_runtime_route_wiring_exists",
+    ],
+}
+
 PROJECTION_STORE_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_projection_store_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_projection_store_readiness.py",
@@ -1035,6 +1055,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "real_router_dependency_map_proof": REAL_ROUTER_DEPENDENCY_MAP_PROOF,
         "real_router_get_testclient_proof": REAL_ROUTER_GET_TESTCLIENT_PROOF,
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
+        "route_dependency_contract_readiness_proof": ROUTE_DEPENDENCY_CONTRACT_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "projection_read_source_readiness_proof": PROJECTION_READ_SOURCE_READINESS_PROOF,
         "projection_write_convergence_readiness_proof": PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF,
@@ -1080,6 +1101,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "real_router_dependency_map_proof_present": True,
             "real_router_get_testclient_proof_present": True,
             "get_dependency_auth_readiness_proof_present": True,
+            "route_dependency_contract_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
             "projection_read_source_readiness_proof_present": True,
             "projection_write_convergence_readiness_proof_present": True,

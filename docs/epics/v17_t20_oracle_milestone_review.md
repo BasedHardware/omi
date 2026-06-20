@@ -1781,6 +1781,19 @@ Added `backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py` as a 
 The aggregate links the local schema validator, source/IAM emulator/client-deny readiness, production read proof, lifecycle/evidence bundle, observability/telemetry approval, runtime wiring, and external compatibility gates. Local readiness contracts exist, but runtime remains NO-GO until real production read proof, production artifact existence/validity, human approval evidence, telemetry sink/runbook proof, and route wiring gates are satisfied. No production approval, route wiring, Archive default visibility, stale Short-term default visibility, or legacy fallback/merge is claimed.
 
 
+### 2026-06-20 — P1-3 `/v3` route dependency auth/rate-limit/fail-closed readiness contract
+
+Added the next pre-runtime route dependency contract without changing `backend/routers/memories.py` or the rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_route_dependency_contract_readiness.py`, a static/read-only BLOCKED contract for future `GET /v3/memories` route dependency evidence.
+- Added `backend/tests/unit/test_v17_p1_3_v3_route_dependency_contract_readiness.py` and registered it in `backend/test.sh`.
+- Linked `route_dependency_contract_readiness_proof` from both `backend/scripts/v17_p1_3_v3_external_compatibility_readiness.py` and `backend/scripts/v17_p1_3_v3_get_runtime_wiring_readiness.py`, increasing the runtime local-proof inventory while keeping every runtime gate BLOCKED.
+- The contract pins required evidence for authenticated subject binding before reads, legacy token/API-key/MCP behavior inventory, rejection of client uid overrides, non-enrolled legacy vs enrolled V17 boundary, an explicit GET rate-limit/backpressure hook, and fail-closed missing/invalid auth/control/cursor/config behavior.
+- Future route-level TestClient scenarios remain explicitly blocked until runtime route wiring exists; this slice does not execute FastAPI clients, import the production app, call Firestore/Pinecone/cloud/provider/network services, emit telemetry sink calls, or mutate state.
+- No runtime `/v3` behavior change, rollout approval, legacy fallback/merge, Archive default visibility, or stale Short-term default visibility is claimed.
+
+Verification for this slice is recorded in the local commit handoff. Production rollout remains **BLOCKED / NO-GO** until all Oracle P0/P1 gates and required real-service evidence are complete.
+
 ### 2026-06-20 — P1-3 `/v3` projection write convergence/freshness-fence readiness
 
 Implemented the next non-canary pre-runtime readiness slice without changing the production rollout verdict:
