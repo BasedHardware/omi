@@ -735,6 +735,26 @@ PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF = {
     ],
 }
 
+ARCHIVE_SHORT_TERM_VISIBILITY_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_archive_short_term_visibility_readiness.py",
+    "utility": "backend/utils/memory/v17_v3_archive_visibility_readiness.py",
+    "test": "backend/tests/unit/test_v17_v3_archive_visibility_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "covered_defaults": [
+        "archive_not_default_visible_and_requires_explicit_opt_in",
+        "stale_short_term_not_default_visible_and_requires_explicit_historical_opt_in",
+        "fresh_short_term_source_backed_projection_default_visible",
+        "active_long_term_stable_synthesis_default_visible",
+        "unknown_visibility_lifecycle_or_source_freshness_fails_closed",
+        "no_legacy_fallback_or_v17_legacy_merge_claim",
+    ],
+}
+
 CONTROL_READER_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_control_reader_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_control_reader_readiness.py",
@@ -1082,6 +1102,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "projection_read_source_readiness_proof": PROJECTION_READ_SOURCE_READINESS_PROOF,
         "projection_write_convergence_readiness_proof": PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF,
+        "archive_short_term_visibility_readiness_proof": ARCHIVE_SHORT_TERM_VISIBILITY_READINESS_PROOF,
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
@@ -1129,6 +1150,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "projection_store_readiness_proof_present": True,
             "projection_read_source_readiness_proof_present": True,
             "projection_write_convergence_readiness_proof_present": True,
+            "archive_short_term_visibility_readiness_proof_present": True,
             "control_reader_readiness_proof_present": True,
             "control_reader_contract_proof_present": True,
             "account_generation_readiness_proof_present": True,

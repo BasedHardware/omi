@@ -377,6 +377,7 @@ def test_v3_readiness_json_round_trips_and_command_summary_is_stable():
         "projection_store_readiness_proof_present": True,
         "projection_read_source_readiness_proof_present": True,
         "projection_write_convergence_readiness_proof_present": True,
+        "archive_short_term_visibility_readiness_proof_present": True,
         "control_reader_readiness_proof_present": True,
         "control_reader_contract_proof_present": True,
         "account_generation_readiness_proof_present": True,

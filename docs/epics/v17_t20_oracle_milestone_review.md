@@ -1815,3 +1815,8 @@ Implemented the next non-canary pre-runtime readiness slice without changing the
 - The contract requires route-scoped server-owned evidence; durable outbox/equivalent acknowledgement; dual-write/projection writer readiness; create/update/delete and tombstone convergence; idempotency-key replay/mismatch semantics; aligned account/projection/freshness/tombstone/vector-cleanup fences; and rollback fail-closed behavior before V17 projection reads are trusted.
 
 Non-claims preserved: no `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore writes/cloud/provider/vector/network calls by default, no telemetry sink production call, no secret/cursor/user content logging, no legacy fallback/merge claim, no Archive default visibility, and no stale Short-term default visibility.
+
+
+### Follow-up implementation slice: archive + stale Short-term visibility readiness
+
+Added `backend/scripts/v17_p1_3_v3_archive_short_term_visibility_readiness.py`, `backend/utils/memory/v17_v3_archive_visibility_readiness.py`, and `backend/tests/unit/test_v17_v3_archive_visibility_readiness.py` as a local/read-only readiness contract for future GET `/v3/memories`: Archive is unavailable by default, stale Short-term is not default-visible, archive/historical context requires explicit opt-in, fresh source-backed Short-term and active stable Long-term may be default-visible, and unknown visibility/lifecycle/freshness fails closed. Runtime remains BLOCKED; no route wiring, production calls, telemetry sink, approval, Archive default visibility, stale Short-term default visibility, or legacy fallback/merge is claimed.

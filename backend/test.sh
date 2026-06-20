@@ -90,6 +90,7 @@ pytest tests/unit/test_v17_v3_response_adapter.py -v
 pytest tests/unit/test_v17_v3_request_adapter.py -v
 pytest tests/unit/test_v17_v3_route_planner.py -v
 pytest tests/unit/test_v17_v3_get_dependency_seam.py -v
+pytest tests/unit/test_v17_v3_archive_visibility_readiness.py -v
 pytest tests/unit/test_v17_v3_local_telemetry.py -v
 # V17 /v3 canary approval schema + fake-injectable reader readiness seam.
 pytest tests/unit/test_v17_v3_canary_approval_artifact.py -v
