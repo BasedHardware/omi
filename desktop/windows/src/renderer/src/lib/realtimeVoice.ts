@@ -48,6 +48,18 @@ export function realtimeVoiceReadiness(
       reason: configured ? undefined : 'OpenAI key is not saved'
     }
   }
+  if (provider === 'elevenlabs') {
+    const configured = !!byokStatus?.providers.elevenlabs.configured
+    return {
+      enabled,
+      provider,
+      ready: enabled && configured,
+      label: 'ElevenLabs',
+      keyPath: 'ElevenLabs BYOK key',
+      transcriptionPath: 'ElevenLabs realtime STT when selected in Speech-to-text runtime',
+      reason: configured ? undefined : 'ElevenLabs key is not saved'
+    }
+  }
   const relayConfigured = !!import.meta.env.VITE_OMI_REALTIME_VOICE_URL
   return {
     enabled,
