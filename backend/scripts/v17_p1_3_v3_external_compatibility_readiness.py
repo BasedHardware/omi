@@ -667,6 +667,32 @@ PROJECTION_READ_SOURCE_READINESS_PROOF = {
     ],
 }
 
+PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF = {
+    "service": "backend/scripts/v17_p1_3_v3_projection_write_convergence_readiness.py",
+    "test": "backend/tests/unit/test_v17_p1_3_v3_projection_write_convergence_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Backend-owned V17 /v3 projection write convergence/freshness-fence contract is defined locally, "
+        "but production-safe route-scoped convergence evidence reads remain optional/explicit and no route wiring "
+        "or rollout approval is claimed."
+    ),
+    "covered_defaults": [
+        "route_scoped_server_owned_projection_write_convergence_state_selected",
+        "durable_outbox_or_equivalent_acknowledged_before_projection_reads",
+        "dual_write_projection_writer_ready_before_projection_reads",
+        "delete_tombstone_convergence_complete_before_absence_is_trusted",
+        "idempotency_key_contract_required_for_write_replay_and_payload_mismatch_fail_closed",
+        "account_projection_freshness_tombstone_vector_cleanup_fences_aligned",
+        "rollback_fails_closed_after_v17_writes_until_reconciled",
+        "no_client_controlled_collection_path_or_source_no_legacy_fallback_or_v17_legacy_merge_claim",
+    ],
+}
+
 CONTROL_READER_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_control_reader_readiness.py",
     "test": "backend/tests/unit/test_v17_p1_3_v3_control_reader_readiness.py",
@@ -1011,6 +1037,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "get_dependency_auth_readiness_proof": GET_DEPENDENCY_AUTH_READINESS_PROOF,
         "projection_store_readiness_proof": PROJECTION_STORE_READINESS_PROOF,
         "projection_read_source_readiness_proof": PROJECTION_READ_SOURCE_READINESS_PROOF,
+        "projection_write_convergence_readiness_proof": PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF,
         "control_reader_readiness_proof": CONTROL_READER_READINESS_PROOF,
         "control_reader_contract_proof": CONTROL_READER_CONTRACT_PROOF,
         "control_reader_emulator_readiness_proof": CONTROL_READER_EMULATOR_READINESS_PROOF,
@@ -1055,6 +1082,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "get_dependency_auth_readiness_proof_present": True,
             "projection_store_readiness_proof_present": True,
             "projection_read_source_readiness_proof_present": True,
+            "projection_write_convergence_readiness_proof_present": True,
             "control_reader_readiness_proof_present": True,
             "control_reader_contract_proof_present": True,
             "account_generation_readiness_proof_present": True,

@@ -106,6 +106,7 @@ pytest tests/unit/test_v17_p1_3_v3_cursor_secret_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_cursor_secret_production_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_runtime_config_source_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_projection_read_source_readiness.py -v
+pytest tests/unit/test_v17_p1_3_v3_projection_write_convergence_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_canary_approval_source_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_canary_approval_production_readiness.py -v
 pytest tests/unit/test_v17_p1_3_v3_canary_approval_lifecycle_readiness.py -v

@@ -1779,3 +1779,15 @@ Added the local pure seam behind the observability/approval readiness gate witho
 Added `backend/scripts/v17_p1_3_v3_canary_approval_aggregate_readiness.py` as a local-only pre-runtime aggregate decision report for `GET /v3/memories` canary approval. It reports `status=BLOCKED`, `decision=NO_GO`, `runtime_wiring_changed=false`, and no production calls/writes by default or with `--execute`.
 
 The aggregate links the local schema validator, source/IAM emulator/client-deny readiness, production read proof, lifecycle/evidence bundle, observability/telemetry approval, runtime wiring, and external compatibility gates. Local readiness contracts exist, but runtime remains NO-GO until real production read proof, production artifact existence/validity, human approval evidence, telemetry sink/runbook proof, and route wiring gates are satisfied. No production approval, route wiring, Archive default visibility, stale Short-term default visibility, or legacy fallback/merge is claimed.
+
+
+### 2026-06-20 — P1-3 `/v3` projection write convergence/freshness-fence readiness
+
+Implemented the next non-canary pre-runtime readiness slice without changing the production rollout verdict:
+
+- Added `backend/scripts/v17_p1_3_v3_projection_write_convergence_readiness.py` as a read-only readiness proof for the evidence required before `GET /v3/memories` can trust the V17 compatibility projection source.
+- Added `backend/tests/unit/test_v17_p1_3_v3_projection_write_convergence_readiness.py` and registered it in `backend/test.sh`.
+- Linked `projection_write_convergence_readiness_proof` from external compatibility and GET runtime-wiring readiness, increasing local proof inventory while keeping runtime gates BLOCKED.
+- The contract requires route-scoped server-owned evidence; durable outbox/equivalent acknowledgement; dual-write/projection writer readiness; create/update/delete and tombstone convergence; idempotency-key replay/mismatch semantics; aligned account/projection/freshness/tombstone/vector-cleanup fences; and rollback fail-closed behavior before V17 projection reads are trusted.
+
+Non-claims preserved: no `backend/routers/memories.py` change, no runtime `/v3` behavior change, no production rollout approval, no production Firestore writes/cloud/provider/vector/network calls by default, no telemetry sink production call, no secret/cursor/user content logging, no legacy fallback/merge claim, no Archive default visibility, and no stale Short-term default visibility.

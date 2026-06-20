@@ -47,6 +47,7 @@ PROOF_CONSTANTS = {
     "get_dependency_auth_readiness_proof": _EXTERNAL.GET_DEPENDENCY_AUTH_READINESS_PROOF,
     "projection_store_readiness_proof": _EXTERNAL.PROJECTION_STORE_READINESS_PROOF,
     "projection_read_source_readiness_proof": _EXTERNAL.PROJECTION_READ_SOURCE_READINESS_PROOF,
+    "projection_write_convergence_readiness_proof": _EXTERNAL.PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF,
     "control_reader_readiness_proof": _EXTERNAL.CONTROL_READER_READINESS_PROOF,
     "control_reader_contract_proof": _EXTERNAL.CONTROL_READER_CONTRACT_PROOF,
     "control_reader_emulator_readiness_proof": _EXTERNAL.CONTROL_READER_EMULATOR_READINESS_PROOF,
@@ -158,6 +159,7 @@ REMAINING_GATES = [
         "existing_local_proofs": [
             "write_convergence_proof",
             "projection_readiness_proof",
+            "projection_write_convergence_readiness_proof",
             "write_convergence_tombstone_matrix_proof",
         ],
         "missing_real_service_runtime_evidence": True,
@@ -249,6 +251,7 @@ REMAINING_GATES = [
         "existing_local_proofs": [
             "projection_readiness_proof",
             "write_convergence_proof",
+            "projection_write_convergence_readiness_proof",
             "write_convergence_tombstone_matrix_proof",
             "response_adapter_proof",
             "request_adapter_proof",
