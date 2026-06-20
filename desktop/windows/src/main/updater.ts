@@ -1,9 +1,10 @@
 import { app } from 'electron'
-import { autoUpdater } from 'electron-updater'
 import { addObservabilityBreadcrumb, captureMainException } from './observability'
 
 const CHECK_DELAY_MS = 15000
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+
+type AutoUpdater = (typeof import('electron-updater'))['autoUpdater']
 
 function updatesEnabled(): boolean {
   return app.isPackaged || process.env.OMI_UPDATES_ENABLED === '1'
@@ -29,6 +30,23 @@ export function startWindowsUpdater(): void {
     )
     return
   }
+
+  void startWindowsUpdaterWithFeed(url)
+}
+
+async function loadAutoUpdater(): Promise<AutoUpdater | null> {
+  try {
+    const updater = await import('electron-updater')
+    return updater.autoUpdater
+  } catch (error) {
+    captureMainException('updater.load_failed', error, {}, 'warning')
+    return null
+  }
+}
+
+async function startWindowsUpdaterWithFeed(url: string): Promise<void> {
+  const autoUpdater = await loadAutoUpdater()
+  if (!autoUpdater) return
 
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
