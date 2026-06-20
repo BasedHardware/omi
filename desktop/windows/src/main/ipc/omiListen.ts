@@ -6,6 +6,8 @@ import type {
   ListenMessage,
   ListenStartArgs
 } from '../../shared/types'
+import { ParakeetStreamSession } from '../localStt/parakeetSession'
+import { getLocalSttStatus } from '../localStt/status'
 
 function buildEndpoint(language: string): string {
   return (
@@ -21,7 +23,9 @@ function buildEndpoint(language: string): string {
 }
 
 type Session = {
-  ws: WebSocket
+  backend: 'omi' | 'local-parakeet'
+  ws?: WebSocket
+  local?: ParakeetStreamSession
   ownerId: number // webContents id for routing replies back
   source: 'mic' | 'system'
   closed: boolean
@@ -36,13 +40,112 @@ function emit(ownerId: number, msg: ListenMessage): void {
   }
 }
 
-function startSession(args: ListenStartArgs, owner: WebContents): void {
+async function stopSession(sessionId: string): Promise<void> {
+  const s = sessions.get(sessionId)
+  if (!s) return
+  s.closed = true
+  sessions.delete(sessionId)
+  if (s.backend === 'local-parakeet' && s.local) {
+    await s.local.stop()
+    return
+  }
+  try {
+    s.ws?.close()
+  } catch {
+    /* ignore */
+  }
+}
+
+async function startSession(args: ListenStartArgs, owner: WebContents): Promise<void> {
   const existing = sessions.get(args.sessionId)
   if (existing) {
     // Already running — caller bug. Tear the old one down to avoid leaks.
-    try { existing.ws.close() } catch { /* ignore */ }
-    sessions.delete(args.sessionId)
+    await stopSession(args.sessionId)
   }
+
+  const mode = args.sttMode ?? 'auto'
+  if (mode === 'local-parakeet' || mode === 'auto') {
+    const status = await getLocalSttStatus()
+    if (status.available) {
+      startLocalSession(args, owner, status.configuredUrl, mode === 'auto')
+      return
+    } else if (mode === 'local-parakeet') {
+      emit(owner.id, {
+        sessionId: args.sessionId,
+        kind: 'error',
+        message: status.reason ?? 'local Parakeet STT unavailable',
+        fatal: true
+      })
+      return
+    }
+  }
+
+  startCloudSession(args, owner)
+}
+
+function startLocalSession(
+  args: ListenStartArgs,
+  owner: WebContents,
+  baseUrl: string,
+  fallbackCloudOnStartupFailure: boolean
+): void {
+  const session: Session = {
+    backend: 'local-parakeet',
+    ownerId: owner.id,
+    source: args.source,
+    closed: false
+  }
+  const local = new ParakeetStreamSession({
+    sessionId: args.sessionId,
+    source: args.source,
+    baseUrl,
+    handlers: {
+      onConnected: () => {
+        emit(session.ownerId, {
+          sessionId: args.sessionId,
+          kind: 'connected',
+          backend: 'local-parakeet'
+        })
+      },
+      onSegments: (segments) => {
+        emit(session.ownerId, { sessionId: args.sessionId, kind: 'segments', segments })
+      },
+      onError: (message, fatal) => {
+        emit(session.ownerId, { sessionId: args.sessionId, kind: 'error', message, fatal })
+      },
+      onClosed: (code, reason) => {
+        if (session.closed) return
+        session.closed = true
+        sessions.delete(args.sessionId)
+        emit(session.ownerId, { sessionId: args.sessionId, kind: 'closed', code, reason })
+      }
+    }
+  })
+  session.local = local
+  sessions.set(args.sessionId, session)
+  void local.start().catch((err) => {
+    if (session.closed) return
+    sessions.delete(args.sessionId)
+    session.closed = true
+    if (fallbackCloudOnStartupFailure) {
+      emit(session.ownerId, {
+        sessionId: args.sessionId,
+        kind: 'event',
+        event: { type: 'local_stt_fallback_cloud', raw: { reason: (err as Error).message } }
+      })
+      startCloudSession(args, owner)
+      return
+    }
+    emit(session.ownerId, {
+      sessionId: args.sessionId,
+      kind: 'error',
+      message: (err as Error).message,
+      fatal: true
+    })
+  })
+}
+
+function startCloudSession(args: ListenStartArgs, owner: WebContents): void {
   // Decode (not verify) the JWT to derive the uid for the query param; the
   // backend verifies the token from the Authorization header.
   let uid = ''
@@ -63,11 +166,17 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     headers: { Authorization: `Bearer ${args.token}` }
   })
   ws.binaryType = 'arraybuffer'
-  const session: Session = { ws, ownerId: owner.id, source: args.source, closed: false }
+  const session: Session = {
+    backend: 'omi',
+    ws,
+    ownerId: owner.id,
+    source: args.source,
+    closed: false
+  }
   sessions.set(args.sessionId, session)
 
   ws.on('open', () => {
-    emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected' })
+    emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected', backend: 'omi' })
   })
 
   ws.on('message', (data, isBinary) => {
@@ -119,24 +228,24 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
 
 function feedSession(sessionId: string, pcm: ArrayBuffer): void {
   const s = sessions.get(sessionId)
-  if (!s || s.ws.readyState !== WebSocket.OPEN) return
+  if (!s) return
+  if (s.backend === 'local-parakeet') {
+    s.local?.feed(pcm)
+    return
+  }
+  if (s.ws?.readyState !== WebSocket.OPEN) return
   s.ws.send(pcm)
 }
 
-function stopSession(sessionId: string): void {
-  const s = sessions.get(sessionId)
-  if (!s) return
-  s.closed = true
-  sessions.delete(sessionId)
-  try { s.ws.close() } catch { /* ignore */ }
-}
-
 export function registerOmiListenHandlers(): void {
-  ipcMain.handle('omi-listen:start', (e, args: ListenStartArgs) => {
-    startSession(args, e.sender)
+  ipcMain.handle('omi-listen:start', async (e, args: ListenStartArgs) => {
+    await startSession(args, e.sender)
   })
-  ipcMain.handle('omi-listen:stop', (_e, sessionId: string) => {
-    stopSession(sessionId)
+  ipcMain.handle('omi-listen:stop', async (_e, sessionId: string) => {
+    await stopSession(sessionId)
+  })
+  ipcMain.handle('omi-local-stt:status', async () => {
+    return getLocalSttStatus()
   })
   // `on` (not `handle`) — feed is fire-and-forget to keep audio throughput cheap.
   ipcMain.on('omi-listen:feed', (_e, sessionId: string, pcm: ArrayBuffer) => {
