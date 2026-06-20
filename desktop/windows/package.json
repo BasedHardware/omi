@@ -27,6 +27,8 @@
     "bench:anim": "node scripts/bench/anim.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "0.79.9",
+    "@earendil-works/pi-ai": "0.79.9",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@huggingface/transformers": "^3.8.1",
