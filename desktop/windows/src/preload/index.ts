@@ -99,6 +99,7 @@ const omi: OmiBridgeApi = {
   rewindFrameById: (id: number) => ipcRenderer.invoke('rewind:frameById', id),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
+  rewindStatus: () => ipcRenderer.invoke('rewind:status'),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),

@@ -32,7 +32,7 @@ function panelClass(active: boolean): string {
 }
 
 export function MainViews(): React.JSX.Element {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
 
   // Mounting every panel up front (incl. the heavy Memories R3F brain map) on
   // first render blocks the main thread during the startup entrance animations
@@ -82,7 +82,7 @@ export function MainViews(): React.JSX.Element {
         {(isMemories || hydrateAll) && <MemoriesPanel />}
       </div>
       <div className={panelClass(isSettings)}>
-        {(isSettings || hydrateAll) && <SettingsPanel />}
+        {(isSettings || hydrateAll) && <SettingsPanel key={search} />}
       </div>
       <div className={panelClass(isTasks)}>{(isTasks || hydrateAll) && <TasksPanel />}</div>
       <div className={panelClass(isGoals)}>{(isGoals || hydrateAll) && <GoalsPanel />}</div>
