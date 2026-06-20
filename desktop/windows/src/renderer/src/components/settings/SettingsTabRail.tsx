@@ -11,20 +11,40 @@ export function SettingsTabRail(props: {
   onQuery: (q: string) => void
   onBack: () => void
   backLabel?: string
+  side?: 'left' | 'right'
+  showBack?: boolean
 }): React.JSX.Element {
-  const { active, onSelect, query, onQuery, onBack, backLabel = 'Back' } = props
+  const {
+    active,
+    onSelect,
+    query,
+    onQuery,
+    onBack,
+    backLabel = 'Back',
+    side = 'left',
+    showBack = true
+  } = props
   return (
-    <nav className="flex w-60 shrink-0 flex-col gap-1 border-r border-white/10 px-3 py-6">
-      <button
-        onClick={onBack}
-        className={cn(
-          'mb-4 flex items-center gap-2 self-start rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white/90',
-          HOVER
-        )}
-      >
-        <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
-        {backLabel}
-      </button>
+    <nav
+      className={cn(
+        'flex w-60 shrink-0 flex-col gap-1 px-3 py-6',
+        side === 'right'
+          ? 'rounded-[1.35rem] border border-white/[0.12] bg-black/50 shadow-[0_28px_80px_rgba(0,0,0,0.44)] backdrop-blur-2xl'
+          : 'border-r border-white/10'
+      )}
+    >
+      {showBack && (
+        <button
+          onClick={onBack}
+          className={cn(
+            'mb-4 flex items-center gap-2 self-start rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/60 transition-colors hover:text-white/90',
+            HOVER
+          )}
+        >
+          <ArrowLeft className="h-4 w-4" strokeWidth={1.75} />
+          {backLabel}
+        </button>
+      )}
       <h2 className="mb-3 px-2.5 font-display text-2xl font-semibold text-text-primary">
         Settings
       </h2>
