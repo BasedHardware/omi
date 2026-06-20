@@ -23,6 +23,7 @@ import { ContinuousRecordingHost } from './components/recording/ContinuousRecord
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
+import { GoalCelebration } from './components/ui/GoalCelebration'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -139,6 +140,8 @@ function AppShellInner(): React.JSX.Element {
       <RewindCaptureHost />
       {/* Always-on mic capture for continuous recording mode. */}
       <ContinuousRecordingHost />
+      {/* Goal completion celebration — fullscreen confetti + text overlay. */}
+      <GoalCelebration />
     </div>
   )
 }

@@ -13,7 +13,12 @@ import {
   Mic,
   PanelLeftClose,
   PanelLeftOpen,
-  Settings
+  Settings,
+  MessageCircle,
+  ShieldAlert,
+  Bluetooth,
+  HelpCircle,
+  User as UserIcon
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
@@ -21,24 +26,29 @@ import { cn } from '../../lib/utils'
 import { RecordingStatusBar } from '../recording/RecordingStatusBar'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
+import { loadObservations, type FocusStatus } from '../../lib/focusEngine'
 
 const navItems = [
   { label: 'Dashboard', to: '/home', Icon: House },
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
+  { label: 'Chat', to: '/chat', Icon: MessageCircle },
   { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
   { label: 'Focus', to: '/focus', Icon: Target },
   { label: 'Rewind', to: '/rewind', Icon: History },
   { label: 'Insights', to: '/insights', Icon: Lightbulb },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid },
-  { label: 'Settings', to: '/settings', Icon: Settings }
 ]
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
 
-// Shared hover/selection background — matches .nav-active so an active tab and a
-// hovered tab read as the same neutral grey.
 const HOVER = 'hover:bg-[var(--nav-sel)]'
+
+const FOCUS_DOT: Record<FocusStatus, string> = {
+  focused: 'bg-green-500',
+  distracted: 'bg-orange-500',
+  neutral: 'bg-white/25',
+}
 
 export function Sidebar(): React.JSX.Element {
   const [user, setUser] = useState<User | null>(null)
@@ -47,21 +57,44 @@ export function Sidebar(): React.JSX.Element {
     () => localStorage.getItem(COLLAPSE_KEY) === '1'
   )
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
+  const [focusStatus, setFocusStatus] = useState<FocusStatus | null>(null)
+  const [insightBadge, setInsightBadge] = useState(0)
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
-
-  // Keep the displayed name in sync with the editable Settings/onboarding name.
   useEffect(() => onPreferencesChange((p) => setPrefName(p.displayName)), [])
 
-  // Ctrl+1–9: jump to the nth sidebar item — matches macOS Cmd+1–N shortcuts.
+  // Load latest focus observation from local storage for sidebar dot
   useEffect(() => {
+    const obs = loadObservations()
+    if (obs.length > 0) setFocusStatus(obs[0].status)
+  }, [pathname]) // refresh when navigating
+
+  // Insight unread badge: count insights newer than the last time the user
+  // visited /insights. Cleared on entry to /insights.
+  useEffect(() => {
+    if (pathname === '/insights') {
+      localStorage.setItem('omi.insights.lastVisited', String(Date.now()))
+      setInsightBadge(0)
+      return
+    }
+    const lastVisited = parseInt(localStorage.getItem('omi.insights.lastVisited') ?? '0', 10)
+    void window.omi.insightRecent?.(50).then((list) => {
+      if (!list) return
+      const unread = (list as Array<{ ts: number }>).filter((ins) => ins.ts > lastVisited).length
+      setInsightBadge(unread)
+    })
+  }, [pathname])
+
+  // Ctrl+1–N: jump to the nth sidebar item
+  useEffect(() => {
+    const allItems = [...navItems, { to: '/settings', Icon: Settings, label: 'Settings' }]
     const handler = (e: KeyboardEvent): void => {
       if (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return
       const digit = parseInt(e.key, 10)
       if (isNaN(digit) || digit < 1) return
-      const item = navItems[digit - 1]
+      const item = allItems[digit - 1]
       if (!item) return
       const tag = (document.activeElement as HTMLElement | null)?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
@@ -81,15 +114,11 @@ export function Sidebar(): React.JSX.Element {
   }, [])
 
   const email = user?.email
-  // Prefer the Google account's full name (stable "First Last"), then the
-  // onboarding-entered name, then the email.
   const displayName = user?.displayName?.trim() || prefName?.trim() || email || 'Account'
   const photoURL = user?.photoURL
   const initial =
     (user?.displayName?.trim() || prefName?.trim() || email)?.[0]?.toUpperCase() ?? '?'
 
-  // Screen-recording = the persistent Rewind capture setting (the toggle that
-  // used to be a checkbox in Settings). Optimistic flip, reconcile from main.
   const screenOn = !!rewind?.captureEnabled
   const toggleScreen = (): void => {
     if (!rewind) return
@@ -98,20 +127,12 @@ export function Sidebar(): React.JSX.Element {
     void window.omi.rewindSetSettings(next).then(setRewind)
   }
 
-  // Microphone = always-on listening. The toggle reflects the `continuousRecording`
-  // preference; flipping it starts/stops the background ContinuousRecordingHost
-  // (which streams the mic to /v4/listen). Viewing the live transcript is a SEPARATE
-  // affordance (the "New" button in Conversations / opening a conversation row) —
-  // this switch only turns listening on and off.
   const [micOn, setMicOn] = useState<boolean>(() => !!getPreferences().continuousRecording)
   useEffect(() => onPreferencesChange((p) => setMicOn(!!p.continuousRecording)), [])
   const toggleMic = (): void => {
     setPreferences({ continuousRecording: !getPreferences().continuousRecording })
   }
 
-  // The label/name text fades with opacity (and is width-clipped by flexbox) so
-  // collapsing animates smoothly instead of popping. Row padding/alignment stay
-  // constant in both states — only nav width and text opacity animate.
   const label = (text: string): React.JSX.Element => (
     <span
       className={cn(
@@ -168,6 +189,14 @@ export function Sidebar(): React.JSX.Element {
     </button>
   )
 
+  // Bottom utility links: Settings, Permissions, Device, Help
+  const bottomLinks = [
+    { label: 'Settings', to: '/settings', Icon: Settings },
+    { label: 'Permissions', to: '/permissions', Icon: ShieldAlert },
+    { label: 'Device', to: '/settings?tab=devices', Icon: Bluetooth },
+    { label: 'Help from Founder', to: '/help', Icon: HelpCircle },
+  ]
+
   return (
     <nav
       className={cn(
@@ -176,7 +205,7 @@ export function Sidebar(): React.JSX.Element {
         collapsed ? 'w-16' : 'w-60'
       )}
     >
-      {/* Top row: logo (left, fades out) + collapse toggle pinned right. */}
+      {/* Top row: logo + collapse toggle */}
       <div className="flex items-center justify-between px-1.5 py-1">
         <img
           src="https://personas.omi.me/omilogo.png"
@@ -205,6 +234,7 @@ export function Sidebar(): React.JSX.Element {
 
       <div className="my-2 h-px w-full bg-white/10" />
 
+      {/* Main nav items */}
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
         {navItems.map(({ label: text, to, Icon }) => (
           <NavLink
@@ -212,7 +242,11 @@ export function Sidebar(): React.JSX.Element {
             to={to}
             title={collapsed ? text : undefined}
             className={({ isActive }) =>
-              linkClass(isActive || (to === '/tasks' && pathname === '/goals'))
+              linkClass(
+                isActive ||
+                (to === '/tasks' && pathname === '/goals') ||
+                (to === '/home' && pathname === '/chat-legacy')
+              )
             }
           >
             {({ isActive }) => {
@@ -227,20 +261,53 @@ export function Sidebar(): React.JSX.Element {
                     strokeWidth={1.75}
                   />
                   {label(text)}
+                  {/* Focus status dot */}
+                  {to === '/focus' && focusStatus && !collapsed && (
+                    <span className={cn('h-2 w-2 shrink-0 rounded-full', FOCUS_DOT[focusStatus])} />
+                  )}
+                  {/* Insight unread badge */}
+                  {to === '/insights' && insightBadge > 0 && !collapsed && (
+                    <span className="flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[color:var(--accent)] px-1 text-[10px] font-bold leading-none text-white">
+                      {insightBadge > 99 ? '99+' : insightBadge}
+                    </span>
+                  )}
+                  {/* Rewind pulse dot when screen or mic capture is active */}
+                  {to === '/rewind' && (screenOn || micOn) && !collapsed && (
+                    <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-[color:var(--accent)]" />
+                  )}
                 </>
               )
             }}
           </NavLink>
         ))}
+
+        {/* Persona link */}
+        <NavLink
+          to="/persona"
+          title={collapsed ? 'AI Persona' : undefined}
+          className={({ isActive }) => linkClass(isActive)}
+        >
+          {({ isActive }) => (
+            <>
+              <UserIcon
+                className={cn(
+                  'h-4 w-4 shrink-0 transition-colors duration-150',
+                  isActive ? 'text-[color:var(--accent)]' : 'text-white/50'
+                )}
+                strokeWidth={1.75}
+              />
+              {label('Persona')}
+            </>
+          )}
+        </NavLink>
       </div>
 
       <div className="my-2 h-px w-full bg-white/10" />
 
-      {/* Recording status indicator — visible while a live mic session or manual
-          recording is active. Mirrors the macOS sidebar recording state panel. */}
+      {/* Recording status */}
       <RecordingStatusBar collapsed={collapsed} />
 
-      {/* Quick capture toggles, sitting just above the account row. */}
+      {/* Quick capture toggles */}
       <div className="flex flex-col gap-1">
         {toggleRow('Screen recording', Monitor, screenOn, toggleScreen)}
         {toggleRow('Microphone', Mic, micOn, toggleMic)}
@@ -248,8 +315,34 @@ export function Sidebar(): React.JSX.Element {
 
       <div className="my-2 h-px w-full bg-white/10" />
 
-      {/* Account row → opens Settings (Sign out now lives in Settings). Plain Link
-          so the account avatar doesn't double-highlight alongside the Settings nav item. */}
+      {/* Bottom utility links (Settings, Permissions, Device, Help) */}
+      <div className="flex flex-col gap-0.5">
+        {bottomLinks.map(({ label: text, to, Icon }) => {
+          const isSettings = to === '/settings' && pathname === '/settings'
+          const isPermissions = to === '/permissions' && pathname === '/permissions'
+          const isHelp = to === '/help' && pathname === '/help'
+          const active = isSettings || isPermissions || isHelp
+          return (
+            <Link
+              key={to}
+              to={to}
+              title={collapsed ? text : undefined}
+              className={cn(
+                'flex items-center rounded-xl px-2.5 py-1.5 text-sm transition-colors duration-150',
+                !collapsed && 'gap-3',
+                active ? 'nav-active' : cn('text-white/40 hover:text-white/70', HOVER)
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+              {label(text)}
+            </Link>
+          )
+        })}
+      </div>
+
+      <div className="my-2 h-px w-full bg-white/10" />
+
+      {/* Account row */}
       <Link
         to="/settings"
         title={collapsed ? displayName : undefined}
