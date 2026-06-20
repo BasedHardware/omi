@@ -190,6 +190,10 @@ final class BatchAudioWriter {
                 do {
                     try FileManager.default.moveItem(at: part, to: finalURL)
                     NSLog("[BatchWriter] finalized \(finalURL.lastPathComponent) (\(currentFrames) frames, \(currentBytes) bytes, reason=\(reason))")
+                    let finalizedName = finalURL.lastPathComponent
+                    DispatchQueue.main.async {
+                        OmiBleManager.shared.flutterApi?.onBatchRecordingFinalized(fileName: finalizedName) { _ in }
+                    }
                 } catch {
                     NSLog("[BatchWriter] finalize failed: \(error)")
                 }
