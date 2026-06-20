@@ -3085,5 +3085,9 @@
     "recapRegenerateCooldown": "Veuillez patienter quelques secondes avant de régénérer.",
     "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée.",
     "syncCustomSttWarningTitle": "La synchronisation utilise la transcription d'Omi",
-    "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait."
+    "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait.",
+    "offlineModeTitle": "Mode hors ligne",
+    "offlineModeDescription": "Enregistrez l'audio sur votre téléphone pour le transcrire plus tard. Ce mode ne propose pas de transcription en direct : les enregistrements sont stockés en local, puis vous les importez pour créer des conversations.",
+    "offlineModeNote": "Compatible avec les appareils Omi pour le moment. L'audio reste sur votre téléphone jusqu'à ce que vous décidiez de l'importer.",
+    "offlineModeStorageFull": "L'espace de stockage de votre téléphone est presque saturé : l'enregistrement hors ligne est donc en pause. Libérez de l'espace ou importez vos enregistrements, et il reprendra automatiquement."
 }

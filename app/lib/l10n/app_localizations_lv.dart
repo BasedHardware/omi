@@ -9347,17 +9347,17 @@ class AppLocalizationsLv extends AppLocalizations {
       'Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Bezsaistes režīms';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Saglabājiet audio telefonā ierakstīšanas laikā un transkribējiet vēlāk. Šajā režīmā nav tiešraides transkripcijas — ieraksti tiek glabāti lokāli, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu telefonā, līdz izvēlaties to augšupielādēt.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Telefonā ir maz brīvas vietas, tāpēc ierakstīšana bezsaistē ir apturēta. Atbrīvojiet vietu vai augšupielādējiet ierakstus, un tā automātiski atsāksies.';
 }

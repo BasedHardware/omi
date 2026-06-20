@@ -9410,17 +9410,17 @@ class AppLocalizationsTl extends AppLocalizations {
       'Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offline na Mode';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'I-save ang audio sa iyong telepono habang nagre-record, at i-transcribe ito mamaya. Walang live na transkripsiyon sa mode na ito — naka-store muna ang mga recording sa device mo, saka mo ito ia-upload para gumawa ng mga usapan.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Gumagana sa mga Omi device sa ngayon. Nananatili ang audio sa iyong telepono hangga\'t hindi mo pa ito ina-upload.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Mababa na ang storage ng iyong telepono, kaya naka-pause ang offline recording. Maglaan ng espasyo o i-upload ang mga recording mo, at awtomatiko itong magpapatuloy.';
 }

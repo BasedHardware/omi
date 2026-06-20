@@ -9332,17 +9332,17 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'অফলাইন মোড';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'ক্যাপচার করার সময় অডিও আপনার ফোনে সংরক্ষণ করুন এবং পরে প্রতিলিপি তৈরি করুন। এই মোডে লাইভ প্রতিলিপি হয় না — রেকর্ডিংগুলো ফোনেই জমা থাকে, পরে সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারবেন।';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'আপাতত Omi ডিভাইসের সঙ্গে কাজ করে। আপনি নিজে আপলোড না করা পর্যন্ত অডিও আপনার ফোনেই থাকে।';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'আপনার ফোনে স্টোরেজ কম থাকায় অফলাইন রেকর্ডিং থামিয়ে রাখা হয়েছে। কিছু জায়গা খালি করুন বা রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি স্বয়ংক্রিয়ভাবে আবার চালু হবে।';
 }

@@ -9374,17 +9374,17 @@ class AppLocalizationsTe extends AppLocalizations {
       'మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'ఆఫ్‌లైన్ మోడ్';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'మీరు రికార్డ్ చేస్తున్నప్పుడు ఆడియోను మీ ఫోన్‌లోనే సేవ్ చేసి, తర్వాత ట్రాన్స్‌క్రైబ్ చేయండి. ఈ మోడ్‌లో లైవ్ ట్రాన్స్‌క్రిప్షన్ ఉండదు — రికార్డింగ్‌లు మీ ఫోన్‌లోనే భద్రపరచబడతాయి, తర్వాత మీరు వాటిని అప్‌లోడ్ చేసి సంభాషణలను రూపొందించవచ్చు.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'ప్రస్తుతానికి Omi పరికరాలతో మాత్రమే పని చేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే ఆఫ్‌లైన్ రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, తర్వాత అది తిరిగి ఆటోమేటిక్‌గా ప్రారంభమవుతుంది.';
 }

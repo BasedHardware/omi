@@ -9365,17 +9365,17 @@ class AppLocalizationsHu extends AppLocalizations {
       'Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offline mód';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Vedd fel a hangot a telefonodra, az átírást pedig hagyd későbbre. Ebben a módban nincs élő átírás – a felvételek a telefonodon tárolódnak, majd a feltöltésükkel beszélgetéseket hozhatsz létre belőlük.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg úgy nem döntesz, hogy feltöltöd.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Kevés a szabad hely a telefonodon, ezért az offline rögzítés szünetel. Szabadíts fel helyet vagy töltsd fel a felvételeidet, és automatikusan folytatódik.';
 }

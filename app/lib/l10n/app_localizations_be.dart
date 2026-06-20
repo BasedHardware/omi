@@ -9353,17 +9353,17 @@ class AppLocalizationsBe extends AppLocalizations {
       'Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Аўтаномны рэжым';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Захоўвайце аўдыё на тэлефоне падчас запісу, а транскрыбуйце пазней. У гэтым рэжыме няма транскрыпцыі ў рэальным часе — запісы захоўваюцца лакальна, а потым вы загружаеце іх, каб стварыць размовы.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Пакуль працуе з прыладамі Omi. Аўдыё застаецца на тэлефоне, пакуль вы самі не загрузіце яго.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'На тэлефоне мала памяці, таму аўтаномны запіс прыпынены. Вызваліце месца або загрузіце свае запісы — і ён аднавіцца аўтаматычна.';
 }

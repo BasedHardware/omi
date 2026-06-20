@@ -9255,17 +9255,16 @@ class AppLocalizationsHe extends AppLocalizations {
       'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'מצב לא מקוון';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'הקליטו ושמרו את האודיו בטלפון, ותמללו אותו בהמשך. במצב זה אין תמלול בזמן אמת — ההקלטות נשמרות מקומית, ולאחר מכן תוכלו להעלות אותן כדי ליצור שיחות.';
 
   @override
-  String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+  String get offlineModeNote => 'פועל כרגע עם מכשירי Omi. ההקלטות נשארות בטלפון עד שתבחרו להעלות אותן.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'בטלפון נותר מעט שטח אחסון, ולכן ההקלטה הלא מקוונת מושהית. פנו מקום או העלו את ההקלטות, וההקלטה תתחדש אוטומטית.';
 }

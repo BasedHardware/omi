@@ -3019,5 +3019,9 @@
     "recapRegenerateCooldown": "Espera uns segons abans de tornar a regenerar.",
     "recapRegenerateNoConversations": "No hi ha converses per resumir d'aquest dia.",
     "syncCustomSttWarningTitle": "La sincronització utilitza la transcripció d'Omi",
-    "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla."
+    "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla.",
+    "offlineModeTitle": "Mode fora de línia",
+    "offlineModeDescription": "Desa l'àudio al telèfon mentre captures i transcriu-lo més tard. En aquest mode no hi ha transcripció en directe: els enregistraments es guarden localment i, després, els puges per crear converses.",
+    "offlineModeNote": "De moment funciona amb dispositius Omi. L'àudio es queda al telèfon fins que decideixis pujar-lo.",
+    "offlineModeStorageFull": "Al telèfon li queda poc espai, així que l'enregistrament fora de línia s'ha aturat. Allibera espai o puja els enregistraments i es reprendrà automàticament."
 }

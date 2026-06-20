@@ -9351,17 +9351,17 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offlinemodus';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Sla audio op je telefoon op terwijl je opneemt en transcribeer later. In deze modus is er geen live transcriptie: opnames worden lokaal bewaard en je uploadt ze daarna om gesprekken te maken.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Werkt voorlopig met Omi-apparaten. Audio blijft op je telefoon totdat je ervoor kiest om die te uploaden.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Je telefoon heeft weinig opslagruimte, dus offline opnemen is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.';
 }

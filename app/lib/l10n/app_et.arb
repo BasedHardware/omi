@@ -3050,5 +3050,9 @@
     "recapRegenerateCooldown": "Palun oota mõni sekund enne uuesti loomist.",
     "recapRegenerateNoConversations": "Selle päeva jaoks pole vestlusi, mida kokku võtta.",
     "syncCustomSttWarningTitle": "Sünkroonimine kasutab Omi transkriptsiooni",
-    "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse."
+    "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.",
+    "offlineModeTitle": "Võrguühenduseta režiim",
+    "offlineModeDescription": "Salvesta heli telefoni ja transkribeeri see hiljem. Selles režiimis reaalajas transkribeerimist ei toimu — salvestised hoitakse telefonis ja vestluste loomiseks laadid need ise üles.",
+    "offlineModeNote": "Praegu töötab Omi seadmetega. Heli jääb sinu telefoni, kuni otsustad selle üles laadida.",
+    "offlineModeStorageFull": "Telefoni mälu hakkab täis saama, seega on võrguühenduseta salvestamine peatatud. Vabasta ruumi või laadi salvestised üles ja see jätkub automaatselt."
 }

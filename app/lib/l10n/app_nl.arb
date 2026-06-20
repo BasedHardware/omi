@@ -3050,5 +3050,9 @@
     "recapRegenerateCooldown": "Wacht een paar seconden voordat je opnieuw genereert.",
     "recapRegenerateNoConversations": "Geen gesprekken om voor deze dag samen te vatten.",
     "syncCustomSttWarningTitle": "Synchroniseren gebruikt Omi-transcriptie",
-    "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement."
+    "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement.",
+    "offlineModeTitle": "Offlinemodus",
+    "offlineModeDescription": "Sla audio op je telefoon op terwijl je opneemt en transcribeer later. In deze modus is er geen live transcriptie: opnames worden lokaal bewaard en je uploadt ze daarna om gesprekken te maken.",
+    "offlineModeNote": "Werkt voorlopig met Omi-apparaten. Audio blijft op je telefoon totdat je ervoor kiest om die te uploaden.",
+    "offlineModeStorageFull": "Je telefoon heeft weinig opslagruimte, dus offline opnemen is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder."
 }

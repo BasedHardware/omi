@@ -3051,5 +3051,9 @@
     "recapRegenerateCooldown": "Espera unos segundos antes de regenerar de nuevo.",
     "recapRegenerateNoConversations": "No hay conversaciones para resumir en este día.",
     "syncCustomSttWarningTitle": "La sincronización usa la transcripción de Omi",
-    "syncCustomSttWarningMessage": "Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan."
+    "syncCustomSttWarningMessage": "Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.",
+    "offlineModeTitle": "Modo sin conexión",
+    "offlineModeDescription": "Guarda el audio en tu teléfono mientras grabas y transcríbelo más tarde. En este modo no hay transcripción en directo: las grabaciones se almacenan localmente y luego las subes para crear conversaciones.",
+    "offlineModeNote": "Por ahora funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.",
+    "offlineModeStorageFull": "Tu teléfono tiene poco espacio de almacenamiento, así que la grabación sin conexión está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente."
 }

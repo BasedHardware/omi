@@ -3146,5 +3146,9 @@
     "recapRegenerateCooldown": "Kérlek, várj néhány másodpercet az újragenerálás előtt.",
     "recapRegenerateNoConversations": "Erre a napra nincsenek összegezhető beszélgetések.",
     "syncCustomSttWarningTitle": "A szinkronizálás az Omi átiratát használja",
-    "syncCustomSttWarningMessage": "Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe."
+    "syncCustomSttWarningMessage": "Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.",
+    "offlineModeTitle": "Offline mód",
+    "offlineModeDescription": "Vedd fel a hangot a telefonodra, az átírást pedig hagyd későbbre. Ebben a módban nincs élő átírás – a felvételek a telefonodon tárolódnak, majd a feltöltésükkel beszélgetéseket hozhatsz létre belőlük.",
+    "offlineModeNote": "Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg úgy nem döntesz, hogy feltöltöd.",
+    "offlineModeStorageFull": "Kevés a szabad hely a telefonodon, ezért az offline rögzítés szünetel. Szabadíts fel helyet vagy töltsd fel a felvételeidet, és automatikusan folytatódik."
 }

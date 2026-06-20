@@ -9275,17 +9275,16 @@ class AppLocalizationsTh extends AppLocalizations {
       'คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'โหมดออฟไลน์';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'บันทึกเสียงไว้ในเครื่องของคุณขณะที่คุณบันทึก แล้วค่อยถอดความภายหลัง โหมดนี้จะไม่มีการถอดความแบบเรียลไทม์ เสียงที่บันทึกจะถูกเก็บไว้ในเครื่อง จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา';
 
   @override
-  String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+  String get offlineModeNote => 'ตอนนี้รองรับเฉพาะอุปกรณ์ Omi เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย การบันทึกแบบออฟไลน์จึงหยุดชั่วคราว โปรดเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วระบบจะกลับมาทำงานต่อโดยอัตโนมัติ';
 }

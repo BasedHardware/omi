@@ -3050,5 +3050,9 @@
     "recapRegenerateCooldown": "Sila tunggu beberapa saat sebelum menjana semula.",
     "recapRegenerateNoConversations": "Tiada perbualan untuk diringkaskan untuk hari ini.",
     "syncCustomSttWarningTitle": "Penyegerakan menggunakan transkripsi Omi",
-    "syncCustomSttWarningMessage": "Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda."
+    "syncCustomSttWarningMessage": "Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.",
+    "offlineModeTitle": "Mod Luar Talian",
+    "offlineModeDescription": "Simpan audio pada telefon anda untuk dirakam dahulu dan ditranskripsikan kemudian. Tiada transkripsi masa nyata dalam mod ini — rakaman disimpan secara tempatan, kemudian anda memuat naiknya untuk mencipta perbualan.",
+    "offlineModeNote": "Berfungsi dengan peranti Omi buat masa ini. Audio kekal pada telefon anda sehingga anda memilih untuk memuat naiknya.",
+    "offlineModeStorageFull": "Ruang storan telefon anda hampir penuh, jadi rakaman luar talian dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik."
 }

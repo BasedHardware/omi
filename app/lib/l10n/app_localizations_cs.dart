@@ -9325,17 +9325,16 @@ class AppLocalizationsCs extends AppLocalizations {
       'Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offline režim';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Ukládejte zvuk do telefonu během nahrávání a přepis si nechte na později. V tomto režimu neprobíhá živý přepis – nahrávky se uloží lokálně a vy je pak nahrajete, abyste z nich vytvořili konverzace.';
 
   @override
-  String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+  String get offlineModeNote => 'Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud jej sami nenahrajete.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'V telefonu dochází místo, proto je nahrávání offline pozastaveno. Uvolněte místo nebo nahrajte nahrávky a poté se automaticky obnoví.';
 }

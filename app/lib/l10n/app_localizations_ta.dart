@@ -9391,17 +9391,17 @@ class AppLocalizationsTa extends AppLocalizations {
       'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'ஆஃப்லைன் முறை';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'ஒலியைப் பதிவு செய்து உங்கள் தொலைபேசியில் சேமித்து, பின்னர் எழுத்தாக்கம் செய்யுங்கள். இந்த முறையில் நிகழ்நேர எழுத்தாக்கம் இல்லை — பதிவுகள் தொலைபேசியிலேயே சேமிக்கப்படும், பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'தற்போது Omi சாதனங்களுடன் மட்டுமே வேலை செய்யும். நீங்கள் பதிவேற்றத் தேர்ந்தெடுக்கும் வரை ஒலி உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'உங்கள் தொலைபேசியில் சேமிப்பிடம் குறைவாக உள்ளதால், ஆஃப்லைன் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலி செய்யுங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள், பிறகு அது தானாகவே தொடரும்.';
 }

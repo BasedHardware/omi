@@ -9379,17 +9379,17 @@ class AppLocalizationsCa extends AppLocalizations {
       'Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d\'Omi i compten per al límit de transcripció del teu pla.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Mode fora de línia';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Desa l\'àudio al telèfon mentre captures i transcriu-lo més tard. En aquest mode no hi ha transcripció en directe: els enregistraments es guarden localment i, després, els puges per crear converses.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'De moment funciona amb dispositius Omi. L\'àudio es queda al telèfon fins que decideixis pujar-lo.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Al telèfon li queda poc espai, així que l\'enregistrament fora de línia s\'ha aturat. Allibera espai o puja els enregistraments i es reprendrà automàticament.';
 }

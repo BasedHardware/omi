@@ -9343,17 +9343,17 @@ class AppLocalizationsUk extends AppLocalizations {
       'Ви використовуєте власний сервіс транскрипції. Синхронізація цих записів розшифрує їх на серверах Omi, і вони зараховуються до ліміту транскрипції вашого тарифу.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Офлайн-режим';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Записуйте аудіо на телефон, щоб транскрибувати його пізніше. У цьому режимі немає транскрипції в реальному часі — записи зберігаються локально, а потім ви завантажуєте їх, щоб створити розмови.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Наразі працює з пристроями Omi. Аудіо залишається на вашому телефоні, доки ви не вирішите завантажити його.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'На телефоні майже немає вільного місця, тому офлайн-запис призупинено. Звільніть місце або завантажте свої записи — і він автоматично відновиться.';
 }

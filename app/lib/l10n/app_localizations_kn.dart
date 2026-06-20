@@ -9356,17 +9356,17 @@ class AppLocalizationsKn extends AppLocalizations {
       'ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'ಆಫ್‌ಲೈನ್ ಮೋಡ್';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'ರೆಕಾರ್ಡ್ ಮಾಡುವಾಗ ಆಡಿಯೊವನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಿ, ನಂತರ ಲಿಪ್ಯಂತರ ಮಾಡಿ. ಈ ಮೋಡ್‌ನಲ್ಲಿ ತಕ್ಷಣದ ಲಿಪ್ಯಂತರ ಇರುವುದಿಲ್ಲ — ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಫೋನ್‌ನಲ್ಲೇ ಸಂಗ್ರಹವಾಗುತ್ತವೆ, ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಲು ನೀವು ಅವುಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಬೇಕು.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹಣೆ ಕಡಿಮೆ ಇರುವುದರಿಂದ ಆಫ್‌ಲೈನ್ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳವನ್ನು ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ, ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.';
 }

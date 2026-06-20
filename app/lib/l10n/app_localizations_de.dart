@@ -9402,17 +9402,17 @@ class AppLocalizationsDe extends AppLocalizations {
       'Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offline-Modus';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Nimm Audio auf deinem Smartphone auf und transkribiere es später. In diesem Modus gibt es keine Live-Transkription – die Aufnahmen werden lokal gespeichert und später hochgeladen, um daraus Gespräche zu erstellen.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Funktioniert vorerst mit Omi-Geräten. Deine Aufnahmen bleiben auf dem Smartphone, bis du sie selbst hochlädst.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Auf deinem Smartphone ist kaum noch Speicherplatz frei, daher pausiert die Offline-Aufnahme. Gib Speicher frei oder lade deine Aufnahmen hoch – dann wird sie automatisch fortgesetzt.';
 }

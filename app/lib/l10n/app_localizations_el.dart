@@ -9391,17 +9391,17 @@ class AppLocalizationsEl extends AppLocalizations {
       'Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Λειτουργία εκτός σύνδεσης';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Αποθηκεύστε τον ήχο στο τηλέφωνό σας κατά την εγγραφή και μεταγράψτε τον αργότερα. Σε αυτή τη λειτουργία δεν υπάρχει ζωντανή μεταγραφή — οι εγγραφές αποθηκεύονται τοπικά και στη συνέχεια τις ανεβάζετε για να δημιουργήσετε συνομιλίες.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Προς το παρόν λειτουργεί με συσκευές Omi. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Ο αποθηκευτικός χώρος του τηλεφώνου σας είναι περιορισμένος, οπότε η εγγραφή εκτός σύνδεσης έχει διακοπεί προσωρινά. Ελευθερώστε χώρο ή ανεβάστε τις εγγραφές σας και θα συνεχιστεί αυτόματα.';
 }

@@ -9336,17 +9336,17 @@ class AppLocalizationsTr extends AppLocalizations {
       'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Çevrimdışı Mod';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Sesi telefonunuza kaydedin, daha sonra transkribe edin. Bu modda canlı transkripsiyon yoktur; kayıtlar telefonunuzda saklanır, ardından bunları yükleyerek konuşmalar oluşturursunuz.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Şimdilik Omi cihazlarıyla çalışır. Siz yüklemeyi seçene kadar ses telefonunuzda kalır.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Telefonunuzun depolama alanı azaldığı için çevrimdışı kayıt duraklatıldı. Yer açın ya da kayıtlarınızı yükleyin; ardından otomatik olarak devam eder.';
 }

@@ -9322,17 +9322,17 @@ class AppLocalizationsNo extends AppLocalizations {
       'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Frakoblet modus';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Ta opp lyd på telefonen mens du tar opp, og transkriber senere. I denne modusen er det ingen direkte transkripsjon – opptakene lagres lokalt, og du laster dem opp for å lage samtaler.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Fungerer foreløpig med Omi-enheter. Lyden blir liggende på telefonen til du selv velger å laste den opp.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Telefonen har lite lagringsplass, så opptak i frakoblet modus er satt på pause. Frigjør plass eller last opp opptakene dine, så starter det automatisk igjen.';
 }

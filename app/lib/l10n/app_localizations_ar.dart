@@ -9270,17 +9270,16 @@ class AppLocalizationsAr extends AppLocalizations {
       'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'الوضع دون اتصال';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'احفظ الصوت على هاتفك أثناء التسجيل وفرّغه نصيًا لاحقًا. لا يتوفر تفريغ نصي مباشر في هذا الوضع — تُخزَّن التسجيلات محليًا، ثم ترفعها لإنشاء المحادثات.';
 
   @override
-  String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+  String get offlineModeNote => 'يعمل حاليًا مع أجهزة Omi. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'مساحة التخزين في هاتفك منخفضة، لذا تم إيقاف التسجيل دون اتصال مؤقتًا. حرّر بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.';
 }

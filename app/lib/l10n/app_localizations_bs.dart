@@ -9350,17 +9350,17 @@ class AppLocalizationsBs extends AppLocalizations {
       'Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Offline način rada';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Snimajte zvuk na telefonu i transkribirajte ga kasnije. U ovom načinu nema transkripcije uživo — snimci se pohranjuju lokalno, a vi ih kasnije otpremate kako biste kreirali razgovore.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Za sada radi s Omi uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Na telefonu vam ponestaje prostora pa je offline snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i automatski će se nastaviti.';
 }

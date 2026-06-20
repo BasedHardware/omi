@@ -9322,17 +9322,17 @@ class AppLocalizationsEt extends AppLocalizations {
       'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
 
   @override
-  String get offlineModeTitle => 'Offline Mode';
+  String get offlineModeTitle => 'Võrguühenduseta režiim';
 
   @override
   String get offlineModeDescription =>
-      'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.';
+      'Salvesta heli telefoni ja transkribeeri see hiljem. Selles režiimis reaalajas transkribeerimist ei toimu — salvestised hoitakse telefonis ja vestluste loomiseks laadid need ise üles.';
 
   @override
   String get offlineModeNote =>
-      'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.';
+      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni, kuni otsustad selle üles laadida.';
 
   @override
   String get offlineModeStorageFull =>
-      'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+      'Telefoni mälu hakkab täis saama, seega on võrguühenduseta salvestamine peatatud. Vabasta ruumi või laadi salvestised üles ja see jätkub automaatselt.';
 }
