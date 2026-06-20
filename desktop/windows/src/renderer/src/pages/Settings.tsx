@@ -5,6 +5,7 @@ import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
 import { AIChatTab } from '../components/settings/tabs/AIChatTab'
+import { ByokTab } from '../components/settings/tabs/ByokTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
@@ -21,6 +22,7 @@ import { cn } from '../lib/utils'
 // separately below and is intentionally absent from this map.
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
   'ai-chat': AIChatTab,
+  byok: ByokTab,
   shortcuts: ShortcutsTab,
   transcription: TranscriptionTab,
   'plan-usage': PlanUsageTab,
