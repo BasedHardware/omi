@@ -28,6 +28,7 @@ import {
   Gift,
   MoreHorizontal,
   Lock,
+  FlaskConical,
 } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
@@ -48,6 +49,7 @@ const navItems = [
   { label: 'Rewind', to: '/rewind', Icon: History, tier: 1 },
   { label: 'Insights', to: '/insights', Icon: Lightbulb, tier: 0 },
   { label: 'Apps', to: '/apps', Icon: LayoutGrid, tier: 6 },
+  { label: 'ChatLab', to: '/chatlab', Icon: FlaskConical, tier: 0 },
 ]
 
 const TIER_KEY = 'omi.tier.level'

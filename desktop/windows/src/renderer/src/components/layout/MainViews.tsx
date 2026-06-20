@@ -16,6 +16,7 @@ import { Chat } from '../../pages/Chat'
 import { Persona } from '../../pages/Persona'
 import { Permissions } from '../../pages/Permissions'
 import { Help } from '../../pages/Help'
+import { ChatLab } from '../../pages/ChatLab'
 
 // Every page stays mounted (inactive ones are just hidden) so switching tabs is
 // instant. But the pages take no props, so without memo they ALL re-render on
@@ -38,6 +39,7 @@ const ChatPanel = memo(Chat)
 const PersonaPanel = memo(Persona)
 const PermissionsPanel = memo(Permissions)
 const HelpPanel = memo(Help)
+const ChatLabPanel = memo(ChatLab)
 
 function panelClass(active: boolean): string {
   return active ? 'flex h-full min-h-0 flex-col' : 'hidden'
@@ -88,6 +90,7 @@ export function MainViews(): React.JSX.Element {
   const isPersona = pathname === '/persona'
   const isPermissions = pathname === '/permissions'
   const isHelp = pathname === '/help'
+  const isChatLab = pathname === '/chatlab'
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -113,6 +116,7 @@ export function MainViews(): React.JSX.Element {
         {(isPermissions || hydrateAll) && <PermissionsPanel />}
       </div>
       <div className={panelClass(isHelp)}>{(isHelp || hydrateAll) && <HelpPanel />}</div>
+      <div className={panelClass(isChatLab)}>{(isChatLab || hydrateAll) && <ChatLabPanel />}</div>
     </div>
   )
 }
