@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import {
   setCurrentScreen,
+  clearCurrentScreen,
   getCurrentScreen,
   currentScreenAgeMs,
   screenCacheFresh,
@@ -11,7 +12,7 @@ describe('currentScreen cache', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     // Reset to a known state for each test.
-    setCurrentScreen('')
+    clearCurrentScreen()
   })
   afterEach(() => {
     vi.useRealTimers()
@@ -26,6 +27,13 @@ describe('currentScreen cache', () => {
     setCurrentScreen('first')
     setCurrentScreen('second')
     expect(getCurrentScreen().text).toBe('second')
+  })
+
+  it('clears text and freshness', () => {
+    setCurrentScreen('private screen text')
+    clearCurrentScreen()
+    expect(getCurrentScreen()).toEqual({ text: '', ts: 0 })
+    expect(screenCacheFresh(Date.now())).toBe(false)
   })
 
   it('stamps the time on set, so age reflects how stale the text is', () => {
