@@ -287,10 +287,11 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     List<Uint8List> pcmFrames = [];
     for (final opusFrame in opusFrames) {
-      final pcmFrame = decoder.decode(input: opusFrame);
-      if (pcmFrame != null) {
-        final uint8Frame = Uint8List.fromList(pcmFrame.buffer.asUint8List());
-        pcmFrames.add(uint8Frame);
+      try {
+        final pcmFrame = decoder.decode(input: opusFrame);
+        pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
+      } catch (e) {
+        Logger.warning('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${wal.id}: $e');
       }
     }
 
