@@ -43,6 +43,7 @@ function localRuntimeValue(status: LocalSttStatus | null): string {
 
 function localRuntimeSubtitle(sttMode: SttMode, status: LocalSttStatus | null): string {
   if (sttMode === 'cloud') return 'Hosted Omi /v4/listen'
+  if (sttMode === 'elevenlabs') return 'ElevenLabs realtime STT'
   if (!status) return 'Checking local Parakeet'
   if (status.available) return 'Local Parakeet ready'
   if (status.runtime.installState === 'installing') return 'Installing local Parakeet'
@@ -55,6 +56,7 @@ function localRuntimeTone(
   sttMode: SttMode
 ): 'good' | 'warn' | 'neutral' {
   if (status?.available) return 'good'
+  if (sttMode === 'elevenlabs') return 'neutral'
   if (sttMode === 'local-parakeet' || status?.runtime.installState === 'error') return 'warn'
   return 'neutral'
 }
@@ -249,13 +251,17 @@ export function TranscriptionTab(): React.JSX.Element {
       <SettingRow
         icon={Cpu}
         dot={
-          sttMode === 'cloud'
-            ? 'off'
-            : localSttStatus?.available
+          sttMode === 'elevenlabs'
+            ? byokStatus?.providers.elevenlabs.configured
               ? 'on'
-              : sttMode === 'local-parakeet'
-                ? 'warn'
-                : 'off'
+              : 'warn'
+            : sttMode === 'cloud'
+              ? 'off'
+              : localSttStatus?.available
+                ? 'on'
+                : sttMode === 'local-parakeet'
+                  ? 'warn'
+                  : 'off'
         }
         title="Speech-to-text runtime"
         subtitle={localRuntimeSubtitle(sttMode, localSttStatus)}
@@ -276,17 +282,30 @@ export function TranscriptionTab(): React.JSX.Element {
             <option value="local-parakeet" className="bg-neutral-900">
               Local Parakeet
             </option>
+            <option value="elevenlabs" className="bg-neutral-900">
+              ElevenLabs
+            </option>
           </select>
           <StatusTile
-            label="Local STT"
+            label={sttMode === 'elevenlabs' ? 'ElevenLabs STT' : 'Local STT'}
             value={
-              localSttStatus?.available
-                ? 'Ready'
-                : localSttStatus?.runtime.canInstall
-                  ? 'First-use install'
-                  : 'Unavailable'
+              sttMode === 'elevenlabs'
+                ? byokStatus?.providers.elevenlabs.configured
+                  ? 'Ready'
+                  : 'Needs key'
+                : localSttStatus?.available
+                  ? 'Ready'
+                  : localSttStatus?.runtime.canInstall
+                    ? 'First-use install'
+                    : 'Unavailable'
             }
-            tone={localRuntimeTone(localSttStatus, sttMode)}
+            tone={
+              sttMode === 'elevenlabs'
+                ? byokStatus?.providers.elevenlabs.configured
+                  ? 'good'
+                  : 'warn'
+                : localRuntimeTone(localSttStatus, sttMode)
+            }
           />
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -311,6 +330,11 @@ export function TranscriptionTab(): React.JSX.Element {
                   ? 'good'
                   : 'warn'
             }
+          />
+          <StatusTile
+            label="ElevenLabs STT"
+            value={byokStatus?.providers.elevenlabs.configured ? 'Ready' : 'Needs key'}
+            tone={byokStatus?.providers.elevenlabs.configured ? 'good' : 'neutral'}
           />
         </div>
       </SettingRow>
@@ -343,6 +367,9 @@ export function TranscriptionTab(): React.JSX.Element {
             <option value="local-kokoro" className="bg-neutral-900">
               Local Kokoro
             </option>
+            <option value="elevenlabs" className="bg-neutral-900">
+              ElevenLabs
+            </option>
           </select>
           <StatusTile
             label="Voice readiness"
@@ -363,7 +390,20 @@ export function TranscriptionTab(): React.JSX.Element {
             tone={localTtsRuntimeTone(localTtsStatus, realtimeVoiceProvider === 'local-kokoro')}
           />
           <StatusTile
-            label="Voice model"
+            label="Cloud TTS"
+            value={
+              byokStatus?.providers.elevenlabs.configured ? 'ElevenLabs ready' : 'ElevenLabs key'
+            }
+            tone={
+              realtimeVoiceProvider === 'elevenlabs'
+                ? byokStatus?.providers.elevenlabs.configured
+                  ? 'good'
+                  : 'warn'
+                : 'neutral'
+            }
+          />
+          <StatusTile
+            label="Local voice model"
             value={localTtsStatus?.runtime.model.includes('Kokoro-82M') ? 'Kokoro-82M' : 'Kokoro'}
             tone={
               realtimeVoiceProvider === 'local-kokoro' && localTtsStatus?.runtime.canInstall
