@@ -326,8 +326,11 @@ final class UpdaterViewModel: ObservableObject {
     // Wire up delegate back-reference
     updaterDelegate.viewModel = self
 
-    // Check for updates every 10 minutes
-    updaterController.updater.updateCheckInterval = 600
+    // Poll faster on the beta channel so testers pick up new builds within ~2 min of
+    // publish; stable stays at the conservative 10-min cadence (unchanged for prod users).
+    // (Release builds already auto-download + silent-install on quit, so a faster poll is
+    // the only lever left for delivery latency after a build publishes.)
+    updaterController.updater.updateCheckInterval = (updateChannel == .beta) ? 120 : 600
 
     // Observe updater state changes
     updaterController.updater.publisher(for: \.canCheckForUpdates)
