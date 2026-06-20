@@ -13,79 +13,34 @@ Covers bot-identified correctness gaps:
 
 from __future__ import annotations
 
+import importlib
 import os
-import re
+import sys
+import types
 import unittest
 
 # ---------------------------------------------------------------------------
-# Inline copy of constants from models/transcript_segment.py
+# Import the real splitter under a fake Google Translate client.
 # ---------------------------------------------------------------------------
-SENTENCE_ENDERS = frozenset('.?!。！？؟۔।॥')
-SENTENCE_ENDERS_CLASS = '[' + re.escape(''.join(SENTENCE_ENDERS)) + ']'
-SENTENCE_FINDALL_RE = re.compile(
-    r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
-)
+# The sentence splitter is pure, but utils.translation creates the Google client
+# at import time. Keep these tests focused on the splitter by stubbing that
+# client before importing the production module. This avoids the previous test
+# smell where the test copied the splitter implementation and could pass while
+# production code regressed.
+_fake_translate_v3 = types.ModuleType('google.cloud.translate_v3')
+setattr(_fake_translate_v3, 'TranslationServiceClient', lambda *args, **kwargs: object())
+try:
+    _google_cloud = importlib.import_module('google.cloud')
+except Exception:
+    _google = types.ModuleType('google')
+    _google_cloud = types.ModuleType('google.cloud')
+    setattr(_google, 'cloud', _google_cloud)
+    sys.modules.setdefault('google', _google)
+    sys.modules.setdefault('google.cloud', _google_cloud)
+setattr(_google_cloud, 'translate_v3', _fake_translate_v3)
+sys.modules['google.cloud.translate_v3'] = _fake_translate_v3
 
-_ABBR = 'ⓐⓑⓒ'
-_DEC = 'ⓓⓔⓕ'
-_LAT = 'ⓛⓐⓣ'
-
-
-def _should_merge(prev: str, nxt: str) -> bool:
-    if not prev or prev[-1] not in '.!?。！？':
-        return False
-    if not nxt:
-        return False
-    nxt_body = nxt.rstrip('.!?。！؟؟۔।॥ ')
-    if len(nxt_body) <= 15 and nxt and nxt[0].islower():
-        return True
-    prev_body = prev.rstrip('.!?。！؟ ')
-    if len(prev_body) <= 6:
-        return True
-    return False
-
-
-def split_into_sentences(text: str) -> list[str]:
-    if not text:
-        return []
-
-    _ABBREV_PATTERNS = [
-        (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
-        (re.compile(r'(?<=\d)\.(?=\d)'), _DEC),
-        (re.compile(r'\b([a-z])\.([a-z])\.'), lambda m: m.group(1) + _LAT + m.group(2) + '.'),
-        (re.compile(r'\betc\.'), 'etc' + _LAT),
-        (re.compile(r'\bvs\.'), 'vs' + _LAT),
-    ]
-
-    result = []
-    for line in text.split('\n'):
-        line = line.strip()
-        if not line:
-            continue
-
-        protected = line
-        for pattern, replacement in _ABBREV_PATTERNS:
-            protected = pattern.sub(replacement, protected)
-
-        raw = SENTENCE_FINDALL_RE.findall(protected)
-
-        restored_list = []
-        for s in raw:
-            s = s.strip()
-            if not s:
-                continue
-            restored = s.replace(_ABBR, '.').replace(_DEC, '.').replace(_LAT, '.')
-            restored_list.append(restored)
-
-        merged = []
-        for seg in restored_list:
-            if merged and _should_merge(merged[-1], seg):
-                merged[-1] = merged[-1] + ' ' + seg
-            else:
-                merged.append(seg)
-        result.extend(merged)
-    return result
-
+from utils.translation import split_into_sentences  # noqa: E402
 
 # ===========================================================================
 # TESTS — Abbreviation Splitting (P2 from Codex bot review)
@@ -120,6 +75,39 @@ class TestAbbreviationSplitting(unittest.TestCase):
         result = split_into_sentences("She is from the U.K. She likes tea.")
         self.assertEqual(len(result), 2, f"Expected 2 sentences, got {result}: {repr(result)}")
         self.assertIn("U.K.", result[0])
+
+    def test_acronym_sentence_enders_split_before_capitalized_next_sentence(self):
+        """Generalized regression for the latest review: acronym at true boundary."""
+        countries = ("U.S.", "U.K.", "E.U.")
+        next_sentences = ("She likes tea.", "They agreed.", "Markets opened higher.")
+        for acronym in countries:
+            for following in next_sentences:
+                with self.subTest(acronym=acronym, following=following):
+                    text = f"She is from the {acronym} {following}"
+                    self.assertEqual(
+                        split_into_sentences(text),
+                        [f"She is from the {acronym}", following],
+                    )
+
+    def test_acronym_fragments_stay_joined_before_lowercase_continuation(self):
+        """The boundary guard should not regress continuation cases like U.S. policy."""
+        cases = (
+            "I live in the U.S. now.",
+            "The U.K. policy changed.",
+            "The E.U. market opened.",
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertEqual(split_into_sentences(text), [text])
+
+    def test_generated_short_sentences_do_not_merge_with_following_capitalized_sentence(self):
+        """Fuzz-ish matrix: short utterances are common STT units, not abbreviations."""
+        starters = ("Hi.", "OK.", "Sí.", "No.", "Yes.", "Go.")
+        followers = ("Thanks.", "There it is.", "We agree.", "Another sentence.")
+        for first in starters:
+            for second in followers:
+                with self.subTest(first=first, second=second):
+                    self.assertEqual(split_into_sentences(f"{first} {second}"), [first, second])
 
     def test_decimal_number_not_split(self):
         result = split_into_sentences("The value is 3.14159. It is precise.")

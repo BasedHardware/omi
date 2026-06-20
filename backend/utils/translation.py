@@ -434,14 +434,15 @@ def _should_merge(prev: str, nxt: str) -> bool:
     if len(_last_token) <= 6 and _last_token:
         # Must look like an abbreviation: single uppercase letter(s), title prefix,
         # latin abbrev, or version/decimal pattern
-        is_abbrev_like = (
-            _last_token.isupper()
-            and len(_last_token) <= 3  # U.S., UK, Dr
-            or _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')  # Title abbrevs
-            or _last_token in ('etc', 'vs')  # Latin abbrevs
-            or (_last_token[0].isupper() and len(_last_token) > 1 and _last_token[1:].isdigit())  # v2, V3
-        )
-        if is_abbrev_like:
+        # Uppercase acronyms can also end a real sentence ("... U.K. She ...").
+        # Only merge those when the following fragment looks like a continuation;
+        # title prefixes still merge before capitalized names ("Dr. Smith").
+        is_title_abbrev = _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof')
+        is_lowercase_abbrev = _last_token in ('etc', 'vs')
+        is_version_token = _last_token[0].isupper() and len(_last_token) > 1 and _last_token[1:].isdigit()  # V3
+        is_upper_acronym = _last_token.isupper() and len(_last_token) <= 3  # U.S., UK
+        next_is_continuation = bool(nxt and nxt[0].islower())
+        if is_title_abbrev or is_version_token or ((is_upper_acronym or is_lowercase_abbrev) and next_is_continuation):
             return True
 
     return False
