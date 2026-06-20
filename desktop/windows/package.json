@@ -64,7 +64,7 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.5.0",
-    "electron": "^39.2.6",
+    "electron": "^39.8.10",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
