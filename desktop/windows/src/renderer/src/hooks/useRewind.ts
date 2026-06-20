@@ -26,9 +26,13 @@ export function useRewind(): RewindState {
   const [results, setResults] = useState<RewindSearchGroup[]>([])
   const playTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const framesRef = useRef(frames)
-  useEffect(() => { framesRef.current = frames }, [frames])
+  useEffect(() => {
+    framesRef.current = frames
+  }, [frames])
   const cursorRef = useRef(cursorTs)
-  useEffect(() => { cursorRef.current = cursorTs }, [cursorTs])
+  useEffect(() => {
+    cursorRef.current = cursorTs
+  }, [cursorTs])
 
   const reload = useCallback(async () => {
     const b = await window.omi.rewindDayBounds()
@@ -43,6 +47,18 @@ export function useRewind(): RewindState {
   useEffect(() => {
     void reload()
   }, [reload])
+
+  useEffect(
+    () =>
+      window.omi.onRewindCleared(() => {
+        setFrames([])
+        setBounds(null)
+        setCursorTs(Date.now())
+        setPlaying(false)
+        setResults([])
+      }),
+    []
+  )
 
   // Live refresh: poll for newly-captured frames and extend the timeline in
   // place. We append (never reload) so the user's scrub position is preserved;
