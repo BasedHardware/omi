@@ -163,6 +163,7 @@ describe('Pi/Omi chat bridge', () => {
         runTool,
         toolDefinitions: () => toolDefinitions,
         runtimeContext,
+        loadActiveByokChatKey: () => null,
         desktopApiBaseUrl: 'https://desktop.example.test'
       }
     )
@@ -190,6 +191,64 @@ describe('Pi/Omi chat bridge', () => {
       text: 'You have 3 screenshots.',
       toolCalls: [{ id: 'toolu_1', name: 'execute_sql' }],
       usage: { promptTokens: 18, completionTokens: 7, totalTokens: 25 }
+    })
+  })
+
+  it('routes native Pi model calls through active OpenRouter BYOK when configured', async () => {
+    const requests: { url: string; init: RequestInit; body: Record<string, unknown> }[] = []
+    const fetchImpl = vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      requests.push({ url, init, body: JSON.parse(String(init.body)) as Record<string, unknown> })
+      return jsonResponse({
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'OpenRouter BYOK response'
+            },
+            finish_reason: 'stop'
+          }
+        ],
+        usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 }
+      })
+    })
+
+    const result = await sendPiChat(
+      {
+        token: 'firebase-token',
+        messages: [{ role: 'user', content: 'Use my selected model' }],
+        modelId: 'openrouter:openai/gpt-4o-mini'
+      },
+      {
+        fetchImpl,
+        toolDefinitions: () => toolDefinitions,
+        runtimeContext,
+        loadActiveByokChatKey: () => ({ provider: 'openrouter', key: 'sk-or-secret' }),
+        desktopApiBaseUrl: 'https://desktop.example.test'
+      }
+    )
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(requests[0].url).toBe('https://openrouter.ai/api/v1/chat/completions')
+    expect(requests[0].init.headers).toMatchObject({
+      authorization: 'Bearer sk-or-secret',
+      'HTTP-Referer': 'https://omi.me',
+      'X-Title': 'Omi Windows'
+    })
+    expect(requests[0].init.headers).not.toMatchObject({
+      authorization: 'Bearer firebase-token'
+    })
+    expect(requests[0].body).toMatchObject({
+      model: 'openai/gpt-4o-mini',
+      stream: false,
+      tool_choice: 'auto'
+    })
+    expect(
+      (requests[0].body.tools as { function: { name: string } }[]).map((tool) => tool.function.name)
+    ).toEqual(['execute_sql', 'get_local_status'])
+    expect(result).toEqual({
+      text: 'OpenRouter BYOK response',
+      toolCalls: [],
+      usage: { promptTokens: 3, completionTokens: 4, totalTokens: 7 }
     })
   })
 
@@ -246,6 +305,7 @@ describe('Pi/Omi chat bridge', () => {
         runTool,
         toolDefinitions: () => toolDefinitions,
         runtimeContext,
+        loadActiveByokChatKey: () => null,
         desktopApiBaseUrl: 'https://desktop.example.test'
       }
     )
