@@ -98,6 +98,19 @@ xcrun swift test --package-path Desktop \
 
 None of these steps establishes production readiness. Dev-cloud/provider proof, rollout gates, production Archive authorization, and production mutation semantics remain separate and explicitly unproven.
 
+## Final Oracle checkpoint — stop Linux iteration, hand to Mac testing
+
+**Date:** 2026-06-21
+**Oracle session:** `we-need-one-final-prescripti`
+**Reviewed commits:** `fcc20de16`, `19fd6bc61`
+**Model caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`.
+
+Verdict: **LIMITED GO** — stop local Linux iteration and hand commits `fcc20de16` and `19fd6bc61` to Mac local desktop testing. Oracle said no additional Linux-side code or documentation P0 fixes are required based on the evidence presented.
+
+Required next gate: execute `docs/epics/v17_memory_desktop_local_test_plan.md` exactly on a supported Mac/Xcode environment. Treat any compilation failure, test failure, unexpected bulk-network request, data-loss behavior, tier-scope leak, or restart inconsistency as a stop condition requiring remediation before proceeding.
+
+Successful Mac build/tests/smoke satisfies only the local desktop testing gate. All backend/dev-cloud/production items listed as blocked remain blocked pending separate proof and approval.
+
 ## Follow-up Oracle review — LIMITED GO to Mac local testing
 
 **Date:** 2026-06-21
