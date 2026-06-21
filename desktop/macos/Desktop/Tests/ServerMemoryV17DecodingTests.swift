@@ -80,4 +80,86 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         XCTAssertEqual(memory.tier, .longTerm)
         XCTAssertTrue(memory.tier.isDefaultAccessible)
     }
+
+    func testUnknownPresentTierFailsClosed() {
+        let json = """
+        {
+          "id": "mem-future",
+          "content": "Future tier",
+          "category": "system",
+          "tier": "future_archive",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
+    }
+
+    func testConflictingTierAliasesFailClosed() {
+        let json = """
+        {
+          "id": "mem-conflict",
+          "content": "Conflicting tier",
+          "category": "system",
+          "tier": "long_term",
+          "memory_tier": "archive",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
+    }
+
+    func testMatchingTierAliasesDecode() throws {
+        let json = """
+        {
+          "id": "mem-match",
+          "content": "Matching tier",
+          "category": "system",
+          "tier": "archive",
+          "memory_tier": "archive",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+        XCTAssertEqual(memory.tier, .archive)
+    }
+
+    func testConflictingIdAliasesFailClosed() {
+        let json = """
+        {
+          "id": "mem-a",
+          "memory_id": "mem-b",
+          "content": "Conflicting ids",
+          "category": "system",
+          "tier": "long_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
+    }
+
+    func testMatchingIdAliasesDecode() throws {
+        let json = """
+        {
+          "id": "mem-a",
+          "memory_id": "mem-a",
+          "content": "Matching ids",
+          "category": "system",
+          "tier": "long_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+        XCTAssertEqual(memory.id, "mem-a")
+    }
+
 }

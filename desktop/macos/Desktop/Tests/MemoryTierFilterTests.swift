@@ -46,7 +46,17 @@ final class MemoryTierFilterTests: XCTestCase {
         XCTAssertEqual(roundTripped?.tier, .longTerm)
     }
 
-    func testUnknownPersistedTierFallsBackToLongTerm() {
+    func testDefaultTierScopeExcludesArchive() {
+        XCTAssertEqual(MemoryTierScope.defaultAccess.tiers, [.shortTerm, .longTerm])
+        XCTAssertFalse(MemoryTierScope.defaultAccess.includesArchive)
+    }
+
+    func testArchiveScopeRequiresAcknowledgement() {
+        XCTAssertEqual(MemoryTierScope.archiveOnly.tiers, [.archive])
+        XCTAssertTrue(MemoryTierScope.archiveOnly.requiresArchiveAcknowledgement)
+    }
+
+    func testUnknownPersistedTierIsExcludedNotPromotedToLongTerm() {
         let record = MemoryRecord(
             backendId: "mem-unknown",
             backendSynced: true,
@@ -55,6 +65,6 @@ final class MemoryTierFilterTests: XCTestCase {
             tier: "unexpected_future_tier"
         )
 
-        XCTAssertEqual(record.toServerMemory()?.tier, .longTerm)
+        XCTAssertNil(record.toServerMemory())
     }
 }

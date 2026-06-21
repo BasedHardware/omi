@@ -522,18 +522,24 @@ actor MemoryStorage {
         }
     }
 
-    /// Mark all memories as read
-    func markAllAsRead() async throws {
+    /// Mark memories as read within a tier scope.
+    func markAllAsRead(scope: MemoryTierScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
+            var conditions = ["isRead = 0"]
+            var arguments: [DatabaseValue] = []
+            guard let updatedAt = DatabaseValue(value: Date()) else { return }
+            arguments.append(updatedAt)
+            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
             try database.execute(
-                sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE isRead = 0",
-                arguments: [Date()]
+                sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
 
-        log("MemoryStorage: Marked all memories as read")
+        log("MemoryStorage: Marked memories as read for scope \(scope.sqlTierRawValues)")
     }
 
     /// Soft delete a memory
@@ -567,20 +573,39 @@ actor MemoryStorage {
         log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
     }
 
+    /// Restore a soft-deleted memory by backend ID. Used by undo/delete-failure paths;
+    /// callers must requery the active tier scope instead of appending directly to UI arrays.
+    func restoreMemoryByBackendId(_ backendId: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            try database.execute(
+                sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
+                arguments: [Date(), backendId]
+            )
+        }
+
+        log("MemoryStorage: Restored memory with backendId \(backendId)")
+    }
+
     /// Soft-delete synced memories whose backendId is no longer present on the
     /// backend. Used by the one-time cache reconcile to clear orphaned local rows
     /// that diverged from the authoritative backend (e.g. after the server-side
     /// category cleanup). Local-only unsynced memories (backendId NULL) are kept.
     @discardableResult
-    func softDeleteSyncedOrphans(keepingBackendIds keep: Set<String>) async throws -> Int {
+    func softDeleteSyncedOrphans(
+        keepingBackendIds keep: Set<String>,
+        within scope: MemoryTierScope
+    ) async throws -> Int {
         let db = try await ensureInitialized()
 
         return try await db.write { database -> Int in
-            let candidates =
-                try MemoryRecord
+            var query = MemoryRecord
                 .filter(Column("backendId") != nil)
                 .filter(Column("deleted") == false)
-                .fetchAll(database)
+            query = applyTierFilter(query, tiers: scope.tiers)
+
+            let candidates = try query.fetchAll(database)
 
             var removed = 0
             for var record in candidates {
@@ -594,18 +619,24 @@ actor MemoryStorage {
         }
     }
 
-    /// Soft delete all memories
-    func deleteAllMemories() async throws {
+    /// Soft delete memories within a tier scope.
+    func deleteAllMemories(scope: MemoryTierScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
+            var conditions = ["deleted = 0"]
+            var arguments: [DatabaseValue] = []
+            guard let updatedAt = DatabaseValue(value: Date()) else { return }
+            arguments.append(updatedAt)
+            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
             try database.execute(
-                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0",
-                arguments: [Date()]
+                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
 
-        log("MemoryStorage: Soft deleted all memories")
+        log("MemoryStorage: Soft deleted memories for scope \(scope.sqlTierRawValues)")
     }
 
     /// Update content by backend ID
@@ -628,6 +659,28 @@ actor MemoryStorage {
             try database.execute(
                 sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE backendId = ?",
                 arguments: [visibility, Date(), backendId]
+            )
+        }
+    }
+
+    /// Update visibility for memories within a tier scope.
+    func updateVisibility(scope: MemoryTierScope, visibility: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            var conditions = ["deleted = 0"]
+            var arguments: [DatabaseValue] = []
+            guard
+                let visibilityValue = DatabaseValue(value: visibility),
+                let updatedAt = DatabaseValue(value: Date())
+            else { return }
+            arguments.append(visibilityValue)
+            arguments.append(updatedAt)
+            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+
+            try database.execute(
+                sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
+                arguments: StatementArguments(arguments)
             )
         }
     }

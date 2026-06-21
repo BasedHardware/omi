@@ -247,7 +247,7 @@ class InsightStorage: ObservableObject {
 
     private func markAllReadOnBackend() async {
         do {
-            try await APIClient.shared.markAllMemoriesRead()
+            try await APIClient.shared.markAllMemoriesRead(scope: .defaultAccess)
             log("Insight: Marked all as read on backend")
         } catch {
             logError("Insight: Failed to mark all as read on backend", error: error)

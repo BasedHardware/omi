@@ -279,7 +279,13 @@ extension MemoryRecord {
 
         // Parse category
         let memoryCategory = MemoryCategory(rawValue: category) ?? .system
-        let memoryTier = MemoryTier(rawValue: tier) ?? .longTerm
+        guard let memoryTier = MemoryTier(rawValue: tier) else {
+            logError(
+                "MemoryRecord: excluding memory with malformed persisted tier '\(tier)'",
+                error: MemoryStorageError.syncFailed("Malformed persisted memory tier")
+            )
+            return nil
+        }
 
         return ServerMemory(
             id: memoryId,

@@ -98,6 +98,47 @@ xcrun swift test --package-path Desktop \
 
 None of these steps establishes production readiness. Dev-cloud/provider proof, rollout gates, production Archive authorization, and production mutation semantics remain separate and explicitly unproven.
 
+## Remediation status — local P0 slice
+
+Implemented in the follow-up desktop slice:
+
+- Added shared `MemoryTierScope` and mapped the UI tier filter onto it.
+- Made orphan reconciliation tier-scoped in storage and changed the current one-time reconcile to fail closed: it syncs default-scope rows but skips pruning until the backend provides explicit scope/completeness metadata.
+- Version-bumped default-scope sync/reconcile keys.
+- Scoped local bulk helpers (`markAllAsRead`, visibility, delete) and disabled legacy global server bulk mutations with an explicit `unsupportedTierScopedBulkMutation` error before network requests.
+- Updated desktop bulk UI labels/copy to Default scope and disabled them until backend tier-scoped mutation semantics exist.
+- Made `ServerMemory` fail closed on conflicting `id`/`memory_id` and `tier`/`memory_tier` aliases.
+- Kept missing-tier legacy fallback to `.longTerm` only when no tier alias is present.
+- Changed malformed persisted tiers to be excluded instead of promoted to Long-term.
+- Added scope-generation checks around search/filter/load/paging refresh paths.
+- Changed undo/delete-failure restoration to restore SQLite state and requery current scope instead of directly appending to UI arrays.
+- Added Swift tests for alias conflicts, malformed persisted tiers, tier scopes, and scope-aware orphan reconciliation.
+
+Local verification performed on Linux:
+
+- `git diff --check` passed.
+- Static source presence checks passed for shared scope, disabled bulk API, alias conflict handling, malformed persisted-tier exclusion, scoped orphan prune, restore-by-backend-id, scope generation, disabled bulk UI copy, and reconciliation tests.
+- Swift brace balance checks passed for the touched Swift files.
+
+Still **not locally proven** on this host:
+
+- macOS build/typecheck.
+- GRDB migration/runtime correctness under the Mac app bundle.
+- SwiftUI actor-isolation correctness.
+- The new Swift tests executing on a Mac runner.
+
+Required Mac gate remains:
+
+```bash
+cd desktop/macos
+xcrun swift build --package-path Desktop
+xcrun swift test --package-path Desktop \
+  --skip CrispManagerLifecycleTests \
+  --skip MemoriesViewModelObserverTests \
+  --skip TasksStoreObserverTests \
+  --skip OnboardingFlowTests
+```
+
 ## Short guidance for David
 
 > The desktop-first direction is right, but the current slice is not safe to build on unchanged. Before proceeding, we need to make cache reconciliation and bulk operations tier-scoped, fail closed on malformed tiers, harden undo/async state against Archive leakage, and pass the Mac build/tests. After those local fixes, this becomes a limited desktop foundation — not backend, dev-cloud, or production readiness.
