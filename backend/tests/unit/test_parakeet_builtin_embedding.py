@@ -175,7 +175,7 @@ class TestGetEmbedding:
         http_mock.assert_called_once_with(wav)
         np.testing.assert_array_equal(result, http_emb)
 
-    def test_returns_none_when_both_fail(self):
+    def test_returns_none_when_no_builtin_no_url(self):
         wav = _make_wav_bytes(duration_s=1.0)
 
         with patch.object(transcribe, 'get_builtin_embedding_model', return_value=None):
@@ -188,6 +188,22 @@ class TestGetEmbedding:
 
         assert result is None
 
+    def test_returns_none_when_builtin_fails_and_http_fails(self):
+        fake_model = MagicMock()
+        fake_model.side_effect = RuntimeError("GPU error")
+        wav = _make_wav_bytes(duration_s=1.0)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            with patch.object(transcribe, '_get_embedding_http', return_value=None):
+                old_url = transcribe.SPEAKER_EMBEDDING_URL
+                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+                try:
+                    result = transcribe._get_embedding(wav)
+                finally:
+                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        assert result is None
+
     def test_reshapes_1d_embedding(self):
         fake_model = MagicMock()
         fake_model.return_value = np.zeros(128, dtype=np.float32)
@@ -197,6 +213,46 @@ class TestGetEmbedding:
             result = transcribe._get_embedding(wav)
 
         assert result.shape == (1, 128)
+
+
+class TestGetBuiltinEmbeddingModel:
+    def test_returns_none_when_pyannote_unavailable(self):
+        old_model = transcribe._embedding_model
+        transcribe._embedding_model = None
+        old_pyannote = transcribe._PyannoteModel
+        transcribe._PyannoteModel = None
+        try:
+            result = transcribe.get_builtin_embedding_model()
+            assert result is None
+        finally:
+            transcribe._PyannoteModel = old_pyannote
+            transcribe._embedding_model = old_model
+
+    def test_returns_cached_model(self):
+        sentinel = MagicMock()
+        old_model = transcribe._embedding_model
+        transcribe._embedding_model = sentinel
+        try:
+            assert transcribe.get_builtin_embedding_model() is sentinel
+        finally:
+            transcribe._embedding_model = old_model
+
+
+class TestEmbeddingBuiltinDuration:
+    def test_short_audio_below_min_duration_returns_none(self):
+        fake_model = MagicMock()
+        wav = _make_wav_bytes(duration_s=0.3)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is None
+        fake_model.assert_not_called()
+
+    def test_audio_at_min_duration_returns_embedding(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(256, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=0.7)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is not None
+        fake_model.assert_called_once()
 
 
 class TestDiarizeSegmentsGating:
