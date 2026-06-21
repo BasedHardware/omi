@@ -1,7 +1,7 @@
 ---
 ticket_id: "tkt_dev_up_foundation"
 agent: "codex"
-done: false
+done: true
 title: "Add local emulator stack start and reset commands"
 goal: "Developers can start, check, stop, and reset the local emulator/backend stack with repo-native make commands."
 context:
@@ -44,3 +44,10 @@ context:
 - Run the reset command twice and verify it is idempotent.
 - Verify health checks fail clearly when a required dependency is missing.
 - `git diff --check`
+
+## Completion notes
+
+- Added root make lifecycle commands backed by `scripts/dev-harness/` Python CLI and thin shell entrypoints.
+- Added loopback Firestore/Auth emulator config for `demo-omi-local`, local Redis/backend process manifests, status/logs/down/reset, and prerequisite/provider-mode preflight.
+- Verified offline mode skips provider credentials while keeping the local Firestore/Auth/Redis/backend stack shape; real mode reports missing core provider credentials pending TICKET-025 broker/governor details.
+- In this environment `make dev-up` fails safely and actionably because `redis-server` and Python `uvicorn` are not installed.

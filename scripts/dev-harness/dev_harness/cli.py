@@ -1,0 +1,433 @@
+"""CLI implementation for top-level local dev harness make commands."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Iterable
+
+from . import config, safety
+
+OWNERSHIP_PREFIX = "omi-dev-harness"
+SERVICE_PORTS = {"firestore": config.FIRESTORE_PORT, "auth": config.AUTH_PORT, "redis": config.REDIS_PORT, "backend": config.BACKEND_PORT}
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _repo_root() -> Path:
+    return config.repo_root_from(Path.cwd())
+
+
+def _marker(cfg: config.HarnessConfig, service: str) -> str:
+    return f"{OWNERSHIP_PREFIX}:{cfg.instance}:{service}"
+
+
+def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
+    if not path.is_file():
+        return default
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return default
+    return data if isinstance(data, dict) else default
+
+
+def _write_json(path: Path, data: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _process_records(cfg: config.HarnessConfig) -> list[dict[str, object]]:
+    records = _load_json(cfg.layout.process_manifest, {"processes": []}).get("processes", [])
+    return records if isinstance(records, list) else []
+
+
+def _port_records(cfg: config.HarnessConfig) -> list[dict[str, object]]:
+    records = _load_json(cfg.layout.port_manifest, {"ports": []}).get("ports", [])
+    return records if isinstance(records, list) else []
+
+
+def _save_manifests(cfg: config.HarnessConfig, records: list[dict[str, object]]) -> None:
+    live = [record for record in records if safety.process_exists(int(record.get("pid", -1)))]
+    _write_json(cfg.layout.process_manifest, {"schema_version": 1, "updated_at": _now(), "processes": live})
+    ports = [
+        {"service": record["service"], "port": record["port"], "pid": record["pid"], "endpoint": record.get("endpoint")}
+        for record in live
+        if "port" in record
+    ]
+    _write_json(cfg.layout.port_manifest, {"schema_version": 1, "updated_at": _now(), "ports": ports})
+
+
+def _port_open(host: str, port: int, timeout: float = 0.25) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object] | None:
+    for record in _process_records(cfg):
+        if record.get("service") == service and safety.process_exists(int(record.get("pid", -1))):
+            return record
+    return None
+
+
+def _require_port_available_or_owned(cfg: config.HarnessConfig, service: str, port: int) -> None:
+    if not _port_open("127.0.0.1", port):
+        return
+    record = _service_record(cfg, service)
+    if record is None:
+        raise RuntimeError(
+            f"Port {port} for {service} is already in use by a foreign process. Stop it or set a separate local harness state/port before retrying."
+        )
+    safety.validate_port_owner(
+        port,
+        pid=int(record["pid"]),
+        port_manifest=cfg.layout.port_manifest,
+        process_manifest=cfg.layout.process_manifest,
+        service=service,
+    )
+
+
+def _http_ok(url: str, timeout: float = 1.0) -> tuple[bool, str]:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return response.status < 500, f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        return exc.code < 500, f"HTTP {exc.code}"
+    except Exception as exc:  # noqa: BLE001 - health output should be actionable, not typed
+        return False, str(exc)
+
+
+def _which(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def _python_importable(module: str) -> bool:
+    return subprocess.run([sys.executable, "-c", f"import {module}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
+    missing: list[str] = []
+    warnings: list[str] = []
+    if not _which("node"):
+        missing.append("node (required by Firebase emulator CLI)")
+    if not (_which("firebase") or _which("npx")):
+        missing.append("firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)")
+    if not _which("java"):
+        missing.append("java runtime (required by Firestore emulator)")
+    if not _which("redis-server"):
+        missing.append("redis-server (required for local Redis on loopback)")
+    if not (cfg.repo_root / "firebase.json").is_file():
+        missing.append("firebase.json at repo root")
+    if not (cfg.repo_root / "firestore.rules").is_file():
+        missing.append("firestore.rules at repo root")
+    if not (cfg.repo_root / "firestore.indexes.json").is_file():
+        missing.append("firestore.indexes.json at repo root")
+    if not (cfg.repo_root / "backend" / "main.py").is_file():
+        missing.append("backend/main.py")
+    if not _python_importable("uvicorn"):
+        missing.append("Python package uvicorn (install backend requirements before starting backend)")
+    if cfg.provider_mode == "real":
+        for key in config.CORE_PROVIDER_ENV:
+            if not os.environ.get(key):
+                missing.append(f"{key} (real provider mode; set PROVIDER_MODE=offline to skip external provider credentials)")
+        warnings.append("Provider broker/governor is defined by TICKET-025; this foundation only preflights core dev keys.")
+    else:
+        warnings.append("PROVIDER_MODE=offline: external-provider credentials are stripped from child processes; local stack shape is preserved.")
+    return missing, warnings
+
+
+def print_config(cfg: config.HarnessConfig) -> None:
+    print(f"instance: {cfg.instance}")
+    print(f"provider_mode: {cfg.provider_mode}")
+    print(f"state_root: {cfg.layout.state_root}")
+    print(f"firebase_project: {cfg.project_id}")
+    print(f"firestore_database: {cfg.database_id}")
+    print(f"firestore_emulator: {cfg.firestore_host}")
+    print(f"firebase_auth_emulator: {cfg.auth_host}")
+    print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
+    print(f"backend: {cfg.backend_url}")
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    missing, warnings = prerequisite_report(cfg)
+    print("Omi local dev harness prerequisite check")
+    print_config(cfg)
+    if warnings:
+        print("\nWarnings:")
+        for item in warnings:
+            print(f"  - {item}")
+    if missing:
+        print("\nMissing prerequisites:")
+        for item in missing:
+            print(f"  - {item}")
+        return 1
+    print("\nAll required prerequisites for this mode are present.")
+    return 0
+
+
+def _start_process(cfg: config.HarnessConfig, service: str, command: list[str], *, cwd: Path, log_name: str, port: int) -> None:
+    if _service_record(cfg, service) is not None:
+        print(f"{service}: already recorded as running")
+        return
+    _require_port_available_or_owned(cfg, service, port)
+    marker = _marker(cfg, service)
+    log_path = cfg.layout.logs_dir / log_name
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_file = log_path.open("ab")
+    env = config.child_env_for(cfg)
+    env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{env.get('PYTHONPATH', '')}"
+    supervised = [sys.executable, "-m", "dev_harness.supervise", "--marker", marker, "--service", service, "--", *command]
+    proc = subprocess.Popen(supervised, cwd=str(cwd), env=env, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
+    records = [record for record in _process_records(cfg) if record.get("service") != service]
+    records.append(
+        {
+            "service": service,
+            "pid": proc.pid,
+            "port": port,
+            "endpoint": f"127.0.0.1:{port}",
+            "log": str(log_path),
+            "ownership_marker": marker,
+            "started_at": _now(),
+            "command": command,
+        }
+    )
+    _save_manifests(cfg, records)
+    print(f"{service}: started pid={proc.pid} log={log_path}")
+
+
+def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
+    base = ["firebase"] if _which("firebase") else ["npx", "firebase-tools"]
+    return [
+        *base,
+        "emulators:start",
+        "--only",
+        "firestore,auth",
+        "--project",
+        cfg.project_id,
+        "--import",
+        str(cfg.layout.services_dir / "firebase-export"),
+        "--export-on-exit",
+        str(cfg.layout.services_dir / "firebase-export"),
+    ]
+
+
+def _start_services(cfg: config.HarnessConfig) -> None:
+    cfg.layout.logs_dir.mkdir(parents=True, exist_ok=True)
+    _start_process(cfg, "firestore", _firebase_command(cfg), cwd=cfg.repo_root, log_name="firebase-emulators.log", port=config.FIRESTORE_PORT)
+    redis_dir = cfg.layout.services_dir / "redis"
+    redis_dir.mkdir(parents=True, exist_ok=True)
+    _start_process(
+        cfg,
+        "redis",
+        ["redis-server", "--bind", "127.0.0.1", "--port", str(cfg.redis_port), "--dir", str(redis_dir), "--save", "", "--appendonly", "no"],
+        cwd=cfg.repo_root,
+        log_name="redis.log",
+        port=cfg.redis_port,
+    )
+    _start_process(
+        cfg,
+        "backend",
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(config.BACKEND_PORT)],
+        cwd=cfg.repo_root / "backend",
+        log_name="backend.log",
+        port=config.BACKEND_PORT,
+    )
+
+
+def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[str]:
+    checks = {
+        "firestore": f"http://{cfg.firestore_host}/",
+        "auth": f"http://{cfg.auth_host}/",
+        "backend": f"{cfg.backend_url}/docs",
+    }
+    pending = dict(checks)
+    deadline = time.time() + timeout
+    failures: dict[str, str] = {}
+    while pending and time.time() < deadline:
+        for service, url in list(pending.items()):
+            ok, detail = _http_ok(url)
+            if ok:
+                print(f"{service}: healthy ({detail})")
+                pending.pop(service)
+            else:
+                failures[service] = detail
+        if pending:
+            time.sleep(0.75)
+    for service, url in pending.items():
+        failures.setdefault(service, f"not healthy at {url}")
+    return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending]
+
+
+def cmd_up(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=True)
+    missing, warnings = prerequisite_report(cfg)
+    print("Omi local dev harness startup")
+    print_config(cfg)
+    for item in warnings:
+        print(f"warning: {item}")
+    if missing:
+        print("\nCannot start; missing prerequisites:")
+        for item in missing:
+            print(f"  - {item}")
+        return 1
+    _write_json(
+        cfg.layout.config_digest_path,
+        {
+            "schema_version": 1,
+            "updated_at": _now(),
+            "project_id": cfg.project_id,
+            "database_id": cfg.database_id,
+            "provider_mode": cfg.provider_mode,
+            "instance": cfg.instance,
+            "state_root": str(cfg.layout.state_root),
+            "endpoints": {
+                "firestore": cfg.firestore_host,
+                "auth": cfg.auth_host,
+                "redis": f"{cfg.redis_host}:{cfg.redis_port}",
+                "backend": cfg.backend_url,
+            },
+        },
+    )
+    try:
+        _start_services(cfg)
+        failures = _wait_health(cfg)
+    except Exception as exc:  # noqa: BLE001
+        print(f"dev-up failed: {exc}")
+        return 1
+    if failures:
+        print("\nHealth checks failed:")
+        for failure in failures:
+            print(f"  - {failure}")
+        print(f"Inspect logs with: make dev-logs OMI_LOCAL_STATE_ROOT={cfg.layout.state_root.parent}")
+        return 1
+    print("\nLocal dev harness is up.")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    print("Omi local dev harness status")
+    print_config(cfg)
+    if not cfg.layout.sentinel_path.is_file():
+        print("sentinel: missing (run make dev-up or make dev-reset to initialize harness-owned state)")
+    else:
+        safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+        print("sentinel: ok")
+    print("\nProcesses:")
+    for record in _process_records(cfg):
+        pid = int(record.get("pid", -1))
+        alive = safety.process_exists(pid)
+        health = "not checked"
+        service = str(record.get("service"))
+        port = int(record.get("port", 0) or 0)
+        if port:
+            health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
+        print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
+    return 0
+
+
+def _stop_owned(cfg: config.HarnessConfig) -> None:
+    records = _process_records(cfg)
+    for record in records:
+        pid = int(record.get("pid", -1))
+        service = str(record.get("service"))
+        if not safety.process_exists(pid):
+            continue
+        try:
+            safety.terminate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
+            print(f"{service}: sent SIGTERM to pid={pid}")
+        except safety.SafetyError as exc:
+            print(f"{service}: not stopped: {exc}")
+    deadline = time.time() + 8
+    while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
+        time.sleep(0.25)
+    for record in records:
+        pid = int(record.get("pid", -1))
+        if safety.process_exists(pid):
+            print(f"{record.get('service')}: still running pid={pid}; leaving it for safety inspection")
+    _save_manifests(cfg, records)
+
+
+def cmd_down(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    if not cfg.layout.sentinel_path.is_file():
+        print("No harness-owned state exists; nothing to stop.")
+        return 0
+    safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+    _stop_owned(cfg)
+    return 0
+
+
+def _clear_state(cfg: config.HarnessConfig) -> None:
+    safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+    for child in ("manifests", "logs", "reports", "services", "files"):
+        target = cfg.layout.state_root / child
+        if target.exists():
+            safety.validate_destructive_target(target, state_root=cfg.layout.state_root, repo_root=cfg.repo_root)
+            shutil.rmtree(target)
+    safety.create_state_layout(cfg.repo_root, cfg.instance, {"OMI_LOCAL_STATE_ROOT": str(cfg.layout.state_root.parent)})
+
+
+def cmd_reset(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=True)
+    print(f"Resetting harness-owned state only: {cfg.layout.state_root}")
+    safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+    _stop_owned(cfg)
+    _clear_state(cfg)
+    print("Reset complete.")
+    return 0
+
+
+def cmd_logs(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    print(f"logs_dir: {cfg.layout.logs_dir}")
+    for path in sorted(cfg.layout.logs_dir.glob("*.log")) if cfg.layout.logs_dir.is_dir() else []:
+        print(f"\n==> {path} <==")
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-80:]
+        for line in lines:
+            print(line)
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="dev-harness")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name, func in {
+        "check": cmd_check,
+        "up": cmd_up,
+        "status": cmd_status,
+        "down": cmd_down,
+        "reset": cmd_reset,
+        "logs": cmd_logs,
+    }.items():
+        command = sub.add_parser(name)
+        command.set_defaults(func=func)
+    return parser
+
+
+def main(argv: Iterable[str] | None = None) -> int:
+    args = build_parser().parse_args(list(argv) if argv is not None else None)
+    try:
+        return int(args.func(args))
+    except safety.SafetyError as exc:
+        print(f"Safety check failed: {exc}")
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
