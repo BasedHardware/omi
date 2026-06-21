@@ -41,6 +41,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   static const String _jobsPrefKey = 'localRecordingJobs';
   Map<String, String> _jobs = {};
 
+  // Exact per-file duration (seconds), computed once by walking the frame
+  // prefixes. Finalized .bin files are immutable, so this is cached by fileName.
+  final Map<String, int> _secondsByFile = {};
+
   List<LocalRecording> _recordings = [];
   List<LocalRecording> get recordings => _recordings;
 
@@ -103,6 +107,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         return;
       }
       final list = <LocalRecording>[];
+      final seen = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch_*) — never offline-sync WAL flushes,
@@ -110,10 +115,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         // writer stamps the `batchRecordingDevice` marker into the device segment.
         if (!name.startsWith('audio_${batchRecordingDevice}_') || !name.endsWith('.bin')) continue;
         final size = await entity.length();
+        seen.add(name);
         final rec = LocalRecording.fromFile(
           fileName: name,
           filePath: entity.path,
           sizeBytes: size,
+          seconds: await _durationSeconds(name, entity.path, size),
           jobId: _jobs[name],
           state: _stateFor(name),
         );
@@ -121,6 +128,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
+      _secondsByFile.removeWhere((k, _) => !seen.contains(k));
     } catch (e) {
       Logger.error('LocalRecordings: scan failed: $e');
     } finally {
@@ -130,6 +138,37 @@ class LocalRecordingsProvider extends ChangeNotifier {
       if (_jobs.isNotEmpty) _startReconcileTimer();
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Exact recording duration (seconds), computed once per file by counting the
+  /// length-prefixed frames (`[4-byte LE len][frame]`) and multiplying by the
+  /// per-frame duration — the byte-size estimate is unreliable for VBR opus.
+  /// Cached because finalized files never change; falls back to the size estimate
+  /// if the file can't be read.
+  Future<int> _durationSeconds(String name, String path, int sizeBytes) async {
+    final cached = _secondsByFile[name];
+    if (cached != null) return cached;
+    final info = BatchRecordingInfo.fromFileName(name);
+    if (info == null) return 1;
+    int seconds;
+    try {
+      final bytes = await File(path).readAsBytes();
+      final n = bytes.length;
+      var frames = 0;
+      var pos = 0;
+      while (pos + 4 <= n) {
+        final len = bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16) | (bytes[pos + 3] << 24);
+        if (len <= 0) break;
+        pos += 4 + len;
+        frames++;
+      }
+      seconds = info.secondsFromFrameCount(frames);
+    } catch (e) {
+      Logger.error('LocalRecordings: duration scan failed for $name: $e');
+      seconds = info.estimateSeconds(sizeBytes);
+    }
+    _secondsByFile[name] = seconds;
+    return seconds;
   }
 
   LocalRecording? getById(String id) {
