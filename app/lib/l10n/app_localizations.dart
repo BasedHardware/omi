@@ -17379,29 +17379,29 @@ abstract class AppLocalizations {
   /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
   String get syncCustomSttWarningMessage;
 
-  /// Title for the offline (batch) capture mode toggle in device settings
+  /// Title for the 'transcribe later' capture-mode toggle in device settings
   ///
   /// In en, this message translates to:
-  /// **'Offline Mode'**
-  String get offlineModeTitle;
+  /// **'Transcribe Later'**
+  String get transcribeLaterTitle;
 
-  /// Subtitle explaining the offline mode toggle
+  /// Subtitle explaining the transcribe-later mode toggle
   ///
   /// In en, this message translates to:
-  /// **'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.'**
-  String get offlineModeDescription;
+  /// **'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.'**
+  String get transcribeLaterDescription;
 
-  /// Caveat note shown in the Offline Mode sheet
+  /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
   /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
-  String get offlineModeNote;
+  String get transcribeLaterNote;
 
-  /// Warning shown in the Offline Mode sheet when local storage is too low to keep recording
+  /// Warning shown when storage is too low to keep recording in Transcribe Later mode
   ///
   /// In en, this message translates to:
-  /// **'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
-  String get offlineModeStorageFull;
+  /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get transcribeLaterStorageFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

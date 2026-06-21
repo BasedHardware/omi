@@ -10629,8 +10629,8 @@
     "recapRegenerateNoConversations": "Za ta dan ni pogovorov za povzemanje.",
     "syncCustomSttWarningTitle": "Sinhronizacija uporablja prepis Omi",
     "syncCustomSttWarningMessage": "Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.",
-    "offlineModeTitle": "Brez povezave",
-    "offlineModeDescription": "Med snemanjem zvok shranite v telefon in ga prepišete pozneje. V tem načinu ni sprotnega prepisa – posnetki se shranijo lokalno, nato jih naložite in iz njih ustvarite pogovore.",
-    "offlineModeNote": "Za zdaj deluje z napravami Omi. Zvok ostane v telefonu, dokler ga ne naložite sami.",
-    "offlineModeStorageFull": "V telefonu zmanjkuje prostora, zato je snemanje brez povezave začasno ustavljeno. Sprostite prostor ali naložite posnetke in nato se bo samodejno nadaljevalo."
+    "transcribeLaterTitle": "Prepiši pozneje",
+    "transcribeLaterDescription": "Zvok posnemite zdaj in ga prepišite pozneje, ko želite, namesto sproti. Posnetki se shranijo v vaš telefon, nato jih naložite in iz njih nastanejo pogovori.",
+    "transcribeLaterNote": "Zaenkrat deluje z napravami Omi. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.",
+    "transcribeLaterStorageFull": "V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo."
 }

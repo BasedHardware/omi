@@ -9255,16 +9255,16 @@ class AppLocalizationsHe extends AppLocalizations {
       'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
 
   @override
-  String get offlineModeTitle => 'מצב לא מקוון';
+  String get transcribeLaterTitle => 'תמלול מאוחר יותר';
 
   @override
-  String get offlineModeDescription =>
-      'הקליטו ושמרו את האודיו בטלפון, ותמללו אותו בהמשך. במצב זה אין תמלול בזמן אמת — ההקלטות נשמרות מקומית, ולאחר מכן תוכלו להעלות אותן כדי ליצור שיחות.';
+  String get transcribeLaterDescription =>
+      'הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.';
 
   @override
-  String get offlineModeNote => 'פועל כרגע עם מכשירי Omi. ההקלטות נשארות בטלפון עד שתבחרו להעלות אותן.';
+  String get transcribeLaterNote => 'פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
 
   @override
-  String get offlineModeStorageFull =>
-      'בטלפון נותר מעט שטח אחסון, ולכן ההקלטה הלא מקוונת מושהית. פנו מקום או העלו את ההקלטות, וההקלטה תתחדש אוטומטית.';
+  String get transcribeLaterStorageFull =>
+      'האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.';
 }

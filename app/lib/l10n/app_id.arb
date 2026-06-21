@@ -3093,8 +3093,8 @@
     "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini.",
     "syncCustomSttWarningTitle": "Sinkronisasi memakai transkripsi Omi",
     "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.",
-    "offlineModeTitle": "Mode Offline",
-    "offlineModeDescription": "Simpan audio di ponsel Anda saat merekam, lalu transkripsikan nanti. Mode ini tidak menyediakan transkripsi langsung — rekaman disimpan secara lokal, lalu Anda mengunggahnya untuk membuat percakapan.",
-    "offlineModeNote": "Untuk saat ini hanya mendukung perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
-    "offlineModeStorageFull": "Penyimpanan ponsel Anda menipis, jadi perekaman offline dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis."
+    "transcribeLaterTitle": "Transkripsi Nanti",
+    "transcribeLaterDescription": "Rekam audio sekarang dan transkripsikan saat dibutuhkan, bukan secara langsung. Rekaman disimpan di ponsel Anda, lalu Anda mengunggahnya untuk membuat percakapan.",
+    "transcribeLaterNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
+    "transcribeLaterStorageFull": "Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis."
 }

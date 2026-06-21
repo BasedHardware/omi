@@ -9348,17 +9348,17 @@ class AppLocalizationsMs extends AppLocalizations {
       'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
 
   @override
-  String get offlineModeTitle => 'Mod Luar Talian';
+  String get transcribeLaterTitle => 'Transkrip Kemudian';
 
   @override
-  String get offlineModeDescription =>
-      'Simpan audio pada telefon anda untuk dirakam dahulu dan ditranskripsikan kemudian. Tiada transkripsi masa nyata dalam mod ini — rakaman disimpan secara tempatan, kemudian anda memuat naiknya untuk mencipta perbualan.';
+  String get transcribeLaterDescription =>
+      'Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.';
 
   @override
-  String get offlineModeNote =>
-      'Berfungsi dengan peranti Omi buat masa ini. Audio kekal pada telefon anda sehingga anda memilih untuk memuat naiknya.';
+  String get transcribeLaterNote =>
+      'Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
 
   @override
-  String get offlineModeStorageFull =>
-      'Ruang storan telefon anda hampir penuh, jadi rakaman luar talian dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
+  String get transcribeLaterStorageFull =>
+      'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
 }

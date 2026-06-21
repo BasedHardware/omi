@@ -3051,8 +3051,8 @@
     "recapRegenerateNoConversations": "Nu există conversații de rezumat pentru această zi.",
     "syncCustomSttWarningTitle": "Sincronizarea folosește transcrierea Omi",
     "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.",
-    "offlineModeTitle": "Mod offline",
-    "offlineModeDescription": "Salvează audio pe telefon în timp ce înregistrezi și transcrie-l mai târziu. În acest mod nu există transcriere în timp real — înregistrările sunt stocate local, apoi le încarci pentru a crea conversații.",
-    "offlineModeNote": "Deocamdată funcționează cu dispozitivele Omi. Audio rămâne pe telefon până când alegi să-l încarci.",
-    "offlineModeStorageFull": "Telefonul tău are spațiu de stocare insuficient, așa că înregistrarea offline a fost întreruptă. Eliberează spațiu sau încarcă înregistrările, apoi va continua automat."
+    "transcribeLaterTitle": "Transcrie mai târziu",
+    "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
+    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
+    "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat."
 }
