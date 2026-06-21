@@ -119,7 +119,14 @@ actor EmbeddingService {
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, _) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await URLSession.shared.data(for: request)
+
+    // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
+    // cause "data couldn't be read" errors that mask the real problem.
+    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+      let body = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+      throw EmbeddingError.serverError(statusCode: httpResponse.statusCode, body: body)
+    }
 
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let embeddings = json["embeddings"] as? [[String: Any]]
