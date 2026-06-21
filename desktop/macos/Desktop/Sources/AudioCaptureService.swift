@@ -180,6 +180,15 @@ class AudioCaptureService: @unchecked Sendable {
         if let override = overrideDeviceID {
             inputDeviceID = override
             log("AudioCapture: Using override device ID \(override)")
+        } else if Self.isDefaultOutputBluetooth(), let builtIn = Self.findBuiltInMicDeviceID() {
+            // Output is a Bluetooth device (e.g. AirPods). Opening the BT *microphone* forces the
+            // headset out of high-quality A2DP into 16 kHz HFP "call" mode — which degrades ALL
+            // playback (including the hub's spoken reply) and frequently makes macOS deliver only
+            // silence (the A2DP/HFP profile conflict). That silence trips the silent-mic watchdog,
+            // which swaps devices and rebuilds the audio engine MID-REPLY, cutting the reply off.
+            // So capture from the built-in mic and leave Bluetooth in A2DP. Mirrors the PTT path.
+            inputDeviceID = builtIn
+            log("AudioCapture: output is Bluetooth — capturing from built-in mic id=\(builtIn) to keep A2DP")
         } else {
             var size = UInt32(MemoryLayout<AudioDeviceID>.size)
             var address = AudioObjectPropertyAddress(
