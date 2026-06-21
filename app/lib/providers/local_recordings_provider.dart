@@ -352,7 +352,31 @@ class LocalRecordingsProvider extends ChangeNotifier {
   bool isPlaying(LocalRecording r) => _audio.isPlaying(_walFor(r).id);
   bool canPlay(LocalRecording r) => _audio.canPlayOrShare(_walFor(r));
   Future<void> togglePlayback(LocalRecording r) => _audio.togglePlayback(_walFor(r));
-  Future<void> share(LocalRecording r) => _audio.shareAsAudio(_walFor(r));
+
+  bool _isPreparingShare = false;
+  bool get isPreparingShare => _isPreparingShare;
+
+  Future<void> share(LocalRecording r) async {
+    if (_isPreparingShare) return;
+    final wal = _walFor(r);
+    _isPreparingShare = true;
+    notifyListeners();
+    try {
+      await Future.delayed(const Duration(milliseconds: 16));
+      await _audio.ensureAudioFileExists(wal);
+    } catch (e) {
+      Logger.error('LocalRecordings: preparing share failed for ${r.fileName}: $e');
+    } finally {
+      _isPreparingShare = false;
+      if (!_disposed) notifyListeners();
+    }
+    try {
+      await _audio.shareAsAudio(wal);
+    } catch (e) {
+      Logger.error('LocalRecordings: share failed for ${r.fileName}: $e');
+    }
+  }
+
   Future<void> seekTo(Duration position) => _audio.seekToPosition(position);
   Future<void> skipForward() => _audio.skipForward();
   Future<void> skipBackward() => _audio.skipBackward();
