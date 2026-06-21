@@ -1,4 +1,5 @@
 import Foundation
+import FirebaseCore
 @preconcurrency import FirebaseAuth
 import CryptoKit
 import AppKit
@@ -123,6 +124,10 @@ class AuthService {
 
     func configure() {
         guard !isConfigured else { return }
+        guard FirebaseApp.app() != nil else {
+            NSLog("OMI AUTH: Skipping AuthService configuration because FirebaseApp is not configured")
+            return
+        }
         isConfigured = true
         restoreAuthState()
         setupAuthStateListener()
@@ -160,7 +165,7 @@ class AuthService {
         // with user=nil and flip isSignedIn to false before we restore it.
         if savedSignedIn {
             // Check if Firebase also has a current user (session might still be valid)
-            if let currentUser = Auth.auth().currentUser {
+            if FirebaseApp.app() != nil, let currentUser = Auth.auth().currentUser {
                 NSLog("OMI AUTH: Restored auth state from Firebase - uid: %@", currentUser.uid)
                 self.isSignedIn = true
                 AuthState.shared.userEmail = currentUser.email ?? savedEmail
@@ -717,7 +722,7 @@ class AuthService {
         let isImpersonating = UserDefaults.standard.bool(forKey: "auth_isImpersonating")
         if isImpersonating {
             NSLog("OMI AUTH: Skipping Firebase displayName update (impersonation mode)")
-        } else if let user = Auth.auth().currentUser {
+        } else if FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             do {
                 let changeRequest = user.createProfileChangeRequest()
                 changeRequest.displayName = trimmedName
@@ -741,7 +746,9 @@ class AuthService {
 
     /// Try to get name from Firebase user (after OAuth sign-in)
     func getNameFromFirebase() -> String? {
-        if let displayName = Auth.auth().currentUser?.displayName, !displayName.isEmpty {
+        if FirebaseApp.app() != nil,
+           let displayName = Auth.auth().currentUser?.displayName,
+           !displayName.isEmpty {
             return displayName
         }
         return nil
@@ -1001,7 +1008,7 @@ class AuthService {
 
         // Third try: Use Firebase SDK (only if user matches expected user)
         // This prevents returning a stale user's token during sign-out race conditions
-        if let user = Auth.auth().currentUser {
+        if FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             if expectedUserId == nil || user.uid == expectedUserId {
                 if expectedUserId == nil {
                     // Backfill the missing userId

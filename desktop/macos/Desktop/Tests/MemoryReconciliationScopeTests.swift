@@ -40,7 +40,8 @@ final class MemoryReconciliationScopeTests: XCTestCase {
         )
 
         XCTAssertEqual(removed, 0)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("archive-1")?.deleted, false)
+        let archiveRecord = try await MemoryStorage.shared.getMemoryByBackendId("archive-1")
+        XCTAssertEqual(archiveRecord?.deleted, false)
     }
 
     func testDefaultScopeReconcileDeletesOnlyAbsentDefaultScopeRows() async throws {
@@ -56,9 +57,12 @@ final class MemoryReconciliationScopeTests: XCTestCase {
         )
 
         XCTAssertEqual(removed, 1)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("short-kept")?.deleted, false)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("long-deleted")?.deleted, true)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("archive-preserved")?.deleted, false)
+        let shortRecord = try await MemoryStorage.shared.getMemoryByBackendId("short-kept")
+        let longRecord = try await MemoryStorage.shared.getMemoryByBackendId("long-deleted")
+        let archiveRecord = try await MemoryStorage.shared.getMemoryByBackendId("archive-preserved")
+        XCTAssertEqual(shortRecord?.deleted, false)
+        XCTAssertEqual(longRecord?.deleted, true)
+        XCTAssertEqual(archiveRecord?.deleted, false)
     }
 
     func testArchiveScopeReconcileDeletesOnlyAbsentArchiveRows() async throws {
@@ -75,10 +79,14 @@ final class MemoryReconciliationScopeTests: XCTestCase {
         )
 
         XCTAssertEqual(removed, 1)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("short-1")?.deleted, false)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("long-1")?.deleted, false)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("archive-deleted")?.deleted, true)
-        XCTAssertEqual(try await MemoryStorage.shared.getMemoryByBackendId("archive-kept")?.deleted, false)
+        let shortRecord = try await MemoryStorage.shared.getMemoryByBackendId("short-1")
+        let longRecord = try await MemoryStorage.shared.getMemoryByBackendId("long-1")
+        let archiveDeletedRecord = try await MemoryStorage.shared.getMemoryByBackendId("archive-deleted")
+        let archiveKeptRecord = try await MemoryStorage.shared.getMemoryByBackendId("archive-kept")
+        XCTAssertEqual(shortRecord?.deleted, false)
+        XCTAssertEqual(longRecord?.deleted, false)
+        XCTAssertEqual(archiveDeletedRecord?.deleted, true)
+        XCTAssertEqual(archiveKeptRecord?.deleted, false)
     }
 
     private func makeMemory(id: String, tier: MemoryTier) -> ServerMemory {

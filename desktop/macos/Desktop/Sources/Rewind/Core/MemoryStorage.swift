@@ -40,12 +40,12 @@ actor MemoryStorage {
         return db
     }
 
-    private func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryTier]?) -> QueryInterfaceRequest<MemoryRecord> {
+    private static func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryTier]?) -> QueryInterfaceRequest<MemoryRecord> {
         guard let tiers = tiers, !tiers.isEmpty else { return query }
         return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
     }
 
-    private func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryTier]?) {
+    private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryTier]?) {
         guard let tiers = tiers, !tiers.isEmpty else { return }
         let placeholders = tiers.map { _ in "?" }.joined(separator: ", ")
         conditions.append("tier IN (\(placeholders))")
@@ -83,7 +83,7 @@ actor MemoryStorage {
                 query = query.filter(Column("category") == category)
             }
 
-            query = applyTierFilter(query, tiers: tiers)
+            query = Self.applyTierFilter(query, tiers: tiers)
 
             // Tag filtering using JSON
             if let tags = tags, !tags.isEmpty {
@@ -124,7 +124,7 @@ actor MemoryStorage {
                 query = query.filter(Column("category") == category)
             }
 
-            query = applyTierFilter(query, tiers: tiers)
+            query = Self.applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -158,7 +158,7 @@ actor MemoryStorage {
                 conditions.append("isDismissed = 0")
             }
 
-            appendTierCondition(&conditions, &arguments, tiers: tiers)
+            Self.appendTierCondition(&conditions, &arguments, tiers: tiers)
 
             // Tag OR conditions
             if let tags = matchAnyTag, !tags.isEmpty {
@@ -240,7 +240,7 @@ actor MemoryStorage {
                 query = query.filter(Column("category") == category)
             }
 
-            query = applyTierFilter(query, tiers: tiers)
+            query = Self.applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -298,7 +298,7 @@ actor MemoryStorage {
                 query = query.filter(Column("category") == category)
             }
 
-            query = applyTierFilter(query, tiers: tiers)
+            query = Self.applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -531,7 +531,7 @@ actor MemoryStorage {
             var arguments: [DatabaseValue] = []
             guard let updatedAt = DatabaseValue(value: Date()) else { return }
             arguments.append(updatedAt)
-            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
 
             try database.execute(
                 sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
@@ -603,7 +603,7 @@ actor MemoryStorage {
             var query = MemoryRecord
                 .filter(Column("backendId") != nil)
                 .filter(Column("deleted") == false)
-            query = applyTierFilter(query, tiers: scope.tiers)
+            query = Self.applyTierFilter(query, tiers: scope.tiers)
 
             let candidates = try query.fetchAll(database)
 
@@ -628,7 +628,7 @@ actor MemoryStorage {
             var arguments: [DatabaseValue] = []
             guard let updatedAt = DatabaseValue(value: Date()) else { return }
             arguments.append(updatedAt)
-            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
 
             try database.execute(
                 sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
@@ -676,7 +676,7 @@ actor MemoryStorage {
             else { return }
             arguments.append(visibilityValue)
             arguments.append(updatedAt)
-            appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
+            Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
 
             try database.execute(
                 sql: "UPDATE memories SET visibility = ?, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
