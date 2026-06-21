@@ -2,36 +2,45 @@
 ticket_id: "tkt_dev_up_foundation"
 agent: "codex"
 done: false
-title: "Add local dev stack start and reset commands"
-goal: "Developers can start and reset the local backend stack with repo-native commands."
+title: "Add local emulator stack start and reset commands"
+goal: "Developers can start, check, stop, and reset the local emulator/backend stack with repo-native make commands."
 context:
   - path: ".codex-autorunner/contextspace/spec.md"
     required: true
-    max_bytes: 12000
+    max_bytes: 16000
   - path: "backend/testing/e2e/README.md"
     required: true
     max_bytes: 16000
   - path: "desktop/macos/run.sh"
     required: true
-    max_bytes: 20000
+    max_bytes: 24000
 ---
 
 ## Tasks
 
-- Add repo-native commands for starting and resetting the local stack.
+- Add top-level `make` commands for `dev-check`, `dev-up`, `dev-status`, `dev-reset`, and any needed `dev-down` / `dev-logs` helpers.
+- Put heavy implementation under `scripts/` rather than in the Makefile.
 - Wire Python backend startup with a local-only environment profile.
-- Add local Redis/fakeredis and Firestore/Auth emulator or documented strict fake startup.
-- Ensure reset deletes only harness-owned state.
+- Start or validate Firestore emulator and Firebase Auth emulator.
+- Start or validate local Redis or the selected local-only state service.
+- Add a prerequisite checker that lists missing core local prerequisites and, in default real-provider mode, missing required provider credentials before startup.
+- Ensure `PROVIDER_MODE=offline` skips external-provider credential requirements while preserving the same local stack shape.
+- Ensure the checker rejects production Firebase/Firestore/GCS projects and implicit ambient GCP state as harness-owned dependencies.
+- Ensure reset deletes only harness-owned local state and is idempotent.
 - Add health checks that fail fast with actionable messages.
 
 ## Acceptance criteria
 
-- `dev-up` equivalent starts the required local services or reports missing prerequisites.
-- `dev-reset` equivalent clears harness-owned state without touching real user data.
-- Commands do not use production credentials or ambient GCP defaults.
+- `make dev-up` starts the required local emulator/backend services or reports missing prerequisites.
+- `make dev-check` prints a clear missing-prerequisites checklist without starting services, including missing dev provider keys when provider mode is real.
+- `make dev-reset` clears harness-owned local state without touching real user data.
+- Commands do not use production credentials, production data, production projects, or ambient GCP defaults for mutable state.
+- External provider usage is governed by `TICKET-025-provider-capabilities.md`; offline mode must not require external-provider credentials.
 
 ## Tests
 
+- Run `make dev-check` with missing credentials and verify actionable output.
 - Run the start command from a clean shell.
 - Run the reset command twice and verify it is idempotent.
 - Verify health checks fail clearly when a required dependency is missing.
+- `git diff --check`

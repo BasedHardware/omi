@@ -2,8 +2,8 @@
 ticket_id: "tkt_dev_cloud_preview_bridge"
 agent: "codex"
 done: false
-title: "Design optional branch preview bridge for dev-cloud proof"
-goal: "There is a safe path from local iteration to deployed branch proof without weakening V17 Gate 2."
+title: "Post-MVP: design optional branch preview bridge for dev-cloud proof"
+goal: "After the local emulator MVP, there is a safe handoff path from local iteration to deployed branch proof without weakening V17 Gate 2."
 context:
   - path: "docs/runbooks/v17-v3-dev-cloud-proof.md"
     required: true
@@ -15,6 +15,7 @@ context:
 
 ## Tasks
 
+- Treat this as post-MVP cloud-promotion infrastructure, not part of the local emulator critical path.
 - Document how branch backend revisions can be deployed to a non-production preview target.
 - Define required identity, project, index, and fixture-writer constraints.
 - Ensure preview deployment cannot target production projects by default or ambient credentials.
