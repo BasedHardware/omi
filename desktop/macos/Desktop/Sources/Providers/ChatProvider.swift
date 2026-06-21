@@ -2357,6 +2357,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if case APIError.unauthorized = error {
                 AuthBackoffTracker.shared.reportAuthFailure()
             }
+            // Benign sign-out race: the isSignedIn guard above passed, but the
+            // token was cleared by the time getMessages ran. Expected, not a bug
+            // — log quietly (breadcrumb only) instead of flooding Sentry.
+            if case AuthError.notSignedIn = error {
+                log("ChatProvider poll skipped: signed out mid-cycle")
+                return
+            }
             // Silent failure — polling errors shouldn't disrupt the user
             logError("ChatProvider poll failed", error: error)
         }
