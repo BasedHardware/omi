@@ -164,8 +164,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       seconds = info.secondsFromFrameCount(frames);
     } catch (e) {
+      // Transient read failure (e.g. file mid-write): return the rough estimate but
+      // don't cache it, so the next refresh retries the exact frame count.
       Logger.error('LocalRecordings: duration scan failed for $name: $e');
-      seconds = info.estimateSeconds(sizeBytes);
+      return info.estimateSeconds(sizeBytes);
     }
     _secondsByFile[name] = seconds;
     return seconds;
