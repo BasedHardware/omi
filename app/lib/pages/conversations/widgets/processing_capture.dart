@@ -550,7 +550,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     const Icon(Icons.cloud_off_rounded, size: 14, color: Colors.deepPurpleAccent),
                     const SizedBox(width: 6),
                     Text(
-                      context.l10n.offlineModeTitle,
+                      context.l10n.transcribeLaterTitle,
                       style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
@@ -580,7 +580,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           ),
           const SizedBox(height: 10),
           Text(
-            context.l10n.offlineModeNote,
+            context.l10n.transcribeLaterNote,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -607,14 +607,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   const Icon(Icons.cloud_off_rounded, color: Colors.deepPurpleAccent, size: 22),
                   const SizedBox(width: 10),
                   Text(
-                    context.l10n.offlineModeTitle,
+                    context.l10n.transcribeLaterTitle,
                     style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
               Text(
-                context.l10n.offlineModeDescription,
+                context.l10n.transcribeLaterDescription,
                 style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
               ),
               const SizedBox(height: 24),

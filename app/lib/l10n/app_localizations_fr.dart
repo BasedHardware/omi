@@ -9409,17 +9409,17 @@ class AppLocalizationsFr extends AppLocalizations {
       'Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d\'Omi et ils comptent dans la limite de transcription de votre forfait.';
 
   @override
-  String get offlineModeTitle => 'Mode hors ligne';
+  String get transcribeLaterTitle => 'Transcrire plus tard';
 
   @override
-  String get offlineModeDescription =>
-      'Enregistrez l\'audio sur votre téléphone pour le transcrire plus tard. Ce mode ne propose pas de transcription en direct : les enregistrements sont stockés en local, puis vous les importez pour créer des conversations.';
+  String get transcribeLaterDescription =>
+      'Enregistrez l\'audio maintenant et transcrivez-le à la demande plutôt qu\'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.';
 
   @override
-  String get offlineModeNote =>
-      'Compatible avec les appareils Omi pour le moment. L\'audio reste sur votre téléphone jusqu\'à ce que vous décidiez de l\'importer.';
+  String get transcribeLaterNote =>
+      'Compatible avec les appareils Omi pour le moment. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
 
   @override
-  String get offlineModeStorageFull =>
-      'L\'espace de stockage de votre téléphone est presque saturé : l\'enregistrement hors ligne est donc en pause. Libérez de l\'espace ou importez vos enregistrements, et il reprendra automatiquement.';
+  String get transcribeLaterStorageFull =>
+      'L\'espace de stockage de votre téléphone est presque plein : l\'enregistrement est donc en pause. Libérez de l\'espace ou importez vos enregistrements pour qu\'il reprenne automatiquement.';
 }
