@@ -1,7 +1,7 @@
 ---
 ticket_id: "tkt_local_runtime_safety"
 agent: "codex"
-done: false
+done: true
 title: "Add local runtime safety and isolation guards"
 goal: "Harness scripts are mechanically prevented from reaching cloud state, deleting unrelated state, or killing unrelated processes."
 context:
@@ -42,3 +42,8 @@ context:
 - Unit tests proving dangerous paths are rejected.
 - Unit tests proving foreign PID/port ownership is rejected.
 - `git diff --check`
+
+## Completion notes
+
+- Added `scripts/dev-harness/dev_harness/safety.py` guard helpers for canonical `demo-omi-local` / `(default)` config, loopback emulator validation, sanitized child environments, sentinel-owned state layout, destructive path checks, PID/port ownership checks, and Redis reset namespacing.
+- Added unit tests under `scripts/dev-harness/tests/` covering state-root sentinel validation, project/database/loopback validation, dangerous path rejection, foreign PID/port rejection, environment stripping, and shared Redis refusal.
