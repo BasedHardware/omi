@@ -1,19 +1,21 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
-import 'package:omi/widgets/waveform_section.dart';
+import 'package:omi/widgets/waveform_painter.dart';
 
 /// Floating bottom sheet for a batch/offline recording — playback (waveform +
-/// transport), the primary "Sync now" (transcribe → conversation) action, and
-/// share / details / delete. Replaces the old full-page detail screen.
+/// scrub + transport), the primary "Sync now" (transcribe → conversation)
+/// action, and share / details / delete. Replaces the old full-page detail.
 Future<void> showRecordingDetailSheet(BuildContext context, LocalRecording recording) {
   return showModalBottomSheet(
     context: context,
@@ -33,14 +35,18 @@ class _RecordingDetailSheet extends StatefulWidget {
 }
 
 class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
-  List<double>? _waveformData;
-  bool _isProcessingWaveform = false;
+  List<double>? _waveform;
+  bool _loadingWaveform = false;
+  Timer? _ticker;
   LocalRecordingsProvider? _provider;
 
   @override
   void initState() {
     super.initState();
-    _generateWaveform();
+    _loadWaveform();
+    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (mounted && (_provider?.isPlaying(widget.recording) ?? false)) setState(() {});
+    });
   }
 
   @override
@@ -51,22 +57,38 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
 
   @override
   void dispose() {
+    _ticker?.cancel();
     if (_provider != null && _provider!.isPlaying(widget.recording)) {
       _provider!.togglePlayback(widget.recording);
     }
     super.dispose();
   }
 
-  Future<void> _generateWaveform() async {
+  Future<void> _loadWaveform() async {
     if (!mounted) return;
-    setState(() => _isProcessingWaveform = true);
+    setState(() => _loadingWaveform = true);
     final data = await context.read<LocalRecordingsProvider>().getWaveform(widget.recording);
-    if (mounted) {
-      setState(() {
-        _waveformData = data;
-        _isProcessingWaveform = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _waveform = _normalize(data);
+      _loadingWaveform = false;
+    });
+  }
+
+  // Scale amplitudes so the loudest bar nearly fills the height — a quiet
+  // recording still reads as a real waveform instead of a flat line.
+  List<double>? _normalize(List<double>? data) {
+    if (data == null || data.isEmpty) return data;
+    final maxV = data.reduce(math.max);
+    if (maxV <= 0) return data;
+    final scale = 0.95 / maxV;
+    return data.map((v) => (v * scale).clamp(0.0, 1.0)).toList();
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    return '$m:${s.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -74,7 +96,8 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+        margin: const EdgeInsets.all(8),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(28)),
         child: SafeArea(
           top: false,
@@ -82,144 +105,131 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
             builder: (context, provider, child) {
               final rec = provider.getById(widget.recording.id) ?? widget.recording;
               final isPlaying = provider.isPlaying(rec);
-              final playbackState = PlaybackState(
-                isPlaying: isPlaying,
-                isProcessing: provider.isProcessingAudio && isPlaying,
-                canPlayOrShare: provider.canPlay(rec),
-                isSynced: false,
-                hasError: rec.state == LocalRecordingState.failed,
-                currentPosition: provider.currentPosition,
-                totalDuration: provider.totalDuration,
-                playbackProgress: provider.playbackProgress,
-              );
-              final canPlay = playbackState.canPlayOrShare;
+              final canPlay = provider.canPlay(rec);
+              final total = provider.totalDuration.inMilliseconds > 0 && isPlaying
+                  ? provider.totalDuration
+                  : Duration(seconds: rec.seconds);
+              final position = isPlaying ? provider.currentPosition : Duration.zero;
+              final progress = isPlaying ? provider.playbackProgress.clamp(0.0, 1.0) : 0.0;
 
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      dateTimeFormat('dd MMM yyyy', rec.startedAt),
-                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      dateTimeFormat('h:mm a', rec.startedAt),
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      height: 120,
-                      child: WaveformSection(
-                        seconds: rec.seconds,
-                        waveformData: _waveformData,
-                        isProcessingWaveform: _isProcessingWaveform,
-                        playbackState: playbackState,
-                        isPlaying: isPlaying,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _formatPosition(isPlaying ? provider.currentPosition : Duration.zero),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 1.5,
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+              return Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 14, 24, 30),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          iconSize: 30,
-                          color: Colors.white,
-                          disabledColor: Colors.grey.shade700,
-                          onPressed: canPlay && isPlaying ? () => provider.skipBackward() : null,
-                          icon: const Icon(Icons.replay_10),
+                        Container(
+                          width: 36,
+                          height: 4,
+                          decoration:
+                              BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
                         ),
-                        const SizedBox(width: 24),
-                        GestureDetector(
-                          onTap: canPlay && !playbackState.isProcessing ? () => provider.togglePlayback(rec) : null,
-                          child: Container(
-                            width: 72,
-                            height: 72,
-                            decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                            child: Icon(
-                              playbackState.isProcessing
-                                  ? Icons.hourglass_empty
-                                  : (isPlaying ? Icons.pause : Icons.play_arrow),
-                              color: canPlay ? Colors.white : Colors.grey.shade600,
-                              size: 34,
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            const SizedBox(width: 40),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  Text(
+                                    dateTimeFormat('dd MMM yyyy', rec.startedAt),
+                                    style:
+                                        const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    dateTimeFormat('h:mm a', rec.startedAt),
+                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
+                            _buildMenu(context, provider, rec),
+                          ],
                         ),
-                        const SizedBox(width: 24),
-                        IconButton(
-                          iconSize: 30,
-                          color: Colors.white,
-                          disabledColor: Colors.grey.shade700,
-                          onPressed: canPlay && isPlaying ? () => provider.skipForward() : null,
-                          icon: const Icon(Icons.forward_10),
+                        const SizedBox(height: 36),
+                        SizedBox(height: 60, child: _buildWaveform(provider, rec, isPlaying, canPlay, total, progress)),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(_fmt(position), style: _timeStyle),
+                            Text(_fmt(total), style: _timeStyle),
+                          ],
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
-                        onPressed: rec.isBusy ? null : () => _handleTranscribe(provider, rec),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          disabledBackgroundColor: const Color(0xFF35343B),
-                          foregroundColor: Colors.black,
-                          disabledForegroundColor: Colors.grey.shade500,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
-                        child: Row(
+                        const SizedBox(height: 28),
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (rec.isBusy)
-                              SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade500),
-                              )
-                            else
-                              const Icon(Icons.cloud_upload_outlined, size: 20),
-                            const SizedBox(width: 10),
-                            Text(
-                              rec.isBusy ? context.l10n.syncStatusUploaded : context.l10n.syncNow,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            IconButton(
+                              iconSize: 28,
+                              color: Colors.white,
+                              disabledColor: Colors.grey.shade700,
+                              onPressed: canPlay && isPlaying ? () => provider.skipBackward() : null,
+                              icon: const Icon(Icons.replay_10_rounded),
+                            ),
+                            const SizedBox(width: 28),
+                            GestureDetector(
+                              onTap: canPlay ? () => provider.togglePlayback(rec) : null,
+                              child: Container(
+                                width: 66,
+                                height: 66,
+                                decoration: BoxDecoration(
+                                  color: canPlay ? Colors.white : const Color(0xFF35343B),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  provider.isProcessingAudio && isPlaying
+                                      ? Icons.hourglass_empty_rounded
+                                      : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                  color: canPlay ? Colors.black : Colors.grey.shade600,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 28),
+                            IconButton(
+                              iconSize: 28,
+                              color: Colors.white,
+                              disabledColor: Colors.grey.shade700,
+                              onPressed: canPlay && isPlaying ? () => provider.skipForward() : null,
+                              icon: const Icon(Icons.forward_10_rounded),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _action(Icons.ios_share_rounded, context.l10n.shareRecording, const Color(0xFFC9CBCF),
-                            () => provider.share(rec)),
-                        _action(Icons.info_outline_rounded, context.l10n.recordingInfo, const Color(0xFFC9CBCF),
-                            () => _showFileDetailsDialog(context, rec)),
-                        _action(Icons.delete_outline_rounded, context.l10n.delete, Colors.redAccent,
-                            rec.isBusy ? null : () => _confirmDelete(context, provider, rec)),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton.icon(
+                            onPressed: rec.isBusy ? null : () => _handleTranscribe(provider, rec),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF35343B),
+                              disabledBackgroundColor: const Color(0xFF2A2A2E),
+                              foregroundColor: Colors.white,
+                              disabledForegroundColor: Colors.grey.shade600,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                            icon: rec.isBusy
+                                ? SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade500),
+                                  )
+                                : const Icon(Icons.cloud_upload_outlined, size: 20),
+                            label: Text(
+                              rec.isBusy ? context.l10n.syncStatusUploaded : context.l10n.processNow,
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  if (provider.isPreparingShare) _preparingOverlay(context),
+                ],
               );
             },
           ),
@@ -228,31 +238,117 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     );
   }
 
-  Widget _action(IconData icon, String label, Color color, VoidCallback? onTap) {
-    final c = onTap == null ? Colors.grey.shade700 : color;
-    return Expanded(
+  static const TextStyle _timeStyle = TextStyle(
+    color: Color(0xFF9A9CA3),
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  Widget _buildWaveform(
+    LocalRecordingsProvider provider,
+    LocalRecording rec,
+    bool isPlaying,
+    bool canPlay,
+    Duration total,
+    double progress,
+  ) {
+    if (_loadingWaveform) {
+      return Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade600),
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        void seek(double dx) {
+          if (total.inMilliseconds <= 0) return;
+          final p = (dx / constraints.maxWidth).clamp(0.0, 1.0);
+          provider.seekTo(Duration(milliseconds: (p * total.inMilliseconds).round()));
+        }
+
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: isPlaying ? (d) => seek(d.localPosition.dx) : null,
+          onHorizontalDragUpdate: isPlaying ? (d) => seek(d.localPosition.dx) : null,
+          child: SizedBox(
+            width: double.infinity,
+            height: double.infinity,
+            child: RepaintBoundary(
+              child: CustomPaint(
+                painter: WaveformPainter(isPlaying: isPlaying, waveformData: _waveform, playbackProgress: progress),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _preparingOverlay(BuildContext context) {
+    return Positioned.fill(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            children: [
-              Icon(icon, color: c, size: 22),
-              const SizedBox(height: 6),
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c, fontSize: 12)),
-            ],
+        onTap: () {},
+        child: Container(
+          color: const Color(0xE61F1F25),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 26,
+                  height: 26,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                ),
+                const SizedBox(height: 16),
+                Text(context.l10n.preparingAudio, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  String _formatPosition(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    final centis = (duration.inMilliseconds.remainder(1000) / 10).floor();
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')},${centis.toString().padLeft(2, '0')}';
+  Widget _buildMenu(BuildContext context, LocalRecordingsProvider provider, LocalRecording rec) {
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.more_horiz_rounded, color: Colors.grey.shade400),
+      color: const Color(0xFF2A2A2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      position: PopupMenuPosition.under,
+      onSelected: (v) {
+        switch (v) {
+          case 'share':
+            provider.share(rec);
+          case 'info':
+            _showFileDetailsDialog(context, rec);
+          case 'delete':
+            _confirmDelete(context, provider, rec);
+        }
+      },
+      itemBuilder: (_) => [
+        _menuItem('share', Icons.ios_share_rounded, context.l10n.shareRecording, Colors.white),
+        _menuItem('info', Icons.info_outline_rounded, context.l10n.recordingInfo, Colors.white),
+        if (!rec.isBusy) _menuItem('delete', Icons.delete_outline_rounded, context.l10n.delete, Colors.redAccent),
+      ],
+    );
+  }
+
+  PopupMenuItem<String> _menuItem(String value, IconData icon, String label, Color color) {
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color, fontSize: 14)),
+        ],
+      ),
+    );
   }
 
   Future<void> _handleTranscribe(LocalRecordingsProvider provider, LocalRecording rec) async {
