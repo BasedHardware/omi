@@ -40,6 +40,22 @@ actor MemoryStorage {
         return db
     }
 
+    private func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryTier]?) -> QueryInterfaceRequest<MemoryRecord> {
+        guard let tiers = tiers, !tiers.isEmpty else { return query }
+        return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
+    }
+
+    private func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryTier]?) {
+        guard let tiers = tiers, !tiers.isEmpty else { return }
+        let placeholders = tiers.map { _ in "?" }.joined(separator: ", ")
+        conditions.append("tier IN (\(placeholders))")
+        for tier in tiers {
+            if let dbValue = DatabaseValue(value: tier.rawValue) {
+                arguments.append(dbValue)
+            }
+        }
+    }
+
     // MARK: - Local-First Read Operations
 
     /// Get memories from local cache for instant display
@@ -49,6 +65,7 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -65,6 +82,8 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = applyTierFilter(query, tiers: tiers)
 
             // Tag filtering using JSON
             if let tags = tags, !tags.isEmpty {
@@ -87,6 +106,7 @@ actor MemoryStorage {
     func getLocalMemoriesCount(
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -103,6 +123,8 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -122,6 +144,7 @@ actor MemoryStorage {
         matchAnyTag: [String]? = nil,     // OR logic: matches any of these tags
         matchAnyCategory: [String]? = nil, // OR logic: matches any of these categories
         excludeTags: [String]? = nil,      // Exclude memories containing these tags
+        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -134,6 +157,8 @@ actor MemoryStorage {
             if !includeDismissed {
                 conditions.append("isDismissed = 0")
             }
+
+            appendTierCondition(&conditions, &arguments, tiers: tiers)
 
             // Tag OR conditions
             if let tags = matchAnyTag, !tags.isEmpty {
@@ -193,6 +218,7 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -213,6 +239,8 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {
@@ -249,6 +277,7 @@ actor MemoryStorage {
         query searchText: String,
         category: String? = nil,
         tags: [String]? = nil,
+        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -268,6 +297,8 @@ actor MemoryStorage {
             if let category = category {
                 query = query.filter(Column("category") == category)
             }
+
+            query = applyTierFilter(query, tiers: tiers)
 
             if let tags = tags, !tags.isEmpty {
                 for tag in tags {

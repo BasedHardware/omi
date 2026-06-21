@@ -1156,12 +1156,43 @@ enum MemoryCategory: String, Codable, CaseIterable {
   }
 }
 
-struct ServerMemory: Codable, Identifiable {
+enum MemoryTier: String, Codable, CaseIterable, Identifiable {
+  case shortTerm = "short_term"
+  case longTerm = "long_term"
+  case archive
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .shortTerm: return "Short-term"
+    case .longTerm: return "Long-term"
+    case .archive: return "Archive"
+    }
+  }
+
+  var icon: String {
+    switch self {
+    case .shortTerm: return "clock"
+    case .longTerm: return "brain.head.profile"
+    case .archive: return "archivebox"
+    }
+  }
+
+  var isDefaultAccessible: Bool {
+    self == .shortTerm || self == .longTerm
+  }
+}
+
+struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
   let category: MemoryCategory
   let createdAt: Date
   let updatedAt: Date
+  let capturedAt: Date?
+  let expiresAt: Date?
+  let tier: MemoryTier
   let conversationId: String?
   let reviewed: Bool
   let userReview: Bool?
@@ -1190,9 +1221,13 @@ struct ServerMemory: Codable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline
+      headline, tier
+    case memoryId = "memory_id"
+    case memoryTier = "memory_tier"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case capturedAt = "captured_at"
+    case expiresAt = "expires_at"
     case conversationId = "conversation_id"
     case userReview = "user_review"
     case manuallyAdded = "manually_added"
@@ -1207,11 +1242,17 @@ struct ServerMemory: Codable, Identifiable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
+    id = try container.decodeIfPresent(String.self, forKey: .id)
+      ?? container.decode(String.self, forKey: .memoryId)
     content = try container.decode(String.self, forKey: .content)
     category = try container.decodeIfPresent(MemoryCategory.self, forKey: .category) ?? .system
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? capturedAt ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+    tier = try container.decodeIfPresent(MemoryTier.self, forKey: .tier)
+      ?? container.decodeIfPresent(MemoryTier.self, forKey: .memoryTier)
+      ?? .longTerm
     conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
     reviewed = try container.decodeIfPresent(Bool.self, forKey: .reviewed) ?? false
     userReview = try container.decodeIfPresent(Bool.self, forKey: .userReview)

@@ -15,6 +15,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     // Core ServerMemory fields
     var content: String
     var category: String                // system, interesting, manual
+    var tier: String                    // short_term, long_term, archive
     var tagsJson: String?               // JSON array: ["tips"], ["focus", "focused"]
     var visibility: String
     var reviewed: Bool
@@ -54,6 +55,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         backendSynced: Bool = false,
         content: String,
         category: String = "system",
+        tier: String = MemoryTier.longTerm.rawValue,
         tagsJson: String? = nil,
         visibility: String = "private",
         reviewed: Bool = false,
@@ -82,6 +84,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.backendSynced = backendSynced
         self.content = content
         self.category = category
+        self.tier = tier
         self.tagsJson = tagsJson
         self.visibility = visibility
         self.reviewed = reviewed
@@ -181,6 +184,7 @@ extension MemoryRecord {
             backendSynced: true,
             content: memory.content,
             category: memory.category.rawValue,
+            tier: memory.tier.rawValue,
             tagsJson: tagsJson,
             visibility: memory.visibility,
             reviewed: memory.reviewed,
@@ -215,6 +219,7 @@ extension MemoryRecord {
         // Update core fields
         self.content = memory.content
         self.category = memory.category.rawValue
+        self.tier = memory.tier.rawValue
         self.visibility = memory.visibility
         self.reviewed = memory.reviewed
         self.userReview = memory.userReview
@@ -274,11 +279,13 @@ extension MemoryRecord {
 
         // Parse category
         let memoryCategory = MemoryCategory(rawValue: category) ?? .system
+        let memoryTier = MemoryTier(rawValue: tier) ?? .longTerm
 
         return ServerMemory(
             id: memoryId,
             content: content,
             category: memoryCategory,
+            tier: memoryTier,
             createdAt: createdAt,
             updatedAt: updatedAt,
             conversationId: conversationId,
@@ -311,8 +318,11 @@ extension ServerMemory {
         id: String,
         content: String,
         category: MemoryCategory,
+        tier: MemoryTier = .longTerm,
         createdAt: Date,
         updatedAt: Date,
+        capturedAt: Date? = nil,
+        expiresAt: Date? = nil,
         conversationId: String?,
         reviewed: Bool,
         userReview: Bool?,
@@ -335,8 +345,11 @@ extension ServerMemory {
         self.id = id
         self.content = content
         self.category = category
+        self.tier = tier
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.capturedAt = capturedAt
+        self.expiresAt = expiresAt
         self.conversationId = conversationId
         self.reviewed = reviewed
         self.userReview = userReview

@@ -49,6 +49,42 @@ enum MemoryTag: String, CaseIterable, Identifiable {
   }
 }
 
+enum MemoryTierFilter: String, CaseIterable, Identifiable {
+  case defaultAccess
+  case shortTerm
+  case longTerm
+  case archive
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .defaultAccess: return "Default"
+    case .shortTerm: return "Short-term"
+    case .longTerm: return "Long-term"
+    case .archive: return "Archive"
+    }
+  }
+
+  var description: String {
+    switch self {
+    case .defaultAccess: return "Short-term + Long-term"
+    case .shortTerm: return "Fresh source-backed memories"
+    case .longTerm: return "Stable memories"
+    case .archive: return "Explicit archive search"
+    }
+  }
+
+  var allowedTiers: [MemoryTier] {
+    switch self {
+    case .defaultAccess: return [.shortTerm, .longTerm]
+    case .shortTerm: return [.shortTerm]
+    case .longTerm: return [.longTerm]
+    case .archive: return [.archive]
+    }
+  }
+}
+
 // MARK: - Memories View Model
 
 @MainActor
@@ -70,6 +106,14 @@ class MemoriesViewModel: ObservableObject {
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [ServerMemory] = []
+  @Published var selectedTierFilter: MemoryTierFilter = .defaultAccess {
+    didSet {
+      guard oldValue != selectedTierFilter else { return }
+      displayLimit = pageSize
+      Task { await reloadForCurrentTierFilter() }
+    }
+  }
+
   @Published var selectedTags: Set<MemoryTag> = [] {
     didSet {
       // Reset display limit when filters change
@@ -164,6 +208,30 @@ class MemoriesViewModel: ObservableObject {
     tagCounts[tag] ?? 0
   }
 
+  private var activeTierFilter: [MemoryTier] {
+    selectedTierFilter.allowedTiers
+  }
+
+  private func reloadForCurrentTierFilter() async {
+    if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      await performSearch()
+    }
+    if !selectedTags.isEmpty {
+      await loadFilteredMemoriesFromDatabase()
+    } else {
+      do {
+        memories = try await MemoryStorage.shared.getLocalMemories(limit: pageSize, offset: 0, tiers: activeTierFilter)
+        currentOffset = memories.count
+        hasMoreMemories = memories.count >= pageSize
+        recomputeFilteredMemories()
+      } catch {
+        logError("MemoriesViewModel: Failed to reload tier-filtered memories", error: error)
+        recomputeFilteredMemories()
+      }
+    }
+    await loadTagCountsFromDatabase()
+  }
+
   // MARK: - Initialization
 
   init() {
@@ -244,12 +312,12 @@ class MemoriesViewModel: ObservableObject {
       var counts: [MemoryTag: Int] = [:]
 
       // Get total count (no filters) and store for "All" badge
-      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount()
+      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(tiers: activeTierFilter)
       totalMemoriesCount = totalCount
 
       // One count per backend category (mirrors mobile).
       for tag in MemoryTag.allCases {
-        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue)
+        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue, tiers: activeTierFilter)
       }
 
       tagCounts = counts
@@ -282,7 +350,8 @@ class MemoriesViewModel: ObservableObject {
       let results = try await MemoryStorage.shared.getFilteredMemories(
         limit: 10000,
         matchAnyTag: nil,
-        matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory
+        matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory,
+        tiers: activeTierFilter
       )
 
       let filteredResults = results.filter { memory in
@@ -326,6 +395,10 @@ class MemoriesViewModel: ObservableObject {
       result = memories
     }
 
+    // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
+    let allowedTiers = Set(activeTierFilter)
+    result = result.filter { allowedTiers.contains($0.tier) }
+
     // Sort by date (newest first)
     result.sort { $0.createdAt > $1.createdAt }
 
@@ -365,7 +438,8 @@ class MemoriesViewModel: ObservableObject {
     do {
       let results = try await MemoryStorage.shared.searchLocalMemories(
         query: query,
-        limit: 10000
+        limit: 10000,
+        tiers: activeTierFilter
       )
       searchResults = results
       log("MemoriesViewModel: Search for '\(query)' found \(results.count) results")
@@ -448,9 +522,10 @@ class MemoriesViewModel: ObservableObject {
         log("MemoriesViewModel: Showing \(mergedMemories.count) memories from merged local cache")
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
-        // Fall back to API data if sync fails
-        memories = fetchedMemories
-        currentOffset = fetchedMemories.count
+        // Fall back to API data if sync fails, preserving the desktop default-access guardrail.
+        let allowedTiers = Set(activeTierFilter)
+        memories = fetchedMemories.filter { allowedTiers.contains($0.tier) }
+        currentOffset = memories.count
         hasMoreMemories = fetchedMemories.count >= pageSize
       }
     } catch {
@@ -561,7 +636,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether we're currently in a filtered/search mode
   var isInFilteredMode: Bool {
-    !searchText.isEmpty || !selectedTags.isEmpty
+    !searchText.isEmpty || !selectedTags.isEmpty || selectedTierFilter != .defaultAccess
   }
 
   /// Load more memories (pagination) - triggered by scrolling near end
@@ -623,11 +698,14 @@ class MemoriesViewModel: ObservableObject {
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
 
+      let allowedTiers = Set(activeTierFilter)
+      let visibleNewMemories = newMemories.filter { allowedTiers.contains($0.tier) }
+
       // Then append to display
-      memories.append(contentsOf: newMemories)
-      currentOffset += newMemories.count
+      memories.append(contentsOf: visibleNewMemories)
+      currentOffset += visibleNewMemories.count
       hasMoreMemories = newMemories.count >= pageSize
-      log("MemoriesViewModel: Loaded \(newMemories.count) more from API (total: \(memories.count))")
+      log("MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))")
     } catch {
       logError("Failed to load more memories", error: error)
     }
@@ -1044,6 +1122,47 @@ struct MemoriesPage: View {
       .padding(.vertical, 12)
       .frame(minHeight: 46)
       .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
+
+      // Tier filter dropdown. Default is product default access: Short-term + Long-term.
+      Menu {
+        ForEach(MemoryTierFilter.allCases) { filter in
+          Button {
+            viewModel.selectedTierFilter = filter
+          } label: {
+            HStack {
+              Text(filter.displayName)
+              if viewModel.selectedTierFilter == filter {
+                Image(systemName: "checkmark")
+              }
+            }
+          }
+          .help(filter.description)
+        }
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: viewModel.selectedTierFilter == .archive ? "archivebox" : "clock.badge.checkmark")
+            .scaledFont(size: 12)
+          Text(viewModel.selectedTierFilter.displayName)
+            .scaledFont(size: 13, weight: viewModel.selectedTierFilter == .defaultAccess ? .regular : .medium)
+          Image(systemName: "chevron.down")
+            .scaledFont(size: 10)
+        }
+        .foregroundColor(
+          viewModel.selectedTierFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(minHeight: 46)
+        .omiControlSurface(
+          fill: viewModel.selectedTierFilter == .defaultAccess
+            ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
+          radius: 18,
+          stroke: viewModel.selectedTierFilter == .defaultAccess ? nil : OmiColors.purplePrimary.opacity(0.28)
+        )
+      }
+      .menuStyle(.button)
+      .buttonStyle(.plain)
+      .help("Default shows Short-term + Long-term. Archive is explicit.")
 
       // Category filter dropdown
       Button {
@@ -1631,6 +1750,24 @@ struct MemoriesPage: View {
 
 // MARK: - Memory Card View
 
+private struct MemoryTierBadge: View {
+  let tier: MemoryTier
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Image(systemName: tier.icon)
+        .scaledFont(size: 9, weight: .medium)
+      Text(tier.displayName)
+        .scaledFont(size: 10, weight: .medium)
+    }
+    .foregroundColor(tier == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
+    .padding(.horizontal, 7)
+    .padding(.vertical, 3)
+    .background(tier == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
+    .clipShape(Capsule())
+  }
+}
+
 private struct MemoryCardView: View {
   let memory: ServerMemory
   let onTap: () -> Void
@@ -1674,6 +1811,15 @@ private struct MemoryCardView: View {
           Text(formatDate(memory.createdAt))
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textSecondary)
+
+          MemoryTierBadge(tier: memory.tier)
+
+          if let sourceName = memory.sourceName {
+            Text("From \(sourceName)")
+              .scaledFont(size: 10)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+          }
 
           Spacer(minLength: 4)
 
@@ -1779,6 +1925,11 @@ private struct MemoryDetailTooltip: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
+      tooltipRow("Tier", memory.tier.displayName)
+      if memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
+        tooltipRow("Expires", expiresAt.formatted(date: .abbreviated, time: .shortened))
+      }
+
       // Category
       if memory.isTip {
         tooltipRow("Category", "Tips")

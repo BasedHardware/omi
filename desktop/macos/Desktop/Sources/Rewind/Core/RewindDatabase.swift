@@ -2127,6 +2127,13 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addMemoryTier") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "tier", .text).notNull().defaults(to: "long_term")
+            }
+            try db.create(index: "idx_memories_tier", on: "memories", columns: ["tier"])
+        }
+
         migrator.registerMigration("createLocalKnowledgeGraph") { db in
             try db.create(table: "local_kg_nodes") { t in
                 t.autoIncrementedPrimaryKey("id")
