@@ -1,7 +1,7 @@
 ---
 ticket_id: "tkt_provider_capabilities"
 agent: "codex"
-done: false
+done: true
 title: "Define real-default providers and offline provider fallback"
 goal: "Manual QA uses real dev-keyed providers by default, while an easy offline mode reuses hermetic fake providers and no external provider holds harness state."
 context:
@@ -45,3 +45,10 @@ context:
 - Secret-scan test proving provider keys are not emitted in desktop bundle config or session summaries.
 - Offline mode smoke using hermetic-shared fake providers.
 - `git diff --check`
+
+## Completion notes
+
+- Implemented local harness provider broker/governor foundation in `scripts/dev-harness/dev_harness/providers.py`.
+- `PROVIDER_MODE=real` remains default and fails closed on missing provider/account/project/fingerprint configuration.
+- `PROVIDER_MODE=offline` loads thin wrappers over `backend/testing/e2e/fakes/` provider modules and strips provider credentials from child processes.
+- `dev-check`, `dev-up`, and `dev-status` now print sanitized provider mode/status, enabled external providers, budgets, side-effect policy, and offline fake sources without provider key values.

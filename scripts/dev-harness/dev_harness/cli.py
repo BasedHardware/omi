@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import shutil
 import socket
 import subprocess
@@ -15,7 +14,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, safety
+from . import config, providers, safety
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
 SERVICE_PORTS = {"firestore": config.FIRESTORE_PORT, "auth": config.AUTH_PORT, "redis": config.REDIS_PORT, "backend": config.BACKEND_PORT}
@@ -140,12 +139,10 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
         missing.append("Python package uvicorn (install backend requirements before starting backend)")
-    if cfg.provider_mode == "real":
-        for key in config.CORE_PROVIDER_ENV:
-            if not os.environ.get(key):
-                missing.append(f"{key} (real provider mode; set PROVIDER_MODE=offline to skip external provider credentials)")
-        warnings.append("Provider broker/governor is defined by TICKET-025; this foundation only preflights core dev keys.")
-    else:
+    provider_report = providers.provider_preflight(cfg.repo_root)
+    missing.extend(provider_report.missing)
+    warnings.extend(provider_report.warnings)
+    if cfg.provider_mode == "offline":
         warnings.append("PROVIDER_MODE=offline: external-provider credentials are stripped from child processes; local stack shape is preserved.")
     return missing, warnings
 
@@ -162,11 +159,20 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"backend: {cfg.backend_url}")
 
 
+def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
+    report = providers.provider_preflight(cfg.repo_root)
+    print("provider_status:")
+    for line in providers.status_lines(report):
+        print(f"  {line}")
+    return report
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=False)
     missing, warnings = prerequisite_report(cfg)
     print("Omi local dev harness prerequisite check")
     print_config(cfg)
+    print_provider_status(cfg)
     if warnings:
         print("\nWarnings:")
         for item in warnings:
@@ -278,6 +284,7 @@ def cmd_up(args: argparse.Namespace) -> int:
     missing, warnings = prerequisite_report(cfg)
     print("Omi local dev harness startup")
     print_config(cfg)
+    provider_report = print_provider_status(cfg)
     for item in warnings:
         print(f"warning: {item}")
     if missing:
@@ -293,6 +300,17 @@ def cmd_up(args: argparse.Namespace) -> int:
             "project_id": cfg.project_id,
             "database_id": cfg.database_id,
             "provider_mode": cfg.provider_mode,
+            "enabled_external_providers": list(provider_report.enabled_external_providers),
+            "credential_fingerprints": dict(provider_report.fingerprints),
+            "offline_fake_sources": dict(provider_report.offline_fake_sources),
+            "provider_budgets": {
+                "session_usd": providers.DEFAULT_SESSION_BUDGET_USD,
+                "day_usd": providers.DEFAULT_DAILY_BUDGET_USD,
+                "concurrency": providers.DEFAULT_MAX_CONCURRENCY,
+                "idempotent_retries": providers.DEFAULT_IDEMPOTENT_RETRIES,
+                "non_idempotent_retries": providers.DEFAULT_NON_IDEMPOTENT_RETRIES,
+                "automatic_replay_after_restart": False,
+            },
             "instance": cfg.instance,
             "state_root": str(cfg.layout.state_root),
             "endpoints": {
@@ -323,6 +341,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=False)
     print("Omi local dev harness status")
     print_config(cfg)
+    print_provider_status(cfg)
     if not cfg.layout.sentinel_path.is_file():
         print("sentinel: missing (run make dev-up or make dev-reset to initialize harness-owned state)")
     else:

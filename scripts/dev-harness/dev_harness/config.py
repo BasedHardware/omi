@@ -7,13 +7,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
-from . import safety
+from . import providers, safety
 
 FIRESTORE_PORT = 8085
 AUTH_PORT = 9099
 BACKEND_PORT = 8000
 REDIS_PORT = 6380
-PROVIDER_MODES = {"real", "offline"}
+PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = ("OPENAI_API_KEY", "DEEPGRAM_API_KEY")
 
 
@@ -49,11 +49,7 @@ def repo_root_from(path: Path) -> Path:
 
 
 def provider_mode_from_env(env: Mapping[str, str] | None = None) -> str:
-    source = os.environ if env is None else env
-    mode = source.get("PROVIDER_MODE", "real").strip().lower()
-    if mode not in PROVIDER_MODES:
-        raise safety.SafetyError(f"PROVIDER_MODE must be one of {sorted(PROVIDER_MODES)}, got {mode!r}")
-    return mode
+    return providers.provider_mode_from_env(env)
 
 
 def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create_layout: bool = False) -> HarnessConfig:
