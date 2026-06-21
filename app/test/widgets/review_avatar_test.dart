@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
-  home: Scaffold(body: Center(child: child)),
-);
+      home: Scaffold(body: Center(child: child)),
+    );
 
 void main() {
   group('ReviewAvatar', () {
@@ -36,6 +36,21 @@ void main() {
       final second = bgOf(find.byType(Container));
 
       expect(first, second);
+    });
+
+    testWidgets('uses dark initials on a light background for contrast', (tester) async {
+      // No foreground override + a light background must not render white initials.
+      await tester.pumpWidget(
+        _wrap(const ReviewAvatar(seed: 'uid_1', username: 'jane', backgroundColor: Color(0xFFFDCB6E))),
+      );
+      expect(tester.widget<Text>(find.text('J')).style!.color, const Color(0xFF1F1F25));
+    });
+
+    testWidgets('uses white initials on a dark background for contrast', (tester) async {
+      await tester.pumpWidget(
+        _wrap(const ReviewAvatar(seed: 'uid_1', username: 'jane', backgroundColor: Color(0xFF1F1F25))),
+      );
+      expect(tester.widget<Text>(find.text('J')).style!.color, Colors.white);
     });
 
     testWidgets('honors explicit background and foreground colors', (tester) async {
