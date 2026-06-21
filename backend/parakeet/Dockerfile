@@ -25,6 +25,13 @@ RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torchaudio && \
     printf '__version__ = "stub"\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py
 
+# pyannote.audio.core.task imports torch_audiomentations for training-time
+# data augmentation. We only use Model + Inference (embedding extraction),
+# never the training pipeline. Stub the package to satisfy the import.
+RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torch_audiomentations && \
+    printf '__version__ = "stub"\n' > \
+    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/__init__.py
+
 # Extra deps not in the NGC image.
 # pyannote.audio and torch-dependent deps installed --no-deps to prevent
 # upgrading torch/torchvision/torchaudio in the NGC stack.
@@ -41,8 +48,7 @@ RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0" && \
     pip install --no-cache-dir --no-deps \
     "pyannote.core" "pyannote.database" "pyannote.pipeline" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
-    "hf_transfer" "tensorboardX" "torch_audiomentations" \
-    "julius" "torch-pitch-shift"
+    "hf_transfer" "tensorboardX"
 
 COPY backend/parakeet/ .
 
