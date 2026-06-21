@@ -9330,17 +9330,17 @@ class AppLocalizationsPt extends AppLocalizations {
       'Você usa seu próprio provedor de transcrição. Sincronizar estas gravações as transcreve nos servidores da Omi e elas contam para o limite de transcrição do seu plano.';
 
   @override
-  String get offlineModeTitle => 'Modo Offline';
+  String get transcribeLaterTitle => 'Transcrever depois';
 
   @override
-  String get offlineModeDescription =>
-      'Grave o áudio no seu telefone enquanto captura e transcreva depois. Neste modo não há transcrição em tempo real — as gravações ficam guardadas localmente e, em seguida, você as envia para criar conversas.';
+  String get transcribeLaterDescription =>
+      'Grave o áudio agora e transcreva quando quiser, em vez de ao vivo. As gravações ficam salvas no seu telefone e você as envia para criar conversas.';
 
   @override
-  String get offlineModeNote =>
+  String get transcribeLaterNote =>
       'Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.';
 
   @override
-  String get offlineModeStorageFull =>
-      'O seu telefone está com pouco espaço, por isso a gravação offline foi pausada. Libere espaço ou envie as suas gravações para que ela retome automaticamente.';
+  String get transcribeLaterStorageFull =>
+      'Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.';
 }

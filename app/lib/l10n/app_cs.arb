@@ -3020,8 +3020,8 @@
     "recapRegenerateNoConversations": "Pro tento den nejsou žádné konverzace k shrnutí.",
     "syncCustomSttWarningTitle": "Synchronizace používá přepis Omi",
     "syncCustomSttWarningMessage": "Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.",
-    "offlineModeTitle": "Offline režim",
-    "offlineModeDescription": "Ukládejte zvuk do telefonu během nahrávání a přepis si nechte na později. V tomto režimu neprobíhá živý přepis – nahrávky se uloží lokálně a vy je pak nahrajete, abyste z nich vytvořili konverzace.",
-    "offlineModeNote": "Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud jej sami nenahrajete.",
-    "offlineModeStorageFull": "V telefonu dochází místo, proto je nahrávání offline pozastaveno. Uvolněte místo nebo nahrajte nahrávky a poté se automaticky obnoví."
+    "transcribeLaterTitle": "Přepsat později",
+    "transcribeLaterDescription": "Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.",
+    "transcribeLaterNote": "Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
+    "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví."
 }

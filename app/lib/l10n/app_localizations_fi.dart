@@ -9325,17 +9325,17 @@ class AppLocalizationsFi extends AppLocalizations {
       'Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.';
 
   @override
-  String get offlineModeTitle => 'Offline-tila';
+  String get transcribeLaterTitle => 'Litteroi myöhemmin';
 
   @override
-  String get offlineModeDescription =>
-      'Tallenna ääni puhelimeesi nyt ja litteroi myöhemmin. Tässä tilassa ei ole reaaliaikaista litterointia – tallenteet säilytetään paikallisesti, ja keskustelut syntyvät, kun lataat ne palveluun.';
+  String get transcribeLaterDescription =>
+      'Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.';
 
   @override
-  String get offlineModeNote =>
-      'Toimii toistaiseksi Omi-laitteiden kanssa. Ääni pysyy puhelimessasi, kunnes päätät ladata sen palveluun.';
+  String get transcribeLaterNote =>
+      'Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
 
   @override
-  String get offlineModeStorageFull =>
-      'Puhelimesi tallennustila on vähissä, joten offline-tallennus on keskeytetty. Vapauta tilaa tai lataa tallenteesi palveluun, niin tallennus jatkuu automaattisesti.';
+  String get transcribeLaterStorageFull =>
+      'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
 }

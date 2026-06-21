@@ -9174,15 +9174,14 @@ class AppLocalizationsJa extends AppLocalizations {
       'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
 
   @override
-  String get offlineModeTitle => 'オフラインモード';
+  String get transcribeLaterTitle => '後で文字起こし';
 
   @override
-  String get offlineModeDescription =>
-      '音声を端末に保存しておき、あとでまとめて文字起こしします。このモードではリアルタイムの文字起こしは行われません。録音は端末内に保存され、アップロードすると会話が作成されます。';
+  String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get offlineModeNote => '現在はOmiデバイスでのみ利用できます。音声はアップロードするまで端末内に保存されます。';
+  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
-  String get offlineModeStorageFull => '端末の空き容量が不足しているため、オフライン録音を一時停止しています。空き容量を確保するか録音をアップロードすると、自動的に再開します。';
+  String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
 }

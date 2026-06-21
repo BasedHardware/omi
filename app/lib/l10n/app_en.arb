@@ -11023,20 +11023,20 @@
     "@syncCustomSttWarningMessage": {
         "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
     },
-    "offlineModeTitle": "Offline Mode",
-    "@offlineModeTitle": {
-        "description": "Title for the offline (batch) capture mode toggle in device settings"
+    "transcribeLaterTitle": "Transcribe Later",
+    "@transcribeLaterTitle": {
+        "description": "Title for the 'transcribe later' capture-mode toggle in device settings"
     },
-    "offlineModeDescription": "Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.",
-    "@offlineModeDescription": {
-        "description": "Subtitle explaining the offline mode toggle"
+    "transcribeLaterDescription": "Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.",
+    "@transcribeLaterDescription": {
+        "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "offlineModeNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
-    "@offlineModeNote": {
-        "description": "Caveat note shown in the Offline Mode sheet"
+    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "@transcribeLaterNote": {
+        "description": "Caveat note shown in the Transcribe Later sheet"
     },
-    "offlineModeStorageFull": "Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.",
-    "@offlineModeStorageFull": {
-        "description": "Warning shown in the Offline Mode sheet when local storage is too low to keep recording"
+    "transcribeLaterStorageFull": "Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.",
+    "@transcribeLaterStorageFull": {
+        "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
     }
 }
