@@ -130,6 +130,7 @@ pytest tests/unit/test_v17_v3_gcp_evidence_run_record.py -v
 pytest tests/unit/test_v17_v3_gcp_evidence_redaction.py -v
 pytest tests/unit/test_v17_v3_f6_readonly_contracts.py -v
 pytest tests/unit/test_v17_v3_f6_pre_gcp_aggregate.py -v
+pytest tests/unit/test_v17_v3_dev_cloud_readiness.py -v
 pytest tests/unit/test_v17_cutover_evidence_readiness.py -v
 pytest tests/unit/test_v17_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_v17_firestore_indexes.py -v

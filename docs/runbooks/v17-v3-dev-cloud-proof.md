@@ -11,6 +11,50 @@ A local backend using dev credentials is useful for debugging only. It is supple
 
 Do not use production with a synthetic UID and call it dev-cloud.
 
+## Checked-in preparation tooling
+
+Use `backend/scripts/v17_v3_dev_cloud_readiness.py` to prepare and validate the local artifact contract before a real dev-cloud run. The script is safe by default: it performs no network calls, no Firestore reads, and no Firestore writes.
+
+Default preflight:
+
+```bash
+cd backend
+python3 scripts/v17_v3_dev_cloud_readiness.py
+```
+
+Expected status without a fully specified dev target is `BLOCKED` with missing-env blockers. This is correct and is not a failure.
+
+Prepare a local evidence-bundle skeleton for the deployed dev-cloud CI/proof job to fill:
+
+```bash
+cd backend
+python3 scripts/v17_v3_dev_cloud_readiness.py \
+  --run-id <run-id> \
+  --uid-a <synthetic-dev-uid-a> \
+  --uid-b <synthetic-dev-uid-b> \
+  --write-bundle-dir /tmp/v17-v3-dev-cloud-<git-sha>-<run-id>
+```
+
+Required env for `READY_TO_EXECUTE_DEV_CLOUD_PROOF` preflight:
+
+```text
+V17_DEV_CLOUD_PROJECT_ID=<non-prod project id>
+V17_DEV_CLOUD_PROJECT_NUMBER=<non-prod project number>
+GOOGLE_CLOUD_PROJECT=<same non-prod project id>
+GOOGLE_CLOUD_PROJECT_NUMBER=<same non-prod project number>
+V17_DEV_CLOUD_DATABASE_ID=<database id, often (default)>
+V17_DEV_CLOUD_REGION=<region>
+V17_DEV_CLOUD_BACKEND_URL=<deployed branch backend URL>
+V17_DEV_CLOUD_DEPLOYED_REVISION=<deployed revision>
+V17_DEV_CLOUD_IMAGE_DIGEST=<image digest>
+V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT=<runtime service account>
+V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL=<separate fixture writer identity>
+V17_PRODUCTION_PROJECT_IDS=<comma-separated prod project ids to reject>
+V17_PRODUCTION_PROJECT_NUMBERS=<comma-separated prod project numbers to reject>
+```
+
+`READY_TO_EXECUTE_DEV_CLOUD_PROOF` means only that local target metadata is complete and not obviously production. It is **not** Gate 2 GO. Gate 2 GO requires the deployed backend proof suite to fill and pass the bundle described below.
+
 ## Required identities
 
 | Identity | Purpose | Required constraints |
