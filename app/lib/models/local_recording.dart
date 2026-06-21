@@ -72,6 +72,7 @@ class LocalRecording {
     required String fileName,
     required String filePath,
     required int sizeBytes,
+    int? seconds,
     String? jobId,
     required LocalRecordingState state,
   }) {
@@ -84,7 +85,7 @@ class LocalRecording {
       codec: info.codec,
       frameSize: info.frameSize,
       sizeBytes: sizeBytes,
-      seconds: info.estimateSeconds(sizeBytes),
+      seconds: seconds ?? info.estimateSeconds(sizeBytes),
       jobId: jobId,
       state: state,
     );
