@@ -78,6 +78,19 @@ final class BatchAudioWriter {
             NSLog("[BatchWriter] matched audio characteristic — batch capture active (device=\(peripheralUuid), dir=\(config.dir))")
         }
 
+        let d = UserDefaults.standard
+        // Muted: drop the packet but keep the open file's gap timer alive so unmute
+        // resumes the same recording instead of starting a new one.
+        if d.bool(forKey: "flutter.batchMuted") {
+            queue.async { self.touchKeepAlive() }
+            return true
+        }
+        // Manual "New recording": finalize the current file now; this packet opens a fresh one.
+        if d.bool(forKey: "flutter.batchCutRequested") {
+            d.set(false, forKey: "flutter.batchCutRequested")
+            queue.async { self.closeCurrentLocked("manual") }
+        }
+
         let frames = transformFrames(deviceType: config.deviceType, value: value)
         if !frames.isEmpty {
             queue.async { self.writeFrames(frames, config: config) }
@@ -93,6 +106,13 @@ final class BatchAudioWriter {
     }
 
     // MARK: - Writing (on `queue`)
+
+    /// Keep the open file's gap timer fresh while muted so unmute resumes it.
+    private func touchKeepAlive() {
+        if fileHandle != nil {
+            lastFrameMs = Int64(Date().timeIntervalSince1970 * 1000)
+        }
+    }
 
     private func writeFrames(_ frames: [Data], config: Config) {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
