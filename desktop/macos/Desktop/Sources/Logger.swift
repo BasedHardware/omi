@@ -154,6 +154,11 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   // Swift structured-concurrency cancellation: thrown when a Task/operation is
   // cancelled (assistant stopped, frame superseded). Expected, not an app bug.
   if error is CancellationError { return true }
+  // Benign sign-out race: background loops (conversation/advice/goals refresh,
+  // upload retries) pass an isSignedIn guard, then the token is cleared mid-cycle
+  // and the awaited request throws AuthError.notSignedIn. Expected when the user
+  // signs out or runs signed-out — floods Sentry without indicating a bug.
+  if case AuthError.notSignedIn = error { return true }
   let nsError = error as NSError
   switch nsError.domain {
   case NSURLErrorDomain:
