@@ -158,12 +158,14 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   switch nsError.domain {
   case NSURLErrorDomain:
     // -999 cancelled, -1001 timed out, -1003 host not found, -1004 cannot connect,
-    // -1005 connection lost, -1009 offline, -1011 bad server response, -1020 not allowed.
+    // -1005 connection lost, -1009 offline, -1011 bad server response, -1020 not allowed,
+    // -1200 TLS handshake failed (transient secure-connection drop, same as -1005).
     let transient: Set<Int> = [
       NSURLErrorCancelled, NSURLErrorTimedOut, NSURLErrorCannotFindHost,
       NSURLErrorCannotConnectToHost, NSURLErrorNetworkConnectionLost,
       NSURLErrorNotConnectedToInternet, NSURLErrorBadServerResponse,
       NSURLErrorDataNotAllowed, NSURLErrorResourceUnavailable,
+      NSURLErrorSecureConnectionFailed,
     ]
     return transient.contains(nsError.code)
   case NSPOSIXErrorDomain:
