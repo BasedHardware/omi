@@ -228,13 +228,36 @@ class TestGetBuiltinEmbeddingModel:
             transcribe._PyannoteModel = old_pyannote
             transcribe._embedding_model = old_model
 
-    def test_returns_cached_model(self):
+    def test_returns_cached_model_without_reload(self):
         sentinel = MagicMock()
         old_model = transcribe._embedding_model
         transcribe._embedding_model = sentinel
         try:
-            assert transcribe.get_builtin_embedding_model() is sentinel
+            result1 = transcribe.get_builtin_embedding_model()
+            result2 = transcribe.get_builtin_embedding_model()
+            assert result1 is sentinel
+            assert result2 is sentinel
         finally:
+            transcribe._embedding_model = old_model
+
+    def test_successful_load_is_cached(self):
+        old_model = transcribe._embedding_model
+        old_pyannote_model = transcribe._PyannoteModel
+        old_pyannote_inference = transcribe._PyannoteInference
+        fake_inference = MagicMock()
+        fake_pyannote_model = MagicMock()
+        fake_pyannote_model.from_pretrained.return_value = MagicMock()
+        fake_pyannote_inference = MagicMock(return_value=fake_inference)
+        transcribe._embedding_model = None
+        transcribe._PyannoteModel = fake_pyannote_model
+        transcribe._PyannoteInference = fake_pyannote_inference
+        try:
+            result = transcribe.get_builtin_embedding_model()
+            assert result is fake_inference
+            assert transcribe._embedding_model is fake_inference
+        finally:
+            transcribe._PyannoteModel = old_pyannote_model
+            transcribe._PyannoteInference = old_pyannote_inference
             transcribe._embedding_model = old_model
 
 
@@ -246,7 +269,15 @@ class TestEmbeddingBuiltinDuration:
         assert result is None
         fake_model.assert_not_called()
 
-    def test_audio_at_min_duration_returns_embedding(self):
+    def test_audio_at_exact_min_duration_returns_embedding(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(256, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=0.6)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is not None
+        fake_model.assert_called_once()
+
+    def test_audio_just_above_min_duration_returns_embedding(self):
         fake_model = MagicMock()
         fake_model.return_value = np.zeros(256, dtype=np.float32)
         wav = _make_wav_bytes(duration_s=0.7)
