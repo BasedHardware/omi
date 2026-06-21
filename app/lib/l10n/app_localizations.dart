@@ -17378,6 +17378,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
   String get syncCustomSttWarningMessage;
+
+  /// Title for the offline (batch) capture mode toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Offline Mode'**
+  String get offlineModeTitle;
+
+  /// Subtitle explaining the offline mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio on your phone while you capture and transcribe later. There is no live transcription in this mode — recordings are stored locally, then you upload them to create conversations.'**
+  String get offlineModeDescription;
+
+  /// Caveat note shown in the Offline Mode sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  String get offlineModeNote;
+
+  /// Warning shown in the Offline Mode sheet when local storage is too low to keep recording
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is low on storage, so offline recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get offlineModeStorageFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

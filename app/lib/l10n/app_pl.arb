@@ -3085,5 +3085,9 @@
     "recapRegenerateCooldown": "Poczekaj kilka sekund przed ponownym wygenerowaniem.",
     "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu.",
     "syncCustomSttWarningTitle": "Synchronizacja korzysta z transkrypcji Omi",
-    "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie."
+    "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.",
+    "offlineModeTitle": "Tryb offline",
+    "offlineModeDescription": "Zapisuj dźwięk na telefonie podczas nagrywania i transkrybuj go później. W tym trybie nie ma transkrypcji na żywo — nagrania są przechowywane lokalnie, a następnie przesyłasz je, aby utworzyć rozmowy.",
+    "offlineModeNote": "Na razie działa z urządzeniami Omi. Dźwięk pozostaje na Twoim telefonie, dopóki nie zdecydujesz się go przesłać.",
+    "offlineModeStorageFull": "Na telefonie kończy się miejsce, więc nagrywanie offline zostało wstrzymane. Zwolnij miejsce lub prześlij swoje nagrania, a wznowi się ono automatycznie."
 }

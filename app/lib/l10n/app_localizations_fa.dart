@@ -9325,4 +9325,19 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.';
+
+  @override
+  String get offlineModeTitle => 'حالت آفلاین';
+
+  @override
+  String get offlineModeDescription =>
+      'صدا را روی گوشی خود ذخیره کنید تا بعداً آن را رونویسی کنید. در این حالت رونویسی زنده انجام نمی‌شود؛ ضبط‌ها به‌صورت محلی ذخیره می‌شوند و سپس با بارگذاری آن‌ها مکالمه ساخته می‌شود.';
+
+  @override
+  String get offlineModeNote =>
+      'فعلاً فقط با دستگاه‌های Omi کار می‌کند. صدا تا زمانی که خودتان آن را بارگذاری کنید روی گوشی‌تان باقی می‌ماند.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط آفلاین متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.';
 }

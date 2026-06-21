@@ -9253,4 +9253,18 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
+
+  @override
+  String get offlineModeTitle => 'מצב לא מקוון';
+
+  @override
+  String get offlineModeDescription =>
+      'הקליטו ושמרו את האודיו בטלפון, ותמללו אותו בהמשך. במצב זה אין תמלול בזמן אמת — ההקלטות נשמרות מקומית, ולאחר מכן תוכלו להעלות אותן כדי ליצור שיחות.';
+
+  @override
+  String get offlineModeNote => 'פועל כרגע עם מכשירי Omi. ההקלטות נשארות בטלפון עד שתבחרו להעלות אותן.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'בטלפון נותר מעט שטח אחסון, ולכן ההקלטה הלא מקוונת מושהית. פנו מקום או העלו את ההקלטות, וההקלטה תתחדש אוטומטית.';
 }

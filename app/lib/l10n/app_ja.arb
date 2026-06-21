@@ -3051,5 +3051,9 @@
     "recapRegenerateCooldown": "再生成する前に数秒お待ちください。",
     "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。",
     "syncCustomSttWarningTitle": "同期では Omi の文字起こしを使用します",
-    "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。"
+    "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。",
+    "offlineModeTitle": "オフラインモード",
+    "offlineModeDescription": "音声を端末に保存しておき、あとでまとめて文字起こしします。このモードではリアルタイムの文字起こしは行われません。録音は端末内に保存され、アップロードすると会話が作成されます。",
+    "offlineModeNote": "現在はOmiデバイスでのみ利用できます。音声はアップロードするまで端末内に保存されます。",
+    "offlineModeStorageFull": "端末の空き容量が不足しているため、オフライン録音を一時停止しています。空き容量を確保するか録音をアップロードすると、自動的に再開します。"
 }

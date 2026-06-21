@@ -9315,4 +9315,18 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu.';
+
+  @override
+  String get offlineModeTitle => 'Offline režim';
+
+  @override
+  String get offlineModeDescription =>
+      'Ukladajte zvuk do telefónu a prepíšte ho neskôr. V tomto režime neprebieha prepis naživo – nahrávky sa uložia lokálne a po ich odovzdaní z nich vytvoríte konverzácie.';
+
+  @override
+  String get offlineModeNote => 'Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým ho sami neodovzdáte.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'V telefóne máte málo miesta, preto je nahrávanie offline pozastavené. Uvoľnite miesto alebo odovzdajte nahrávky a nahrávanie sa automaticky obnoví.';
 }

@@ -9348,4 +9348,19 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.';
+
+  @override
+  String get offlineModeTitle => 'Tryb offline';
+
+  @override
+  String get offlineModeDescription =>
+      'Zapisuj dźwięk na telefonie podczas nagrywania i transkrybuj go później. W tym trybie nie ma transkrypcji na żywo — nagrania są przechowywane lokalnie, a następnie przesyłasz je, aby utworzyć rozmowy.';
+
+  @override
+  String get offlineModeNote =>
+      'Na razie działa z urządzeniami Omi. Dźwięk pozostaje na Twoim telefonie, dopóki nie zdecydujesz się go przesłać.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Na telefonie kończy się miejsce, więc nagrywanie offline zostało wstrzymane. Zwolnij miejsce lub prześlij swoje nagrania, a wznowi się ono automatycznie.';
 }

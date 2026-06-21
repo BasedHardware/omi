@@ -9334,4 +9334,19 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
+
+  @override
+  String get offlineModeTitle => 'Çevrimdışı Mod';
+
+  @override
+  String get offlineModeDescription =>
+      'Sesi telefonunuza kaydedin, daha sonra transkribe edin. Bu modda canlı transkripsiyon yoktur; kayıtlar telefonunuzda saklanır, ardından bunları yükleyerek konuşmalar oluşturursunuz.';
+
+  @override
+  String get offlineModeNote =>
+      'Şimdilik Omi cihazlarıyla çalışır. Siz yüklemeyi seçene kadar ses telefonunuzda kalır.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Telefonunuzun depolama alanı azaldığı için çevrimdışı kayıt duraklatıldı. Yer açın ya da kayıtlarınızı yükleyin; ardından otomatik olarak devam eder.';
 }

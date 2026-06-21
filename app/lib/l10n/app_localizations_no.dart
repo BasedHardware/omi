@@ -9320,4 +9320,19 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
+
+  @override
+  String get offlineModeTitle => 'Frakoblet modus';
+
+  @override
+  String get offlineModeDescription =>
+      'Ta opp lyd på telefonen mens du tar opp, og transkriber senere. I denne modusen er det ingen direkte transkripsjon – opptakene lagres lokalt, og du laster dem opp for å lage samtaler.';
+
+  @override
+  String get offlineModeNote =>
+      'Fungerer foreløpig med Omi-enheter. Lyden blir liggende på telefonen til du selv velger å laste den opp.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Telefonen har lite lagringsplass, så opptak i frakoblet modus er satt på pause. Frigjør plass eller last opp opptakene dine, så starter det automatisk igjen.';
 }

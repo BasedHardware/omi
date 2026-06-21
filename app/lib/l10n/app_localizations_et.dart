@@ -9320,4 +9320,19 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
+
+  @override
+  String get offlineModeTitle => 'Võrguühenduseta režiim';
+
+  @override
+  String get offlineModeDescription =>
+      'Salvesta heli telefoni ja transkribeeri see hiljem. Selles režiimis reaalajas transkribeerimist ei toimu — salvestised hoitakse telefonis ja vestluste loomiseks laadid need ise üles.';
+
+  @override
+  String get offlineModeNote =>
+      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni, kuni otsustad selle üles laadida.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Telefoni mälu hakkab täis saama, seega on võrguühenduseta salvestamine peatatud. Vabasta ruumi või laadi salvestised üles ja see jätkub automaatselt.';
 }

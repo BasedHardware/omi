@@ -3050,5 +3050,9 @@
     "recapRegenerateCooldown": "Palaukite kelias sekundes prieš generuodami iš naujo.",
     "recapRegenerateNoConversations": "Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.",
     "syncCustomSttWarningTitle": "Sinchronizavimas naudoja Omi transkripciją",
-    "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą."
+    "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.",
+    "offlineModeTitle": "Neprisijungimo režimas",
+    "offlineModeDescription": "Įrašykite garsą telefone dabar, o transkripciją gaukite vėliau. Šiuo režimu transkripcija realiuoju laiku neveikia – įrašai saugomi telefone, o vėliau juos įkėlę sukursite pokalbius.",
+    "offlineModeNote": "Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
+    "offlineModeStorageFull": "Telefone baigiasi vieta, todėl įrašymas neprisijungus pristabdytas. Atlaisvinkite vietos arba įkelkite turimus įrašus – tada jis bus tęsiamas automatiškai."
 }

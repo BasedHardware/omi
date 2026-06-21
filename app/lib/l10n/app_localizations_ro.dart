@@ -9368,4 +9368,19 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.';
+
+  @override
+  String get offlineModeTitle => 'Mod offline';
+
+  @override
+  String get offlineModeDescription =>
+      'Salvează audio pe telefon în timp ce înregistrezi și transcrie-l mai târziu. În acest mod nu există transcriere în timp real — înregistrările sunt stocate local, apoi le încarci pentru a crea conversații.';
+
+  @override
+  String get offlineModeNote =>
+      'Deocamdată funcționează cu dispozitivele Omi. Audio rămâne pe telefon până când alegi să-l încarci.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Telefonul tău are spațiu de stocare insuficient, așa că înregistrarea offline a fost întreruptă. Eliberează spațiu sau încarcă înregistrările, apoi va continua automat.';
 }

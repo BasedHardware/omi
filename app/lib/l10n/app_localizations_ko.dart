@@ -9173,4 +9173,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.';
+
+  @override
+  String get offlineModeTitle => '오프라인 모드';
+
+  @override
+  String get offlineModeDescription =>
+      '녹음할 때 오디오를 휴대폰에 저장해 두고 나중에 텍스트로 변환합니다. 이 모드에서는 실시간 변환이 지원되지 않으며, 녹음은 휴대폰에 저장되고 업로드하면 대화로 만들어집니다.';
+
+  @override
+  String get offlineModeNote => '현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+
+  @override
+  String get offlineModeStorageFull => '휴대폰 저장 공간이 부족해 오프라인 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
 }

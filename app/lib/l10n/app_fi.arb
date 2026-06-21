@@ -3050,5 +3050,9 @@
     "recapRegenerateCooldown": "Odota muutama sekunti ennen uudelleen luomista.",
     "recapRegenerateNoConversations": "Tänä päivänä ei ole keskusteluja yhteenvedettäväksi.",
     "syncCustomSttWarningTitle": "Synkronointi käyttää Omin litterointia",
-    "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan."
+    "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.",
+    "offlineModeTitle": "Offline-tila",
+    "offlineModeDescription": "Tallenna ääni puhelimeesi nyt ja litteroi myöhemmin. Tässä tilassa ei ole reaaliaikaista litterointia – tallenteet säilytetään paikallisesti, ja keskustelut syntyvät, kun lataat ne palveluun.",
+    "offlineModeNote": "Toimii toistaiseksi Omi-laitteiden kanssa. Ääni pysyy puhelimessasi, kunnes päätät ladata sen palveluun.",
+    "offlineModeStorageFull": "Puhelimesi tallennustila on vähissä, joten offline-tallennus on keskeytetty. Vapauta tilaa tai lataa tallenteesi palveluun, niin tallennus jatkuu automaattisesti."
 }

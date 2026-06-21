@@ -9157,4 +9157,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
+
+  @override
+  String get offlineModeTitle => '离线模式';
+
+  @override
+  String get offlineModeDescription => '在采集时将音频保存在手机上，稍后再转录。此模式下没有实时转录——录音会先保存在本地，之后由你上传以生成对话。';
+
+  @override
+  String get offlineModeNote => '目前支持 Omi 设备。音频会一直保存在你的手机上，直到你选择上传。';
+
+  @override
+  String get offlineModeStorageFull => '手机存储空间不足，离线录音已暂停。请清理空间或上传现有录音，之后将自动恢复。';
 }

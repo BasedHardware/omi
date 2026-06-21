@@ -9268,4 +9268,18 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
+
+  @override
+  String get offlineModeTitle => 'الوضع دون اتصال';
+
+  @override
+  String get offlineModeDescription =>
+      'احفظ الصوت على هاتفك أثناء التسجيل وفرّغه نصيًا لاحقًا. لا يتوفر تفريغ نصي مباشر في هذا الوضع — تُخزَّن التسجيلات محليًا، ثم ترفعها لإنشاء المحادثات.';
+
+  @override
+  String get offlineModeNote => 'يعمل حاليًا مع أجهزة Omi. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'مساحة التخزين في هاتفك منخفضة، لذا تم إيقاف التسجيل دون اتصال مؤقتًا. حرّر بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.';
 }

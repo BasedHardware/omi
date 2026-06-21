@@ -9321,4 +9321,19 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.';
+
+  @override
+  String get offlineModeTitle => 'Chế độ ngoại tuyến';
+
+  @override
+  String get offlineModeDescription =>
+      'Lưu âm thanh ngay trên điện thoại để ghi trước và phiên âm sau. Ở chế độ này không có phiên âm trực tiếp — bản ghi được lưu trên máy, sau đó bạn tải lên để tạo cuộc trò chuyện.';
+
+  @override
+  String get offlineModeNote =>
+      'Hiện chỉ hỗ trợ thiết bị Omi. Âm thanh được giữ trên điện thoại cho đến khi bạn chọn tải lên.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Điện thoại của bạn sắp hết dung lượng nên việc ghi ngoại tuyến đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình sẽ tự động tiếp tục.';
 }

@@ -62,6 +62,13 @@ class SharedPreferencesUtil {
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
 
+  // Batch (offline) capture mode: when on, BLE audio is stored to local .bin files
+  // by the native layer instead of being transcribed in real time. Mutually
+  // exclusive with the realtime transcription socket (see CaptureProvider).
+  bool get batchModeEnabled => getBool('batchModeEnabled');
+
+  set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 

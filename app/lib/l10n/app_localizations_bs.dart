@@ -9348,4 +9348,19 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.';
+
+  @override
+  String get offlineModeTitle => 'Offline način rada';
+
+  @override
+  String get offlineModeDescription =>
+      'Snimajte zvuk na telefonu i transkribirajte ga kasnije. U ovom načinu nema transkripcije uživo — snimci se pohranjuju lokalno, a vi ih kasnije otpremate kako biste kreirali razgovore.';
+
+  @override
+  String get offlineModeNote =>
+      'Za sada radi s Omi uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Na telefonu vam ponestaje prostora pa je offline snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i automatski će se nastaviti.';
 }

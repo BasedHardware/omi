@@ -9350,4 +9350,18 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.';
+
+  @override
+  String get offlineModeTitle => 'Brez povezave';
+
+  @override
+  String get offlineModeDescription =>
+      'Med snemanjem zvok shranite v telefon in ga prepišete pozneje. V tem načinu ni sprotnega prepisa – posnetki se shranijo lokalno, nato jih naložite in iz njih ustvarite pogovore.';
+
+  @override
+  String get offlineModeNote => 'Za zdaj deluje z napravami Omi. Zvok ostane v telefonu, dokler ga ne naložite sami.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'V telefonu zmanjkuje prostora, zato je snemanje brez povezave začasno ustavljeno. Sprostite prostor ali naložite posnetke in nato se bo samodejno nadaljevalo.';
 }

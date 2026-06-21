@@ -9363,4 +9363,19 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.';
+
+  @override
+  String get offlineModeTitle => 'Offline mód';
+
+  @override
+  String get offlineModeDescription =>
+      'Vedd fel a hangot a telefonodra, az átírást pedig hagyd későbbre. Ebben a módban nincs élő átírás – a felvételek a telefonodon tárolódnak, majd a feltöltésükkel beszélgetéseket hozhatsz létre belőlük.';
+
+  @override
+  String get offlineModeNote =>
+      'Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg úgy nem döntesz, hogy feltöltöd.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Kevés a szabad hely a telefonodon, ezért az offline rögzítés szünetel. Szabadíts fel helyet vagy töltsd fel a felvételeidet, és automatikusan folytatódik.';
 }

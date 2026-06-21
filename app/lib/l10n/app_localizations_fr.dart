@@ -9407,4 +9407,19 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d\'Omi et ils comptent dans la limite de transcription de votre forfait.';
+
+  @override
+  String get offlineModeTitle => 'Mode hors ligne';
+
+  @override
+  String get offlineModeDescription =>
+      'Enregistrez l\'audio sur votre téléphone pour le transcrire plus tard. Ce mode ne propose pas de transcription en direct : les enregistrements sont stockés en local, puis vous les importez pour créer des conversations.';
+
+  @override
+  String get offlineModeNote =>
+      'Compatible avec les appareils Omi pour le moment. L\'audio reste sur votre téléphone jusqu\'à ce que vous décidiez de l\'importer.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'L\'espace de stockage de votre téléphone est presque saturé : l\'enregistrement hors ligne est donc en pause. Libérez de l\'espace ou importez vos enregistrements, et il reprendra automatiquement.';
 }

@@ -9337,4 +9337,19 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.';
+
+  @override
+  String get offlineModeTitle => 'Neprisijungimo režimas';
+
+  @override
+  String get offlineModeDescription =>
+      'Įrašykite garsą telefone dabar, o transkripciją gaukite vėliau. Šiuo režimu transkripcija realiuoju laiku neveikia – įrašai saugomi telefone, o vėliau juos įkėlę sukursite pokalbius.';
+
+  @override
+  String get offlineModeNote =>
+      'Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+
+  @override
+  String get offlineModeStorageFull =>
+      'Telefone baigiasi vieta, todėl įrašymas neprisijungus pristabdytas. Atlaisvinkite vietos arba įkelkite turimus įrašus – tada jis bus tęsiamas automatiškai.';
 }
