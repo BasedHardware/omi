@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/pages/conversations/recording_detail/recording_detail_page.dart';
+import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -10,8 +10,8 @@ import 'package:omi/utils/other/temp.dart';
 /// A row in the conversations list for a batch/offline-mode recording captured
 /// locally. Unlike a conversation it has no title/icon yet — it shows the
 /// recording's time + duration, its state, and an inline play/pause button that
-/// decodes and plays the local audio on device. Tapping opens the recording
-/// detail page (transcribe, share, delete).
+/// decodes and plays the local audio on device. Tapping opens a floating
+/// playback sheet (transcribe, share, delete).
 class RecordingListItem extends StatelessWidget {
   final LocalRecording recording;
 
@@ -65,11 +65,7 @@ class RecordingListItem extends StatelessWidget {
                 onDismissed: (_) => provider.delete(recording),
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => RecordingDetailPage(recording: recording)),
-                    );
-                  },
+                  onTap: () => showRecordingDetailSheet(context, recording),
                   child: Padding(
                     padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 18),
                     child: Row(
@@ -78,10 +74,10 @@ class RecordingListItem extends StatelessWidget {
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
-                            color: Colors.deepPurple.withValues(alpha: 0.18),
+                            color: const Color(0xFF35343B),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: const Icon(Icons.graphic_eq, color: Colors.deepPurpleAccent, size: 20),
+                          child: Icon(Icons.graphic_eq, color: Colors.grey.shade400, size: 20),
                         ),
                         const SizedBox(width: 14),
                         Expanded(
@@ -110,13 +106,10 @@ class RecordingListItem extends StatelessWidget {
                           child: Container(
                             width: 44,
                             height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
-                              shape: BoxShape.circle,
-                            ),
+                            decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
                             child: Icon(
                               isPlaying ? Icons.pause : Icons.play_arrow,
-                              color: Colors.deepPurpleAccent,
+                              color: Colors.white,
                               size: 24,
                             ),
                           ),
