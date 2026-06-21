@@ -153,6 +153,19 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
+                    label { class: "settings-label", "Groq (Background)" }
+                    input {
+                        class: "settings-input",
+                        r#type: "password",
+                        placeholder: "gsk_...",
+                        value: "{config.read().groq_background_api_key}",
+                        onchange: move |e| {
+                            config.write().groq_background_api_key = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
                     label { class: "settings-label", "OpenAI Key" }
                     input {
                         class: "settings-input",

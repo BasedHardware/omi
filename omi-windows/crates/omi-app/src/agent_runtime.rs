@@ -199,7 +199,7 @@ impl AgentRuntime {
 
         // Real SSE streaming — tokens arrive as they are generated
         let event_tx = self.inner.event_tx.clone();
-        let response = crate::llm::complete_streaming(
+        let response = match crate::llm::complete_streaming(
             cfg,
             crate::llm::LlmUseCase::Chat,
             llm_messages,
@@ -207,7 +207,14 @@ impl AgentRuntime {
             move |token| {
                 let _ = event_tx.send(AgentEvent::TextDelta { text: token });
             },
-        ).await.map_err(|e| anyhow::anyhow!("LLM streaming failed: {e}"))?;
+        ).await {
+            Ok(res) => res,
+            Err(e) => {
+                let err_msg = format!("LLM failed: {e}");
+                let _ = self.inner.event_tx.send(AgentEvent::Error { message: err_msg.clone() });
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        };
 
         let output_tokens = response.split_whitespace().count() as u32;
         let _ = self.inner.event_tx.send(AgentEvent::Result {

@@ -127,12 +127,23 @@ impl Provider {
 }
 
 /// Build a Provider from a named string + config.
-fn provider_from_name(name: &str, cfg: &AppConfig) -> Option<Provider> {
+fn provider_from_name(name: &str, cfg: &AppConfig, use_case: LlmUseCase) -> Option<Provider> {
     match name {
-        "groq" if !cfg.groq_api_key.is_empty() => Some(Provider::Groq {
-            key: cfg.groq_api_key.clone(),
-            model: "llama-3.3-70b-versatile".into(),
-        }),
+        "groq" => {
+            let key = if use_case == LlmUseCase::Background && !cfg.groq_background_api_key.is_empty() {
+                cfg.groq_background_api_key.clone()
+            } else {
+                cfg.groq_api_key.clone()
+            };
+            if !key.is_empty() {
+                Some(Provider::Groq {
+                    key,
+                    model: "llama-3.3-70b-versatile".into(),
+                })
+            } else {
+                None
+            }
+        }
         "anthropic" if !cfg.anthropic_api_key.is_empty() => Some(Provider::Anthropic {
             key: cfg.anthropic_api_key.clone(),
             model: cfg.anthropic_model.clone(),
@@ -161,21 +172,21 @@ fn all_providers_for(cfg: &AppConfig, use_case: LlmUseCase) -> Vec<Provider> {
 
     // Named preference (if not "auto")
     if pref != "auto" {
-        if let Some(p) = provider_from_name(pref, cfg) {
+        if let Some(p) = provider_from_name(pref, cfg, use_case) {
             if p.is_configured() { out.push(p); }
         }
     }
 
     // Auto priority lists — different order per use-case to avoid starving the UI
     let fallback_order: &[&str] = match use_case {
-        // Interactive: prefer fast/cheap providers
-        LlmUseCase::Chat => &["anthropic", "groq", "openai"],
+        // Interactive: prefer fast/cheap providers (Groq as final fallback)
+        LlmUseCase::Chat => &["anthropic", "openai", "groq"],
         // Background: prefer higher-quota/cheaper providers first
         LlmUseCase::Background => &["openai", "anthropic", "groq"],
     };
 
     for name in fallback_order {
-        if let Some(p) = provider_from_name(name, cfg) {
+        if let Some(p) = provider_from_name(name, cfg, use_case) {
             if p.is_configured() && !out.iter().any(|x| x.label() == p.label()) {
                 out.push(p);
             }

@@ -39,6 +39,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub groq_api_key: String,
 
+    /// Groq API key for background tasks (screenshots)
+    #[serde(default)]
+    pub groq_background_api_key: String,
+
     /// Anthropic API key (claude-*)
     #[serde(default)]
     pub anthropic_api_key: String,
@@ -247,6 +251,7 @@ impl Default for AppConfig {
             openai_base_url: default_openai_base_url(),
             openai_model: default_openai_model(),
             groq_api_key: String::new(),
+            groq_background_api_key: String::new(),
             anthropic_api_key: String::new(),
             anthropic_model: default_anthropic_model(),
             primary_provider: default_auto(),
