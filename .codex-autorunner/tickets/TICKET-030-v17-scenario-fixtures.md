@@ -1,7 +1,7 @@
 ---
 ticket_id: "tkt_v17_scenario_fixtures"
 agent: "codex"
-done: false
+done: true
 title: "Add Python-authored synthetic V17 local product scenarios"
 goal: "Developers can seed and reset named synthetic V17 memory product states in local emulator state."
 context:
@@ -37,3 +37,9 @@ context:
 - Run reset after each scenario and verify no residual scenario state remains.
 - Run the Python unit tests/type checks added for fixture validation.
 - Run `git diff --check`.
+
+## Completion notes
+
+- Added Python-authored, importable local V17 scenarios for `happy_path`, `default_off`, `kill_switch`, `malformed_cursor`, `stale_short_exclusion`, `archive_default_exclusion`, and `cross_user_isolation`.
+- Added local-only list/seed/reset commands. When emulators are absent, seed/reset validate fixtures and emit dry-run manifests without pretending to write live emulator state.
+- Local metadata is hard-coded as `LOCAL_EMULATOR_DEV`, `activation_eligible=false`, and `NOT_ACTIVATION_EVIDENCE`; fixtures cannot select evidence labels.
