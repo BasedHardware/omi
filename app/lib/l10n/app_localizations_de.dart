@@ -9415,4 +9415,13 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Auf deinem Smartphone wird der Speicher knapp, daher ist die Aufnahme pausiert. Gib Speicher frei oder lade deine Aufnahmen hoch – danach wird sie automatisch fortgesetzt.';
+
+  @override
+  String get unmute => 'Ton an';
+
+  @override
+  String get newRecording => 'Neue Aufnahme';
+
+  @override
+  String get transcribeLaterPaused => 'Pausiert – Audio wird nicht aufgenommen';
 }

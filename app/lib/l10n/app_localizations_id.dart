@@ -9346,4 +9346,13 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.';
+
+  @override
+  String get unmute => 'Bunyikan';
+
+  @override
+  String get newRecording => 'Rekaman baru';
+
+  @override
+  String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 }

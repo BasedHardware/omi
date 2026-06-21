@@ -9364,4 +9364,13 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.';
+
+  @override
+  String get unmute => 'Dempen opheffen';
+
+  @override
+  String get newRecording => 'Nieuwe opname';
+
+  @override
+  String get transcribeLaterPaused => 'Gepauzeerd — audio wordt niet opgenomen';
 }

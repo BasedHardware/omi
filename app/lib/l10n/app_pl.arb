@@ -3089,5 +3089,8 @@
     "transcribeLaterTitle": "Transkrypcja później",
     "transcribeLaterDescription": "Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.",
     "transcribeLaterNote": "Na razie działa z urządzeniami Omi. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
-    "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie."
+    "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
+    "unmute": "Wyłącz wyciszenie",
+    "newRecording": "Nowe nagranie",
+    "transcribeLaterPaused": "Wstrzymano — dźwięk nie jest nagrywany"
 }

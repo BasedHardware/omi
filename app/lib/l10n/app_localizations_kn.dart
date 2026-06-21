@@ -9369,4 +9369,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get unmute => 'ಮ್ಯೂಟ್ ತೆಗೆ';
+
+  @override
+  String get newRecording => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
 }

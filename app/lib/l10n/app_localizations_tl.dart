@@ -9423,4 +9423,13 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.';
+
+  @override
+  String get unmute => 'I-unmute';
+
+  @override
+  String get newRecording => 'Bagong recording';
+
+  @override
+  String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 }

@@ -3023,5 +3023,8 @@
     "transcribeLaterTitle": "Přepsat později",
     "transcribeLaterDescription": "Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.",
     "transcribeLaterNote": "Zatím funguje se zařízeními Omi. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.",
-    "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví."
+    "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.",
+    "unmute": "Zapnout zvuk",
+    "newRecording": "Nová nahrávka",
+    "transcribeLaterPaused": "Pozastaveno — zvuk se nenahrává"
 }

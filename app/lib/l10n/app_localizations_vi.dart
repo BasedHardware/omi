@@ -9336,4 +9336,13 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.';
+
+  @override
+  String get unmute => 'Bật tiếng';
+
+  @override
+  String get newRecording => 'Ghi âm mới';
+
+  @override
+  String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
 }

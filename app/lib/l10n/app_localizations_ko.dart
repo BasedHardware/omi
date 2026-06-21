@@ -9185,4 +9185,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
+
+  @override
+  String get unmute => '음소거 해제';
+
+  @override
+  String get newRecording => '새 녹음';
+
+  @override
+  String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
 }

@@ -9356,4 +9356,13 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'На телефоні бракує місця, тому запис призупинено. Звільніть місце або завантажте свої записи — і запис автоматично відновиться.';
+
+  @override
+  String get unmute => 'Увімкнути звук';
+
+  @override
+  String get newRecording => 'Новий запис';
+
+  @override
+  String get transcribeLaterPaused => 'Призупинено — аудіо не записується';
 }

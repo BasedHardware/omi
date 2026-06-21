@@ -9338,4 +9338,13 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.';
+
+  @override
+  String get unmute => 'Zapnout zvuk';
+
+  @override
+  String get newRecording => 'Nová nahrávka';
+
+  @override
+  String get transcribeLaterPaused => 'Pozastaveno — zvuk se nenahrává';
 }

@@ -3059,5 +3059,8 @@
     "transcribeLaterTitle": "Prepísať neskôr",
     "transcribeLaterDescription": "Nahrávajte zvuk teraz a prepíšte ho neskôr podľa potreby, namiesto naživo. Nahrávky sa uložia v telefóne a potom ich odošlete na vytvorenie konverzácií.",
     "transcribeLaterNote": "Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.",
-    "transcribeLaterStorageFull": "V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať."
+    "transcribeLaterStorageFull": "V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať.",
+    "unmute": "Zrušiť stlmenie",
+    "newRecording": "Nová nahrávka",
+    "transcribeLaterPaused": "Pozastavené – zvuk sa nenahráva"
 }

@@ -3089,5 +3089,8 @@
     "transcribeLaterTitle": "Sonradan Transkribe Et",
     "transcribeLaterDescription": "Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.",
     "transcribeLaterNote": "Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
-    "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder."
+    "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.",
+    "unmute": "Sesi aç",
+    "newRecording": "Yeni kayıt",
+    "transcribeLaterPaused": "Duraklatıldı — ses kaydedilmiyor"
 }

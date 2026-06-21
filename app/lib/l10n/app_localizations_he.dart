@@ -9267,4 +9267,13 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.';
+
+  @override
+  String get unmute => 'בטל השתקה';
+
+  @override
+  String get newRecording => 'הקלטה חדשה';
+
+  @override
+  String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 }

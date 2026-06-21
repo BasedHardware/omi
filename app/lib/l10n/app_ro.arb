@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Transcrie mai târziu",
     "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
     "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
-    "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat."
+    "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
+    "unmute": "Reactivează sunetul",
+    "newRecording": "Înregistrare nouă",
+    "transcribeLaterPaused": "În pauză — audio nu se înregistrează"
 }

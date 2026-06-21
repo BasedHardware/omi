@@ -9338,4 +9338,13 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
+
+  @override
+  String get unmute => 'Poista mykistys';
+
+  @override
+  String get newRecording => 'Uusi tallennus';
+
+  @override
+  String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 }

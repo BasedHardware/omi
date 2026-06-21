@@ -9282,4 +9282,13 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.';
+
+  @override
+  String get unmute => 'إلغاء الكتم';
+
+  @override
+  String get newRecording => 'تسجيل جديد';
+
+  @override
+  String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
 }

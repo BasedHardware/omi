@@ -9363,4 +9363,13 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.';
+
+  @override
+  String get unmute => 'Wyłącz wyciszenie';
+
+  @override
+  String get newRecording => 'Nowe nagranie';
+
+  @override
+  String get transcribeLaterPaused => 'Wstrzymano — dźwięk nie jest nagrywany';
 }

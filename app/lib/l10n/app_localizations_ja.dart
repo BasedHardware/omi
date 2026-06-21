@@ -9184,4 +9184,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
+
+  @override
+  String get unmute => 'ミュート解除';
+
+  @override
+  String get newRecording => '新規録音';
+
+  @override
+  String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
 }

@@ -9360,4 +9360,13 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.';
+
+  @override
+  String get unmute => 'Ieslēgt skaņu';
+
+  @override
+  String get newRecording => 'Jauns ieraksts';
+
+  @override
+  String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
 }

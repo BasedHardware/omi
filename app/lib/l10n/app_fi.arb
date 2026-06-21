@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Litteroi myöhemmin",
     "transcribeLaterDescription": "Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.",
     "transcribeLaterNote": "Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
-    "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti."
+    "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.",
+    "unmute": "Poista mykistys",
+    "newRecording": "Uusi tallennus",
+    "transcribeLaterPaused": "Keskeytetty – ääntä ei tallenneta"
 }

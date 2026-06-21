@@ -9315,4 +9315,13 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'आपके फ़ोन में स्टोरेज कम है, इसलिए रिकॉर्डिंग रोक दी गई है। कुछ जगह खाली करें या अपनी रिकॉर्डिंग अपलोड करें, फिर यह अपने आप दोबारा शुरू हो जाएगी।';
+
+  @override
+  String get unmute => 'अनम्यूट';
+
+  @override
+  String get newRecording => 'नई रिकॉर्डिंग';
+
+  @override
+  String get transcribeLaterPaused => 'रोका गया — ऑडियो रिकॉर्ड नहीं हो रहा है';
 }
