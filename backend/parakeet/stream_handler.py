@@ -23,13 +23,13 @@ import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
-from transcribe import transcribe_file, _stream_model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
-
-try:
-    from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
-except ImportError:
-    _PyannoteModel = None
-    _PyannoteInference = None
+from transcribe import (
+    transcribe_file,
+    _stream_model as _asr_model,
+    INFERENCE_MODE as _INFERENCE_MODE,
+    get_builtin_embedding_model,
+    wav_bytes_to_waveform,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,35 +45,6 @@ SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
 
-_embedding_model = None
-_embedding_lock = threading.Lock()
-
-
-def _get_builtin_embedding_model():
-    global _embedding_model
-    if _embedding_model is not None:
-        return _embedding_model
-    with _embedding_lock:
-        if _embedding_model is not None:
-            return _embedding_model
-        try:
-            if _PyannoteModel is None or _PyannoteInference is None:
-                logger.warning("pyannote.audio not installed, built-in embedding unavailable")
-                return None
-            model = _PyannoteModel.from_pretrained(
-                "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
-            )
-            inference = _PyannoteInference(model, window="whole")
-            if _torch is not None:
-                device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
-                inference.to(device)
-            _embedding_model = inference
-            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
-            return _embedding_model
-        except Exception as e:
-            logger.warning(f"Could not load built-in embedding model: {e}")
-            return None
-
 
 _vad_model = None
 _vad_lock = threading.Lock()
@@ -87,11 +58,6 @@ try:
     _torch = torch
 except ImportError:
     _torch = None
-
-try:
-    import torchaudio
-except ImportError:
-    torchaudio = None
 
 
 def _make_divisible_by(num, factor: int) -> int:
@@ -728,7 +694,7 @@ class StreamSession:
             return f"SPEAKER_{self._last_speaker}"
 
     def _get_embedding(self, wav_bytes: bytes):
-        model = _get_builtin_embedding_model()
+        model = get_builtin_embedding_model()
         if model is not None:
             return self._get_embedding_builtin(wav_bytes, model)
         if SPEAKER_EMBEDDING_URL:
@@ -737,8 +703,7 @@ class StreamSession:
 
     def _get_embedding_builtin(self, wav_bytes: bytes, model):
         try:
-            buf = io.BytesIO(wav_bytes)
-            waveform, sample_rate = torchaudio.load(buf)
+            waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
             dur = waveform.shape[1] / sample_rate
             if dur < MIN_EMBEDDING_AUDIO_S:
                 return None

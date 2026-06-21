@@ -1,6 +1,7 @@
 import io
 import os
 import logging
+import threading
 import wave as _wave
 
 import httpx
@@ -23,6 +24,70 @@ try:
     import nemo.collections.asr as nemo_asr
 except ImportError:
     nemo_asr = None
+
+try:
+    import torch as _torch
+except ImportError:
+    _torch = None
+
+try:
+    from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
+except ImportError:
+    _PyannoteModel = None
+    _PyannoteInference = None
+
+_embedding_model = None
+_embedding_lock = threading.Lock()
+
+
+def get_builtin_embedding_model():
+    global _embedding_model
+    if _embedding_model is not None:
+        return _embedding_model
+    with _embedding_lock:
+        if _embedding_model is not None:
+            return _embedding_model
+        try:
+            if _PyannoteModel is None or _PyannoteInference is None:
+                logger.warning("pyannote.audio not installed, built-in embedding unavailable")
+                return None
+            model = _PyannoteModel.from_pretrained(
+                "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
+            )
+            inference = _PyannoteInference(model, window="whole")
+            if _torch is not None and _torch.cuda.is_available():
+                inference.to(_torch.device("cuda"))
+            _embedding_model = inference
+            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
+            return _embedding_model
+        except Exception as e:
+            logger.warning(f"Could not load built-in embedding model: {e}")
+            return None
+
+
+def wav_bytes_to_waveform(wav_bytes: bytes):
+    buf = io.BytesIO(wav_bytes)
+    with _wave.open(buf, "rb") as wf:
+        sr = wf.getframerate()
+        nch = wf.getnchannels()
+        sw = wf.getsampwidth()
+        pcm = wf.readframes(wf.getnframes())
+
+    if sw == 2:
+        dtype = np.int16
+        divisor = 32768.0
+    elif sw == 4:
+        dtype = np.int32
+        divisor = 2147483648.0
+    else:
+        dtype = np.int16
+        divisor = 32768.0
+
+    samples = np.frombuffer(pcm, dtype=dtype).astype(np.float32) / divisor
+    if nch > 1:
+        samples = samples.reshape(-1, nch).mean(axis=1)
+    waveform = _torch.from_numpy(samples).unsqueeze(0)
+    return waveform, sr
 
 
 def set_gpu_worker(worker) -> None:
@@ -197,7 +262,7 @@ def _transcribe_nim(file_path: str):
 
 
 def _diarize_segments(file_path: str, base: dict) -> dict:
-    if not SPEAKER_EMBEDDING_URL:
+    if not SPEAKER_EMBEDDING_URL and get_builtin_embedding_model() is None:
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
@@ -270,7 +335,33 @@ def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
 
 
 def _get_embedding(wav_bytes: bytes):
+    model = get_builtin_embedding_model()
+    if model is not None:
+        emb = _get_embedding_builtin(wav_bytes, model)
+        if emb is not None:
+            return emb
+    if SPEAKER_EMBEDDING_URL:
+        return _get_embedding_http(wav_bytes)
+    return None
 
+
+def _get_embedding_builtin(wav_bytes: bytes, model):
+    try:
+        waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
+        dur = waveform.shape[1] / sample_rate
+        if dur < MIN_SEGMENT_DURATION:
+            return None
+        emb = model({"waveform": waveform, "sample_rate": sample_rate})
+        emb = np.array(emb, dtype=np.float32)
+        if emb.ndim == 1:
+            emb = emb.reshape(1, -1)
+        return emb
+    except Exception as e:
+        logger.warning(f"Built-in embedding failed: {e}")
+        return None
+
+
+def _get_embedding_http(wav_bytes: bytes):
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
             resp = client.post(
@@ -289,5 +380,5 @@ def _get_embedding(wav_bytes: bytes):
             emb = emb.reshape(1, -1)
         return emb
     except Exception as e:
-        logger.warning(f"Embedding extraction failed: {e}")
+        logger.warning(f"HTTP embedding failed: {e}")
         return None
