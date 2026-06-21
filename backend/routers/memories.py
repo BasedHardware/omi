@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Literal, Optional
 
+import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -18,6 +19,7 @@ from database.vector_db import (
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.memory.v17_v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
+from utils.memory.v17_v3_production_runtime import build_v17_v3_production_runtime
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -66,16 +68,18 @@ class V17V3GetRuntime:
     observer: object = None
 
 
-def get_v17_v3_get_runtime() -> V17V3GetRuntime:
-    """Return the F4 production/default runtime bundle.
+def get_v17_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
+    """Return the production/default runtime bundle for GET `/v3/memories`.
 
-    F4 is hard default-off: no environment variable, request input, header,
-    persisted control record, rollout flag, or production dependency can activate
-    V17. Only FastAPI TestClient dependency overrides can replace this callable's
-    return value.
+    Default production behavior is still disabled. Server-owned configuration can
+    only enter V17 when all of these are true: `V17_MODE` is not off,
+    `V17_MEMORY_ENABLED_USERS` contains the authenticated uid, the persisted
+    control state is read-mode, and global/read-convergence gates allow the
+    composed service to proceed. Client headers, query params, request bodies,
+    and persisted user docs alone cannot activate V17.
     """
 
-    return V17V3GetRuntime(enabled=False, source_decision='disabled')
+    return build_v17_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
 
 
 class BatchMemoriesRequest(BaseModel):

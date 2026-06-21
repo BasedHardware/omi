@@ -207,6 +207,22 @@ def _probe_code() -> str:
         sys.modules["utils.memory.v17_v3_composed_get_service"] = composed
         setattr(memory_pkg, "v17_v3_composed_get_service", composed)
 
+        production_runtime = types.ModuleType("utils.memory.v17_v3_production_runtime")
+        class ProductionV17V3GetRuntime:
+            def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
+                self.enabled = enabled
+                self.source_decision = source_decision
+                self.service = service
+                self.adapters = adapters
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+        def build_v17_v3_production_runtime(*, uid, db_client, env=None):
+            return ProductionV17V3GetRuntime(enabled=False, source_decision="disabled")
+        production_runtime.V17V3GetRuntime = ProductionV17V3GetRuntime
+        production_runtime.build_v17_v3_production_runtime = build_v17_v3_production_runtime
+        sys.modules["utils.memory.v17_v3_production_runtime"] = production_runtime
+        setattr(memory_pkg, "v17_v3_production_runtime", production_runtime)
+
         executors = types.ModuleType("utils.executors")
         executors.db_executor = StubExecutor()
         executors.postprocess_executor = StubExecutor()
