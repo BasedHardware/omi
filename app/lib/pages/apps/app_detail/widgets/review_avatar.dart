@@ -35,10 +35,29 @@ class ReviewAvatar extends StatelessWidget {
 
   String get _initial => username.isNotEmpty ? username[0].toUpperCase() : 'A';
 
+  // Deterministic FNV-1a hash. Dart's String.hashCode is seeded per run
+  // (hash-flood mitigation), so the same reviewer could otherwise get a
+  // different color on every app launch.
+  static int _stableHash(String s) {
+    var hash = 0x811c9dc5;
+    for (final unit in s.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash;
+  }
+
   Color get _background {
     if (backgroundColor != null) return backgroundColor!;
     final key = seed.isNotEmpty ? seed : username;
-    return _palette[key.hashCode.abs() % _palette.length];
+    return _palette[_stableHash(key) % _palette.length];
+  }
+
+  // White initials wash out on the light palette entries; pick a legible
+  // foreground from the background's luminance when no override is given.
+  Color get _foreground {
+    if (foregroundColor != null) return foregroundColor!;
+    return _background.computeLuminance() > 0.5 ? const Color(0xFF1F1F25) : Colors.white;
   }
 
   @override
@@ -50,7 +69,7 @@ class ReviewAvatar extends StatelessWidget {
       decoration: BoxDecoration(color: _background, shape: BoxShape.circle),
       child: Text(
         _initial,
-        style: TextStyle(color: foregroundColor ?? Colors.white, fontSize: size * 0.45, fontWeight: FontWeight.w600),
+        style: TextStyle(color: _foreground, fontSize: size * 0.45, fontWeight: FontWeight.w600),
       ),
     );
   }
