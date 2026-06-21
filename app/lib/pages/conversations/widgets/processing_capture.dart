@@ -75,10 +75,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
         return GestureDetector(
           onTap: () async {
-            // Offline/batch mode has no live transcript — tapping opens an explainer
-            // instead of the (empty) capturing page.
+            // Offline/batch mode has no live transcript — the card is informational,
+            // so swallow taps instead of opening the (empty) capturing page.
             if (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice) {
-              _showOfflineModeInfoSheet(context);
               return;
             }
             final isCaptureActive = provider.recordingState == RecordingState.record ||
@@ -527,7 +526,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (elapsed != null) {
       elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
-    final accent = muted ? Colors.grey.shade400 : Colors.deepPurpleAccent;
+    final dotColor = muted ? Colors.grey.shade600 : const Color(0xFFFE5D50);
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 6),
       child: Column(
@@ -538,29 +537,27 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: (muted ? Colors.grey : Colors.deepPurple).withValues(alpha: 0.18),
+                  color: const Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(muted ? Icons.mic_off_rounded : Icons.cloud_off_rounded, size: 14, color: accent),
-                    const SizedBox(width: 6),
-                    Text(
-                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
-                      style: TextStyle(color: accent, fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
+                      style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
               const Spacer(),
-              if (elapsedLabel != null) ...[
+              if (elapsedLabel != null)
                 Text(
                   elapsedLabel,
                   style: const TextStyle(
@@ -570,9 +567,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
-                const SizedBox(width: 10),
-              ],
-              Icon(Icons.info_outline, size: 18, color: Colors.grey.shade500),
             ],
           ),
           const SizedBox(height: 10),
@@ -611,7 +605,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     required bool primary,
     required VoidCallback onTap,
   }) {
-    final color = primary ? Colors.deepPurpleAccent : Colors.grey.shade300;
+    final color = primary ? Colors.white : const Color(0xFFC9CBCF);
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -619,7 +613,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: primary ? Colors.deepPurple.withValues(alpha: 0.18) : const Color(0xFF2A2A2E),
+            color: primary ? const Color(0xFF35343B) : const Color(0xFF2A2A2E),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -632,56 +626,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showOfflineModeInfoSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).viewInsets.bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.cloud_off_rounded, color: Colors.deepPurpleAccent, size: 22),
-                  const SizedBox(width: 10),
-                  Text(
-                    context.l10n.transcribeLaterTitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                context.l10n.transcribeLaterDescription,
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    context.l10n.close,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
