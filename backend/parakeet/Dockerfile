@@ -41,7 +41,7 @@ RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0" && \
     pip install --no-cache-dir --no-deps \
     "pyannote.core" "pyannote.database" "pyannote.pipeline" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
-    "hf_transfer" "tensorboardX"
+    "hf_transfer" "tensorboardX" "torch_audiomentations"
 
 COPY backend/parakeet/ .
 
