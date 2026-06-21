@@ -74,6 +74,7 @@ pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
+pytest tests/unit/test_translation_dedup_edge_cases.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_conversation_model_split.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v

@@ -342,18 +342,131 @@ def split_into_sentences(text: str) -> List[str]:
     """Splits text into sentences based on sentence-ending punctuation and newlines.
 
     Recognizes Unicode sentence enders for CJK, Arabic, Hindi, and other non-English languages.
+    Protects common abbreviations (Mr., Dr., U.S., 3.14, etc.) from being split
+    by temporarily replacing them with placeholders before splitting.
     """
     if not text:
         return []
+
+    # Placeholder strategy: replace internal periods in multi-part abbreviations
+    # before sentence splitting, then restore them after. Combined with a
+    # post-split merge step to handle false boundaries at abbreviation tails.
+    #
+    # Handles: U.S., U.K., 3.14, e.g., i.e., etc., vs.
+    # Does NOT attempt to resolve single-period titles (Dr./Mr.) followed by
+    # proper nouns — that requires NLP-level disambiguation.
+
+    _ABBR = 'ⓐⓑⓒ'  # country code internal period
+    _DEC = 'ⓓⓔⓕ'  # decimal point
+    _LAT = 'ⓛⓐⓣ'  # latin abbrev internal period
+
+    _ABBREV_PATTERNS = [
+        # Country codes: U.S. → UⓐⓑⓒS. (internal period protected, trailing period kept)
+        (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
+        # Extended multi-part acronyms: U.S.A. → UⓐⓑⓒSⓐⓑⓒA.
+        (
+            re.compile(r'\b([A-Z])\.([A-Z])\.([A-Z])\.'),
+            lambda m: m.group(1) + _ABBR + m.group(2) + _ABBR + m.group(3) + '.',
+        ),
+        # Decimal/version numbers: 3.14 → 3ⓓⓔⓕ14
+        (re.compile(r'(?<=\d)\.(?=\d)'), _DEC),
+        # Latin abbreviations: e.g. → eⓛⓐⓣg.
+        (re.compile(r'\b([a-z])\.([a-z])\.'), lambda m: m.group(1) + _LAT + m.group(2) + '.'),
+        # etc. → etcⓛⓐⓣ
+        (re.compile(r'\betc\.'), 'etc' + _LAT),
+        # vs. → vsⓛⓐⓣ
+        (re.compile(r'\bvs\.'), 'vs' + _LAT),
+    ]
 
     result = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
             continue
-        sentences = SENTENCE_FINDALL_RE.findall(line)
-        result.extend(s.strip() for s in sentences if s.strip())
+
+        # Phase 1: Replace abbreviation internals with placeholders
+        protected = line
+        for pattern, replacement in _ABBREV_PATTERNS:
+            protected = pattern.sub(replacement, protected)
+
+        # Phase 2: Split on sentence boundaries
+        raw = SENTENCE_FINDALL_RE.findall(protected)
+
+        # Phase 3: Restore placeholders
+        restored_list = []
+        for s in raw:
+            s = s.strip()
+            if not s:
+                continue
+            restored = s.replace(_ABBR, '.').replace(_DEC, '.').replace(_LAT, '.')
+            restored_list.append(restored)
+
+        # Phase 4: Merge false splits at abbreviation boundaries
+        merged = []
+        for seg in restored_list:
+            if merged and _should_merge(merged[-1], seg):
+                merged[-1] = merged[-1] + ' ' + seg
+            else:
+                merged.append(seg)
+        result.extend(merged)
     return result
+
+
+def _should_merge(prev: str, nxt: str) -> bool:
+    """Decide whether to merge prev segment into the next one.
+
+    Returns True when prev ends with a sentence-ending punctuation mark but
+    appears to be a fragment rather than a complete sentence (e.g., an
+    abbreviation tail like 'U.S.' or a short title like 'Dr.').
+
+    This function is pure regex-based (no PySBD) and thread-safe.
+    """
+    if not prev or prev[-1] not in '.!?。！？؟۔।॥':
+        return False
+    if not nxt:
+        return False
+
+    # Next segment starts with a capitalized word — likely a real new sentence.
+    # Exception: single lowercase word/fragment that's clearly not a sentence.
+    nxt_body = nxt.rstrip('.!?。！؟؟۔।॥ ')
+    nxt_stripped = nxt.lstrip()
+
+    # Only merge lowercase continuations that look like abbreviation fragments
+    # (e.g., "Smith" after "Dr.", "García" after "Sr.") — NOT full sentences
+    # like "Gracias." after "Sí." or "thanks." after "I agree."
+    if len(nxt_body) <= 15 and nxt_stripped and nxt_stripped[0].islower():
+        # Must be a single token (name/word), not a multi-word phrase
+        if ' ' not in nxt_body:
+            return True
+
+    # Prev ends with a known abbreviation pattern (short token + period)
+    # Only merge if prev looks like an abbreviation (Dr., Mr., U.S., etc.)
+    # NOT for generic short sentences followed by real text
+    prev_body = prev.rstrip('.!?。！؟۔। ')
+    # Extract the last token — embedded abbreviations like "I spoke to Dr."
+    # have a long prev_body but the trailing token is still a title/latin abbrev.
+    _last_token = prev_body.rsplit(None, 1)[-1] if prev_body else ''
+    if len(_last_token) <= 8 and _last_token:
+        # Must look like an abbreviation: single uppercase letter(s), title prefix,
+        # latin abbrev, version/decimal pattern, or multi-part acronym
+        is_abbrev_like = (
+            _last_token.isupper()
+            and len(_last_token) <= 5  # U.S.A., F.B.I., UK, Dr
+            or _last_token in ('Dr', 'Mr', 'Mrs', 'Ms', 'St', 'Prof', 'Sr')  # Title abbrevs
+            or _last_token in ('etc', 'vs')  # Latin abbrevs
+            or (_last_token[0].isupper() and len(_last_token) > 1 and _last_token[1:].isdigit())  # v2, V3
+        )
+        if is_abbrev_like:
+            # But DON'T merge if next starts capitalized and looks like a new sentence
+            # (e.g., "U.K. She likes tea." → keep separate)
+            if nxt_stripped and nxt_stripped[0].isupper() and ' ' in nxt_body:
+                return False
+            # Also don't merge after etc./vs. when next starts a new sentence
+            if _last_token in ('etc', 'vs') and nxt_stripped and nxt_stripped[0].isupper():
+                return False
+            return True
+
+    return False
 
 
 def _redis_cache_key(text_hash: str, dest_lang: str) -> str:
@@ -530,60 +643,108 @@ class TranslationService:
     def translate_units_batch(self, dest_language: str, units: List[Tuple[str, str]]) -> List[Tuple[str, str, str]]:
         """Translate a batch of (unit_id, text) pairs in minimal GCP API calls.
 
-        Deduplicates identical texts, checks all cache layers, and batches
-        only truly uncached texts into a single API call.
+        Splits each text into sentences, checks all cache layers PER SENTENCE,
+        batches only truly uncached sentences into a single API call, then
+        reassembles per-unit results.
+
+        This sentence-level dedup means that if two different units share
+        a common sentence (e.g., "How are you?"), only the first occurrence
+        triggers an API call — subsequent units get the cached result.
 
         Returns list of (unit_id, translated_text, detected_lang) in input order.
         """
         if not units:
             return []
 
-        # Build deduplicated mapping: text_hash -> (text, [indices])
-        results = [None] * len(units)
-        hash_to_info = {}  # text_hash -> {'text': str, 'indices': [int]}
-
-        for i, (unit_id, text) in enumerate(units):
+        # Phase -1: Check full-text caches for each unit before sentence splitting.
+        # This preserves hits from the pre-DD-008 batch path and from
+        # translate_text() calls that wrote full-text entries.
+        full_text_results = {}
+        for unit_id, text in units:
             text_hash = hashlib.md5(text.encode()).hexdigest()
-            if text_hash not in hash_to_info:
-                hash_to_info[text_hash] = {'text': text, 'indices': [], 'hash': text_hash}
-            hash_to_info[text_hash]['indices'].append(i)
-
-        # Phase 1: Check caches for each unique text
-        uncached_hashes = []
-        for text_hash, info in hash_to_info.items():
-            # Check negative cache first
+            # Check negative cache first — skip if previously determined
+            # to not need translation (e.g., same source/target language)
             if get_negative_cache(text_hash, dest_language):
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], info['text'], '')  # return original text
+                full_text_results[unit_id] = (text, dest_language)
+                continue
+            # Check memory LRU next (cheapest positive cache)
+            lru_hit = self._check_memory_cache(text_hash, dest_language)
+            if lru_hit:
+                full_text_results[unit_id] = lru_hit
+                continue
+            # Check Redis full-text key
+            redis_hit = get_cached_translation(text_hash, dest_language)
+            if redis_hit:
+                translated = redis_hit["text"]
+                detected = redis_hit.get("detected_lang", "")
+                self._set_memory_cache(text_hash, dest_language, translated, detected)
+                full_text_results[unit_id] = (translated, detected)
+                continue
+
+        # If every unit hit the full-text cache, return immediately.
+        if len(full_text_results) == len(units):
+            return [(uid, *full_text_results[uid]) for uid, _ in units]
+
+        # Phase 0: Split each unit's text into sentences (only for cache-miss units)
+        # Units that hit full-text cache in Phase -1 skip sentence splitting entirely.
+        # unit_sentences[i] = list of (sentence_text, sentence_hash) for unit i
+        unit_sentences = []
+        for unit_id, text in units:
+            if unit_id in full_text_results:
+                continue  # Already have a full-text cache hit — no need to split
+            sentences = split_into_sentences(text)
+            hashed = [(s, hashlib.md5(s.encode()).hexdigest()) for s in sentences]
+            unit_sentences.append((unit_id, text, hashed))
+
+        # Build global sentence-level dedup map:
+        # sent_hash -> {'text': str, 'indices': [(unit_idx, sent_idx), ...]}
+        sent_hash_to_info = {}
+        for unit_idx, (_, _, sentences) in enumerate(unit_sentences):
+            for sent_idx, (sent_text, sent_hash) in enumerate(sentences):
+                if sent_hash not in sent_hash_to_info:
+                    sent_hash_to_info[sent_hash] = {
+                        'text': sent_text,
+                        'indices': [],
+                    }
+                sent_hash_to_info[sent_hash]['indices'].append((unit_idx, sent_idx))
+
+        # Phase 1: Check caches for each unique sentence
+        # sent_translation[hash] = (translated_text, detected_lang) or None
+        sent_translation = {}  # hash -> (str, str)
+        uncached_sent_hashes = []
+
+        for sent_hash, info in sent_hash_to_info.items():
+            # Check negative cache first
+            if get_negative_cache(sent_hash, dest_language):
+                sent_translation[sent_hash] = (info['text'], '')  # return original
                 continue
 
             # Check memory cache
-            cached = self._check_memory_cache(text_hash, dest_language)
+            cached = self._check_memory_cache(sent_hash, dest_language)
             if cached:
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], cached[0], cached[1])
+                sent_translation[sent_hash] = cached
                 continue
 
             # Check Redis cache
-            redis_cached = get_cached_translation(text_hash, dest_language)
+            redis_cached = get_cached_translation(sent_hash, dest_language)
             if redis_cached:
                 translated = redis_cached["text"]
                 detected = redis_cached.get("detected_lang", "")
-                self._set_memory_cache(text_hash, dest_language, translated, detected)
-                for idx in info['indices']:
-                    results[idx] = (units[idx][0], translated, detected)
+                self._set_memory_cache(sent_hash, dest_language, translated, detected)
+                sent_translation[sent_hash] = (translated, detected)
                 continue
 
-            uncached_hashes.append(text_hash)
+            uncached_sent_hashes.append(sent_hash)
 
-        # Phase 2: Batch translate uncached texts
-        if uncached_hashes:
-            uncached_texts = [hash_to_info[h]['text'] for h in uncached_hashes]
+        # Phase 2: Batch translate uncached sentences
+        _failed_sent_hashes: set = set()  # track which sentences fell back to original text
+        if uncached_sent_hashes:
+            uncached_texts = [sent_hash_to_info[h]['text'] for h in uncached_sent_hashes]
 
             for chunk_start in range(0, len(uncached_texts), MAX_BATCH_SIZE):
                 chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_texts))
                 chunk = uncached_texts[chunk_start:chunk_end]
-                chunk_hashes = uncached_hashes[chunk_start:chunk_end]
+                chunk_hashes = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
                     response = _client.translate_text(
@@ -594,31 +755,95 @@ class TranslationService:
                     )
 
                     for j, translation in enumerate(response.translations):
-                        text_hash = chunk_hashes[j]
+                        sent_hash = chunk_hashes[j]
                         translated_text = translation.translated_text
                         detected_lang = translation.detected_language_code or ""
-                        info = hash_to_info[text_hash]
 
-                        self._set_memory_cache(text_hash, dest_language, translated_text, detected_lang)
-                        cache_translation(text_hash, dest_language, translated_text, detected_lang)
-
-                        for idx in info['indices']:
-                            results[idx] = (units[idx][0], translated_text, detected_lang)
+                        self._set_memory_cache(sent_hash, dest_language, translated_text, detected_lang)
+                        cache_translation(sent_hash, dest_language, translated_text, detected_lang)
+                        sent_translation[sent_hash] = (translated_text, detected_lang)
 
                 except Exception as e:
-                    logger.error(f"Batch translation error: {e}")
+                    logger.error(f"Sentence-level batch translation error: {e}")
+                    # Mark failed sentences as fallbacks so Phase 3 does NOT
+                    # write them to Redis (avoids poisoning cache with raw text).
                     for h in chunk_hashes:
-                        info = hash_to_info[h]
-                        for idx in info['indices']:
-                            if results[idx] is None:
-                                results[idx] = (units[idx][0], info['text'], '')
+                        if h not in sent_translation:
+                            sent_translation[h] = (sent_hash_to_info[h]['text'], '')
+                            _failed_sent_hashes.add(h)
 
-        # Fill any remaining None results (shouldn't happen, but be safe)
-        for i in range(len(results)):
-            if results[i] is None:
-                results[i] = (units[i][0], units[i][1], '')
+        # Phase 3: Reassemble per-unit results from sentence translations.
+        # Results are emitted in the same order as the input `units` list
+        # so downstream consumers can rely on positional mapping.
+        results: list[tuple[str, str, str] | None] = [None] * len(units)  # pre-allocate for in-order assembly
 
-        return results
+        # Map each unit_id back to its original index in `units` (needed because
+        # unit_sentences is compacted — cache-hit units are excluded).
+        _unit_id_to_orig_idx = {uid: i for i, (uid, _) in enumerate(units)}
+
+        for unit_idx, (unit_id, original_text, sentences) in enumerate(unit_sentences):
+            orig_idx = _unit_id_to_orig_idx[unit_id]
+            if not sentences:
+                results[orig_idx] = (unit_id, original_text, '')
+                continue
+
+            translated_parts = []
+            detected_langs = []
+            _fallback_sent_hashes: set[str] = set()
+            for sent_text, sent_hash in sentences:
+                if sent_hash in sent_translation:
+                    trans_text, det_lang = sent_translation[sent_hash]
+                    translated_parts.append(trans_text)
+                    if det_lang:
+                        detected_langs.append(det_lang)
+                else:
+                    # Fallback: should not happen, but use original text
+                    translated_parts.append(sent_text)
+                    _fallback_sent_hashes.add(sent_hash)
+
+            assembled = ' '.join(translated_parts)
+            # Dominant detected language from constituent sentences
+            dominant_lang = ''
+            if detected_langs:
+                lang_counts = Counter(detected_langs)
+                dominant_lang = lang_counts.most_common(1)[0][0]
+
+            text_hash = hashlib.md5(original_text.encode()).hexdigest()
+            # Only persist to any cache if NO sentence fell back to original text
+            # (avoids poisoning both in-memory LRU and Redis with untranslated output).
+            # This covers both exception-path failures (_failed_sent_hashes) and
+            # quiet fallbacks where a sentence hash was never populated.
+            _any_failure = any(sh in _failed_sent_hashes for _, sh in sentences) or bool(_fallback_sent_hashes)
+            if not _any_failure:
+                self._set_memory_cache(text_hash, dest_language, assembled, dominant_lang)
+                cache_translation(text_hash, dest_language, assembled, dominant_lang)
+
+            # When any sentence fell back or failed, return original text rather
+            # than a partial/mixed assembly — otherwise the caller persists the
+            # incomplete translation and advances committed_text, preventing
+            # retry on transient API failures.
+            if _any_failure:
+                results[orig_idx] = (unit_id, original_text, '')
+            else:
+                results[orig_idx] = (unit_id, assembled, dominant_lang)
+
+        # Fill in any units that hit the full-text cache in Phase -1
+        # (they were skipped during sentence splitting)
+        for unit_idx, (unit_id, _) in enumerate(units):
+            if results[unit_idx] is None and unit_id in full_text_results:
+                trans, det = full_text_results[unit_id]
+                results[unit_idx] = (unit_id, trans, det)
+
+        # Safety: replace any remaining gaps with original-text fallbacks
+        final_results = []
+        for idx, r in enumerate(results):
+            if r is not None:
+                final_results.append(r)
+            else:
+                uid, orig_text = units[idx]
+                final_results.append((uid, orig_text, ''))
+
+        return final_results
 
     def translate_text(self, dest_language: str, text: str) -> Tuple[str, str]:
         """
