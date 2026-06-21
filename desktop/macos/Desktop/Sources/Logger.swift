@@ -151,6 +151,9 @@ func log(_ message: String) {
 /// We still write them to the local log + breadcrumbs for debugging context.
 private func isNonActionableTransient(_ error: Error?) -> Bool {
   guard let error = error else { return false }
+  // Swift structured-concurrency cancellation: thrown when a Task/operation is
+  // cancelled (assistant stopped, frame superseded). Expected, not an app bug.
+  if error is CancellationError { return true }
   let nsError = error as NSError
   switch nsError.domain {
   case NSURLErrorDomain:
