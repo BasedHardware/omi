@@ -152,17 +152,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     if (info == null) return 1;
     int seconds;
     try {
-      final bytes = await File(path).readAsBytes();
-      final n = bytes.length;
-      var frames = 0;
-      var pos = 0;
-      while (pos + 4 <= n) {
-        final len = bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16) | (bytes[pos + 3] << 24);
-        if (len <= 0) break;
-        pos += 4 + len;
-        frames++;
-      }
-      seconds = info.secondsFromFrameCount(frames);
+      seconds = info.secondsFromFrameCount(await countBatchRecordingFrames(path));
     } catch (e) {
       // Transient read failure (e.g. file mid-write): return the rough estimate but
       // don't cache it, so the next refresh retries the exact frame count.
@@ -406,5 +396,52 @@ class LocalRecordingsProvider extends ChangeNotifier {
     BleBridge.instance.batchRecordingFinalizedCallback = null;
     _audio.removeListener(_onAudioChanged);
     super.dispose();
+  }
+}
+
+/// Counts complete length-prefixed frames (`[4-byte LE length][payload]`) in a
+/// batch `.bin` file. Reads in fixed 64 KB chunks so a long recording is never
+/// loaded whole into memory, and only counts a frame once its full payload is
+/// present — a truncated tail frame (e.g. from a crash-recovered file) is not
+/// counted, keeping the duration exact.
+Future<int> countBatchRecordingFrames(String path) async {
+  final raf = await File(path).open();
+  try {
+    const chunkSize = 64 * 1024;
+    final buf = Uint8List(chunkSize);
+    final header = Uint8List(4);
+    var headerHave = 0; // bytes of the current 4-byte header collected (0..4)
+    var remaining = 0; // payload bytes still to consume for the in-flight frame
+    var inPayload = false;
+    var frames = 0;
+    while (true) {
+      final read = await raf.readInto(buf, 0, chunkSize);
+      if (read <= 0) break;
+      var i = 0;
+      while (i < read) {
+        if (inPayload) {
+          final avail = read - i;
+          final skip = remaining < avail ? remaining : avail;
+          i += skip;
+          remaining -= skip;
+          if (remaining == 0) {
+            frames++; // full payload consumed — frame is complete
+            inPayload = false;
+          }
+        } else {
+          header[headerHave++] = buf[i++];
+          if (headerHave == 4) {
+            headerHave = 0;
+            final len = header[0] | (header[1] << 8) | (header[2] << 16) | (header[3] << 24);
+            if (len <= 0) return frames; // invalid/zero length — stop
+            remaining = len;
+            inPayload = true;
+          }
+        }
+      }
+    }
+    return frames; // any in-flight (truncated) frame is intentionally not counted
+  } finally {
+    await raf.close();
   }
 }
