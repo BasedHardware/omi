@@ -9348,4 +9348,13 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get unmute => 'Sesi aç';
+
+  @override
+  String get newRecording => 'Yeni kayıt';
+
+  @override
+  String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 }

@@ -9323,4 +9323,13 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.';
+
+  @override
+  String get unmute => 'Slå lyd til';
+
+  @override
+  String get newRecording => 'Ny optagelse';
+
+  @override
+  String get transcribeLaterPaused => 'Sat på pause — lyden optages ikke';
 }

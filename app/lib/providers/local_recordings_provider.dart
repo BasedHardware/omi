@@ -41,6 +41,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   static const String _jobsPrefKey = 'localRecordingJobs';
   Map<String, String> _jobs = {};
 
+  // Exact per-file duration (seconds), computed once by walking the frame
+  // prefixes. Finalized .bin files are immutable, so this is cached by fileName.
+  final Map<String, int> _secondsByFile = {};
+
   List<LocalRecording> _recordings = [];
   List<LocalRecording> get recordings => _recordings;
 
@@ -61,7 +65,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _audio.addListener(_onAudioChanged);
     // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
     // rotated recording surfaces without waiting for a BLE disconnect.
-    BleBridge.instance.batchRecordingFinalizedCallback = (_) => refresh();
+    BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
     _jobs = _loadJobs();
     refresh();
     if (_jobs.isNotEmpty) {
@@ -75,6 +79,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void setConversationProvider(ConversationProvider provider) {
     _conversationProvider = provider;
   }
+
+  void _onRecordingFinalized(String _) => refresh();
 
   // ───────────────────────── scanning ─────────────────────────
 
@@ -103,6 +109,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         return;
       }
       final list = <LocalRecording>[];
+      final seen = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch_*) — never offline-sync WAL flushes,
@@ -110,10 +117,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
         // writer stamps the `batchRecordingDevice` marker into the device segment.
         if (!name.startsWith('audio_${batchRecordingDevice}_') || !name.endsWith('.bin')) continue;
         final size = await entity.length();
+        seen.add(name);
         final rec = LocalRecording.fromFile(
           fileName: name,
           filePath: entity.path,
           sizeBytes: size,
+          seconds: await _durationSeconds(name, entity.path, size),
           jobId: _jobs[name],
           state: _stateFor(name),
         );
@@ -121,6 +130,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
+      _secondsByFile.removeWhere((k, _) => !seen.contains(k));
     } catch (e) {
       Logger.error('LocalRecordings: scan failed: $e');
     } finally {
@@ -130,6 +140,29 @@ class LocalRecordingsProvider extends ChangeNotifier {
       if (_jobs.isNotEmpty) _startReconcileTimer();
       if (!_disposed) notifyListeners();
     }
+  }
+
+  /// Exact recording duration (seconds), computed once per file by counting the
+  /// length-prefixed frames (`[4-byte LE len][frame]`) and multiplying by the
+  /// per-frame duration — the byte-size estimate is unreliable for VBR opus.
+  /// Cached because finalized files never change; falls back to the size estimate
+  /// if the file can't be read.
+  Future<int> _durationSeconds(String name, String path, int sizeBytes) async {
+    final cached = _secondsByFile[name];
+    if (cached != null) return cached;
+    final info = BatchRecordingInfo.fromFileName(name);
+    if (info == null) return 1;
+    int seconds;
+    try {
+      seconds = info.secondsFromFrameCount(await countBatchRecordingFrames(path));
+    } catch (e) {
+      // Transient read failure (e.g. file mid-write): return the rough estimate but
+      // don't cache it, so the next refresh retries the exact frame count.
+      Logger.error('LocalRecordings: duration scan failed for $name: $e');
+      return info.estimateSeconds(sizeBytes);
+    }
+    _secondsByFile[name] = seconds;
+    return seconds;
   }
 
   LocalRecording? getById(String id) {
@@ -319,7 +352,31 @@ class LocalRecordingsProvider extends ChangeNotifier {
   bool isPlaying(LocalRecording r) => _audio.isPlaying(_walFor(r).id);
   bool canPlay(LocalRecording r) => _audio.canPlayOrShare(_walFor(r));
   Future<void> togglePlayback(LocalRecording r) => _audio.togglePlayback(_walFor(r));
-  Future<void> share(LocalRecording r) => _audio.shareAsAudio(_walFor(r));
+
+  bool _isPreparingShare = false;
+  bool get isPreparingShare => _isPreparingShare;
+
+  Future<void> share(LocalRecording r) async {
+    if (_isPreparingShare) return;
+    final wal = _walFor(r);
+    _isPreparingShare = true;
+    notifyListeners();
+    try {
+      await Future.delayed(const Duration(milliseconds: 16));
+      await _audio.ensureAudioFileExists(wal);
+    } catch (e) {
+      Logger.error('LocalRecordings: preparing share failed for ${r.fileName}: $e');
+    } finally {
+      _isPreparingShare = false;
+      if (!_disposed) notifyListeners();
+    }
+    try {
+      await _audio.shareAsAudio(wal);
+    } catch (e) {
+      Logger.error('LocalRecordings: share failed for ${r.fileName}: $e');
+    }
+  }
+
   Future<void> seekTo(Duration position) => _audio.seekToPosition(position);
   Future<void> skipForward() => _audio.skipForward();
   Future<void> skipBackward() => _audio.skipBackward();
@@ -362,8 +419,55 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _stopReconcileTimer();
-    BleBridge.instance.batchRecordingFinalizedCallback = null;
+    BleBridge.instance.removeBatchRecordingFinalizedListener(_onRecordingFinalized);
     _audio.removeListener(_onAudioChanged);
     super.dispose();
+  }
+}
+
+/// Counts complete length-prefixed frames (`[4-byte LE length][payload]`) in a
+/// batch `.bin` file. Reads in fixed 64 KB chunks so a long recording is never
+/// loaded whole into memory, and only counts a frame once its full payload is
+/// present — a truncated tail frame (e.g. from a crash-recovered file) is not
+/// counted, keeping the duration exact.
+Future<int> countBatchRecordingFrames(String path) async {
+  final raf = await File(path).open();
+  try {
+    const chunkSize = 64 * 1024;
+    final buf = Uint8List(chunkSize);
+    final header = Uint8List(4);
+    var headerHave = 0; // bytes of the current 4-byte header collected (0..4)
+    var remaining = 0; // payload bytes still to consume for the in-flight frame
+    var inPayload = false;
+    var frames = 0;
+    while (true) {
+      final read = await raf.readInto(buf, 0, chunkSize);
+      if (read <= 0) break;
+      var i = 0;
+      while (i < read) {
+        if (inPayload) {
+          final avail = read - i;
+          final skip = remaining < avail ? remaining : avail;
+          i += skip;
+          remaining -= skip;
+          if (remaining == 0) {
+            frames++; // full payload consumed — frame is complete
+            inPayload = false;
+          }
+        } else {
+          header[headerHave++] = buf[i++];
+          if (headerHave == 4) {
+            headerHave = 0;
+            final len = header[0] | (header[1] << 8) | (header[2] << 16) | (header[3] << 24);
+            if (len <= 0) return frames; // invalid/zero length — stop
+            remaining = len;
+            inPayload = true;
+          }
+        }
+      }
+    }
+    return frames; // any in-flight (truncated) frame is intentionally not counted
+  } finally {
+    await raf.close();
   }
 }

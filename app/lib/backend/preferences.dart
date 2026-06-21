@@ -69,6 +69,18 @@ class SharedPreferencesUtil {
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
 
+  // Transcribe Later: pause capture (native writer drops packets, keeps the file
+  // open) so the user can mute a sensitive moment and resume the same recording.
+  bool get batchMuted => getBool('batchMuted');
+
+  set batchMuted(bool value) => saveBool('batchMuted', value);
+
+  // Transcribe Later: one-shot flag — when set, the native writer finalizes the
+  // current file and starts a fresh one (manual "New recording" cut), then clears it.
+  bool get batchCutRequested => getBool('batchCutRequested');
+
+  set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 

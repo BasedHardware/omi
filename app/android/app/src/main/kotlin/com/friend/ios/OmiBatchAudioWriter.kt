@@ -91,6 +91,18 @@ class OmiBatchAudioWriter(private val context: Context) {
         if (!config.deviceId.equals(address, ignoreCase = true)) return
         if (!matches(config, serviceUuid, characteristicUuid)) return
 
+        // Muted: drop the packet but keep the open file's gap timer alive so unmute
+        // resumes the same recording instead of starting a new one.
+        if (boolPref("batchMuted", false)) {
+            synchronized(lock) { if (raf != null) lastFrameMs = System.currentTimeMillis() }
+            return
+        }
+        // Manual "New recording": finalize the current file now; this packet opens a fresh one.
+        if (boolPref("batchCutRequested", false)) {
+            prefs().edit().putBoolean("flutter.batchCutRequested", false).apply()
+            closeCurrent("manual")
+        }
+
         val frames = transformFrames(config.deviceType, value)
         if (frames.isEmpty()) return
 

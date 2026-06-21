@@ -3089,5 +3089,8 @@
     "transcribeLaterTitle": "Transcrire plus tard",
     "transcribeLaterDescription": "Enregistrez l'audio maintenant et transcrivez-le à la demande plutôt qu'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.",
     "transcribeLaterNote": "Compatible avec les appareils Omi pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
-    "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement."
+    "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement.",
+    "unmute": "Réactiver le son",
+    "newRecording": "Nouvel enregistrement",
+    "transcribeLaterPaused": "En pause — aucun audio n'est enregistré"
 }

@@ -9343,4 +9343,13 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.';
+
+  @override
+  String get unmute => 'Slå på ljud';
+
+  @override
+  String get newRecording => 'Ny inspelning';
+
+  @override
+  String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
 }

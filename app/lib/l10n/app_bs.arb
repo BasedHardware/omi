@@ -10632,5 +10632,8 @@
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.",
     "transcribeLaterNote": "Za sada radi s Omi uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
-    "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti."
+    "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
+    "unmute": "Uključi zvuk",
+    "newRecording": "Novi snimak",
+    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima"
 }

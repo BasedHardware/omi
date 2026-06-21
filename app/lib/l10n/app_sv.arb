@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Transkribera senare",
     "transcribeLaterDescription": "Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.",
     "transcribeLaterNote": "Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
-    "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt."
+    "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.",
+    "unmute": "Slå på ljud",
+    "newRecording": "Ny inspelning",
+    "transcribeLaterPaused": "Pausad – inget ljud spelas in"
 }

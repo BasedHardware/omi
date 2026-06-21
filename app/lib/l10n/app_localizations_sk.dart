@@ -9330,4 +9330,13 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať.';
+
+  @override
+  String get unmute => 'Zrušiť stlmenie';
+
+  @override
+  String get newRecording => 'Nová nahrávka';
+
+  @override
+  String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
 }

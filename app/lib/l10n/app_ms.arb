@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Transkrip Kemudian",
     "transcribeLaterDescription": "Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.",
     "transcribeLaterNote": "Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.",
-    "transcribeLaterStorageFull": "Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik."
+    "transcribeLaterStorageFull": "Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.",
+    "unmute": "Nyahsenyap",
+    "newRecording": "Rakaman baharu",
+    "transcribeLaterPaused": "Dijeda — audio tidak dirakam"
 }

@@ -9378,4 +9378,13 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.';
+
+  @override
+  String get unmute => 'Némítás feloldása';
+
+  @override
+  String get newRecording => 'Új felvétel';
+
+  @override
+  String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 }

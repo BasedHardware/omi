@@ -3059,5 +3059,8 @@
     "transcribeLaterTitle": "Phiên âm sau",
     "transcribeLaterDescription": "Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.",
     "transcribeLaterNote": "Hiện chỉ hoạt động với thiết bị Omi. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
-    "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục."
+    "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.",
+    "unmute": "Bật tiếng",
+    "newRecording": "Ghi âm mới",
+    "transcribeLaterPaused": "Đã tạm dừng — không ghi lại âm thanh"
 }

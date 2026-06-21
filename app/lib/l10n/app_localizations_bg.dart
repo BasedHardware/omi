@@ -9373,4 +9373,13 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Паметта на телефона ви е на изчерпване, затова записването е спряно на пауза. Освободете място или качете записите си и то ще се възобнови автоматично.';
+
+  @override
+  String get unmute => 'Включи звука';
+
+  @override
+  String get newRecording => 'Нов запис';
+
+  @override
+  String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 }

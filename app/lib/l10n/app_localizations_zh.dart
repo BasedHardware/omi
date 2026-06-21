@@ -9169,4 +9169,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
+
+  @override
+  String get unmute => '取消静音';
+
+  @override
+  String get newRecording => '新建录音';
+
+  @override
+  String get transcribeLaterPaused => '已暂停 — 当前未在录音';
 }

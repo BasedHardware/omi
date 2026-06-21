@@ -3055,5 +3055,8 @@
     "transcribeLaterTitle": "Transcribir después",
     "transcribeLaterDescription": "Graba el audio ahora y transcríbelo cuando quieras, en lugar de en directo. Las grabaciones se guardan en tu teléfono y luego las subes para crear conversaciones.",
     "transcribeLaterNote": "De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.",
-    "transcribeLaterStorageFull": "Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente."
+    "transcribeLaterStorageFull": "Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente.",
+    "unmute": "Reactivar audio",
+    "newRecording": "Nueva grabación",
+    "transcribeLaterPaused": "En pausa: no se está grabando audio"
 }

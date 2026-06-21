@@ -9371,4 +9371,13 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'На телефоне заканчивается память, поэтому запись приостановлена. Освободите место или загрузите записи — и она возобновится автоматически.';
+
+  @override
+  String get unmute => 'Включить звук';
+
+  @override
+  String get newRecording => 'Новая запись';
+
+  @override
+  String get transcribeLaterPaused => 'Пауза — аудио не записывается';
 }

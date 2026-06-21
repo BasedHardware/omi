@@ -9387,4 +9387,13 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, ఆ తర్వాత అది దానంతటదే మళ్లీ ప్రారంభమవుతుంది.';
+
+  @override
+  String get unmute => 'అన్‌మ్యూట్ చేయి';
+
+  @override
+  String get newRecording => 'కొత్త రికార్డింగ్';
+
+  @override
+  String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
 }

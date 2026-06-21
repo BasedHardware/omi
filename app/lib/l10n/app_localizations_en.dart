@@ -9333,4 +9333,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+
+  @override
+  String get unmute => 'Unmute';
+
+  @override
+  String get newRecording => 'New recording';
+
+  @override
+  String get transcribeLaterPaused => 'Paused — audio isn\'t being recorded';
 }

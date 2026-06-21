@@ -9370,4 +9370,13 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonu ponestaje prostora pa je snimanje pauzirano. Oslobodi prostor ili prenesi snimke i snimanje će se automatski nastaviti.';
+
+  @override
+  String get unmute => 'Uključi zvuk';
+
+  @override
+  String get newRecording => 'Novo snimanje';
+
+  @override
+  String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 }

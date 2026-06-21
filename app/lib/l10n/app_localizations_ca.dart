@@ -9392,4 +9392,13 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'El telèfon té poc espai d\'emmagatzematge i la gravació s\'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.';
+
+  @override
+  String get unmute => 'Activar so';
+
+  @override
+  String get newRecording => 'Nou enregistrament';
+
+  @override
+  String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
 }

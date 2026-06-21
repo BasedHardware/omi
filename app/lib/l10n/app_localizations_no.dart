@@ -9335,4 +9335,13 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.';
+
+  @override
+  String get unmute => 'Slå på lyd';
+
+  @override
+  String get newRecording => 'Nytt opptak';
+
+  @override
+  String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 }

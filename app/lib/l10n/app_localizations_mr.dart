@@ -9348,4 +9348,13 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.';
+
+  @override
+  String get unmute => 'आवाज सुरू करा';
+
+  @override
+  String get newRecording => 'नवीन रेकॉर्डिंग';
+
+  @override
+  String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
 }

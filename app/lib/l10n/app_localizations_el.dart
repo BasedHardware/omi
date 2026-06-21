@@ -9404,4 +9404,13 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Ο αποθηκευτικός χώρος του τηλεφώνου σας τελειώνει, γι\' αυτό η ηχογράφηση είναι σε παύση. Ελευθερώστε χώρο ή ανεβάστε τις ηχογραφήσεις σας και θα συνεχιστεί αυτόματα.';
+
+  @override
+  String get unmute => 'Άρση σίγασης';
+
+  @override
+  String get newRecording => 'Νέα εγγραφή';
+
+  @override
+  String get transcribeLaterPaused => 'Σε παύση — δεν γίνεται εγγραφή ήχου';
 }

@@ -17402,6 +17402,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
   String get transcribeLaterStorageFull;
+
+  /// Button to resume Transcribe Later capture after muting
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get unmute;
+
+  /// Button to finalize the current recording and start a new one
+  ///
+  /// In en, this message translates to:
+  /// **'New recording'**
+  String get newRecording;
+
+  /// Capture-card subtitle shown while Transcribe Later capture is muted/paused
+  ///
+  /// In en, this message translates to:
+  /// **'Paused — audio isn\'t being recorded'**
+  String get transcribeLaterPaused;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

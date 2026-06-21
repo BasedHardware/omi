@@ -9422,4 +9422,13 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'L\'espace de stockage de votre téléphone est presque plein : l\'enregistrement est donc en pause. Libérez de l\'espace ou importez vos enregistrements pour qu\'il reprenne automatiquement.';
+
+  @override
+  String get unmute => 'Réactiver le son';
+
+  @override
+  String get newRecording => 'Nouvel enregistrement';
+
+  @override
+  String get transcribeLaterPaused => 'En pause — aucun audio n\'est enregistré';
 }

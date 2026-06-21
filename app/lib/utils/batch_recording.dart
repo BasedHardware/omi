@@ -18,11 +18,13 @@ class BatchRecordingInfo {
   final int timerStart;
   final BleAudioCodec codec;
   final int frameSize;
+  final int sampleRate;
 
   const BatchRecordingInfo({
     required this.timerStart,
     required this.codec,
     required this.frameSize,
+    this.sampleRate = 16000,
   });
 
   /// Returns null if [name] is not a parseable, finalized batch `.bin` filename
@@ -38,6 +40,9 @@ class BatchRecordingInfo {
     final fsMatch = RegExp(r'_fs(\d+)').firstMatch(name);
     final frameSize = fsMatch != null ? int.parse(fsMatch.group(1)!) : 160;
 
+    final srMatch = RegExp(r'_(\d+)_\d+_fs\d+_\d+\.bin$').firstMatch(name);
+    final sampleRate = srMatch != null ? int.parse(srMatch.group(1)!) : 16000;
+
     final BleAudioCodec codec;
     if (name.contains('_pcm16_')) {
       codec = BleAudioCodec.pcm16;
@@ -47,7 +52,16 @@ class BatchRecordingInfo {
       codec = frameSize == 320 ? BleAudioCodec.opusFS320 : BleAudioCodec.opus;
     }
 
-    return BatchRecordingInfo(timerStart: timerStart, codec: codec, frameSize: frameSize);
+    return BatchRecordingInfo(timerStart: timerStart, codec: codec, frameSize: frameSize, sampleRate: sampleRate);
+  }
+
+  /// Exact duration in seconds from the decoded frame count. Each length-prefixed
+  /// frame decodes to [frameSize] samples (the backend uses the same), so the audio
+  /// duration is `frames * frameSize / sampleRate` — independent of opus VBR bitrate.
+  /// Preferred over [estimateSeconds], which only sees the byte size.
+  int secondsFromFrameCount(int frames) {
+    if (sampleRate <= 0 || frameSize <= 0) return 1;
+    return (frames * frameSize / sampleRate).round().clamp(1, 24 * 3600);
   }
 
   /// Rough duration in seconds from file size — for display/stats only. The

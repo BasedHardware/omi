@@ -3023,5 +3023,8 @@
     "transcribeLaterTitle": "Transcriure més tard",
     "transcribeLaterDescription": "Grava l'àudio ara i transcriu-lo quan vulguis en comptes de fer-ho en directe. Les gravacions es desen al telèfon i, després, les puges per crear converses.",
     "transcribeLaterNote": "De moment, funciona amb dispositius Omi. L'àudio es queda al teu telèfon fins que decideixis pujar-lo.",
-    "transcribeLaterStorageFull": "El telèfon té poc espai d'emmagatzematge i la gravació s'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament."
+    "transcribeLaterStorageFull": "El telèfon té poc espai d'emmagatzematge i la gravació s'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.",
+    "unmute": "Activar so",
+    "newRecording": "Nou enregistrament",
+    "transcribeLaterPaused": "En pausa — no s'està gravant àudio"
 }

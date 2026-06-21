@@ -9404,4 +9404,13 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.';
+
+  @override
+  String get unmute => 'ஒலியை இயக்கு';
+
+  @override
+  String get newRecording => 'புதிய பதிவு';
+
+  @override
+  String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
 }

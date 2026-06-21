@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Later transcriberen",
     "transcribeLaterDescription": "Neem nu audio op en transcribeer die later wanneer je wilt, in plaats van live. Opnames worden op je telefoon bewaard, daarna upload je ze om gesprekken te maken.",
     "transcribeLaterNote": "Werkt voorlopig met Omi-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.",
-    "transcribeLaterStorageFull": "Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder."
+    "transcribeLaterStorageFull": "Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.",
+    "unmute": "Dempen opheffen",
+    "newRecording": "Nieuwe opname",
+    "transcribeLaterPaused": "Gepauzeerd — audio wordt niet opgenomen"
 }

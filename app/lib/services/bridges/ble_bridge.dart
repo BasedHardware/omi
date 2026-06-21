@@ -30,7 +30,14 @@ class BleBridge implements BleFlutterApi {
   void Function(String state)? bluetoothStateChangedCallback;
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
-  void Function(String fileName)? batchRecordingFinalizedCallback;
+
+  final List<void Function(String fileName)> _batchRecordingFinalizedListeners = [];
+
+  void addBatchRecordingFinalizedListener(void Function(String fileName) cb) =>
+      _batchRecordingFinalizedListeners.add(cb);
+
+  void removeBatchRecordingFinalizedListener(void Function(String fileName) cb) =>
+      _batchRecordingFinalizedListeners.remove(cb);
 
   void registerPeripheral({
     required String peripheralUuid,
@@ -105,6 +112,8 @@ class BleBridge implements BleFlutterApi {
 
   @override
   void onBatchRecordingFinalized(String fileName) {
-    batchRecordingFinalizedCallback?.call(fileName);
+    for (final cb in List.of(_batchRecordingFinalizedListeners)) {
+      cb(fileName);
+    }
   }
 }

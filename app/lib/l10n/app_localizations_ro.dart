@@ -9383,4 +9383,13 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.';
+
+  @override
+  String get unmute => 'Reactivează sunetul';
+
+  @override
+  String get newRecording => 'Înregistrare nouă';
+
+  @override
+  String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 }

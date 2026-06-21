@@ -9345,4 +9345,13 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।';
+
+  @override
+  String get unmute => 'আনমিউট করুন';
+
+  @override
+  String get newRecording => 'নতুন রেকর্ডিং';
+
+  @override
+  String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 }

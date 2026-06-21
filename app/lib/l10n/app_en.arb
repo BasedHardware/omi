@@ -11038,5 +11038,17 @@
     "transcribeLaterStorageFull": "Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.",
     "@transcribeLaterStorageFull": {
         "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
+    },
+    "unmute": "Unmute",
+    "@unmute": {
+        "description": "Button to resume Transcribe Later capture after muting"
+    },
+    "newRecording": "New recording",
+    "@newRecording": {
+        "description": "Button to finalize the current recording and start a new one"
+    },
+    "transcribeLaterPaused": "Paused — audio isn't being recorded",
+    "@transcribeLaterPaused": {
+        "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
     }
 }

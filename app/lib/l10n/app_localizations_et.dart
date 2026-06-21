@@ -9335,4 +9335,13 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.';
+
+  @override
+  String get unmute => 'Tühista vaigistus';
+
+  @override
+  String get newRecording => 'Uus salvestus';
+
+  @override
+  String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 }

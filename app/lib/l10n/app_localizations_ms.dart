@@ -9361,4 +9361,13 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
+
+  @override
+  String get unmute => 'Nyahsenyap';
+
+  @override
+  String get newRecording => 'Rakaman baharu';
+
+  @override
+  String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
 }

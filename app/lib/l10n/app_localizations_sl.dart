@@ -9365,4 +9365,13 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo.';
+
+  @override
+  String get unmute => 'Vklopi zvok';
+
+  @override
+  String get newRecording => 'Novo snemanje';
+
+  @override
+  String get transcribeLaterPaused => 'Premor – zvok se ne snema';
 }

@@ -9287,4 +9287,13 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String get unmute => 'เปิดเสียง';
+
+  @override
+  String get newRecording => 'การบันทึกใหม่';
+
+  @override
+  String get transcribeLaterPaused => 'หยุดชั่วคราว — ไม่ได้กำลังบันทึกเสียง';
 }

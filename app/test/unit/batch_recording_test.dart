@@ -60,5 +60,29 @@ void main() {
       expect(opus.estimateSeconds(240000), inInclusiveRange(90, 110));
       expect(opus.estimateSeconds(0), 1); // clamped to >= 1
     });
+
+    test('parses sample rate', () {
+      expect(BatchRecordingInfo.fromFileName('audio_omi_opus_16000_1_fs160_1735689600.bin')!.sampleRate, 16000);
+      expect(BatchRecordingInfo.fromFileName('audio_omi_pcm8_8000_1_fs160_1735689600.bin')!.sampleRate, 8000);
+    });
+  });
+
+  group('BatchRecordingInfo.secondsFromFrameCount', () {
+    test('exact duration is frames * frameSize / sampleRate (opus fs160 = 10ms/frame)', () {
+      final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_16000_1_fs160_1735689600.bin')!;
+      // A 15-min file capped at 900s of continuous 10ms frames = 90000 frames.
+      expect(info.secondsFromFrameCount(90000), 900);
+      expect(info.secondsFromFrameCount(6000), 60);
+    });
+
+    test('fs320 frames are 20ms each', () {
+      final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_fs320_16000_1_fs320_1735689600.bin')!;
+      expect(info.secondsFromFrameCount(45000), 900);
+    });
+
+    test('is bounded to >= 1 second', () {
+      final info = BatchRecordingInfo.fromFileName('audio_omibatch_opus_16000_1_fs160_1735689600.bin')!;
+      expect(info.secondsFromFrameCount(0), 1);
+    });
   });
 }

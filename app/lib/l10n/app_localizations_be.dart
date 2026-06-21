@@ -9366,4 +9366,13 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.';
+
+  @override
+  String get unmute => 'Уключыць гук';
+
+  @override
+  String get newRecording => 'Новы запіс';
+
+  @override
+  String get transcribeLaterPaused => 'Прыпынена — аўдыя не запісваецца';
 }

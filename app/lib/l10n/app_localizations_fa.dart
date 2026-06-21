@@ -9340,4 +9340,13 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.';
+
+  @override
+  String get unmute => 'باصدا کردن';
+
+  @override
+  String get newRecording => 'ضبط جدید';
+
+  @override
+  String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
 }

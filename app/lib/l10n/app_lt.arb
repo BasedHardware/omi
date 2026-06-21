@@ -3054,5 +3054,8 @@
     "transcribeLaterTitle": "Transkribuoti vėliau",
     "transcribeLaterDescription": "Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.",
     "transcribeLaterNote": "Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
-    "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas."
+    "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
+    "unmute": "Įjungti garsą",
+    "newRecording": "Naujas įrašas",
+    "transcribeLaterPaused": "Pristabdyta — garsas neįrašomas"
 }

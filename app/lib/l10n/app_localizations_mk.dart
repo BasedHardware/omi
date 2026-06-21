@@ -9387,4 +9387,13 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.';
+
+  @override
+  String get unmute => 'Вклучи звук';
+
+  @override
+  String get newRecording => 'Ново снимање';
+
+  @override
+  String get transcribeLaterPaused => 'Паузирано — аудиото не се снима';
 }

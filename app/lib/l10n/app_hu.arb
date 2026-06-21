@@ -3150,5 +3150,8 @@
     "transcribeLaterTitle": "Átírás később",
     "transcribeLaterDescription": "Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.",
     "transcribeLaterNote": "Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.",
-    "transcribeLaterStorageFull": "Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik."
+    "transcribeLaterStorageFull": "Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.",
+    "unmute": "Némítás feloldása",
+    "newRecording": "Új felvétel",
+    "transcribeLaterPaused": "Szüneteltetve – nem rögzít hangot"
 }

@@ -221,6 +221,15 @@ class AudioPlayerUtils extends ChangeNotifier {
       }
     }
 
+    // Sharing reuses the already-decoded playback file (e.g. the one produced when
+    // the waveform loaded) instead of decoding the whole recording again.
+    if (forSharing) {
+      final playbackCached = _audioFileCache[wal.id];
+      if (playbackCached != null && File(playbackCached).existsSync()) {
+        return playbackCached;
+      }
+    }
+
     final audioFilePath = await _getAudioFilePath(wal);
     if (audioFilePath == null) return null;
 

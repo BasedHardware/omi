@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -168,6 +169,7 @@ class CaptureProvider extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
     _startAudioInterruptionListener();
+    BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
   }
 
   // iOS phone-call interruption events from AudioInterruptionManager.swift.
@@ -344,6 +346,56 @@ class CaptureProvider extends ChangeNotifier
   int _offlineSessionStartSeconds = 0;
   int? get offlineRecordingStartedAt => _offlineSessionStartSeconds == 0 ? null : _offlineSessionStartSeconds;
 
+  /// Wall-clock seconds when the current recording was muted, or null when not
+  /// muted — the "captured so far" timer freezes at this point.
+  int? _offlineMuteStartedAt;
+
+  bool get offlineMuted => SharedPreferencesUtil().batchMuted;
+
+  /// Elapsed seconds of the *current* recording for the capture-card timer:
+  /// frozen while muted, and reset on each cut (manual or the 15-min rotation).
+  int? get offlineRecordingElapsedSeconds {
+    if (_offlineSessionStartSeconds == 0) return null;
+    final end = _offlineMuteStartedAt ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    final secs = end - _offlineSessionStartSeconds;
+    return secs < 0 ? 0 : secs;
+  }
+
+  int get _nowSeconds => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  /// Mute/unmute Transcribe Later capture. The native writer drops packets while
+  /// muted and resumes into the same recording; the card timer freezes meanwhile.
+  void toggleOfflineMute() {
+    if (SharedPreferencesUtil().batchMuted) {
+      if (_offlineMuteStartedAt != null) {
+        _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
+        _offlineMuteStartedAt = null;
+      }
+      SharedPreferencesUtil().batchMuted = false;
+    } else {
+      _offlineMuteStartedAt = _nowSeconds;
+      SharedPreferencesUtil().batchMuted = true;
+    }
+    notifyListeners();
+  }
+
+  /// Manually finalize the current recording and start a fresh one. The native
+  /// writer cuts on the next packet; the timer resets immediately for feedback.
+  void startNewOfflineRecording() {
+    SharedPreferencesUtil().batchCutRequested = true;
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = null;
+    notifyListeners();
+  }
+
+  void _onOfflineRecordingFinalized(String _) {
+    if (_offlineSessionStartSeconds == 0) return;
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = SharedPreferencesUtil().batchMuted ? _nowSeconds : null;
+    notifyListeners();
+  }
+
   bool _orphanRecoveryDone = false;
 
   /// Preserved session start for auto-sync after socket-driven conversation completion.
@@ -454,7 +506,7 @@ class CaptureProvider extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
-    if (device == null) _offlineSessionStartSeconds = 0; // offline session ended
+    if (device == null) _endOfflineSession();
     notifyListeners();
   }
 
@@ -471,8 +523,15 @@ class CaptureProvider extends ChangeNotifier
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
-    _offlineSessionStartSeconds = 0;
+    _endOfflineSession();
     notifyListeners();
+  }
+
+  void _endOfflineSession() {
+    _offlineSessionStartSeconds = 0;
+    _offlineMuteStartedAt = null;
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
   }
 
   Future<void> onRecordProfileSettingChanged() async {
@@ -937,6 +996,8 @@ class CaptureProvider extends ChangeNotifier
     // Update state
     if (SharedPreferencesUtil().batchModeEnabled && _offlineSessionStartSeconds == 0) {
       _offlineSessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      _offlineMuteStartedAt = null;
+      if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
     }
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
@@ -1144,6 +1205,7 @@ class CaptureProvider extends ChangeNotifier
     _metricsTimer?.cancel();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
+    BleBridge.instance.removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
 
     super.dispose();
   }

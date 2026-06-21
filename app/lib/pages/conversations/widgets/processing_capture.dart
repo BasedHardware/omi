@@ -75,10 +75,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
         return GestureDetector(
           onTap: () async {
-            // Offline/batch mode has no live transcript — tapping opens an explainer
-            // instead of the (empty) capturing page.
+            // Offline/batch mode has no live transcript — the card is informational,
+            // so swallow taps instead of opening the (empty) capturing page.
             if (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice) {
-              _showOfflineModeInfoSheet(context);
               return;
             }
             final isCaptureActive = provider.recordingState == RecordingState.record ||
@@ -521,16 +520,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// saving regardless of the Dart stream). Shows a live "captured so far" timer
   /// for the current session. Tapping opens [_showOfflineModeInfoSheet].
   Widget _buildBatchRecordingUI(CaptureProvider provider) {
-    final startedAt = provider.offlineRecordingStartedAt;
+    final muted = provider.offlineMuted;
+    final elapsed = provider.offlineRecordingElapsedSeconds;
     String? elapsedLabel;
-    if (startedAt != null) {
-      final secs = (DateTime.now().millisecondsSinceEpoch ~/ 1000) - startedAt;
-      if (secs >= 0) {
-        final m = secs ~/ 60;
-        final s = secs % 60;
-        elapsedLabel = '${m}m ${s.toString().padLeft(2, '0')}s';
-      }
+    if (elapsed != null) {
+      elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
+    final dotColor = muted ? Colors.grey.shade600 : const Color(0xFFFE5D50);
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 6),
       child: Column(
@@ -541,29 +537,27 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.withValues(alpha: 0.18),
+                  color: const Color(0xFF35343B),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.cloud_off_rounded, size: 14, color: Colors.deepPurpleAccent),
-                    const SizedBox(width: 6),
-                    Text(
-                      context.l10n.transcribeLaterTitle,
-                      style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 8),
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: const BoxDecoration(color: Colors.deepPurpleAccent, shape: BoxShape.circle),
+                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
+                      style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
               ),
               const Spacer(),
-              if (elapsedLabel != null) ...[
+              if (elapsedLabel != null)
                 Text(
                   elapsedLabel,
                   style: const TextStyle(
@@ -573,70 +567,65 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
-                const SizedBox(width: 10),
-              ],
-              Icon(Icons.info_outline, size: 18, color: Colors.grey.shade500),
             ],
           ),
           const SizedBox(height: 10),
           Text(
-            context.l10n.transcribeLaterNote,
+            muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote,
             style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildOfflineControl(
+                icon: muted ? Icons.mic_none_rounded : Icons.mic_off_outlined,
+                label: muted ? context.l10n.unmute : context.l10n.mute,
+                primary: false,
+                onTap: () => provider.toggleOfflineMute(),
+              ),
+              const SizedBox(width: 10),
+              _buildOfflineControl(
+                icon: Icons.fiber_new_rounded,
+                label: context.l10n.newRecording,
+                primary: true,
+                onTap: () => provider.startNewOfflineRecording(),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  void _showOfflineModeInfoSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + MediaQuery.of(ctx).viewInsets.bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildOfflineControl({
+    required IconData icon,
+    required String label,
+    required bool primary,
+    required VoidCallback onTap,
+  }) {
+    final color = primary ? Colors.white : const Color(0xFFC9CBCF);
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: primary ? const Color(0xFF35343B) : const Color(0xFF2A2A2E),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.cloud_off_rounded, color: Colors.deepPurpleAccent, size: 22),
-                  const SizedBox(width: 10),
-                  Text(
-                    context.l10n.transcribeLaterTitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                context.l10n.transcribeLaterDescription,
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.4),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text(
-                    context.l10n.close,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

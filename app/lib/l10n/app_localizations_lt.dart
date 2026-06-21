@@ -9352,4 +9352,13 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.';
+
+  @override
+  String get unmute => 'Įjungti garsą';
+
+  @override
+  String get newRecording => 'Naujas įrašas';
+
+  @override
+  String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 }
