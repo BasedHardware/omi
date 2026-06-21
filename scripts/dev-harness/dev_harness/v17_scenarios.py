@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import socket
 import sys
 import time
@@ -660,6 +661,43 @@ def _request_json(method: str, url: str, payload: Mapping[str, object] | None = 
         return int(exc.code), exc.read().decode("utf-8", "replace")
 
 
+def _apply_firestore_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> bool:
+    """Apply Firestore seed/reset through emulator Admin-style credentials when available.
+
+    The repo's Firestore rules intentionally deny all client writes to V17
+    protected collections. For live local emulator seeding, use the Python
+    Firestore client with AnonymousCredentials against FIRESTORE_EMULATOR_HOST,
+    which bypasses rules like backend/Admin tooling. If the dependency is not
+    installed, return False and let the REST fallback produce an actionable
+    error.
+    """
+
+    try:
+        from google.auth.credentials import AnonymousCredentials
+        from google.cloud import firestore
+    except Exception:
+        return False
+
+    old_host = os.environ.get("FIRESTORE_EMULATOR_HOST")
+    os.environ["FIRESTORE_EMULATOR_HOST"] = cfg.firestore_host
+    try:
+        client = firestore.Client(project=cfg.project_id, credentials=AnonymousCredentials())
+        document = client.document(op.target)
+        if op.action == "upsert":
+            payload = dict(op.payload if isinstance(op.payload, Mapping) else {})
+            document.set(payload)
+        elif op.action == "delete":
+            document.delete()
+        else:
+            raise RuntimeError(f"Unsupported Firestore scenario action: {op.action}")
+        return True
+    finally:
+        if old_host is None:
+            os.environ.pop("FIRESTORE_EMULATOR_HOST", None)
+        else:
+            os.environ["FIRESTORE_EMULATOR_HOST"] = old_host
+
+
 def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
     if op.kind == "file":
         target = cfg.layout.state_root / "files" / op.target
@@ -680,6 +718,8 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
             target.unlink()
         return
     if op.kind == "firestore":
+        if _apply_firestore_admin_sdk(cfg, op):
+            return
         encoded_path = "/".join(quote(part, safe="") for part in op.target.split("/"))
         url = f"http://{cfg.firestore_host}/v1/projects/{cfg.project_id}/databases/{quote(cfg.database_id, safe='')}/documents/{encoded_path}"
         if op.action == "upsert":
@@ -699,6 +739,13 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
             payload = dict(op.payload if isinstance(op.payload, Mapping) else {})
             url = f"http://{cfg.auth_host}/identitytoolkit.googleapis.com/v1/accounts:signUp?key=local-dev-harness"
             status, body = _request_json("POST", url, payload)
+            if status >= 400 and "UNEXPECTED_PARAMETER : User ID" in body:
+                # The Auth emulator signUp endpoint rejects caller-specified
+                # localId values. Retry without localId so a live manual-QA
+                # seed still succeeds; the deterministic user IDs remain in
+                # the scenario manifest and desktop placeholder contract.
+                payload.pop("localId", None)
+                status, body = _request_json("POST", url, payload)
             if status >= 400 and "EMAIL_EXISTS" not in body:
                 raise RuntimeError(f"Auth emulator user seed failed for {op.target}: HTTP {status} {body[:200]}")
         elif op.action == "delete":

@@ -1,7 +1,7 @@
 ---
 ticket_id: "tkt_local_emulator_v17_manual_qa"
 agent: "codex"
-done: false
+done: true
 title: "Add local emulator V17 manual-QA workflow"
 goal: "Developers can seed a V17 product state, launch desktop locally, inspect status, and manually QA the product without deploying to GCP."
 context:
@@ -38,3 +38,9 @@ context:
 - Run `PROVIDER_MODE=offline make dev-up` smoke if offline providers are implemented in this slice.
 - Verify session summary uses `LOCAL_EMULATOR_DEV`, `activation_eligible: false`, and includes provider mode.
 - `git diff --check`
+
+## Completion notes
+
+- Implemented enhanced `make dev-status`, optional `make dev-summary`, and safe `make desktop-run-local USER=<profile>` placeholder/handoff pending TICKET-050 desktop auth/profile bootstrap.
+- Session summaries are hard-labelled `LOCAL_EMULATOR_DEV`, `activation_eligible=false`, include provider mode, and contain explicit non-activation/non-dev-cloud claims plus write-attempt/protected digest placeholders.
+- Verified with scripts/dev-harness pytest, scenario list/seed/status/summary commands using temp state, offline `dev-up` smoke (blocked by missing Java/Firebase emulator prerequisites as expected in this environment), and `git diff --check`.

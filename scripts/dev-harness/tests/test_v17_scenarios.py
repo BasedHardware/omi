@@ -104,6 +104,32 @@ def test_fixtures_cannot_choose_evidence_labels() -> None:
         assert scenario.local_flags["activation_eligible"] is False
 
 
+def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    env = _env(tmp_path)
+    cfg = config.load_config(REPO_ROOT, env=env, create_layout=True)
+    calls: list[tuple[str, str, dict[str, object] | None]] = []
+
+    def fake_request(method: str, url: str, payload: dict[str, object] | None = None) -> tuple[int, str]:
+        calls.append((method, url, dict(payload) if payload is not None else None))
+        if len(calls) == 1:
+            return 400, 'UNEXPECTED_PARAMETER : User ID'
+        return 200, '{}'
+
+    monkeypatch.setattr(v17_scenarios, '_request_json', fake_request)
+    op = v17_scenarios.SeedOperation(
+        kind='auth',
+        action='upsert',
+        target='alice',
+        payload={'localId': 'alice', 'email': 'alice@local.omi.invalid', 'password': 'local-test'},
+    )
+
+    v17_scenarios._apply_operation(cfg, op)
+
+    assert len(calls) == 2
+    assert calls[0][2] and calls[0][2].get('localId') == 'alice'
+    assert calls[1][2] and 'localId' not in calls[1][2]
+
+
 def test_entrypoint_seed_dry_run_outputs_manifest(tmp_path: Path) -> None:
     env = _env(tmp_path)
     result = subprocess.run(

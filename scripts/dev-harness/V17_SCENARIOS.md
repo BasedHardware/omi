@@ -15,7 +15,12 @@ Commands:
 ```bash
 make list-v17-scenarios
 make seed-v17-scenario SCENARIO=happy_path
+make dev-status
+make dev-summary
+make desktop-run-local USER=alice
 make reset-v17-scenario SCENARIO=happy_path
 ```
+
+`make dev-summary` writes an optional `LOCAL_EMULATOR_DEV` session summary with `activation_eligible=false`, provider mode, local endpoints, no prod/dev-cloud activation implication, and placeholder fields for write-attempt instrumentation plus protected-collection before/after digests when live emulator instrumentation is not available.
 
 If local Firestore/Auth emulators are not reachable, seed/reset commands still validate fixtures and emit a dry-run manifest under the sentinel-owned local harness state root. They do not fake live emulator writes.

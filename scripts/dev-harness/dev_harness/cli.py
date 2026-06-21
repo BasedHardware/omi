@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import socket
@@ -45,6 +46,11 @@ def _load_json(path: Path, default: dict[str, object]) -> dict[str, object]:
 def _write_json(path: Path, data: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _json_digest(data: object) -> str:
+    payload = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _process_records(cfg: config.HarnessConfig) -> list[dict[str, object]]:
@@ -165,6 +171,116 @@ def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPrefli
     for line in providers.status_lines(report):
         print(f"  {line}")
     return report
+
+
+def _git_metadata(repo_root: Path) -> dict[str, object]:
+    def run_git(args: list[str]) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo_root, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5
+        )
+        return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+    return {"commit": run_git(["rev-parse", "HEAD"]), "dirty": bool(run_git(["status", "--porcelain"]))}
+
+
+def _current_scenario_manifest(cfg: config.HarnessConfig) -> dict[str, object] | None:
+    current = cfg.layout.state_root / "manifests" / "v17-scenario-current.json"
+    if current.is_file():
+        data = _load_json(current, {})
+        if data:
+            return data
+    manifests = sorted((cfg.layout.state_root / "manifests").glob("v17-scenario-*-seed.json"))
+    if not manifests:
+        return None
+    latest = max(manifests, key=lambda path: path.stat().st_mtime)
+    return _load_json(latest, {})
+
+
+def _scenario_users_from_seed_manifest(cfg: config.HarnessConfig) -> list[str]:
+    manifests = sorted((cfg.layout.state_root / "manifests").glob("v17-scenario-*-seed.json"))
+    if not manifests:
+        return []
+    latest = max(manifests, key=lambda path: path.stat().st_mtime)
+    data = _load_json(latest, {})
+    operations = data.get("operations", [])
+    if not isinstance(operations, list):
+        return []
+    users = [str(op.get("target")) for op in operations if isinstance(op, dict) and op.get("kind") == "auth" and op.get("action") == "upsert"]
+    return sorted(set(users))
+
+
+def _summary_path(cfg: config.HarnessConfig) -> Path:
+    return cfg.layout.reports_dir / "local-emulator-v17-session-summary.json"
+
+
+def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.ProviderPreflight) -> dict[str, object]:
+    scenario = _current_scenario_manifest(cfg) or {}
+    config_digest = _load_json(cfg.layout.config_digest_path, {})
+    endpoints = {
+        "firestore": cfg.firestore_host,
+        "firebase_auth": cfg.auth_host,
+        "redis": f"{cfg.redis_host}:{cfg.redis_port}",
+        "backend": cfg.backend_url,
+    }
+    return {
+        "schema_version": 1,
+        "evidence_class": "LOCAL_EMULATOR_DEV",
+        "activation_eligible": False,
+        "watermark": "NOT_ACTIVATION_EVIDENCE",
+        "generated_at": _now(),
+        "instance": cfg.instance,
+        "state_root": str(cfg.layout.state_root),
+        "firebase_project_id": cfg.project_id,
+        "firestore_database_id": cfg.database_id,
+        "provider_mode": cfg.provider_mode,
+        "enabled_external_providers": list(provider_report.enabled_external_providers),
+        "credential_fingerprints": dict(provider_report.fingerprints),
+        "offline_fake_sources": dict(provider_report.offline_fake_sources),
+        "local_endpoints": endpoints,
+        "scenario_id": scenario.get("scenario_id"),
+        "scenario_digest": scenario.get("scenario_digest"),
+        "selected_user": scenario.get("selected_user"),
+        "seeded_users": _scenario_users_from_seed_manifest(cfg),
+        "git": _git_metadata(cfg.repo_root),
+        "config_digest": _json_digest(config_digest) if config_digest else None,
+        "session_budget": {
+            "session_usd": providers.DEFAULT_SESSION_BUDGET_USD,
+            "day_usd": providers.DEFAULT_DAILY_BUDGET_USD,
+            "concurrency": providers.DEFAULT_MAX_CONCURRENCY,
+        },
+        "external_provider_call_summary": {
+            "instrumented": False,
+            "placeholder": "Provider broker policy is present; live per-call accounting is not wired in this manual-QA slice.",
+        },
+        "v17_write_attempt_instrumentation": {
+            "instrumented": False,
+            "placeholder": "Firestore adapter/client-boundary write-attempt counters are reserved for the live desktop/backend instrumentation slice.",
+            "attempted_write_count": None,
+            "blocked_write_count": None,
+        },
+        "protected_state_digest": {
+            "computed": False,
+            "before_digest": None,
+            "after_digest": None,
+            "placeholder": "Protected-collection before/after digests are not computed unless a live emulator readback instrumenter is added.",
+        },
+        "manual_qa": {
+            "framing": "Exploratory product-use workflow; not a deterministic long-lived pass/fail product test suite.",
+            "status": "not_asserted_by_harness",
+            "notes": [],
+        },
+        "non_claims": [
+            "Not DEV_CLOUD_PROOF.",
+            "Not production, dev-cloud, IAM, deployed index, telemetry sink, rollback, or activation proof.",
+            "Does not imply prod/dev-cloud V17 activation eligibility.",
+        ],
+    }
+
+
+def write_session_summary(cfg: config.HarnessConfig, provider_report: providers.ProviderPreflight) -> Path:
+    path = _summary_path(cfg)
+    _write_json(path, build_session_summary(cfg, provider_report))
+    return path
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -341,14 +457,36 @@ def cmd_status(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=False)
     print("Omi local dev harness status")
     print_config(cfg)
-    print_provider_status(cfg)
+    provider_report = print_provider_status(cfg)
+    if cfg.provider_mode == "offline":
+        print("offline_hint: PROVIDER_MODE=offline active; external provider credentials are stripped from child processes")
+    else:
+        print("offline_hint: run with PROVIDER_MODE=offline for hermetic fake providers and no external provider credentials")
     if not cfg.layout.sentinel_path.is_file():
         print("sentinel: missing (run make dev-up or make dev-reset to initialize harness-owned state)")
     else:
         safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
         print("sentinel: ok")
+    scenario = _current_scenario_manifest(cfg)
+    print("\nV17 manual-QA state:")
+    if scenario:
+        print(f"  scenario_id: {scenario.get('scenario_id')}")
+        print(f"  scenario_digest: {scenario.get('scenario_digest')}")
+        print(f"  selected_user: {scenario.get('selected_user')}")
+        users = _scenario_users_from_seed_manifest(cfg)
+        print(f"  seeded_users: {', '.join(users) if users else 'unknown'}")
+    else:
+        print("  scenario_id: none (run make seed-v17-scenario SCENARIO=happy_path)")
+        print("  seeded_users: none")
+    print(f"  session_summary_path: {_summary_path(cfg)}")
+    if getattr(args, "write_summary", False):
+        path = write_session_summary(cfg, provider_report)
+        print(f"  session_summary_written: {path}")
     print("\nProcesses:")
-    for record in _process_records(cfg):
+    records = _process_records(cfg)
+    if not records:
+        print("  - none recorded")
+    for record in records:
         pid = int(record.get("pid", -1))
         alive = safety.process_exists(pid)
         health = "not checked"
@@ -357,6 +495,18 @@ def cmd_status(args: argparse.Namespace) -> int:
         if port:
             health = "port-open" if _port_open("127.0.0.1", port) else "port-closed"
         print(f"  - {service}: pid={pid} alive={alive} {health} log={record.get('log')}")
+    return 0
+
+
+def cmd_summary(args: argparse.Namespace) -> int:
+    cfg = config.load_config(_repo_root(), create_layout=False)
+    provider_report = providers.provider_preflight(cfg.repo_root)
+    if not cfg.layout.sentinel_path.is_file():
+        print("Cannot write session summary: harness sentinel is missing (run make dev-up or make dev-reset first)")
+        return 1
+    safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+    path = write_session_summary(cfg, provider_report)
+    print(path)
     return 0
 
 
@@ -430,11 +580,14 @@ def build_parser() -> argparse.ArgumentParser:
         "check": cmd_check,
         "up": cmd_up,
         "status": cmd_status,
+        "summary": cmd_summary,
         "down": cmd_down,
         "reset": cmd_reset,
         "logs": cmd_logs,
     }.items():
         command = sub.add_parser(name)
+        if name == "status":
+            command.add_argument("--write-summary", action="store_true", default=False)
         command.set_defaults(func=func)
     return parser
 

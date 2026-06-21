@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -63,3 +64,72 @@ def test_reset_command_is_idempotent_with_temp_state(tmp_path: Path) -> None:
     layout = safety.layout_for_instance(REPO_ROOT, "default", env)
     assert layout.sentinel_path.is_file()
     safety.read_and_validate_sentinel(layout.state_root, repo_root=REPO_ROOT, instance="default")
+
+
+def test_status_reports_seeded_scenario_and_summary_path(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["PROVIDER_MODE"] = "offline"
+    env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
+    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+
+    seed = subprocess.run(
+        [sys.executable, "scripts/dev-harness/seed-v17-scenario.py", "happy_path", "--dry-run"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    assert seed.returncode == 0, seed.stdout
+
+    result = subprocess.run(
+        [sys.executable, "-m", "dev_harness.cli", "status"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout
+    assert "scenario_id: happy_path" in result.stdout
+    assert "seeded_users: alice, bob, local_default_user" in result.stdout
+    assert "session_summary_path:" in result.stdout
+    assert "PROVIDER_MODE=offline active" in result.stdout
+
+
+def test_session_summary_is_local_emulator_non_activation(tmp_path: Path) -> None:
+    env = os.environ.copy()
+    env["PROVIDER_MODE"] = "offline"
+    env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
+    env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+
+    seed = subprocess.run(
+        [sys.executable, "scripts/dev-harness/seed-v17-scenario.py", "happy_path", "--dry-run"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    assert seed.returncode == 0, seed.stdout
+    summary = subprocess.run(
+        [sys.executable, "-m", "dev_harness.cli", "summary"],
+        cwd=REPO_ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    assert summary.returncode == 0, summary.stdout
+    path = Path(summary.stdout.strip())
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["evidence_class"] == "LOCAL_EMULATOR_DEV"
+    assert payload["activation_eligible"] is False
+    assert payload["provider_mode"] == "offline"
+    assert payload["v17_write_attempt_instrumentation"]["instrumented"] is False
+    assert "before_digest" in payload["protected_state_digest"]
+    assert any("Not DEV_CLOUD_PROOF" in item for item in payload["non_claims"])
