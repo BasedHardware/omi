@@ -73,17 +73,14 @@ def wav_bytes_to_waveform(wav_bytes: bytes):
         sw = wf.getsampwidth()
         pcm = wf.readframes(wf.getnframes())
 
-    if sw == 2:
-        dtype = np.int16
-        divisor = 32768.0
+    if sw == 1:
+        samples = np.frombuffer(pcm, dtype=np.uint8).astype(np.float32) / 128.0 - 1.0
+    elif sw == 2:
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
     elif sw == 4:
-        dtype = np.int32
-        divisor = 2147483648.0
+        samples = np.frombuffer(pcm, dtype=np.int32).astype(np.float32) / 2147483648.0
     else:
-        dtype = np.int16
-        divisor = 32768.0
-
-    samples = np.frombuffer(pcm, dtype=dtype).astype(np.float32) / divisor
+        raise ValueError(f"Unsupported WAV sample width: {sw} bytes")
     if nch > 1:
         samples = samples.reshape(-1, nch).mean(axis=1)
     waveform = _torch.from_numpy(samples).unsqueeze(0)

@@ -68,6 +68,28 @@ def _make_wav_bytes(duration_s=1.0, sample_rate=16000, channels=1):
     return buf.getvalue()
 
 
+def _make_wav_bytes_8bit(duration_s=1.0, sample_rate=16000):
+    n_samples = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(1)
+        wf.setframerate(sample_rate)
+        wf.writeframes(bytes([128] * n_samples))
+    return buf.getvalue()
+
+
+def _make_wav_bytes_32bit(duration_s=1.0, sample_rate=16000):
+    n_samples = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(4)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f'<{n_samples}i', *([100000] * n_samples)))
+    return buf.getvalue()
+
+
 class TestWavBytesToWaveform:
     def test_returns_waveform_and_sample_rate(self):
         wav = _make_wav_bytes(duration_s=0.5, sample_rate=16000)
@@ -80,6 +102,28 @@ class TestWavBytesToWaveform:
         waveform, sr = transcribe.wav_bytes_to_waveform(wav)
         assert sr == 16000
         assert waveform.shape == [1, 8000]
+
+    def test_8bit_unsigned_pcm(self):
+        wav = _make_wav_bytes_8bit(duration_s=0.5, sample_rate=16000)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_32bit_pcm(self):
+        wav = _make_wav_bytes_32bit(duration_s=0.5, sample_rate=16000)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_unsupported_width_raises(self):
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(3)
+            wf.setframerate(16000)
+            wf.writeframes(b'\x00\x00\x00' * 8000)
+        with pytest.raises(ValueError, match="Unsupported WAV sample width"):
+            transcribe.wav_bytes_to_waveform(buf.getvalue())
 
 
 class TestGetEmbedding:
