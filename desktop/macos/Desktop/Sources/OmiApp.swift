@@ -365,6 +365,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           let lower = message.lowercased()
           if lower.contains("api key expired") || lower.contains("renew the api key")
             || lower.contains("api_key_invalid")
+            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
+            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
+            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
+            // same flood (one bad key emits one event per task-extraction frame for every user).
+            || lower.contains("ai service authentication error")
           {
             return nil
           }
