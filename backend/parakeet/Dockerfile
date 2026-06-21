@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --no-deps --force-reinstall \
 # (wespeaker needs kaldi.fbank for mel filterbank features), then patch
 # __init__.py to skip the C extension loader and only expose compliance.
 RUN pip install --no-cache-dir --no-deps torchaudio && \
-    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\n' > \
+    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nfrom . import functional\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py && \
     printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\ndef fail_if_no_align(*a, **kw): pass\ndef fail_if_no_sox(*a, **kw): pass\ndef fail_if_no_ffmpeg(*a, **kw): pass\ndef fail_if_no_soundfile(*a, **kw): pass\ndef fail_if_no_kaldi(*a, **kw): pass\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py
@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir \
 
 # pyannote.audio + deps. Post-install: stub telemetry (needs opentelemetry
 # OTLP exporter which we don't need for inference-only usage).
-RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0" && \
+RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0,<4.0" && \
     pip install --no-cache-dir --no-deps \
     "pyannote.core" "pyannote.database" "pyannote.pipeline" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
