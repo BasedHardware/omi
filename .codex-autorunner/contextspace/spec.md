@@ -19,27 +19,50 @@ This sits above the existing fully fake hermetic E2E harness and below dev-cloud
 
 ## Command surface
 
-Top-level `make` commands are the stable developer interface. Heavy implementation should live under `scripts/`.
+Top-level `make` commands are the stable developer interface. Heavy implementation must live under `scripts/dev-harness/`. The root `Makefile` is expected to be a thin dispatcher; this repository currently has no root `Makefile`, so implementation tickets may add one without changing the command contract.
 
 Required initial commands:
 
 ```bash
 make dev-up
+make dev-check
 make dev-reset
 make seed-v17-scenario SCENARIO=happy_path
+make list-v17-scenarios
 make desktop-run-local USER=alice
 make dev-status
-```
-
-Supporting commands may include:
-
-```bash
-make list-v17-scenarios
-make dev-check
 make dev-down
 make dev-logs
 PROVIDER_MODE=offline make dev-up
 ```
+
+Locked backing entrypoints:
+
+| Command | Entrypoint |
+|---|---|
+| `make dev-up` | `scripts/dev-harness/dev-up.sh` |
+| `make dev-check` | `scripts/dev-harness/dev-check.sh` |
+| `make dev-reset` | `scripts/dev-harness/dev-reset.sh` |
+| `make seed-v17-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-v17-scenario.py` |
+| `make list-v17-scenarios` | `scripts/dev-harness/list-v17-scenarios.py` |
+| `make desktop-run-local USER=<name>` | `scripts/dev-harness/desktop-run-local.sh` |
+| `make dev-status` | `scripts/dev-harness/dev-status.sh` |
+| `make dev-down` | `scripts/dev-harness/dev-down.sh` |
+| `make dev-logs` | `scripts/dev-harness/dev-logs.sh` |
+
+Helper modules and scenario packages may live below `scripts/dev-harness/`, but the top-level command names and entrypoint paths are stable.
+
+## Existing repo-native assets
+
+The local emulator harness must reuse existing repo assets rather than creating parallel Firebase or fake-provider stacks:
+
+- Firebase CLI config: `firebase.json` is authoritative and currently wires Firestore rules/indexes plus Firestore emulator port `8085`. Auth emulator support should be added by extending this file in implementation work.
+- Firestore policy/index assets: `firestore.rules` and `firestore.indexes.json` are the rules and index files for the local harness and V17 emulator coverage.
+- Existing V17 emulator npm scripts in `package.json` use short-lived `firebase emulators:exec --only firestore --project demo-v17-memory` commands. They are test assets/reference patterns, not the long-lived local manual-QA project.
+- Existing emulator proof scripts under `backend/scripts/v17_*_emulator_test.*` demonstrate Firestore-emulator safety checks and may be reused or wrapped only where appropriate.
+- The hermetic backend E2E runner `backend/testing/e2e/run.sh` and fakes under `backend/testing/e2e/fakes/` remain the deterministic fake/offline source of truth; `PROVIDER_MODE=offline` should reuse those implementations where possible.
+- The desktop runner `desktop/macos/run.sh` is the existing build/launch primitive. `make desktop-run-local` should call it with a named local bundle/profile, explicit localhost service URLs, and local emulator Auth bootstrap.
+- No root `Makefile` or README local-harness docs exist at this point; adding those is implementation/adoption work after this contract.
 
 ## Required local services
 

@@ -5,7 +5,7 @@
 - The repo already has a fully fake hermetic E2E harness. This epic should focus on the next layer up: local emulator full-stack development.
 - Dev-cloud proof remains mandatory for V17 activation. Local emulator evidence can supplement confidence but never replace it.
 - Evidence from this harness should be labelled `LOCAL_EMULATOR_DEV`, not `DEV_CLOUD_PROOF`.
-- Top-level `make` commands are the stable developer interface; heavy implementation should live under `scripts/`.
+- Top-level `make` commands are the stable developer interface; heavy implementation should live under `scripts/dev-harness/` with a thin root `Makefile` dispatcher.
 - Scenario fixtures should be Python-authored for type checking, easy authoring, and reuse in seed/test tooling.
 - Desktop macOS is the first surface target. Mobile, web, and hardware can be added later.
 - Local auth should use Firebase Auth emulator, with a pre-populated default local test user and easy multi-user test profiles.
@@ -16,3 +16,9 @@
 - The v1 local Firebase boundary is fixed to project ID `demo-omi-local` and Firestore database `(default)`, with loopback emulator endpoints and sanitized child-process environments.
 - This harness is for manual QA and using the product locally, not deterministic pass/fail product testing; hermetic E2E remains the deterministic test layer.
 - Desktop testing should use a named local profile such as `Omi Dev Local` so it does not collide with production, beta, or existing dev installs.
+- The locked local harness command surface is `make dev-up`, `make dev-check`, `make dev-reset`, `make seed-v17-scenario`, `make list-v17-scenarios`, `make desktop-run-local`, `make dev-status`, `make dev-down`, and `make dev-logs`.
+- Locked command entrypoints are under `scripts/dev-harness/`: `dev-up.sh`, `dev-check.sh`, `dev-reset.sh`, `seed-v17-scenario.py`, `list-v17-scenarios.py`, `desktop-run-local.sh`, `dev-status.sh`, `dev-down.sh`, and `dev-logs.sh`.
+- The harness must reuse repo-native Firebase assets: `firebase.json`, `firestore.rules`, and `firestore.indexes.json`. Auth emulator support should extend `firebase.json`; do not create a separate harness Firebase config.
+- Existing `package.json` V17 Firestore emulator scripts and `backend/scripts/v17_*_emulator_test.*` are short-lived test/reference assets using `demo-v17-memory`; the long-lived local manual-QA harness remains fixed to `demo-omi-local` / `(default)`.
+- `backend/testing/e2e/run.sh` remains the hermetic deterministic E2E harness. Offline provider mode should share its fake-provider implementations where possible, but local emulator manual QA is a separate layer.
+- `desktop/macos/run.sh` remains the desktop build/launch primitive; `make desktop-run-local` should wrap it with a named local bundle/profile, localhost service URLs, and emulator-auth bootstrapping.

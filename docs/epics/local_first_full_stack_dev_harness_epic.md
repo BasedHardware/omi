@@ -34,17 +34,45 @@ The harness is general infrastructure. V17 memory is the first validation target
 
 ## Target developer experience
 
-Top-level `make` commands are the stable user interface. Heavy implementation should live under `scripts/` so the command surface stays discoverable and maintainable.
+Top-level `make` commands are the stable user interface. Heavy implementation must live under `scripts/dev-harness/` so the command surface stays discoverable and maintainable; the root `Makefile` is only a thin dispatcher and may be added by the implementation tickets because this repository does not currently have a root `Makefile`.
 
 ```bash
 make dev-up
+make dev-check
 make seed-v17-scenario SCENARIO=happy_path
 make desktop-run-local USER=alice
 make dev-status
 make dev-reset
+make dev-down
 ```
 
-The exact backing script names may change to match repo conventions, but the top-level developer loop should remain one-command and scenario-driven.
+Locked command contract:
+
+| Stable command | Backing implementation expectation |
+|---|---|
+| `make dev-up` | `scripts/dev-harness/dev-up.sh` starts or validates the long-lived local emulator/manual-QA instance. |
+| `make dev-check` | `scripts/dev-harness/dev-check.sh` runs prerequisite, safety, and provider preflight checks without mutating state. |
+| `make seed-v17-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-v17-scenario.py` validates and applies a Python-authored synthetic V17 scenario to the running local instance. |
+| `make list-v17-scenarios` | `scripts/dev-harness/list-v17-scenarios.py` lists scenario fixture names and descriptions. |
+| `make desktop-run-local USER=<name>` | `scripts/dev-harness/desktop-run-local.sh` launches a named local desktop bundle/profile against localhost services and a seeded local Auth emulator user. |
+| `make dev-status` | `scripts/dev-harness/dev-status.sh` prints owned process, port, endpoint, provider-mode, scenario, user, and state-root status. |
+| `make dev-reset` | `scripts/dev-harness/dev-reset.sh` clears only harness-owned local state after demo-project, loopback, database, and sentinel checks. |
+| `make dev-down` | `scripts/dev-harness/dev-down.sh` stops only recorded owned processes for the selected harness instance. |
+| `make dev-logs` | `scripts/dev-harness/dev-logs.sh` tails or locates logs for owned local services. |
+
+Implementation tickets may add helper modules below `scripts/dev-harness/`, but these command names and backing entrypoint paths are stable for this epic.
+
+## Existing repo assets to reuse
+
+The local emulator harness must reuse the repository-native Firebase and test assets already present instead of creating a parallel rules/index stack:
+
+- `firebase.json` is the authoritative Firebase CLI configuration. It currently points Firestore to `firestore.rules` and `firestore.indexes.json` and assigns the Firestore emulator port `8085`; harness work should extend this config for Auth emulator support rather than introduce a separate Firebase config file.
+- `firestore.rules` and `firestore.indexes.json` are the rules/index assets for emulator startup and V17 Firestore coverage.
+- `package.json` already contains V17 Firestore emulator npm scripts using `firebase emulators:exec --only firestore --project demo-v17-memory`; those remain test-specific and must not become the long-lived manual-QA instance, which is fixed to `demo-omi-local` / `(default)`.
+- Existing emulator proof scripts under `backend/scripts/v17_*_emulator_test.*` are short-lived emulator tests. Reuse their safety patterns, but do not make them the developer harness runtime.
+- `backend/testing/e2e/run.sh` is the fully fake hermetic backend E2E harness and remains the deterministic pass/fail layer. Offline provider mode should reuse hermetic fake-provider implementations where possible, not duplicate a second fake stack.
+- `desktop/macos/run.sh` is the current desktop local runner. `make desktop-run-local` should wrap it with a named local bundle/profile, localhost backend URLs, and emulator-auth bootstrapping rather than launching production, beta, or the default dev bundle directly.
+- README updates are adoption/documentation work for later tickets; this ticket only finalizes the contract.
 
 ## Architecture
 
@@ -62,6 +90,8 @@ The harness should provide:
 - a prerequisite check that fails fast for core local prerequisites before startup and lists missing dev credentials when real-provider mode is selected.
 - desktop local profile that points a named desktop bundle to localhost services.
 - clear evidence labels that distinguish local emulator development from dev-cloud proof.
+
+The v1 long-lived emulator instance must run with Firebase CLI project `demo-omi-local`, Firestore database `(default)`, the repo `firebase.json`, and explicit loopback emulator endpoints. Existing test-only `demo-v17-memory` emulator commands are useful references but are not the harness project boundary.
 
 ## Dependency boundary
 
