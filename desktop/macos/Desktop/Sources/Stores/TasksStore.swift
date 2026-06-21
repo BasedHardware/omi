@@ -267,6 +267,13 @@ class TasksStore: ObservableObject {
             if case APIError.unauthorized = error {
                 AuthBackoffTracker.shared.reportAuthFailure()
             }
+            // Benign sign-out race: the isSignedIn guard above passed, but the
+            // token was cleared by the time the request ran. Expected, not a bug
+            // — log quietly (breadcrumb only) instead of flooding Sentry.
+            if case AuthError.notSignedIn = error {
+                log("TasksStore: Auto-refresh skipped: signed out mid-cycle")
+                return
+            }
             // Silently ignore errors during auto-refresh
             logError("TasksStore: Auto-refresh failed", error: error)
         }
@@ -297,6 +304,11 @@ class TasksStore: ObservableObject {
                 let newHasMore = mergedTasks.count >= pageSize
                 if hasMoreCompletedTasks != newHasMore { hasMoreCompletedTasks = newHasMore }
             } catch {
+                // Benign sign-out race (see incomplete-tasks catch above).
+                if case AuthError.notSignedIn = error {
+                    log("TasksStore: Auto-refresh skipped: signed out mid-cycle")
+                    return
+                }
                 logError("TasksStore: Auto-refresh completed tasks failed", error: error)
             }
         }
@@ -328,6 +340,11 @@ class TasksStore: ObservableObject {
                 }
                 if hasMoreDeletedTasks != response.hasMore { hasMoreDeletedTasks = response.hasMore }
             } catch {
+                // Benign sign-out race (see incomplete-tasks catch above).
+                if case AuthError.notSignedIn = error {
+                    log("TasksStore: Auto-refresh skipped: signed out mid-cycle")
+                    return
+                }
                 logError("TasksStore: Auto-refresh deleted tasks failed", error: error)
             }
         }
