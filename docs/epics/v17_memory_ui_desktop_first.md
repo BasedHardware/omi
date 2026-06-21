@@ -16,7 +16,9 @@
 
 ## Oracle status for this slice
 
-Oracle was requested for a prescriptive UI/UX review. The first browser-backed run failed while uploading attachments, and the compact retry stalled for more than 10 minutes with repeated `no thinking status detected yet`. This implementation therefore follows the three subagent audits plus the already-locked V17 normative architecture. A follow-up Oracle review should be run on the committed slice before treating this as final cross-surface design.
+A follow-up compact no-attachment Oracle run succeeded after the earlier browser/upload stalls. See `docs/epics/v17_memory_ui_desktop_foundation_oracle_review.md`.
+
+Oracle verdict for commit `a02ac1459`: **NO-GO as currently described**, while affirming that the architecture and UX direction are correct. The required local fixes before continuing are scope-aware reconciliation, scoped bulk operations, fail-closed malformed-tier handling, stale async/undo hardening, and real macOS build/test proof.
 
 ## Oracle/subagent consensus prescription
 
