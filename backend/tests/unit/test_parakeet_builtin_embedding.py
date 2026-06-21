@@ -1,0 +1,324 @@
+"""Tests for built-in speaker embedding in parakeet transcribe.py.
+
+Validates that batch diarization uses the built-in wespeaker model first
+and falls back to HTTP only when the built-in model is unavailable.
+"""
+
+import io
+import os
+import struct
+import sys
+import wave
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
+os.environ.setdefault('PARAKEET_INFERENCE_MODE', 'nemo')
+os.environ.setdefault('PARAKEET_STREAM_MODEL', '')
+os.environ.setdefault('PARAKEET_DEVICE', 'cpu')
+os.environ.setdefault('PARAKEET_TORCH_COMPILE', 'false')
+os.environ.setdefault('PARAKEET_CUDA_GRAPHS', 'false')
+
+_torch_mock = MagicMock()
+_torch_mock.cuda.is_available.return_value = False
+_torch_mock.cuda.is_bf16_supported.return_value = False
+_torch_mock.bfloat16 = 'bfloat16'
+
+
+def _torch_from_numpy(arr):
+    result = MagicMock()
+    result.unsqueeze.return_value = result
+    result.shape = [1, len(arr)]
+    return result
+
+
+_torch_mock.from_numpy = _torch_from_numpy
+sys.modules['torch'] = _torch_mock
+
+for _mod in [
+    'nemo',
+    'nemo.collections',
+    'nemo.collections.asr',
+    'nemo.collections.asr.models',
+    'pyannote',
+    'pyannote.audio',
+]:
+    if _mod not in sys.modules:
+        sys.modules[_mod] = MagicMock()
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../parakeet'))
+
+if 'transcribe' in sys.modules:
+    _existing = sys.modules['transcribe']
+    if not hasattr(_existing, '__file__') or _existing.__file__ is None:
+        del sys.modules['transcribe']
+
+import transcribe  # noqa: E402
+
+
+def _make_wav_bytes(duration_s=1.0, sample_rate=16000, channels=1):
+    n_samples = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f'<{n_samples * channels}h', *([1000] * n_samples * channels)))
+    return buf.getvalue()
+
+
+def _make_wav_bytes_8bit(duration_s=1.0, sample_rate=16000):
+    n_samples = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(1)
+        wf.setframerate(sample_rate)
+        wf.writeframes(bytes([128] * n_samples))
+    return buf.getvalue()
+
+
+def _make_wav_bytes_32bit(duration_s=1.0, sample_rate=16000):
+    n_samples = int(duration_s * sample_rate)
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(4)
+        wf.setframerate(sample_rate)
+        wf.writeframes(struct.pack(f'<{n_samples}i', *([100000] * n_samples)))
+    return buf.getvalue()
+
+
+class TestWavBytesToWaveform:
+    def test_returns_waveform_and_sample_rate(self):
+        wav = _make_wav_bytes(duration_s=0.5, sample_rate=16000)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_stereo_downmix(self):
+        wav = _make_wav_bytes(duration_s=0.5, sample_rate=16000, channels=2)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_8bit_unsigned_pcm(self):
+        wav = _make_wav_bytes_8bit(duration_s=0.5, sample_rate=16000)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_32bit_pcm(self):
+        wav = _make_wav_bytes_32bit(duration_s=0.5, sample_rate=16000)
+        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        assert sr == 16000
+        assert waveform.shape == [1, 8000]
+
+    def test_unsupported_width_raises(self):
+        buf = io.BytesIO()
+        with wave.open(buf, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(3)
+            wf.setframerate(16000)
+            wf.writeframes(b'\x00\x00\x00' * 8000)
+        with pytest.raises(ValueError, match="Unsupported WAV sample width"):
+            transcribe.wav_bytes_to_waveform(buf.getvalue())
+
+
+class TestGetEmbedding:
+    def test_uses_builtin_model_first(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(256, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=1.0)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            with patch.object(transcribe, '_get_embedding_http') as http_mock:
+                result = transcribe._get_embedding(wav)
+
+        assert result is not None
+        assert result.shape == (1, 256)
+        http_mock.assert_not_called()
+
+    def test_falls_back_to_http_when_builtin_unavailable(self):
+        wav = _make_wav_bytes(duration_s=1.0)
+        http_emb = np.ones((1, 256), dtype=np.float32)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=None):
+            with patch.object(transcribe, '_get_embedding_http', return_value=http_emb) as http_mock:
+                old_url = transcribe.SPEAKER_EMBEDDING_URL
+                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+                try:
+                    result = transcribe._get_embedding(wav)
+                finally:
+                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        http_mock.assert_called_once_with(wav)
+        assert result is not None
+        np.testing.assert_array_equal(result, http_emb)
+
+    def test_falls_back_to_http_when_builtin_fails(self):
+        fake_model = MagicMock()
+        fake_model.side_effect = RuntimeError("GPU error")
+        wav = _make_wav_bytes(duration_s=1.0)
+        http_emb = np.ones((1, 256), dtype=np.float32)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            with patch.object(transcribe, '_get_embedding_http', return_value=http_emb) as http_mock:
+                old_url = transcribe.SPEAKER_EMBEDDING_URL
+                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+                try:
+                    result = transcribe._get_embedding(wav)
+                finally:
+                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        http_mock.assert_called_once_with(wav)
+        np.testing.assert_array_equal(result, http_emb)
+
+    def test_returns_none_when_no_builtin_no_url(self):
+        wav = _make_wav_bytes(duration_s=1.0)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=None):
+            old_url = transcribe.SPEAKER_EMBEDDING_URL
+            transcribe.SPEAKER_EMBEDDING_URL = ''
+            try:
+                result = transcribe._get_embedding(wav)
+            finally:
+                transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        assert result is None
+
+    def test_returns_none_when_builtin_fails_and_http_fails(self):
+        fake_model = MagicMock()
+        fake_model.side_effect = RuntimeError("GPU error")
+        wav = _make_wav_bytes(duration_s=1.0)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            with patch.object(transcribe, '_get_embedding_http', return_value=None):
+                old_url = transcribe.SPEAKER_EMBEDDING_URL
+                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+                try:
+                    result = transcribe._get_embedding(wav)
+                finally:
+                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        assert result is None
+
+    def test_reshapes_1d_embedding(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(128, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=1.0)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            result = transcribe._get_embedding(wav)
+
+        assert result.shape == (1, 128)
+
+
+class TestGetBuiltinEmbeddingModel:
+    def test_returns_none_when_pyannote_unavailable(self):
+        old_model = transcribe._embedding_model
+        transcribe._embedding_model = None
+        old_pyannote = transcribe._PyannoteModel
+        transcribe._PyannoteModel = None
+        try:
+            result = transcribe.get_builtin_embedding_model()
+            assert result is None
+        finally:
+            transcribe._PyannoteModel = old_pyannote
+            transcribe._embedding_model = old_model
+
+    def test_returns_cached_model_without_reload(self):
+        sentinel = MagicMock()
+        old_model = transcribe._embedding_model
+        transcribe._embedding_model = sentinel
+        try:
+            result1 = transcribe.get_builtin_embedding_model()
+            result2 = transcribe.get_builtin_embedding_model()
+            assert result1 is sentinel
+            assert result2 is sentinel
+        finally:
+            transcribe._embedding_model = old_model
+
+    def test_successful_load_is_cached(self):
+        old_model = transcribe._embedding_model
+        old_pyannote_model = transcribe._PyannoteModel
+        old_pyannote_inference = transcribe._PyannoteInference
+        fake_inference = MagicMock()
+        fake_pyannote_model = MagicMock()
+        fake_pyannote_model.from_pretrained.return_value = MagicMock()
+        fake_pyannote_inference = MagicMock(return_value=fake_inference)
+        transcribe._embedding_model = None
+        transcribe._PyannoteModel = fake_pyannote_model
+        transcribe._PyannoteInference = fake_pyannote_inference
+        try:
+            result = transcribe.get_builtin_embedding_model()
+            assert result is fake_inference
+            assert transcribe._embedding_model is fake_inference
+        finally:
+            transcribe._PyannoteModel = old_pyannote_model
+            transcribe._PyannoteInference = old_pyannote_inference
+            transcribe._embedding_model = old_model
+
+
+class TestEmbeddingBuiltinDuration:
+    def test_short_audio_below_min_duration_returns_none(self):
+        fake_model = MagicMock()
+        wav = _make_wav_bytes(duration_s=0.3)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is None
+        fake_model.assert_not_called()
+
+    def test_audio_at_exact_min_duration_returns_embedding(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(256, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=0.6)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is not None
+        fake_model.assert_called_once()
+
+    def test_audio_just_above_min_duration_returns_embedding(self):
+        fake_model = MagicMock()
+        fake_model.return_value = np.zeros(256, dtype=np.float32)
+        wav = _make_wav_bytes(duration_s=0.7)
+        result = transcribe._get_embedding_builtin(wav, fake_model)
+        assert result is not None
+        fake_model.assert_called_once()
+
+
+class TestDiarizeSegmentsGating:
+    def test_proceeds_with_builtin_model_even_without_url(self, tmp_path):
+        wav_path = tmp_path / "test.wav"
+        wav_bytes = _make_wav_bytes(duration_s=2.0)
+        wav_path.write_bytes(wav_bytes)
+
+        base = {"text": "hello", "segments": [{"text": "hello", "start": 0.0, "end": 2.0}]}
+        fake_model = MagicMock()
+        fake_emb = np.zeros((1, 256), dtype=np.float32)
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=fake_model):
+            with patch.object(transcribe, '_get_embedding', return_value=fake_emb):
+                old_url = transcribe.SPEAKER_EMBEDDING_URL
+                transcribe.SPEAKER_EMBEDDING_URL = ''
+                try:
+                    result = transcribe._diarize_segments(str(wav_path), base)
+                finally:
+                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        assert result["segments"][0].get("speaker") is not None
+
+    def test_skips_diarization_when_no_model_and_no_url(self, tmp_path):
+        wav_path = tmp_path / "test.wav"
+        wav_path.write_bytes(_make_wav_bytes(duration_s=1.0))
+
+        base = {"text": "hi", "segments": [{"text": "hi", "start": 0.0, "end": 1.0}]}
+
+        with patch.object(transcribe, 'get_builtin_embedding_model', return_value=None):
+            old_url = transcribe.SPEAKER_EMBEDDING_URL
+            transcribe.SPEAKER_EMBEDDING_URL = ''
+            try:
+                result = transcribe._diarize_segments(str(wav_path), base)
+            finally:
+                transcribe.SPEAKER_EMBEDDING_URL = old_url
+
+        assert result["segments"][0]["speaker"] == "SPEAKER_0"
