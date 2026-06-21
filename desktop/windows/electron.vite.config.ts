@@ -3,7 +3,13 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      externalizeDeps: {
+        exclude: ['@earendil-works/pi-agent-core', '@earendil-works/pi-ai']
+      }
+    }
+  },
   preload: {},
   renderer: {
     // Pin the dev server to a fixed port so the renderer's origin
