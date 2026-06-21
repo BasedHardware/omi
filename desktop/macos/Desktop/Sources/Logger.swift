@@ -154,6 +154,16 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   // Swift structured-concurrency cancellation: thrown when a Task/operation is
   // cancelled (assistant stopped, frame superseded). Expected, not an app bug.
   if error is CancellationError { return true }
+  // Benign sign-out race: background loops (conversation/advice/goals refresh,
+  // upload retries) pass an isSignedIn guard, then the token is cleared mid-cycle
+  // and the awaited request throws AuthError.notSignedIn. Expected when the user
+  // signs out or runs signed-out — floods Sentry without indicating a bug.
+  if case AuthError.notSignedIn = error { return true }
+  // Transient AI backend-capacity errors (rate limit, quota, overload, 5xx) from
+  // the Gemini proxy, surfaced by the proactive assistants (task/memory/advice/
+  // insight extraction) after exhausting retries. Backend overload, not an app bug
+  // (OMI-COMPUTER-6JK/6JR/6JM/6NC). Real auth/config/parse errors stay captured.
+  if let geminiError = error as? GeminiClient.GeminiClientError, geminiError.isTransient { return true }
   let nsError = error as NSError
   switch nsError.domain {
   case NSURLErrorDomain:
