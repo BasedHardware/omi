@@ -31,6 +31,27 @@ The deployed backend service account is the only principal expected to mutate V1
 - Do not distribute service account keys to clients. Production should use workload identity / platform-provided credentials where possible; local development may use `SERVICE_ACCOUNT_JSON` only on trusted developer/server machines.
 - Keep vector/search/outbox consumer credentials separate when feasible so a compromised consumer cannot bypass the Long-term apply transaction.
 
+## Dev-cloud before production IAM proof
+
+For V17 `GET /v3/memories` activation, cloud IAM must now be proven first in a dedicated non-production Firebase/GCP project. See:
+
+- `docs/rollout/v17-v3-proof-order.md`
+- `docs/runbooks/v17-v3-dev-cloud-proof.md`
+- `docs/runbooks/v17-v3-production-activation.md`
+
+Dev-cloud proof must use a deployed branch backend revision with its actual runtime identity. A local backend using dev credentials is supplemental only and cannot satisfy the dev-cloud gate.
+
+Dev-cloud IAM acceptance requires:
+
+- explicit dev project ID, project number, database ID, and runtime service-account unique ID;
+- hard-stop checks that abort on known production project IDs/numbers and reject implicit default projects;
+- runtime identity read permissions sufficient for V17 GET and no Firestore data-write permissions;
+- a separate fixture-writer identity for synthetic control/head/projection docs;
+- effective IAM evidence including inherited grants;
+- denial evidence for unsafe/runtime write paths where feasible.
+
+After dev-cloud GO, production IAM remains a production-only final activation blocker. Production activation must verify production runtime identity and effective IAM, but should not use production as the first enabled-path proof environment.
+
 ## Rollout/deployment checklist
 
 Before enabling V17 writes for any production user:

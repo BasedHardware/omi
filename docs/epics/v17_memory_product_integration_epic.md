@@ -81,6 +81,18 @@ Prefer a small configuration surface:
 
 Avoid many independent product rollout toggles unless implementation requires hidden internal safety switches.
 
+### V17 `/v3/memories` proof-order update — production is not first proof
+
+For the V17 `GET /v3/memories` default-read path, the normative rollout gate is now `docs/rollout/v17-v3-proof-order.md`.
+
+Production must not be the first environment where the enabled V17 `/v3` path is exercised against a real cloud Firestore database. The rollout order is:
+
+1. **Local/emulator proof:** unit, fake-Firestore, Firebase-emulator where applicable, and hermetic E2E evidence. This can clear local behavior only.
+2. **Dev-cloud proof:** a dedicated non-production Firebase/GCP project with a deployed branch backend using its actual runtime identity, synthetic users/data only, checked-in indexes deployed and READY, and the mandatory proof matrix in `docs/runbooks/v17-v3-dev-cloud-proof.md`.
+3. **Production activation proof:** production-specific deltas only, after dev-cloud GO and independent review; see `docs/runbooks/v17-v3-production-activation.md`.
+
+A local backend using dev credentials may supplement debugging, but cannot satisfy the dev-cloud gate. A production deployment with `V17_V3_GET_ENABLED` absent or false is dark plumbing only and must not be cited as enabled-path proof.
+
 ## Vector policy update
 
 Prefer KISS: start with the existing memory vector namespace plus strict metadata filters instead of creating a separate Archive namespace by default.

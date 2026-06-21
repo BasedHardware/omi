@@ -1,10 +1,13 @@
 # V17 Memory Product Integration — Implementation Tickets
 
-**Created:** 2026-06-18T20:08:24Z
-**Status:** Normative decisions baked in; GO for P0 amendment implementation, BLOCKED for production writes/read switch/vector/API cutover until P0 gates pass
+**Created:** 2026-06-18T20:24Z  
+**Status:** Normative decisions baked in; GO for local/default-off implementation and dev-cloud preparation, BLOCKED for dev-cloud GO until the Gate 2 evidence bundle passes, and NO-GO for production writes/read switch/vector/API cutover until dev-cloud GO plus production-only gates pass
 **Normative Architecture:** `docs/epics/v17_memory_normative_architecture.md`
 **Source Epic:** `docs/epics/v17_memory_product_integration_epic.md`
 **Decision Brief:** `docs/epics/v17_memory_product_integration_decision_brief.md`
+**V17 /v3 Proof Order:** `docs/rollout/v17-v3-proof-order.md`
+**Dev-cloud Proof Runbook:** `docs/runbooks/v17-v3-dev-cloud-proof.md`
+**Production Activation Runbook:** `docs/runbooks/v17-v3-production-activation.md`
 **Repos:**
 - Product: `/root/workspace/omi-memory-ingestion-pipeline`
 - Benchmark/eval: `/root/workspace/omi-ingestion-benchmark`
