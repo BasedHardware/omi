@@ -363,7 +363,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       children: [
                         Expanded(
                           child: Text(
-                            context.l10n.offlineModeTitle,
+                            context.l10n.transcribeLaterTitle,
                             style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -377,7 +377,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      context.l10n.offlineModeDescription,
+                      context.l10n.transcribeLaterDescription,
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
                     ),
                     const SizedBox(height: 16),
@@ -392,7 +392,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              context.l10n.offlineModeNote,
+                              context.l10n.transcribeLaterNote,
                               style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
                             ),
                           ),
@@ -412,7 +412,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                context.l10n.offlineModeStorageFull,
+                                context.l10n.transcribeLaterStorageFull,
                                 style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
                               ),
                             ),
@@ -536,7 +536,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ],
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
                 _buildProfileItem(
-                  title: context.l10n.offlineModeTitle,
+                  title: context.l10n.transcribeLaterTitle,
                   icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
                   showBetaTag: true,
                   chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
