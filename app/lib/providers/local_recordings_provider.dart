@@ -65,7 +65,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _audio.addListener(_onAudioChanged);
     // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
     // rotated recording surfaces without waiting for a BLE disconnect.
-    BleBridge.instance.batchRecordingFinalizedCallback = (_) => refresh();
+    BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
     _jobs = _loadJobs();
     refresh();
     if (_jobs.isNotEmpty) {
@@ -79,6 +79,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void setConversationProvider(ConversationProvider provider) {
     _conversationProvider = provider;
   }
+
+  void _onRecordingFinalized(String _) => refresh();
 
   // ───────────────────────── scanning ─────────────────────────
 
@@ -393,7 +395,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _stopReconcileTimer();
-    BleBridge.instance.batchRecordingFinalizedCallback = null;
+    BleBridge.instance.removeBatchRecordingFinalizedListener(_onRecordingFinalized);
     _audio.removeListener(_onAudioChanged);
     super.dispose();
   }
