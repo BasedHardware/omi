@@ -1,8 +1,8 @@
 # Oracle review — V17 desktop memory tier UX foundation
 
-**Date:** 2026-06-21  
-**Oracle session:** `we-need-prescripti-oracle-guidance-6`  
-**Command shape:** compact no-attachment `consult-oracle` prompt from `/home/ubuntu` with `ORACLE_HOME_DIR=/home/ubuntu/.oracle` after smoke check passed.  
+**Date:** 2026-06-21
+**Oracle session:** `we-need-prescripti-oracle-guidance-6`
+**Command shape:** compact no-attachment `consult-oracle` prompt from `/home/ubuntu` with `ORACLE_HOME_DIR=/home/ubuntu/.oracle` after smoke check passed.
 **Model caveat:** Oracle reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`. Preserve this caveat when citing the review.
 
 ## Prompt context
@@ -97,6 +97,31 @@ xcrun swift test --package-path Desktop \
 6. Only after that contract is stable, port the same scope type and conformance cases to Windows, mobile, and web.
 
 None of these steps establishes production readiness. Dev-cloud/provider proof, rollout gates, production Archive authorization, and production mutation semantics remain separate and explicitly unproven.
+
+## Follow-up Oracle review — LIMITED GO to Mac local testing
+
+**Date:** 2026-06-21
+**Oracle session:** `we-need-a-prescripti-follow`
+**Reviewed commit:** `fcc20de16 fix(v17): scope desktop memory tier operations`
+**Model caveat:** Oracle again reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`.
+
+Verdict: **LIMITED GO** for moving from Linux/static verification to **local Mac desktop testing**.
+
+Oracle assessed prior P0-1/P0-2/P0-3 as addressed **in principle**:
+
+- Reconciliation is now tier-scoped and current default responses are not treated as complete snapshots.
+- Bulk mutation paths are scoped locally and disabled before network for unsafe server calls.
+- Malformed tiers/aliases fail closed, persisted malformed tiers are excluded, async completions are scope-token guarded, and undo/failure restoration requeries current scope.
+
+Oracle still requires Mac-side proof before this can become a validated local desktop foundation:
+
+- clean Mac build and Swift tests,
+- zero-network bulk rejection tests,
+- stale-scope/undo race proof,
+- migration/restart smoke with seeded data,
+- UI smoke proving Default excludes Archive and bulk controls remain disabled.
+
+The executable local test plan lives in `docs/epics/v17_memory_desktop_local_test_plan.md`.
 
 ## Remediation status — local P0 slice
 
