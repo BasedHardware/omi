@@ -191,10 +191,14 @@ class TestDERRegressionGate:
     """DER must stay below threshold with built-in embedding model."""
 
     def test_builtin_diarization_der_below_threshold(self):
-        from transcribe import get_builtin_embedding_model, transcribe_file_v2
+        from gpu_worker import GPUWorker
+        from transcribe import has_builtin_embedding, set_gpu_worker, transcribe_file_v2
 
-        model = get_builtin_embedding_model()
-        assert model is not None, "Built-in embedding model failed to load"
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        set_gpu_worker(worker)
+        assert has_builtin_embedding(), "Built-in embedding model failed to load on GPU worker"
 
         wav_bytes, ground_truth, total_dur = _generate_two_speaker_wav()
 
@@ -227,13 +231,19 @@ class TestDERRegressionGate:
             )
         finally:
             os.unlink(tmp_path)
+            worker.stop()
 
     def test_single_speaker_no_false_splits(self):
         """Single-speaker audio should not be split into multiple speakers."""
-        from transcribe import get_builtin_embedding_model, transcribe_file_v2
+        from gpu_worker import GPUWorker
+        from transcribe import has_builtin_embedding, set_gpu_worker, transcribe_file_v2
 
-        model = get_builtin_embedding_model()
-        if model is None:
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        set_gpu_worker(worker)
+        if not has_builtin_embedding():
+            worker.stop()
             pytest.skip("Model not available")
 
         tone = _generate_tone(250, 5.0)
@@ -262,6 +272,7 @@ class TestDERRegressionGate:
             assert len(speakers) <= 1, f"Single-speaker audio was split into {len(speakers)} speakers: {speakers}"
         finally:
             os.unlink(tmp_path)
+            worker.stop()
 
 
 if __name__ == "__main__":
@@ -276,11 +287,16 @@ if __name__ == "__main__":
         tmp_path = f.name
 
     try:
-        from transcribe import get_builtin_embedding_model, transcribe_file_v2
+        from gpu_worker import GPUWorker
+        from transcribe import has_builtin_embedding, set_gpu_worker, transcribe_file_v2
 
-        model = get_builtin_embedding_model()
-        if model is None:
-            print("FAIL: Built-in embedding model did not load")
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        set_gpu_worker(worker)
+        if not has_builtin_embedding():
+            print("FAIL: Built-in embedding model did not load on GPU worker")
+            worker.stop()
             sys.exit(1)
 
         os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
@@ -298,6 +314,7 @@ if __name__ == "__main__":
         print(f"  Detected speakers: {n_speakers} (expected: {TOTAL_SPEAKERS})")
         print(f"  Result: {'PASS' if der <= DER_THRESHOLD else 'FAIL'}")
 
+        worker.stop()
         sys.exit(0 if der <= DER_THRESHOLD else 1)
     finally:
         os.unlink(tmp_path)

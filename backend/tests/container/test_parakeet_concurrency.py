@@ -34,13 +34,28 @@ ROUNDS = int(os.getenv("CONCURRENCY_ROUNDS", "3"))
 
 
 def _make_wav_bytes(duration_s=2.0, sample_rate=16000):
+    """Generate speech-like audio (multi-tone) to ensure ASR produces segments.
+
+    Silent audio would bypass the diarization embedding path entirely,
+    giving false confidence that the CUDA fix works.
+    """
+    import math
+
     n_samples = int(duration_s * sample_rate)
+    samples = []
+    for i in range(n_samples):
+        t = i / sample_rate
+        val = 0.3 * math.sin(2 * math.pi * 250 * t)
+        val += 0.2 * math.sin(2 * math.pi * 440 * t)
+        val += 0.1 * math.sin(2 * math.pi * 800 * t)
+        val *= 0.8 + 0.2 * math.sin(2 * math.pi * 3 * t)
+        samples.append(int(val * 16000))
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(sample_rate)
-        w.writeframes(struct.pack("<" + "h" * n_samples, *([0] * n_samples)))
+        w.writeframes(struct.pack("<" + "h" * n_samples, *samples))
     return buf.getvalue()
 
 
@@ -155,6 +170,20 @@ class TestConcurrentTranscription:
         assert total_500 == 0, (
             f"{total_500}/{total} requests returned 500. "
             f"This suggests a concurrency bug (CUDA stream conflict, race condition, etc.)"
+        )
+
+        diarized_count = 0
+        for r in all_results:
+            if r["status"] == 200:
+                data = json.loads(r["body"])
+                for seg in data.get("segments", []):
+                    if seg.get("speaker", "").startswith("SPEAKER_"):
+                        diarized_count += 1
+                        break
+        print(f"  Diarized responses (with speaker labels): {diarized_count}/{total_success}")
+        assert diarized_count > 0, (
+            "No responses contained speaker labels — embedding path was never exercised. "
+            "The test audio may be too short or silent for ASR to produce segments."
         )
 
     def test_concurrent_mixed_diarize_and_nodiarize(self, wav_data):
