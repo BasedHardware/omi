@@ -10628,5 +10628,12 @@
     "recapRegenerateCooldown": "Molimo sačekajte nekoliko sekundi prije ponovnog generisanja.",
     "recapRegenerateNoConversations": "Nema razgovora za sažimanje za ovaj dan.",
     "syncCustomSttWarningTitle": "Sinkronizacija koristi Omi transkripciju",
-    "syncCustomSttWarningMessage": "Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana."
+    "syncCustomSttWarningMessage": "Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.",
+    "transcribeLaterTitle": "Transkripcija kasnije",
+    "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.",
+    "transcribeLaterNote": "Za sada radi s Omi uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
+    "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
+    "unmute": "Uključi zvuk",
+    "newRecording": "Novi snimak",
+    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima"
 }

@@ -35,6 +35,33 @@ enum AppBuild {
     return "omi"
   }
 
+  /// GitHub repo that hosts desktop releases (source of truth for the changelog).
+  private static let releasesBaseURL = "https://github.com/BasedHardware/omi/releases"
+
+  /// Release tag for the running build, e.g. "v0.11.475+11475-macos".
+  /// Matches the tag Codemagic publishes (`v{shortVersion}+{build}-{platform}`).
+  static var releaseTag: String? {
+    guard
+      let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+      !version.isEmpty,
+      let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String,
+      !build.isEmpty
+    else {
+      return nil
+    }
+    return "v\(version)+\(build)-macos"
+  }
+
+  /// "What's New" target: the GitHub release page for the running build.
+  /// Real shipped builds (beta + stable both use the production bundle id) carry a
+  /// version that maps to a published tag, so deep-link to this version's notes (the
+  /// `+` in the tag must be `%2B` in the URL path). Dev/named test bundles carry a
+  /// placeholder version with no matching tag, so fall back to the releases list.
+  static var changelogURLString: String {
+    guard isProductionBundle, let tag = releaseTag else { return releasesBaseURL }
+    return "\(releasesBaseURL)/tag/\(tag.replacingOccurrences(of: "+", with: "%2B"))"
+  }
+
   static var currentUpdateChannel: String {
     let raw = UserDefaults.standard.string(forKey: updateChannelDefaultsKey) ?? "stable"
     return raw == "staging" ? "beta" : raw

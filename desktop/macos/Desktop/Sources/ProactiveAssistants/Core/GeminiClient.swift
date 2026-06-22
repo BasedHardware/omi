@@ -203,6 +203,27 @@ actor GeminiClient {
       return nil
     }
 
+    /// True for transient backend-capacity failures (rate limit, quota, overload,
+    /// 5xx, network blips) — retryable and not an app bug. Drives both retry
+    /// decisions and Sentry noise suppression (these flood without being actionable).
+    var isTransient: Bool {
+      switch self {
+      case .apiError(let message):
+        let lower = message.lowercased()
+        return lower.contains("service unavailable")
+          || lower.contains("overloaded")
+          || lower.contains("resource exhausted")
+          || lower.contains("high demand")
+          || lower.contains("503")
+          || lower.contains("429")
+          || lower.contains("internal error")
+      case .networkError:
+        return true
+      case .invalidResponse, .missingAPIKey:
+        return false
+      }
+    }
+
     var errorDescription: String? {
       switch self {
       case .missingAPIKey:
@@ -313,21 +334,7 @@ actor GeminiClient {
   /// Check if an error is transient and worth retrying
   private func isTransientError(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
-      switch geminiError {
-      case .apiError(let message):
-        let lower = message.lowercased()
-        return lower.contains("service unavailable")
-          || lower.contains("overloaded")
-          || lower.contains("resource exhausted")
-          || lower.contains("high demand")
-          || lower.contains("503")
-          || lower.contains("429")
-          || lower.contains("internal error")
-      case .networkError:
-        return true
-      case .invalidResponse, .missingAPIKey:
-        return false
-      }
+      return geminiError.isTransient
     }
     // URLSession network errors are transient
     return (error as NSError).domain == NSURLErrorDomain

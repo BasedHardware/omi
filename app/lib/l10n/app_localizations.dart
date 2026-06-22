@@ -17378,6 +17378,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
   String get syncCustomSttWarningMessage;
+
+  /// Title for the 'transcribe later' capture-mode toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe Later'**
+  String get transcribeLaterTitle;
+
+  /// Subtitle explaining the transcribe-later mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.'**
+  String get transcribeLaterDescription;
+
+  /// Caveat note shown in the Transcribe Later sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  String get transcribeLaterNote;
+
+  /// Warning shown when storage is too low to keep recording in Transcribe Later mode
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get transcribeLaterStorageFull;
+
+  /// Button to resume Transcribe Later capture after muting
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get unmute;
+
+  /// Button to finalize the current recording and start a new one
+  ///
+  /// In en, this message translates to:
+  /// **'New recording'**
+  String get newRecording;
+
+  /// Capture-card subtitle shown while Transcribe Later capture is muted/paused
+  ///
+  /// In en, this message translates to:
+  /// **'Paused — audio isn\'t being recorded'**
+  String get transcribeLaterPaused;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -1140,6 +1140,9 @@ protocol BleFlutterApiProtocol {
   func onCharacteristicValueUpdated(peripheralUuid peripheralUuidArg: String, serviceUuid serviceUuidArg: String, characteristicUuid characteristicUuidArg: String, value valueArg: FlutterStandardTypedData, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onRssiUpdate(peripheralUuid peripheralUuidArg: String, rssi rssiArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onStateRestored(peripheralUuids peripheralUuidsArg: [String], completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  func onBatchRecordingFinalized(fileName fileNameArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void)
 }
 class BleFlutterApi: BleFlutterApiProtocol {
   private let binaryMessenger: FlutterBinaryMessenger
@@ -1263,6 +1266,26 @@ class BleFlutterApi: BleFlutterApiProtocol {
     let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([peripheralUuidsArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  func onBatchRecordingFinalized(fileName fileNameArg: String, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([fileNameArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

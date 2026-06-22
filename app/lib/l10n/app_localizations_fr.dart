@@ -9407,4 +9407,28 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d\'Omi et ils comptent dans la limite de transcription de votre forfait.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcrire plus tard';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Enregistrez l\'audio maintenant et transcrivez-le à la demande plutôt qu\'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Compatible avec les appareils Omi pour le moment. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'L\'espace de stockage de votre téléphone est presque plein : l\'enregistrement est donc en pause. Libérez de l\'espace ou importez vos enregistrements pour qu\'il reprenne automatiquement.';
+
+  @override
+  String get unmute => 'Réactiver le son';
+
+  @override
+  String get newRecording => 'Nouvel enregistrement';
+
+  @override
+  String get transcribeLaterPaused => 'En pause — aucun audio n\'est enregistré';
 }

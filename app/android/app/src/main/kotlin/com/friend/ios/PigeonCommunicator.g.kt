@@ -1300,4 +1300,25 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
       } 
     }
   }
+  /**
+   * Native batch writer finalized a recording file (rotation / gap / stop) so
+   * Dart can rescan the recordings dir without waiting for a disconnect.
+   */
+  fun onBatchRecordingFinalized(fileNameArg: String, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(fileNameArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(PigeonCommunicatorPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
 }

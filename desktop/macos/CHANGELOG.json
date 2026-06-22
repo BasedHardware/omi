@@ -2,6 +2,92 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.492",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.491",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.490",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.489",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.488",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.487",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.486",
+      "date": "2026-06-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.485",
+      "date": "2026-06-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.484",
+      "date": "2026-06-20",
+      "changes": [
+        "Push-to-talk now always answers \u2014 if the realtime voice connection drops mid-turn (or sends nothing usable), it falls back to Deepgram transcription instead of failing silently",
+        "Added a What's New link in Settings \u2192 About that opens the release notes for your version",
+        "Show a What's New popup in the corner after the app updates to a new version"
+      ]
+    },
+    {
+      "version": "0.11.482",
+      "date": "2026-06-20",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.481",
+      "date": "2026-06-20",
+      "changes": [
+        "Voice replies now follow your language setting by default (fixes occasional replies in the wrong language) while still letting you switch languages mid-conversation"
+      ]
+    },
+    {
+      "version": "0.11.480",
+      "date": "2026-06-20",
+      "changes": [
+        "Fixed push-to-talk voice responses falling back to the slower model \u2014 the realtime voice connection now stays warm and auto-reconnects (keepalive, relentless reconnect, re-warm on wake)"
+      ]
+    },
+    {
       "version": "0.11.478",
       "date": "2026-06-20",
       "changes": [

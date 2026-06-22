@@ -9273,4 +9273,27 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'คุณใช้ผู้ให้บริการถอดเสียงของคุณเอง การซิงค์การบันทึกเหล่านี้จะถอดเสียงบนเซิร์ฟเวอร์ของ Omi และจะนับรวมในขีดจำกัดการถอดเสียงของแพ็กเกจของคุณ';
+
+  @override
+  String get transcribeLaterTitle => 'ถอดเสียงภายหลัง';
+
+  @override
+  String get transcribeLaterDescription =>
+      'บันทึกเสียงไว้ก่อนแล้วค่อยถอดเสียงเมื่อต้องการ แทนที่จะถอดแบบเรียลไทม์ ไฟล์บันทึกจะถูกเก็บไว้ในเครื่องของคุณ จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา';
+
+  @override
+  String get transcribeLaterNote => 'ขณะนี้รองรับเฉพาะอุปกรณ์ Omi เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String get unmute => 'เปิดเสียง';
+
+  @override
+  String get newRecording => 'การบันทึกใหม่';
+
+  @override
+  String get transcribeLaterPaused => 'หยุดชั่วคราว — ไม่ได้กำลังบันทึกเสียง';
 }

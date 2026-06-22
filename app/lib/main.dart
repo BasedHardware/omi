@@ -48,6 +48,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -296,10 +297,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
         ),
-        ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+        ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(
+          create: (context) => LocalRecordingsProvider(),
+          update: (BuildContext context, conversation, LocalRecordingsProvider? previous) =>
+              (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
+        ),
+        ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
           create: (context) => DeviceProvider(),
-          update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+          update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
+              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),

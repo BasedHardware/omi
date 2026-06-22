@@ -248,4 +248,8 @@ abstract class BleFlutterApi {
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  void onBatchRecordingFinalized(String fileName);
 }

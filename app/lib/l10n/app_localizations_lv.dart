@@ -9345,4 +9345,28 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribēt vēlāk';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.';
+
+  @override
+  String get unmute => 'Ieslēgt skaņu';
+
+  @override
+  String get newRecording => 'Jauns ieraksts';
+
+  @override
+  String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
 }

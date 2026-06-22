@@ -105,6 +105,7 @@ struct OMIApp: App {
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
         .withFontScaling()
+        .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
@@ -245,6 +246,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
+    // After a Sparkle update, show a small "what's new" card in the corner of the
+    // main window once. Delayed so the window/overlay exist to render it.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+      WhatsNewToast.shared.presentIfUpdated()
+    }
+
     // Proactive notifications are now OFF by default for everyone. Run the one-time
     // migration before any assistant can fire, so existing users are flipped to Off
     // once (they can re-enable in Settings).
@@ -358,6 +365,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           let lower = message.lowercased()
           if lower.contains("api key expired") || lower.contains("renew the api key")
             || lower.contains("api_key_invalid")
+            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
+            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
+            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
+            // same flood (one bad key emits one event per task-extraction frame for every user).
+            || lower.contains("ai service authentication error")
           {
             return nil
           }

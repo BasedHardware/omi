@@ -10628,5 +10628,12 @@
     "recapRegenerateCooldown": "אנא המתן מספר שניות לפני יצירה מחודשת.",
     "recapRegenerateNoConversations": "אין שיחות לסיכום עבור היום הזה.",
     "syncCustomSttWarningTitle": "הסנכרון משתמש בתמלול של Omi",
-    "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך."
+    "syncCustomSttWarningMessage": "אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.",
+    "transcribeLaterTitle": "תמלול מאוחר יותר",
+    "transcribeLaterDescription": "הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.",
+    "transcribeLaterNote": "פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.",
+    "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
+    "unmute": "בטל השתקה",
+    "newRecording": "הקלטה חדשה",
+    "transcribeLaterPaused": "מושהה — האודיו אינו מוקלט"
 }

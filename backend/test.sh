@@ -26,6 +26,7 @@ pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
+pytest tests/unit/test_parakeet_builtin_embedding.py -v
 pytest tests/unit/test_parakeet_endpoints.py -v
 pytest tests/unit/test_audiobuffer_guard.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
@@ -191,6 +192,7 @@ pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
+pytest tests/unit/test_translation_dedup_edge_cases.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_conversation_model_split.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v
