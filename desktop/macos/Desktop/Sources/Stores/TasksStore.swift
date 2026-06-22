@@ -82,7 +82,7 @@ class TasksStore: ObservableObject {
     private var hasLoadedIncomplete = false
     private var hasLoadedCompleted = false
     private var hasLoadedDeleted = false
-    private var hasScheduledStartupMaintenance = false
+    private(set) var hasScheduledStartupMaintenance = false
     /// Whether we're currently showing all tasks (no date filter) or just recent
     private var cancellables = Set<AnyCancellable>()
     private var isRetryingUnsynced = false
@@ -514,23 +514,34 @@ class TasksStore: ObservableObject {
         // launch felt like spam.
     }
 
-    private func scheduleStartupMaintenanceIfNeeded() {
+    func scheduleStartupMaintenanceIfNeeded(
+        fullSyncAndRetry: (@Sendable () async -> Void)? = nil,
+        relevanceBackfill: (@Sendable () async -> Void)? = nil
+    ) {
         guard !hasScheduledStartupMaintenance else { return }
         hasScheduledStartupMaintenance = true
 
         // Kick off one-time full sync in background (populates SQLite with all tasks)
         // Then retry pushing any locally-created tasks that failed to sync.
         Task {
-            await performFullSyncIfNeeded()
-            await migrateAITasksToStagedIfNeeded()
-            await migrateConversationItemsToStagedIfNeeded()
-            await retryUnsyncedItems()
+            if let fullSyncAndRetry {
+                await fullSyncAndRetry()
+            } else {
+                await performFullSyncIfNeeded()
+                await migrateAITasksToStagedIfNeeded()
+                await migrateConversationItemsToStagedIfNeeded()
+                await retryUnsyncedItems()
+            }
         }
 
         // Backfill relevance scores for unscored tasks (independent of full sync).
         Task {
-            let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
-            await backfillRelevanceScoresIfNeeded(userId: userId)
+            if let relevanceBackfill {
+                await relevanceBackfill()
+            } else {
+                let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+                await backfillRelevanceScoresIfNeeded(userId: userId)
+            }
         }
     }
 

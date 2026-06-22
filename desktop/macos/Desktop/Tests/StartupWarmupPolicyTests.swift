@@ -176,4 +176,45 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertFalse(backfill.shouldMarkComplete)
         XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
     }
+
+    @MainActor
+    func testTasksStoreStartupMaintenanceSchedulesOnceForFirstUseLoadPath() async {
+        let store = TasksStore()
+        let counter = StartupMaintenanceCounter()
+
+        store.scheduleStartupMaintenanceIfNeeded(
+            fullSyncAndRetry: { await counter.recordFullSyncAndRetry() },
+            relevanceBackfill: { await counter.recordRelevanceBackfill() }
+        )
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertTrue(store.hasScheduledStartupMaintenance)
+        XCTAssertEqual(await counter.fullSyncAndRetryCount, 1)
+        XCTAssertEqual(await counter.relevanceBackfillCount, 1)
+
+        store.scheduleStartupMaintenanceIfNeeded(
+            fullSyncAndRetry: { await counter.recordFullSyncAndRetry() },
+            relevanceBackfill: { await counter.recordRelevanceBackfill() }
+        )
+
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(await counter.fullSyncAndRetryCount, 1)
+        XCTAssertEqual(await counter.relevanceBackfillCount, 1)
+    }
+}
+
+private actor StartupMaintenanceCounter {
+    private var fullSyncAndRetryTotal = 0
+    private var relevanceBackfillTotal = 0
+
+    var fullSyncAndRetryCount: Int { fullSyncAndRetryTotal }
+    var relevanceBackfillCount: Int { relevanceBackfillTotal }
+
+    func recordFullSyncAndRetry() {
+        fullSyncAndRetryTotal += 1
+    }
+
+    func recordRelevanceBackfill() {
+        relevanceBackfillTotal += 1
+    }
 }
