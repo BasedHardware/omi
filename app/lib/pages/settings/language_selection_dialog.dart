@@ -163,9 +163,8 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-                                      : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withOpacity(0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -220,6 +219,8 @@ class LanguageSelectionDialog {
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
+                          final successMsg = context.l10n.languageSetTo(selectedLanguageName!);
+                          final failMsg = context.l10n.failedToSetLanguage;
                           final userProvider = Provider.of<UserProvider>(context, listen: false);
                           final success = await homeProvider.updateUserPrimaryLanguage(
                             selectedLanguage!,
@@ -229,9 +230,9 @@ class LanguageSelectionDialog {
                           if (success) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
+                            AppSnackbar.showSnackbarSuccess(successMsg);
                           } else {
-                            AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
+                            AppSnackbar.showSnackbarError(failMsg);
                           }
                         },
                   style: ElevatedButton.styleFrom(
