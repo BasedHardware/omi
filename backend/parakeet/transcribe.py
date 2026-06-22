@@ -51,7 +51,9 @@ def get_builtin_embedding_model():
             if _PyannoteModel is None or _PyannoteInference is None:
                 logger.warning("pyannote.audio not installed, built-in embedding unavailable")
                 return None
-            # PyTorch 2.6+ defaults weights_only=True which rejects older checkpoints
+            # PyTorch 2.6+ defaults weights_only=True which rejects older checkpoints.
+            # Scope the patch: restore torch.load after model loading completes.
+            _orig_load = None
             if _torch is not None and hasattr(_torch, 'load'):
                 _orig_load = _torch.load
 
@@ -67,9 +69,13 @@ def get_builtin_embedding_model():
                 _pam.check_version = lambda *a, **kw: None
             except (ImportError, AttributeError):
                 pass
-            model = _PyannoteModel.from_pretrained(
-                "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
-            )
+            try:
+                model = _PyannoteModel.from_pretrained(
+                    "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
+                )
+            finally:
+                if _orig_load is not None:
+                    _torch.load = _orig_load
             inference = _PyannoteInference(model, window="whole")
             if _torch is not None and _torch.cuda.is_available():
                 inference.to(_torch.device("cuda"))

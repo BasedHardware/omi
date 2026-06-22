@@ -157,6 +157,26 @@ def _best_speaker_mapping(ref_labels, hyp_labels, hyp_speakers, scored_frames):
     return mapping
 
 
+def _build_gpu_result(ground_truth, total_dur):
+    """Build a synthetic gpu_result dict matching _transcribe_from_gpu_result format.
+
+    Bypasses the GPU worker (not available in raw pytest) so we only test diarization.
+    """
+    segments = []
+    for gt in ground_truth:
+        segments.append(
+            {
+                "segment": f"speaker {gt['speaker']} segment",
+                "start": gt["start"],
+                "end": gt["end"],
+            }
+        )
+    return {
+        "text": " ".join(s["segment"] for s in segments),
+        "timestamp": {"segment": segments},
+    }
+
+
 try:
     import torch
 
@@ -183,7 +203,8 @@ class TestDERRegressionGate:
 
         try:
             os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
-            result = transcribe_file_v2(tmp_path, diarize=True)
+            gpu_result = _build_gpu_result(ground_truth, total_dur)
+            result = transcribe_file_v2(tmp_path, gpu_result=gpu_result, diarize=True)
 
             hyp_turns = []
             for seg in result["segments"]:
@@ -228,7 +249,14 @@ class TestDERRegressionGate:
 
         try:
             os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
-            result = transcribe_file_v2(tmp_path, diarize=True)
+            gpu_result = {
+                "text": "single speaker test",
+                "timestamp": {
+                    "segment": [{"segment": "single speaker test", "start": 0.0, "end": 5.0}],
+                },
+            }
+            result = transcribe_file_v2(tmp_path, gpu_result=gpu_result, diarize=True)
+            assert len(result["segments"]) > 0, "Expected at least one segment"
             speakers = set(s.get("speaker", "SPEAKER_0") for s in result["segments"])
             assert len(speakers) <= 1, f"Single-speaker audio was split into {len(speakers)} speakers: {speakers}"
         finally:
@@ -255,7 +283,8 @@ if __name__ == "__main__":
             sys.exit(1)
 
         os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
-        result = transcribe_file_v2(tmp_path, diarize=True)
+        gpu_result = _build_gpu_result(ground_truth, total_dur)
+        result = transcribe_file_v2(tmp_path, gpu_result=gpu_result, diarize=True)
 
         hyp_turns = [
             {"start": s["start"], "end": s["end"], "speaker": s.get("speaker", "SPEAKER_0")} for s in result["segments"]
