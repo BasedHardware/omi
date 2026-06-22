@@ -184,6 +184,20 @@ class TestGPUInference:
             "Model failed to load -- check pyannote import chain, " "torch.load monkey-patch, and check_version bypass"
         )
 
+    def test_monkey_patches_restored_after_model_load(self):
+        """Regression: torch.load and check_version must be restored after model load."""
+        import pyannote.audio.core.model as pam
+
+        orig_load = torch.load
+        orig_check = pam.check_version
+
+        from transcribe import get_builtin_embedding_model
+
+        get_builtin_embedding_model()
+
+        assert torch.load is orig_load, "torch.load not restored after model load"
+        assert pam.check_version is orig_check, "check_version not restored after model load"
+
     def test_embedding_produces_256_dims(self):
         from transcribe import _get_embedding_builtin, get_builtin_embedding_model
 
