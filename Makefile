@@ -1,12 +1,26 @@
 PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bin/python; else printf python3; fi)
+DESKTOP_USER ?= alice
 
-.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs list-v17-scenarios seed-v17-scenario reset-v17-scenario desktop-run-local
+.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-v17-scenarios seed-v17-scenario reset-v17-scenario desktop-run-local
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh
 
 dev-up:
 	bash scripts/dev-harness/dev-up.sh
+
+dev:
+	$(MAKE) dev-up
+
+dev-desktop:
+	$(MAKE) dev
+	$(MAKE) desktop-run-local
+
+dev-init:
+	bash scripts/dev-harness/dev-init.sh
+
+dev-verify:
+	bash scripts/dev-harness/verify-desktop-local-launch.sh
 
 dev-status:
 	bash scripts/dev-harness/dev-status.sh
@@ -33,8 +47,4 @@ reset-v17-scenario:
 	$(PYTHON) scripts/dev-harness/reset-v17-scenario.py $(SCENARIO)
 
 desktop-run-local:
-	@if [ "$(origin USER)" != "command line" ]; then \
-		echo "Usage: make desktop-run-local USER=<profile> (for example USER=alice)" >&2; \
-		exit 2; \
-	fi
-	bash scripts/dev-harness/desktop-run-local.sh "$(USER)"
+	bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
