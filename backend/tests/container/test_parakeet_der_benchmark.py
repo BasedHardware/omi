@@ -38,8 +38,8 @@ MANIFEST_PATH = Path(__file__).parent / "voxconverse" / "manifest.json"
 RTTM_DIR = Path(__file__).parent / "voxconverse"
 
 MAX_CLIPS = int(os.getenv("VOXCONVERSE_MAX_CLIPS", "15"))
-DER_THRESHOLD = float(os.getenv("DER_THRESHOLD", "0.30"))
-PER_CLIP_DER_MAX = float(os.getenv("PER_CLIP_DER_MAX", "0.50"))
+DER_THRESHOLD = float(os.getenv("DER_THRESHOLD", "0.40"))
+PER_CLIP_DER_MAX = float(os.getenv("PER_CLIP_DER_MAX", "0.85"))
 REPORT_ONLY = os.getenv("DER_REPORT_ONLY", "false").lower() == "true"
 
 
