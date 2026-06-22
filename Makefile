@@ -47,4 +47,4 @@ reset-v17-scenario:
 	$(PYTHON) scripts/dev-harness/reset-v17-scenario.py $(SCENARIO)
 
 desktop-run-local:
-	bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
+	PYTHON="$(PYTHON)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
