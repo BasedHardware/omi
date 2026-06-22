@@ -1,12 +1,11 @@
 import Foundation
 
-/// Runtime switches for the harness-owned Omi Dev Local desktop profile.
+/// Runtime switches for the harness-owned Omi Dev local profile.
 ///
-/// Production, beta, and the default Omi Dev bundle keep their existing bundle
-/// identifiers, preferences domains, Firebase config, and storage paths.  The
-/// local profile is activated only by the generated launch environment from
-/// `make desktop-run-local USER=<profile>` and uses a named non-production bundle
-/// (`com.omi.omi-local-v17`) plus separate Application Support/Caches roots.
+/// Production and beta keep their existing bundle identifiers. The local harness
+/// reuses the default ``Omi Dev`` bundle (`com.omi.desktop-dev`) so macOS
+/// permissions and storage paths are preserved; only API endpoints and Firebase
+/// Auth switch to localhost emulators when ``OMI_DESKTOP_LOCAL_PROFILE=1``.
 enum DesktopLocalProfile {
   static var isEnabled: Bool {
     value("OMI_DESKTOP_LOCAL_PROFILE") == "1"
@@ -14,7 +13,7 @@ enum DesktopLocalProfile {
 
   static var storageDirectoryName: String {
     guard isEnabled else { return "Omi" }
-    return nonEmpty(value("OMI_LOCAL_PROFILE_STORAGE_NAME")) ?? "Omi Dev Local"
+    return nonEmpty(value("OMI_LOCAL_PROFILE_STORAGE_NAME")) ?? "Omi"
   }
 
   static var authEmulatorHost: String? {
