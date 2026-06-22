@@ -126,6 +126,7 @@ class MemoryDB(Memory):
     data_protection_level: Optional[str] = None
     is_locked: bool = False
     kg_extracted: bool = False
+    is_baseline: bool = False
 
     # Temporal lifecycle — the "constantly updated brain". All optional, so existing
     # docs (which lack these fields) read back as active with no migration.

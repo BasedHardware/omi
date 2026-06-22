@@ -232,3 +232,16 @@ def update_memory_visibility(
     memories_db.change_memory_visibility(uid, memory_id, value)
     postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}
+
+
+@router.patch('/v3/memories/{memory_id}/baseline', tags=['memories'])
+def update_memory_baseline(
+    memory_id: str,
+    value: bool,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
+):
+    """Toggle the baseline flag for a memory."""
+    _validate_memory(uid, memory_id)
+    # Persist the new is_baseline value to Firestore
+    memories_db.update_memory_fields(uid, memory_id, {'is_baseline': value})
+    return {'status': 'ok'}
