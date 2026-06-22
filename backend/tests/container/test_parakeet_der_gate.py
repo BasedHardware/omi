@@ -198,15 +198,16 @@ class TestDERRegressionGate:
         worker.start()
         worker.wait_ready(timeout=300)
         set_gpu_worker(worker)
-        assert has_builtin_embedding(), "Built-in embedding model failed to load on GPU worker"
-
-        wav_bytes, ground_truth, total_dur = _generate_two_speaker_wav()
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(wav_bytes)
-            tmp_path = f.name
-
+        tmp_path = None
         try:
+            assert has_builtin_embedding(), "Built-in embedding model failed to load on GPU worker"
+
+            wav_bytes, ground_truth, total_dur = _generate_two_speaker_wav()
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_bytes)
+                tmp_path = f.name
+
             os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
             gpu_result = _build_gpu_result(ground_truth, total_dur)
             result = transcribe_file_v2(tmp_path, gpu_result=gpu_result, diarize=True)
@@ -230,7 +231,8 @@ class TestDERRegressionGate:
                 f"DER {der}% exceeds threshold {DER_THRESHOLD}%. " f"Diarization quality has regressed."
             )
         finally:
-            os.unlink(tmp_path)
+            if tmp_path:
+                os.unlink(tmp_path)
             worker.stop()
 
     def test_single_speaker_no_false_splits(self):
@@ -242,23 +244,23 @@ class TestDERRegressionGate:
         worker.start()
         worker.wait_ready(timeout=300)
         set_gpu_worker(worker)
-        if not has_builtin_embedding():
-            worker.stop()
-            pytest.skip("Model not available")
-
-        tone = _generate_tone(250, 5.0)
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(SAMPLE_RATE)
-            w.writeframes(tone.tobytes())
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(buf.getvalue())
-            tmp_path = f.name
-
+        tmp_path = None
         try:
+            if not has_builtin_embedding():
+                pytest.skip("Model not available")
+
+            tone = _generate_tone(250, 5.0)
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(SAMPLE_RATE)
+                w.writeframes(tone.tobytes())
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(buf.getvalue())
+                tmp_path = f.name
+
             os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
             gpu_result = {
                 "text": "single speaker test",
@@ -271,7 +273,8 @@ class TestDERRegressionGate:
             speakers = set(s.get("speaker", "SPEAKER_0") for s in result["segments"])
             assert len(speakers) <= 1, f"Single-speaker audio was split into {len(speakers)} speakers: {speakers}"
         finally:
-            os.unlink(tmp_path)
+            if tmp_path:
+                os.unlink(tmp_path)
             worker.stop()
 
 

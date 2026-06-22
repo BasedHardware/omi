@@ -23,13 +23,14 @@ import numpy as np
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
+import transcribe as _transcribe_mod
+
 from transcribe import (
     transcribe_file,
     _stream_model as _asr_model,
     INFERENCE_MODE as _INFERENCE_MODE,
     has_builtin_embedding,
     wav_bytes_to_waveform,
-    _gpu_worker as _transcribe_gpu_worker,
 )
 
 logger = logging.getLogger(__name__)
@@ -707,7 +708,7 @@ class StreamSession:
             dur = waveform.shape[1] / sample_rate
             if dur < MIN_EMBEDDING_AUDIO_S:
                 return None
-            emb = _transcribe_gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+            emb = _transcribe_mod._gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
             if emb is None:
                 return None
             emb = np.array(emb, dtype=np.float32)
