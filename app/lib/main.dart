@@ -13,7 +13,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart' as ble;
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
@@ -49,6 +48,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
@@ -69,7 +69,6 @@ import 'package:omi/services/notifications/important_conversation_notification_h
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/utils/analytics/growthbook.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -184,7 +183,6 @@ Future _init() async {
   }
   initOpus(await opus_flutter.load());
 
-  await GrowthbookUtil.init();
   // Register native BLE bridge
   BleFlutterApi.setUp(BleBridge.instance);
 
@@ -299,10 +297,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
         ),
-        ChangeNotifierProxyProvider<CaptureProvider, DeviceProvider>(
+        ChangeNotifierProxyProvider<ConversationProvider, LocalRecordingsProvider>(
+          create: (context) => LocalRecordingsProvider(),
+          update: (BuildContext context, conversation, LocalRecordingsProvider? previous) =>
+              (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
+        ),
+        ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
           create: (context) => DeviceProvider(),
-          update: (BuildContext context, captureProvider, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider)) ?? DeviceProvider(),
+          update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
+              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),

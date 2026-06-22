@@ -313,7 +313,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         if (!hasConversationSummaryRatingSet) {
           _ratingTimer = Timer(const Duration(seconds: 15), () {
             if (_isDisposed) return;
-            setConversationSummaryRating(conversation.id, -1); // set -1 to indicate is was shown
+            final conv = conversationOrNull;
+            if (conv == null) return;
+            setConversationSummaryRating(conv.id, -1); // set -1 to indicate is was shown
             showRatingUI = true;
             notifyListeners();
           });
@@ -673,11 +675,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       final timeMin = conversationStart.subtract(const Duration(hours: 2));
       final timeMax = conversationEnd.add(const Duration(hours: 2));
 
-      return await listGoogleCalendarEvents(
-        timeMin: timeMin,
-        timeMax: timeMax,
-        maxResults: 30,
-      );
+      return await listGoogleCalendarEvents(timeMin: timeMin, timeMax: timeMax, maxResults: 30);
     } catch (e) {
       debugPrint('Error listing calendar events: $e');
       return [];

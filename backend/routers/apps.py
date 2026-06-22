@@ -474,9 +474,11 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['id'] = str(ULID())
     data['uid'] = uid
     if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid)
-        data['author'] = user.get('display_name', '')
-        data['email'] = user['email']
+        user = get_user_from_uid(uid) or {}
+        email = user.get('email')
+        # author is required + non-null on AppCreate; display_name/email can both be null.
+        data['author'] = user.get('display_name') or (email.split('@')[0] if email else None) or 'Anonymous'
+        data['email'] = email
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -997,11 +999,15 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     if not reviewer_uid:
         raise HTTPException(status_code=422, detail='Reviewer UID is required')
 
+    response = data.get('response')
+    if not isinstance(response, str) or not response.strip():
+        raise HTTPException(status_code=422, detail='Response is required')
+
     review = get_specific_user_review(app_id, reviewer_uid)
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
 
-    review['response'] = data['response']
+    review['response'] = response
     review['responded_at'] = datetime.now(timezone.utc).isoformat()
     set_app_review(app_id, reviewer_uid, review)
 
@@ -1009,7 +1015,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     send_app_review_reply_notification(
         reviewer_uid,
         app.uid,
-        data['response'],
+        response,
         app_id,
         app.name,
     )

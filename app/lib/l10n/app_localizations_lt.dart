@@ -429,6 +429,13 @@ class AppLocalizationsLt extends AppLocalizations {
   String get offlineSync => 'Sinchronizavimas neprisijungus';
 
   @override
+  String get autoSync => 'Automatinis sinchronizavimas';
+
+  @override
+  String get autoSyncDescription =>
+      'Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys';
+
+  @override
   String get deviceSettings => 'Įrenginio nustatymai';
 
   @override
@@ -4686,10 +4693,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ir yra $triggerDescription.';
   }
 
@@ -9326,4 +9330,35 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sinchronizavimas naudoja Omi transkripciją';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribuoti vėliau';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.';
+
+  @override
+  String get unmute => 'Įjungti garsą';
+
+  @override
+  String get newRecording => 'Naujas įrašas';
+
+  @override
+  String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 }

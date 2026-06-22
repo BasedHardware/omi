@@ -25,10 +25,23 @@ import database.mcp_api_key as mcp_api_key_db
 import database.vector_db as vector_db
 import database.x_posts as x_posts_db
 import database.users as users_db
+import database.action_items as action_items_db
+import database.goals as goals_db
+import database.chat as chat_db
+import database.screen_activity as screen_activity_db
+import database.daily_summaries as daily_summaries_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
+from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_memories import (
+    collect_filtered_memories,
+    parse_mcp_bool,
+    parse_mcp_datetime,
+    parse_mcp_int,
+    parse_optional_mcp_bool,
+)
 
 router = APIRouter()
 
@@ -46,6 +59,11 @@ MCP_SCOPES_SUPPORTED = [
     "memories.read",
     "memories.write",
     "conversations.read",
+    "action_items.read",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
 ]
 
 READ_ONLY_ANNOTATIONS = {
@@ -69,6 +87,11 @@ DESTRUCTIVE_WRITE_ANNOTATIONS = {
 MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]
 MEMORIES_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["memories.write"]}]
 CONVERSATIONS_READ_SECURITY = [{"type": "oauth2", "scopes": ["conversations.read"]}]
+ACTION_ITEMS_READ_SECURITY = [{"type": "oauth2", "scopes": ["action_items.read"]}]
+GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
+CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
+SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
+PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 
 
 class MCPSession:
@@ -119,10 +142,8 @@ MCP_TOOLS = [
     {
         "name": "get_user_profile",
         "description": (
-            "Get the user's profile — a single consolidated, always-current summary of who the user is "
-            "(identity, contacts, work, projects, tools, preferences, and current goals). This is the most "
-            "complete and authoritative source of facts about the user. ALWAYS call this first when you need "
-            "any context about the user, before searching individual memories or conversations."
+            "Get Omi's cached high-level summary of the user, if one has been generated. Use this as a "
+            "lightweight starting point, then search memories or conversations for task-specific evidence."
         ),
         "annotations": READ_ONLY_ANNOTATIONS,
         "securitySchemes": MEMORIES_READ_SECURITY,
@@ -144,6 +165,28 @@ MCP_TOOLS = [
                 },
                 "limit": {"type": "integer", "description": "Number of memories to retrieve", "default": 100},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "sort": {
+                    "type": "string",
+                    "enum": ["scoring_desc", "created_desc", "updated_desc", "manual_first"],
+                    "description": "Ordering for returned memories",
+                    "default": "created_desc",
+                },
+                "reviewed": {"type": "boolean", "description": "Filter by reviewed state"},
+                "manually_added": {"type": "boolean", "description": "Filter by manually-added state"},
+                "updated_after": {
+                    "type": "string",
+                    "description": "Only return memories updated after this ISO 8601 timestamp",
+                },
+                "include_activity": {
+                    "type": "boolean",
+                    "description": "Include obvious focus/screen/activity memories. Durable memory reads exclude these by default.",
+                    "default": False,
+                },
+                "include_sensitive": {
+                    "type": "boolean",
+                    "description": "Include memories marked above standard data protection. Defaults to true for backward compatibility.",
+                    "default": True,
+                },
             },
         },
     },
@@ -233,7 +276,13 @@ MCP_TOOLS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Natural language search query"},
-                "limit": {"type": "integer", "description": "Maximum number of results to return", "default": 10},
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of results to return",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 20,
+                },
             },
             "required": ["query"],
         },
@@ -291,6 +340,118 @@ MCP_TOOLS = [
             },
         },
     },
+    {
+        "name": "get_action_items",
+        "description": (
+            "Retrieve the user's action items (tasks/to-dos extracted from conversations), newest due first. "
+            "Each item has a description, completion status, and optional due date. Use this to know what the "
+            "user needs to do or has committed to."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "completed": {"type": "boolean", "description": "Filter by completion status (omit for all)"},
+                "due_start_date": {"type": "string", "description": "Only items due on/after this date (yyyy-mm-dd)"},
+                "due_end_date": {"type": "string", "description": "Only items due on/before this date (yyyy-mm-dd)"},
+                "limit": {"type": "integer", "description": "Number of action items to retrieve", "default": 100},
+                "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+            },
+        },
+    },
+    {
+        "name": "get_goals",
+        "description": (
+            "Retrieve the user's goals — their stated objectives and what they are working toward. Use this to "
+            "ground long-horizon advice and prioritization in what actually matters to the user."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": GOALS_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "include_inactive": {
+                    "type": "boolean",
+                    "description": "Include ended/inactive goals (default only active goals)",
+                    "default": False,
+                },
+            },
+        },
+    },
+    {
+        "name": "get_chat_messages",
+        "description": (
+            "Retrieve the user's recent chat history with Omi, newest first. Reveals what the user has previously "
+            "asked, their intent, and stated preferences. Returns message text, sender (human/ai), and timestamp."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CHAT_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Number of messages to retrieve", "default": 50},
+                "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+            },
+        },
+    },
+    {
+        "name": "get_people",
+        "description": (
+            "Retrieve the people/contacts the user interacts with (recurring speakers Omi has identified). "
+            "Returns each person's name, id, and a few transcript samples of how they speak. Use this to reason "
+            "about the user's relationships, not just raw text."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": PEOPLE_READ_SECURITY,
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_screen_activity",
+        "description": (
+            "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
+            "on-screen text, ordered by time. Pass summary=true for an aggregated per-app usage breakdown instead "
+            "of raw rows. High-signal context on what the user actually does day to day."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": SCREEN_ACTIVITY_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
+                "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
+                "app": {"type": "string", "description": "Filter to a single app name"},
+                "summary": {
+                    "type": "boolean",
+                    "description": "Return an aggregated per-app usage summary instead of raw rows",
+                    "default": False,
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max raw rows to return (ignored when summary=true)",
+                    "default": 200,
+                },
+            },
+        },
+    },
+    {
+        "name": "get_daily_summaries",
+        "description": (
+            "Retrieve Omi's per-day summaries of the user's life, newest first. A concise digest of what happened "
+            "each day. Use for temporal context — 'what has the user been up to lately'."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CONVERSATIONS_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
+                "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
+                "limit": {"type": "integer", "description": "Number of summaries to retrieve", "default": 30},
+                "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+            },
+        },
+    },
 ]
 
 
@@ -333,6 +494,16 @@ class ToolExecutionError(Exception):
         super().__init__(self.message)
 
 
+def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
+    """Parse a yyyy-mm-dd MCP argument into a datetime, or None when absent."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
+
+
 def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
 
@@ -348,8 +519,22 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
     elif tool_name == "get_memories":
         categories = arguments.get("categories", [])
-        limit = arguments.get("limit", 100)
-        offset = arguments.get("offset", 0)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+            reviewed = parse_optional_mcp_bool(arguments.get("reviewed"), "reviewed")
+            manually_added = parse_optional_mcp_bool(arguments.get("manually_added"), "manually_added")
+            include_activity = parse_mcp_bool(arguments.get("include_activity"), "include_activity", default=False)
+            include_sensitive = parse_mcp_bool(arguments.get("include_sensitive"), "include_sensitive", default=True)
+            updated_after = parse_mcp_datetime(arguments.get("updated_after"), "updated_after")
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        sort = arguments.get("sort", "created_desc")
+        if sort not in {"scoring_desc", "created_desc", "updated_desc", "manual_first"}:
+            raise ToolExecutionError(
+                "Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
+                code=-32602,
+            )
 
         # Validate categories
         valid_categories = []
@@ -359,14 +544,26 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
-        memories = memories_db.get_memories(user_id, limit, offset, valid_categories)
+        result = collect_filtered_memories(
+            lambda batch_offset, batch_limit: memories_db.get_memories(
+                user_id, batch_limit, batch_offset, valid_categories, sort=sort
+            ),
+            limit=limit,
+            offset=offset,
+            reviewed=reviewed,
+            manually_added=manually_added,
+            include_activity=include_activity,
+            include_sensitive=include_sensitive,
+            updated_after=updated_after,
+            sort=sort,
+        )
         # Apply locked content truncation
-        for memory in memories:
+        for memory in result["memories"]:
             if memory.get('is_locked', False):
                 content = memory.get('content', '')
                 memory['content'] = (content[:70] + '...') if len(content) > 70 else content
 
-        return {"memories": memories}
+        return result
 
     elif tool_name == "create_memory":
         content = arguments.get("content")
@@ -487,29 +684,35 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=20)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        fetch_limit = min(limit * 3, 60)
 
-        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=limit)
+        matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
         if not matches:
             return {"memories": []}
 
-        memory_ids = [m['memory_id'] for m in matches]
+        memory_ids = [m.get('memory_id') for m in matches if m.get('memory_id')]
+        if not memory_ids:
+            return {"memories": []}
         memories = memories_db.get_memories_by_ids(user_id, memory_ids)
 
-        # Build score lookup and filter locked
-        score_map = {m['memory_id']: m.get('score', 0) for m in matches}
+        # Mirror the REST MCP path so SSE search never surfaces rejected, locked,
+        # or superseded facts, while fetching extra candidates before filtering.
+        score_map = {m.get('memory_id'): m.get('score', 0) for m in matches if m.get('memory_id')}
         results = []
         for mem in memories:
-            if mem.get('is_locked', False):
-                content = mem.get('content', '')
-                mem['content'] = (content[:70] + '...') if len(content) > 70 else content
+            if mem.get('user_review') is False or mem.get('is_locked', False) or mem.get('invalid_at') is not None:
+                continue
             mem['relevance_score'] = round(score_map.get(mem.get('id'), 0), 4)
             results.append(mem)
 
         # Sort by relevance
         results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
 
-        return {"memories": results}
+        return {"memories": results[:limit]}
 
     elif tool_name == "search_conversations":
         query = arguments.get("query")
@@ -598,6 +801,72 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         ]
         return {"posts": results}
 
+    elif tool_name == "get_action_items":
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=100, minimum=1, maximum=500)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+            completed = parse_optional_mcp_bool(arguments.get("completed"), "completed")
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        due_start = _parse_mcp_date(arguments.get("due_start_date"), "due_start_date")
+        due_end = _parse_mcp_date(arguments.get("due_end_date"), "due_end_date")
+        items = action_items_db.get_action_items(
+            user_id,
+            completed=completed,
+            due_start_date=due_start,
+            due_end_date=due_end,
+            limit=limit,
+            offset=offset,
+        )
+        return {"action_items": [clean_action_item(i) for i in items if not i.get("deleted", False)]}
+
+    elif tool_name == "get_goals":
+        include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
+        return {"goals": goals_db.get_all_goals(user_id, include_inactive=include_inactive)}
+
+    elif tool_name == "get_chat_messages":
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        messages = chat_db.get_messages(user_id, limit=limit, offset=offset)
+        return {"messages": [clean_chat_message(m) for m in messages]}
+
+    elif tool_name == "get_people":
+        return {"people": [clean_person(p) for p in users_db.get_people(user_id)]}
+
+    elif tool_name == "get_screen_activity":
+        start = _parse_mcp_date(arguments.get("start_date"), "start_date")
+        end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        app = arguments.get("app")
+        summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
+        if summary:
+            return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        rows = screen_activity_db.get_screen_activity(
+            user_id, start_date=start, end_date=end, app_filter=app, limit=limit
+        )
+        return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
+
+    elif tool_name == "get_daily_summaries":
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=30, minimum=1, maximum=100)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        summaries = daily_summaries_db.get_daily_summaries(
+            user_id,
+            limit=limit,
+            offset=offset,
+            start_date=arguments.get("start_date"),
+            end_date=arguments.get("end_date"),
+        )
+        return {"daily_summaries": summaries}
+
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
 
@@ -641,10 +910,9 @@ def handle_mcp_message(
                     "serverInfo": {"name": "omi-mcp-server", "version": "1.0.0"},
                     "instructions": (
                         "This server exposes the user's Omi memory (their personal AI memory bank). "
-                        "A consolidated, always-current user profile is available via the `get_user_profile` "
-                        "tool — consult it FIRST for any question about who the user is (identity, contacts, "
-                        "work, projects, preferences, goals) before falling back to `search_memories` or "
-                        "`get_memories` for finer-grained or historical details."
+                        "`get_user_profile` returns a cached high-level profile when available. Use it as a "
+                        "starting point, then call `search_memories`, `get_memories`, or conversation tools for "
+                        "task-specific evidence."
                     ),
                 },
             ),

@@ -60,6 +60,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     super.initState();
   }
 
+  // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
+  Rect _shareOrigin() {
+    if (!mounted) return const Rect.fromLTWH(0, 0, 100, 100);
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
@@ -255,6 +265,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       builder: (context, provider, child) {
         if (provider.isLoading && provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
@@ -262,6 +273,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.error != null) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Center(
@@ -271,6 +283,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Column(
@@ -682,9 +695,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       return;
                                     }
                                     if (files.length == 1) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(files.first.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(files.first.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
@@ -751,9 +766,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                     );
 
                                     if (selected != null) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(selected.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(selected.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
@@ -851,6 +868,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               [XFile(exportedPath)],
                               subject: exportTitle,
                               text: exportTitle,
+                              sharePositionOrigin: _shareOrigin(),
                             );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');

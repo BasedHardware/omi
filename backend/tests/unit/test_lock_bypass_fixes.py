@@ -8,7 +8,9 @@ from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
+from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType
+from zoneinfo import ZoneInfo
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -27,8 +29,80 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
+class _ToolWrapper:
+    """Tiny LangChain tool stand-in for tests that call `.invoke(...)`."""
+
+    def __init__(self, fn):
+        self.fn = fn
+        self.name = fn.__name__
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+    def invoke(self, args=None, config=None):
+        if args is not None and not isinstance(args, dict):
+            if config is not None:
+                return self.fn(args, config=config)
+            return self.fn(args)
+
+        kwargs = dict(args or {})
+        if config is not None:
+            kwargs['config'] = config
+        return self.fn(**kwargs)
+
+
+class _PytzZoneInfo(tzinfo):
+    """Minimal pytz timezone stand-in with `.localize(...)` for summary tests."""
+
+    def __init__(self, key):
+        try:
+            self._zone = ZoneInfo(key)
+        except Exception:
+            if key == 'UTC':
+                self._zone = timezone.utc
+            elif key == 'Asia/Kolkata':
+                self._zone = timezone(timedelta(hours=5, minutes=30), key)
+            else:
+                raise
+
+    def localize(self, value):
+        if value.tzinfo is not None:
+            return value.astimezone(self)
+        return value.replace(tzinfo=self)
+
+    def _delegate_value(self, value):
+        if value is not None and value.tzinfo is self:
+            return value.replace(tzinfo=self._zone)
+        return value
+
+    def utcoffset(self, value):
+        return self._zone.utcoffset(self._delegate_value(value))
+
+    def dst(self, value):
+        return self._zone.dst(self._delegate_value(value))
+
+    def tzname(self, value):
+        return self._zone.tzname(self._delegate_value(value))
+
+    def fromutc(self, value):
+        localized = value.replace(tzinfo=timezone.utc).astimezone(self._zone)
+        return localized.replace(tzinfo=self)
+
+
+def _tool(func=None, *args, **kwargs):
+    def decorator(fn):
+        return _ToolWrapper(fn)
+
+    if callable(func):
+        return decorator(func)
+    return decorator
+
+
 _stubs = [
+    'anthropic',
+    'av',
     'database._client',
+    'database.cache',
     'database.redis_db',
     'database.conversations',
     'database.memories',
@@ -46,13 +120,44 @@ _stubs = [
     'database.daily_summaries',
     'database.fair_use',
     'database.auth',
+    'database.llm_usage',
+    'database.phone_calls',
+    'deepgram',
+    'deepgram.clients',
+    'deepgram.clients.live',
+    'deepgram.clients.live.v1',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'google.cloud.firestore_v1.FieldFilter',
+    'langchain_core',
+    'langchain_core.callbacks',
+    'langchain_core.language_models',
+    'langchain_core.output_parsers',
+    'langchain_core.outputs',
+    'langchain_core.prompts',
+    'langchain_core.runnables',
+    'langchain_core.tools',
+    'langchain_google_genai',
+    'langchain_openai',
+    'openai',
+    'PIL',
+    'PIL.Image',
     'pinecone',
+    'pycountry',
+    'pytz',
+    'scipy',
+    'scipy.spatial',
+    'scipy.spatial.distance',
+    'tiktoken',
+    'twilio',
+    'twilio.jwt',
+    'twilio.jwt.access_token',
+    'twilio.jwt.access_token.grants',
+    'twilio.request_validator',
+    'twilio.rest',
     'typesense',
     'opuslib',
     'pydub',
@@ -67,12 +172,23 @@ _stubs = [
     'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.apps',
+    'utils.llm.clients',
     'utils.llm.memories',
     'utils.llm.chat',
+    'utils.llm.usage_tracker',
+    'websockets',
 ]
 for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+# Concrete attributes used by imported modules during lightweight tests.
+sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
+sys.modules['langchain_core.outputs'].LLMResult = object
+sys.modules['langchain_core.runnables'].RunnableConfig = dict
+sys.modules['langchain_core.tools'].tool = _tool
+sys.modules['pytz'].timezone = _PytzZoneInfo
+sys.modules['pytz'].utc = timezone.utc
 
 # Override specific attributes that need concrete values
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
@@ -80,6 +196,28 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+class TestLightweightStubHelpers:
+    """Keep lightweight dependency stubs aligned with the real interfaces tests rely on."""
+
+    def test_tool_wrapper_invoke_accepts_string_input(self):
+        def echo(value):
+            return value
+
+        wrapped = _tool(echo)
+
+        assert wrapped.invoke('hello') == 'hello'
+
+    def test_pytz_stub_supports_localize_and_datetime_now(self):
+        import pytz
+
+        user_tz = pytz.timezone('UTC')
+        localized = user_tz.localize(datetime(2026, 6, 10, 12, 0, 0))
+
+        assert localized.tzinfo is user_tz
+        assert localized.astimezone(pytz.utc).hour == 12
+        assert datetime.now(user_tz).tzinfo is user_tz
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
@@ -288,6 +426,68 @@ class TestSearchRedaction:
         assert len(unlocked_item['transcript_segments']) == 1
         # total_pages uses page-level signal, not global found count
         assert result['total_pages'] == 1
+
+    def test_search_skips_malformed_timestamp_hit(self):
+        """A single hit with a missing/null timestamp must be skipped, not 500 the whole page."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='good'),
+                        'created_at': 1704067200,
+                        'started_at': 1704067200,
+                        'finished_at': 1704070800,
+                    }
+                },
+                {
+                    'document': {
+                        # null started_at -> utcfromtimestamp(None) raises; finished_at missing entirely
+                        **_make_conversation(locked=False, conversation_id='bad'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test')
+
+        # Does not raise; only the well-formed hit survives, with ISO-string timestamps.
+        assert len(result['items']) == 1
+        kept = result['items'][0]
+        assert isinstance(kept['created_at'], str) and 'T' in kept['created_at']
+        assert isinstance(kept['started_at'], str)
+
+    def test_search_all_malformed_returns_empty_page_not_500(self):
+        """If every hit is malformed, return an empty page instead of 500ing the whole request."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {'document': {**_make_conversation(locked=False, conversation_id='bad1'), 'created_at': None}},
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='bad2'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test', page=2)
+
+        assert result['items'] == []
+        assert result['total_pages'] == 2  # falls back to the page param, not inflated
+        assert result['current_page'] == 2
 
     def test_search_total_pages_does_not_leak_locked_count(self):
         """total_pages must not inflate from locked docs on other pages."""
@@ -600,6 +800,61 @@ class TestMcpSseLockRedaction:
         assert convs[0]['structured']['title'] == 'Test Conversation'
         assert len(convs[1]['structured']['action_items']) == 1
 
+    def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
+        """MCP SSE search_memories must match REST filtering before applying the requested limit."""
+        import database.memories as memories_db
+        import database.vector_db as vector_db
+
+        vector_db.find_similar_memories = MagicMock(
+            return_value=[
+                {'score': 1.0},
+                {'memory_id': 'locked', 'score': 0.99},
+                {'memory_id': 'rejected', 'score': 0.98},
+                {'memory_id': 'invalidated', 'score': 0.97},
+                {'memory_id': 'visible-1', 'score': 0.70},
+                {'memory_id': 'visible-2', 'score': 0.60},
+                {'memory_id': 'visible-3', 'score': 0.50},
+            ]
+        )
+        locked = _make_memory(locked=True, memory_id='locked')
+        locked['content'] = 'LOCKED_SECRET_MEMORY'
+        rejected = _make_memory(memory_id='rejected')
+        rejected['content'] = 'REJECTED_MEMORY'
+        rejected['user_review'] = False
+        invalidated = _make_memory(memory_id='invalidated')
+        invalidated['content'] = 'INVALIDATED_MEMORY'
+        invalidated['invalid_at'] = '2026-06-10T00:00:00+00:00'
+        memories_db.get_memories_by_ids = MagicMock(
+            return_value=[
+                locked,
+                rejected,
+                invalidated,
+                _make_memory(memory_id='visible-1'),
+                _make_memory(memory_id='visible-2'),
+                _make_memory(memory_id='visible-3'),
+            ]
+        )
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2})
+
+        assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
+        assert 'LOCKED_SECRET_MEMORY' not in str(result)
+        assert 'REJECTED_MEMORY' not in str(result)
+        assert 'INVALIDATED_MEMORY' not in str(result)
+        vector_db.find_similar_memories.assert_called_once_with('test-uid', 'memory', threshold=0.0, limit=6)
+
+    def test_mcp_sse_search_memories_schema_documents_limit_bounds(self):
+        """MCP clients should see the same limit bounds enforced by execute_tool."""
+        from routers.mcp_sse import MCP_TOOLS
+
+        search_memories = next(tool for tool in MCP_TOOLS if tool['name'] == 'search_memories')
+        limit_schema = search_memories['inputSchema']['properties']['limit']
+
+        assert limit_schema['minimum'] == 1
+        assert limit_schema['maximum'] == 20
+
 
 # =============================================================================
 # Test users.py endpoints
@@ -746,16 +1001,18 @@ class TestScheduledDailySummaryLockFilter:
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch(
-                'utils.other.notifications.generate_comprehensive_daily_summary',
-                return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
-            ) as mock_gen:
-                daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
-                with patch('utils.other.notifications.send_notification'):
-                    from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch(
+                    'utils.other.notifications.generate_comprehensive_daily_summary',
+                    return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
+                ) as mock_gen:
+                    daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+                    daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
+                    with patch('utils.other.notifications.send_notification'):
+                        from utils.other.notifications import _send_summary_notification
 
-                    _send_summary_notification(('test-uid', 'token', 'UTC'))
+                        _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # generate_comprehensive_daily_summary must be called only with unlocked conversations
         mock_gen.assert_called_once()
@@ -766,14 +1023,17 @@ class TestScheduledDailySummaryLockFilter:
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""
         import database.conversations as conversations_db
+        import database.daily_summaries as daily_summaries_db
 
         conversations_db.get_conversations = MagicMock(return_value=[_make_conversation(locked=True)])
+        daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
-                from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
+                    from utils.other.notifications import _send_summary_notification
 
-                _send_summary_notification(('test-uid', 'token', 'UTC'))
+                    _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # Should not call LLM when no unlocked conversations remain
         mock_gen.assert_not_called()
@@ -1264,8 +1524,10 @@ class TestSuggestGoalLockFilter:
         mock_track.__exit__ = MagicMock(return_value=False)
 
         with patch('utils.llm.goals.track_usage', return_value=mock_track):
-            with patch('utils.llm.goals.llm_mini') as mock_llm:
+            with patch('utils.llm.goals.get_llm') as mock_get_llm:
+                mock_llm = MagicMock()
                 mock_llm.invoke.return_value = mock_llm_response
+                mock_get_llm.return_value = mock_llm
 
                 from utils.llm.goals import suggest_goal
 

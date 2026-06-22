@@ -19,7 +19,10 @@ named utilities with bounded resources, clean shutdown, and observability.
 
 import asyncio
 import logging
+import sys
+import threading
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Any, Awaitable, Generic, Iterable, TypeVar
 
 from prometheus_client import Counter, Histogram
@@ -32,32 +35,88 @@ T = TypeVar('T')
 # Metrics
 # ---------------------------------------------------------------------------
 
-SUPERVISOR_EXIT_TOTAL = Counter(
+_METRIC_CACHE_MODULE = 'utils._async_tasks_metric_cache'
+
+
+def _new_metric_cache_module():
+    module = ModuleType(_METRIC_CACHE_MODULE)
+    module.cache = {}
+    module.lock = threading.Lock()
+    return module
+
+
+def _metric_cache_state():
+    state = sys.modules.get(_METRIC_CACHE_MODULE)
+    if state is None:
+        state = sys.modules.setdefault(_METRIC_CACHE_MODULE, _new_metric_cache_module())
+    return state
+
+
+def _metric_cache():
+    return _metric_cache_state().cache
+
+
+def _cacheable_value(value):
+    if isinstance(value, list):
+        return tuple(_cacheable_value(item) for item in value)
+    if isinstance(value, dict):
+        return tuple(sorted((key, _cacheable_value(item)) for key, item in value.items()))
+    return value
+
+
+def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
+    return (
+        metric_class,
+        name,
+        tuple(labelnames),
+        tuple(sorted((key, _cacheable_value(value)) for key, value in kwargs.items())),
+    )
+
+
+def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
+    state = _metric_cache_state()
+    cache_key = _metric_cache_key(metric_class, name, labelnames, **kwargs)
+    with state.lock:
+        cache = state.cache
+        existing = cache.get(cache_key)
+        if existing is not None:
+            return existing
+        metric = metric_class(name, documentation, labelnames, **kwargs)
+        cache[cache_key] = metric
+        return metric
+
+
+SUPERVISOR_EXIT_TOTAL = _get_or_create_metric(
+    Counter,
     'async_supervisor_exit_total',
     'Supervisor loop exits by reason',
     ['label', 'reason'],
 )
 
-DRAIN_TIMEOUT_TOTAL = Counter(
+DRAIN_TIMEOUT_TOTAL = _get_or_create_metric(
+    Counter,
     'async_drain_timeout_total',
     'Task drain operations that hit timeout',
     ['label'],
 )
 
-DRAIN_DURATION = Histogram(
+DRAIN_DURATION = _get_or_create_metric(
+    Histogram,
     'async_drain_duration_seconds',
     'Time spent draining tasks',
     ['label'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
 )
 
-GATHER_FAILURES_TOTAL = Counter(
+GATHER_FAILURES_TOTAL = _get_or_create_metric(
+    Counter,
     'async_gather_failures_total',
     'Individual coroutine failures in gather_safe',
     ['label'],
 )
 
-GATHER_DURATION = Histogram(
+GATHER_DURATION = _get_or_create_metric(
+    Histogram,
     'async_gather_duration_seconds',
     'Total duration of gather_safe calls',
     ['label'],

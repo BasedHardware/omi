@@ -135,6 +135,8 @@
     "systemDefault": "Sistem Varsayılanı",
     "planAndUsage": "Plan ve Kullanım",
     "offlineSync": "Çevrimdışı Senkronizasyon",
+    "autoSync": "Otomatik eşitleme",
+    "autoSyncDescription": "Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin",
     "deviceSettings": "Cihaz Ayarları",
     "integrations": "Entegrasyonlar",
     "feedbackBug": "Geri Bildirim / Hata",
@@ -3081,5 +3083,14 @@
     "recapRegeneratedSnackbar": "Özet yeniden oluşturuldu",
     "recapRegenerateFailed": "Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.",
     "recapRegenerateCooldown": "Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.",
-    "recapRegenerateNoConversations": "Bu gün için özetlenecek konuşma bulunamadı."
+    "recapRegenerateNoConversations": "Bu gün için özetlenecek konuşma bulunamadı.",
+    "syncCustomSttWarningTitle": "Eşitleme, Omi transkripsiyonunu kullanır",
+    "syncCustomSttWarningMessage": "Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.",
+    "transcribeLaterTitle": "Sonradan Transkribe Et",
+    "transcribeLaterDescription": "Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.",
+    "transcribeLaterNote": "Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
+    "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.",
+    "unmute": "Sesi aç",
+    "newRecording": "Yeni kayıt",
+    "transcribeLaterPaused": "Duraklatıldı — ses kaydedilmiyor"
 }

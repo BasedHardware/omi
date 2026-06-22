@@ -6,7 +6,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -43,7 +43,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.apps import update_personas_async
-from utils.notifications import send_action_item_data_message
+from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
@@ -104,20 +104,103 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 # ******************************************************
 
 
+def _coerce_required_memory_id(value) -> str:
+    if not value and value != 0:
+        raise ValueError('id is required')
+    return str(value)
+
+
+def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
+    if value in [None, '']:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
+
+
 class CleanerMemory(BaseModel):
     # Core fields (aligned with MemoryResponse)
     id: str
-    content: str
-    category: MemoryCategory
+    content: str = ''
+    category: MemoryCategory = MemoryCategory.interesting
     visibility: Optional[str] = 'private'
-    tags: List[str] = []
-    created_at: datetime
-    updated_at: datetime
-    manually_added: bool
+    tags: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    manually_added: bool = False
     scoring: Optional[str] = None
-    reviewed: bool
+    reviewed: bool = False
     user_review: Optional[bool] = None
-    edited: bool
+    edited: bool = False
+
+    @field_validator('id', mode='before')
+    def coerce_id(cls, value):
+        return _coerce_required_memory_id(value)
+
+    @field_validator('content', mode='before')
+    def coerce_content(cls, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    @field_validator('category', mode='before')
+    def coerce_category(cls, value):
+        if isinstance(value, MemoryCategory):
+            return value
+        try:
+            return MemoryCategory(value)
+        except (TypeError, ValueError):
+            return MemoryCategory.interesting
+
+    @field_validator('visibility', mode='before')
+    def coerce_visibility(cls, value):
+        return value if value in ['public', 'private'] else 'private'
+
+    @field_validator('tags', mode='before')
+    def coerce_tags(cls, value):
+        if not isinstance(value, list):
+            return []
+        return [str(tag) for tag in value if tag is not None]
+
+    @field_validator('scoring', mode='before')
+    def coerce_scoring(cls, value):
+        if value is None:
+            return None
+        return str(value)
+
+    @field_validator('created_at', 'updated_at', mode='before')
+    def coerce_datetime(cls, value):
+        return _coerce_optional_memory_datetime(value)
+
+    @field_validator('user_review', mode='before')
+    def coerce_user_review(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return None
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
+
+    @field_validator('manually_added', 'reviewed', 'edited', mode='before')
+    def coerce_bool(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return False
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
 
 
 class CreateMemoryRequest(BaseModel):
@@ -171,11 +254,27 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field or an out-of-enum category) doesn't fail the whole page with a 500. Mirrors the
+    # hardening already applied to GET /v3/memories.
+    valid_memories = []
     for memory in memories:
+        if not isinstance(memory, dict) or not memory.get('id'):
+            logger.warning('Skipping malformed memory in Developer API memory list')
+            continue
         if memory.get('is_locked', False):
-            content = memory.get('content', '')
+            content = str(memory.get('content') or '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid_memories.append(CleanerMemory.model_validate(memory))
+        except ValidationError as e:
+            missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory doc {memory.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {missing_fields}"
+            )
+            continue
+    return valid_memories
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
@@ -607,14 +706,17 @@ def update_action_item(
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
-    # Send FCM notification if due_at was updated
-    if request.due_at is not None:
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085).
+    if 'completed' in update_data or 'due_at' in update_data:
         description = request.description.strip() if request.description else action_item.get('description', '')
-        send_action_item_data_message(
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=description,
-            due_at=request.due_at.isoformat(),
+            completed=bool(update_data.get('completed', action_item.get('completed'))),
+            due_at=update_data.get('due_at', action_item.get('due_at')),
         )
 
     return action_items_db.get_action_item(uid, action_item_id)

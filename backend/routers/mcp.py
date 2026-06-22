@@ -9,6 +9,11 @@ from pydantic import BaseModel
 import database.memories as memories_db
 import database.conversations as conversations_db
 import database.users as users_db
+import database.action_items as action_items_db
+import database.goals as goals_db
+import database.chat as chat_db
+import database.screen_activity as screen_activity_db
+import database.daily_summaries as daily_summaries_db
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -23,6 +28,14 @@ from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
+from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_memories import (
+    collect_filtered_memories,
+    parse_mcp_bool,
+    parse_mcp_datetime,
+    parse_mcp_int,
+    parse_optional_mcp_bool,
+)
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
@@ -105,7 +118,7 @@ class UserProfile(BaseModel):
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
 def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
-    """The user's consolidated, always-current profile. Read this first for facts about the user."""
+    """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
     return UserProfile(
@@ -182,14 +195,49 @@ def get_memories(
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
+    sort: str = "created_desc",
+    reviewed: Optional[bool] = None,
+    manually_added: Optional[bool] = None,
+    updated_after: Optional[str] = None,
+    include_activity: bool = False,
+    include_sensitive: bool = True,
 ):
+    try:
+        limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
+        offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)
+        reviewed = parse_optional_mcp_bool(reviewed, "reviewed")
+        manually_added = parse_optional_mcp_bool(manually_added, "manually_added")
+        include_activity = parse_mcp_bool(include_activity, "include_activity", default=False)
+        include_sensitive = parse_mcp_bool(include_sensitive, "include_sensitive", default=True)
+        parsed_updated_after = parse_mcp_datetime(updated_after, "updated_after")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if sort not in {"scoring_desc", "created_desc", "updated_desc", "manual_first"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
+        )
+
     category_list = []
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
-    memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
+    result = collect_filtered_memories(
+        lambda batch_offset, batch_limit: memories_db.get_memories(
+            uid, batch_limit, batch_offset, [c.value for c in category_list], sort=sort
+        ),
+        limit=limit,
+        offset=offset,
+        reviewed=reviewed,
+        manually_added=manually_added,
+        include_activity=include_activity,
+        include_sensitive=include_sensitive,
+        updated_after=parsed_updated_after,
+        sort=sort,
+    )
+    memories = result["memories"]
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
@@ -315,3 +363,137 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from
     populate_speaker_names(uid, [conversation])
 
     return conversation
+
+
+# ---------------------------------------------------------------------------
+# Action items — the user's actionable task layer (to-dos with due dates)
+# ---------------------------------------------------------------------------
+
+
+class SimpleActionItem(BaseModel):
+    id: str
+    description: str
+    completed: bool = False
+    created_at: Optional[datetime] = None
+    due_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    conversation_id: Optional[str] = None
+
+
+@router.get("/v1/mcp/action-items", response_model=List[SimpleActionItem], tags=["mcp"])
+def get_action_items(
+    completed: Optional[bool] = None,
+    due_start_date: Optional[datetime] = None,
+    due_end_date: Optional[datetime] = None,
+    limit: int = 100,
+    offset: int = 0,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"get_action_items {uid} completed={completed} limit={limit} offset={offset}")
+    limit = max(1, min(limit, 500))
+    offset = max(0, offset)
+    items = action_items_db.get_action_items(
+        uid,
+        completed=completed,
+        due_start_date=due_start_date,
+        due_end_date=due_end_date,
+        limit=limit,
+        offset=offset,
+    )
+    return [clean_action_item(i) for i in items if not i.get("deleted", False)]
+
+
+# ---------------------------------------------------------------------------
+# Goals — the user's stated objectives
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/mcp/goals", tags=["mcp"])
+def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"get_goals {uid} include_inactive={include_inactive}")
+    return goals_db.get_all_goals(uid, include_inactive=include_inactive)
+
+
+# ---------------------------------------------------------------------------
+# Chat — the user's prior conversations with Omi (intent / preferences signal)
+# ---------------------------------------------------------------------------
+
+
+class SimpleChatMessage(BaseModel):
+    id: str
+    text: str
+    sender: str
+    type: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+@router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
+def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+    messages = chat_db.get_messages(uid, limit=limit, offset=offset)
+    return [clean_chat_message(m) for m in messages]
+
+
+# ---------------------------------------------------------------------------
+# People — the contacts/speakers the user interacts with
+# ---------------------------------------------------------------------------
+
+
+class SimplePerson(BaseModel):
+    id: str
+    name: str
+    created_at: Optional[datetime] = None
+    speech_sample_transcripts: List[str] = []
+
+
+@router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
+def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"get_people {uid}")
+    return [clean_person(p) for p in users_db.get_people(uid)]
+
+
+# ---------------------------------------------------------------------------
+# Screen activity — desktop Rewind (app, window title, OCR text)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/mcp/screen-activity", tags=["mcp"])
+def get_screen_activity(
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    app: Optional[str] = None,
+    summary: bool = False,
+    limit: int = 200,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
+    if summary:
+        return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
+    limit = max(1, min(limit, 1000))
+    rows = screen_activity_db.get_screen_activity(
+        uid, start_date=start_date, end_date=end_date, app_filter=app, limit=limit
+    )
+    return [clean_screen_activity_row(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Daily summaries — Omi's per-day digest of the user's life
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/mcp/daily-summaries", tags=["mcp"])
+def get_daily_summaries(
+    limit: int = 30,
+    offset: int = 0,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
+    logger.info(f"get_daily_summaries {uid} limit={limit} offset={offset}")
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    return daily_summaries_db.get_daily_summaries(
+        uid, limit=limit, offset=offset, start_date=start_date, end_date=end_date
+    )

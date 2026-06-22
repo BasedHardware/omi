@@ -428,6 +428,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get offlineSync => 'Синхронизовање без интернета';
 
   @override
+  String get autoSync => 'Аутоматска синхронизација';
+
+  @override
+  String get autoSyncDescription => 'Аутоматски синхронизуј офлајн снимке када се уређај повеже';
+
+  @override
   String get deviceSettings => 'Подешавања уређаја';
 
   @override
@@ -4694,10 +4700,7 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription и је $triggerDescription.';
   }
 
@@ -9325,4 +9328,35 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Нема разговора за сумирање за овај дан.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизација користи Omi транскрипцију';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkripcija kasnije';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Za sada radi sa Omi uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.';
+
+  @override
+  String get unmute => 'Uključi zvuk';
+
+  @override
+  String get newRecording => 'Novi snimak';
+
+  @override
+  String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 }

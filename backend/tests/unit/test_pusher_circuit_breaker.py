@@ -12,9 +12,13 @@ Verifies:
 
 import asyncio
 import time
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from pusher_websockets_stub import install_websockets_stub
+
+install_websockets_stub()
 
 from utils.pusher import (
     PusherCircuitBreaker,

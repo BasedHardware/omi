@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ValidationError
 import database.memories as memories_db
 from database.vector_db import (
     delete_memory_vector,
+    delete_memory_vectors_batch,
     upsert_memory_vector,
     upsert_memory_vectors_batch,
 )
@@ -187,7 +188,25 @@ def delete_memory(
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
+    # Collect all memory IDs before Firestore delete so we can also purge
+    # their Pinecone vectors — otherwise orphaned vectors become search
+    # noise that never gets cleaned up.
+    memory_ids = []
+    offset = 0
+    batch_size = 1000
+    while True:
+        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
+        if not memories:
+            break
+        batch_ids = [m.get('id') for m in memories if m.get('id')]
+        memory_ids.extend(batch_ids)
+        offset += batch_size
+
     memories_db.delete_all_memories(uid)
+
+    if memory_ids:
+        delete_memory_vectors_batch(uid, memory_ids)
+
     return {'status': 'ok'}
 
 

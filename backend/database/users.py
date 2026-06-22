@@ -5,12 +5,19 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
+from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.redis_db import try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Conservative low-risk user projections. Do NOT use these policies for
+# entitlement, BYOK, data-protection, privacy-consent, or full user-doc caching.
+_USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
+_USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
+_USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
@@ -881,14 +888,28 @@ def get_user_language_preference(uid: str) -> str:
     Returns:
         Language code (e.g., 'en', 'vi') or empty string if not set
     """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
 
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
-        return user_data.get('language', '')
+    def fetch_language():
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['language'])
 
-    return ''  # Return empty string if not set
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            return user_data.get('language', '')
+
+        return ''  # Return empty string if not set
+
+    # DESIGN DECISION: cache this typed user projection, not the full users/{uid} doc.
+    #
+    # Rationale:
+    # - Language preference is a low-risk, frequently-read setting used during
+    #   listen startup.
+    # - Full user-doc caching is intentionally avoided because users/{uid} also
+    #   contains entitlement, BYOK, privacy, and data-protection fields.
+    #
+    # Safety: cache is disabled by default, Redis failures fall back to Firestore,
+    # and set_user_language_preference() invalidates this namespace.
+    return get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language)
 
 
 def set_user_language_preference(uid: str, language: str) -> None:
@@ -901,6 +922,8 @@ def set_user_language_preference(uid: str, language: str) -> None:
     """
     user_ref = db.collection('users').document(uid)
     user_ref.set({'language': language}, merge=True)
+    invalidate(_USER_LANGUAGE_CACHE, uid)
+    invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 def get_user_onboarding_state(uid: str) -> dict:
@@ -1201,19 +1224,34 @@ def get_user_transcription_preferences(uid: str) -> dict:
     Returns:
         dict with 'single_language_mode' (bool), 'vocabulary' (List[str]), and 'language' (str)
     """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
 
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
-        prefs = user_data.get('transcription_preferences', {})
+    def fetch_preferences():
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['transcription_preferences', 'language'])
+
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            prefs = user_data.get('transcription_preferences', {})
+            return {
+                'single_language_mode': prefs.get('single_language_mode', False),
+                'vocabulary': prefs.get('vocabulary', []),
+                'language': user_data.get('language', ''),
+                'uses_custom_stt': prefs.get('uses_custom_stt', False),
+                'custom_stt_since': prefs.get('custom_stt_since'),
+            }
+
         return {
-            'single_language_mode': prefs.get('single_language_mode', False),
-            'vocabulary': prefs.get('vocabulary', []),
-            'language': user_data.get('language', ''),
+            'single_language_mode': False,
+            'vocabulary': [],
+            'language': '',
+            'uses_custom_stt': False,
+            'custom_stt_since': None,
         }
 
-    return {'single_language_mode': False, 'vocabulary': [], 'language': ''}
+    # DESIGN DECISION: cache this typed user projection, not the full users/{uid} doc.
+    # It includes only transcription startup preferences and language. It does not
+    # include entitlement, BYOK, data-protection, or privacy-consent fields.
+    return get_or_fetch(_USER_TRANSCRIPTION_PREFS_CACHE, uid, fetch_preferences)
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
@@ -1253,6 +1291,28 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+        invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
+
+
+def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
+    """Persist whether the user is using a custom (third-party) mobile STT provider.
+
+    There is no other record that a user is on custom STT — the app only sends a
+    per-session `custom_stt=enabled` WS param. This stamps it onto the user doc so
+    custom-STT users are queryable/meterable (see #7690).
+
+    - `transcription_preferences.uses_custom_stt`: current state (bool).
+    - `transcription_preferences.custom_stt_since`: when the current custom-STT
+      streak began (set on the off->on transition; cleared when turned off).
+
+    Callers should only invoke this when the value actually changes, so the
+    `_since` timestamp is not overwritten on every session and writes stay rare.
+    """
+    user_ref = db.collection('users').document(uid)
+    update_data = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
+    update_data['transcription_preferences.custom_stt_since'] = datetime.now(timezone.utc) if uses_custom_stt else None
+    user_ref.update(update_data)
+    invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 # ============================================================================
@@ -1351,20 +1411,29 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
     return existing
 
 
-def get_ai_user_profile(uid: str) -> Optional[dict]:
+def _get_ai_user_profile_from_firestore(uid: str) -> Optional[dict]:
     user_ref = db.collection('users').document(uid)
-    doc = user_ref.get()
+    doc = user_ref.get(['ai_user_profile'])
     if not doc.exists:
         return None
     return doc.to_dict().get('ai_user_profile')
+
+
+def get_ai_user_profile(uid: str) -> Optional[dict]:
+    # DESIGN DECISION: cache only the low-risk ai_user_profile projection.
+    # Avoid full user-doc caching because high-risk entitlement/BYOK/privacy
+    # fields live on the same Firestore document.
+    return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
 def update_ai_user_profile(
     uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
 ) -> dict:
     """Update AI user profile.  Only writes non-None fields (partial update)."""
-    # Read existing profile and merge updates
-    existing = get_ai_user_profile(uid) or {}
+    # Read existing profile directly from Firestore — never from cache — because
+    # this is a read-modify-write path. Using a stale cached projection here
+    # could overwrite newer profile fields.
+    existing = _get_ai_user_profile_from_firestore(uid) or {}
     if profile_text is not None:
         existing['profile_text'] = profile_text
     if generated_at is not None:
@@ -1373,4 +1442,5 @@ def update_ai_user_profile(
         existing['data_sources_used'] = data_sources_used
     user_ref = db.collection('users').document(uid)
     user_ref.update({'ai_user_profile': existing})
+    invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing

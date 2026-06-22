@@ -430,6 +430,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get offlineSync => 'Офлайн синхронизация';
 
   @override
+  String get autoSync => 'Автоматична синхронизация';
+
+  @override
+  String get autoSyncDescription => 'Автоматично синхронизиране на офлайн записите при свързване на устройството ви';
+
+  @override
   String get deviceSettings => 'Настройки на устройството';
 
   @override
@@ -4700,10 +4706,7 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription и е $triggerDescription.';
   }
 
@@ -9348,4 +9351,35 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Няма разговори за обобщаване за този ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизирането използва транскрипция на Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Използвате собствен доставчик за транскрипция. Синхронизирането на тези записи ги транскрибира на сървърите на Omi и те се отчитат към лимита за транскрипция на вашия план.';
+
+  @override
+  String get transcribeLaterTitle => 'Транскрибиране по-късно';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Записвайте аудио сега и го транскрибирайте при поискване, вместо на живо. Записите се запазват на телефона ви, след което ги качвате, за да създадете разговори.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Паметта на телефона ви е на изчерпване, затова записването е спряно на пауза. Освободете място или качете записите си и то ще се възобнови автоматично.';
+
+  @override
+  String get unmute => 'Включи звука';
+
+  @override
+  String get newRecording => 'Нов запис';
+
+  @override
+  String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 }

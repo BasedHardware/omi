@@ -113,11 +113,16 @@ action_items_db.get_action_item = MagicMock(return_value=None)
 action_items_db.create_action_item = MagicMock(return_value="test-item-id")
 action_items_db.update_action_item = MagicMock(return_value=True)
 
+# Stub database.notifications
+notifications_db = _stub_module("database.notifications")
+notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 # Stub utils packages
 _stub_package("utils")
@@ -135,6 +140,35 @@ factory_mod = _stub_module("utils.conversations.factory")
 factory_mod.deserialize_conversation = MagicMock(
     side_effect=lambda d: d if not isinstance(d, dict) else type('FakeConv', (), d)()
 )
+search_mod = _stub_module("utils.conversations.search")
+search_mod.keyword_search_conversation_ids = MagicMock(return_value=[])
+
+
+def _merge_conversation_search_ids(keyword_ids, vector_ids):
+    return list(keyword_ids) + [cid for cid in vector_ids if cid not in keyword_ids]
+
+
+search_mod.merge_conversation_search_ids = MagicMock(side_effect=_merge_conversation_search_ids)
+transcript_chunks_mod = _stub_module("utils.conversations.transcript_chunks")
+
+
+def _hydrate_chunk_texts(_uid, conversations):
+    return conversations
+
+
+transcript_chunks_mod.hydrate_chunk_texts = MagicMock(side_effect=_hydrate_chunk_texts)
+
+
+@pytest.fixture(autouse=True)
+def reset_conversation_search_stubs():
+    search_mod.keyword_search_conversation_ids.reset_mock()
+    search_mod.keyword_search_conversation_ids.return_value = []
+    search_mod.merge_conversation_search_ids.reset_mock()
+    search_mod.merge_conversation_search_ids.side_effect = _merge_conversation_search_ids
+    transcript_chunks_mod.hydrate_chunk_texts.reset_mock()
+    transcript_chunks_mod.hydrate_chunk_texts.side_effect = _hydrate_chunk_texts
+
+
 endpoints_mod = _stub_module("utils.other.endpoints")
 endpoints_mod.get_current_user_uid = MagicMock()
 endpoints_mod.with_rate_limit = MagicMock(return_value=MagicMock())
@@ -301,7 +335,7 @@ class TestParseIsoDate:
         )
         if not os.path.exists(swift_path):
             pytest.skip("APIClient.swift not found (backend-only test environment)")
-        with open(swift_path) as f:
+        with open(swift_path, encoding="utf-8") as f:
             source = f.read()
         assert 'func encodeQueryDate' in source, "encodeQueryDate helper must exist in APIClient.swift"
         # 8 call sites + 1 definition = at least 9 occurrences

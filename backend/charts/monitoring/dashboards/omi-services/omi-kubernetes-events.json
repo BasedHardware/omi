@@ -1,0 +1,131 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 22,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"k8s_cluster\" OR resource.type=\"k8s_node\" OR resource.type=\"k8s_pod\" OR resource.type=\"k8s_container\"\nlog_id(\"events\")\n(resource.labels.cluster_name=~\"prod-omi-gke\" resource.labels.location=~\"us-central1\")\nseverity=(EMERGENCY OR ALERT OR CRITICAL OR ERROR OR WARNING)\n((resource.labels.\"resource_container\"=\"projects/208440318997\") OR (resource.labels.\"project_id\"=\"based-hardware\"))\njsonPayload.metadata.namespace=\"$Namespace\"\nSEARCH(\"$Filter\")\n",
+          "refId": "A"
+        }
+      ],
+      "title": "Omi Kubernetes Events",
+      "type": "logs"
+    }
+  ],
+  "preload": false,
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "tags": [],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": [
+            "prod-omi-backend"
+          ],
+          "value": [
+            "prod-omi-backend"
+          ]
+        },
+        "description": "",
+        "multi": true,
+        "name": "Namespace",
+        "options": [
+          {
+            "selected": true,
+            "text": "prod-omi-backend",
+            "value": "prod-omi-backend"
+          },
+          {
+            "selected": false,
+            "text": "prod-omi-dg-self-hosted",
+            "value": "prod-omi-dg-self-hosted"
+          },
+          {
+            "selected": false,
+            "text": "prod-omi-monitoring",
+            "value": "prod-omi-monitoring"
+          }
+        ],
+        "query": "prod-omi-backend,prod-omi-dg-self-hosted,prod-omi-monitoring",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "",
+        "name": "Filter",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Omi Kubernetes Events",
+  "uid": "3714dbfa-114b-47a0-99ca-1a26354e792a"
+}

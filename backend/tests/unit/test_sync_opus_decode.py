@@ -12,11 +12,13 @@ focusing on failure modes that cause WALs to become permanently stuck:
 Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
+import importlib.util
 import os
 import struct
 import sys
 import tempfile
 import wave
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -46,8 +48,15 @@ _stub_modules = [
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.encryption',
+    'utils.analytics',
+    'utils.byok',
+    'utils.cloud_tasks',
+    'utils.http_client',
     'utils.stt.pre_recorded',
     'utils.stt.vad',
+    'utils.speaker_assignment',
+    'utils.speaker_identification',
+    'utils.stt.speaker_embedding',
     'utils.fair_use',
     'utils.subscription',
     'utils.log_sanitizer',
@@ -60,12 +69,161 @@ for _mod in _stub_modules:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()
 
+
+def _ensure_attrs(module_name, attrs):
+    module = sys.modules.setdefault(module_name, MagicMock())
+    for attr in attrs:
+        if not hasattr(module, attr):
+            setattr(module, attr, MagicMock())
+    return module
+
+
+class _ConversationSource:
+    omi = 'omi'
+    limitless = 'limitless'
+    unknown = 'unknown'
+
+
+def _ensure_conversation_source_stub():
+    source = getattr(sys.modules.setdefault('models.conversation_enums', MagicMock()), 'ConversationSource', None)
+    if source is None or not all(hasattr(source, attr) for attr in ('omi', 'limitless')):
+        sys.modules['models.conversation_enums'].ConversationSource = _ConversationSource
+
+    conversation_mod = sys.modules.setdefault('models.conversation', MagicMock())
+    if not hasattr(getattr(conversation_mod, 'ConversationSource', None), 'omi'):
+        conversation_mod.ConversationSource = sys.modules['models.conversation_enums'].ConversationSource
+
+
+def _install_python_multipart_stub():
+    if 'python_multipart' in sys.modules:
+        return False
+    if importlib.util.find_spec('python_multipart') is not None:
+        return False
+
+    mod = ModuleType('python_multipart')
+    mod.__version__ = '0.0.20'
+    sys.modules['python_multipart'] = mod
+    return True
+
+
 sys.modules['database.redis_db'].r = MagicMock()
 sys.modules['database._client'].db = MagicMock()
+_ensure_attrs('opuslib', ['Decoder'])
+_ensure_attrs('database.conversations', ['get_closest_conversation_to_timestamps', 'update_conversation_segments'])
+_ensure_attrs(
+    'database.sync_jobs',
+    [
+        'TERMINAL_STATUSES',
+        'create_sync_job',
+        'get_sync_job',
+        'update_sync_job',
+        'mark_job_processing',
+        'mark_job_completed',
+        'mark_job_failed',
+        'mark_job_queued_for_retry',
+        'try_acquire_job_run_lock',
+        'release_job_run_lock',
+        'add_processed_segment',
+        'get_processed_segments',
+        'try_mark_once',
+    ],
+)
+_ensure_attrs('models.conversation', ['Conversation', 'CreateConversation'])
+_ensure_conversation_source_stub()
+_ensure_attrs('models.transcript_segment', ['TranscriptSegment'])
+_ensure_attrs('utils.conversations.factory', ['deserialize_conversation'])
+_ensure_attrs('utils.conversations.process_conversation', ['process_conversation'])
+_ensure_attrs('utils.analytics', ['record_usage'])
+_ensure_attrs('utils.other.endpoints', ['get_current_user_uid'])
+_ensure_attrs(
+    'utils.other.storage',
+    [
+        'get_syncing_file_temporal_signed_url',
+        'delete_syncing_temporal_file',
+        'schedule_syncing_temporal_file_deletion',
+        'upload_syncing_temporal_file',
+        'download_syncing_temporal_file',
+        'download_audio_chunks_and_merge',
+        'get_or_create_merged_audio',
+        'get_merged_audio_signed_url',
+        'download_legacy_merged_wav',
+        'get_playback_artifact_signed_url',
+        'download_playback_artifact',
+        'upload_playback_artifact',
+        'mark_playback_unavailable',
+        'is_playback_unavailable',
+        'enqueue_conversation_audio_merge',
+        '_PRECACHE_FILE_SEM',
+    ],
+)
+_ensure_attrs('utils.byok', ['get_byok_keys', 'set_byok_keys', 'has_byok_keys'])
+_ensure_attrs(
+    'utils.cloud_tasks',
+    [
+        'enqueue_sync_job',
+        'get_sync_tasks_max_attempts',
+        'is_audio_merge_dispatch_enabled',
+        'is_cloud_tasks_dispatch_enabled',
+        'verify_cloud_tasks_oidc',
+    ],
+)
+_ensure_attrs('utils.http_client', ['_get_semaphore'])
+_ensure_attrs(
+    'utils.executors',
+    [
+        'critical_executor',
+        'db_executor',
+        'postprocess_executor',
+        'storage_executor',
+        'sync_executor',
+        'run_blocking',
+        'start_background_task',
+        'submit_with_context',
+    ],
+)
+_ensure_attrs('utils.stt.pre_recorded', ['postprocess_words', 'prerecorded'])
+_ensure_attrs('utils.stt.vad', ['vad_is_empty'])
+_ensure_attrs(
+    'utils.fair_use',
+    [
+        'record_speech_ms',
+        'get_rolling_speech_ms',
+        'check_soft_caps',
+        'is_hard_restricted',
+        'trigger_classifier_if_needed',
+        'is_dg_budget_exhausted',
+        'get_enforcement_stage',
+        'record_dg_usage_ms',
+        'FAIR_USE_ENABLED',
+        'FAIR_USE_RESTRICT_DAILY_DG_MS',
+    ],
+)
+_ensure_attrs('utils.speaker_assignment', ['process_speaker_assigned_segments'])
+_ensure_attrs('utils.speaker_identification', ['detect_speaker_from_text'])
+_ensure_attrs(
+    'utils.stt.speaker_embedding',
+    ['extract_embedding_from_bytes', 'compare_embeddings', 'SPEAKER_MATCH_THRESHOLD'],
+)
+_ensure_attrs('utils.subscription', ['has_transcription_credits'])
+_ensure_attrs('pydub', ['AudioSegment'])
+if 'google.cloud.tasks_v2' not in sys.modules:
+    sys.modules['google.cloud.tasks_v2'] = MagicMock()
+if not hasattr(sys.modules.setdefault('google.cloud', MagicMock()), 'tasks_v2'):
+    sys.modules['google.cloud'].tasks_v2 = sys.modules['google.cloud.tasks_v2']
 sys.modules['utils.log_sanitizer'].sanitize = lambda x: x
 sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
-from routers.sync import decode_opus_file_to_wav, decode_files_to_wav  # noqa: E402
+_remove_python_multipart_stub = _install_python_multipart_stub()
+try:
+    from routers.sync import (  # noqa: E402
+        decode_opus_file_to_wav,
+        decode_files_to_wav,
+        _merge_and_cap_vad_segments,
+        MAX_VAD_SEGMENT_SECONDS,
+    )
+finally:
+    if _remove_python_multipart_stub:
+        sys.modules.pop('python_multipart', None)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -468,3 +626,49 @@ class TestDecodeFilesToWavOpus:
             assert len(wav_files) == 1
             assert not os.path.exists(valid_bin)
             assert not os.path.exists(corrupt_bin)
+
+
+class TestMergeAndCapVadSegments:
+    """VAD merge + per-segment length cap that guards the STT worker from GPU OOM."""
+
+    def _assert_within_cap(self, segments):
+        for s in segments:
+            assert s['end'] - s['start'] <= MAX_VAD_SEGMENT_SECONDS
+
+    def test_close_spans_merge(self):
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 2}, {'start': 3, 'end': 5}])
+        assert out == [{'start': 0, 'end': 5}]
+
+    def test_far_apart_spans_not_merged(self):
+        spans = [{'start': 0, 'end': 2}, {'start': 300, 'end': 320}]
+        assert _merge_and_cap_vad_segments(spans) == [{'start': 0, 'end': 2}, {'start': 300, 'end': 320}]
+
+    def test_continuous_audio_is_capped(self):
+        # 50s spans 1s apart spanning ~900s would merge into one giant segment without the cap.
+        spans = [{'start': i, 'end': i + 50} for i in range(0, 900, 51)]
+        out = _merge_and_cap_vad_segments(spans)
+        assert len(out) > 1
+        self._assert_within_cap(out)
+        for a, b in zip(out, out[1:]):
+            assert b['start'] >= a['end']
+
+    def test_single_long_span_is_split(self):
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 800}])
+        self._assert_within_cap(out)
+        assert out[0]['start'] == 0
+        assert out[-1]['end'] == 800
+        for a, b in zip(out, out[1:]):
+            assert b['start'] == a['end']
+
+    def test_exact_multiple_of_cap(self):
+        cap = MAX_VAD_SEGMENT_SECONDS
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 2 * cap}])
+        assert out == [{'start': 0, 'end': cap}, {'start': cap, 'end': 2 * cap}]
+
+    def test_empty(self):
+        assert _merge_and_cap_vad_segments([]) == []
+
+    def test_input_not_mutated(self):
+        spans = [{'start': 0, 'end': 2}, {'start': 3, 'end': 5}]
+        _merge_and_cap_vad_segments(spans)
+        assert spans == [{'start': 0, 'end': 2}, {'start': 3, 'end': 5}]

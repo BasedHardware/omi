@@ -134,6 +134,8 @@
     "systemDefault": "システムの既定",
     "planAndUsage": "プランと使用状況",
     "offlineSync": "オフライン同期",
+    "autoSync": "自動同期",
+    "autoSyncDescription": "デバイスの接続時にオフライン録音を自動的に同期します",
     "deviceSettings": "デバイス設定",
     "integrations": "連携",
     "feedbackBug": "フィードバック / バグ報告",
@@ -3047,5 +3049,14 @@
     "recapRegeneratedSnackbar": "要約を再生成しました",
     "recapRegenerateFailed": "要約を再生成できませんでした。後でもう一度お試しください。",
     "recapRegenerateCooldown": "再生成する前に数秒お待ちください。",
-    "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。"
+    "recapRegenerateNoConversations": "この日の要約対象となる会話はありません。",
+    "syncCustomSttWarningTitle": "同期では Omi の文字起こしを使用します",
+    "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。",
+    "transcribeLaterTitle": "後で文字起こし",
+    "transcribeLaterDescription": "リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。",
+    "transcribeLaterNote": "現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。",
+    "transcribeLaterStorageFull": "スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。",
+    "unmute": "ミュート解除",
+    "newRecording": "新規録音",
+    "transcribeLaterPaused": "一時停止中 — 音声は録音されていません"
 }

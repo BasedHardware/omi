@@ -135,6 +135,8 @@
     "systemDefault": "Par défaut du système",
     "planAndUsage": "Forfait et utilisation",
     "offlineSync": "Synchronisation hors ligne",
+    "autoSync": "Synchronisation automatique",
+    "autoSyncDescription": "Synchroniser automatiquement les enregistrements hors ligne lorsque votre appareil se connecte",
     "deviceSettings": "Paramètres de l'appareil",
     "integrations": "Intégrations",
     "feedbackBug": "Retour / Bug",
@@ -3081,5 +3083,14 @@
     "recapRegeneratedSnackbar": "Récapitulatif régénéré",
     "recapRegenerateFailed": "Impossible de régénérer le récapitulatif. Réessayez plus tard.",
     "recapRegenerateCooldown": "Veuillez patienter quelques secondes avant de régénérer.",
-    "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée."
+    "recapRegenerateNoConversations": "Aucune conversation à résumer pour cette journée.",
+    "syncCustomSttWarningTitle": "La synchronisation utilise la transcription d'Omi",
+    "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait.",
+    "transcribeLaterTitle": "Transcrire plus tard",
+    "transcribeLaterDescription": "Enregistrez l'audio maintenant et transcrivez-le à la demande plutôt qu'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.",
+    "transcribeLaterNote": "Compatible avec les appareils Omi pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
+    "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement.",
+    "unmute": "Réactiver le son",
+    "newRecording": "Nouvel enregistrement",
+    "transcribeLaterPaused": "En pause — aucun audio n'est enregistré"
 }

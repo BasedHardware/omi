@@ -135,6 +135,8 @@
     "systemDefault": "افتراضي النظام",
     "planAndUsage": "الخطة والاستخدام",
     "offlineSync": "المزامنة دون اتصال",
+    "autoSync": "المزامنة التلقائية",
+    "autoSyncDescription": "مزامنة التسجيلات دون اتصال تلقائيًا عند توصيل جهازك",
     "deviceSettings": "إعدادات الجهاز",
     "integrations": "التكاملات",
     "feedbackBug": "ملاحظات / خطأ",
@@ -3013,5 +3015,14 @@
     "recapRegeneratedSnackbar": "تمت إعادة إنشاء الملخص",
     "recapRegenerateFailed": "تعذرت إعادة إنشاء الملخص. حاول مرة أخرى لاحقًا.",
     "recapRegenerateCooldown": "يرجى الانتظار بضع ثوانٍ قبل إعادة الإنشاء مرة أخرى.",
-    "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم."
+    "recapRegenerateNoConversations": "لا توجد محادثات لتلخيصها في هذا اليوم.",
+    "syncCustomSttWarningTitle": "المزامنة تستخدم خدمة النسخ في Omi",
+    "syncCustomSttWarningMessage": "أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.",
+    "transcribeLaterTitle": "التفريغ النصي لاحقًا",
+    "transcribeLaterDescription": "سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.",
+    "transcribeLaterNote": "يعمل مع أجهزة Omi في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.",
+    "transcribeLaterStorageFull": "مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.",
+    "unmute": "إلغاء الكتم",
+    "newRecording": "تسجيل جديد",
+    "transcribeLaterPaused": "متوقف مؤقتًا — لا يتم تسجيل الصوت"
 }

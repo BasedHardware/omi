@@ -30,7 +30,7 @@ class TestSyncV2Structure:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def test_v2_post_endpoint_exists(self):
@@ -331,6 +331,24 @@ class TestSyncJobsRedis:
         result = mod.get_sync_job('fresh-1')
         assert result['status'] == 'processing'
 
+    def test_get_sync_job_does_not_fail_stale_queued(self):
+        """A stale 'queued' job was never picked up (pool saturation) — it is
+        NOT a worker failure and must stay 'queued' (see issue #7469)."""
+        mod, mock_redis = self._load_sync_jobs_module()
+        stale_queued = {
+            'job_id': 'queued-1',
+            'uid': 'uid',
+            'status': 'queued',
+            'updated_at': time.time() - 700,  # 700s ago > 600s threshold
+            'created_at': time.time() - 800,
+        }
+        mock_redis.get.return_value = json.dumps(stale_queued).encode()
+
+        result = mod.get_sync_job('queued-1')
+        assert result['status'] == 'queued'
+        assert result.get('error') is None
+        mock_redis.set.assert_not_called()
+
     def test_mark_job_completed_sets_status(self):
         """mark_job_completed must set correct terminal status."""
         mod, mock_redis = self._load_sync_jobs_module()
@@ -410,7 +428,7 @@ class TestFullPipelineBackground:
     @staticmethod
     def _get_bg_func_body():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             source = f.read()
         start = source.index('async def _run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
@@ -481,7 +499,7 @@ class TestV1Unchanged:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def _get_v1_body(self):
@@ -548,7 +566,7 @@ class TestV2EndpointContract:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def _get_v2_post_body(self):
@@ -770,7 +788,7 @@ class TestAsyncCoordinatorStructure:
     @staticmethod
     def _get_bg_func_body():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             source = f.read()
         start = source.index('async def _run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
@@ -885,7 +903,7 @@ class TestAsyncCoordinatorSemaphore:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def test_semaphore_delegates_to_http_client(self):
@@ -923,7 +941,7 @@ class TestAsyncCoordinatorScenarios:
     @staticmethod
     def _get_bg_func_body():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             source = f.read()
         start = source.index('async def _run_full_pipeline_background_async')
         next_boundary = source.find('\n@router.', start + 1)
@@ -1143,7 +1161,7 @@ class TestAsyncCoordinatorScenarios:
         """target_conversation_id must be passed through to _process_one_segment / process_segment."""
         body = self._get_bg_func_body()
         process_segment_section = body[body.index('def _process_one_segment') :]
-        process_segment_call = process_segment_section[:500]
+        process_segment_call = process_segment_section[:800]
         assert 'target_conversation_id' in process_segment_call
 
     # --- Cleanup on success and failure ---
@@ -1178,10 +1196,14 @@ class TestAsyncCoordinatorScenarios:
         assert 'job_dir' in after_finally
 
     def test_general_exception_marks_failed(self):
-        """General except Exception must mark job failed with error message."""
+        """Inline mode: general except Exception must mark job failed.
+        Task mode: it must re-raise instead, so the Cloud Tasks handler
+        controls retry vs final-attempt consume."""
         body = self._get_bg_func_body()
         main_except = body[body.index("except Exception as e:\n            logger.error(f'sync_v2 bg failed") :]
-        main_except_early = main_except[:200]
+        main_except_early = main_except[:600]
+        assert 'if task_mode:' in main_except_early
+        assert 'raise' in main_except_early
         assert 'mark_job_failed' in main_except_early
 
     def test_cleanup_order_byok_before_files(self):
@@ -1230,6 +1252,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -1670,6 +1693,7 @@ class TestV2EndpointExecution:
             'utils',
             'utils.analytics',
             'utils.byok',
+            'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -2015,7 +2039,7 @@ class TestPusherCoordinatorExecutor:
     @staticmethod
     def _read_pusher_source():
         pusher_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'pusher.py')
-        with open(pusher_path) as f:
+        with open(pusher_path, encoding='utf-8') as f:
             return f.read()
 
     def test_process_conversation_uses_run_in_executor(self):
@@ -2070,7 +2094,7 @@ class TestBulkheadExecutors:
     @staticmethod
     def _read_executors_source():
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'executors.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     def test_sync_executor_exists(self):
@@ -2150,7 +2174,7 @@ class TestBYOKContextPropagation:
     @staticmethod
     def _read_sync_source():
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     def test_v2_uses_start_background_task_for_context_inheritance(self):
@@ -2190,7 +2214,7 @@ class TestBYOKContextPropagation:
     def test_no_plain_submit_in_process_conversation(self):
         """All executor .submit() calls in process_conversation.py must use submit_with_context."""
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'process_conversation.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             source = f.read()
         import re as _re
 
@@ -2213,19 +2237,19 @@ class TestTimeoutConfiguration:
     @staticmethod
     def _read_clients_source():
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'clients.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     @staticmethod
     def _read_pre_recorded_source():
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'stt', 'pre_recorded.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     @staticmethod
     def _read_classifier_source():
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'llm', 'fair_use_classifier.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     def test_llm_mini_has_timeout(self):
@@ -2294,7 +2318,7 @@ class TestTimeoutConfiguration:
     def test_segment_timeout_budget(self):
         """Segment tasks in v2 async coordinator must use asyncio.wait_for with timeout=300."""
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             source = f.read()
         start = source.index('async def _run_full_pipeline_background_async')
         end = source.find('\n@router.', start + 1)

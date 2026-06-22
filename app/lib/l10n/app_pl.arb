@@ -135,6 +135,8 @@
     "systemDefault": "Domyślny systemowy",
     "planAndUsage": "Plan i wykorzystanie",
     "offlineSync": "Synchronizacja offline",
+    "autoSync": "Automatyczna synchronizacja",
+    "autoSyncDescription": "Automatycznie synchronizuj nagrania offline po połączeniu urządzenia",
     "deviceSettings": "Ustawienia urządzenia",
     "integrations": "Integracje",
     "feedbackBug": "Opinia / Błąd",
@@ -3081,5 +3083,14 @@
     "recapRegeneratedSnackbar": "Podsumowanie wygenerowane ponownie",
     "recapRegenerateFailed": "Nie udało się ponownie wygenerować podsumowania. Spróbuj później.",
     "recapRegenerateCooldown": "Poczekaj kilka sekund przed ponownym wygenerowaniem.",
-    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu."
+    "recapRegenerateNoConversations": "Brak rozmów do podsumowania w tym dniu.",
+    "syncCustomSttWarningTitle": "Synchronizacja korzysta z transkrypcji Omi",
+    "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.",
+    "transcribeLaterTitle": "Transkrypcja później",
+    "transcribeLaterDescription": "Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.",
+    "transcribeLaterNote": "Na razie działa z urządzeniami Omi. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
+    "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
+    "unmute": "Wyłącz wyciszenie",
+    "newRecording": "Nowe nagranie",
+    "transcribeLaterPaused": "Wstrzymano — dźwięk nie jest nagrywany"
 }

@@ -508,3 +508,26 @@ def test_mixed_english_cjk_sentence_splitting():
     assert len(segments) == 2
     assert segments[0].text.endswith("。")
     assert segments[1].text == "Next part."
+
+
+def test_segments_as_string_uses_configured_user_name():
+    """User segments must render the configured name, not the generic 'User' label (#5319)."""
+    segs = [
+        _segment("Hi, this is me.", speaker="SPEAKER_00", is_user=True, start=0.0, end=2.0),
+        _segment("Nice to meet you.", speaker="SPEAKER_01", is_user=False, start=2.0, end=4.0),
+    ]
+
+    rendered = TranscriptSegment.segments_as_string(segs, user_name="Stephen")
+
+    assert "Stephen: Hi, this is me." in rendered
+    assert "User:" not in rendered
+    assert "Speaker 1: Nice to meet you." in rendered
+
+
+def test_segments_as_string_defaults_to_user_when_name_missing():
+    """No configured name (None) falls back to the generic 'User' label — unchanged behavior."""
+    segs = [_segment("Hello.", speaker="SPEAKER_00", is_user=True, start=0.0, end=1.0)]
+
+    rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
+
+    assert rendered.startswith("User: Hello.")

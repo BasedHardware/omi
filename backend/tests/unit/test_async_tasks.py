@@ -1,11 +1,15 @@
 """Unit tests for utils/async_tasks.py — structured concurrency utilities."""
 
 import asyncio
+import importlib
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from unittest.mock import patch
 
+import utils.async_tasks as async_tasks_mod
 from utils.async_tasks import (
     GatherResult,
     SupervisorResult,
@@ -16,6 +20,81 @@ from utils.async_tasks import (
     create_named_task,
     wait_for_event,
 )
+
+
+def test_metrics_are_reused_after_module_cache_eviction():
+    utils_pkg = sys.modules.get('utils')
+    previous_attr = getattr(utils_pkg, 'async_tasks', None) if utils_pkg is not None else None
+    sys.modules.pop('utils.async_tasks', None)
+    try:
+        reimported = importlib.import_module('utils.async_tasks')
+        assert reimported.SUPERVISOR_EXIT_TOTAL is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+        assert reimported.DRAIN_TIMEOUT_TOTAL is async_tasks_mod.DRAIN_TIMEOUT_TOTAL
+        assert reimported.DRAIN_DURATION is async_tasks_mod.DRAIN_DURATION
+        assert reimported.GATHER_FAILURES_TOTAL is async_tasks_mod.GATHER_FAILURES_TOTAL
+        assert reimported.GATHER_DURATION is async_tasks_mod.GATHER_DURATION
+    finally:
+        sys.modules['utils.async_tasks'] = async_tasks_mod
+        if utils_pkg is not None:
+            if previous_attr is None:
+                utils_pkg.__dict__.pop('async_tasks', None)
+            else:
+                utils_pkg.async_tasks = previous_attr
+
+
+def test_metrics_are_tracked_in_module_cache():
+    cache = async_tasks_mod._metric_cache()
+    assert async_tasks_mod._METRIC_CACHE_MODULE in sys.modules
+    supervisor_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Counter,
+        'async_supervisor_exit_total',
+        ['label', 'reason'],
+    )
+    drain_duration_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'async_drain_duration_seconds',
+        ['label'],
+        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+    )
+
+    assert cache[supervisor_key] is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+    assert cache[drain_duration_key] is async_tasks_mod.DRAIN_DURATION
+
+
+def test_metric_cache_key_handles_nested_lists():
+    cache_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'nested_bucket_metric',
+        ['label'],
+        buckets=[[0.1, 0.2], [0.3, 0.4]],
+    )
+
+    hash(cache_key)
+
+
+def test_metric_creation_is_lock_guarded():
+    class FakeMetric:
+        created = 0
+
+        def __init__(self, name, documentation, labelnames=(), **kwargs):
+            type(self).created += 1
+            self.name = name
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        metrics = list(
+            executor.map(
+                lambda _: async_tasks_mod._get_or_create_metric(
+                    FakeMetric,
+                    'threaded_cache_metric',
+                    'Threaded cache metric',
+                ),
+                range(8),
+            )
+        )
+
+    assert len({id(metric) for metric in metrics}) == 1
+    assert FakeMetric.created == 1
+
 
 # ---------------------------------------------------------------------------
 # Tests for create_named_task
@@ -547,7 +626,7 @@ class TestStructuralUsage:
     def test_pusher_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/pusher.py') as f:
+        with open(self.BACKEND_DIR / 'routers/pusher.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -562,7 +641,7 @@ class TestStructuralUsage:
     def test_transcribe_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/transcribe.py') as f:
+        with open(self.BACKEND_DIR / 'routers/transcribe.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -577,7 +656,7 @@ class TestStructuralUsage:
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             assert (
                 'asyncio.gather(*tasks)' not in source
@@ -591,7 +670,7 @@ class TestStructuralUsage:
         import re
 
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             for match in re.finditer(r'label=f"[^"]*\{uid\}', source):
                 pytest.fail(f"{filename}: dynamic uid in metric label: {match.group()}")
@@ -601,7 +680,7 @@ class TestStructuralUsage:
     def test_app_integrations_uses_gather_safe(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'utils/app_integrations.py') as f:
+        with open(self.BACKEND_DIR / 'utils/app_integrations.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []

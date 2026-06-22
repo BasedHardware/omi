@@ -80,12 +80,17 @@ class RedisPubSubManager:
         if self.pubsub:
             try:
                 self.pubsub.unsubscribe(self.CHANNEL)
-                self.pubsub.close()
             except Exception as e:
                 logger.error(f"Error closing pub/sub connection: {e}")
 
         if self.subscriber_thread:
             self.subscriber_thread.join(timeout=5)
+
+        if self.pubsub:
+            try:
+                self.pubsub.close()
+            except Exception as e:
+                logger.error(f"Error closing pub/sub connection: {e}")
 
         logger.info("Stopped Redis pub/sub manager")
 
@@ -126,9 +131,13 @@ class RedisPubSubManager:
                 if message and message['type'] == 'message':
                     self._handle_message(message['data'])
             except redis.ConnectionError as e:
+                if not self.running:
+                    break
                 logger.error(f"Redis connection error in pub/sub: {e}")
                 self._reconnect()
             except Exception as e:
+                if not self.running:
+                    break
                 logger.error(f"Error in pub/sub loop: {e}")
                 time.sleep(self.RECONNECT_DELAY)
 

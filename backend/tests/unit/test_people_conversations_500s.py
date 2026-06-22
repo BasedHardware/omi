@@ -169,7 +169,7 @@ class TestConversationsListNoPhotos:
         import os
 
         router_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(router_path) as f:
+        with open(router_path, encoding='utf-8') as f:
             source = f.read()
         # The list endpoint function should call get_conversations_without_photos
         assert 'get_conversations_without_photos' in source
@@ -179,7 +179,7 @@ class TestConversationsListNoPhotos:
         import os
 
         db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(db_path) as f:
+        with open(db_path, encoding='utf-8') as f:
             source = f.read()
         # Find the function definition and check its parameters
         assert 'def get_conversations_without_photos(' in source
@@ -199,7 +199,7 @@ class TestConversationsListNoPhotos:
         import re
 
         db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(db_path) as f:
+        with open(db_path, encoding='utf-8') as f:
             source = f.read()
 
         # Find the function definition and the lines preceding it (decorators)
@@ -223,7 +223,7 @@ class TestConversationsListNoPhotos:
         import os
 
         db_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(db_path) as f:
+        with open(db_path, encoding='utf-8') as f:
             source = f.read()
 
         lines = source.split('\n')

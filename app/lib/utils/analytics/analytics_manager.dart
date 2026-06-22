@@ -197,10 +197,7 @@ class AnalyticsManager {
   }
 
   void setNameAndEmail() {
-    _setUserPropertiesBatch({
-      '\$name': SharedPreferencesUtil().fullName,
-      '\$email': SharedPreferencesUtil().email,
-    });
+    _setUserPropertiesBatch({'\$name': SharedPreferencesUtil().fullName, '\$email': SharedPreferencesUtil().email});
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -281,6 +278,15 @@ class AnalyticsManager {
   void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
+
+  // Transcribe Later (batch / offline capture)
+  void transcribeLaterToggled({required bool enabled}) =>
+      track('Transcribe Later Toggled', properties: {'enabled': enabled});
+
+  void transcribeLaterRecordingCaptured({int? durationSeconds}) =>
+      track('Transcribe Later Recording Captured', properties: {'duration_seconds': durationSeconds});
+
+  void transcribeLaterRecordingProcessed() => track('Transcribe Later Recording Processed');
 
   // Phone Calls (VoIP)
   void phoneCallPageOpened() => track('Phone Call Page Opened');
@@ -1037,6 +1043,10 @@ class AnalyticsManager {
   // ============================================================================
   // AUDIO PLAYBACK TRACKING
   // ============================================================================
+
+  void audioPlaybackFailed({required String conversationId, required String reason}) {
+    track('Audio Playback Failed', properties: {'conversation_id': conversationId, 'reason': reason});
+  }
 
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
     track(

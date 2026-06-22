@@ -42,6 +42,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Timer? _debounce;
   Timer? _micGainDebounce;
 
+  bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
+
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -169,11 +171,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _buildProfileStyleItem({
     required IconData icon,
     required String title,
+    String? subtitle,
     String? chipValue,
     String? copyValue,
     VoidCallback? onTap,
+    Widget? trailing,
     bool showChevron = true,
   }) {
+    // A trailing widget (e.g. a toggle) owns the row's right edge and the
+    // interaction, so suppress the chevron in that case.
+    final bool showChevronResolved = showChevron && trailing == null;
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
@@ -181,9 +188,22 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w400),
+                  ),
+                ],
+              ],
             ),
           ),
           if (chipValue != null) ...[
@@ -195,9 +215,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
-            if (showChevron) const SizedBox(width: 8),
+            if (showChevronResolved) const SizedBox(width: 8),
           ],
-          if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+          if (trailing != null) trailing,
+          if (showChevronResolved) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
         ],
       ),
     );
@@ -280,6 +301,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
+          // Auto-sync toggle — Omi devices only. Lets users opt out of having
+          // offline recordings automatically synced to Omi on connect.
+          if (device?.type == DeviceType.omi) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.arrowsRotate,
+              title: context.l10n.autoSync,
+              subtitle: context.l10n.autoSyncDescription,
+              showChevron: false,
+              trailing: Switch(
+                value: _autoSyncOfflineRecordings,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF8B5CF6),
+                onChanged: (value) {
+                  setState(() => _autoSyncOfflineRecordings = value);
+                  SharedPreferencesUtil().autoSyncOfflineRecordings = value;
+                },
+              ),
+            ),
+          ],
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.stethoscope,

@@ -428,6 +428,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get offlineSync => 'آفلائن ہم وقت';
 
   @override
+  String get autoSync => 'خودکار مطابقت';
+
+  @override
+  String get autoSyncDescription => 'جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں';
+
+  @override
   String get deviceSettings => 'ڈیوائس کی ترتیبات';
 
   @override
@@ -4694,10 +4700,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription اور $triggerDescription سے متحرک ہے۔';
   }
 
@@ -9327,4 +9330,35 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'اس دن کے لیے خلاصہ کرنے کے لیے کوئی گفتگو نہیں ہے۔';
+
+  @override
+  String get syncCustomSttWarningTitle => 'سنک Omi کی ٹرانسکرپشن استعمال کرتا ہے';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔';
+
+  @override
+  String get transcribeLaterTitle => 'بعد میں ٹرانسکرائب کریں';
+
+  @override
+  String get transcribeLaterDescription =>
+      'ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔';
+
+  @override
+  String get transcribeLaterNote =>
+      'فی الحال صرف Omi ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔';
+
+  @override
+  String get unmute => 'آواز چالو کریں';
+
+  @override
+  String get newRecording => 'نئی ریکارڈنگ';
+
+  @override
+  String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 }

@@ -163,9 +163,8 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-                                      : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withOpacity(0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -225,7 +224,8 @@ class LanguageSelectionDialog {
                             selectedLanguage!,
                             userProvider: userProvider,
                           );
-                          if (success && context.mounted) {
+                          if (!context.mounted) return;
+                          if (success) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
                             AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));

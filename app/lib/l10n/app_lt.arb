@@ -1402,6 +1402,8 @@
     "off": "Išj.",
     "offline": "Neprisijungęs",
     "offlineSync": "Sinchronizavimas neprisijungus",
+    "autoSync": "Automatinis sinchronizavimas",
+    "autoSyncDescription": "Automatiškai sinchronizuoti neprisijungus įrašytus įrašus, kai prijungiamas įrenginys",
     "ok": "Gerai",
     "olderDeviceDetected": "Aptiktas senesnis įrenginys",
     "omiApiKeys": "Omi API raktai",
@@ -3046,5 +3048,14 @@
     "recapRegeneratedSnackbar": "Santrauka sukurta iš naujo",
     "recapRegenerateFailed": "Nepavyko iš naujo sukurti santraukos. Bandykite vėliau.",
     "recapRegenerateCooldown": "Palaukite kelias sekundes prieš generuodami iš naujo.",
-    "recapRegenerateNoConversations": "Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti."
+    "recapRegenerateNoConversations": "Šiai dienai nėra pokalbių, kuriuos būtų galima apibendrinti.",
+    "syncCustomSttWarningTitle": "Sinchronizavimas naudoja Omi transkripciją",
+    "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.",
+    "transcribeLaterTitle": "Transkribuoti vėliau",
+    "transcribeLaterDescription": "Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.",
+    "transcribeLaterNote": "Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
+    "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
+    "unmute": "Įjungti garsą",
+    "newRecording": "Naujas įrašas",
+    "transcribeLaterPaused": "Pristabdyta — garsas neįrašomas"
 }

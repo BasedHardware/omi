@@ -8,7 +8,6 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -114,14 +113,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       _taskGoalLinks.remove(taskId);
     }
     SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
-  }
-
-  void _attachTaskToGoal(String taskId, String goalId) {
-    setState(() {
-      _taskGoalLinks[taskId] = goalId;
-    });
-    SharedPreferencesUtil().taskGoalLinks = Map<String, String>.from(_taskGoalLinks);
-    HapticFeedback.lightImpact();
   }
 
   String? _getGoalTitleForTask(ActionItemWithMetadata item) {
@@ -828,46 +819,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               ...goals.map((goal) => _buildGoalItem(goal, actionProvider)),
               const SizedBox(height: 8),
             ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildGoalDropTile(Goal? goal) {
-    return DragTarget<ActionItemWithMetadata>(
-      onWillAcceptWithDetails: (details) => goal != null,
-      onAcceptWithDetails: (details) {
-        if (goal == null) return;
-        PlatformManager.instance.analytics.taskDraggedToGoal(taskId: details.data.id, goalId: goal.id);
-        _attachTaskToGoal(details.data.id, goal.id);
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isHovering = candidateData.isNotEmpty && goal != null;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(goal == null ? 0.04 : 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isHovering ? Colors.white.withOpacity(0.5) : Colors.white.withOpacity(0.08),
-              width: 1,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              goal?.title ?? '',
-              textAlign: TextAlign.center,
-              maxLines: 3,
-              style: TextStyle(
-                color: goal == null ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.9),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.2,
-              ),
-            ),
           ),
         );
       },

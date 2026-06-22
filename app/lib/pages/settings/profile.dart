@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -315,6 +318,119 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _showOfflineModeSheet() {
+    final captureProvider = context.read<CaptureProvider>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final enabled = SharedPreferencesUtil().batchModeEnabled;
+            Future<void> setEnabled(bool value) async {
+              SharedPreferencesUtil().batchModeEnabled = value;
+              PlatformManager.instance.analytics.transcribeLaterToggled(enabled: value);
+              final docs = await getApplicationDocumentsDirectory();
+              await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+              // Batch capture takes precedence over background streaming.
+              await SharedPreferencesUtil()
+                  .saveBool('nativeBleStreamingEnabled', !value && SharedPreferencesUtil().backgroundModeEnabled);
+              setSheetState(() {});
+              setState(() {});
+              // Re-apply capture so the transcription socket closes/opens to match.
+              try {
+                await captureProvider.onRecordProfileSettingChanged();
+              } catch (_) {}
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.transcribeLaterTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: (v) => setEnabled(v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.transcribeLaterDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration:
+                          BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(12)),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.transcribeLaterNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (SharedPreferencesUtil().getBool('batchStorageFull')) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration:
+                            BoxDecoration(color: const Color(0xFF3A2A2A), borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.transcribeLaterStorageFull,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -419,6 +535,14 @@ class _ProfilePageState extends State<ProfilePage> {
                     onTap: _showBackgroundModeSheet,
                   ),
                 ],
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.transcribeLaterTitle,
+                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
+                  chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
+                  onTap: _showOfflineModeSheet,
+                ),
               ],
             ),
             const SizedBox(height: 32),

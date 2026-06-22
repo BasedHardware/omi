@@ -49,6 +49,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -188,7 +189,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Reload convos
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
-        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        captureProvider.refreshInProgressConversations();
+        // Pick up any batch recordings the native layer wrote while backgrounded/closed.
+        Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
 
       // Ensure agent VM is running and restart keepalive
@@ -467,6 +471,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        // Custom STT users sync manually (with confirmation) — never auto-sync,
+        // since offline files are transcribed on Omi and count toward the limit.
+        if (SharedPreferencesUtil().useCustomStt) {
+          Logger.debug('HomePage: Auto-sync skipped, custom STT provider enabled');
+          return;
+        }
+        // Omi users can disable auto-sync from device settings. Defaults to on.
+        if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+          Logger.debug('HomePage: Auto-sync skipped, disabled by user');
+          return;
+        }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
           syncProvider.syncWals();

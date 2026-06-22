@@ -687,7 +687,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
-                                subject: app.name,
+                                subject: app.name.isEmpty ? null : app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
                             },

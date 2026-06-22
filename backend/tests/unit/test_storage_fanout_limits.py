@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 def _read_source(rel_path):
     base = os.path.join(os.path.dirname(__file__), '..', '..')
-    with open(os.path.join(base, rel_path)) as f:
+    with open(os.path.join(base, rel_path), encoding='utf-8') as f:
         return f.read()
 
 
@@ -91,9 +91,13 @@ class TestPrecacheFileSemaphore:
         assert '_PRECACHE_FILE_SEM' in src
 
     def test_precache_file_semaphore_is_4(self):
-        """Global precache file semaphore must be BoundedSemaphore(4)."""
+        """Global precache file semaphore must be BoundedSemaphore(4).
+
+        Was 2 while storage_executor was saturated by per-file sleep(480)
+        deletion timers; restored to 4 once the janitor thread took those
+        over (see test_deferred_blob_janitor.py)."""
         src = _read_source('utils/other/storage.py')
-        assert 'BoundedSemaphore(4)' in src
+        assert '_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)' in src
 
     def test_precache_conversation_audio_uses_semaphore(self):
         """precache_conversation_audio must gate submissions with _PRECACHE_FILE_SEM."""

@@ -429,6 +429,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get offlineSync => 'Offline-synkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser frakoblede opptak automatisk når enheten din kobles til';
+
+  @override
   String get deviceSettings => 'Enhetsinnstillinger';
 
   @override
@@ -4688,10 +4694,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription og er $triggerDescription.';
   }
 
@@ -9310,4 +9313,35 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Ingen samtaler å oppsummere for denne dagen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering bruker Omi-transkripsjon';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkriber senere';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ta opp lyd nå og transkriber den ved behov i stedet for direkte. Opptakene lagres på telefonen, og du laster dem opp for å lage samtaler.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Fungerer foreløpig med Omi-enheter. Lyden blir værende på telefonen til du velger å laste den opp.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.';
+
+  @override
+  String get unmute => 'Slå på lyd';
+
+  @override
+  String get newRecording => 'Nytt opptak';
+
+  @override
+  String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 }

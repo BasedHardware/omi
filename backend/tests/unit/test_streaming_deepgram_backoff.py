@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -38,6 +39,19 @@ if 'deepgram' in _mock_modules:
     sys.modules['deepgram'].DeepgramClientOptions = MagicMock
     sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
     sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+
+_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
+
+_vad = ModuleType('utils.stt.vad')
+_vad._get_ort_session = MagicMock()
+_vad.make_fresh_state = MagicMock(return_value=(None, None))
+_vad.run_vad_window = MagicMock(return_value=0.0)
+_vad.VAD_WINDOW_SAMPLES = 512
+sys.modules.setdefault('utils.stt.vad', _vad)
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
@@ -1224,6 +1238,62 @@ class TestFillerWordsLanguageBehavior:
     def test_chinese_preserves_fillers(self):
         """Chinese ('zh') should preserve filler words."""
         assert self._get_filler_words_option('zh') is True
+
+
+class TestConnectKeywordsNoneGuard:
+    """connect_to_deepgram must tolerate keywords=None.
+
+    The multi-channel / phone-call path opens the STT socket without passing a
+    vocabulary list, so keywords arrives as None. Previously `if len(keywords) > 0`
+    raised "object of type 'NoneType' has no len()", which aborted the socket open
+    ("Could not open socket: ...") and left the client stuck reconnecting. This is a
+    regression guard for that phone-call breakage.
+    """
+
+    def _connect(self, keywords):
+        """Call connect_to_deepgram with the given keywords; return (raised, keyword_set_called)."""
+        from utils.stt.streaming import connect_to_deepgram
+
+        mock_dg_conn = MagicMock()
+        mock_dg_conn.on = MagicMock()
+        mock_dg_conn.start.return_value = True
+
+        mock_client = MagicMock()
+        mock_client.listen.websocket.v.return_value = mock_dg_conn
+
+        keyword_set = MagicMock(side_effect=lambda options, kw: options)
+
+        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
+            'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: MagicMock()
+        ), patch('utils.stt.streaming._dg_keywords_set', keyword_set):
+            result = connect_to_deepgram(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=2,
+                model='nova-3',
+                keywords=keywords,
+            )
+        return result, keyword_set.called
+
+    def test_none_keywords_does_not_raise(self):
+        """keywords=None (phone-call path) opens the socket without crashing."""
+        result, keyword_set_called = self._connect(None)
+        assert result is not None  # socket opened (start() returned True)
+        assert keyword_set_called is False  # no keyterms applied when none given
+
+    def test_empty_keywords_does_not_apply(self):
+        """keywords=[] opens the socket and applies no keyterms."""
+        result, keyword_set_called = self._connect([])
+        assert result is not None
+        assert keyword_set_called is False
+
+    def test_nonempty_keywords_applied(self):
+        """A real vocabulary list (single-channel path) is still applied to the options."""
+        result, keyword_set_called = self._connect(['Omi'])
+        assert result is not None
+        assert keyword_set_called is True
 
 
 class TestShouldPreserveFillerWords:

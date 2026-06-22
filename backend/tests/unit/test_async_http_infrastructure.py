@@ -9,10 +9,52 @@ Covers:
 """
 
 import asyncio
+import sys
 import time
+import types
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+
+def _drop_stale_module(name, required_attrs):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+    if (
+        isinstance(module, types.ModuleType)
+        and getattr(module, "__file__", None)
+        and all(hasattr(module, attr) for attr in required_attrs)
+    ):
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, attr_name = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr_name, None) is module:
+        delattr(parent, attr_name)
+
+
+_ensure_package("utils", BACKEND_DIR / "utils")
+_drop_stale_module("utils.http_client", ["WebhookCircuitBreaker", "get_webhook_circuit_breaker"])
+_drop_stale_module("utils.executors", ["critical_executor", "storage_executor", "shutdown_executors"])
 
 from utils.http_client import (
     WebhookCircuitBreaker,
@@ -386,9 +428,9 @@ class TestExecutorConfiguration:
         """critical_executor documented as 8 workers for latency-sensitive work."""
         assert critical_executor._max_workers == 8
 
-    def test_storage_executor_has_96_workers(self):
-        """storage_executor sized for 96 workers to handle concurrent private cloud uploads (#7376)."""
-        assert storage_executor._max_workers == 96
+    def test_storage_executor_has_128_workers(self):
+        """storage_executor sized for 128 workers to handle concurrent private cloud uploads (#7376)."""
+        assert storage_executor._max_workers == 128
 
 
 class TestNotificationWebhookWiring:
@@ -402,7 +444,7 @@ class TestNotificationWebhookWiring:
 
         # Read source to verify pattern without triggering Firestore imports
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py')) as f:
+        with open(os.path.join(backend_dir, 'utils', 'other', 'notifications.py'), encoding='utf-8') as f:
             src = f.read()
 
         # Verify the exact wiring pattern (postprocess_executor, not storage_executor, #7387)
@@ -420,7 +462,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         assert 'deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)' in src
@@ -432,7 +474,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         tree = ast.parse(src)
@@ -450,7 +492,7 @@ class TestPrivateCloudQueueCap:
         import os
 
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        with open(os.path.join(backend_dir, 'routers', 'pusher.py')) as f:
+        with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             src = f.read()
 
         # Count occurrences of the overflow warning pattern

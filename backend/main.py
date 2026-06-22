@@ -153,7 +153,15 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+# The Cloud Tasks sync-job handler runs the whole pipeline inside the request,
+# so it needs a much higher cap than the default. Must stay below the job run
+# lock TTL (1800s) so a lock can never expire under a live run.
+paths_timeout = {
+    "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
+}
+
+app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
 

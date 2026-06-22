@@ -560,6 +560,14 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Auto-Sync",
+    "@autoSync": {
+        "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
+    },
+    "autoSyncDescription": "Automatically sync offline recordings when your device connects",
+    "@autoSyncDescription": {
+        "description": "Subtitle explaining the Auto-Sync toggle in device settings"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -11006,5 +11014,41 @@
     "recapRegeneratedSnackbar": "Recap regenerated",
     "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
     "recapRegenerateCooldown": "Please wait a few seconds before regenerating again.",
-    "recapRegenerateNoConversations": "No conversations to summarize for this day."
+    "recapRegenerateNoConversations": "No conversations to summarize for this day.",
+    "syncCustomSttWarningTitle": "Sync uses Omi transcription",
+    "@syncCustomSttWarningTitle": {
+        "description": "Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings"
+    },
+    "syncCustomSttWarningMessage": "You use your own transcription provider. Syncing these recordings transcribes them on Omi's servers instead, and they count toward your plan's transcription limit.",
+    "@syncCustomSttWarningMessage": {
+        "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
+    },
+    "transcribeLaterTitle": "Transcribe Later",
+    "@transcribeLaterTitle": {
+        "description": "Title for the 'transcribe later' capture-mode toggle in device settings"
+    },
+    "transcribeLaterDescription": "Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.",
+    "@transcribeLaterDescription": {
+        "description": "Subtitle explaining the transcribe-later mode toggle"
+    },
+    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "@transcribeLaterNote": {
+        "description": "Caveat note shown in the Transcribe Later sheet"
+    },
+    "transcribeLaterStorageFull": "Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.",
+    "@transcribeLaterStorageFull": {
+        "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
+    },
+    "unmute": "Unmute",
+    "@unmute": {
+        "description": "Button to resume Transcribe Later capture after muting"
+    },
+    "newRecording": "New recording",
+    "@newRecording": {
+        "description": "Button to finalize the current recording and start a new one"
+    },
+    "transcribeLaterPaused": "Paused — audio isn't being recorded",
+    "@transcribeLaterPaused": {
+        "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
+    }
 }

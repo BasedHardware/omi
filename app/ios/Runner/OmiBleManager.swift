@@ -173,14 +173,13 @@ final class OmiBleManager: NSObject {
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
             if manuallyDisconnected.contains(uuid) { continue }
-            switch peripheral.state {
-            case .connected, .connecting:
-                continue
-            default:
-                NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
-                peripheral.delegate = self
-                centralManager.connect(peripheral, options: nil)
-            }
+            // Only skip if already connected. For peripherals in .connecting state,
+            // re-issue connect() to kick CoreBluetooth — the pending attempt may be
+            // silently waiting in congested RF. connect() is idempotent on iOS.
+            if peripheral.state == .connected { continue }
+            NSLog("[OmiBle] Re-issuing connect on foreground for \(uuid), state=\(peripheral.state.rawValue)")
+            peripheral.delegate = self
+            centralManager.connect(peripheral, options: nil)
         }
     }
 
@@ -642,6 +641,10 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
 
+        // Finalize the in-progress batch recording so it's saved + ingestable right away
+        // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
+        BatchAudioWriter.shared.stop("disconnected")
+
         if !isManual {
             let reason = Self.bleReasonString(from: error)
             let code = (error as? CBError)?.code.rawValue ?? -1
@@ -754,6 +757,18 @@ extension OmiBleManager: CBPeripheralDelegate {
 
         if characteristic.uuid == OmiBleManager.batteryLevelCharUuid, let firstByte = data.first {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
+        }
+
+        // Batch (offline) mode: store audio natively and skip the Dart forward so the
+        // Flutter engine stays idle. Returns true only for the configured audio
+        // characteristic while batch mode is on; everything else falls through.
+        if BatchAudioWriter.shared.handle(
+            peripheralUuid: uuid,
+            serviceUuid: serviceUuid,
+            characteristicUuid: charUuid,
+            value: data
+        ) {
+            return
         }
 
         let typedData = FlutterStandardTypedData(bytes: data)

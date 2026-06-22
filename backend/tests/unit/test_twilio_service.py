@@ -1,11 +1,16 @@
 import os
 from unittest.mock import patch, MagicMock
 
+from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
+
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
 os.environ.setdefault('TWILIO_API_KEY_SID', 'SKtest123')
 os.environ.setdefault('TWILIO_API_KEY_SECRET', 'test_api_secret')
 os.environ.setdefault('TWILIO_TWIML_APP_SID', 'APtest123')
+install_twilio_stub()
+prepare_twilio_service_import()
+install_phone_calls_stub()
 
 from utils.twilio_service import generate_access_token, validate_twilio_signature
 
@@ -16,6 +21,25 @@ def test_generate_access_token(mock_jwt):
     assert result['access_token'] == 'mock.jwt.token'
     assert result['identity'] == 'user-abc'
     assert result['ttl'] == 600
+
+
+def test_twilio_stub_dial_appends_multiple_numbers():
+    from twilio.twiml.voice_response import Dial, VoiceResponse
+
+    dial = Dial(caller_id='+15550000000')
+    first_number = dial.number('+15551111111')
+    second_number = dial.number('+15552222222')
+
+    assert str(first_number) == '<Number>+15551111111</Number>'
+    assert str(second_number) == '<Number>+15552222222</Number>'
+
+    response = VoiceResponse()
+    response.append(dial)
+
+    assert (
+        str(response) == '<?xml version="1.0" encoding="utf-8"?><Response><Dial callerId="+15550000000">'
+        '<Number>+15551111111</Number><Number>+15552222222</Number></Dial></Response>'
+    )
 
 
 def test_validate_twilio_signature_valid():

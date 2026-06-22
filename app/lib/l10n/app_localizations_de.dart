@@ -433,6 +433,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get offlineSync => 'Offline-Synchronisierung';
 
   @override
+  String get autoSync => 'Automatische Synchronisierung';
+
+  @override
+  String get autoSyncDescription => 'Offline-Aufnahmen automatisch synchronisieren, wenn dein Gerät verbunden wird';
+
+  @override
   String get deviceSettings => 'Geräteeinstellungen';
 
   @override
@@ -4724,10 +4730,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription und wird $triggerDescription.';
   }
 
@@ -9390,4 +9393,35 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Keine Konversationen für diesen Tag zum Zusammenfassen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronisierung nutzt Omi-Transkription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet.';
+
+  @override
+  String get transcribeLaterTitle => 'Später transkribieren';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Nimm Audio jetzt auf und transkribiere es bei Bedarf statt in Echtzeit. Die Aufnahmen werden auf deinem Smartphone gespeichert; lade sie anschließend hoch, um Gespräche zu erstellen.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Funktioniert vorerst mit Omi-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Auf deinem Smartphone wird der Speicher knapp, daher ist die Aufnahme pausiert. Gib Speicher frei oder lade deine Aufnahmen hoch – danach wird sie automatisch fortgesetzt.';
+
+  @override
+  String get unmute => 'Ton an';
+
+  @override
+  String get newRecording => 'Neue Aufnahme';
+
+  @override
+  String get transcribeLaterPaused => 'Pausiert – Audio wird nicht aufgenommen';
 }

@@ -18,9 +18,22 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import av
 import numpy as np
-import opuslib  # type: ignore
 
-import lc3  # lc3py
+try:
+    import opuslib  # type: ignore
+except Exception as e:
+    opuslib = None
+    _OPUS_IMPORT_ERROR = e
+else:
+    _OPUS_IMPORT_ERROR = None
+
+try:
+    import lc3  # lc3py
+except Exception as e:
+    lc3 = None
+    _LC3_IMPORT_ERROR = e
+else:
+    _LC3_IMPORT_ERROR = None
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -62,7 +75,7 @@ from models.message_event import (
 )
 from models.transcript_segment import Translation
 from models.users import PlanType
-from utils.analytics import record_usage
+from utils.analytics import billable_transcription_seconds, record_usage
 from utils.app_integrations import trigger_realtime_integrations
 from utils.apps import is_audio_bytes_app_enabled
 from utils.conversations.process_conversation import retrieve_in_progress_conversation
@@ -128,6 +141,23 @@ from utils.log_sanitizer import sanitize, sanitize_pii
 from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
 
 logger = logging.getLogger(__name__)
+
+
+def _get_opuslib():
+    if opuslib is None:
+        raise RuntimeError(
+            'Opus streaming requires opuslib and the native libopus library. '
+            'Install the OS-level Opus package before using the opus codec.'
+        ) from _OPUS_IMPORT_ERROR
+    return opuslib
+
+
+def _get_lc3():
+    if lc3 is None:
+        message = 'LC3 streaming requires lc3py and its native codec library. Install lc3py before using the lc3 codec.'
+        raise RuntimeError(message) from _LC3_IMPORT_ERROR
+    return lc3
+
 
 router = APIRouter()
 
@@ -287,7 +317,7 @@ async def _stream_handler(
         channel_id_to_index = {ch.channel_id: i for i, ch in enumerate(channel_configs)}
         stt_sockets_multi = [None] * len(channel_configs)
         if codec == 'opus':
-            multi_opus_decoders = [opuslib.Decoder(sample_rate, 1) for _ in channel_configs]
+            multi_opus_decoders = [_get_opuslib().Decoder(sample_rate, 1) for _ in channel_configs]
         else:
             multi_opus_decoders = [None] * len(channel_configs)
         channel_mix_buffers = [bytearray() for _ in channel_configs]
@@ -326,10 +356,24 @@ async def _stream_handler(
         lc3_chunk_size = 30  # 30 bytes per frame
         lc3_frame_duration_us = 10000  # 10ms = 10000 microseconds
 
-    # Fetch user transcription preferences
+    # Fetch user transcription preferences once and reuse its embedded language
+    # projection below for translation targeting. Avoid a second user preference
+    # read on the hot WebSocket startup path.
     transcription_prefs = get_user_transcription_preferences(uid)
     single_language_mode = transcription_prefs.get('single_language_mode', False)
     vocabulary = transcription_prefs.get('vocabulary', [])
+    user_language_preference = transcription_prefs.get('language', '')
+
+    # Stamp mobile custom-STT usage onto the user doc so these users are queryable
+    # and meterable (#7690) — the app otherwise only signals it per-session via the
+    # custom_stt WS param. Write only on change to keep this off the hot path.
+    # Best-effort telemetry only: never let a tracking write failure (e.g. a
+    # transient Firestore error) tear down the session — catch, log, and proceed.
+    if use_custom_stt != transcription_prefs.get('uses_custom_stt', False):
+        try:
+            await run_blocking(db_executor, user_db.set_user_custom_stt_usage, uid, use_custom_stt)
+        except Exception as e:
+            logger.warning(f"Failed to persist custom_stt usage {uid} {session_id}: {e}")
 
     # Onboarding mode: force single language for better accuracy
     if onboarding_mode:
@@ -364,7 +408,6 @@ async def _stream_handler(
         translation_language = None
     elif stt_language == 'multi':
         if language == "multi":
-            user_language_preference = user_db.get_user_language_preference(uid)
             if user_language_preference:
                 translation_language = user_language_preference
         else:
@@ -379,6 +422,7 @@ async def _stream_handler(
     MAX_PHOTO_BUFFER_SIZE = 100  # Max photos to buffer
     MAX_AUDIO_BUFFER_SIZE = 1024 * 1024 * 10  # 10MB max audio buffer
     MAX_PENDING_REQUESTS = 100  # Max pending conversation requests
+    MAX_PENDING_SPEAKER_SAMPLE_REQUESTS = 50  # Max speaker-sample requests buffered while pusher is down
     MAX_IMAGE_CHUNKS = 50  # Max concurrent image uploads
     IMAGE_CHUNK_TTL = 60.0  # Seconds before incomplete image chunks expire
     IMAGE_CHUNK_CLEANUP_INTERVAL = 2.0  # Seconds between cleanup scans
@@ -532,7 +576,11 @@ async def _stream_handler(
 
             if last_usage_record_timestamp:
                 current_time = time.time()
-                transcription_seconds = int(current_time - last_usage_record_timestamp)
+                # Clamped to the last audio actually received (#4700): keepalive
+                # pings keep the socket alive after the device stops streaming.
+                transcription_seconds = billable_transcription_seconds(
+                    last_usage_record_timestamp, last_audio_received_time, current_time
+                )
 
                 words_to_record = words_transcribed_since_last_record
                 words_transcribed_since_last_record = 0  # reset
@@ -1020,8 +1068,14 @@ async def _stream_handler(
                         return cb
 
                     callback = make_multi_channel_callback(ch_config)
+                    # Pass the user's vocabulary (always includes "Omi") so phone-call /
+                    # multi-channel transcripts get the same keyterm hinting as single-channel.
                     stt_sockets_multi[i] = await _create_stt_socket(
-                        callback, stt_language, TARGET_SAMPLE_RATE, stt_model
+                        callback,
+                        stt_language,
+                        TARGET_SAMPLE_RATE,
+                        stt_model,
+                        kw=vocabulary[:100] if vocabulary else None,
                     )
                 logger.info(
                     f"Multi-channel STT connections established ({len(channel_configs)} channels) {uid} {session_id}"
@@ -1101,6 +1155,11 @@ async def _stream_handler(
         MAX_RETRIES_PER_REQUEST = 3
         pending_conversation_requests: Dict[str, dict] = {}
         pending_request_event = asyncio.Event()
+
+        # Speaker-sample extraction requests buffered while pusher is disconnected,
+        # replayed on reconnect (#6060). Bounded to avoid unbounded growth during
+        # long outages; oldest is dropped when full.
+        pending_speaker_sample_requests: deque = deque(maxlen=MAX_PENDING_SPEAKER_SAMPLE_REQUESTS)
 
         def transcript_send(segments):
             nonlocal segment_buffers
@@ -1498,6 +1557,15 @@ async def _stream_handler(
                     for cid in list(pending_conversation_requests.keys()):
                         pending_conversation_requests[cid]['sent_at'] = time.time()
                         await request_conversation_processing(cid)
+                # Re-send any speaker sample requests buffered while disconnected (#6060)
+                if pending_speaker_sample_requests:
+                    buffered = list(pending_speaker_sample_requests)
+                    pending_speaker_sample_requests.clear()
+                    logger.info(
+                        f"Reconnected to pusher, re-sending {len(buffered)} pending speaker sample requests {uid} {session_id}"
+                    )
+                    for person_id, conv_id, segment_ids in buffered:
+                        await send_speaker_sample_request(person_id, conv_id, segment_ids)
             except PusherCircuitBreakerOpen:
                 raise  # Let caller handle circuit breaker
             except Exception as e:
@@ -1528,6 +1596,13 @@ async def _stream_handler(
             """Send speaker sample extraction request to pusher with segment IDs."""
             nonlocal pusher_ws, pusher_connected
             if not pusher_connected or not pusher_ws:
+                # Buffer instead of dropping so the request survives a transient
+                # pusher disconnect and is replayed on reconnect (#6060).
+                pending_speaker_sample_requests.append((person_id, conv_id, segment_ids))
+                logger.warning(
+                    f"Pusher not connected, buffered speaker sample request: person={person_id}, "
+                    f"{len(segment_ids)} segments ({len(pending_speaker_sample_requests)} pending) {uid} {session_id}"
+                )
                 return
             try:
                 data = bytearray()
@@ -2369,11 +2444,16 @@ async def _stream_handler(
     lc3_decoder = None
 
     if codec == 'opus':
-        opus_decoder = opuslib.Decoder(sample_rate, 1)
+        opus_decoder = _get_opuslib().Decoder(sample_rate, 1)
     elif codec == 'aac':
         aac_decoder = AACDecoder(uid=uid, session_id=session_id, sample_rate=sample_rate, channels=channels)
     elif codec == 'lc3':
-        lc3_decoder = lc3.Decoder(lc3_frame_duration_us, sample_rate)
+        if lc3 is None:
+            websocket_close_code = 1011
+            logger.error(f"LC3 codec requested but lc3py is not installed {uid} {session_id}")
+            await websocket.close(code=websocket_close_code, reason="LC3 codec is not available")
+            return
+        lc3_decoder = _get_lc3().Decoder(lc3_frame_duration_us, sample_rate)
 
     async def receive_data(stt_socket):
         nonlocal websocket_active, websocket_close_code, last_audio_received_time, last_activity_time, current_conversation_id
@@ -2769,7 +2849,9 @@ async def _stream_handler(
         shutdown_event.set()
         BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS.dec()
         if not use_custom_stt and last_usage_record_timestamp:
-            transcription_seconds = int(time.time() - last_usage_record_timestamp)
+            transcription_seconds = billable_transcription_seconds(
+                last_usage_record_timestamp, last_audio_received_time, time.time()
+            )
             words_to_record = words_transcribed_since_last_record
 
             # Flush any pending speech_ms delta to Redis (#5746 reviewer fix)

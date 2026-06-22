@@ -428,6 +428,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get offlineSync => 'অফলাইন সিঙ্ক';
 
   @override
+  String get autoSync => 'স্বয়ংক্রিয় সিঙ্ক';
+
+  @override
+  String get autoSyncDescription => 'আপনার ডিভাইস সংযুক্ত হলে অফলাইন রেকর্ডিংগুলি স্বয়ংক্রিয়ভাবে সিঙ্ক করুন';
+
+  @override
   String get deviceSettings => 'ডিভাইস সেটিংস';
 
   @override
@@ -4692,10 +4698,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription এবং $triggerDescription দ্বারা ট্রিগার।';
   }
 
@@ -9320,4 +9323,35 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'এই দিনের জন্য সংক্ষেপ করার কোনো কথোপকথন নেই।';
+
+  @override
+  String get syncCustomSttWarningTitle => 'সিঙ্ক Omi-এর ট্রান্সক্রিপশন ব্যবহার করে';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
+
+  @override
+  String get transcribeLaterTitle => 'পরে ট্রান্সক্রাইব করুন';
+
+  @override
+  String get transcribeLaterDescription =>
+      'এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।';
+
+  @override
+  String get transcribeLaterNote =>
+      'আপাতত শুধু Omi ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।';
+
+  @override
+  String get unmute => 'আনমিউট করুন';
+
+  @override
+  String get newRecording => 'নতুন রেকর্ডিং';
+
+  @override
+  String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 }

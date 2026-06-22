@@ -7,13 +7,56 @@ disabled clips fall back safely), not the hosted embedding model itself.
 
 import asyncio
 import os
+import sys
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 
 os.environ.setdefault('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://fake')  # enables _diarize
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 
+_owned_modules = set()
+for _mod_name in [
+    'deepgram',
+    'deepgram.clients',
+    'deepgram.clients.live',
+    'deepgram.clients.live.v1',
+    'websockets',
+    'websockets.exceptions',
+]:
+    if _mod_name not in sys.modules:
+        sys.modules[_mod_name] = MagicMock()
+        _owned_modules.add(_mod_name)
+
+if 'deepgram' in _owned_modules:
+    sys.modules['deepgram'].DeepgramClient = MagicMock
+    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
+if 'deepgram.clients.live.v1' in _owned_modules:
+    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+
+_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.extract_embedding_from_bytes = MagicMock(return_value=None)
+
+
+def _cosine_distance(a, b):
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    if denom == 0:
+        return 1.0
+    return float(1.0 - np.sum(a * b) / denom)
+
+
+_speaker_embedding.compare_embeddings = _cosine_distance
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
+
 import utils.stt.streaming as st  # noqa: E402
+
+st.compare_embeddings = _cosine_distance
 
 
 def _dir_vec(idx: int, rng) -> np.ndarray:

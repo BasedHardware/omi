@@ -79,6 +79,17 @@ class OmiBleForegroundService : Service() {
             context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
                 .getBoolean("flutter.backgroundModeEnabled", false)
 
+        /** Batch (offline) capture opt-in. Like background mode, it keeps the BLE
+         *  foreground service alive past app close so native can keep storing audio. */
+        fun isBatchModeEnabled(context: Context): Boolean =
+            context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .getBoolean("flutter.batchModeEnabled", false)
+
+        /** True when the service must persist past app close (sticky) — either for
+         *  background streaming or batch capture. */
+        fun isPersistentModeEnabled(context: Context): Boolean =
+            isBackgroundModeEnabled(context) || isBatchModeEnabled(context)
+
         fun startService(context: Context, deviceAddress: String, requiresBond: Boolean = false, caller: String = "unknown") {
             if (caller.startsWith("CompanionSvc")) {
                 val now = System.currentTimeMillis()
@@ -91,8 +102,11 @@ class OmiBleForegroundService : Service() {
 
             val inst = instance
             if (inst != null) {
-                Log.d(TAG, "startService($caller): service already running, managing $deviceAddress directly")
-                inst.manageDevice(deviceAddress, requiresBond)
+                // Service already running — any startService call is effectively a
+                // "please (re)connect this device" signal. Always force a fresh attempt
+                // so a stuck autoConnect=true passive scan doesn't silently swallow it.
+                Log.d(TAG, "startService($caller): service running, forcing reconnect for $deviceAddress")
+                inst.forceReconnect(deviceAddress, requiresBond, caller)
                 return
             }
 
@@ -146,6 +160,7 @@ class OmiBleForegroundService : Service() {
     private val syncLock = Any()
     private val bleManager get() = OmiBleManager.instance
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
+    private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
 
     // ── Connection listener — receives GATT events from OmiBleManager ──
 
@@ -255,7 +270,11 @@ class OmiBleForegroundService : Service() {
 
     private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
         if (OmiBleManager.isFlutterAlive) return
-        val target = backgroundAudioStreamer.configuredAudioTargetFor(address) ?: return
+        // Subscribe for background streaming OR batch capture (whichever is configured)
+        // so native keeps receiving audio after the Flutter engine is gone.
+        val target = backgroundAudioStreamer.configuredAudioTargetFor(address)
+            ?: batchAudioWriter.configuredAudioTargetFor(address)
+            ?: return
         val hasTarget = services.any { service ->
             service.uuid.equals(target.first, ignoreCase = true) &&
                 service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
@@ -407,6 +426,37 @@ class OmiBleForegroundService : Service() {
         connectToDevice(addr, source)
     }
 
+    /**
+     * Called from startService() when CompanionDeviceManager fires EVENT_BLE_APPEARED.
+     * The OS has confirmed the device is in range right now, so abandon any stuck
+     * autoConnect=true passive scan and force a fresh connection attempt.
+     */
+    fun forceReconnect(address: String, requiresBond: Boolean, source: String) {
+        val addr = address.uppercase()
+        if (bleManager.isPeripheralConnected(addr)) return
+
+        synchronized(syncLock) {
+            val managed = managedDevices[addr] ?: run {
+                // No managed state yet — fall through to normal manage flow
+                managedDevices[addr] = ManagedDevice(address = addr, requiresBond = requiresBond)
+                null
+            }
+            if (managed != null) {
+                if (requiresBond && !managed.requiresBond) managed.requiresBond = true
+                // Cancel any pending retry so it doesn't race with the fresh attempt
+                managed.pendingReconnect?.let { handler.removeCallbacks(it) }
+                managed.pendingReconnect = null
+                managed.retryCount = 0
+                // Close the stuck GATT so connectToDevice opens a fresh one
+                if (bleManager.connectedGatts.containsKey(addr)) {
+                    bleManager.closeGatt(addr)
+                }
+                managed.currentGattHash = null
+            }
+        }
+        connectToDevice(addr, source)
+    }
+
     // ── Disconnect handling + retry ──
 
     private fun handleDisconnection(address: String, gattHash: Int, status: Int) {
@@ -434,6 +484,10 @@ class OmiBleForegroundService : Service() {
             bleManager.closeGatt(addr)
             managed.currentGattHash = null
         }
+
+        // Finalize the in-progress batch recording so it's saved + ingestable right away
+        // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
+        batchAudioWriter.stop("ble_disconnected")
 
         val addr = address.uppercase()
 
@@ -599,6 +653,9 @@ class OmiBleForegroundService : Service() {
                 characteristicUuid: String,
                 value: ByteArray
             ) {
+                // Batch mode and background streaming are mutually exclusive (gated by
+                // their respective prefs); calling both is safe — each self-gates.
+                batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
                 backgroundAudioStreamer.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
             }
         }
@@ -609,12 +666,13 @@ class OmiBleForegroundService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
 
         val backgroundMode = isBackgroundModeEnabled(this)
+        val persistentMode = isPersistentModeEnabled(this)
         val address = intent?.getStringExtra("device_address")
         val requiresBond = intent?.getBooleanExtra("requires_bond", false) ?: false
 
         if (address != null) {
             manageDevice(address, requiresBond)
-        } else if (backgroundMode) {
+        } else if (persistentMode) {
             // Restart after process death (sticky): restore the device we were managing.
             val saved = getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREFS_KEY, null)
             val parts = saved?.split("|")
@@ -630,13 +688,13 @@ class OmiBleForegroundService : Service() {
             stopSelf()
         }
 
-        // Background mode off ⇒ non-sticky, so the OS won't resurrect the service after the app is closed.
-        return if (backgroundMode) START_STICKY else START_NOT_STICKY
+        // Persistent mode off ⇒ non-sticky, so the OS won't resurrect the service after the app is closed.
+        return if (persistentMode) START_STICKY else START_NOT_STICKY
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        if (isBackgroundModeEnabled(this)) {
-            Log.i(TAG, "Task removed; keeping BLE foreground service alive (background mode on)")
+        if (isPersistentModeEnabled(this)) {
+            Log.i(TAG, "Task removed; keeping BLE foreground service alive (background/batch mode on)")
         } else {
             Log.i(TAG, "Task removed; stopping BLE foreground service (background mode off)")
             stopSelf()
@@ -648,6 +706,7 @@ class OmiBleForegroundService : Service() {
         Log.d(TAG, "Service destroying")
         isDestroying = true
         backgroundAudioStreamer.stop("service_destroyed")
+        batchAudioWriter.stop("service_destroyed")
 
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }

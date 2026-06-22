@@ -18,7 +18,7 @@ PAYMENT_SOURCE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
 
 
 def _read_source():
-    return PAYMENT_SOURCE.read_text()
+    return PAYMENT_SOURCE.read_text(encoding="utf-8")
 
 
 # ── Fix 1: FirestoreNotFound guard for deleted users ─────────────────────────

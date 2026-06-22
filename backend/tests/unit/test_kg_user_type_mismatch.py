@@ -11,9 +11,13 @@ from Firebase Auth — the canonical way to get user names in this codebase.
 import os
 import sys
 import types
+from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -26,6 +30,16 @@ def _stub_module(name: str) -> types.ModuleType:
         mod = types.ModuleType(name)
         sys.modules[name] = mod
     return sys.modules[name]
+
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    mod = _stub_module(name)
+    mod.__path__ = [str(path)]
+    if "." in name:
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = _stub_module(parent_name)
+        setattr(parent, child_name, mod)
+    return mod
 
 
 # Stub database package and submodules
@@ -62,8 +76,12 @@ for attr in [
     "find_similar_memories",
     "upsert_memory_vector",
     "delete_memory_vector",
+    "upsert_action_item_vectors_batch",
+    "delete_action_item_vectors_batch",
+    "find_similar_action_items",
     "upsert_vector2",
     "update_vector_metadata",
+    "upsert_transcript_chunk_vectors",
 ]:
     setattr(vector_db_mod, attr, MagicMock())
 
@@ -95,6 +113,8 @@ memories_mod.save_memories = MagicMock()
 memories_mod.delete_memory = MagicMock()
 
 # Stub utils modules
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
 for name in [
     "utils.apps",
     "utils.analytics",
@@ -106,18 +126,21 @@ for name in [
     "utils.llm.chat",
     "utils.llm.clients",
     "utils.llm.knowledge_graph",
+    "utils.llm.usage_tracker",
     "utils.notifications",
+    "utils.subscription",
     "utils.other.hume",
     "utils.retrieval.rag",
     "utils.webhooks",
     "utils.task_sync",
     "utils.other.storage",
+    "utils.conversations.calendar_linking",
 ]:
     if name not in sys.modules:
         sys.modules[name] = types.ModuleType(name)
 
 utils_apps = sys.modules["utils.apps"]
-for attr in ["get_available_apps", "update_personas_async", "sync_update_persona_prompt"]:
+for attr in ["get_available_apps", "update_personas_async", "update_persona_prompt", "sync_update_persona_prompt"]:
     setattr(utils_apps, attr, MagicMock())
 
 utils_analytics = sys.modules["utils.analytics"]
@@ -165,9 +188,32 @@ llm_clients.generate_embedding = MagicMock()
 llm_kg = sys.modules["utils.llm.knowledge_graph"]
 llm_kg.extract_knowledge_from_memory = MagicMock()
 
+llm_usage_tracker = sys.modules["utils.llm.usage_tracker"]
+
+
+@contextmanager
+def _track_usage_stub(*_args, **_kwargs):
+    yield
+
+
+llm_usage_tracker.track_usage = _track_usage_stub
+llm_usage_tracker.Features = types.SimpleNamespace(
+    CONVERSATION_STRUCTURE="conversation_structure",
+    CONVERSATION_ACTION_ITEMS="conversation_action_items",
+    CONVERSATION_DISCARD="conversation_discard",
+    CONVERSATION_APPS="conversation_apps",
+    CONVERSATION_FOLDER="conversation_folder",
+    GOALS="goals",
+    MEMORIES="memories",
+    TRENDS="trends",
+)
+
 utils_notifications = sys.modules["utils.notifications"]
 for attr in ["send_notification", "send_important_conversation_message", "send_action_item_data_message"]:
     setattr(utils_notifications, attr, MagicMock())
+
+utils_subscription = sys.modules["utils.subscription"]
+utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
 
 utils_hume = sys.modules["utils.other.hume"]
 for attr in ["get_hume", "HumeJobCallbackModel", "HumeJobModelPredictionResponseModel"]:
@@ -185,10 +231,23 @@ utils_task_sync.auto_sync_action_items_batch = MagicMock()
 utils_storage = sys.modules["utils.other.storage"]
 utils_storage.precache_conversation_audio = MagicMock()
 
+utils_calendar_linking = sys.modules["utils.conversations.calendar_linking"]
+utils_calendar_linking.get_overlapping_calendar_event = MagicMock(return_value=None)
+utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
+
 import importlib
 
 process_conversation = importlib.import_module("utils.conversations.process_conversation")
 from models.memories import MemoryDB
+
+
+@pytest.fixture(autouse=True)
+def _restore_module_bindings():
+    if "models.memories" not in sys.modules:
+        importlib.import_module("models.memories")
+    setattr(sys.modules["models"], "memories", sys.modules["models.memories"])
+    auth_mod.get_user_name = MagicMock(return_value="The User")
+    process_conversation.get_user_name = auth_mod.get_user_name
 
 
 def _make_conversation_mock():
@@ -213,9 +272,16 @@ def _make_memory_mock(memory_id="mem-1", content="Test memory", kg_extracted=Fal
     return m
 
 
+def _make_raw_memory(content="Test memory"):
+    """Create a raw extracted memory mock with content for duplicate filtering."""
+    memory = MagicMock()
+    memory.content = content
+    return memory
+
+
 def _setup_extract_memories(memory_mock):
     """Configure stubs so _extract_memories_inner reaches the KG block with one memory."""
-    llm_memories.new_memories_extractor.return_value = [MagicMock()]  # raw Memory
+    llm_memories.new_memories_extractor.return_value = [_make_raw_memory(memory_mock.content)]
     vector_db_mod.find_similar_memories.return_value = []
     memories_mod.get_memory_ids_for_conversation.return_value = []
     memories_mod.save_memories.reset_mock()
@@ -246,7 +312,7 @@ class TestKnowledgeGraphUserLookup:
         from pathlib import Path
 
         router_path = Path(__file__).resolve().parent.parent.parent / "routers" / "knowledge_graph.py"
-        source = router_path.read_text()
+        source = router_path.read_text(encoding="utf-8")
         assert "get_user_name" in source, "Router should use get_user_name from database.auth"
         assert (
             "get_user_profile" not in source
@@ -318,7 +384,11 @@ class TestKnowledgeGraphUserLookup:
         mem3 = _make_memory_mock("mem-c", "Third memory", kg_extracted=True)  # already extracted
 
         mock_from_memory.side_effect = [mem1, mem2, mem3]
-        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        llm_memories.new_memories_extractor.return_value = [
+            _make_raw_memory(mem1.content),
+            _make_raw_memory(mem2.content),
+            _make_raw_memory(mem3.content),
+        ]
         vector_db_mod.find_similar_memories.return_value = []
         memories_mod.get_memory_ids_for_conversation.return_value = []
         memories_mod.save_memories.reset_mock()
@@ -373,7 +443,11 @@ class TestKnowledgeGraphFailureHandling:
         mem3 = _make_memory_mock("mem-ok2", "Another good", kg_extracted=False)
 
         mock_from_memory.side_effect = [mem1, mem2, mem3]
-        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock(), MagicMock()]
+        llm_memories.new_memories_extractor.return_value = [
+            _make_raw_memory(mem1.content),
+            _make_raw_memory(mem2.content),
+            _make_raw_memory(mem3.content),
+        ]
         vector_db_mod.find_similar_memories.return_value = []
         memories_mod.get_memory_ids_for_conversation.return_value = []
         memories_mod.save_memories.reset_mock()
@@ -439,7 +513,10 @@ class TestKnowledgeGraphLockedMemorySkip:
         mem2 = _make_memory_mock("mem-2", "More secret", kg_extracted=False)
 
         mock_from_memory.side_effect = [mem1, mem2]
-        llm_memories.new_memories_extractor.return_value = [MagicMock(), MagicMock()]
+        llm_memories.new_memories_extractor.return_value = [
+            _make_raw_memory(mem1.content),
+            _make_raw_memory(mem2.content),
+        ]
         vector_db_mod.find_similar_memories.return_value = []
         memories_mod.get_memory_ids_for_conversation.return_value = []
         memories_mod.save_memories.reset_mock()

@@ -1,0 +1,90 @@
+/* src/renderer/src/components/overlay/overlay.css */
+/* The overlay window is non-transparent with a native Win11 material backdrop;
+   the page background must be transparent so that material shows through. */
+html {
+  background: transparent !important;
+}
+
+/* The overlay window must never show its OWN scrollbars: the window height eases
+   (tweens) behind the content as a reply streams in, so for a moment the content
+   is taller/wider than the current window and the document would flash vertical +
+   horizontal scrollbars until the window catches up. Nothing is lost — the window
+   grows to fit — and the message list keeps its own internal scroll. */
+html,
+body.overlay-body {
+  overflow: hidden;
+}
+
+/* The dark wash lives on the BODY — the whole window surface — not the
+   content-sized .overlay-panel, so it covers EVERY transparent pixel uniformly:
+   the ~2px the window is intentionally sized taller than the content (OverlayApp
+   reports offsetHeight + 2) and any sub-pixel seam from the 0.7 zoom. When the
+   wash was only on the panel, that uncovered sliver showed un-washed (brighter)
+   acrylic as a stray bright line along the bottom edge. min-height:100vh makes
+   the body fill the window height so the wash always reaches the bottom. */
+body.overlay-body {
+  background: rgba(0, 0, 0, 0.45) !important;
+  min-height: 100vh;
+  transition: background 160ms ease;
+}
+
+/* Panel fills the window edge-to-edge. The native DWM acrylic backdrop provides
+   the frost + translucency; the dark wash that recolors it toward black lives on
+   the body (above) so it covers the whole window surface, not just this
+   content-sized div. The native rounded window provides the corners. */
+.overlay-panel {
+  width: 100%;
+}
+
+/* Render the whole overlay at 50% scale — fonts and layout alike. The layer lays
+   out at the ORIGINAL window width (480px) so spacing/proportions are unchanged,
+   then `zoom` paints it at half size; the window width (main: OVERLAY_WIDTH) is
+   halved to match so the panel still fills it edge-to-edge. */
+.overlay-zoom {
+  zoom: 0.7;
+  width: 480px;
+}
+
+/* Rest mode (window inactive): Win11 brightens the acrylic backdrop, so deepen
+   the black wash to cancel that and keep the panel dark + translucent — darker
+   than when in use. Still translucent (alpha < 1), NOT solid black, so whatever
+   see-through the inactive backdrop retains still shows as dark frost. */
+body.overlay-body.overlay-inactive {
+  background: rgba(0, 0, 0, 0.62) !important;
+}
+
+/* Drag / no-drag regions for the frameless-with-overlay window. The top strip is
+   draggable; interactive controls must opt out so typing/clicking still work. */
+.overlay-drag {
+  -webkit-app-region: drag;
+}
+.overlay-no-drag,
+textarea,
+input,
+button,
+a,
+[role='button'] {
+  -webkit-app-region: no-drag;
+}
+
+/* Fade + scale on summon; fade out on dismiss. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.overlay-enter {
+  animation: overlay-in 150ms ease-out;
+}
+.overlay-leave {
+  opacity: 0;
+  transform: scale(0.98) translateY(-3px);
+  transition:
+    opacity 140ms ease-in,
+    transform 140ms ease-in;
+}
