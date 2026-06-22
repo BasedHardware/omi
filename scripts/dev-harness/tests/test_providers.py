@@ -15,19 +15,12 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _real_env(api_key: str = "sk-local-dev-test-key") -> dict[str, str]:
-    deepgram = "dg-local-dev-test-key"
     return {
         "PROVIDER_MODE": "real",
         "OPENAI_API_KEY": api_key,
-        "DEEPGRAM_API_KEY": deepgram,
-        "OMI_LOCAL_OPENAI_ACCOUNT": "local-openai-dev-account",
-        "OMI_LOCAL_OPENAI_PROJECT": "local-openai-dev-project",
-        "OMI_LOCAL_OPENAI_KEY_SHA256_12": providers.secret_fingerprint(api_key),
-        "OMI_LOCAL_DEEPGRAM_ACCOUNT": "local-deepgram-dev-account",
-        "OMI_LOCAL_DEEPGRAM_PROJECT": "local-deepgram-dev-project",
-        "OMI_LOCAL_DEEPGRAM_KEY_SHA256_12": providers.secret_fingerprint(deepgram),
-        "OMI_LOCAL_HOSTED_ML_ACCOUNT": "local-hosted-ml",
-        "OMI_LOCAL_HOSTED_ML_PROJECT": "loopback-only",
+        "DEEPGRAM_API_KEY": "dg-local-dev-test-key",
+        "GEMINI_API_KEY": "gemini-local-dev-test-key",
+        "ANTHROPIC_API_KEY": "sk-ant-local-dev-test-key",
     }
 
 
@@ -41,8 +34,7 @@ def test_credential_checker_real_and_offline_modes(monkeypatch: pytest.MonkeyPat
 
     assert not real_missing.ok
     assert any("OPENAI_API_KEY" in item for item in real_missing.missing)
-    assert any("OMI_LOCAL_OPENAI_ACCOUNT" in item for item in real_missing.missing)
-    assert any("sha256 first 12" in item for item in real_missing.missing) is False
+    assert not any("OMI_LOCAL_" in item for item in real_missing.missing)
 
     monkeypatch.setenv("PROVIDER_MODE", "offline")
     offline = providers.provider_preflight(REPO_ROOT)
@@ -53,16 +45,24 @@ def test_credential_checker_real_and_offline_modes(monkeypatch: pytest.MonkeyPat
     assert "backend/testing/e2e/fakes/llm.py" in offline.offline_fake_sources["openai"]
 
 
-def test_real_mode_accepts_approved_fingerprints_without_leaking_secrets() -> None:
+def test_real_mode_reports_fingerprints_without_leaking_secrets() -> None:
     env = _real_env()
     report = providers.provider_preflight(REPO_ROOT, env=env)
 
     assert report.ok
-    assert set(report.enabled_external_providers) == {"openai", "deepgram", "hosted-ml-local-http"}
-    assert report.fingerprints["openai"] == env["OMI_LOCAL_OPENAI_KEY_SHA256_12"]
+    assert set(report.enabled_external_providers) == {
+        "openai",
+        "deepgram",
+        "gemini",
+        "anthropic",
+        "hosted-ml-local-http",
+    }
+    assert report.fingerprints["openai"] == providers.secret_fingerprint(env["OPENAI_API_KEY"])
     rendered = "\n".join(providers.status_lines(report))
     assert env["OPENAI_API_KEY"] not in rendered
     assert env["DEEPGRAM_API_KEY"] not in rendered
+    assert env["GEMINI_API_KEY"] not in rendered
+    assert env["ANTHROPIC_API_KEY"] not in rendered
     assert "sha256:" in rendered
 
 
@@ -161,30 +161,69 @@ def test_offline_mode_uses_hermetic_shared_fake_provider_wrapper() -> None:
     )
 
 
-def test_provider_secrets_not_emitted_in_child_env_status_or_config_digest(tmp_path: Path) -> None:
+def test_provider_secrets_injected_into_child_env(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    backend = repo / "backend"
+    backend.mkdir(parents=True)
+    (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (repo / ".git").mkdir()
+    secret = "sk-super-secret-local-provider-key"
+    (backend / ".env.local-dev").write_text(
+        "\n".join(
+            [
+                "PROVIDER_MODE=real",
+                f"OPENAI_API_KEY={secret}",
+                "DEEPGRAM_API_KEY=dg-local-dev-test-key",
+                "GEMINI_API_KEY=gemini-local-dev-test-key",
+                "ANTHROPIC_API_KEY=sk-ant-local-dev-test-key",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     env = os.environ.copy()
-    env.update(_real_env(api_key="sk-super-secret-local-provider-key"))
     env["OMI_LOCAL_STATE_ROOT"] = str(tmp_path / "state")
     env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
+    for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
+        env.pop(key, None)
 
-    cfg = config.load_config(REPO_ROOT, env=env, create_layout=True)
+    cfg = config.load_config(repo, env=env, create_layout=True)
     child = config.child_env_for(cfg)
-    assert child.get("OPENAI_API_KEY") != env["OPENAI_API_KEY"]
-    assert env["OPENAI_API_KEY"] not in "\n".join(providers.status_lines(providers.provider_preflight(REPO_ROOT, env=env)))
-
-    result = subprocess.run(
-        [sys.executable, "-m", "dev_harness.cli", "up"],
-        cwd=REPO_ROOT,
-        env={**env, "PATH": "/tmp/no-tools"},
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=30,
+    desktop_child = config.desktop_backend_child_env_for(cfg)
+    for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
+        expected = config.parse_secrets_file(cfg).secrets[key]
+        assert child.get(key) == expected
+        assert desktop_child.get(key) == expected
+    assert secret not in "\n".join(
+        providers.status_lines(providers.provider_preflight(repo, env=config.preflight_env(cfg)))
     )
-    assert result.returncode == 1
-    assert env["OPENAI_API_KEY"] not in result.stdout
-    digest = cfg.layout.config_digest_path.read_text(encoding="utf-8") if cfg.layout.config_digest_path.exists() else ""
-    assert env["OPENAI_API_KEY"] not in digest
+
+
+def test_placeholder_secret_rejected() -> None:
+    env = _real_env()
+    env["OPENAI_API_KEY"] = "changeme"
+    report = providers.provider_preflight(REPO_ROOT, env=env)
+    assert not report.ok
+    assert any("placeholder" in item.lower() for item in report.missing)
+
+
+def test_parse_secrets_file_ignores_non_secret_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = tmp_path / "repo"
+    backend = repo / "backend"
+    backend.mkdir(parents=True)
+    (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (repo / ".git").mkdir()
+    (backend / ".env.local-dev").write_text(
+        "OPENAI_API_KEY=sk-file-key\nFIREBASE_PROJECT_ID=evil-project\nBASE_API_URL=http://evil\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
+    cfg = config.load_config(repo, create_layout=True)
+    parsed = config.parse_secrets_file(cfg)
+    assert "FIREBASE_PROJECT_ID" in parsed.ignored_keys
+    assert parsed.secrets.get("OPENAI_API_KEY") == "sk-file-key"
+    child = config.child_env_for(cfg)
+    assert child["FIREBASE_PROJECT_ID"] == safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
 
 
 def test_offline_child_env_rejects_provider_credentials() -> None:
