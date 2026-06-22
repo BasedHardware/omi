@@ -17,10 +17,16 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, safety
+from . import config, providers, safety, v17_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
-SERVICE_PORTS = {"firestore": config.FIRESTORE_PORT, "auth": config.AUTH_PORT, "redis": config.REDIS_PORT, "backend": config.BACKEND_PORT}
+SERVICE_PORTS = {
+    "firestore": config.FIRESTORE_PORT,
+    "auth": config.AUTH_PORT,
+    "redis": config.REDIS_PORT,
+    "backend": config.BACKEND_PORT,
+    "desktop-backend": config.DESKTOP_BACKEND_PORT,
+}
 
 
 def _now() -> str:
@@ -123,7 +129,12 @@ def _which(name: str) -> bool:
 
 
 def _python_importable(module: str) -> bool:
-    return subprocess.run([sys.executable, "-c", f"import {module}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    return (
+        subprocess.run(
+            [sys.executable, "-c", f"import {module}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        ).returncode
+        == 0
+    )
 
 
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
@@ -132,7 +143,9 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
     if not _which("node"):
         missing.append("node (required by Firebase emulator CLI)")
     if not (_which("firebase") or _which("npx")):
-        missing.append("firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)")
+        missing.append(
+            "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
+        )
     if not _which("java"):
         missing.append("java runtime (required by Firestore emulator)")
     if not _which("redis-server"):
@@ -147,11 +160,15 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
         missing.append("Python package uvicorn (install backend requirements before starting backend)")
-    provider_report = providers.provider_preflight(cfg.repo_root)
+    if not _which("cargo"):
+        missing.append("cargo (required to build the Rust desktop backend)")
+    provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)
     if cfg.provider_mode == "offline":
-        warnings.append("PROVIDER_MODE=offline: external-provider credentials are stripped from child processes; local stack shape is preserved.")
+        warnings.append(
+            "PROVIDER_MODE=offline: external-provider credentials are stripped from child processes; local stack shape is preserved."
+        )
     return missing, warnings
 
 
@@ -165,13 +182,26 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
     print(f"backend: {cfg.backend_url}")
+    print(f"desktop_backend: {cfg.desktop_backend_url}")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
-    report = providers.provider_preflight(cfg.repo_root)
+    parsed = config.parse_secrets_file(cfg)
+    report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     print("provider_status:")
     for line in providers.status_lines(report):
         print(f"  {line}")
+    if parsed.ignored_keys:
+        print("secrets_file_ignored_keys:")
+        for key in parsed.ignored_keys:
+            print(f"  - {key} (harness injects this; remove from backend/.env.local-dev)")
+    if parsed.sources:
+        print("provider_credential_sources:")
+        for key in sorted(parsed.sources):
+            if key == "PROVIDER_MODE":
+                print(f"  {key}: {parsed.sources[key]}")
+            elif key in config.CORE_PROVIDER_ENV:
+                print(f"  {key}: {parsed.sources[key]}")
     return report
 
 
@@ -207,7 +237,11 @@ def _scenario_users_from_seed_manifest(cfg: config.HarnessConfig) -> list[str]:
     operations = data.get("operations", [])
     if not isinstance(operations, list):
         return []
-    users = [str(op.get("target")) for op in operations if isinstance(op, dict) and op.get("kind") == "auth" and op.get("action") == "upsert"]
+    users = [
+        str(op.get("target"))
+        for op in operations
+        if isinstance(op, dict) and op.get("kind") == "auth" and op.get("action") == "upsert"
+    ]
     return sorted(set(users))
 
 
@@ -223,6 +257,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "firebase_auth": cfg.auth_host,
         "redis": f"{cfg.redis_host}:{cfg.redis_port}",
         "backend": cfg.backend_url,
+        "desktop_backend": cfg.desktop_backend_url,
     }
     return {
         "schema_version": 1,
@@ -304,7 +339,16 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def _start_process(cfg: config.HarnessConfig, service: str, command: list[str], *, cwd: Path, log_name: str, port: int) -> None:
+def _start_process(
+    cfg: config.HarnessConfig,
+    service: str,
+    command: list[str],
+    *,
+    cwd: Path,
+    log_name: str,
+    port: int,
+    env: dict[str, str] | None = None,
+) -> None:
     if _service_record(cfg, service) is not None:
         print(f"{service}: already recorded as running")
         return
@@ -313,10 +357,26 @@ def _start_process(cfg: config.HarnessConfig, service: str, command: list[str], 
     log_path = cfg.layout.logs_dir / log_name
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = log_path.open("ab")
-    env = config.child_env_for(cfg)
-    env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{env.get('PYTHONPATH', '')}"
-    supervised = [sys.executable, "-m", "dev_harness.supervise", "--marker", marker, "--service", service, "--", *command]
-    proc = subprocess.Popen(supervised, cwd=str(cwd), env=env, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)
+    child_env = config.child_env_for(cfg) if env is None else env
+    child_env["PYTHONPATH"] = f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{child_env.get('PYTHONPATH', '')}"
+    if service == "backend":
+        child_env["PYTHONPATH"] = (
+            f"{cfg.repo_root / 'scripts' / 'dev-harness'}:{cfg.repo_root / 'backend'}:{child_env.get('PYTHONPATH', '')}"
+        )
+    supervised = [
+        sys.executable,
+        "-m",
+        "dev_harness.supervise",
+        "--marker",
+        marker,
+        "--service",
+        service,
+        "--",
+        *command,
+    ]
+    proc = subprocess.Popen(
+        supervised, cwd=str(cwd), env=child_env, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True
+    )
     records = [record for record in _process_records(cfg) if record.get("service") != service]
     records.append(
         {
@@ -332,6 +392,43 @@ def _start_process(cfg: config.HarnessConfig, service: str, command: list[str], 
     )
     _save_manifests(cfg, records)
     print(f"{service}: started pid={proc.pid} log={log_path}")
+
+
+def _desktop_backend_dir(cfg: config.HarnessConfig) -> Path:
+    return cfg.repo_root / "desktop" / "macos" / "Backend-Rust"
+
+
+def _ensure_desktop_backend_binary(cfg: config.HarnessConfig) -> Path:
+    backend_dir = _desktop_backend_dir(cfg)
+    release = os.environ.get("OMI_DESKTOP_BACKEND_RELEASE", "").strip() in {"1", "true", "yes"}
+    profile = "release" if release else "debug"
+    binary = backend_dir / "target" / profile / "omi-desktop-backend"
+    stale_markers = ("src", "Cargo.toml", "Cargo.lock")
+
+    def _is_stale(marker: str) -> bool:
+        path = backend_dir / marker
+        if not path.exists():
+            return False
+        if path.is_file():
+            return path.stat().st_mtime > binary.stat().st_mtime
+        newer = subprocess.run(
+            ["find", str(path), "-newer", str(binary)],
+            cwd=backend_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return bool(newer.stdout.strip())
+
+    if binary.is_file() and not any(_is_stale(marker) for marker in stale_markers):
+        return binary
+    build_cmd = ["cargo", "build"]
+    if release:
+        build_cmd.append("--release")
+    print(f"desktop-backend: building ({' '.join(build_cmd)})...")
+    subprocess.run(build_cmd, cwd=backend_dir, check=True)
+    return binary
 
 
 def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
@@ -352,13 +449,32 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
 
 def _start_services(cfg: config.HarnessConfig) -> None:
     cfg.layout.logs_dir.mkdir(parents=True, exist_ok=True)
-    _start_process(cfg, "firestore", _firebase_command(cfg), cwd=cfg.repo_root, log_name="firebase-emulators.log", port=config.FIRESTORE_PORT)
+    _start_process(
+        cfg,
+        "firestore",
+        _firebase_command(cfg),
+        cwd=cfg.repo_root,
+        log_name="firebase-emulators.log",
+        port=config.FIRESTORE_PORT,
+    )
     redis_dir = cfg.layout.services_dir / "redis"
     redis_dir.mkdir(parents=True, exist_ok=True)
     _start_process(
         cfg,
         "redis",
-        ["redis-server", "--bind", "127.0.0.1", "--port", str(cfg.redis_port), "--dir", str(redis_dir), "--save", "", "--appendonly", "no"],
+        [
+            "redis-server",
+            "--bind",
+            "127.0.0.1",
+            "--port",
+            str(cfg.redis_port),
+            "--dir",
+            str(redis_dir),
+            "--save",
+            "",
+            "--appendonly",
+            "no",
+        ],
         cwd=cfg.repo_root,
         log_name="redis.log",
         port=cfg.redis_port,
@@ -371,6 +487,16 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         log_name="backend.log",
         port=config.BACKEND_PORT,
     )
+    desktop_binary = _ensure_desktop_backend_binary(cfg)
+    _start_process(
+        cfg,
+        "desktop-backend",
+        [str(desktop_binary)],
+        cwd=_desktop_backend_dir(cfg),
+        log_name="desktop-backend.log",
+        port=config.DESKTOP_BACKEND_PORT,
+        env=config.desktop_backend_child_env_for(cfg),
+    )
 
 
 def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[str]:
@@ -378,6 +504,7 @@ def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[st
         "firestore": f"http://{cfg.firestore_host}/",
         "auth": f"http://{cfg.auth_host}/",
         "backend": f"{cfg.backend_url}/docs",
+        "desktop-backend": f"{cfg.desktop_backend_url}/health",
     }
     pending = dict(checks)
     deadline = time.time() + timeout
@@ -436,6 +563,7 @@ def cmd_up(args: argparse.Namespace) -> int:
                 "auth": cfg.auth_host,
                 "redis": f"{cfg.redis_host}:{cfg.redis_port}",
                 "backend": cfg.backend_url,
+                "desktop_backend": cfg.desktop_backend_url,
             },
         },
     )
@@ -451,6 +579,12 @@ def cmd_up(args: argparse.Namespace) -> int:
             print(f"  - {failure}")
         print(f"Inspect logs with: make dev-logs OMI_LOCAL_STATE_ROOT={cfg.layout.state_root.parent}")
         return 1
+    if _current_scenario_manifest(cfg) is None:
+        try:
+            v17_scenarios.seed_scenario("happy_path", cfg)
+            print("auto-seeded scenario=happy_path (first run)")
+        except Exception as exc:  # noqa: BLE001
+            print(f"warning: auto-seed happy_path failed: {exc}")
     print("\nLocal dev harness is up.")
     return 0
 
@@ -461,9 +595,13 @@ def cmd_status(args: argparse.Namespace) -> int:
     print_config(cfg)
     provider_report = print_provider_status(cfg)
     if cfg.provider_mode == "offline":
-        print("offline_hint: PROVIDER_MODE=offline active; external provider credentials are stripped from child processes")
+        print(
+            "offline_hint: PROVIDER_MODE=offline active; external provider credentials are stripped from child processes"
+        )
     else:
-        print("offline_hint: run with PROVIDER_MODE=offline for hermetic fake providers and no external provider credentials")
+        print(
+            "offline_hint: run with PROVIDER_MODE=offline for hermetic fake providers and no external provider credentials"
+        )
     if not cfg.layout.sentinel_path.is_file():
         print("sentinel: missing (run make dev-up or make dev-reset to initialize harness-owned state)")
     else:
@@ -478,7 +616,9 @@ def cmd_status(args: argparse.Namespace) -> int:
         users = _scenario_users_from_seed_manifest(cfg)
         print(f"  seeded_users: {', '.join(users) if users else 'unknown'}")
     else:
-        print("  scenario_id: none (run make seed-v17-scenario SCENARIO=happy_path)")
+        print(
+            "  scenario_id: none (run make dev-up to auto-seed happy_path, or make seed-v17-scenario SCENARIO=happy_path)"
+        )
         print("  seeded_users: none")
     print(f"  session_summary_path: {_summary_path(cfg)}")
     if getattr(args, "write_summary", False):
@@ -502,7 +642,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_summary(args: argparse.Namespace) -> int:
     cfg = config.load_config(_repo_root(), create_layout=False)
-    provider_report = providers.provider_preflight(cfg.repo_root)
+    provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     if not cfg.layout.sentinel_path.is_file():
         print("Cannot write session summary: harness sentinel is missing (run make dev-up or make dev-reset first)")
         return 1
