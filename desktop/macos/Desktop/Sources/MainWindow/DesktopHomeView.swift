@@ -580,6 +580,8 @@ struct DesktopHomeView: View {
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.agentVMProvisioningDelay * 1_000_000_000)
       )
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
       await AgentVMService.shared.ensureProvisioned()
     }
   }
@@ -592,6 +594,8 @@ struct DesktopHomeView: View {
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.conversationWarmupDelay * 1_000_000_000)
       )
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
 
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
@@ -619,8 +623,12 @@ struct DesktopHomeView: View {
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.initialFileIndexingDelay * 1_000_000_000)
       )
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
       initialFileIndexingBackfill.markScanCompleted()
       if initialFileIndexingBackfill.shouldMarkComplete {
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
@@ -638,6 +646,14 @@ struct DesktopHomeView: View {
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.proactiveAssistantsStartDelay * 1_000_000_000)
       )
+      guard !Task.isCancelled else {
+        proactiveMonitoringStartGate.finishAttempt()
+        return
+      }
+      guard await AuthState.shared.isSignedIn else {
+        proactiveMonitoringStartGate.finishAttempt()
+        return
+      }
 
       let plugin = ProactiveAssistantsPlugin.shared
       guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else {

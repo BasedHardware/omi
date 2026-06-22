@@ -49,6 +49,9 @@ class CrispManager: ObservableObject {
     var activationObserver: NSObjectProtocol?
     var refreshAllObserver: NSObjectProtocol?
 
+    /// Retained so a delayed startup poll cannot fire after sign-out/stop.
+    private var initialPollTask: Task<Void, Never>?
+
     /// Counter bumped at the top of `pollForMessages()`, before the auth-backoff
     /// guard and the network task. Lets `CrispManagerLifecycleTests` prove that
     /// posting `didBecomeActive` / `.refreshAllData` actually reaches the poll
@@ -82,8 +85,10 @@ class CrispManager: ObservableObject {
 
         if performInitialPoll {
             if initialPollDelay > 0 {
-                Task { [weak self] in
+                initialPollTask?.cancel()
+                initialPollTask = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: UInt64(initialPollDelay * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
                     guard let self, self.isStarted else { return }
                     self.pollForMessages()
                 }
@@ -112,6 +117,8 @@ class CrispManager: ObservableObject {
 
     /// Stop observing (called on sign-out)
     func stop() {
+        initialPollTask?.cancel()
+        initialPollTask = nil
         if let obs = activationObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = refreshAllObserver { NotificationCenter.default.removeObserver(obs) }
         activationObserver = nil
@@ -224,6 +231,10 @@ class CrispManager: ObservableObject {
         // 503 means Crisp is not configured - silently return empty
         if httpResponse.statusCode == 503 {
             return []
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw APIError.unauthorized
         }
 
         guard httpResponse.statusCode == 200 else {
