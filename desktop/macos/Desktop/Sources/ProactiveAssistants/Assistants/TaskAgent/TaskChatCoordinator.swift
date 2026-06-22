@@ -196,6 +196,7 @@ class TaskChatCoordinator: ObservableObject {
     /// Uses the agent bridge via TaskChatState. Skips tasks already sending.
     func investigateInBackground(for task: TaskActionItem) async {
         log("TaskChatCoordinator: investigateInBackground for \(task.id)")
+        TaskAgentStatusRegistry.shared.registerTask(taskId: task.id, title: task.description)
 
         let state: TaskChatState
         if let existing = taskStates[task.id] {
