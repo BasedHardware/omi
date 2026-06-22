@@ -1235,7 +1235,7 @@ def start_user_trial(uid: str = Depends(auth.get_current_user_uid)):
     if already_started:
         return get_trial_metadata(uid)
 
-    now_seconds = int(time.time())
+    now_seconds = int(datetime.now(timezone.utc).timestamp())
     users_db.set_subscription_trial_started_at(uid, now_seconds)
     clear_trial_paywall_cache(uid)
     return get_trial_metadata(uid)
