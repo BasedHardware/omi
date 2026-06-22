@@ -217,7 +217,7 @@ def run_benchmark():
                     "der": der,
                     "missed": detail.get("missed detection", 0),
                     "false_alarm": detail.get("false alarm", 0),
-                    "confusion": detail.get("speaker error", 0),
+                    "confusion": detail.get("confusion", 0),
                     "total": detail.get("total", 0),
                     "ref_speakers": clip["speakers"],
                     "hyp_speakers": n_hyp_speakers,

@@ -70,7 +70,7 @@ jobs:
 
       - name: Create GPU test job
         run: |
-          cat <<'JOBEOF' | envsubst | kubectl apply -f -
+          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_TAG $DER_REPORT_ONLY' | kubectl apply -f -
           apiVersion: batch/v1
           kind: Job
           metadata:

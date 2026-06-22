@@ -155,7 +155,7 @@ class TestPyannoteMetricsContract:
         assert "diarization error rate" in detail
         assert "missed detection" in detail
         assert "false alarm" in detail
-        assert "speaker error" in detail
+        assert "confusion" in detail
         assert "total" in detail
         assert 0.0 <= detail["diarization error rate"] <= 1.0
 
