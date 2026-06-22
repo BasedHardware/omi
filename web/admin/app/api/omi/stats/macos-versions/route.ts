@@ -125,8 +125,7 @@ export async function GET(request: NextRequest) {
           timestamp
         ) AS app_version
       FROM events
-      WHERE event = 'App Became Active'
-        AND properties.$os_name = 'macOS'
+      WHERE properties.$os_name = 'macOS'
         AND toDate(timestamp) = today()
       GROUP BY actor_id
       ORDER BY actor_id ASC

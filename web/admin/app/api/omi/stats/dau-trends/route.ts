@@ -30,14 +30,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: cache.data, days });
     }
 
-    // Use PostHog HogQL for daily unique macOS users with "App Became Active"
+    // Daily unique macOS users = distinct clients emitting ANY event (rename-proof;
+    // the old `App Became Active` lifecycle event was removed from the desktop app).
     const hogql = `
       SELECT
         toDate(timestamp) as day,
         count(DISTINCT distinct_id) as users
       FROM events
-      WHERE event = 'App Became Active'
-        AND properties.$os_name = 'macOS'
+      WHERE properties.$os_name = 'macOS'
         AND timestamp >= now() - interval ${days} day
       GROUP BY day
       ORDER BY day
