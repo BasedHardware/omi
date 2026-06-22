@@ -79,10 +79,7 @@ class ProviderBudget:
 @dataclass(frozen=True)
 class ProviderSpec:
     name: str
-    account_env: str
-    project_env: str
     credential_env: str | None
-    credential_fingerprint_env: str | None
     billing_owner: str
     quota: str
     data_use: str
@@ -137,10 +134,7 @@ def default_provider_specs(repo_root: Path) -> tuple[ProviderSpec, ...]:
     return (
         ProviderSpec(
             name="openai",
-            account_env="OMI_LOCAL_OPENAI_ACCOUNT",
-            project_env="OMI_LOCAL_OPENAI_PROJECT",
             credential_env="OPENAI_API_KEY",
-            credential_fingerprint_env="OMI_LOCAL_OPENAI_KEY_SHA256_12",
             billing_owner="developer-local-qa",
             quota="local-harness $10/day developer budget",
             data_use="training disabled / synthetic-or-local-QA inputs only",
@@ -154,10 +148,7 @@ def default_provider_specs(repo_root: Path) -> tuple[ProviderSpec, ...]:
         ),
         ProviderSpec(
             name="deepgram",
-            account_env="OMI_LOCAL_DEEPGRAM_ACCOUNT",
-            project_env="OMI_LOCAL_DEEPGRAM_PROJECT",
             credential_env="DEEPGRAM_API_KEY",
-            credential_fingerprint_env="OMI_LOCAL_DEEPGRAM_KEY_SHA256_12",
             billing_owner="developer-local-qa",
             quota="local-harness $10/day developer budget",
             data_use="synthetic-or-local-QA audio only",
@@ -176,11 +167,35 @@ def default_provider_specs(repo_root: Path) -> tuple[ProviderSpec, ...]:
             fake_source_path=str(fake_root / "stt.py"),
         ),
         ProviderSpec(
+            name="gemini",
+            credential_env="GEMINI_API_KEY",
+            billing_owner="developer-local-qa",
+            quota="local-harness $10/day developer budget",
+            data_use="training disabled / synthetic-or-local-QA inputs only",
+            retention="provider policy; not harness-authoritative state",
+            region="provider default",
+            allowed_endpoints=(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                "https://generativelanguage.googleapis.com/v1/models",
+            ),
+            allowed_capabilities=("llm.chat", "embedding.read"),
+            budget=ProviderBudget(max_requests_per_session=60, max_requests_per_day=300, max_tokens=200_000),
+        ),
+        ProviderSpec(
+            name="anthropic",
+            credential_env="ANTHROPIC_API_KEY",
+            billing_owner="developer-local-qa",
+            quota="local-harness $10/day developer budget",
+            data_use="training disabled / synthetic-or-local-QA inputs only",
+            retention="provider policy; not harness-authoritative state",
+            region="provider default",
+            allowed_endpoints=("https://api.anthropic.com/v1/messages",),
+            allowed_capabilities=("llm.chat",),
+            budget=ProviderBudget(max_requests_per_session=60, max_requests_per_day=300, max_tokens=200_000),
+        ),
+        ProviderSpec(
             name="hosted-ml-local-http",
-            account_env="OMI_LOCAL_HOSTED_ML_ACCOUNT",
-            project_env="OMI_LOCAL_HOSTED_ML_PROJECT",
             credential_env=None,
-            credential_fingerprint_env=None,
             billing_owner="developer-local-qa",
             quota="local loopback-only hosted ML budget",
             data_use="synthetic-or-local-QA audio only",
@@ -211,6 +226,31 @@ def secret_fingerprint(secret: str) -> str:
     if not secret:
         raise ProviderPolicyError("Cannot fingerprint an empty provider credential")
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()[:12]
+
+
+_PLACEHOLDER_SECRET_VALUES = frozenset(
+    {
+        "changeme",
+        "change-me",
+        "your-key-here",
+        "your_api_key",
+        "replace-me",
+        "todo",
+        "xxx",
+        "placeholder",
+    }
+)
+
+
+def is_placeholder_secret(value: str) -> bool:
+    normalized = value.strip().lower()
+    if not normalized:
+        return True
+    if normalized in _PLACEHOLDER_SECRET_VALUES:
+        return True
+    if "your-key" in normalized or "changeme" in normalized:
+        return True
+    return False
 
 
 def redact_secret(value: str | None) -> str:
@@ -319,26 +359,19 @@ def provider_preflight(
             continue
         if spec.permits_stateful_resources or spec.permits_async_jobs or spec.permits_external_files:
             missing.append(f"{spec.name}: matrix permits durable external side effects; local harness requires false")
-        for env_name, label in ((spec.account_env, "dev account"), (spec.project_env, "dev project")):
-            if not source.get(env_name):
-                missing.append(f"{env_name} ({spec.name} {label}; configure in local shell/.envrc only, never desktop bundle)")
         if spec.credential_env:
-            secret = source.get(spec.credential_env, "")
+            secret = source.get(spec.credential_env, "").strip()
             if not secret:
                 missing.append(
-                    f"{spec.credential_env} ({spec.name} dev credential; set backend-side only or use PROVIDER_MODE=offline)"
+                    f"{spec.credential_env} ({spec.name}; set in backend/.env.local-dev or use PROVIDER_MODE=offline)"
                 )
-            elif spec.credential_fingerprint_env:
-                actual = secret_fingerprint(secret)
-                expected = source.get(spec.credential_fingerprint_env, "")
-                if not expected:
-                    missing.append(
-                        f"{spec.credential_fingerprint_env} ({spec.name} approved dev credential fingerprint: sha256 first 12 chars)"
-                    )
-                elif expected != actual:
-                    missing.append(f"{spec.name}: credential fingerprint mismatch for approved local dev key")
-                else:
-                    fingerprints[spec.name] = actual
+            elif is_placeholder_secret(secret):
+                missing.append(
+                    f"{spec.credential_env} ({spec.name}; placeholder value rejected — set a real key in backend/.env.local-dev)"
+                )
+            else:
+                # Non-secret fingerprint for dev-status / config digest only (never required in .env).
+                fingerprints[spec.name] = secret_fingerprint(secret)
         enabled.append(spec.name)
 
     return ProviderPreflight(
@@ -353,7 +386,9 @@ def provider_preflight(
 class ProviderBroker:
     """Fail-closed request policy checker for future local provider call sites."""
 
-    def __init__(self, repo_root: Path, *, env: Mapping[str, str] | None = None, specs: tuple[ProviderSpec, ...] | None = None):
+    def __init__(
+        self, repo_root: Path, *, env: Mapping[str, str] | None = None, specs: tuple[ProviderSpec, ...] | None = None
+    ):
         self.repo_root = Path(repo_root)
         self.env = os.environ if env is None else env
         self.mode = provider_mode_from_env(self.env)
@@ -363,7 +398,9 @@ class ProviderBroker:
     def check_request(self, request: ProviderRequest) -> None:
         spec = self.specs.get(request.provider)
         if spec is None:
-            raise ProviderPolicyError(f"Unknown provider {request.provider!r}; provider matrix is explicit and fail-closed")
+            raise ProviderPolicyError(
+                f"Unknown provider {request.provider!r}; provider matrix is explicit and fail-closed"
+            )
         if request.replay_after_restart:
             raise ProviderPolicyError("Automatic provider replay after restart is prohibited")
         if not request.synthetic_or_local_qa_data:
