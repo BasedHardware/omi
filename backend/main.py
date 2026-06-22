@@ -3,9 +3,9 @@ import json
 import logging
 import os
 
-from dotenv import load_dotenv
+from utils.env_loader import load_backend_env
 
-load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
+load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 
 logging.basicConfig(level=logging.INFO)
 
@@ -76,7 +76,15 @@ log_langsmith_status()
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
+_auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
+if _auth_emulator_host:
+    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+        os.environ.pop(_adc_key, None)
+    _firebase_project_id = (
+        os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
+    )
+    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})
+elif os.environ.get("SERVICE_ACCOUNT_JSON"):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
     credentials = firebase_admin.credentials.Certificate(service_account_info)
     firebase_admin.initialize_app(credentials)
