@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -50,16 +51,7 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
-    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: { kind: "HogQLQuery", query: hogql },
-      }),
-    });
+    const response = await posthogFetch(host, projectId, apiKey, hogql);
 
     if (!response.ok) {
       // HogQL countIf with DISTINCT might not be supported — fall back to two queries

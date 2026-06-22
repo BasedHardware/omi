@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -31,20 +32,7 @@ type Breakdown = {
 };
 
 async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      query: {
-        kind: "HogQLQuery",
-        query,
-      },
-    }),
-  });
+  const response = await posthogFetch(host, projectId, apiKey, query);
 
   if (!response.ok) {
     const text = await response.text();
