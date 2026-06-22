@@ -1,48 +1,87 @@
 # V17 local emulator manual QA runbook
 
-This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_DEV` metadata and is not V17 dev-cloud proof, production proof, IAM proof, deployed-index proof, telemetry proof, rollback proof, or activation evidence.
-
-## Happy path
+## Daily dev (30 seconds)
 
 ```bash
-# Real providers are the default for interactive manual QA and require local dev credentials.
+cp backend/.env.local-dev.template backend/.env.local-dev  # once
+# set OPENAI_API_KEY, DEEPGRAM_API_KEY, GEMINI_API_KEY, ANTHROPIC_API_KEY
+make dev-desktop
+```
+
+`make dev-desktop` starts emulators + backends, auto-seeds `happy_path`, and launches **Omi Dev** signed in as `alice`. Override user: `make desktop-run-local DESKTOP_USER=bob`.
+
+Offline (no API keys): `PROVIDER_MODE=offline make dev-desktop`
+
+### Harness-injected defaults (do not put in `.env.local-dev`)
+
+| Setting | Value |
+|---------|-------|
+| Firebase project | `demo-omi-local` |
+| Firestore database | `(default)` |
+| Firestore emulator | `127.0.0.1:8085` |
+| Auth emulator | `127.0.0.1:9099` |
+| Redis | `127.0.0.1:6380` |
+| Python API | `http://127.0.0.1:8000` |
+| Rust desktop API | `http://127.0.0.1:10201` |
+| Encryption / admin | harness test values (not prod) |
+
+Non-secret keys in `backend/.env.local-dev` are **ignored** — see `make dev-status` for warnings.
+
+### Seeded users
+
+| Profile | Email | Password |
+|---------|-------|----------|
+| `alice` (default) | `alice@local.omi.invalid` | `alice-local-password-030` |
+| `bob` | `bob@local.omi.invalid` | `bob-local-password-030` |
+| `local_default_user` | `local_default_user@local.omi.invalid` | `local_default_user-local-password-030` |
+
+### Useful commands
+
+```bash
+make dev-init      # one-time venv + template copy
+make dev           # services + auto-seed
+make dev-status    # endpoints, provider mode, seeded users
+make dev-verify    # signed-in check + chat smoke + no aud errors
+make dev-down      # stop harness processes
+```
+
+For perf testing with a release Rust binary: `OMI_DESKTOP_BACKEND_RELEASE=1 make dev`
+
+---
+
+<details>
+<summary>Evidence class / activation framing (QA agents)</summary>
+
+This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_DEV` metadata and is not V17 dev-cloud proof, production proof, IAM proof, deployed-index proof, telemetry proof, rollback proof, or activation evidence.
+
+### Happy path (explicit steps)
+
+```bash
 make dev-up
-make seed-v17-scenario SCENARIO=happy_path
-make desktop-run-local USER=alice
+make seed-v17-scenario SCENARIO=happy_path   # optional; dev-up auto-seeds on first run
+make desktop-run-local DESKTOP_USER=alice
 make dev-status
 make dev-summary
 ```
 
-Use offline providers for provider-independent debugging or missing-key demos:
+Use offline providers for provider-independent debugging:
 
 ```bash
 PROVIDER_MODE=offline make dev-up
-PROVIDER_MODE=offline make seed-v17-scenario SCENARIO=happy_path
 PROVIDER_MODE=offline make dev-status
-PROVIDER_MODE=offline make dev-summary
 ```
 
-`make dev-status` prints the active instance, provider mode, local endpoints, state root, enabled external providers, seeded V17 scenario/users, and the local session-summary path. `make dev-summary` writes the optional session summary under the harness-owned `reports/` directory.
-
-## Fail-closed scenario
+### Fail-closed scenario
 
 ```bash
 make seed-v17-scenario SCENARIO=kill_switch
 make dev-status
-make desktop-run-local USER=alice
+make desktop-run-local DESKTOP_USER=alice
 ```
 
-Other scenario names are listed with:
+Other scenario names: `make list-v17-scenarios`
 
-```bash
-make list-v17-scenarios
-```
-
-## Desktop local profile handoff
-
-`make desktop-run-local USER=<profile>` currently validates the harness sentinel and seeded synthetic Auth users, then prints the exact `desktop/macos/run.sh` environment expected once TICKET-050 adds the desktop auth/profile bootstrap. It intentionally does not embed provider credentials and does not touch production, beta, or default dev bundles.
-
-## Reset
+### Reset
 
 ```bash
 make dev-reset
@@ -50,12 +89,12 @@ make dev-reset
 
 Reset only clears sentinel-owned local harness state. It does not delete provider logs or provider-retained data from real external processors.
 
-## Evidence and no-write framing
-
-Session summaries are labelled:
+### Session summary labels
 
 - `evidence_class: LOCAL_EMULATOR_DEV`
 - `activation_eligible: false`
 - `watermark: NOT_ACTIVATION_EVIDENCE`
 
-Where the summary references no-write/protected-state expectations, this slice includes explicit instrumentation placeholders plus protected collection `before_digest`/`after_digest` fields. Those fields remain `null` until live emulator readback/write-attempt instrumentation is wired; do not treat them as dev-cloud or production no-write proof.
+Protected collection `before_digest`/`after_digest` fields remain `null` until live emulator instrumentation is wired; do not treat as dev-cloud or production no-write proof.
+
+</details>
