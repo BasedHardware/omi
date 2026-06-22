@@ -198,6 +198,119 @@ sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetc
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
 
+def _install_legacy_safe_v17_defaults(monkeypatch):
+    """Keep lock-bypass tests focused on legacy lock checks, not V17 rollout gating."""
+    from types import SimpleNamespace
+
+    import utils.memory.v17_chat_memory_adapter as chat_adapter
+    import utils.mcp_memories as default_mcp
+    import utils.memory.v17_default_read_rollout as rollout
+    import utils.memory.v17_product_authorization as product_auth
+
+    def _legacy_rollout(uid='test-uid', consumer='mcp', **_kwargs):
+        return rollout.legacy_safe_v17_default_read_rollout_decision(
+            uid=uid,
+            source_path='test/legacy-safe',
+            consumer=consumer,
+            reason='lock_bypass_fixture_legacy_safe',
+        )
+
+    legacy_text = SimpleNamespace(
+        read_decision=rollout.V17ReadDecision.USE_LEGACY_SAFE,
+        text='',
+        fallback_reason='lock_bypass_fixture_legacy_safe',
+    )
+    legacy_memories = SimpleNamespace(
+        read_decision=rollout.V17ReadDecision.USE_LEGACY_SAFE,
+        memories=[],
+        fallback_reason='lock_bypass_fixture_legacy_safe',
+    )
+    allowed_write = rollout.V17LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
+    ready_gate = rollout.V17WriteConvergencePolicy(source_path='test/convergence', ready=True)
+    allowed_auth = product_auth.V17ProductAuthorizationDecision(
+        allowed=True,
+        context=product_auth.V17ProductAuthorizationContext(
+            uid='test-uid', consumer='mcp', surface='mcp_sse', app_id='test-app', key_id='test-key'
+        ),
+        db_client=None,
+        read_decision=rollout.V17ReadDecision.USE_LEGACY_SAFE,
+        reason='lock_bypass_fixture_legacy_safe',
+        observability={'enabled': True},
+        status_code=200,
+    )
+
+    for module in [chat_adapter, default_mcp]:
+        for attr in [
+            'list_v17_default_chat_memories_decision_text',
+            'search_v17_default_chat_memories_vector_decision_text',
+            'list_v17_default_mcp_memories',
+            'search_v17_default_mcp_memories_vector',
+        ]:
+            if hasattr(module, attr):
+                value = legacy_text if attr.endswith('_text') else legacy_memories
+                monkeypatch.setattr(module, attr, MagicMock(return_value=value), raising=False)
+
+    monkeypatch.setattr(
+        default_mcp, 'read_v17_mcp_default_memory_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
+    )
+    monkeypatch.setattr(
+        product_auth, 'authorize_v17_external_default_memory_read', MagicMock(return_value=allowed_auth), raising=False
+    )
+    monkeypatch.setattr(rollout, 'read_v17_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False)
+    monkeypatch.setattr(
+        rollout,
+        'assert_legacy_memory_write_allowed_for_default_read_decision',
+        MagicMock(return_value=allowed_write),
+        raising=False,
+    )
+
+    # Patch already-imported callsites that used `from module import ...`.
+    for module_name in [
+        'utils.retrieval.tools.memory_tools',
+        'routers.mcp',
+        'routers.mcp_sse',
+    ]:
+        module = sys.modules.get(module_name)
+        if module is None:
+            continue
+        for attr in [
+            'list_v17_default_chat_memories_decision_text',
+            'search_v17_default_chat_memories_vector_decision_text',
+        ]:
+            if hasattr(module, attr):
+                monkeypatch.setattr(module, attr, MagicMock(return_value=legacy_text), raising=False)
+        for attr in ['list_v17_default_mcp_memories', 'search_v17_default_mcp_memories_vector']:
+            if hasattr(module, attr):
+                monkeypatch.setattr(module, attr, MagicMock(return_value=legacy_memories), raising=False)
+        if hasattr(module, 'read_v17_mcp_default_memory_rollout'):
+            monkeypatch.setattr(
+                module, 'read_v17_mcp_default_memory_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
+            )
+        if hasattr(module, 'authorize_v17_external_default_memory_read'):
+            monkeypatch.setattr(
+                module,
+                'authorize_v17_external_default_memory_read',
+                MagicMock(return_value=allowed_auth),
+                raising=False,
+            )
+        if hasattr(module, 'read_v17_write_convergence_gate'):
+            monkeypatch.setattr(
+                module, 'read_v17_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False
+            )
+        if hasattr(module, 'assert_legacy_memory_write_allowed_for_default_read_decision'):
+            monkeypatch.setattr(
+                module,
+                'assert_legacy_memory_write_allowed_for_default_read_decision',
+                MagicMock(return_value=allowed_write),
+                raising=False,
+            )
+
+
+@pytest.fixture(autouse=True)
+def _legacy_safe_v17_for_lock_bypass_tests(monkeypatch):
+    _install_legacy_safe_v17_defaults(monkeypatch)
+
+
 class TestLightweightStubHelpers:
     """Keep lightweight dependency stubs aligned with the real interfaces tests rely on."""
 
@@ -835,9 +948,12 @@ class TestMcpSseLockRedaction:
             ]
         )
 
-        from routers.mcp_sse import execute_tool
+        from routers.mcp_sse import V17ProductAuthorizationContext, execute_tool
 
-        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2})
+        auth_context = V17ProductAuthorizationContext(
+            uid='test-uid', consumer='mcp', surface='mcp_sse', app_id='test-app', key_id='test-key'
+        )
+        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2}, auth_context=auth_context)
 
         assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
         assert 'LOCKED_SECRET_MEMORY' not in str(result)

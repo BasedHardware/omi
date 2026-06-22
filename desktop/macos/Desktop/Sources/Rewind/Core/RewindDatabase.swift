@@ -122,20 +122,16 @@ actor RewindDatabase {
     /// Falls back to the static currentUserId (set synchronously at app start) when
     /// configure() hasn't been called yet (e.g., TierManager triggers init early).
     private func userBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
-        return appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
+        return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
     }
 
     /// Static version of userBaseDirectory for nonisolated markCleanShutdown
     private static func staticUserBaseDirectory() -> URL {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let userId = currentUserId ?? "anonymous"
-        return appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
+        return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
     }

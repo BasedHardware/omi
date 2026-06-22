@@ -74,12 +74,8 @@ final class WALService: ObservableObject {
     // MARK: - Directory Setup
 
     private func setupWalDirectory() {
-        guard let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
-            logger.error("Could not find Application Support directory")
-            return
-        }
-
-        let walDir = appSupport.appendingPathComponent("me.omi.desktop/wals", isDirectory: true)
+        let walDir = DesktopLocalProfile.applicationSupportURL()
+            .appendingPathComponent("wals", isDirectory: true)
 
         do {
             try fileManager.createDirectory(at: walDir, withIntermediateDirectories: true)

@@ -45,6 +45,7 @@ fastapi_stub.APIRouter = _APIRouter
 fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
+fastapi_stub.Request = type("Request", (), {})
 sys.modules["fastapi"] = fastapi_stub
 sys.modules["database._client"] = MagicMock()
 

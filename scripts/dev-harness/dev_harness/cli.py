@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -510,6 +512,16 @@ def cmd_summary(args: argparse.Namespace) -> int:
     return 0
 
 
+def _signal_owned_process_group(pid: int, service: str) -> None:
+    try:
+        os.killpg(pid, signal.SIGINT)
+        print(f"{service}: sent SIGINT to process group {pid}")
+    except ProcessLookupError:
+        return
+    except PermissionError as exc:
+        raise safety.SafetyError(f"Cannot signal process group {pid}: {exc}") from exc
+
+
 def _stop_owned(cfg: config.HarnessConfig) -> None:
     records = _process_records(cfg)
     for record in records:
@@ -518,11 +530,24 @@ def _stop_owned(cfg: config.HarnessConfig) -> None:
         if not safety.process_exists(pid):
             continue
         try:
-            safety.terminate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
-            print(f"{service}: sent SIGTERM to pid={pid}")
+            safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
+            _signal_owned_process_group(pid, service)
         except safety.SafetyError as exc:
             print(f"{service}: not stopped: {exc}")
     deadline = time.time() + 8
+    while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
+        time.sleep(0.25)
+    for record in records:
+        pid = int(record.get("pid", -1))
+        service = str(record.get("service"))
+        if safety.process_exists(pid):
+            try:
+                safety.validate_owned_pid(pid, process_manifest=cfg.layout.process_manifest, service=service)
+                os.killpg(pid, signal.SIGTERM)
+                print(f"{service}: sent SIGTERM to process group {pid}")
+            except (ProcessLookupError, safety.SafetyError) as exc:
+                print(f"{service}: still running pid={pid}; leaving it for safety inspection: {exc}")
+    deadline = time.time() + 5
     while time.time() < deadline and any(safety.process_exists(int(r.get("pid", -1))) for r in records):
         time.sleep(0.25)
     for record in records:

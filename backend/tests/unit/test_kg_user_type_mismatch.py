@@ -63,6 +63,8 @@ for submodule in [
     "_client",
     "auth",
     "chat",
+    "short_term_memories",
+    "entities",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -111,6 +113,10 @@ memories_mod.delete_memories_for_conversation = MagicMock()
 memories_mod.get_memory = MagicMock(return_value=None)
 memories_mod.save_memories = MagicMock()
 memories_mod.delete_memory = MagicMock()
+
+entities_mod = sys.modules["database.entities"]
+entities_mod.USER_ENTITY_ID = "entity:user"
+entities_mod.person_entity_id = MagicMock(side_effect=lambda person_id: f"entity:person:{person_id}")
 
 # Stub utils modules
 _ensure_package_path("utils", BACKEND_DIR / "utils")

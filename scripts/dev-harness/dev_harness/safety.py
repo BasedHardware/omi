@@ -73,6 +73,7 @@ _STRIPPED_ENV_PREFIXES = (
     "SERVICE_ACCOUNT",
     "FIREBASE_ADMIN",
 )
+_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY"}
 _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
@@ -202,7 +203,7 @@ def build_child_env(
     for key, value in (extra or {}).items():
         if key in _STRIPPED_EXACT_ENV_KEYS or key.startswith(_STRIPPED_ENV_PREFIXES):
             raise SafetyError(f"Refusing to pass unsafe child environment variable {key}")
-        if provider_mode == "offline" and _PROVIDER_SECRET_RE.search(key):
+        if provider_mode == "offline" and key not in _LOCAL_BACKEND_SECRET_KEYS and _PROVIDER_SECRET_RE.search(key):
             raise SafetyError(f"Refusing provider credential {key} in offline provider mode")
         child[key] = value
 

@@ -1449,7 +1449,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_with_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1478,7 +1478,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_with_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1512,8 +1512,8 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_two_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
-                segmented_paths.add('/tmp/seg2.wav')
+                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/2000.wav')
 
             module.retrieve_vad_segments = _vad_two_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1550,7 +1550,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1582,7 +1582,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1592,7 +1592,9 @@ class TestAsyncCoordinatorBehavioral:
             module.record_usage = MagicMock()
             captured_target = {}
 
-            def _capture_target(path, uid, response, lock, errors, source, is_locked, prefs, cache, target_cid):
+            def _capture_target(
+                path, uid, response, lock, errors, source, is_locked, prefs, cache, target_cid, turnstile
+            ):
                 captured_target['value'] = target_cid
                 response['new_memories'].add('m1')
 
@@ -1616,7 +1618,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1643,7 +1645,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/seg1.wav')
+                segmented_paths.add('/tmp/1000.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(side_effect=RuntimeError('unexpected crash'))
@@ -2115,7 +2117,7 @@ class TestBulkheadExecutors:
         assert 'max_workers=24' in source
         from utils.executors import storage_executor
 
-        assert storage_executor._max_workers == 96, "storage_executor must have 96 workers (#7376)"
+        assert storage_executor._max_workers == 128, "storage_executor must have 128 workers (#7376)"
 
     def test_all_executors_in_shutdown(self):
         source = self._read_executors_source()

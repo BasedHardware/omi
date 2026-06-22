@@ -63,6 +63,8 @@ for submodule in [
     "llm_usage",
     "_client",
     "auth",
+    "short_term_memories",
+    "entities",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
@@ -97,6 +99,10 @@ client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
 auth_mod = sys.modules["database.auth"]
 auth_mod.get_user_name = MagicMock(return_value="Test User")
+
+entities_mod = sys.modules["database.entities"]
+entities_mod.USER_ENTITY_ID = "entity:user"
+entities_mod.person_entity_id = MagicMock(side_effect=lambda person_id: f"entity:person:{person_id}")
 
 langchain_core_mod = _stub_module("langchain_core")
 langchain_core_mod.__path__ = []

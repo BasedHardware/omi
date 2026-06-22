@@ -23,6 +23,7 @@ Options (via environment variables):
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
+  OMI_DESKTOP_LOCAL_PROFILE=1     Omi Dev Local profile; localhost endpoints/Auth emulator only
 
 Required files:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -101,6 +102,11 @@ substep() {
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
+LOCAL_PROFILE=false
+[ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
+if [ "$LOCAL_PROFILE" = true ]; then
+    APP_NAME="${OMI_APP_NAME:-omi-local-v17}"
+fi
 IS_NAMED_BUNDLE=false
 [ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
 
@@ -142,6 +148,22 @@ fi
 if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
     echo "ERROR: APP_NAME '$APP_NAME' must use URL scheme '$EXPECTED_URL_SCHEME' (got '$URL_SCHEME')"
     exit 1
+fi
+if [ "$LOCAL_PROFILE" = true ]; then
+    if [ "$APP_NAME" != "omi-local-v17" ]; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use OMI_APP_NAME=omi-local-v17 (got '$APP_NAME')"
+        exit 1
+    fi
+    if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
+        echo "ERROR: Omi Dev Local requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1; start the harness with make dev-up first"
+        exit 1
+    fi
+    case "${OMI_DESKTOP_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_DESKTOP_API_URL must be localhost for Omi Dev Local"; exit 1 ;; esac
+    case "${OMI_PYTHON_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_PYTHON_API_URL must be localhost for Omi Dev Local"; exit 1 ;; esac
+    if [ "${FIREBASE_PROJECT_ID:-}" != "demo-omi-local" ] || [ "${FIREBASE_AUTH_PROJECT_ID:-demo-omi-local}" != "demo-omi-local" ]; then
+        echo "ERROR: Omi Dev Local must use Firebase project demo-omi-local"
+        exit 1
+    fi
 fi
 AUTOMATION_ARGS=()
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
@@ -244,6 +266,9 @@ fi
 # ─── Load .env and credentials ─────────────────────────────────────────
 cd "$BACKEND_DIR"
 
+if [ "$LOCAL_PROFILE" = true ]; then
+    substep "Omi Dev Local: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
+else
 # Copy .env if not present — try sibling dirs, then scaffold from .env.example
 if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
     cp "../../backend/.env" ".env"
@@ -311,6 +336,7 @@ fi
 if [ -f "$CREDS_PATH" ]; then
     export GOOGLE_APPLICATION_CREDENTIALS="$CREDS_PATH"
 fi
+fi # end non-local profile .env/credential bootstrap
 
 # Validate FIREBASE_PROJECT_ID (required unless yolo mode — no local backend)
 if [ -z "$FIREBASE_PROJECT_ID" ] && [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
@@ -442,7 +468,9 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 substep "Copying GoogleService-Info.plist"
-if [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
+if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
+    cp -f Desktop/Sources/GoogleService-Info-Local.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
+elif [ -f "Desktop/Sources/GoogleService-Info-Dev.plist" ]; then
     cp -f Desktop/Sources/GoogleService-Info-Dev.plist "$APP_BUNDLE/Contents/Resources/GoogleService-Info.plist"
 else
     cp -f Desktop/Sources/GoogleService-Info.plist "$APP_BUNDLE/Contents/Resources/"
@@ -475,6 +503,26 @@ else
 fi
 
 substep "Copying .env.app"
+if [ "$LOCAL_PROFILE" = true ]; then
+    EFFECTIVE_API_URL="$OMI_DESKTOP_API_URL"
+    : > "$APP_BUNDLE/Contents/Resources/.env"
+    {
+        echo "OMI_DESKTOP_LOCAL_PROFILE=1"
+        echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
+        echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
+        echo "OMI_LOCAL_PROFILE_STORAGE_NAME=${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi Dev Local}"
+        echo "OMI_LOCAL_AUTH_USER=$OMI_LOCAL_AUTH_USER"
+        echo "OMI_LOCAL_AUTH_EMAIL=$OMI_LOCAL_AUTH_EMAIL"
+        echo "OMI_LOCAL_AUTH_PASSWORD=$OMI_LOCAL_AUTH_PASSWORD"
+        echo "OMI_LOCAL_AUTH_DISPLAY_NAME=$OMI_LOCAL_AUTH_DISPLAY_NAME"
+        echo "FIREBASE_AUTH_EMULATOR_HOST=$FIREBASE_AUTH_EMULATOR_HOST"
+        echo "FIREBASE_PROJECT_ID=$FIREBASE_PROJECT_ID"
+        echo "FIREBASE_AUTH_PROJECT_ID=${FIREBASE_AUTH_PROJECT_ID:-$FIREBASE_PROJECT_ID}"
+        echo "FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID:-(default)}"
+        echo "FIREBASE_API_KEY=$FIREBASE_API_KEY"
+    } >> "$APP_BUNDLE/Contents/Resources/.env"
+    substep "Omi Dev Local .env contains localhost endpoints/Auth emulator bootstrap only"
+else
 if [ -f ".env.app.dev" ]; then
     cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
 elif [ -f ".env.app" ]; then
@@ -524,6 +572,7 @@ else
     echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
+fi # end non-local .env.app merge
 
 substep "Copying app icon"
 cp -f omi_icon.icns "$APP_BUNDLE/Contents/Resources/OmiIcon.icns" 2>/dev/null || true

@@ -25,6 +25,9 @@ sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
 sys.modules.setdefault("google.cloud.exceptions", MagicMock())
 sys.modules.setdefault("google.oauth2", MagicMock())
 sys.modules.setdefault("google.oauth2.service_account", MagicMock())
+subscription_stub = MagicMock()
+subscription_stub.get_default_basic_subscription.return_value = None
+sys.modules.setdefault("utils.subscription", subscription_stub)
 
 # Now import the module under test
 from utils.other import storage as storage_mod
@@ -84,7 +87,7 @@ class TestUploadAudioChunkDataProtectionCache:
             data_protection_level='standard',
         )
 
-        assert path.endswith('.bin')
+        assert path.endswith('.opus')
         mock_blob.upload_from_string.assert_called_once()
 
     @patch.object(storage_mod, 'encryption')
@@ -102,8 +105,12 @@ class TestUploadAudioChunkDataProtectionCache:
             data_protection_level='enhanced',
         )
 
-        assert path.endswith('.enc')
-        mock_encryption.encrypt_audio_chunk.assert_called_once_with(b'\x00' * 100, 'test-uid')
+        assert path.endswith('.opus.enc')
+        mock_encryption.encrypt_audio_chunk.assert_called_once()
+        encrypted_payload, encrypted_uid = mock_encryption.encrypt_audio_chunk.call_args.args
+        assert encrypted_uid == 'test-uid'
+        assert encrypted_payload != b'\x00' * 100
+        mock_blob.upload_from_string.assert_called_once_with(b'\x01' * 120, content_type='application/octet-stream')
 
     @patch.object(storage_mod, 'users_db')
     def test_explicit_none_falls_back_to_db(self, mock_users_db):

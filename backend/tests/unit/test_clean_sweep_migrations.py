@@ -327,15 +327,15 @@ class TestWrappedExecutorMigration:
 
 
 class TestChatUtilsExecutorMigration:
-    """Verify utils/chat.py uses storage_executor for file cleanup."""
+    """Verify utils/chat.py delegates temporal file cleanup to storage utilities."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/chat.py')
         assert 'threading.Thread' not in src
 
-    def test_uses_storage_executor(self):
+    def test_schedules_temporal_file_deletion(self):
         src = _read_source('utils/chat.py')
-        assert 'storage_executor.submit(' in src
+        assert 'schedule_syncing_temporal_file_deletion(' in src
 
 
 class TestPostprocessExecutorMigration:
@@ -432,8 +432,9 @@ class TestNoRequestsInProductionCode:
                 assert 'import requests' not in src, f'routers/{fname} still imports requests'
 
     def test_no_import_requests_in_utils(self):
-        # vad.py retains requests for sync onnx-compatible path (not yet migrated)
-        excluded = {'utils/stt/vad.py'}
+        # vad.py retains requests for sync onnx-compatible path; cloud_tasks.py uses
+        # requests for google-auth OIDC verification and task dispatch.
+        excluded = {'utils/stt/vad.py', 'utils/cloud_tasks.py'}
         for root, dirs, files in os.walk(os.path.join(BACKEND_DIR, 'utils')):
             for fname in files:
                 if fname.endswith('.py'):

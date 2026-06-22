@@ -302,11 +302,8 @@ struct RewindSettingsView: View {
                 Spacer()
 
                 Button("Show in Finder") {
-                    let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-                        .appendingPathComponent("Omi")
-                    if let url = url {
-                        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
-                    }
+                    let url = DesktopLocalProfile.applicationSupportURL()
+                    NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: url.path)
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(OmiColors.purplePrimary)

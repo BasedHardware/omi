@@ -94,6 +94,15 @@ def test_child_environment_strips_cloud_defaults_and_offline_provider_secrets() 
 
     with pytest.raises(safety.SafetyError, match="unsafe child environment"):
         safety.build_child_env(parent, extra={"GOOGLE_APPLICATION_CREDENTIALS": "/tmp/key.json"})
+    env_with_backend_secret = safety.build_child_env(
+        parent,
+        provider_mode="offline",
+        extra={"ENCRYPTION_SECRET": "local-only-test-secret", "ADMIN_KEY": "local-admin", "TYPESENSE_API_KEY": "local-typesense"},
+    )
+    assert env_with_backend_secret["ENCRYPTION_SECRET"] == "local-only-test-secret"
+    assert env_with_backend_secret["ADMIN_KEY"] == "local-admin"
+    assert env_with_backend_secret["TYPESENSE_API_KEY"] == "local-typesense"
+
     with pytest.raises(safety.SafetyError, match="provider credential"):
         safety.build_child_env(parent, provider_mode="offline", extra={"DEEPGRAM_API_KEY": "x"})
 

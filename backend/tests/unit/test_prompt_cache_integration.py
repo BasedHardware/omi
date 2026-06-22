@@ -106,8 +106,7 @@ clients_mod.num_tokens_from_string = MagicMock(return_value=100)
 clients_mod.parser = MagicMock()
 
 llm_mod = _stub_module("utils.llm")
-if not hasattr(llm_mod, "__path__"):
-    llm_mod.__path__ = []
+llm_mod.__path__ = [str(BACKEND_DIR / "utils" / "llm")]
 tracker_mod = _stub_module("utils.llm.usage_tracker")
 tracker_mod.get_usage_callback = MagicMock(return_value=[])
 tracker_mod.set_usage_context = MagicMock()
@@ -156,12 +155,14 @@ def _passthrough_timeit(fn):
 endpoints_mod.timeit = _passthrough_timeit
 
 retrieval_mod = _stub_module("utils.retrieval")
-if not hasattr(retrieval_mod, "__path__"):
-    retrieval_mod.__path__ = []
+retrieval_mod.__path__ = [str(BACKEND_DIR / "utils" / "retrieval")]
 
 safety_mod = _stub_module("utils.retrieval.safety")
 safety_mod.AgentSafetyGuard = MagicMock()
 safety_mod.SafetyGuardError = type("SafetyGuardError", (Exception,), {})
+
+boundary_mod = _stub_module("utils.retrieval.tool_result_boundaries")
+boundary_mod.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
 # --- MCP client stub ---
 mcp_mod = _stub_module("utils.mcp_client")
@@ -652,6 +653,17 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     source = source.replace("from models.structured import Structured", "")
     source = source.replace("from utils.byok import get_byok_key", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
+    source = source.replace(
+        "from utils.llm.providers import (\n"
+        "    ChatGoogleGenerativeAI,  # backward-compat re-export (was here pre-refactor)\n"
+        "    GEMINI_OPENAI_BASE_URL,\n"
+        "    get_default_client,\n"
+        "    get_or_create_gemini_llm as _get_or_create_gemini_llm,\n"
+        "    get_or_create_openai_compatible_llm,\n"
+        "    _llm_cache,\n"
+        ")",
+        "",
+    )
 
     # Create a fake anthropic module with AsyncAnthropic
     fake_anthropic = _stub_module("anthropic_fake")
@@ -669,6 +681,17 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
         "Structured": MagicMock(),
         "get_byok_key": MagicMock(return_value=None),
         "get_usage_callback": MagicMock(return_value=[]),
+        "GEMINI_OPENAI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "get_default_client": lambda model, provider, streaming, options: FakeChatOpenAI(
+            model=model, streaming=streaming, **options
+        ),
+        "get_or_create_openai_compatible_llm": lambda provider, model, streaming, options: FakeChatOpenAI(
+            model=model, streaming=streaming, **options
+        ),
+        "_get_or_create_gemini_llm": lambda model, streaming, options: FakeChatOpenAI(
+            model=model, streaming=streaming, **options
+        ),
+        "_llm_cache": {},
         "List": list,
     }
     exec(source, ns)

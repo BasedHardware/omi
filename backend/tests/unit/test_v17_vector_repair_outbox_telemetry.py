@@ -8,7 +8,11 @@ from database.v17_vector_repair_outbox_worker import (
     V17VectorRepairOutboxWorkerTickConfig,
     run_v17_vector_repair_outbox_worker_tick,
 )
-from tests.unit.test_v17_vector_repair_outbox_worker import _FakeFirestore, _record, _live_item
+
+try:
+    from tests.unit.test_v17_vector_repair_outbox_worker import _FakeFirestore, _record, _live_item
+except ModuleNotFoundError:
+    from test_v17_vector_repair_outbox_worker import _FakeFirestore, _record, _live_item
 
 
 def _summary(**overrides):

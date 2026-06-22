@@ -110,6 +110,7 @@ sys.modules["google.cloud.firestore_v1"].FieldFilter = field_filter_stub.FieldFi
 sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
 redis_stub = sys.modules["database.redis_db"]
+redis_stub.r = MagicMock()
 redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # Add backend dir to sys.path

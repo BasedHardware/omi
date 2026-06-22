@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -133,7 +133,40 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
+import routers.mcp as mcp_router
 from routers.mcp import search_memories, delete_memory, edit_memory
+
+
+def _auth_context(uid: str = "user-1"):
+    return mcp_router.V17ProductAuthorizationContext(
+        uid=uid,
+        consumer="mcp",
+        surface="unit_test",
+        app_id="test-app",
+        key_id="test-key",
+        scopes=("memories.read", "memories.write"),
+    )
+
+
+def _allow_v17_auth(_auth_context, db_client=None):
+    return SimpleNamespace(allowed=True, status_code=200, observability={})
+
+
+def _legacy_safe_vector_result(*_args, **_kwargs):
+    return SimpleNamespace(read_decision=mcp_router.V17ReadDecision.USE_LEGACY_SAFE, memories=[])
+
+
+def _allow_legacy_write(*_args, **_kwargs):
+    return SimpleNamespace(allowed=True, status_code=200, detail={})
+
+
+mcp_router.authorize_v17_external_default_memory_read = _allow_v17_auth
+mcp_router.read_v17_mcp_default_memory_rollout = MagicMock(
+    return_value=SimpleNamespace(read_decision=mcp_router.V17ReadDecision.USE_LEGACY_SAFE)
+)
+mcp_router.search_v17_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
+mcp_router.read_v17_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
+mcp_router.assert_legacy_memory_write_allowed_for_default_read_decision = MagicMock(side_effect=_allow_legacy_write)
 
 
 class TestSearchMemoriesEndpoint:
@@ -150,7 +183,7 @@ class TestSearchMemoriesEndpoint:
     @patch('routers.mcp.vector_db')
     def test_returns_empty_when_no_matches(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert result == []
         # limit=10 → fetch_limit = min(10*3, 60) = 30
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
@@ -166,7 +199,7 @@ class TestSearchMemoriesEndpoint:
             self._make_memory('mem-1', 'Work memory', 'work'),
             self._make_memory('mem-2', 'Hobby memory', 'hobbies'),
         ]
-        result = search_memories(query="work stuff", limit=10, uid="user-1")
+        result = search_memories(query="work stuff", limit=10, auth_context=_auth_context())
         assert len(result) == 2
         assert result[0]['id'] == 'mem-1'
         assert result[0]['relevance_score'] == 0.95
@@ -186,7 +219,7 @@ class TestSearchMemoriesEndpoint:
             self._make_memory('mem-1', 'Short locked', 'other', locked=True),
             self._make_memory('mem-2', 'Unlocked memory', 'other', locked=False),
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-2'
 
@@ -194,7 +227,7 @@ class TestSearchMemoriesEndpoint:
     @patch('routers.mcp.vector_db')
     def test_limit_capped_at_20_fetches_60_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
-        search_memories(query="test", limit=100, uid="user-1")
+        search_memories(query="test", limit=100, auth_context=_auth_context())
         # limit clamps to 20, fetch_limit = min(20*3, 60) = 60
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=60)
 
@@ -202,7 +235,7 @@ class TestSearchMemoriesEndpoint:
     @patch('routers.mcp.vector_db')
     def test_limit_zero_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
-        search_memories(query="test", limit=0, uid="user-1")
+        search_memories(query="test", limit=0, auth_context=_auth_context())
         # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
@@ -210,7 +243,7 @@ class TestSearchMemoriesEndpoint:
     @patch('routers.mcp.vector_db')
     def test_negative_limit_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
-        search_memories(query="test", limit=-5, uid="user-1")
+        search_memories(query="test", limit=-5, auth_context=_auth_context())
         # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
@@ -227,7 +260,7 @@ class TestSearchMemoriesEndpoint:
             self._make_memory('mem-2', 'High relevance'),
             self._make_memory('mem-3', 'Mid relevance'),
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert [r['relevance_score'] for r in result] == [0.99, 0.75, 0.5]
 
     @patch('routers.mcp.memories_db')
@@ -241,7 +274,7 @@ class TestSearchMemoriesEndpoint:
         mock_memories_db.get_memories_by_ids.return_value = [
             self._make_memory('mem-1', 'Valid memory'),
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-1'
         mock_memories_db.get_memories_by_ids.assert_called_once_with("user-1", ['mem-1'])
@@ -252,7 +285,7 @@ class TestSearchMemoriesEndpoint:
         mock_vector_db.find_similar_memories.return_value = [
             {'category': 'other', 'score': 0.5},
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert result == []
         mock_memories_db.get_memories_by_ids.assert_not_called()
 
@@ -260,7 +293,7 @@ class TestSearchMemoriesEndpoint:
     @patch('routers.mcp.vector_db')
     def test_default_limit_fetches_3x_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
-        search_memories(query="test", uid="user-1")
+        search_memories(query="test", auth_context=_auth_context())
         # default limit=10, fetch_limit = min(10*3, 60) = 30
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
 
@@ -277,7 +310,7 @@ class TestSearchMemoriesEndpoint:
             self._make_memory('mem-locked', 'secret', 'other', locked=True),
             self._make_memory('mem-ok', 'visible', 'other', locked=False),
         ]
-        result = search_memories(query="test", limit=1, uid="user-1")
+        result = search_memories(query="test", limit=1, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-ok'
 
@@ -296,7 +329,7 @@ class TestSearchMemoriesUserReview:
             {'id': 'mem-1', 'content': 'accepted', 'category': 'other', 'is_locked': False, 'user_review': True},
             {'id': 'mem-2', 'content': 'rejected', 'category': 'other', 'is_locked': False, 'user_review': False},
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-1'
 
@@ -310,7 +343,7 @@ class TestSearchMemoriesUserReview:
         mock_memories_db.get_memories_by_ids.return_value = [
             {'id': 'mem-1', 'content': 'pending review', 'category': 'other', 'is_locked': False},
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
 
     @patch('routers.mcp.memories_db')
@@ -322,7 +355,7 @@ class TestSearchMemoriesUserReview:
         mock_memories_db.get_memories_by_ids.return_value = [
             {'id': 'mem-1', 'content': 'rejected', 'category': 'other', 'is_locked': False, 'user_review': False},
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert result == []
 
 
@@ -349,7 +382,7 @@ class TestSearchMemoriesInvalidated:
             },
             {'id': 'mem-new', 'content': 'hates ice cream', 'category': 'system', 'is_locked': False},
         ]
-        result = search_memories(query="ice cream", limit=10, uid="user-1")
+        result = search_memories(query="ice cream", limit=10, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-new'
 
@@ -362,7 +395,7 @@ class TestSearchMemoriesInvalidated:
         mock_memories_db.get_memories_by_ids.return_value = [
             {'id': 'mem-1', 'content': 'active', 'category': 'system', 'is_locked': False, 'invalid_at': None},
         ]
-        result = search_memories(query="test", limit=10, uid="user-1")
+        result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
         assert result[0]['id'] == 'mem-1'
 
@@ -382,7 +415,7 @@ class TestEditMemoryVectorSync:
         result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
         assert result == {"status": "ok"}
         mock_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
-        mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies")
+        mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies", subject_entity_id=None)
 
     @patch('routers.mcp.upsert_memory_vector')
     @patch('routers.mcp.memories_db')

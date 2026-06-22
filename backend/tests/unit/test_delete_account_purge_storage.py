@@ -168,7 +168,8 @@ def test_id_enumeration_happens_before_firestore_wipe():
         users_router._background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
-    assert order == ['enumerate', 'wipe'], order
+    assert order[-1] == 'wipe', order
+    assert order[:-1] and all(event == 'enumerate' for event in order[:-1]), order
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe():

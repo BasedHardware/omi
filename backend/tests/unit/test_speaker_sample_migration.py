@@ -15,6 +15,12 @@ sys.modules["utils.other.storage"] = MagicMock()
 sys.modules["utils.stt.pre_recorded"] = MagicMock()
 sys.modules["utils.stt.speaker_embedding"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
+_firebase_admin_module = types.ModuleType("firebase_admin")
+_firebase_auth_module = types.ModuleType("firebase_admin.auth")
+_firebase_auth_module.get_user = MagicMock()
+_firebase_admin_module.auth = _firebase_auth_module
+sys.modules.setdefault("firebase_admin", _firebase_admin_module)
+sys.modules.setdefault("firebase_admin.auth", _firebase_auth_module)
 
 
 class NotFound(Exception):

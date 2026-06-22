@@ -1,3 +1,5 @@
+PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bin/python; else printf python3; fi)
+
 .PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs list-v17-scenarios seed-v17-scenario reset-v17-scenario desktop-run-local
 
 dev-check:
@@ -22,13 +24,13 @@ dev-logs:
 	bash scripts/dev-harness/dev-logs.sh
 
 list-v17-scenarios:
-	python3 scripts/dev-harness/list-v17-scenarios.py
+	$(PYTHON) scripts/dev-harness/list-v17-scenarios.py
 
 seed-v17-scenario:
-	python3 scripts/dev-harness/seed-v17-scenario.py $(SCENARIO)
+	$(PYTHON) scripts/dev-harness/seed-v17-scenario.py $(SCENARIO)
 
 reset-v17-scenario:
-	python3 scripts/dev-harness/reset-v17-scenario.py $(SCENARIO)
+	$(PYTHON) scripts/dev-harness/reset-v17-scenario.py $(SCENARIO)
 
 desktop-run-local:
 	@if [ "$(origin USER)" != "command line" ]; then \

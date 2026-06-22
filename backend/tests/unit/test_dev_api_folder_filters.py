@@ -368,11 +368,40 @@ def _build_memories_test_app():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers.developer import router as developer_router
-    from dependencies import get_uid_with_memories_read
+    import routers.developer as developer_module
+    from dependencies import get_developer_v17_default_memory_read_context
+    from utils.memory.v17_product_authorization import V17ProductAuthorizationDecision
+
+    auth_context = developer_module.V17ProductAuthorizationContext(
+        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+    )
+    developer_module.authorize_v17_external_default_memory_read = MagicMock(
+        return_value=V17ProductAuthorizationDecision(
+            allowed=True,
+            context=auth_context,
+            db_client=None,
+            read_decision=developer_module.V17ReadDecision.USE_LEGACY_SAFE,
+            reason='test_legacy_safe',
+            observability={'enabled': True},
+            status_code=200,
+        )
+    )
+    developer_module.search_v17_default_developer_memories = MagicMock(
+        return_value=type(
+            'LegacySafeV17Result',
+            (),
+            {
+                'read_decision': developer_module.V17ReadDecision.USE_LEGACY_SAFE,
+                'memories': [],
+                'fallback_reason': 'test_legacy_safe',
+                'should_use_legacy_fallback': True,
+            },
+        )()
+    )
 
     app = FastAPI()
     app.include_router(developer_router)
-    app.dependency_overrides[get_uid_with_memories_read] = lambda: 'uid1'
+    app.dependency_overrides[get_developer_v17_default_memory_read_context] = lambda: auth_context
     return app, TestClient(app, raise_server_exceptions=False)
 
 

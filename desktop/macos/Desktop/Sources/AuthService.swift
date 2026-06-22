@@ -128,9 +128,15 @@ class AuthService {
             NSLog("OMI AUTH: Skipping AuthService configuration because FirebaseApp is not configured")
             return
         }
+        if DesktopLocalProfile.isEnabled {
+            configureAuthEmulatorIfNeeded()
+        }
         isConfigured = true
         restoreAuthState()
         setupAuthStateListener()
+        if DesktopLocalProfile.isEnabled {
+            Task { await bootstrapLocalAuthUserIfNeeded() }
+        }
 
         // Timeout: if auth isn't restored within 5 seconds, stop showing loading
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -138,6 +144,49 @@ class AuthService {
                 NSLog("OMI AUTH: Auth restore timed out after 5s, clearing loading state")
                 AuthState.shared.isRestoringAuth = false
             }
+        }
+    }
+
+    // MARK: - Local emulator auth bootstrap
+
+    private func configureAuthEmulatorIfNeeded() {
+        guard let hostPort = DesktopLocalProfile.authEmulatorHost else { return }
+        let parts = hostPort.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2, let port = Int(parts[1]) else {
+            NSLog("OMI AUTH LOCAL: invalid FIREBASE_AUTH_EMULATOR_HOST=%@", hostPort)
+            return
+        }
+        Auth.auth().useEmulator(withHost: parts[0], port: port)
+        NSLog("OMI AUTH LOCAL: using Firebase Auth emulator at %@", hostPort)
+    }
+
+    private func bootstrapLocalAuthUserIfNeeded() async {
+        guard let email = DesktopLocalProfile.selectedEmail,
+              let password = DesktopLocalProfile.selectedPassword,
+              let selectedUser = DesktopLocalProfile.selectedUser else {
+            NSLog("OMI AUTH LOCAL: missing selected local auth user env; staying signed out")
+            return
+        }
+        if let current = Auth.auth().currentUser, current.email == email || current.uid == selectedUser {
+            NSLog("OMI AUTH LOCAL: selected emulator user already active uid=%@", current.uid)
+            return
+        }
+        do {
+            let result = try await Auth.auth().signIn(withEmail: email, password: password)
+            let user = result.user
+            AuthState.shared.userEmail = user.email ?? email
+            isSignedIn = true
+            saveAuthState(isSignedIn: true, email: user.email ?? email, userId: user.uid)
+            if let display = DesktopLocalProfile.selectedDisplayName, !display.isEmpty {
+                let pieces = display.split(separator: " ", maxSplits: 1).map(String.init)
+                givenName = pieces.first ?? ""
+                familyName = pieces.count > 1 ? pieces[1] : ""
+            }
+            Task { await RewindDatabase.shared.configure(userId: user.uid) }
+            NSLog("OMI AUTH LOCAL: signed in to Auth emulator as %@ uid=%@", email, user.uid)
+        } catch {
+            NSLog("OMI AUTH LOCAL: sign-in failed for %@: %@", email, error.localizedDescription)
+            self.error = "Local Auth emulator sign-in failed for \(email): \(error.localizedDescription)"
         }
     }
 

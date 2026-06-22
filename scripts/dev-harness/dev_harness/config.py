@@ -84,6 +84,11 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
             "REDIS_DB_PASSWORD": "",
             "PORT": str(BACKEND_PORT),
             "ENVIRONMENT": "local-dev-harness",
+            "ENCRYPTION_SECRET": "omi_local_dev_harness_32_byte_test_secret_not_prod",
+            "ADMIN_KEY": "local-dev-admin-key-",
+            "TYPESENSE_HOST": "127.0.0.1",
+            "TYPESENSE_HOST_PORT": "8108",
+            "TYPESENSE_API_KEY": "local-typesense-api-key-not-real",
             "PYTHONUNBUFFERED": "1",
         },
     )
