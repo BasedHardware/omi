@@ -112,3 +112,14 @@ class TestTorchaudioBackendContract:
             fn = getattr(_extension, name, None)
             assert fn is not None, f"Missing decorator: {name}"
             assert fn(sentinel) is sentinel, f"{name} must return its argument"
+
+
+class TestPyannoteImportSurfaces:
+    """Verify broader pyannote import surfaces that depend on our stubs."""
+
+    def test_pyannote_augmentation_mix(self):
+        from pyannote.audio.core.task import Task  # noqa: F401
+
+    def test_torchaudio_compliance_and_functional(self):
+        from torchaudio.compliance.kaldi import fbank  # noqa: F401
+        from torchaudio.functional import resample  # noqa: F401

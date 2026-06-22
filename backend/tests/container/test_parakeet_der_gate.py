@@ -1,8 +1,9 @@
 """
 DER regression gate -- run INSIDE the built container with GPU.
 
-Generates synthetic multi-speaker audio, transcribes via /v2/transcribe
-with diarize=true, and checks that DER is below the regression threshold.
+Generates synthetic multi-speaker audio, passes pre-built segment
+boundaries to transcribe_file_v2 (bypassing GPU worker), and tests
+that the diarization pipeline produces DER below the regression threshold.
 
 No external dependencies (no Deepgram, no L2 audio files, no GCS).
 Uses synthesized two-speaker audio with distinct frequency profiles.
