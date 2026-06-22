@@ -14,6 +14,7 @@ final class TaskAgentStatusRegistry {
     case running
     case completed
     case failed
+    case stopped
     case timedOut = "timed_out"
   }
 
@@ -36,6 +37,8 @@ final class TaskAgentStatusRegistry {
   }
 
   private var entries: [String: Entry] = [:]
+  private let maxSnapshotEntries = 20
+  private let maxRetainedEntries = 100
   private let encoder: JSONEncoder
 
   private init() {
@@ -79,9 +82,14 @@ final class TaskAgentStatusRegistry {
     update(taskId: taskId, status: status, statusText: nil, lastError: error)
   }
 
+  func markStopped(taskId: String) {
+    update(taskId: taskId, status: .stopped, statusText: nil, lastError: "Stopped by user")
+  }
+
   func snapshotJSON() -> String {
     let snapshots = entries.values
       .sorted { $0.updatedAt > $1.updatedAt }
+      .prefix(maxSnapshotEntries)
       .map { entry in
         Snapshot(
           taskId: entry.taskId,
@@ -121,5 +129,17 @@ final class TaskAgentStatusRegistry {
     entry.lastError = lastError
     entry.updatedAt = Date()
     entries[taskId] = entry
+    pruneIfNeeded()
+  }
+
+  private func pruneIfNeeded() {
+    guard entries.count > maxRetainedEntries else { return }
+    let retainedIds = Set(
+      entries.values
+        .sorted { $0.updatedAt > $1.updatedAt }
+        .prefix(maxRetainedEntries)
+        .map(\.taskId)
+    )
+    entries = entries.filter { retainedIds.contains($0.key) }
   }
 }

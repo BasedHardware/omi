@@ -286,7 +286,7 @@ class TaskChatState: ObservableObject {
             }
 
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                // User stopped — no error
+                TaskAgentStatusRegistry.shared.markStopped(taskId: taskId)
             } else {
                 errorMessage = error.localizedDescription
                 TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: error.localizedDescription)

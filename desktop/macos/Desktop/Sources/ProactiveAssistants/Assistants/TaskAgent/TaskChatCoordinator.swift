@@ -70,9 +70,8 @@ class TaskChatCoordinator: ObservableObject {
                     // Streaming finished — remove from active set
                     self.streamingTaskIds.remove(taskId)
                     self.streamingStatuses.removeValue(forKey: taskId)
-                    if state.errorMessage == nil {
-                        TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
-                    }
+                    // Terminal task-agent status is owned by TaskChatState (completed/failed/stopped).
+                    // Do not infer completion here; stopped runs have no error but are not completed.
                     // Mark unread if panel not showing this task
                     if !self.isPanelOpen || self.activeTaskId != taskId {
                         self.unreadTaskIds.insert(taskId)
