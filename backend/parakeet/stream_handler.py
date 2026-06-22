@@ -27,8 +27,9 @@ from transcribe import (
     transcribe_file,
     _stream_model as _asr_model,
     INFERENCE_MODE as _INFERENCE_MODE,
-    get_builtin_embedding_model,
+    has_builtin_embedding,
     wav_bytes_to_waveform,
+    _gpu_worker as _transcribe_gpu_worker,
 )
 
 logger = logging.getLogger(__name__)
@@ -694,20 +695,21 @@ class StreamSession:
             return f"SPEAKER_{self._last_speaker}"
 
     def _get_embedding(self, wav_bytes: bytes):
-        model = get_builtin_embedding_model()
-        if model is not None:
-            return self._get_embedding_builtin(wav_bytes, model)
+        if has_builtin_embedding():
+            return self._get_embedding_builtin(wav_bytes)
         if SPEAKER_EMBEDDING_URL:
             return self._get_embedding_http(wav_bytes)
         return None
 
-    def _get_embedding_builtin(self, wav_bytes: bytes, model):
+    def _get_embedding_builtin(self, wav_bytes: bytes):
         try:
             waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
             dur = waveform.shape[1] / sample_rate
             if dur < MIN_EMBEDDING_AUDIO_S:
                 return None
-            emb = model({"waveform": waveform, "sample_rate": sample_rate})
+            emb = _transcribe_gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+            if emb is None:
+                return None
             emb = np.array(emb, dtype=np.float32)
             if emb.ndim == 1:
                 emb = emb.reshape(1, -1)
