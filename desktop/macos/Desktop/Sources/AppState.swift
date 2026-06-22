@@ -341,6 +341,16 @@ class AppState: ObservableObject {
       let metadata = try await APIClient.shared.startTrial()
       await MainActor.run {
         self.trialMetadata = metadata
+        // Sync paywall state immediately — otherwise a user who opted in while
+        // paywalled (e.g. an expired old account starting a fresh trial) stays
+        // blocked until the next metadata poll. Mirrors fetchTrialMetadata.
+        if APIKeyService.isByokActive {
+          if self.isPaywalled { self.isPaywalled = false }
+        } else if metadata.trialExpired && !self.isPaywalled {
+          self.isPaywalled = true
+        } else if !metadata.trialExpired && self.isPaywalled {
+          self.isPaywalled = false
+        }
       }
     } catch {
       log("AppState: startTrial failed: \(error.localizedDescription)")
