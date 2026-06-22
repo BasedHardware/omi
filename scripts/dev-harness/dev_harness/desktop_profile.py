@@ -124,6 +124,7 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
     desktop_api_url = cfg.desktop_backend_url
     env = {
         "OMI_DESKTOP_LOCAL_PROFILE": "1",
+        "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_SKIP_BACKEND": "1",
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,
