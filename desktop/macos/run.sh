@@ -99,6 +99,37 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
+# Serialize bundle builds — parallel ./run.sh invocations corrupt the same build/Omi Dev.app tree.
+RUN_SH_LOCK_DIR="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
+_release_run_sh_lock() {
+    rmdir "$RUN_SH_LOCK_DIR" 2>/dev/null || true
+}
+_run_sh_lock_waited=0
+while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
+    if [ "$_run_sh_lock_waited" -eq 0 ]; then
+        printf "[%6.1fs]   ├─ Waiting for another ./run.sh to finish...\n" "$(echo "$(date +%s.%N) - $SCRIPT_START_TIME" | bc)"
+    fi
+    sleep 2
+    _run_sh_lock_waited=$((_run_sh_lock_waited + 2))
+    if [ "$_run_sh_lock_waited" -ge 600 ]; then
+        echo "ERROR: timed out after 10 minutes waiting for ./run.sh lock ($RUN_SH_LOCK_DIR)"
+        exit 1
+    fi
+done
+trap '_release_run_sh_lock' EXIT INT TERM
+
+macos_copy_tree() {
+    local src="$1"
+    local dest="$2"
+    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
+        ditto --norsrc "$src" "$dest"
+    elif [ "$(uname -s)" = "Darwin" ]; then
+        cp -R -X "$src" "$dest"
+    else
+        cp -R "$src" "$dest"
+    fi
+}
+
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
@@ -205,11 +236,15 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Kill any old Rust backend by process name (port-agnostic)
-pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
-    substep "Killing old backend (PID: $pid)"
-    kill -9 "$pid" 2>/dev/null || true
-done
+# Kill any old Rust backend by process name (port-agnostic), unless the harness owns it.
+if [ -z "${OMI_HARNESS_INSTANCE:-}" ]; then
+    pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
+        substep "Killing old backend (PID: $pid)"
+        kill -9 "$pid" 2>/dev/null || true
+    done
+else
+    substep "Keeping harness desktop-backend (OMI_HARNESS_INSTANCE=${OMI_HARNESS_INSTANCE})"
+fi
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
@@ -389,13 +424,14 @@ else
 fi
 
 # Check if another SwiftPM instance is running (will block our build)
-SWIFTPM_PID=$(pgrep -f "swiftpm-workspace-state|swift-build|swift-package" 2>/dev/null | head -1)
-if [ -n "$SWIFTPM_PID" ]; then
-    step "Waiting for other SwiftPM instance (PID: $SWIFTPM_PID) to finish..."
-    while kill -0 "$SWIFTPM_PID" 2>/dev/null; do
-        sleep 1
-    done
-fi
+while true; do
+    SWIFTPM_PIDS=$(pgrep -f "swift-build|swift-package" 2>/dev/null || true)
+    if [ -z "$SWIFTPM_PIDS" ]; then
+        break
+    fi
+    step "Waiting for other SwiftPM instance(s) to finish..."
+    sleep 2
+done
 
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --local-node
@@ -411,6 +447,8 @@ xcrun swift build -c debug --package-path Desktop
 auth_debug "AFTER swift build: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Creating app bundle..."
+substep "Removing prior bundle (if any)"
+rm -rf "$APP_BUNDLE"
 substep "Creating directories"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
@@ -450,11 +488,13 @@ fi
 WEBP_LIB="$(pkg-config --variable=libdir libwebp 2>/dev/null)/libwebp.7.dylib"
 if [ -f "$WEBP_LIB" ]; then
     substep "Bundling libwebp"
-    cp "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
+    mkdir -p "$APP_BUNDLE/Contents/Frameworks"
+    rm -f "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+    cp -f "$WEBP_LIB" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
     # Find libsharpyuv (libwebp dependency)
     SHARPYUV_LIB="$(dirname "$WEBP_LIB")/libsharpyuv.0.dylib"
     if [ -f "$SHARPYUV_LIB" ]; then
-        cp "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
+        cp -f "$SHARPYUV_LIB" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
         install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
     fi
     install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
@@ -485,15 +525,15 @@ fi
 RESOURCE_BUNDLE="Desktop/.build/arm64-apple-macosx/debug/Omi Computer_Omi Computer.bundle"
 if [ -d "$RESOURCE_BUNDLE" ]; then
     substep "Copying resource bundle ($(du -sh "$RESOURCE_BUNDLE" 2>/dev/null | cut -f1))"
-    cp -Rf "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/"
+    macos_copy_tree "$RESOURCE_BUNDLE" "$APP_BUNDLE/Contents/Resources/$(basename "$RESOURCE_BUNDLE")"
 fi
 
 substep "Copying agent"
 if [ -d "$AGENT_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
-    cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
+    macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
+    macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
