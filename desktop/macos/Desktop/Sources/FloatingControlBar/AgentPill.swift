@@ -104,6 +104,7 @@ final class AgentPillsManager: ObservableObject {
     private var providersByPill: [UUID: ChatProvider] = [:]
     private var streamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
+    private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
@@ -404,12 +405,15 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        Task { [weak self, weak pill, weak provider] in
+        let runTask = Task { [weak self, weak pill, weak provider] in
             await myBoot.value
+            guard !Task.isCancelled else { return }
             guard let self, let pill, let provider else { return }
             // Bridge is up; flip to running and fire the prompt. Concurrent
             // with any other pill that's already past this point.
             pill.status = .running
+            pill.completedAt = nil
+            pill.suggestedFollowUps = []
             await provider.sendMessage(
                 pill.query,
                 model: pill.model,
@@ -417,8 +421,10 @@ final class AgentPillsManager: ObservableObject {
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)"
             )
+            guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
         }
+        runTasksByPill[pill.id] = runTask
 
         return pill
     }
@@ -450,14 +456,19 @@ final class AgentPillsManager: ObservableObject {
             return
         }
         pill.status = .running
+        pill.completedAt = nil
+        pill.suggestedFollowUps = []
         pill.latestActivity = "Working on your follow-up…"
-        Task { @MainActor [weak self, weak pill, weak provider] in
+        runTasksByPill[pill.id]?.cancel()
+        let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
             await provider.sendMessage(
                 text, model: pill.model, systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)")
+            guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
         }
+        runTasksByPill[pill.id] = runTask
     }
 
     /// Force-dismiss a pill.
@@ -474,6 +485,13 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func cleanup(pillID: UUID) {
+        if recordingPillID == pillID {
+            recordingPillID = nil
+            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
+        }
+        runTasksByPill[pillID]?.cancel()
+        runTasksByPill[pillID] = nil
+        providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil
         providersByPill[pillID] = nil
