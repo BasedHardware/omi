@@ -100,7 +100,8 @@ class DeviceConnectionFactory {
 
     // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
+    final isOmiGlass =
+        device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');

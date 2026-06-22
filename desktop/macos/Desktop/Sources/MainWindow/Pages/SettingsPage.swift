@@ -1803,64 +1803,7 @@ struct SettingsContentView: View {
 
   @ViewBuilder
   private var trialCountdownCard: some View {
-    if let trial = appState.trialMetadata,
-       trial.trialAvailable == true,
-       trial.trialStartedAt == nil {
-      // Opt-in offer — user has never started the trial, this is the
-      // "always available later" entry point (the first-sign-in modal is
-      // the other one). Same card chrome as the active-trial card for
-      // visual continuity. Once tapped, the backend writes
-      // trial_started_at and the next poll flips us into the
-      // "Premium Trial Active" branch below.
-      settingsCard(settingId: "planusage.trial-offer") {
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 16) {
-            Image(systemName: "sparkles")
-              .scaledFont(size: 28)
-              .foregroundColor(OmiColors.purplePrimary)
-
-            VStack(alignment: .leading, spacing: 4) {
-              Text("Start your 3-day premium trial")
-                .scaledFont(size: 16, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-
-              Text("Unlock everything for 3 days. No card required.")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
-            }
-
-            Spacer()
-          }
-
-          Divider().overlay(OmiColors.backgroundQuaternary)
-
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Included in your trial")
-              .scaledFont(size: 12, weight: .semibold)
-              .foregroundColor(OmiColors.textTertiary)
-
-            trialFeatureRow(text: "Unlimited listening & transcription")
-            trialFeatureRow(text: "Unlimited memories & insights")
-            trialFeatureRow(text: "Chat questions")
-          }
-
-          Button(action: {
-            Task { await appState.startTrial() }
-          }) {
-            Text("Start Trial")
-              .scaledFont(size: 14, weight: .semibold)
-              .foregroundColor(.white)
-              .frame(maxWidth: .infinity)
-              .frame(height: 40)
-              .background(
-                RoundedRectangle(cornerRadius: 8)
-                  .fill(OmiColors.purplePrimary)
-              )
-          }
-          .buttonStyle(.plain)
-        }
-      }
-    } else if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
+    if let trial = appState.trialMetadata, trial.trialStartedAt != nil, !trial.trialExpired {
       settingsCard(settingId: "planusage.trial") {
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 16) {

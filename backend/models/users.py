@@ -73,11 +73,6 @@ class Subscription(BaseModel):
     limits: PlanLimits = PlanLimits()
     deprecated: bool = False
     deprecation_message: Optional[str] = None
-    # Unix-seconds timestamp the user explicitly opted into the desktop 3-day
-    # trial. None for accounts that never started it — those see
-    # `trial_available=True` in TrialMetadata and the desktop UI offers
-    # opt-in. Written exclusively by POST /v1/users/me/trial/start.
-    trial_started_at: Optional[int] = None
 
 
 class PricingOption(BaseModel):
@@ -108,13 +103,6 @@ class TrialMetadata(BaseModel):
     trial_duration_seconds: int = 0  # configured trial length
     trial_features: List[str] = []
     plan_after_trial: str = 'Free'  # display name of fallback plan
-    # True iff the user can opt into the trial right now — i.e. they're on a
-    # plan that's eligible (basic / Neo), they're not BYOK, and they haven't
-    # already started or used the trial. The desktop client uses this to
-    # decide whether to render the opt-in offer (first-sign-in modal +
-    # Settings card button). False for paid desktop plans / BYOK / users
-    # mid-trial / users whose trial already expired.
-    trial_available: bool = False
 
 
 class PhoneCallQuota(BaseModel):
