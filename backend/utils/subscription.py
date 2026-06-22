@@ -111,11 +111,9 @@ def _request_has_all_byok_keys() -> bool:
 def _is_trial_expired_uncached(uid: str) -> bool:
     """Is this user past their 3-day desktop trial?
 
-    Trial is opt-in — `subscription.trial_started_at` is the start timestamp,
-    written by POST /v1/users/me/trial/start. If never started, the user is
-    never paywalled (they get the basic free tier instead). BYOK users and
-    desktop-entitled plans bypass the check entirely. Returns False on any
-    lookup error so a Firestore blip never paywalls a paying user.
+    The trial applies to anyone without a desktop-entitled plan (basic OR Neo);
+    BYOK users are bypassed (they're paying their own LLM/STT bill). Returns
+    False on any lookup error so a Firebase blip never paywalls a paying user.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
@@ -124,15 +122,12 @@ def _is_trial_expired_uncached(uid: str) -> bool:
             return False
         if users_db.is_byok_active(uid):
             return False
-        # Read the raw stored subscription doc — `get_user_valid_subscription`
-        # normalises and drops fields irrelevant to plan validity.
-        raw_subscription = users_db.get_user_subscription(uid)
-        trial_started_at = getattr(raw_subscription, 'trial_started_at', None) if raw_subscription else None
-        if not trial_started_at:
-            # Never opted in → not paywalled. They stay on basic free tier;
-            # the desktop client surfaces the opt-in offer until they choose.
+        user_record = firebase_auth.get_user(uid)
+        creation_ms = user_record.user_metadata.creation_timestamp
+        if not creation_ms:
             return False
-        return (time.time() - trial_started_at) > TRIAL_LENGTH_SECONDS
+        age_seconds = time.time() - (creation_ms / 1000)
+        return age_seconds > TRIAL_LENGTH_SECONDS
     except Exception as e:
         logger.warning("trial paywall lookup failed for uid=%s: %s", uid, e)
         return False
@@ -179,19 +174,12 @@ def clear_trial_paywall_cache(uid: str) -> None:
 def get_trial_metadata(uid: str) -> TrialMetadata:
     """Compute structured trial metadata for the given user.
 
-    Trial is opt-in: the response is driven by `subscription.trial_started_at`
-    (written via POST /v1/users/me/trial/start). When unset, the response
-    reports `trial_available=True` for eligible plans so the desktop client
-    can render the opt-in offer; when set, the response carries the live
-    countdown / expired flag for the existing UI surfaces.
+    Returns trial timing info regardless of platform — the client decides
+    whether to render the countdown UI. Paid-plan and BYOK users get
+    `trial_expired=False` with zeroed timing (trial is irrelevant to them).
 
-    Backward-compat for the auto-start era: a user whose stored timestamp is
-    unset but whose Firebase account creation falls inside the trial window
-    gets a one-shot lazy backfill — `trial_started_at = creation_timestamp`
-    is written so their in-progress trial keeps running uninterrupted at
-    deploy time. Users whose derived trial would already have expired do not
-    get backfilled and instead see `trial_available=True` (the original
-    silent auto-start was the bug, not the intent).
+    This reuses the same Firebase Auth lookup path as `_is_trial_expired_uncached`
+    and benefits from the same Redis cache for the expensive bits.
     """
     try:
         subscription = users_db.get_user_valid_subscription(uid)
@@ -206,63 +194,42 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
         if plan_grants_desktop(plan, subscription) or users_db.is_byok_active(uid) or _request_has_all_byok_keys():
             return TrialMetadata(
                 trial_expired=False,
-                trial_available=False,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
                 trial_features=TRIAL_FEATURES,
                 plan_after_trial=get_plan_display_name(PlanType.basic),
             )
 
-        raw_subscription = users_db.get_user_subscription(uid)
-        trial_started_at = getattr(raw_subscription, 'trial_started_at', None) if raw_subscription else None
-
-        # Lazy backfill window: users currently mid-trial at deploy time get
-        # `trial_started_at = creation_timestamp` so their access continues
-        # without a surprise reset. Users whose derived trial already expired
-        # fall through to the opt-in path below.
-        if trial_started_at is None:
-            try:
-                user_record = firebase_auth.get_user(uid)
-                creation_ms = user_record.user_metadata.creation_timestamp
-                if creation_ms:
-                    creation_seconds = int(creation_ms / 1000)
-                    if (time.time() - creation_seconds) <= TRIAL_LENGTH_SECONDS:
-                        users_db.set_subscription_trial_started_at(uid, creation_seconds)
-                        trial_started_at = creation_seconds
-            except Exception as e:
-                logger.warning("trial lazy-backfill lookup failed for uid=%s: %s", uid, e)
-
-        if trial_started_at is None:
-            # No backing timestamp → opt-in offer is available.
+        user_record = firebase_auth.get_user(uid)
+        creation_ms = user_record.user_metadata.creation_timestamp
+        if not creation_ms:
+            # No creation timestamp — treat as active trial (fail-open).
             return TrialMetadata(
                 trial_expired=False,
-                trial_available=True,
                 trial_duration_seconds=TRIAL_LENGTH_SECONDS,
                 trial_features=TRIAL_FEATURES,
                 plan_after_trial=get_plan_display_name(PlanType.basic),
             )
 
-        trial_ends_at = trial_started_at + TRIAL_LENGTH_SECONDS
+        creation_seconds = int(creation_ms / 1000)
+        trial_ends_at = creation_seconds + TRIAL_LENGTH_SECONDS
         now = int(time.time())
         remaining = max(0, trial_ends_at - now)
         expired = remaining == 0
 
         return TrialMetadata(
-            trial_started_at=trial_started_at,
+            trial_started_at=creation_seconds,
             trial_ends_at=trial_ends_at,
             trial_remaining_seconds=remaining,
             trial_expired=expired,
-            trial_available=False,  # already in use or already finished — no fresh opt-in
             trial_duration_seconds=TRIAL_LENGTH_SECONDS,
             trial_features=TRIAL_FEATURES,
             plan_after_trial=get_plan_display_name(PlanType.basic),
         )
     except Exception as e:
         logger.warning("get_trial_metadata failed for uid=%s: %s", uid, e)
-        # Fail-open: don't claim a trial exists, don't claim one is available.
-        # The client will get a benign neutral state and retry on the next poll.
+        # Fail-open: report as active trial so UI doesn't flash paywall.
         return TrialMetadata(
             trial_expired=False,
-            trial_available=False,
             trial_duration_seconds=TRIAL_LENGTH_SECONDS,
             trial_features=TRIAL_FEATURES,
             plan_after_trial=get_plan_display_name(PlanType.basic),

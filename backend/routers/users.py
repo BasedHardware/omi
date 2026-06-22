@@ -1,7 +1,6 @@
 import json
 import re
 import threading
-import time
 import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
@@ -1217,19 +1216,6 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
     Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
     (trial is irrelevant to them — they have full access).
     """
-    return get_trial_metadata(uid)
-
-
-@router.post('/v1/users/me/trial/start', tags=['users'], response_model=TrialMetadata)
-def start_user_trial(uid: str = Depends(auth.get_current_user_uid)):
-    """Opt the user into the desktop 3-day premium trial. Idempotent and eligibility-gated."""
-    metadata = get_trial_metadata(uid)
-    if metadata.trial_started_at is not None or not metadata.trial_available:
-        return metadata
-
-    now_seconds = int(datetime.now(timezone.utc).timestamp())
-    users_db.set_subscription_trial_started_at(uid, now_seconds)
-    clear_trial_paywall_cache(uid)
     return get_trial_metadata(uid)
 
 

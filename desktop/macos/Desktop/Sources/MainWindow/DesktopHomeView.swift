@@ -134,17 +134,6 @@ struct DesktopHomeView: View {
                 )
               }
             }
-            .overlay {
-              // Opt-in trial offer — only renders once per uid (UserDefaults flag
-              // set on either button). Gated by AppState.shouldShowTrialOffer.
-              if appState.shouldShowTrialOffer {
-                TrialOfferView(appState: appState, onDismiss: {
-                  // markTrialOfferSeen() inside the view flips the flag; the
-                  // computed property recomputes false and the overlay drops.
-                  // No additional state needed here.
-                })
-              }
-            }
             .onReceive(NotificationCenter.default.publisher(for: .showUsageLimitPopup)) { notification in
               let reason = notification.userInfo?["reason"] as? String ?? ""
               appState.triggerUsageLimitPopup(reason: reason)
