@@ -13,6 +13,7 @@ import os
 import re
 import signal
 import socket
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -73,7 +74,7 @@ _STRIPPED_ENV_PREFIXES = (
     "SERVICE_ACCOUNT",
     "FIREBASE_ADMIN",
 )
-_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY"}
+_LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY", "FIREBASE_API_KEY"}
 _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
@@ -112,18 +113,14 @@ def validate_project_id(project_id: str, *, require_canonical: bool = False) -> 
     if not value.startswith("demo-"):
         raise SafetyError(f"Refusing non-demo Firebase project ID: {value!r}")
     if require_canonical and value != DEFAULT_LOCAL_FIREBASE_PROJECT_ID:
-        raise SafetyError(
-            f"Local harness project must be {DEFAULT_LOCAL_FIREBASE_PROJECT_ID!r}, got {value!r}"
-        )
+        raise SafetyError(f"Local harness project must be {DEFAULT_LOCAL_FIREBASE_PROJECT_ID!r}, got {value!r}")
     return value
 
 
 def validate_database_id(database_id: str) -> str:
     value = (database_id or "").strip()
     if value != DEFAULT_FIRESTORE_DATABASE_ID:
-        raise SafetyError(
-            f"Local harness Firestore database must be {DEFAULT_FIRESTORE_DATABASE_ID!r}, got {value!r}"
-        )
+        raise SafetyError(f"Local harness Firestore database must be {DEFAULT_FIRESTORE_DATABASE_ID!r}, got {value!r}")
     return value
 
 
@@ -223,16 +220,24 @@ def default_state_base(repo_root: Path, env: Mapping[str, str] | None = None) ->
     return _real(Path(configured)) if configured else _real(Path(repo_root) / ".local" / "dev-harness")
 
 
-def state_root_for_instance(repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None) -> Path:
+def state_root_for_instance(
+    repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None
+) -> Path:
     name = validate_instance_name(instance)
     base = default_state_base(repo_root, env)
     root = _real(base / name)
-    if root == _real(Path(repo_root)) or _real(Path(repo_root)) in {root, *root.parents} and root == _real(Path(repo_root)):
+    if (
+        root == _real(Path(repo_root))
+        or _real(Path(repo_root)) in {root, *root.parents}
+        and root == _real(Path(repo_root))
+    ):
         raise SafetyError("Harness state root cannot be the repository root")
     return root
 
 
-def layout_for_instance(repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None) -> HarnessLayout:
+def layout_for_instance(
+    repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None
+) -> HarnessLayout:
     repo = _real(Path(repo_root))
     state_root = state_root_for_instance(repo, instance, env)
     return HarnessLayout(
@@ -249,7 +254,9 @@ def layout_for_instance(repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, 
     )
 
 
-def create_state_layout(repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None) -> HarnessLayout:
+def create_state_layout(
+    repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, env: Mapping[str, str] | None = None
+) -> HarnessLayout:
     layout = layout_for_instance(repo_root, instance, env)
     validate_safe_state_root(layout.state_root, layout.repo_root)
     layout.state_root.mkdir(parents=True, exist_ok=True)
@@ -267,7 +274,9 @@ def create_state_layout(repo_root: Path, instance: str = DEFAULT_INSTANCE_NAME, 
     return layout
 
 
-def read_and_validate_sentinel(state_root: Path, *, repo_root: Path | None = None, instance: str | None = None) -> dict[str, object]:
+def read_and_validate_sentinel(
+    state_root: Path, *, repo_root: Path | None = None, instance: str | None = None
+) -> dict[str, object]:
     root = _real(Path(state_root))
     sentinel_path = root / HARNESS_SENTINEL_FILENAME
     if not sentinel_path.is_file():
@@ -342,7 +351,17 @@ def command_line_for_pid(pid: int) -> str:
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     if proc_cmdline.exists():
         return proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace").strip()
-    return ""
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+    except OSError:
+        return ""
 
 
 def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None) -> dict[str, object]:
@@ -364,7 +383,9 @@ def validate_owned_pid(pid: int, *, process_manifest: Path, service: str | None 
     raise SafetyError(f"Refusing foreign PID {pid}; not present in harness process manifest")
 
 
-def terminate_owned_pid(pid: int, *, process_manifest: Path, service: str | None = None, sig: signal.Signals = signal.SIGTERM) -> None:
+def terminate_owned_pid(
+    pid: int, *, process_manifest: Path, service: str | None = None, sig: signal.Signals = signal.SIGTERM
+) -> None:
     validate_owned_pid(pid, process_manifest=process_manifest, service=service)
     os.kill(pid, sig)
 
