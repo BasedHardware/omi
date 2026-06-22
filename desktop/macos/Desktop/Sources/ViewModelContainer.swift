@@ -35,9 +35,15 @@ class ViewModelContainer: ObservableObject {
     @Published var isLoading = false
     @Published var databaseInitFailed = false
     @Published var initStatusMessage: String = "Preparing your data…"
+    private var loadedUserId: String?
 
     /// Load critical startup data, then stage warmup work after the first usable window.
     func loadAllData() async {
+        let currentUserId = UserDefaults.standard.string(forKey: "auth_userId")
+        if loadedUserId != nil, loadedUserId != currentUserId {
+            resetStartupState()
+        }
+
         guard !isLoading else { return }
         guard !isInitialLoadComplete else {
             schedulePostInteractiveWarmup(dbAvailable: !databaseInitFailed)
@@ -50,8 +56,7 @@ class ViewModelContainer: ObservableObject {
         logPerf("DATA LOAD: Starting critical startup path", cpu: true)
 
         // Configure database for the current user before initialization
-        let userId = UserDefaults.standard.string(forKey: "auth_userId")
-        await RewindDatabase.shared.configure(userId: userId)
+        await RewindDatabase.shared.configure(userId: currentUserId)
 
         // Pre-initialize database so local SQLite reads are instant
         let dbInitStart = CFAbsoluteTimeGetCurrent()
@@ -68,6 +73,7 @@ class ViewModelContainer: ObservableObject {
         // Database is ready (or failed) — dismiss the loading screen
         // API calls and data fetches continue in the background
         isInitialLoadComplete = true
+        loadedUserId = currentUserId
         let timeToInteractive = CFAbsoluteTimeGetCurrent() - startupStart
 
         // Track startup timing
@@ -93,6 +99,15 @@ class ViewModelContainer: ObservableObject {
     private func schedulePostInteractiveWarmup(dbAvailable: Bool) {
         tasksViewModel.chatCoordinator = taskChatCoordinator
         warmupCoordinator.schedulePostInteractiveWarmup(dbAvailable: dbAvailable)
+    }
+
+    func resetStartupState() {
+        warmupCoordinator.reset()
+        isInitialLoadComplete = false
+        isLoading = false
+        databaseInitFailed = false
+        initStatusMessage = "Preparing your data…"
+        loadedUserId = nil
     }
 
     /// Retry database initialization and schedule the normal staged startup warmup.

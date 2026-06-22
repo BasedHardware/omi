@@ -37,12 +37,16 @@ final class StartupWarmupCoordinator {
         databaseRetryTask?.cancel()
     }
 
+    func reset() {
+        cancel()
+        scheduleState = StartupWarmupScheduleState()
+    }
+
     func schedulePostInteractiveWarmup(dbAvailable: Bool) {
         if scheduleState.reserveServiceWarmup() {
             serviceWarmupTask = Task { [weak self] in
                 await self?.runServiceWarmup()
             }
-            scheduleChatPromptContextWarmup()
         }
 
         scheduleDatabaseWarmup(dbAvailable: dbAvailable)
@@ -61,6 +65,7 @@ final class StartupWarmupCoordinator {
             await self?.runDatabaseWarmup()
         }
         scheduleDashboardNetworkRefresh(dbAvailable: true)
+        scheduleChatPromptContextWarmup()
     }
 
     private func runDatabaseWarmup() async {
@@ -79,6 +84,7 @@ final class StartupWarmupCoordinator {
         guard await sleepForStartupDelay(StartupWarmupPolicy.deferredWarmupDelay) else { return }
         guard await AuthState.shared.isSignedIn else {
             log("DATA LOAD: Skipping DB lifecycle warmup because user is signed out")
+            scheduleState.releaseDatabaseWarmup()
             return
         }
 

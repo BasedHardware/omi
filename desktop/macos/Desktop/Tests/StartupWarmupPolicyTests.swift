@@ -119,6 +119,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertFalse(state.reserveDatabaseWarmup(dbAvailable: true))
     }
 
+    func testWarmupScheduleStateCanRetryDatabaseWarmupAfterRelease() {
+        var state = StartupWarmupScheduleState()
+
+        XCTAssertTrue(state.reserveDatabaseWarmup(dbAvailable: true))
+        XCTAssertFalse(state.reserveDatabaseWarmup(dbAvailable: true))
+
+        state.releaseDatabaseWarmup()
+
+        XCTAssertTrue(state.reserveDatabaseWarmup(dbAvailable: true))
+    }
+
     func testTasksPageFirstUseLoadsWhenStoreHasNoRenderedTasks() {
         XCTAssertTrue(
             TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: false, isLoading: false)

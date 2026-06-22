@@ -263,6 +263,7 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
+              viewModelContainer.resetStartupState()
               appState.hasCompletedOnboarding = false
               appState.stopTranscription()
             }

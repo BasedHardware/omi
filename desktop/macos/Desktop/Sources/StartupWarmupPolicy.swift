@@ -15,6 +15,10 @@ struct StartupWarmupScheduleState {
         didScheduleDatabaseWarmup = true
         return true
     }
+
+    mutating func releaseDatabaseWarmup() {
+        didScheduleDatabaseWarmup = false
+    }
 }
 
 struct RetryableDelayedStartGate {
