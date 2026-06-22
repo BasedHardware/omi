@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed AI-extracted tasks repeatedly failing to sync when the server returned a duplicate task ID"
+  ],
   "releases": [
     {
       "version": "0.11.495",
