@@ -806,6 +806,19 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store.pop('limits', None)
 
     user_ref = db.collection('users').document(uid)
+
+    # Preserve the opt-in trial start across full-map replaces. Callers that
+    # rebuild the subscription from a Stripe object have no knowledge of
+    # trial_started_at, so without this a later plan change would null it out
+    # and make the user eligible for a second trial. Carry the stored value
+    # forward unless this write explicitly sets one.
+    if not subscription_data_to_store.get('trial_started_at'):
+        snapshot = user_ref.get()
+        existing = (snapshot.to_dict() or {}).get('subscription') or {} if snapshot.exists else {}
+        existing_started = existing.get('trial_started_at')
+        if existing_started:
+            subscription_data_to_store['trial_started_at'] = existing_started
+
     user_ref.update({'subscription': subscription_data_to_store})
 
 
