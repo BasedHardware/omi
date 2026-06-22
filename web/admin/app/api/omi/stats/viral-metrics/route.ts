@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -7,14 +8,7 @@ let cache: { data: any; days: number; timestamp: number } | null = null;
 const CACHE_TTL = 30 * 60 * 1000;
 
 async function hogql(apiKey: string, projectId: string, host: string, query: string) {
-  const resp = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ query: { kind: "HogQLQuery", query } }),
-  });
+  const resp = await posthogFetch(host, projectId, apiKey, query);
   if (!resp.ok) {
     const text = await resp.text();
     throw new Error(`PostHog query error ${resp.status}: ${text.slice(0, 200)}`);
