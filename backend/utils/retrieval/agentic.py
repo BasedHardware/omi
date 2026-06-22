@@ -44,6 +44,7 @@ from utils.retrieval.tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    search_google_drive_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -96,6 +97,7 @@ CORE_TOOLS = [
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    search_google_drive_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -133,6 +135,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
         'save_user_preference_tool': 'Saving preference',
+        'search_google_drive_tool': 'Searching Google Drive',
     }
 
     if tool_name in tool_display_map:

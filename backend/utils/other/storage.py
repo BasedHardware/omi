@@ -9,7 +9,10 @@ from concurrent.futures import as_completed
 
 from utils.executors import postprocess_executor, storage_executor
 
-import opuslib
+try:
+    import opuslib
+except Exception:
+    opuslib = None
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.cloud.exceptions import NotFound as BlobNotFound

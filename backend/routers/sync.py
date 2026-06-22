@@ -28,7 +28,10 @@ from utils.executors import (
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
-from opuslib import Decoder
+try:
+    from opuslib import Decoder
+except Exception:
+    Decoder = None
 from pydub import AudioSegment
 
 from database import conversations as conversations_db

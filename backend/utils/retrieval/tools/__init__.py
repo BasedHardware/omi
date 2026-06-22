@@ -30,6 +30,9 @@ from .calendar_tools import (
 from .gmail_tools import (
     get_gmail_messages_tool,
 )
+from .drive_tools import (
+    search_google_drive_tool,
+)
 from .apple_health_tools import (
     get_apple_health_steps_tool,
     get_apple_health_sleep_tool,
@@ -79,4 +82,5 @@ __all__ = [
     'get_screen_activity_tool',
     'search_screen_activity_tool',
     'save_user_preference_tool',
+    'search_google_drive_tool',
 ]

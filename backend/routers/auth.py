@@ -18,6 +18,8 @@ from database.redis_db import set_auth_session, get_auth_session, set_auth_code,
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 import logging
+from datetime import datetime, timezone
+import database.users as users_db
 
 logger = logging.getLogger(__name__)
 
@@ -325,8 +327,27 @@ async def auth_token(
         # Generate custom token if requested
         if use_custom_token:
             try:
-                custom_token = await _generate_custom_token(provider, id_token, access_token)
+                custom_token, firebase_uid = await _generate_custom_token(provider, id_token, access_token)
                 response["custom_token"] = custom_token
+
+                if provider == 'google':
+                    # Fallback to existing refresh token if Google doesn't return a new one
+                    refresh_token = oauth_credentials.get('refresh_token')
+                    if not refresh_token:
+                        existing = users_db.get_integration(firebase_uid, 'google_calendar') or {}
+                        refresh_token = existing.get('refresh_token')
+                    
+                    if refresh_token:
+                        integration_data = {
+                            'connected': True,
+                            'access_token': access_token,
+                            'refresh_token': refresh_token,
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }
+                        users_db.set_integration(firebase_uid, 'google_calendar', integration_data)
+                        logger.info(f"Successfully saved Google integration tokens for user {firebase_uid}")
+                    else:
+                        logger.warning(f"No refresh_token found for user {firebase_uid}, skipping integration save")
             except Exception as e:
                 logger.error(f"Error generating custom token: {e}")
                 # Don't fail the request, just log and continue without custom token
@@ -359,7 +380,9 @@ async def _google_auth_redirect(session_id: str):
         f"client_id={quote(client_id)}&"
         f"redirect_uri={quote(callback_url)}&"
         f"response_type=code&"
-        f"scope={quote('openid email profile')}&"
+        f"scope={quote('openid email profile https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive https://mail.google.com/ https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly')}&"
+        f"access_type=offline&"
+        f"prompt=consent&"
         f"state={quote(session_id)}"
     )
 
@@ -436,6 +459,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
     token_json = token_response.json()
     id_token = token_json.get('id_token')
     access_token = token_json.get('access_token')
+    refresh_token = token_json.get('refresh_token')
 
     if not id_token or not access_token:
         raise HTTPException(status_code=400, detail="Invalid Google token response")
@@ -445,6 +469,7 @@ async def _exchange_google_code_for_oauth_credentials(code: str, session_data: d
         'provider': 'google',
         'id_token': id_token,
         'access_token': access_token,
+        'refresh_token': refresh_token,
         'provider_id': 'google.com',
     }
 
@@ -572,7 +597,8 @@ async def _generate_custom_token(provider: str, id_token: str, access_token: str
         # Create custom token for this UID
         custom_token = firebase_admin.auth.create_custom_token(firebase_uid)
 
-        return custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+        token_str = custom_token.decode('utf-8') if isinstance(custom_token, bytes) else custom_token
+        return token_str, firebase_uid
 
     except Exception as e:
         logger.error(f"Error in _generate_custom_token: {e}")

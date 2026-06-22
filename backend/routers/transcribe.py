@@ -17,9 +17,15 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import av
 import numpy as np
-import opuslib  # type: ignore
+try:
+    import opuslib  # type: ignore
+except Exception:
+    opuslib = None
 
-import lc3  # lc3py
+try:
+    import lc3  # lc3py
+except ImportError:
+    lc3 = None
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
