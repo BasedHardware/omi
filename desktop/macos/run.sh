@@ -18,6 +18,7 @@ Options (via environment variables):
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
@@ -670,6 +671,17 @@ for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
 done
 # Register the /Applications/ copy as the canonical bundle for this bundle ID
 $LSREGISTER -f "$APP_PATH" 2>/dev/null || true
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
+    step "Seeding auth from Omi Dev..."
+    AUTH_CACHE="$(dirname "$0")/tmp/desktop-auth.json"
+    if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
+        ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"
+        auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
+    else
+        echo "Warning: could not seed auth from Omi Dev. Launching cold."
+    fi
+fi
 
 step "Starting app..."
 
