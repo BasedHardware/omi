@@ -62,7 +62,7 @@ RUN pip install --no-cache-dir \
 
 # pyannote.audio + deps. Post-install: stub telemetry (needs opentelemetry
 # OTLP exporter which we don't need for inference-only usage).
-RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0,<4.0" && \
+RUN pip install --no-cache-dir --no-deps "pyannote.audio==3.3.2" && \
     pip install --no-cache-dir --no-deps \
     "pyannote.core" "pyannote.database" "pyannote.pipeline" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
