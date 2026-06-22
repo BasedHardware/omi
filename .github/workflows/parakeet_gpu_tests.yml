@@ -6,6 +6,10 @@ on:
       image_tag:
         description: 'Docker image tag to test (e.g. abc1234)'
         required: true
+      der_report_only:
+        description: 'DER benchmark report-only mode (true = no fail gate)'
+        required: false
+        default: 'false'
   schedule:
     # Nightly at 03:00 UTC — tests latest dev image
     - cron: '0 3 * * *'
@@ -24,7 +28,7 @@ jobs:
       id-token: 'write'
 
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -73,7 +77,7 @@ jobs:
             name: ${JOB_NAME}
             namespace: ${NAMESPACE}
           spec:
-            activeDeadlineSeconds: 1200
+            activeDeadlineSeconds: 1800
             backoffLimit: 0
             template:
               spec:
@@ -107,9 +111,35 @@ jobs:
                           --tb=short 2>&1
                         echo ""
 
-                        echo "--- Phase 4: DER Regression Gate ---"
+                        echo "--- Phase 4: DER Regression Gate (synthetic) ---"
                         python -m pytest tests/container/test_parakeet_der_gate.py -v -s \
                           --tb=short 2>&1
+                        echo ""
+
+                        echo "--- Phase 5: Real-speech DER Benchmark (VoxConverse) ---"
+                        echo "Starting uvicorn for benchmark..."
+                        uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
+                        SERVER_PID=$!
+                        for i in $(seq 1 60); do
+                          if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')" 2>/dev/null; then
+                            echo "Server ready after ${i}s"
+                            break
+                          fi
+                          sleep 1
+                        done
+
+                        DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
+                        python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
+                          --tb=short 2>&1
+                        BENCH_EXIT=$?
+
+                        kill $SERVER_PID 2>/dev/null || true
+                        wait $SERVER_PID 2>/dev/null || true
+
+                        if [ $BENCH_EXIT -ne 0 ]; then
+                          echo "DER benchmark failed (exit=$BENCH_EXIT)"
+                          exit $BENCH_EXIT
+                        fi
                         echo ""
 
                         echo "=== ALL TESTS PASSED ==="
@@ -125,6 +155,8 @@ jobs:
                         value: "nemo"
                       - name: NVIDIA_VISIBLE_DEVICES
                         value: "all"
+                      - name: DER_REPORT_ONLY
+                        value: "${DER_REPORT_ONLY}"
                     resources:
                       requests:
                         cpu: 1
@@ -150,12 +182,13 @@ jobs:
           JOBEOF
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          DER_REPORT_ONLY: ${{ github.event.inputs.der_report_only || 'false' }}
 
       - name: Wait for job completion
         run: |
-          echo "Waiting for GPU test job to complete (timeout: 20 min)..."
+          echo "Waiting for GPU test job to complete (timeout: 30 min)..."
           kubectl -n ${{ env.NAMESPACE }} wait --for=condition=complete \
-            --timeout=1200s job/${{ env.JOB_NAME }} 2>&1 || true
+            --timeout=1800s job/${{ env.JOB_NAME }} 2>&1 || true
 
           # Check job status
           STATUS=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \

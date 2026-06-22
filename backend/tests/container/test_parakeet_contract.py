@@ -114,6 +114,29 @@ class TestTorchaudioBackendContract:
             assert fn(sentinel) is sentinel, f"{name} must return its argument"
 
 
+class TestPyannoteMetricsContract:
+    """Verify pyannote.metrics is installed and compatible with pinned stack."""
+
+    def test_diarization_error_rate_importable(self):
+        from pyannote.metrics.diarization import DiarizationErrorRate  # noqa: F401
+
+    def test_der_scoring_on_synthetic(self):
+        from pyannote.core import Annotation, Segment
+        from pyannote.metrics.diarization import DiarizationErrorRate
+
+        ref = Annotation()
+        ref[Segment(0, 5)] = "A"
+        ref[Segment(5, 10)] = "B"
+
+        hyp = Annotation()
+        hyp[Segment(0, 5)] = "1"
+        hyp[Segment(5, 10)] = "2"
+
+        metric = DiarizationErrorRate(collar=0.25, skip_overlap=True)
+        der = metric(ref, hyp)
+        assert 0.0 <= der <= 1.0
+
+
 class TestPyannoteImportSurfaces:
     """Verify broader pyannote import surfaces that depend on our stubs."""
 
