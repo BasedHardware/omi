@@ -9,6 +9,7 @@ use axum::{
     Json,
 };
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
+use serde::de::DeserializeOwned;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -92,6 +93,13 @@ impl IntoResponse for AuthError {
 }
 
 impl FirebaseAuth {
+    /// True when the Firebase Auth emulator is active (local harness).
+    pub fn auth_emulator_active() -> bool {
+        std::env::var("FIREBASE_AUTH_EMULATOR_HOST")
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    }
+
     /// Create a new Firebase Auth verifier
     pub fn new(project_id: String) -> Self {
         Self {
@@ -126,6 +134,10 @@ impl FirebaseAuth {
 
     /// Verify a Firebase ID token and extract the user ID and name
     pub async fn verify_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+        if Self::auth_emulator_active() {
+            return self.verify_emulator_token(token);
+        }
+
         // Decode header to get kid
         let header = decode_header(token).map_err(|e| AuthError {
             error: "invalid_token".to_string(),
@@ -161,6 +173,97 @@ impl FirebaseAuth {
         })?;
 
         Ok((token_data.claims.sub, token_data.claims.name, token_data.claims.email))
+    }
+
+    /// Verify unsigned JWTs issued by the Firebase Auth emulator (alg "none").
+    fn verify_emulator_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+        let alg = Self::jwt_header_alg(token).ok_or_else(|| AuthError {
+            error: "invalid_token".to_string(),
+            message: "Failed to decode emulator token header".to_string(),
+        })?;
+        if alg != "none" {
+            return Err(AuthError {
+                error: "invalid_token".to_string(),
+                message: format!("Auth emulator expects alg=none, got {alg}"),
+            });
+        }
+
+        let claims = Self::decode_jwt_payload::<FirebaseClaims>(token).map_err(|message| AuthError {
+            error: "invalid_token".to_string(),
+            message,
+        })?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+
+        if claims.aud != self.project_id {
+            return Err(AuthError {
+                error: "invalid_token".to_string(),
+                message: format!(
+                    "Token audience mismatch: expected {}, got {}",
+                    self.project_id, claims.aud
+                ),
+            });
+        }
+
+        let expected_iss = format!("https://securetoken.google.com/{}", self.project_id);
+        if claims.iss != expected_iss {
+            return Err(AuthError {
+                error: "invalid_token".to_string(),
+                message: format!(
+                    "Token issuer mismatch: expected {}, got {}",
+                    expected_iss, claims.iss
+                ),
+            });
+        }
+
+        if claims.exp < now {
+            return Err(AuthError {
+                error: "invalid_token".to_string(),
+                message: "Token expired".to_string(),
+            });
+        }
+
+        if claims.sub.is_empty() {
+            return Err(AuthError {
+                error: "invalid_token".to_string(),
+                message: "Token missing subject".to_string(),
+            });
+        }
+
+        Ok((claims.sub, claims.name, claims.email))
+    }
+
+    fn jwt_header_alg(token: &str) -> Option<String> {
+        let encoded = token.split('.').next()?;
+        Self::decode_jwt_part_json(encoded)
+            .ok()
+            .and_then(|value| value.get("alg").and_then(|item| item.as_str()).map(str::to_string))
+    }
+
+    fn decode_jwt_payload<T: DeserializeOwned>(token: &str) -> Result<T, String> {
+        let encoded = token
+            .split('.')
+            .nth(1)
+            .ok_or_else(|| "Emulator token missing payload".to_string())?;
+        let value = Self::decode_jwt_part_json(encoded)?;
+        serde_json::from_value(value).map_err(|error| format!("Emulator token payload invalid: {error}"))
+    }
+
+    fn decode_jwt_part_json(encoded: &str) -> Result<serde_json::Value, String> {
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(encoded)
+            .or_else(|_| {
+                let padded = match encoded.len() % 4 {
+                    0 => encoded.to_string(),
+                    n => format!("{}{}", encoded, "=".repeat(4 - n)),
+                };
+                base64::engine::general_purpose::STANDARD.decode(padded)
+            })
+            .map_err(|error| format!("Emulator token base64 decode failed: {error}"))?;
+        serde_json::from_slice(&bytes).map_err(|error| format!("Emulator token JSON decode failed: {error}"))
     }
 }
 
