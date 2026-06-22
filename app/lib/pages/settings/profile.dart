@@ -330,6 +330,7 @@ class _ProfilePageState extends State<ProfilePage> {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
             Future<void> setEnabled(bool value) async {
               SharedPreferencesUtil().batchModeEnabled = value;
+              PlatformManager.instance.analytics.transcribeLaterToggled(enabled: value);
               final docs = await getApplicationDocumentsDirectory();
               await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
               // Batch capture takes precedence over background streaming.
