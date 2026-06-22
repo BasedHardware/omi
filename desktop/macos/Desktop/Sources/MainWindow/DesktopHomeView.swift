@@ -264,6 +264,14 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               viewModelContainer.resetStartupState()
+              didScheduleConversationWarmup = false
+              didScheduleAgentVMProvisioning = false
+              appState.conversations = []
+              appState.folders = []
+              appState.totalConversationsCount = nil
+              appState.conversationsError = nil
+              appState.isLoadingConversations = false
+              appState.isLoadingFolders = false
               appState.hasCompletedOnboarding = false
               appState.stopTranscription()
             }

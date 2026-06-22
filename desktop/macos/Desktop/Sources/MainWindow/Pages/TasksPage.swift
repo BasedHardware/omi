@@ -1815,7 +1815,7 @@ class TasksViewModel: ObservableObject {
         ) else { return }
 
         log("TasksPage: First-use loading task list")
-        await store.loadTasks()
+        await store.loadTasksIfNeeded()
     }
 
     func loadTasks() async {

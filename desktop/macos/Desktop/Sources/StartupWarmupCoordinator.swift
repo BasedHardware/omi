@@ -39,6 +39,11 @@ final class StartupWarmupCoordinator {
 
     func reset() {
         cancel()
+        serviceWarmupTask = nil
+        databaseWarmupTask = nil
+        dashboardNetworkRefreshTask = nil
+        chatPromptContextWarmupTask = nil
+        databaseRetryTask = nil
         scheduleState = StartupWarmupScheduleState()
     }
 

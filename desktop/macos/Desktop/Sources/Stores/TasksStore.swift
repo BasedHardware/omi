@@ -48,6 +48,31 @@ class TasksStore: ObservableObject {
         isLoadingIncomplete || isLoadingCompleted || isLoadingDeleted
     }
 
+    func resetSessionState() {
+        incompleteTasks = []
+        completedTasks = []
+        deletedTasks = []
+        overdueTasks = []
+        todaysTasks = []
+        tasksWithoutDueDate = []
+        isLoadingIncomplete = false
+        isLoadingCompleted = false
+        isLoadingDeleted = false
+        isLoadingMore = false
+        hasMoreIncompleteTasks = true
+        hasMoreCompletedTasks = true
+        hasMoreDeletedTasks = true
+        error = nil
+        incompleteOffset = 0
+        completedOffset = 0
+        deletedOffset = 0
+        hasLoadedIncomplete = false
+        hasLoadedCompleted = false
+        hasLoadedDeleted = false
+        hasScheduledStartupMaintenance = false
+        lastReconciliationDate = nil
+    }
+
     // MARK: - Private State
 
     private var incompleteOffset = 0
@@ -57,6 +82,7 @@ class TasksStore: ObservableObject {
     private var hasLoadedIncomplete = false
     private var hasLoadedCompleted = false
     private var hasLoadedDeleted = false
+    private var hasScheduledStartupMaintenance = false
     /// Whether we're currently showing all tasks (no date filter) or just recent
     private var cancellables = Set<AnyCancellable>()
     private var isRetryingUnsynced = false
@@ -462,13 +488,15 @@ class TasksStore: ObservableObject {
 
     /// Load incomplete tasks if not already loaded (call this on app launch)
     func loadTasksIfNeeded() async {
-        guard !hasLoadedIncomplete else { return }
-        await loadIncompleteTasks()
-        await loadDashboardTasks()
-        // Also load deleted tasks in background so the filter count is ready
-        if !hasLoadedDeleted {
-            await loadDeletedTasks()
+        if !hasLoadedIncomplete {
+            await loadIncompleteTasks()
+            await loadDashboardTasks()
+            // Also load deleted tasks in background so the filter count is ready
+            if !hasLoadedDeleted {
+                await loadDeletedTasks()
+            }
         }
+        scheduleStartupMaintenanceIfNeeded()
     }
 
     /// Legacy method - loads incomplete tasks
@@ -479,23 +507,31 @@ class TasksStore: ObservableObject {
         if !hasLoadedDeleted {
             await loadDeletedTasks()
         }
+        scheduleStartupMaintenanceIfNeeded()
+        // Note: no startup task promotion. Promotion happens on the natural
+        // cadence — when the user completes/deletes a task, or via the
+        // 5-minute safety-net timer. Bursting up to 5 promotions on every
+        // launch felt like spam.
+    }
+
+    private func scheduleStartupMaintenanceIfNeeded() {
+        guard !hasScheduledStartupMaintenance else { return }
+        hasScheduledStartupMaintenance = true
+
         // Kick off one-time full sync in background (populates SQLite with all tasks)
-        // Then retry pushing any locally-created tasks that failed to sync
+        // Then retry pushing any locally-created tasks that failed to sync.
         Task {
             await performFullSyncIfNeeded()
             await migrateAITasksToStagedIfNeeded()
             await migrateConversationItemsToStagedIfNeeded()
             await retryUnsyncedItems()
         }
-        // Backfill relevance scores for unscored tasks (independent of full sync)
+
+        // Backfill relevance scores for unscored tasks (independent of full sync).
         Task {
             let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
             await backfillRelevanceScoresIfNeeded(userId: userId)
         }
-        // Note: no startup task promotion. Promotion happens on the natural
-        // cadence — when the user completes/deletes a task, or via the
-        // 5-minute safety-net timer. Bursting up to 5 promotions on every
-        // launch felt like spam.
     }
 
     /// Load incomplete tasks (To Do) using local-first pattern (like Memories)
