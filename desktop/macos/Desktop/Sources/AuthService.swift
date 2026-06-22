@@ -126,16 +126,22 @@ class AuthService {
         guard !isConfigured else { return }
         guard FirebaseApp.app() != nil else {
             NSLog("OMI AUTH: Skipping AuthService configuration because FirebaseApp is not configured")
+            if DesktopLocalProfile.isEnabled {
+                AuthState.shared.isRestoringAuth = false
+            }
             return
         }
         if DesktopLocalProfile.isEnabled {
             configureAuthEmulatorIfNeeded()
         }
         isConfigured = true
-        restoreAuthState()
-        setupAuthStateListener()
         if DesktopLocalProfile.isEnabled {
+            restoreAuthStateForLocalHarness()
+            setupAuthStateListener()
             Task { await bootstrapLocalAuthUserIfNeeded() }
+        } else {
+            restoreAuthState()
+            setupAuthStateListener()
         }
 
         // Timeout: if auth isn't restored within 5 seconds, stop showing loading
@@ -147,9 +153,12 @@ class AuthService {
         }
     }
 
-    // MARK: - Local emulator auth bootstrap
+    private func restoreAuthStateForLocalHarness() {
+        isSignedIn = false
+        AuthState.shared.userEmail = nil
+    }
 
-    private func configureAuthEmulatorIfNeeded() {
+    func configureAuthEmulatorIfNeeded() {
         guard let hostPort = DesktopLocalProfile.authEmulatorHost else { return }
         let parts = hostPort.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2, let port = Int(parts[1]) else {
@@ -160,34 +169,117 @@ class AuthService {
         NSLog("OMI AUTH LOCAL: using Firebase Auth emulator at %@", hostPort)
     }
 
+    func bootstrapLocalHarnessAuthIfNeeded() async {
+        await bootstrapLocalAuthUserIfNeeded()
+    }
+
     private func bootstrapLocalAuthUserIfNeeded() async {
+        defer { AuthState.shared.isRestoringAuth = false }
         guard let email = DesktopLocalProfile.selectedEmail,
               let password = DesktopLocalProfile.selectedPassword,
               let selectedUser = DesktopLocalProfile.selectedUser else {
-            NSLog("OMI AUTH LOCAL: missing selected local auth user env; staying signed out")
+            log("OMI AUTH LOCAL: missing selected local auth user env; staying signed out")
             return
         }
-        if let current = Auth.auth().currentUser, current.email == email || current.uid == selectedUser {
-            NSLog("OMI AUTH LOCAL: selected emulator user already active uid=%@", current.uid)
-            return
+
+        if let savedEmail = UserDefaults.standard.string(forKey: kAuthUserEmail),
+           !savedEmail.isEmpty, savedEmail != email {
+            clearPersistedAuthState()
+            clearTokens()
+            log("OMI AUTH LOCAL: cleared stale persisted auth for email=\(savedEmail)")
         }
+
         do {
-            let result = try await Auth.auth().signIn(withEmail: email, password: password)
-            let user = result.user
-            AuthState.shared.userEmail = user.email ?? email
+            let tokens = try await signInWithPasswordViaAuthEmulator(email: email, password: password)
+            saveTokens(
+                idToken: tokens.idToken,
+                refreshToken: tokens.refreshToken,
+                expiresIn: tokens.expiresIn,
+                userId: tokens.localId
+            )
+            AuthState.shared.userEmail = email
             isSignedIn = true
-            saveAuthState(isSignedIn: true, email: user.email ?? email, userId: user.uid)
+            saveAuthState(isSignedIn: true, email: email, userId: tokens.localId)
             if let display = DesktopLocalProfile.selectedDisplayName, !display.isEmpty {
                 let pieces = display.split(separator: " ", maxSplits: 1).map(String.init)
                 givenName = pieces.first ?? ""
                 familyName = pieces.count > 1 ? pieces[1] : ""
             }
-            Task { await RewindDatabase.shared.configure(userId: user.uid) }
-            NSLog("OMI AUTH LOCAL: signed in to Auth emulator as %@ uid=%@", email, user.uid)
+            await RewindDatabase.shared.configure(userId: tokens.localId)
+            log("OMI AUTH LOCAL: signed in via emulator REST as \(email) uid=\(tokens.localId)")
         } catch {
-            NSLog("OMI AUTH LOCAL: sign-in failed for %@: %@", email, error.localizedDescription)
+            logError("OMI AUTH LOCAL: sign-in failed for \(email)", error: error)
             self.error = "Local Auth emulator sign-in failed for \(email): \(error.localizedDescription)"
+            isSignedIn = false
         }
+    }
+
+    private func signInWithPasswordViaAuthEmulator(email: String, password: String) async throws -> FirebaseTokenResult {
+        guard let hostPort = DesktopLocalProfile.authEmulatorHost else {
+            throw AuthError.invalidURL
+        }
+        let apiKey = firebaseApiKey
+        guard !apiKey.isEmpty else {
+            throw AuthError.missingToken
+        }
+        guard let url = URL(
+            string: "http://\(hostPort)/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=\(apiKey)"
+        ) else {
+            throw AuthError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "email": email,
+            "password": password,
+            "returnSecureToken": true,
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AuthError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            let errorBody = String(data: data, encoding: .utf8) ?? "unknown"
+            log("OMI AUTH LOCAL: emulator REST error \(httpResponse.statusCode): \(errorBody)")
+            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = json["idToken"] as? String,
+              let refreshToken = json["refreshToken"] as? String else {
+            throw AuthError.invalidResponse
+        }
+        let expiresIn = Int(json["expiresIn"] as? String ?? "3600") ?? 3600
+        let localId = json["localId"] as? String ?? selectedLocalUserId(from: idToken) ?? ""
+        guard !localId.isEmpty else {
+            throw AuthError.invalidResponse
+        }
+        return FirebaseTokenResult(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            localId: localId
+        )
+    }
+
+    private func selectedLocalUserId(from idToken: String) -> String? {
+        guard let payload = decodeJWT(idToken) else { return nil }
+        return payload["user_id"] as? String ?? payload["sub"] as? String
+    }
+
+    private func clearPersistedAuthState() {
+        UserDefaults.standard.removeObject(forKey: kAuthIsSignedIn)
+        UserDefaults.standard.removeObject(forKey: kAuthUserEmail)
+        UserDefaults.standard.removeObject(forKey: kAuthUserId)
+        UserDefaults.standard.removeObject(forKey: kAuthIdToken)
+        UserDefaults.standard.removeObject(forKey: kAuthRefreshToken)
+        UserDefaults.standard.removeObject(forKey: kAuthTokenExpiry)
+        UserDefaults.standard.removeObject(forKey: kAuthTokenUserId)
+        UserDefaults.standard.synchronize()
     }
 
     // MARK: - Auth Persistence (UserDefaults for dev builds)
@@ -956,7 +1048,13 @@ class AuthService {
             throw AuthError.notSignedIn
         }
 
-        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)") else {
+        let refreshURLString: String
+        if DesktopLocalProfile.isEnabled, let hostPort = DesktopLocalProfile.authEmulatorHost {
+            refreshURLString = "http://\(hostPort)/securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)"
+        } else {
+            refreshURLString = "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)"
+        }
+        guard let url = URL(string: refreshURLString) else {
             throw AuthError.invalidURL
         }
 
@@ -982,12 +1080,16 @@ class AuthService {
                 || errorBody.contains("USER_DISABLED")
                 || httpResponse.statusCode == 400
             if isDefinitiveAuthFailure {
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
-                clearTokens()
-                // Also clear auth state so the UI shows sign-in instead of a ghost session
-                // where auth_isSignedIn=true but no valid tokens exist.
-                isSignedIn = false
-                saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                if DesktopLocalProfile.isEnabled {
+                    NSLog("OMI AUTH LOCAL: token refresh failed; keeping local harness session")
+                } else {
+                    NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
+                    clearTokens()
+                    // Also clear auth state so the UI shows sign-in instead of a ghost session
+                    // where auth_isSignedIn=true but no valid tokens exist.
+                    isSignedIn = false
+                    saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                }
             }
             throw AuthError.notSignedIn
         }
@@ -1051,6 +1153,25 @@ class AuthService {
                     return try await refreshIdToken()
                 } catch {
                     NSLog("OMI AUTH: Token refresh failed: %@", error.localizedDescription)
+                    if DesktopLocalProfile.isEnabled,
+                       let email = DesktopLocalProfile.selectedEmail,
+                       let password = DesktopLocalProfile.selectedPassword {
+                        do {
+                            let tokens = try await signInWithPasswordViaAuthEmulator(email: email, password: password)
+                            saveTokens(
+                                idToken: tokens.idToken,
+                                refreshToken: tokens.refreshToken,
+                                expiresIn: tokens.expiresIn,
+                                userId: tokens.localId
+                            )
+                            saveAuthState(isSignedIn: true, email: email, userId: tokens.localId)
+                            isSignedIn = true
+                            NSLog("OMI AUTH LOCAL: re-signed via emulator after refresh failure")
+                            return tokens.idToken
+                        } catch {
+                            NSLog("OMI AUTH LOCAL: emulator re-sign failed: %@", error.localizedDescription)
+                        }
+                    }
                 }
             }
         }
