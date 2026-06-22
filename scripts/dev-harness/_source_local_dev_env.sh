@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Source provider secrets for harness shell preflight.
+# Export provider secrets for harness shell preflight (safe parse — never `source` the file).
 # Child processes receive a fully-formed env from the harness (OMI_HARNESS_INSTANCE set);
 # they do not load backend/.env or stage files on disk.
 _repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -15,7 +15,6 @@ case "$_stage" in
   local) _secrets_file="$_repo_root/backend/.env.local-dev" ;;
   offline) _secrets_file="$_repo_root/backend/.env.offline" ;;
   *)
-    # Non-harness stages: fall back to legacy stage file sourcing for standalone backend runs.
     case "$_stage" in
       dev) _secrets_file="$_repo_root/backend/.env.dev" ;;
       prod) _secrets_file="$_repo_root/backend/.env.prod" ;;
@@ -27,20 +26,41 @@ case "$_stage" in
     ;;
 esac
 
-if [ -f "$_secrets_file" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$_secrets_file"
-  set +a
-fi
+_ALLOWED_KEYS=" PROVIDER_MODE OPENAI_API_KEY DEEPGRAM_API_KEY GEMINI_API_KEY ANTHROPIC_API_KEY "
+
+_load_allowed_secrets() {
+  local file="$1"
+  local line key value
+  [ -f "$file" ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [ -z "$line" ] && continue
+    [[ "$line" == \#* ]] && continue
+    [[ "$line" != *=* ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="${key#"${key%%[![:space:]]*}"}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+    case "$_ALLOWED_KEYS" in
+      *" $key "*) printf -v "$key" '%s' "$value"; export "$key" ;;
+    esac
+  done < "$file"
+}
+
+_load_allowed_secrets "$_secrets_file"
 
 # Optional personal overrides for manual standalone backend runs only.
 _personal_env="$_repo_root/backend/.env"
 if [ -f "$_personal_env" ] && [ "$_personal_env" != "$_secrets_file" ] && [ -z "${OMI_HARNESS_INSTANCE:-}" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$_personal_env"
-  set +a
+  _load_allowed_secrets "$_personal_env"
 fi
 
 export OMI_ENV_STAGE="$_stage"
