@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
           COALESCE(person_id, distinct_id) AS actor_id,
           min(toDate(timestamp)) AS cohort_date
         FROM events
-        WHERE event = 'App Became Active'
+        WHERE 1 = 1
           ${eventFilter}
         GROUP BY actor_id
         HAVING cohort_date >= today() - INTERVAL ${days} DAY
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
           COALESCE(person_id, distinct_id) AS actor_id,
           toDate(timestamp) AS event_date
         FROM events
-        WHERE event = 'App Became Active'
+        WHERE 1 = 1
           ${eventFilter}
           AND COALESCE(person_id, distinct_id) IN (${actorIds})
           AND timestamp >= today() - INTERVAL ${days} DAY
