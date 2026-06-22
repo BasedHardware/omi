@@ -120,6 +120,25 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
     }
 
+    func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("Do not guess when you can look it up"))
+        XCTAssertTrue(prompt.contains("Supports SELECT, INSERT, UPDATE, DELETE"))
+        XCTAssertTrue(prompt.contains("Supports FTS5 MATCH queries"))
+        XCTAssertTrue(prompt.contains("More reliable than hand-writing MATCH queries for task search"))
+        XCTAssertTrue(prompt.contains("**save_knowledge_graph**"))
+        XCTAssertTrue(prompt.contains("Deduplication is handled automatically"))
+    }
+
+    func testDesktopPromptPreservesPersonalDataLookupContract() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("For ANY personal question"))
+        XCTAssertTrue(prompt.contains("FIRST check <user_facts>"))
+        XCTAssertTrue(prompt.contains("before saying you don't know"))
+        XCTAssertTrue(prompt.contains("transcription_sessions/transcription_segments"))
+        XCTAssertTrue(prompt.contains("NEVER say \"I don't know\""))
+    }
+
     func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
         let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
             .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
