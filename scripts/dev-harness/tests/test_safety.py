@@ -134,7 +134,7 @@ def test_foreign_pid_and_port_are_rejected(tmp_path: Path) -> None:
     env = {"OMI_LOCAL_STATE_ROOT": str(tmp_path / "state")}
     layout = safety.create_state_layout(REPO_ROOT, "default", env)
     marker = "omi-harness-test-owned-marker"
-    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", marker])
+    proc = subprocess.Popen([sys.executable, "-c", f"import time; time.sleep(60)  # {marker}"])
     foreign_proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         time.sleep(0.1)
