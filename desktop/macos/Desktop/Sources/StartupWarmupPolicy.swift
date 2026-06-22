@@ -46,6 +46,11 @@ struct DelayedFileIndexingBackfillState {
         isScheduled = false
         shouldMarkComplete = true
     }
+
+    mutating func releaseReservation() {
+        isScheduled = false
+        shouldMarkComplete = false
+    }
 }
 
 enum TasksPageFirstUseLoadPolicy {

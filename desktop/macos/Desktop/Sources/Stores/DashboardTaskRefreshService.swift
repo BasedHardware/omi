@@ -30,13 +30,15 @@ enum DashboardTaskRefreshService {
 
         do {
             let calendar = Calendar.current
-            let windowItems = try await fetchDashboardWindowItems(calendar: calendar)
+            let now = Date()
+            let windowItems = try await fetchDashboardWindowItems(now: now, calendar: calendar)
             let serverTruth = await fetchExactServerTruth(forDashboardIds: dashboardIds)
             let plan = DashboardTaskReconciliationPlanner.plan(
                 localDashboardIds: dashboardIds,
                 dashboardWindowServerItems: windowItems,
                 exactServerItemsById: serverTruth.itemsById,
                 missingServerIds: serverTruth.missingIds,
+                now: now,
                 calendar: calendar
             )
 
@@ -62,12 +64,12 @@ enum DashboardTaskRefreshService {
         await store.loadDashboardTasks()
     }
 
-    private static func fetchDashboardWindowItems(calendar: Calendar) async throws -> [TaskActionItem] {
-        let startOfToday = calendar.startOfDay(for: Date())
+    private static func fetchDashboardWindowItems(now: Date, calendar: Calendar) async throws -> [TaskActionItem] {
+        let startOfToday = calendar.startOfDay(for: now)
         guard let endOfToday = calendar.date(byAdding: .day, value: 1, to: startOfToday) else {
             return []
         }
-        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
         let limit = DashboardTaskRefreshPolicy.serverFetchLimit
 
         async let dueWindowResponse = APIClient.shared.getActionItems(

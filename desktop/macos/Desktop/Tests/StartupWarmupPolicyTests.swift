@@ -153,4 +153,16 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertTrue(backfill.shouldMarkComplete)
         XCTAssertFalse(backfill.reserveIfNeeded(hasCompletedBackfill: true))
     }
+
+    func testFileIndexingBackfillCanRescheduleAfterReservationRelease() {
+        var backfill = DelayedFileIndexingBackfillState()
+
+        XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+        XCTAssertFalse(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+
+        backfill.releaseReservation()
+
+        XCTAssertFalse(backfill.shouldMarkComplete)
+        XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+    }
 }

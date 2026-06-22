@@ -576,12 +576,18 @@ struct DesktopHomeView: View {
     guard !didScheduleAgentVMProvisioning else { return }
     didScheduleAgentVMProvisioning = true
 
-    Task {
+    Task { @MainActor in
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.agentVMProvisioningDelay * 1_000_000_000)
       )
-      guard !Task.isCancelled else { return }
-      guard await AuthState.shared.isSignedIn else { return }
+      guard !Task.isCancelled else {
+        didScheduleAgentVMProvisioning = false
+        return
+      }
+      guard await AuthState.shared.isSignedIn else {
+        didScheduleAgentVMProvisioning = false
+        return
+      }
       await AgentVMService.shared.ensureProvisioned()
     }
   }
@@ -594,8 +600,14 @@ struct DesktopHomeView: View {
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.conversationWarmupDelay * 1_000_000_000)
       )
-      guard !Task.isCancelled else { return }
-      guard await AuthState.shared.isSignedIn else { return }
+      guard !Task.isCancelled else {
+        didScheduleConversationWarmup = false
+        return
+      }
+      guard await AuthState.shared.isSignedIn else {
+        didScheduleConversationWarmup = false
+        return
+      }
 
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
@@ -619,16 +631,28 @@ struct DesktopHomeView: View {
         hasCompletedBackfill: UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing"))
     else { return }
 
-    Task {
+    Task { @MainActor in
       try? await Task.sleep(
         nanoseconds: UInt64(StartupWarmupPolicy.initialFileIndexingDelay * 1_000_000_000)
       )
-      guard !Task.isCancelled else { return }
-      guard await AuthState.shared.isSignedIn else { return }
+      guard !Task.isCancelled else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
+      guard await AuthState.shared.isSignedIn else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
-      guard !Task.isCancelled else { return }
-      guard await AuthState.shared.isSignedIn else { return }
+      guard !Task.isCancelled else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
+      guard await AuthState.shared.isSignedIn else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
       initialFileIndexingBackfill.markScanCompleted()
       if initialFileIndexingBackfill.shouldMarkComplete {
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")

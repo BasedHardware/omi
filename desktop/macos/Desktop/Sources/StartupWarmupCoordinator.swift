@@ -77,6 +77,10 @@ final class StartupWarmupCoordinator {
         }
 
         guard await sleepForStartupDelay(StartupWarmupPolicy.deferredWarmupDelay) else { return }
+        guard await AuthState.shared.isSignedIn else {
+            log("DATA LOAD: Skipping DB lifecycle warmup because user is signed out")
+            return
+        }
 
         await measurePerfAsync("DATA LOAD: DB lifecycle warmup") {
             await measurePerfAsync("DATA LOAD: Task agent restore") {
