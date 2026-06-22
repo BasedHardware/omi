@@ -17,15 +17,15 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# NGC torch ABI is incompatible with standard torchaudio C extensions.
-# Install torchaudio --no-deps for the pure-Python compliance.kaldi module
-# (wespeaker needs kaldi.fbank for mel filterbank features), then patch
-# __init__.py to skip the C extension loader and only expose compliance.
-# AudioMetaData stub needed by pyannote.audio.core.io at import time.
-RUN pip install --no-cache-dir --no-deps torchaudio && \
-    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nclass AudioMetaData:\n    def __init__(self, sample_rate=0, num_frames=0, num_channels=0, bits_per_sample=0, encoding=""):\n        self.sample_rate = sample_rate\n        self.num_frames = num_frames\n        self.num_channels = num_channels\n        self.bits_per_sample = bits_per_sample\n        self.encoding = encoding\ndef info(*a, **kw): raise RuntimeError("torchaudio.info unavailable in NGC-compat mode")\ndef load(*a, **kw): raise RuntimeError("torchaudio.load unavailable in NGC-compat mode")\ndef save(*a, **kw): raise RuntimeError("torchaudio.save unavailable in NGC-compat mode")\ndef list_audio_backends(): return ["soundfile"]\n' > \
+# NGC torch ABI is incompatible with torchaudio C extensions.
+# Pin torchaudio==2.5.1 which has all symbols pyannote.audio 3.3.2 needs
+# (AudioMetaData, list_audio_backends, info, load, save) in its pure-Python
+# _backend module. Patch __init__.py to import from real submodules while
+# skipping C-extension-dependent modules (datasets, models, transforms).
+RUN pip install --no-cache-dir --no-deps "torchaudio==2.5.1" && \
+    printf '__version__ = "2.5.1-ngc-compat"\nfrom . import _extension\nfrom ._backend import AudioMetaData, info, load, save, list_audio_backends, set_audio_backend, get_audio_backend\nfrom . import compliance, functional\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py && \
-    printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\ndef fail_if_no_align(*a, **kw): pass\ndef fail_if_no_sox(*a, **kw): pass\ndef fail_if_no_ffmpeg(*a, **kw): pass\ndef fail_if_no_soundfile(*a, **kw): pass\ndef fail_if_no_kaldi(*a, **kw): pass\n' > \
+    printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\n_IS_RIR_AVAILABLE = False\n_IS_ALIGN_AVAILABLE = False\nclass _MockLazy:\n    def is_available(self): return False\n    def __getattr__(self, name): return None\ndef lazy_import_sox_ext(): return _MockLazy()\ndef fail_if_no_align(fn): return fn\ndef fail_if_no_rir(fn): return fn\ndef fail_if_no_sox(fn): return fn\ndef fail_if_no_ffmpeg(fn): return fn\ndef fail_if_no_soundfile(fn): return fn\ndef fail_if_no_kaldi(fn): return fn\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py
 
 # pyannote.audio.core.task imports torch_audiomentations for training-time
@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir --no-deps torchaudio && \
 RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torch_audiomentations/core \
              /usr/local/lib/python3.12/dist-packages/torch_audiomentations/augmentations \
              /usr/local/lib/python3.12/dist-packages/torch_audiomentations/utils && \
-    printf '__version__ = "stub"\nclass Identity:\n    pass\n' > \
+    printf '__version__ = "stub"\nclass Identity:\n    pass\nclass Mix:\n    pass\n' > \
     /usr/local/lib/python3.12/dist-packages/torch_audiomentations/__init__.py && \
     printf '' > \
     /usr/local/lib/python3.12/dist-packages/torch_audiomentations/core/__init__.py && \
