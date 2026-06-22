@@ -469,6 +469,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
         ).resultText
       }
+    case .getTaskAgentStatus:
+      let result = TaskAgentStatusRegistry.shared.voiceSummary()
+      log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
+      session?.sendToolResult(callId: callId, name: name, output: result)
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
       let query = arg("query")

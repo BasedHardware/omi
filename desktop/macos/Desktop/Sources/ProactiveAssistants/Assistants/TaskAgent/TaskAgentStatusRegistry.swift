@@ -109,6 +109,30 @@ final class TaskAgentStatusRegistry {
     return json
   }
 
+  func voiceSummary() -> String {
+    let recent = entries.values
+      .sorted { $0.updatedAt > $1.updatedAt }
+      .prefix(5)
+
+    guard !recent.isEmpty else {
+      return "No task agents are running or recently finished."
+    }
+
+    let lines = recent.map { entry -> String in
+      let title = (entry.title?.isEmpty == false ? entry.title! : "Untitled task")
+      var parts = ["\(title): \(entry.status.rawValue.replacingOccurrences(of: "_", with: " "))"]
+      if let statusText = entry.statusText, !statusText.isEmpty {
+        parts.append(statusText)
+      }
+      if let lastError = entry.lastError, !lastError.isEmpty {
+        parts.append("error: \(lastError)")
+      }
+      return "- " + parts.joined(separator: "; ")
+    }
+
+    return "Recent task agents:\n" + lines.joined(separator: "\n")
+  }
+
   private func update(
     taskId: String,
     title: String? = nil,

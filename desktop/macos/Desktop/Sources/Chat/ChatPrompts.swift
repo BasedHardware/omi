@@ -474,65 +474,7 @@ struct ChatPrompts {
     </critical_accuracy_rules>
 
     <tools>
-    You have 7 tools. ALWAYS use them before answering — don't guess when you can look it up.
-
-    **execute_sql**: Run SQL on the local omi.db database.
-    - Supports: SELECT, INSERT, UPDATE, DELETE
-    - SELECT auto-limits to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE blocked.
-    - Use for: personal facts, app usage stats, time queries, task management, aggregations, anything structured.
-    - Supports FTS5 MATCH queries for keyword search (see schema for FTS tables and patterns).
-
-    **semantic_search**: Vector similarity search on screen history.
-    - Use for: fuzzy conceptual queries where exact SQL keywords won't work.
-    - e.g. "reading about machine learning", "working on design mockups"
-    - Parameters: query (required), days (default 7), app_filter (optional)
-
-    **search_tasks**: Vector similarity search on tasks (action_items + staged_tasks).
-    - Use for: finding tasks by meaning, not just keywords.
-    - e.g. "tasks about shopping", "anything related to the presentation"
-    - Parameters: query (required), include_completed (default false)
-    - More reliable than hand-writing MATCH queries for task search.
-
-    **get_daily_recap**: Pre-formatted activity recap (apps, conversations, tasks, focus, memories, observations).
-    - Use for: "what did I do today/yesterday/this week" — single tool call, much faster than multiple SQL queries.
-    - Parameters: days_ago (0=today, 1=yesterday, 7=past week, default: 1)
-
-    **complete_task**: Toggle a task's completion status.
-    - Takes: task_id (the backendId from action_items table)
-    - Use for: marking tasks done or uncompleting them
-    - First use execute_sql to find the task, then use this tool with its backendId
-
-    **delete_task**: Delete a task permanently.
-    - Takes: task_id (the backendId from action_items table)
-    - Use for: removing tasks the user no longer needs
-    - First use execute_sql to find the task, then use this tool with its backendId
-
-    **save_knowledge_graph**: Save a knowledge graph of entities and relationships extracted from the user's data.
-    - Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label})
-    - node_type must be one of: person, organization, place, thing, concept
-    - Use when: exploring the user's files during onboarding to build their knowledge graph
-    - Deduplication is handled automatically — just provide all entities you find
-
-    **CRITICAL — When to use tools proactively:**
-    The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is in the database.
-    For ANY personal question (age, preferences, relationships, habits, past events, "what do you know about me", etc.):
-    1. FIRST check <user_facts> — if the answer is there, use it directly.
-    2. If NOT in <user_facts>, ALWAYS query the memories table before saying you don't know.
-    3. For questions about past events or conversations, query transcription_sessions/transcription_segments.
-    NEVER say "I don't know" or "I don't have that info" without checking the database first.
-
-    **When to use which tool:**
-    - "how old am I?" / "what's my name?" / personal facts → execute_sql (query memories table)
-    - "what did I do yesterday?" → get_daily_recap (single tool call, returns formatted summary)
-    - "what apps did I use most?" → execute_sql (GROUP BY appName, COUNT)
-    - "find where I was reading about AI" → semantic_search (conceptual)
-    - "find tasks about shopping" → search_tasks (semantic task search)
-    - "create a task to buy milk" → execute_sql (INSERT INTO action_items)
-    - "what are my tasks?" → execute_sql (SELECT FROM action_items)
-    - "complete the first task" → execute_sql to find backendId, then complete_task
-    - "delete that task" → execute_sql to find backendId, then delete_task
-    - "show my conversations" → execute_sql (SELECT FROM transcription_sessions)
-    - "what did I talk about with John?" → execute_sql (search transcription_segments)
+    \(DesktopCapabilityRegistry.desktopToolPrompt)
 
     {database_schema}
 

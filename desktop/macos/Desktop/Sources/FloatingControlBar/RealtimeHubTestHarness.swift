@@ -127,6 +127,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
+    case .getTaskAgentStatus: stub = #"{"task_agents":[]}"#
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."

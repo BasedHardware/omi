@@ -95,14 +95,52 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Vector similarity search on tasks"))
     }
 
-    func testToolPromptHas7Tools() {
+    func testToolPromptDoesNotPinStaleToolCount() {
         let prompt = ChatPrompts.desktopChat
-        XCTAssertTrue(prompt.contains("You have 7 tools"))
+        XCTAssertFalse(prompt.contains("You have 7 tools"))
+        XCTAssertFalse(prompt.contains("You have \(DesktopCapabilityRegistry.desktopToolNames.count) Omi tools"))
     }
 
     func testToolPromptListsSearchTasksInWhenToUse() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("find tasks about shopping"))
+    }
+
+    func testDesktopPromptMentionsEveryDesktopCapability() {
+        let prompt = ChatPrompts.desktopChat
+        for toolName in DesktopCapabilityRegistry.desktopToolNames {
+            XCTAssertTrue(prompt.contains("**\(toolName)**"), "Missing desktop capability \(toolName)")
+        }
+    }
+
+    func testDesktopPromptMentionsTaskAgentStatus() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**get_task_agent_status**"))
+        XCTAssertTrue(prompt.contains("your subagents"))
+        XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
+    }
+
+    func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
+        let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
+            .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
+
+        for toolName in DesktopCapabilityRegistry.desktopToolNames {
+            XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
+        }
+    }
+
+    private func readToolNames(from relativePath: String) throws -> Set<String> {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let desktopDir = testFile.deletingLastPathComponent().deletingLastPathComponent()
+        let macOSDir = desktopDir.deletingLastPathComponent()
+        let file = macOSDir.appendingPathComponent(relativePath)
+        let text = try String(contentsOf: file)
+        let regex = try NSRegularExpression(pattern: #"name:\s*"([^"]+)""#)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Set(regex.matches(in: text, range: range).compactMap { match in
+            guard let nameRange = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[nameRange])
+        })
     }
 
     // MARK: - Table Annotations Completeness
