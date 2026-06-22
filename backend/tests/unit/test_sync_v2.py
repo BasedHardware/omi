@@ -1593,7 +1593,19 @@ class TestAsyncCoordinatorBehavioral:
             captured_target = {}
 
             def _capture_target(
-                path, uid, response, lock, errors, source, is_locked, prefs, cache, target_cid, turnstile
+                path,
+                uid,
+                response,
+                lock,
+                errors,
+                source,
+                is_locked,
+                prefs,
+                cache,
+                target_cid,
+                turnstile,
+                private_cloud_sync_enabled=False,
+                data_protection_level=None,
             ):
                 captured_target['value'] = target_cid
                 response['new_memories'].add('m1')
