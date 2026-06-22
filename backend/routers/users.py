@@ -1224,16 +1224,16 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 def start_user_trial(uid: str = Depends(auth.get_current_user_uid)):
     """Opt the user into the desktop 3-day premium trial.
 
-    Idempotent: if the user already started a trial (or got lazy-backfilled
-    by `get_trial_metadata`), this is a no-op and returns the existing
-    metadata. Otherwise writes `subscription.trial_started_at = now()` and
-    invalidates the paywall cache so the countdown UI flips on the next
-    poll.
+    Idempotent and eligibility-gated. Delegates to `get_trial_metadata` first,
+    which performs the legacy mid-trial lazy backfill and computes eligibility.
+    A fresh start timestamp is written only when the user is actually eligible
+    (`trial_available`) and hasn't already started/backfilled — so a legacy
+    mid-trial user's clock is never reset, and ineligible users (paid / BYOK /
+    trial already used) can't mint a trial through this endpoint.
     """
-    raw_subscription = users_db.get_user_subscription(uid)
-    already_started = getattr(raw_subscription, 'trial_started_at', None) if raw_subscription else None
-    if already_started:
-        return get_trial_metadata(uid)
+    metadata = get_trial_metadata(uid)
+    if metadata.trial_started_at is not None or not metadata.trial_available:
+        return metadata
 
     now_seconds = int(datetime.now(timezone.utc).timestamp())
     users_db.set_subscription_trial_started_at(uid, now_seconds)
