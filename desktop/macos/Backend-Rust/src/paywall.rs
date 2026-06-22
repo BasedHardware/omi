@@ -35,6 +35,12 @@ const FALLBACK_TTL: Duration = Duration::from_secs(30);
 /// Trial length: 3 days in seconds (matches Python `TRIAL_LENGTH_SECONDS`).
 const TRIAL_LENGTH_SECONDS: i64 = 3 * 24 * 60 * 60;
 
+fn auth_emulator_active() -> bool {
+    std::env::var("FIREBASE_AUTH_EMULATOR_HOST")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Copy)]
 struct CacheEntry {
     paywalled: bool,
@@ -80,6 +86,10 @@ impl PaywallChecker {
         request_headers: &HeaderMap,
         byok_stripped: bool,
     ) -> bool {
+        if auth_emulator_active() {
+            return false;
+        }
+
         // BYOK escape hatch: a request carrying all 4 BYOK provider headers
         // is never paywalled, regardless of cached state. This handles the
         // race where Firestore hasn't caught up after BYOK activation.
