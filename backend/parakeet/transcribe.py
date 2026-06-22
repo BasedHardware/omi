@@ -63,9 +63,11 @@ def get_builtin_embedding_model():
 
                 _torch.load = _patched_load
             # pyannote.audio 3.3.2 check_version fails on stubbed torchaudio
+            _orig_check_version = None
             try:
                 import pyannote.audio.core.model as _pam
 
+                _orig_check_version = _pam.check_version
                 _pam.check_version = lambda *a, **kw: None
             except (ImportError, AttributeError):
                 pass
@@ -76,6 +78,8 @@ def get_builtin_embedding_model():
             finally:
                 if _orig_load is not None:
                     _torch.load = _orig_load
+                if _orig_check_version is not None:
+                    _pam.check_version = _orig_check_version
             inference = _PyannoteInference(model, window="whole")
             if _torch is not None and _torch.cuda.is_available():
                 inference.to(_torch.device("cuda"))

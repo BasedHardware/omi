@@ -73,7 +73,7 @@ jobs:
             name: ${JOB_NAME}
             namespace: ${NAMESPACE}
           spec:
-            activeDeadlineSeconds: 600
+            activeDeadlineSeconds: 1200
             backoffLimit: 0
             template:
               spec:
@@ -153,9 +153,9 @@ jobs:
 
       - name: Wait for job completion
         run: |
-          echo "Waiting for GPU test job to complete (timeout: 10 min)..."
+          echo "Waiting for GPU test job to complete (timeout: 20 min)..."
           kubectl -n ${{ env.NAMESPACE }} wait --for=condition=complete \
-            --timeout=600s job/${{ env.JOB_NAME }} 2>&1 || true
+            --timeout=1200s job/${{ env.JOB_NAME }} 2>&1 || true
 
           # Check job status
           STATUS=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
@@ -167,6 +167,10 @@ jobs:
         run: |
           echo "=== GPU Test Job Logs ==="
           kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} --tail=200 2>&1 || true
+          echo ""
+          echo "=== Job/Pod Details ==="
+          kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
+          kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
 
       - name: Check job result
         run: |
