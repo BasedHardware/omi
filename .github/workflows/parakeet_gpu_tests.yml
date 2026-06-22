@@ -128,10 +128,12 @@ jobs:
                           sleep 1
                         done
 
+                        set +e
                         DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
                         python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
                           --tb=short 2>&1
                         BENCH_EXIT=$?
+                        set -e
 
                         kill $SERVER_PID 2>/dev/null || true
                         wait $SERVER_PID 2>/dev/null || true
