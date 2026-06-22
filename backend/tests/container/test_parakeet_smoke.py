@@ -176,37 +176,56 @@ class TestFunctionalCPU:
 class TestGPUInference:
     """Tests that require GPU -- run with: docker run --gpus all ..."""
 
-    def test_model_loads_on_gpu(self):
-        from transcribe import get_builtin_embedding_model
+    def test_embedding_model_loads_on_gpu_worker(self):
+        from gpu_worker import GPUWorker
 
-        model = get_builtin_embedding_model()
-        assert model is not None, (
-            "Model failed to load -- check pyannote import chain, " "torch.load monkey-patch, and check_version bypass"
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        assert worker._embedding_model is not None, (
+            "Embedding model failed to load on GPU worker -- "
+            "check pyannote import chain, torch.load monkey-patch, and check_version bypass"
         )
+        worker.stop()
 
     def test_monkey_patches_restored_after_model_load(self):
-        """Regression: torch.load and check_version must be restored after model load."""
+        """Regression: torch.load and check_version must be restored after GPU worker model load."""
         import pyannote.audio.core.model as pam
 
         orig_load = torch.load
         orig_check = pam.check_version
 
-        from transcribe import get_builtin_embedding_model
+        from gpu_worker import GPUWorker
 
-        get_builtin_embedding_model()
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
 
         assert torch.load is orig_load, "torch.load not restored after model load"
         assert pam.check_version is orig_check, "check_version not restored after model load"
+        worker.stop()
 
     def test_embedding_produces_256_dims(self):
-        from transcribe import _get_embedding_builtin, get_builtin_embedding_model
+        from gpu_worker import GPUWorker
+        from transcribe import wav_bytes_to_waveform
 
-        model = get_builtin_embedding_model()
-        if model is None:
-            pytest.skip("Model not available")
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        if worker._embedding_model is None:
+            worker.stop()
+            pytest.skip("Embedding model not available")
 
         wav_bytes = _make_wav_bytes(duration_s=2.0, sample_rate=16000)
-        emb = _get_embedding_builtin(wav_bytes, model)
+        waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
+        emb = worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+        worker.stop()
+
+        import numpy as np
+
+        emb = np.array(emb, dtype=np.float32)
+        if emb.ndim == 1:
+            emb = emb.reshape(1, -1)
         assert emb is not None, "Embedding extraction returned None"
         assert emb.shape == (1, 256), f"Expected (1, 256), got {emb.shape}"
 
@@ -215,9 +234,15 @@ class TestGPUInference:
         import os
         import tempfile
 
-        from transcribe import _diarize_segments
+        from gpu_worker import GPUWorker
+        from transcribe import _diarize_segments, set_gpu_worker
 
         os.environ.pop("HOSTED_SPEAKER_EMBEDDING_API_URL", None)
+
+        worker = GPUWorker()
+        worker.start()
+        worker.wait_ready(timeout=300)
+        set_gpu_worker(worker)
 
         wav_bytes = _make_wav_bytes(duration_s=3.0, sample_rate=16000)
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -234,3 +259,4 @@ class TestGPUInference:
             assert result["segments"][0]["speaker"].startswith("SPEAKER_")
         finally:
             os.unlink(tmp_path)
+            worker.stop()

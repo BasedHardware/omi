@@ -1,7 +1,6 @@
 import io
 import os
 import logging
-import threading
 import wave as _wave
 
 import httpx
@@ -30,65 +29,9 @@ try:
 except ImportError:
     _torch = None
 
-try:
-    from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
-except ImportError:
-    _PyannoteModel = None
-    _PyannoteInference = None
 
-_embedding_model = None
-_embedding_lock = threading.Lock()
-
-
-def get_builtin_embedding_model():
-    global _embedding_model
-    if _embedding_model is not None:
-        return _embedding_model
-    with _embedding_lock:
-        if _embedding_model is not None:
-            return _embedding_model
-        try:
-            if _PyannoteModel is None or _PyannoteInference is None:
-                logger.warning("pyannote.audio not installed, built-in embedding unavailable")
-                return None
-            # PyTorch 2.6+ defaults weights_only=True which rejects older checkpoints.
-            # Scope the patch: restore torch.load after model loading completes.
-            _orig_load = None
-            if _torch is not None and hasattr(_torch, 'load'):
-                _orig_load = _torch.load
-
-                def _patched_load(*args, **kwargs):
-                    kwargs["weights_only"] = False
-                    return _orig_load(*args, **kwargs)
-
-                _torch.load = _patched_load
-            # pyannote.audio 3.3.2 check_version fails on stubbed torchaudio
-            _orig_check_version = None
-            try:
-                import pyannote.audio.core.model as _pam
-
-                _orig_check_version = _pam.check_version
-                _pam.check_version = lambda *a, **kw: None
-            except (ImportError, AttributeError):
-                pass
-            try:
-                model = _PyannoteModel.from_pretrained(
-                    "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
-                )
-            finally:
-                if _orig_load is not None:
-                    _torch.load = _orig_load
-                if _orig_check_version is not None:
-                    _pam.check_version = _orig_check_version
-            inference = _PyannoteInference(model, window="whole")
-            if _torch is not None and _torch.cuda.is_available():
-                inference.to(_torch.device("cuda"))
-            _embedding_model = inference
-            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
-            return _embedding_model
-        except Exception as e:
-            logger.warning(f"Could not load built-in embedding model: {e}")
-            return None
+def has_builtin_embedding():
+    return _gpu_worker is not None and _gpu_worker.is_ready and _gpu_worker._embedding_model is not None
 
 
 def wav_bytes_to_waveform(wav_bytes: bytes):
@@ -285,7 +228,7 @@ def _transcribe_nim(file_path: str):
 
 
 def _diarize_segments(file_path: str, base: dict) -> dict:
-    if not SPEAKER_EMBEDDING_URL and get_builtin_embedding_model() is None:
+    if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
@@ -358,9 +301,8 @@ def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
 
 
 def _get_embedding(wav_bytes: bytes):
-    model = get_builtin_embedding_model()
-    if model is not None:
-        emb = _get_embedding_builtin(wav_bytes, model)
+    if has_builtin_embedding():
+        emb = _get_embedding_builtin(wav_bytes)
         if emb is not None:
             return emb
     if SPEAKER_EMBEDDING_URL:
@@ -368,13 +310,15 @@ def _get_embedding(wav_bytes: bytes):
     return None
 
 
-def _get_embedding_builtin(wav_bytes: bytes, model):
+def _get_embedding_builtin(wav_bytes: bytes):
     try:
         waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
         dur = waveform.shape[1] / sample_rate
         if dur < MIN_SEGMENT_DURATION:
             return None
-        emb = model({"waveform": waveform, "sample_rate": sample_rate})
+        emb = _gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+        if emb is None:
+            return None
         emb = np.array(emb, dtype=np.float32)
         if emb.ndim == 1:
             emb = emb.reshape(1, -1)
