@@ -59,6 +59,7 @@ final class TaskAgentStatusRegistry {
     }
     entry.updatedAt = Date()
     entries[taskId] = entry
+    pruneIfNeeded()
   }
 
   func markRunning(taskId: String, title: String? = nil, statusText: String = "Responding...") {
@@ -70,6 +71,7 @@ final class TaskAgentStatusRegistry {
     entry.statusText = statusText
     entry.updatedAt = Date()
     entries[taskId] = entry
+    pruneIfNeeded()
   }
 
   func markCompleted(taskId: String) {
