@@ -22,7 +22,7 @@ RUN pip install --no-cache-dir --no-deps --force-reinstall \
 # (wespeaker needs kaldi.fbank for mel filterbank features), then patch
 # __init__.py to skip the C extension loader and only expose compliance.
 RUN pip install --no-cache-dir --no-deps torchaudio && \
-    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nfrom . import functional\n' > \
+    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nclass AudioMetaData:\n    def __init__(self, sample_rate=0, num_frames=0, num_channels=0, bits_per_sample=0, encoding=""):\n        self.sample_rate = sample_rate\n        self.num_frames = num_frames\n        self.num_channels = num_channels\n        self.bits_per_sample = bits_per_sample\n        self.encoding = encoding\ndef info(*a, **kw): raise RuntimeError("torchaudio.info unavailable in NGC-compat mode")\ndef load(*a, **kw): raise RuntimeError("torchaudio.load unavailable in NGC-compat mode")\ndef save(*a, **kw): raise RuntimeError("torchaudio.save unavailable in NGC-compat mode")\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py && \
     printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\ndef fail_if_no_align(*a, **kw): pass\ndef fail_if_no_sox(*a, **kw): pass\ndef fail_if_no_ffmpeg(*a, **kw): pass\ndef fail_if_no_soundfile(*a, **kw): pass\ndef fail_if_no_kaldi(*a, **kw): pass\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py
