@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=_source_local_dev_env.sh
+source "$(dirname "$0")/_source_local_dev_env.sh"
 cd "$(dirname "$0")/../.."
-USER_PROFILE="${1:-}"
-if [ -z "$USER_PROFILE" ]; then
-  echo "Usage: make desktop-run-local USER=<profile> (for example USER=alice)" >&2
-  exit 2
-fi
+USER_PROFILE="${1:-alice}"
 
 PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY' "$USER_PROFILE"
 from __future__ import annotations
@@ -24,7 +22,7 @@ from dev_harness.cli import _current_scenario_manifest, _scenario_users_from_see
 user = sys.argv[1]
 repo = Path.cwd()
 cfg = config.load_config(repo, create_layout=False)
-print("Omi Dev Local desktop launcher")
+print("Omi Dev local harness desktop launcher")
 print(f"instance: {cfg.instance}")
 print(f"provider_mode: {cfg.provider_mode}")
 print(f"state_root: {cfg.layout.state_root}")
