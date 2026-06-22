@@ -2,6 +2,11 @@
 .env*
 !.env.template
 !.env.example
+!.env.local-dev.template
+!.env.dev.template
+!.env.prod.template
+!.env.offline.template
+!.envrc.example
 *__pycache__/
 *venv/
 libraries/
@@ -9,6 +14,7 @@ myenv/
 venv/
 .DS_Store
 .memory_pipeline_runs/
+.local/
 dump/
 /scripts/
 *.zip
