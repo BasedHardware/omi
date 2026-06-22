@@ -807,11 +807,7 @@ def update_user_subscription(uid: str, subscription_data: dict):
 
     user_ref = db.collection('users').document(uid)
 
-    # Preserve the opt-in trial start across full-map replaces. Callers that
-    # rebuild the subscription from a Stripe object have no knowledge of
-    # trial_started_at, so without this a later plan change would null it out
-    # and make the user eligible for a second trial. Carry the stored value
-    # forward unless this write explicitly sets one.
+    # Carry trial_started_at forward so full-map writers (e.g. Stripe rebuilds) don't null it out.
     if not subscription_data_to_store.get('trial_started_at'):
         snapshot = user_ref.get()
         existing = (snapshot.to_dict() or {}).get('subscription') or {} if snapshot.exists else {}
@@ -823,13 +819,7 @@ def update_user_subscription(uid: str, subscription_data: dict):
 
 
 def set_subscription_trial_started_at(uid: str, started_at: int) -> None:
-    """Record the explicit moment a user opted into the desktop 3-day trial.
-
-    Dotted-path update so Stripe-managed fields (current_period_end,
-    stripe_subscription_id, plan, status, ...) sitting in the same
-    `subscription` map are not clobbered. `update_user_subscription` above
-    replaces the whole map and is unsafe for this single-field write.
-    """
+    """Record when a user opted into the trial. Dotted-path update to avoid clobbering other subscription fields."""
     user_ref = db.collection('users').document(uid)
     user_ref.update({'subscription.trial_started_at': started_at})
 

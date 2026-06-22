@@ -341,9 +341,7 @@ class AppState: ObservableObject {
       let metadata = try await APIClient.shared.startTrial()
       await MainActor.run {
         self.trialMetadata = metadata
-        // Sync paywall state immediately — otherwise a user who opted in while
-        // paywalled (e.g. an expired old account starting a fresh trial) stays
-        // blocked until the next metadata poll. Mirrors fetchTrialMetadata.
+        // Sync paywall immediately so an opted-in user isn't blocked until the next poll.
         if APIKeyService.isByokActive {
           if self.isPaywalled { self.isPaywalled = false }
         } else if metadata.trialExpired && !self.isPaywalled {

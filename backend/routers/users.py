@@ -1222,15 +1222,7 @@ def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/users/me/trial/start', tags=['users'], response_model=TrialMetadata)
 def start_user_trial(uid: str = Depends(auth.get_current_user_uid)):
-    """Opt the user into the desktop 3-day premium trial.
-
-    Idempotent and eligibility-gated. Delegates to `get_trial_metadata` first,
-    which performs the legacy mid-trial lazy backfill and computes eligibility.
-    A fresh start timestamp is written only when the user is actually eligible
-    (`trial_available`) and hasn't already started/backfilled — so a legacy
-    mid-trial user's clock is never reset, and ineligible users (paid / BYOK /
-    trial already used) can't mint a trial through this endpoint.
-    """
+    """Opt the user into the desktop 3-day premium trial. Idempotent and eligibility-gated."""
     metadata = get_trial_metadata(uid)
     if metadata.trial_started_at is not None or not metadata.trial_available:
         return metadata
