@@ -6,10 +6,6 @@ on:
       image_tag:
         description: 'Docker image tag to test (e.g. abc1234)'
         required: true
-      environment:
-        description: 'GKE environment'
-        required: true
-        default: 'development'
   schedule:
     # Nightly at 03:00 UTC — tests latest dev image
     - cron: '0 3 * * *'
@@ -18,7 +14,7 @@ env:
   SERVICE: parakeet
   REGION: us-central1
   NAMESPACE: dev-omi-backend
-  JOB_NAME: parakeet-gpu-test
+  JOB_NAME: parakeet-gpu-test-${{ github.run_id }}
 
 jobs:
   gpu-tests:
