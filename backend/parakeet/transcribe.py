@@ -51,6 +51,14 @@ def get_builtin_embedding_model():
             if _PyannoteModel is None or _PyannoteInference is None:
                 logger.warning("pyannote.audio not installed, built-in embedding unavailable")
                 return None
+            # PyTorch 2.6+ defaults weights_only=True which rejects older checkpoints
+            try:
+                if _torch is not None and hasattr(_torch.serialization, 'add_safe_globals'):
+                    from torch.torch_version import TorchVersion
+
+                    _torch.serialization.add_safe_globals([TorchVersion])
+            except (ImportError, AttributeError):
+                pass
             model = _PyannoteModel.from_pretrained(
                 "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
             )
