@@ -118,6 +118,15 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("**get_task_agent_status**"))
         XCTAssertTrue(prompt.contains("your subagents"))
         XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
+        XCTAssertTrue(prompt.contains("floating_agent_pills"))
+    }
+
+    func testDesktopPromptCanSpawnAndManageFloatingAgents() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**spawn_agent**"))
+        XCTAssertTrue(prompt.contains("call spawn_agent"))
+        XCTAssertTrue(prompt.contains("**manage_agent_pills**"))
+        XCTAssertTrue(prompt.contains("circular floating agent pills"))
     }
 
     func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {

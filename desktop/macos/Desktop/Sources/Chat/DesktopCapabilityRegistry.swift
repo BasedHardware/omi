@@ -197,19 +197,31 @@ enum DesktopCapabilityRegistry {
       title: "Task Agent Status",
       latency: .fastLocal,
       surfaces: [.desktopChat, .realtimeHub],
-      summary: "Inspect Omi's local task-chat agents/subagents.",
+      summary: "Inspect Omi's local task-chat agents/subagents and floating agent pills.",
       bullets: [
-        "Use when the user asks about your subagents, task agents, background agents, running agents, errors, or timeouts.",
-        "Call this before claiming there are no subagents or before diagnosing a task-agent timeout."
+        "Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts.",
+        "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
+        "Returns both task_agents and floating_agent_pills; floating_agent_pills are the circular agent pills below the floating bar."
       ]),
     Capability(
       toolName: "spawn_agent",
       title: "Spawn Agent",
       latency: .asyncBackground,
-      surfaces: [.realtimeHub],
-      summary: "Hand multi-step work to a background agent and return immediately.",
+      surfaces: [.desktopChat, .realtimeHub],
+      summary: "Hand multi-step work to a floating background agent pill and return immediately.",
       bullets: [
-        "Use for acting in other apps or multi-step work. This is the only realtime tool that starts a background agent."
+        "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
+        "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it."
+      ]),
+    Capability(
+      toolName: "manage_agent_pills",
+      title: "Manage Agent Pills",
+      latency: .fastLocal,
+      surfaces: [.desktopChat, .realtimeHub],
+      summary: "List, dismiss, or clear completed floating agent pills.",
+      bullets: [
+        "Use after get_task_agent_status when the user asks to manage the circular floating agent pills.",
+        "Actions: list, dismiss with agent_id, or clear_completed."
       ]),
     Capability(
       toolName: "ask_higher_model",
@@ -276,6 +288,8 @@ enum DesktopCapabilityRegistry {
     - Create/update tasks -> create_action_item/update_action_item when available; use execute_sql only for exact local inspection or legacy local writes.
     - Complete/delete local tasks -> find the backendId, then complete_task/delete_task.
     - Subagents/task-agent status -> get_task_agent_status.
+    - Start a floating-bar subagent/background agent -> spawn_agent.
+    - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
     - Onboarding knowledge graph -> save_knowledge_graph.
     """
   }
@@ -284,7 +298,8 @@ enum DesktopCapabilityRegistry {
     """
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
-    - You can inspect your local task-chat agents/subagents with get_task_agent_status. If the user asks about your subagents, background agents, running agents, or task-agent errors/timeouts, call it before answering.
+    - You can inspect your local task-chat agents/subagents and floating agent pills with get_task_agent_status. If the user asks about your subagents, background agents, running agents, finished agents, or task-agent errors/timeouts, call it before answering.
+    - You can manage circular floating agent pills with manage_agent_pills after checking status.
     - You can start a background agent with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
     """
   }

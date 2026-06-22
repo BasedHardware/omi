@@ -927,8 +927,8 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 14 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 14);
+test("OMI_TOOLS: exactly 17 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 17);
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -972,6 +972,9 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     execute_sql: ["query"],
     semantic_search: ["query"],
     get_daily_recap: [],
+    get_task_agent_status: [],
+    spawn_agent: ["brief"],
+    manage_agent_pills: ["action"],
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],

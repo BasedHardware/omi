@@ -10,6 +10,8 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
         XCTAssertTrue(instr.contains("spawn_agent"))                          // guardrails preserved
         XCTAssertTrue(instr.contains("get_task_agent_status"))
+        XCTAssertTrue(instr.contains("manage_agent_pills"))
+        XCTAssertTrue(instr.contains("floating agent pills"))
         XCTAssertTrue(instr.contains("subagents"))
         XCTAssertTrue(instr.contains("get_daily_recap"))
         XCTAssertTrue(instr.contains("ask_higher_model"))
@@ -26,5 +28,14 @@ final class HubSystemInstructionTests: XCTestCase {
         let statusTool = tools.first { ($0["name"] as? String) == HubTool.getTaskAgentStatus.rawValue }
         XCTAssertNotNil(statusTool)
         XCTAssertTrue((statusTool?["description"] as? String ?? "").contains("subagents"))
+        XCTAssertTrue((statusTool?["description"] as? String ?? "").contains("floating agent pills"))
+    }
+
+    func testRealtimeAgentPillManagementToolIsExposed() {
+        let tools = RealtimeHubTools.openAITools
+        let manageTool = tools.first { ($0["name"] as? String) == HubTool.manageAgentPills.rawValue }
+        XCTAssertNotNil(manageTool)
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
+        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear completed"))
     }
 }

@@ -113,6 +113,9 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "get_task_agent_status": return "Checking agents"
+        case "spawn_agent": return "Starting agent"
+        case "manage_agent_pills": return "Managing agents"
         case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
@@ -165,6 +168,18 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "spawn_agent":
+            summary = (input["brief"] ?? input["query"]) as? String
+        case "manage_agent_pills":
+            if let action = input["action"] as? String {
+                if let agentId = input["agent_id"] as? String, !agentId.isEmpty {
+                    summary = "\(action) \(agentId)"
+                } else {
+                    summary = action
+                }
+            } else {
+                summary = nil
+            }
         case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
@@ -336,6 +351,8 @@ struct MessageMetadata {
             "execute_sql",
             "semantic_search",
             "get_task_agent_status",
+            "spawn_agent",
+            "manage_agent_pills",
             "search_tasks",
             "get_daily_recap",
             "complete_task",

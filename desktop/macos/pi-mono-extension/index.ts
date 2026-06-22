@@ -568,14 +568,45 @@ export const OMI_TOOLS = [
   omiTool({
     name: "get_task_agent_status",
     label: "Task Agent Status",
-    description: "Inspect Omi's local task-chat agents/subagents. Use when the user asks about your subagents, task agents, running agents, errors, or timeouts.",
-    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agent status/errors/timeouts",
+    description: "Inspect Omi's local task-chat agents/subagents and floating agent pills. Use when the user asks about your subagents, task agents, running agents, finished agents, errors, or timeouts.",
+    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agents and floating agent pills",
     promptGuidelines: [
       "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
       "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
+      "The floating_agent_pills array is the circular agent UI below the floating bar, and includes running and finished pill agents.",
     ],
     properties: {},
     required: [],
+  }),
+  omiTool({
+    name: "spawn_agent",
+    label: "Spawn Agent",
+    description: "Start a floating background agent pill. Use when the user explicitly asks to run, start, spawn, or launch a subagent/background agent, or for multi-step work in other apps/browser/files.",
+    promptSnippet: "spawn_agent - Start a floating background agent pill",
+    promptGuidelines: [
+      "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
+      "Return immediately after spawning; the pill keeps working in the background.",
+    ],
+    properties: {
+      brief: Type.String({ description: "Clear, self-contained task brief for the background agent." }),
+      title: Type.Optional(Type.String({ description: "Short Title Case label for the agent pill." })),
+    },
+    required: ["brief"],
+  }),
+  omiTool({
+    name: "manage_agent_pills",
+    label: "Manage Agent Pills",
+    description: "List, dismiss, or clear completed floating agent pills shown below the floating bar.",
+    promptSnippet: "manage_agent_pills - List, dismiss, or clear completed floating agent pills",
+    promptGuidelines: [
+      "Call get_task_agent_status first when dismissing a specific pill so you have its id.",
+      "Use clear_completed only when the user asks to clear finished/done agents.",
+    ],
+    properties: {
+      action: Type.String({ enum: ["list", "dismiss", "clear_completed"], description: "Management action." }),
+      agent_id: Type.Optional(Type.String({ description: "Floating agent pill id from get_task_agent_status; required for dismiss." })),
+    },
+    required: ["action"],
   }),
   omiTool({
     name: "search_tasks",

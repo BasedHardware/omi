@@ -89,22 +89,25 @@ final class TaskAgentStatusRegistry {
   }
 
   func snapshotJSON() -> String {
-    let snapshots = entries.values
-      .sorted { $0.updatedAt > $1.updatedAt }
-      .prefix(maxSnapshotEntries)
-      .map { entry in
-        Snapshot(
-          taskId: entry.taskId,
-          title: entry.title,
-          status: entry.status.rawValue,
-          statusText: entry.statusText,
-          lastError: entry.lastError,
-          updatedAt: ISO8601DateFormatter().string(from: entry.updatedAt))
-      }
-
-    let payload: [String: [Snapshot]] = ["task_agents": snapshots]
+    let payload: [String: [Snapshot]] = ["task_agents": snapshots()]
     guard let data = try? encoder.encode(payload), let json = String(data: data, encoding: .utf8) else {
       return "{\"task_agents\":[]}"
+    }
+    return json
+  }
+
+  func combinedSnapshotJSON() -> String {
+    struct CombinedSnapshot: Encodable {
+      let task_agents: [Snapshot]
+      let floating_agent_pills: [AgentPillsManager.Snapshot]
+    }
+
+    let payload = CombinedSnapshot(
+      task_agents: snapshots(),
+      floating_agent_pills: AgentPillsManager.shared.snapshots()
+    )
+    guard let data = try? encoder.encode(payload), let json = String(data: data, encoding: .utf8) else {
+      return "{\"task_agents\":[],\"floating_agent_pills\":[]}"
     }
     return json
   }
@@ -131,6 +134,27 @@ final class TaskAgentStatusRegistry {
     }
 
     return "Recent task agents:\n" + lines.joined(separator: "\n")
+  }
+
+  func combinedSummary() -> String {
+    let taskSummary = voiceSummary()
+    let pillSummary = AgentPillsManager.shared.statusSummary()
+    return "\(taskSummary)\n\n\(pillSummary)"
+  }
+
+  private func snapshots() -> [Snapshot] {
+    entries.values
+      .sorted { $0.updatedAt > $1.updatedAt }
+      .prefix(maxSnapshotEntries)
+      .map { entry in
+        Snapshot(
+          taskId: entry.taskId,
+          title: entry.title,
+          status: entry.status.rawValue,
+          statusText: entry.statusText,
+          lastError: entry.lastError,
+          updatedAt: ISO8601DateFormatter().string(from: entry.updatedAt))
+      }
   }
 
   private func update(

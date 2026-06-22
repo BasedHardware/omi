@@ -47,6 +47,12 @@ class ChatToolExecutor {
     case "get_task_agent_status":
       return await executeTaskAgentStatus()
 
+    case "spawn_agent":
+      return await executeSpawnAgent(toolCall.arguments)
+
+    case "manage_agent_pills":
+      return await executeManageAgentPills(toolCall.arguments)
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
@@ -426,7 +432,37 @@ class ChatToolExecutor {
   // MARK: - Task Agent Status
 
   private static func executeTaskAgentStatus() async -> String {
-    return TaskAgentStatusRegistry.shared.snapshotJSON()
+    return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
+  }
+
+  private static func executeSpawnAgent(_ args: [String: Any]) async -> String {
+    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else {
+      return "Error: Missing brief. Pass a clear, self-contained task brief."
+    }
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let model = ShortcutSettings.shared.selectedModel.isEmpty
+      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    let pill = AgentPillsManager.shared.spawnFromUserQuery(
+      brief,
+      model: model,
+      fromVoice: false,
+      preFetchedTitle: (title?.isEmpty == false) ? title : nil
+    )
+    return """
+    Agent started as a floating agent pill.
+    id: \(pill.id.uuidString)
+    title: \(pill.title)
+    status: \(pill.status.displayLabel)
+    """
+  }
+
+  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
+    let action = ((args["action"] as? String) ?? "list")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
   }
 
   // MARK: - Local Status
