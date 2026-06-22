@@ -12,6 +12,10 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::models::agent::{AgentStatusResponse, AgentVmStatus, ProvisionAgentResponse};
 use crate::AppState;
 
+fn local_harness_agent_disabled() -> bool {
+    std::env::var("ENVIRONMENT").as_deref() == Ok("local-dev-harness")
+}
+
 /// POST /v2/agent/provision
 /// Idempotent — if user already has a VM, returns existing info.
 /// Creates a GCE VM from the omi-agent image family for this user.
@@ -19,6 +23,10 @@ async fn provision_agent_vm(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
 ) -> Result<Json<ProvisionAgentResponse>, StatusCode> {
+    if local_harness_agent_disabled() {
+        tracing::debug!("Agent VM provision disabled in local dev harness");
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
     let user: AuthUser = user.into();
     tracing::info!("Agent VM provision request for user {}", user.uid);
 
@@ -164,6 +172,9 @@ async fn get_agent_status(
     State(state): State<AppState>,
     user: PaywalledAuthUser,
 ) -> Result<Json<Option<AgentStatusResponse>>, StatusCode> {
+    if local_harness_agent_disabled() {
+        return Ok(Json(None));
+    }
     let user: AuthUser = user.into();
     tracing::info!("Agent VM status request for user {}", user.uid);
 
