@@ -104,6 +104,14 @@ class TestGetTrialMetadataExists:
 # ── Behavioral tests: compile and run get_trial_metadata with mocked deps ─────
 
 
+def _make_raw_sub(trial_started_at):
+    """Build a minimal stand-in for the Subscription Pydantic model that just
+    exposes the one field the new get_trial_metadata reads."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(trial_started_at=trial_started_at)
+
+
 def _get_trial_metadata_fn():
     """Extract get_trial_metadata from subscription.py source and compile it."""
     source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text(encoding='utf-8')
@@ -120,17 +128,25 @@ def _get_trial_metadata_fn():
     tls_line = [l for l in source.split('\n') if l.startswith('TRIAL_LENGTH_SECONDS')][0]
     cutoff_line = [l for l in source.split('\n') if l.startswith('NEO_DESKTOP_GRANDFATHER_CUTOFF')][0]
 
+    users_db_mock = MagicMock()
+    # Default: no stored opt-in timestamp. Tests that want a stored value
+    # override `users_db.get_user_subscription.return_value.trial_started_at`.
+    users_db_mock.get_user_subscription.return_value = _make_raw_sub(trial_started_at=None)
+    users_db_mock.set_subscription_trial_started_at = MagicMock()
     namespace = {
         'PlanType': PlanType,
         'TrialMetadata': TrialMetadata,
         'time': time,
         'os': os,
-        'users_db': MagicMock(),
+        'users_db': users_db_mock,
         'firebase_auth': MagicMock(),
         'logger': MagicMock(),
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
         '_request_has_all_byok_keys': lambda: False,
+        # subscription.get_trial_metadata calls plan_grants_desktop to short-circuit
+        # paid-plan users. Stub it as basic-plan → False so the trial code path runs.
+        'plan_grants_desktop': lambda plan, subscription=None: plan not in (PlanType.basic, PlanType.unlimited),
     }
     exec(compile(cutoff_line, '<subscription.py>', 'exec'), namespace)
 
@@ -170,11 +186,19 @@ class TestGetTrialMetadataBehavior:
         self.ns['firebase_auth'].get_user.return_value = user_record
 
     def _mock_user_expired(self, age_seconds=4 * 24 * 3600):
-        """Mock a basic-plan user whose trial has expired."""
+        """Mock a basic-plan user who opted in `age_seconds` ago and is now
+        past the trial window. Uses a stored timestamp (the new opt-in
+        source of truth) rather than relying on Firebase creation alone."""
         sub = MagicMock()
         sub.plan = PlanType.basic
         self.ns['users_db'].get_user_valid_subscription.return_value = sub
         self.ns['users_db'].is_byok_active.return_value = False
+        # Stored opt-in timestamp is what get_trial_metadata reads.
+        self.ns['users_db'].get_user_subscription.return_value = _make_raw_sub(
+            trial_started_at=int(time.time() - age_seconds)
+        )
+        # Firebase still mocked in case lazy-backfill path is taken (it
+        # shouldn't be — stored value is set).
         creation_ms = (time.time() - age_seconds) * 1000
         user_record = MagicMock()
         user_record.user_metadata.creation_timestamp = creation_ms
@@ -473,11 +497,20 @@ class TestTrialBoundaryDynamic:
         self.trial_length = self.ns['TRIAL_LENGTH_SECONDS']
 
     def _mock_user_at_age(self, age_seconds):
-        """Mock a basic-plan user at a specific account age."""
+        """Mock a basic-plan user whose trial was opted into `age_seconds` ago.
+
+        Uses a stored opt-in timestamp (post-refactor source of truth) so the
+        boundary tests cover the explicit-stored-expiry path regardless of
+        the Firebase account age. The Firebase mock stays in place for the
+        rare codepaths that still consult it (lazy backfill — not reached
+        when the stored value is set)."""
         sub = MagicMock()
         sub.plan = PlanType.basic
         self.ns['users_db'].get_user_valid_subscription.return_value = sub
         self.ns['users_db'].is_byok_active.return_value = False
+        self.ns['users_db'].get_user_subscription.return_value = _make_raw_sub(
+            trial_started_at=int(time.time() - age_seconds)
+        )
         creation_ms = (time.time() - age_seconds) * 1000
         user_record = MagicMock()
         user_record.user_metadata.creation_timestamp = creation_ms
@@ -517,11 +550,13 @@ class TestTrialBoundaryDynamic:
         exec(compile(func_source, '<subscription.py>', 'exec'), ns)
         custom_fn = ns['get_trial_metadata']
 
-        # User 30 minutes in — should still be active
+        # User 30 minutes in — should still be active. Stored opt-in
+        # timestamp drives the new logic.
         sub = MagicMock()
         sub.plan = PlanType.basic
         ns['users_db'].get_user_valid_subscription.return_value = sub
         ns['users_db'].is_byok_active.return_value = False
+        ns['users_db'].get_user_subscription.return_value = _make_raw_sub(trial_started_at=int(time.time() - 1800))
         creation_ms = (time.time() - 1800) * 1000
         user_record = MagicMock()
         user_record.user_metadata.creation_timestamp = creation_ms
@@ -546,6 +581,7 @@ class TestTrialBoundaryDynamic:
         sub.plan = PlanType.basic
         ns['users_db'].get_user_valid_subscription.return_value = sub
         ns['users_db'].is_byok_active.return_value = False
+        ns['users_db'].get_user_subscription.return_value = _make_raw_sub(trial_started_at=int(time.time() - 7200))
         creation_ms = (time.time() - 7200) * 1000  # 2 hours ago
         user_record = MagicMock()
         user_record.user_metadata.creation_timestamp = creation_ms

@@ -806,7 +806,22 @@ def update_user_subscription(uid: str, subscription_data: dict):
     subscription_data_to_store.pop('limits', None)
 
     user_ref = db.collection('users').document(uid)
+
+    # Carry trial_started_at forward so full-map writers (e.g. Stripe rebuilds) don't null it out.
+    if not subscription_data_to_store.get('trial_started_at'):
+        snapshot = user_ref.get()
+        existing = (snapshot.to_dict() or {}).get('subscription') or {} if snapshot.exists else {}
+        existing_started = existing.get('trial_started_at')
+        if existing_started:
+            subscription_data_to_store['trial_started_at'] = existing_started
+
     user_ref.update({'subscription': subscription_data_to_store})
+
+
+def set_subscription_trial_started_at(uid: str, started_at: int) -> None:
+    """Record when a user opted into the trial. Dotted-path update to avoid clobbering other subscription fields."""
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'subscription.trial_started_at': started_at})
 
 
 # **************************************

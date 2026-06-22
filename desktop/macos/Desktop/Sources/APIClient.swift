@@ -4011,7 +4011,12 @@ struct CustomerPortalResponse: Codable {
   let url: String
 }
 
-/// Trial metadata from `/v1/users/me/trial` (Python backend) — timing info for countdown UI
+/// Trial metadata from `/v1/users/me/trial` (Python backend) — timing info for countdown UI.
+///
+/// `trialAvailable` is the opt-in signal: when `true` and `trialStartedAt == nil`, the
+/// desktop UI surfaces the "Start your 3-day trial" offer (first-sign-in modal +
+/// Settings card). False for paid plans, BYOK users, users currently on a trial, and
+/// users whose trial already finished.
 struct TrialMetadataResponse: Codable {
   let trialStartedAt: Int?
   let trialEndsAt: Int?
@@ -4020,6 +4025,7 @@ struct TrialMetadataResponse: Codable {
   let trialDurationSeconds: Int
   let trialFeatures: [String]
   let planAfterTrial: String
+  let trialAvailable: Bool?
 
   enum CodingKeys: String, CodingKey {
     case trialStartedAt = "trial_started_at"
@@ -4029,6 +4035,7 @@ struct TrialMetadataResponse: Codable {
     case trialDurationSeconds = "trial_duration_seconds"
     case trialFeatures = "trial_features"
     case planAfterTrial = "plan_after_trial"
+    case trialAvailable = "trial_available"
   }
 }
 
@@ -4658,6 +4665,13 @@ extension APIClient {
 
   func getTrialMetadata() async throws -> TrialMetadataResponse {
     return try await get("v1/users/me/trial")
+  }
+
+  // Opt the user into the 3-day desktop trial. Idempotent server-side: a second
+  // call returns the existing metadata unchanged. UI gates on the response's
+  // `trialStartedAt` / `trialAvailable` flipping.
+  func startTrial() async throws -> TrialMetadataResponse {
+    return try await post("v1/users/me/trial/start", body: EmptyBody())
   }
 
   func getAvailablePlans() async throws -> AvailablePlansResponse {
