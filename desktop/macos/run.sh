@@ -23,7 +23,7 @@ Options (via environment variables):
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
   OMI_AUTOMATION_PORT=47777       Bridge port (set per bundle when running several at once)
-  OMI_DESKTOP_LOCAL_PROFILE=1     Omi Dev Local profile; localhost endpoints/Auth emulator only
+  OMI_DESKTOP_LOCAL_PROFILE=1     Local harness profile; localhost endpoints/Auth emulator only
 
 Required files:
   Backend-Rust/.env         Environment variables (copy from ../.env.example)
@@ -105,7 +105,7 @@ APP_NAME="${OMI_APP_NAME:-Omi Dev}"
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
 if [ "$LOCAL_PROFILE" = true ]; then
-    APP_NAME="${OMI_APP_NAME:-omi-local-v17}"
+    APP_NAME="${OMI_APP_NAME:-Omi Dev}"
 fi
 IS_NAMED_BUNDLE=false
 [ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
@@ -150,18 +150,22 @@ if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
     exit 1
 fi
 if [ "$LOCAL_PROFILE" = true ]; then
-    if [ "$APP_NAME" != "omi-local-v17" ]; then
-        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use OMI_APP_NAME=omi-local-v17 (got '$APP_NAME')"
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use default Omi Dev (unset OMI_APP_NAME; got OMI_APP_NAME='$APP_NAME')"
+        exit 1
+    fi
+    if [ "$APP_NAME" != "Omi Dev" ]; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use Omi Dev (got '$APP_NAME')"
         exit 1
     fi
     if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
-        echo "ERROR: Omi Dev Local requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1; start the harness with make dev-up first"
+        echo "ERROR: Omi Dev local harness requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1; start the harness with make dev-up first"
         exit 1
     fi
-    case "${OMI_DESKTOP_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_DESKTOP_API_URL must be localhost for Omi Dev Local"; exit 1 ;; esac
-    case "${OMI_PYTHON_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_PYTHON_API_URL must be localhost for Omi Dev Local"; exit 1 ;; esac
+    case "${OMI_DESKTOP_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_DESKTOP_API_URL must be localhost for Omi Dev local harness"; exit 1 ;; esac
+    case "${OMI_PYTHON_API_URL:-}" in http://127.*|http://localhost*) ;; *) echo "ERROR: OMI_PYTHON_API_URL must be localhost for Omi Dev local harness"; exit 1 ;; esac
     if [ "${FIREBASE_PROJECT_ID:-}" != "demo-omi-local" ] || [ "${FIREBASE_AUTH_PROJECT_ID:-demo-omi-local}" != "demo-omi-local" ]; then
-        echo "ERROR: Omi Dev Local must use Firebase project demo-omi-local"
+        echo "ERROR: Omi Dev local harness must use Firebase project demo-omi-local"
         exit 1
     fi
 fi
@@ -267,7 +271,7 @@ fi
 cd "$BACKEND_DIR"
 
 if [ "$LOCAL_PROFILE" = true ]; then
-    substep "Omi Dev Local: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
+    substep "Omi Dev local harness: skipping Backend-Rust/.env copy/source and google-credentials bootstrap"
 else
 # Copy .env if not present — try sibling dirs, then scaffold from .env.example
 if [ ! -f ".env" ] && [ -f "../../backend/.env" ]; then
@@ -510,7 +514,7 @@ if [ "$LOCAL_PROFILE" = true ]; then
         echo "OMI_DESKTOP_LOCAL_PROFILE=1"
         echo "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
         echo "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
-        echo "OMI_LOCAL_PROFILE_STORAGE_NAME=${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi Dev Local}"
+        echo "OMI_LOCAL_PROFILE_STORAGE_NAME=${OMI_LOCAL_PROFILE_STORAGE_NAME:-Omi}"
         echo "OMI_LOCAL_AUTH_USER=$OMI_LOCAL_AUTH_USER"
         echo "OMI_LOCAL_AUTH_EMAIL=$OMI_LOCAL_AUTH_EMAIL"
         echo "OMI_LOCAL_AUTH_PASSWORD=$OMI_LOCAL_AUTH_PASSWORD"
@@ -521,7 +525,7 @@ if [ "$LOCAL_PROFILE" = true ]; then
         echo "FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID:-(default)}"
         echo "FIREBASE_API_KEY=$FIREBASE_API_KEY"
     } >> "$APP_BUNDLE/Contents/Resources/.env"
-    substep "Omi Dev Local .env contains localhost endpoints/Auth emulator bootstrap only"
+    substep "Omi Dev local harness .env contains localhost endpoints/Auth emulator bootstrap only"
 else
 if [ -f ".env.app.dev" ]; then
     cp -f .env.app.dev "$APP_BUNDLE/Contents/Resources/.env"
