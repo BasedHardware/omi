@@ -67,6 +67,7 @@ RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0,<4.0" && \
     "pyannote.core" "pyannote.database" "pyannote.pipeline" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
     "hf_transfer" "tensorboardX" && \
+    mkdir -p /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry && \
     printf 'def set_opentelemetry_log_level(*a, **kw): pass\ndef set_telemetry_metrics(*a, **kw): pass\ndef track_model_init(*a, **kw): pass\ndef track_pipeline_init(*a, **kw): pass\ndef track_pipeline_apply(*a, **kw): pass\n' > \
     /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py
 
