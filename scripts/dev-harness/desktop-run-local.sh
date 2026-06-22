@@ -6,7 +6,12 @@ source "$(dirname "$0")/_source_local_dev_env.sh"
 cd "$(dirname "$0")/../.."
 USER_PROFILE="${1:-alice}"
 
-PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" python3 - <<'PY' "$USER_PROFILE"
+PYTHON_BIN="${PYTHON:-backend/venv/bin/python}"
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="python3"
+fi
+
+PYTHONPATH="scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" - <<'PY' "$USER_PROFILE"
 from __future__ import annotations
 
 import os
@@ -44,7 +49,7 @@ if not scenario:
 users = _scenario_users_from_seed_manifest(cfg)
 if user not in users:
     print(f"Cannot launch desktop local profile: USER={user!r} is not in seeded users: {', '.join(users) if users else 'none'}")
-    print("Next step: choose one of the seeded synthetic users, e.g. make desktop-run-local USER=alice")
+    print("Next step: choose one of the seeded synthetic users, e.g. make desktop-run-local DESKTOP_USER=alice")
     raise SystemExit(1)
 
 run_sh = repo / "desktop" / "macos" / "run.sh"
