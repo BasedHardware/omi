@@ -65,10 +65,14 @@ class TaskChatCoordinator: ObservableObject {
                 guard let self else { return }
                 if isSending {
                     self.streamingTaskIds.insert(taskId)
+                    TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
                 } else {
                     // Streaming finished — remove from active set
                     self.streamingTaskIds.remove(taskId)
                     self.streamingStatuses.removeValue(forKey: taskId)
+                    if state.errorMessage == nil {
+                        TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
+                    }
                     // Mark unread if panel not showing this task
                     if !self.isPanelOpen || self.activeTaskId != taskId {
                         self.unreadTaskIds.insert(taskId)
@@ -84,6 +88,7 @@ class TaskChatCoordinator: ObservableObject {
                 guard let self, let state, state.isSending,
                       self.streamingTaskIds.contains(taskId) else { return }
                 self.streamingStatuses[taskId] = self.deriveStreamingStatus(from: messages)
+                TaskAgentStatusRegistry.shared.updateStatus(taskId: taskId, statusText: self.streamingStatuses[taskId])
             }
             .store(in: &subs)
 
@@ -144,6 +149,7 @@ class TaskChatCoordinator: ObservableObject {
 
         activeTaskId = task.id
         markAsRead(task.id)
+        TaskAgentStatusRegistry.shared.registerTask(taskId: task.id, title: task.description)
 
         // Get or create TaskChatState
         let state: TaskChatState

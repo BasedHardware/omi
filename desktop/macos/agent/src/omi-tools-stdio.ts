@@ -219,6 +219,22 @@ Parameter guidance:
     },
   },
   {
+    name: "get_task_agent_status",
+    description: `Inspect Omi's local task-chat agents/subagents.
+
+Use when:
+- User asks about "your subagents", "task agents", running agents, background agents, errors, or timeouts
+- User wants to know which Omi task-agent chats are running, completed, failed, or timed out
+- User asks you to recover from or diagnose "Response took too long" in a task-agent chat
+
+Returns JSON with recent task_agents: taskId, title, status, statusText, lastError, updatedAt.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  {
     name: "search_tasks",
     description: `Vector similarity search on tasks (action_items + staged_tasks).
 

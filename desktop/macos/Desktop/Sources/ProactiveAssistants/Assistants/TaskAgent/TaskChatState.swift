@@ -164,6 +164,7 @@ class TaskChatState: ObservableObject {
 
         isSending = true
         errorMessage = nil
+        TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
 
         // Add user message to local messages and persist
         // Skip for follow-ups — sendFollowUp() already added and persisted it
@@ -268,6 +269,7 @@ class TaskChatState: ObservableObject {
             }
 
             log("TaskChatState[\(taskId)]: response complete (cost=$\(queryResult.costUsd))")
+            TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
         } catch {
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
@@ -287,6 +289,7 @@ class TaskChatState: ObservableObject {
                 // User stopped — no error
             } else {
                 errorMessage = error.localizedDescription
+                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: error.localizedDescription)
             }
             logError("TaskChatState[\(taskId)]: query failed", error: error)
         }

@@ -335,6 +335,7 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
+            "get_task_agent_status",
             "search_tasks",
             "get_daily_recap",
             "complete_task",

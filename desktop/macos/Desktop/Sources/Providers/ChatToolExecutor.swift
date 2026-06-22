@@ -44,6 +44,9 @@ class ChatToolExecutor {
     case "get_local_status":
       return await executeLocalStatus()
 
+    case "get_task_agent_status":
+      return await executeTaskAgentStatus()
+
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
 
@@ -418,6 +421,12 @@ class ChatToolExecutor {
     }
 
     return "OK: \(changes) row(s) affected"
+  }
+
+  // MARK: - Task Agent Status
+
+  private static func executeTaskAgentStatus() async -> String {
+    return TaskAgentStatusRegistry.shared.snapshotJSON()
   }
 
   // MARK: - Local Status

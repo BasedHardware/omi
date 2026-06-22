@@ -566,6 +566,18 @@ export const OMI_TOOLS = [
     required: [],
   }),
   omiTool({
+    name: "get_task_agent_status",
+    label: "Task Agent Status",
+    description: "Inspect Omi's local task-chat agents/subagents. Use when the user asks about your subagents, task agents, running agents, errors, or timeouts.",
+    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agent status/errors/timeouts",
+    promptGuidelines: [
+      "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
+      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
+    ],
+    properties: {},
+    required: [],
+  }),
+  omiTool({
     name: "search_tasks",
     label: "Search Tasks",
     description: "Vector similarity search on tasks. Find tasks by meaning or topic.",
