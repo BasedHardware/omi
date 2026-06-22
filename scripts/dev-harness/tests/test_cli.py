@@ -30,11 +30,16 @@ def test_offline_check_skips_provider_credentials(monkeypatch: pytest.MonkeyPatc
 
 
 def test_real_check_lists_provider_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "AGENTS.md").write_text("agents", encoding="utf-8")
+    (repo / ".git").mkdir()
+    (repo / "backend").mkdir()
+    for key in ("OPENAI_API_KEY", "DEEPGRAM_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("PROVIDER_MODE", "real")
     monkeypatch.setenv("OMI_LOCAL_STATE_ROOT", str(tmp_path / "state"))
-    cfg = config.load_config(REPO_ROOT)
+    cfg = config.load_config(repo)
 
     missing, _warnings = cli.prerequisite_report(cfg)
 
