@@ -205,8 +205,8 @@ def run_benchmark():
             ref = parse_rttm(rttm_path)
             hyp = api_result_to_annotation(api_result)
 
-            der = metric(ref, hyp)
-            detail = metric[ref, hyp]
+            detail = metric(ref, hyp, detailed=True)
+            der = detail["diarization error rate"]
 
             n_hyp_speakers = len(set(s.get("speaker", "") for s in api_result.get("segments", [])))
 
@@ -215,10 +215,10 @@ def run_benchmark():
                     "id": cid,
                     "status": "ok",
                     "der": der,
-                    "missed": detail["missed detection"],
-                    "false_alarm": detail["false alarm"],
-                    "confusion": detail["speaker error"],
-                    "total": detail["total"],
+                    "missed": detail.get("missed detection", 0),
+                    "false_alarm": detail.get("false alarm", 0),
+                    "confusion": detail.get("speaker error", 0),
+                    "total": detail.get("total", 0),
                     "ref_speakers": clip["speakers"],
                     "hyp_speakers": n_hyp_speakers,
                     "elapsed_s": elapsed,

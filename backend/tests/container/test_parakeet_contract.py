@@ -136,6 +136,29 @@ class TestPyannoteMetricsContract:
         der = metric(ref, hyp)
         assert 0.0 <= der <= 1.0
 
+    def test_der_detailed_components(self):
+        """Verify detailed=True returns all component keys the benchmark uses."""
+        from pyannote.core import Annotation, Segment
+        from pyannote.metrics.diarization import DiarizationErrorRate
+
+        ref = Annotation()
+        ref[Segment(0, 5)] = "A"
+        ref[Segment(5, 10)] = "B"
+
+        hyp = Annotation()
+        hyp[Segment(0, 5)] = "1"
+        hyp[Segment(5, 10)] = "2"
+
+        metric = DiarizationErrorRate(collar=0.25, skip_overlap=True)
+        detail = metric(ref, hyp, detailed=True)
+
+        assert "diarization error rate" in detail
+        assert "missed detection" in detail
+        assert "false alarm" in detail
+        assert "speaker error" in detail
+        assert "total" in detail
+        assert 0.0 <= detail["diarization error rate"] <= 1.0
+
 
 class TestPyannoteImportSurfaces:
     """Verify broader pyannote import surfaces that depend on our stubs."""
