@@ -94,6 +94,19 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
 
+    /// Post-release state of a realtime-hub voice turn, so the bar never leaves the user
+    /// guessing whether a reply is coming after they let go of PTT. `.thinking` covers the
+    /// commit→first-audio gap (model latency / reconnect), `.speaking` while the reply plays,
+    /// `.failed` briefly when no reply arrived (hub error or the turn-completion watchdog
+    /// firing with no audio). `.none` = collapsed/idle. Driven by RealtimeHubController.
+    enum VoiceResponsePhase { case none, thinking, speaking, failed }
+    @Published var voiceResponsePhase: VoiceResponsePhase = .none
+
+    /// True whenever a voice turn owns the bar — actively listening (PTT-down) OR showing the
+    /// post-release status pill. One concept so bar-sizing/collapse guards don't each have to AND
+    /// `isVoiceListening` with `voiceResponsePhase` independently (and drift out of sync).
+    var voiceOwnsBar: Bool { isVoiceListening || voiceResponsePhase != .none }
+
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
     @Published var voiceFollowUpTranscript: String = ""

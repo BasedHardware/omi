@@ -104,6 +104,9 @@ final class RealtimeHubSession: NSObject {
   /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
   /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
   private var geminiResponsePending = false
+  /// Single reschedulable timer for the Gemini turn-completion watchdog — re-armed in place
+  /// (no per-event closure pile-up). Created lazily, cancelled in stop(). See armGeminiWatchdog.
+  private var geminiWatchdog: DispatchSourceTimer?
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
   // commit, reported at finishTurn (only for ephemeral sessions; BYOK pays the provider
@@ -183,6 +186,8 @@ final class RealtimeHubSession: NSObject {
       self.pendingActivityStart = false
       self.openAIResponseActive = false
       self.geminiResponsePending = false
+      self.geminiWatchdog?.cancel()
+      self.geminiWatchdog = nil
     }
   }
 
@@ -288,6 +293,10 @@ final class RealtimeHubSession: NSObject {
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         self.activityOpen = false
         self.geminiResponsePending = true  // expect a spoken reply for THIS turn
+        // Recover if the reply never starts or never completes (Gemini Live drops the
+        // trailing turnComplete / truncates replies intermittently). 15s covers the
+        // worst-case think latency before the first audio chunk.
+        self.armGeminiWatchdog(15)
       // Gemini auto-responds at activityEnd; no explicit response request.
       }
     }
@@ -480,6 +489,7 @@ final class RealtimeHubSession: NSObject {
         send(json: ["realtimeInput": ["activityEnd": [:]]])
         activityOpen = false
         geminiResponsePending = true
+        armGeminiWatchdog(15)
       }
     }
     let d = delegate
@@ -556,6 +566,38 @@ final class RealtimeHubSession: NSObject {
     reportUsageIfNeeded()
     let d = delegate
     Task { @MainActor in d?.hubDidFinishTurn() }
+  }
+
+  /// Safety net for Gemini's flaky turn completion. Gemini Live intermittently truncates a
+  /// reply or drops the trailing `turnComplete` — which would otherwise leave
+  /// `geminiResponsePending` stuck true forever, stranding the turn: the UI never resets,
+  /// the turn is never recorded, and the NEXT PTT press is mis-handled as a barge-in. This
+  /// arms a one-shot timer on `q`; if it fires while a turn is still pending (no turnComplete
+  /// arrived), we finish the turn cleanly. It's re-armed on every reply event, so it never
+  /// cuts a healthy still-streaming reply, and a normal turnComplete cancels it by clearing
+  /// `geminiResponsePending`. Buffered audio keeps playing (we don't stop the player), so a
+  /// reply that completed but lost its turnComplete is still heard in full. OpenAI doesn't
+  /// need this — its explicit `response.done` reliably ends every turn.
+  private func armGeminiWatchdog(_ seconds: Double) {
+    guard provider == .gemini else { return }
+    let timer = geminiWatchdog ?? makeGeminiWatchdog()
+    timer.schedule(deadline: .now() + seconds)  // re-arm in place; replaces any prior deadline
+  }
+
+  /// Lazily build the single watchdog timer (on `q`). Re-armed via `schedule`; fires only when a
+  /// turn is still pending, so a re-arm or a normal `turnComplete` (which clears the flag) no-ops it.
+  private func makeGeminiWatchdog() -> DispatchSourceTimer {
+    let timer = DispatchSource.makeTimerSource(queue: q)
+    timer.setEventHandler { [weak self] in
+      guard let self, self.geminiResponsePending else { return }
+      log("\(self.tag): turn watchdog — no turnComplete, finishing stranded turn")
+      self.geminiResponsePending = false
+      self.emitText("", isFinal: true)
+      self.finishTurn()
+    }
+    geminiWatchdog = timer
+    timer.resume()
+    return timer
   }
 
   // MARK: - Usage (client-reported billing, managed sessions only)
@@ -728,7 +770,13 @@ final class RealtimeHubSession: NSObject {
     // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
     // is still streaming, so finishing there truncates the reply and makes the next turn
     // interrupt the server's still-open turn. We finish on turnComplete (below), which
-    // arrives when the audio actually completes.
+    // arrives when the audio actually completes. But generationComplete does mean the
+    // model is done generating, so arm the watchdog: turnComplete normally follows within
+    // a few seconds, and if it's dropped (Gemini does this intermittently) the watchdog
+    // finishes the turn so it can't strand `geminiResponsePending`.
+    if (sc["generationComplete"] as? Bool) == true, geminiResponsePending {
+      armGeminiWatchdog(6)
+    }
     if let it = sc["inputTranscription"] as? [String: Any], let t = it["text"] as? String {
       emitTranscript(t, isFinal: false)
     }
@@ -736,15 +784,20 @@ final class RealtimeHubSession: NSObject {
       emitText(t, isFinal: false)  // the spoken reply's text, for logging / the bubble
     }
     if let parts = (sc["modelTurn"] as? [String: Any])?["parts"] as? [[String: Any]] {
+      var emittedAudio = false
       for p in parts {
         if let t = p["text"] as? String { emitText(t, isFinal: false) }
         if let inline = p["inlineData"] as? [String: Any],
           let mime = inline["mimeType"] as? String, mime.contains("audio/pcm"),
           let b64 = inline["data"] as? String, let d = Data(base64Encoded: b64)
         {
-          if geminiResponsePending { emitAudio(d) }  // gated: only the live turn's reply
+          if geminiResponsePending { emitAudio(d); emittedAudio = true }  // gated: live turn only
         }
       }
+      // Keep pushing the watchdog out while the reply streams. A healthy reply sends audio
+      // chunks <100ms apart, so it never fires mid-stream; it only fires if the stream
+      // truncates with no generationComplete/turnComplete (Gemini cut the reply server-side).
+      if emittedAudio, geminiResponsePending { armGeminiWatchdog(6) }
     }
     if (sc["turnComplete"] as? Bool) == true {
       // Only finish the turn we're actually awaiting a reply for. A turnComplete that

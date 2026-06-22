@@ -21,15 +21,44 @@ class ScreenCaptureManager {
     /// Returns JPEG data for the screen under the mouse cursor. Gemini Live's realtime
     /// video channel reads JPEG/PNG frames; a WebP frame is delivered but not decoded
     /// (the model then answers blind), so the realtime-hub vision path uses this.
-    static func captureScreenJPEG(quality: CGFloat = 0.7) -> Data? {
+    ///
+    /// Downscaled to `maxDimension` on the long edge before encoding: this frame is sent
+    /// INSIDE every Gemini speech turn, and a full-Retina capture (≈0.5–0.8 MB) both bloats
+    /// the audio turn — degrading input transcription — and trips the server's `1007`
+    /// precondition close. The model downsamples to its media resolution anyway, so ~1280px
+    /// keeps on-screen content perfectly legible at a fraction of the bytes (~60–120 KB).
+    static func captureScreenJPEG(quality: CGFloat = 0.6, maxDimension: CGFloat = 1280) -> Data? {
         guard let image = captureScreenImage() else { return nil }
-        let rep = NSBitmapImageRep(cgImage: image)
+        let scaled = downscaledImage(image, maxDimension: maxDimension) ?? image
+        let rep = NSBitmapImageRep(cgImage: scaled)
         guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: quality]) else {
             log("ScreenCaptureManager: JPEG encoding failed")
             return nil
         }
-        log("ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height), JPEG \(data.count / 1024) KB")
+        log(
+            "ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height) "
+                + "→ \(scaled.width)x\(scaled.height), JPEG \(data.count / 1024) KB")
         return data
+    }
+
+    /// Proportionally downscale a CGImage so its longest edge ≤ `maxDimension`. Returns the
+    /// original if it's already small enough (or nil on failure → caller falls back).
+    private static func downscaledImage(_ image: CGImage, maxDimension: CGFloat) -> CGImage? {
+        let w = CGFloat(image.width), h = CGFloat(image.height)
+        let longest = max(w, h)
+        guard longest > maxDimension else { return image }
+        let scale = maxDimension / longest
+        let nw = Int((w * scale).rounded()), nh = Int((h * scale).rounded())
+        let cs = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard
+            let ctx = CGContext(
+                data: nil, width: nw, height: nh, bitsPerComponent: 8, bytesPerRow: 0, space: cs,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                    | CGBitmapInfo.byteOrder32Big.rawValue)
+        else { return nil }
+        ctx.interpolationQuality = .high
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: nw, height: nh))
+        return ctx.makeImage()
     }
 
     /// Returns WebP data for the screen under the mouse cursor at full Retina

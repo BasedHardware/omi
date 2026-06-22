@@ -1052,7 +1052,12 @@ class PushToTalkManager: ObservableObject {
     guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
-    } else if !barState.isVoiceListening && wasListening {
+    } else if !barState.isVoiceListening && wasListening
+      && barState.voiceResponsePhase == .none
+    {
+      // Don't collapse on PTT-up when the hub is about to answer — the bar stays expanded
+      // through the thinking/speaking status (RealtimeHubController collapses it when the
+      // reply resolves). Without this guard the bar would blink shut then reopen.
       FloatingControlBarManager.shared.resizeForPTT(expanded: false)
     }
   }

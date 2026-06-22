@@ -35,7 +35,7 @@ struct FloatingControlBarView: View {
 
     /// Whether the bar chrome should stretch to fill the window width
     private var barNeedsFullWidth: Bool {
-        isHovering || state.showingAIConversation || state.isVoiceListening
+        isHovering || state.showingAIConversation || state.voiceOwnsBar
     }
 
     private var barChrome: some View {
@@ -285,6 +285,12 @@ struct FloatingControlBarView: View {
                     .padding(.vertical, 3)
                     .frame(height: 50)
                     .transition(.opacity)
+            } else if state.voiceResponsePhase != .none && !state.isVoiceFollowUp {
+                voiceResponseView
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .frame(height: 50)
+                    .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
@@ -393,6 +399,52 @@ struct FloatingControlBarView: View {
                     .foregroundColor(.white.opacity(0.5))
             }
         }
+    }
+
+    /// Post-release status of a realtime-hub voice turn — shown after PTT-up so a slow or failed
+    /// reply never collapses to a blank bar: thinking → speaking → a brief "no response" hint.
+    /// While thinking/speaking the pill is tappable to STOP the reply (a push-to-talk tap also
+    /// interrupts). Speaking stays subtle — animated waveform + speaker glyph, no transcript.
+    private var voiceResponseView: some View {
+        let canStop =
+            state.voiceResponsePhase == .thinking || state.voiceResponsePhase == .speaking
+        return HStack(spacing: 8) {
+            // Lively while thinking/speaking; at rest on failure.
+            VoiceWaveformBars(isActive: canStop)
+
+            switch state.voiceResponsePhase {
+            case .thinking:
+                Image(systemName: "ellipsis.bubble.fill")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundColor(.white)
+                Text("Thinking…")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.white.opacity(0.7))
+            case .speaking:
+                // Subtle: the animated waveform conveys that it's speaking — no transcript text.
+                Image(systemName: "speaker.wave.2.fill")
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.85))
+                    .symbolEffect(.variableColor.iterative, options: .repeating)
+                // Subtle tap-to-stop affordance.
+                Image(systemName: "stop.circle.fill")
+                    .scaledFont(size: 13, weight: .regular)
+                    .foregroundColor(.white.opacity(0.45))
+            case .failed:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundColor(.orange)
+                Text("No response — hold \(shortcutSettings.pttShortcut.displayLabel) to retry")
+                    .scaledFont(size: 13)
+                    .foregroundColor(.white.opacity(0.7))
+                    .lineLimit(1)
+            case .none:
+                EmptyView()
+            }
+        }
+        // Tap the pill to stop the reply (in addition to a push-to-talk tap).
+        .contentShape(Rectangle())
+        .onTapGesture { if canStop { RealtimeHubController.shared.stopSpeaking() } }
     }
 
     private var aiInputView: some View {

@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreGraphics
 import Foundation
+import SwiftUI
 
 // MARK: - Realtime Hub Controller (Phase 1)
 //
@@ -196,7 +197,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
-    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
+    let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard, provider: provider)
     let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
     session = s
     sessionProvider = provider
@@ -232,6 +233,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     responding = false
     turnTranscript = ""
     assistantText = ""
+    // A new turn supersedes any prior reply's status indicator (the listening UI takes over);
+    // bump the token so a queued `.failed` auto-dismiss from the last turn can't fire now.
+    voicePhaseToken &+= 1
+    barState?.voiceResponsePhase = .none
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
@@ -278,6 +283,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() {
     responding = true
+    // Keep the bar alive after release: show "thinking" until the first audio arrives, so the
+    // commit→reply gap (model latency / reconnect / a slow turn) never looks like a dead bar.
+    setVoicePhase(.thinking)
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
     session?.commitInputTurn()
@@ -326,6 +334,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     audioReceivedThisTurn = true
+    // First audio of the turn → flip the status from "thinking" to "speaking".
+    if barState?.voiceResponsePhase == .thinking { setVoicePhase(.speaking) }
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
@@ -572,6 +582,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       turnRecorded = true
       FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
     }
+    // Resolve the status: a turn that produced audio just ends (collapse); a turn that
+    // finished with NO audio — e.g. the Gemini turn-completion watchdog fired on a dropped/
+    // empty reply — briefly tells the user it got nothing, instead of silently collapsing.
+    setVoicePhase(audioReceivedThisTurn ? .none : .failed)
     exitVoiceUI()
   }
 
@@ -579,11 +593,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
+    let wasInFlight = replyInFlight
     responding = false
     logError("RealtimeHub: session error — \(message)")
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    // If a turn was mid-flight when the socket died, tell the user it failed (then collapse)
+    // rather than vanishing mid-reply. A benign idle-close between turns shows nothing.
+    if wasInFlight { setVoicePhase(.failed) }
     exitVoiceUI()
     let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
@@ -624,12 +642,79 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     barState.isVoiceFollowUp = false
     // Collapse the bar ourselves in that case — guarded so we never shrink the bar out
     // from under an open conversation, response, notification, hover, or onboarding.
-    guard wasExpandedForVoice,
-      !barState.showingAIConversation, !barState.showingAIResponse,
-      barState.currentNotification == nil, !barState.isHoveringBar,
-      UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-    else { return }
+    guard wasExpandedForVoice, barIsFreeToCollapse(barState) else { return }
     FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+  }
+
+  /// User-initiated "stop talking": halt the current spoken reply immediately, without starting
+  /// a new turn. Stops local playback and tells the session to cancel/gate the rest of the reply
+  /// (OpenAI: response.cancel; Gemini: drops the pending-reply gate so further audio is ignored —
+  /// the warm socket + conversation context survive). Tapping push-to-talk also interrupts (that
+  /// starts a fresh turn); this is the no-new-turn way to just make it stop.
+  func stopSpeaking() {
+    guard replyInFlight else { return }
+    log("RealtimeHub[\(providerTag)]: stop — user halted the reply")
+    responding = false
+    pcmPlayer?.stop()
+    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    session?.cancelActiveResponse()
+    session?.abandonInputTurn()
+    setVoicePhase(.none)
+  }
+
+  // MARK: - Voice response status (so a slow/failed reply never leaves the user guessing)
+
+  /// Invalidates a pending `.failed` auto-dismiss when the phase changes again.
+  private var voicePhaseToken = 0
+
+  /// Drive the floating bar's post-release voice status. The hub speaks its reply as audio
+  /// with no inline UI, so after PTT-up the bar would otherwise collapse and the user would
+  /// be left wondering whether a reply is coming during the commit→first-audio gap (model
+  /// latency, a reconnect, or a dropped/late turn). This keeps the bar showing
+  /// thinking → speaking → (failed) until the turn resolves. `.failed` holds a brief hint,
+  /// then collapses; `.none` collapses immediately.
+  private func setVoicePhase(_ phase: FloatingControlBarState.VoiceResponsePhase) {
+    guard let barState else { return }
+    voicePhaseToken &+= 1
+    let token = voicePhaseToken
+    withAnimation(.easeInOut(duration: 0.18)) {
+      barState.voiceResponsePhase = phase
+    }
+    switch phase {
+    case .failed:
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+        guard let self, token == self.voicePhaseToken,
+          self.barState?.voiceResponsePhase == .failed
+        else { return }
+        self.setVoicePhase(.none)
+      }
+    case .none:
+      collapseVoiceBarIfIdle()
+    case .thinking, .speaking:
+      break  // the bar is already expanded from the listening turn (kept open in updateBarState)
+    }
+  }
+
+  /// Collapse the bar once the voice turn is fully resolved (no longer owns the bar) and nothing
+  /// else needs it open.
+  private func collapseVoiceBarIfIdle() {
+    guard let barState, !barState.voiceOwnsBar, barIsFreeToCollapse(barState) else { return }
+    FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+  }
+
+  /// Shared collapse guard: true when nothing else owns the bar (no open conversation, response,
+  /// notification, or hover) and onboarding is done — so it's safe to shrink it.
+  private func barIsFreeToCollapse(_ barState: FloatingControlBarState) -> Bool {
+    !barState.showingAIConversation && !barState.showingAIResponse
+      && barState.currentNotification == nil && !barState.isHoveringBar
+      && UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+  }
+
+  /// True while a hub reply is in flight — between commit and turn-done, or while the status pill
+  /// shows thinking/speaking. Used for barge-in / stop / failure decisions.
+  private var replyInFlight: Bool {
+    responding || barState?.voiceResponsePhase == .thinking
+      || barState?.voiceResponsePhase == .speaking
   }
 
   // MARK: - Tools

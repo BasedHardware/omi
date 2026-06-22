@@ -619,7 +619,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        // Don't hover-resize while a voice turn owns the bar — listening OR the post-release
+        // thinking/speaking/failed status pill. Otherwise hovering fights the voice-phase
+        // sizing (bar jumps on hover-in, shrinks mid-reply on hover-out).
+        guard !state.showingAIConversation, !state.voiceOwnsBar,
+              !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -628,7 +632,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let doResize: () -> Void = { [weak self] in
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
-                  !self.state.isVoiceListening,
+                  !self.state.voiceOwnsBar,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
