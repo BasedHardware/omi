@@ -89,6 +89,20 @@ actor StagedTaskStorage {
                 throw ActionItemStorageError.recordNotFound
             }
 
+            // The backend deduplicates tasks and can return a backendId that another
+            // local staged row already owns. Assigning it here would violate the
+            // UNIQUE(backendId) constraint and fail the sync-status update forever
+            // (Sentry OMI-DESKTOP-8E). Resolve idempotently: this row is a duplicate
+            // of an already-synced task, so drop it instead of crashing.
+            let backendIdTaken = try StagedTaskRecord
+                .filter(Column("backendId") == backendId)
+                .filter(Column("id") != id)
+                .fetchCount(database) > 0
+            if backendIdTaken {
+                try record.delete(database)
+                return
+            }
+
             record.backendId = backendId
             record.backendSynced = true
             record.updatedAt = Date()
