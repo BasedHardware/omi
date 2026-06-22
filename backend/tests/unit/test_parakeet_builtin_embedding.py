@@ -90,28 +90,42 @@ def _make_wav_bytes_32bit(duration_s=1.0, sample_rate=16000):
     return buf.getvalue()
 
 
+def _fake_waveform(n_samples):
+    wf = MagicMock()
+    wf.shape = [1, n_samples]
+    wf.unsqueeze.return_value = wf
+    return wf
+
+
 class TestWavBytesToWaveform:
+    def _patch_torch(self):
+        return patch.object(transcribe, '_torch', _torch_mock)
+
     def test_returns_waveform_and_sample_rate(self):
         wav = _make_wav_bytes(duration_s=0.5, sample_rate=16000)
-        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        with self._patch_torch():
+            waveform, sr = transcribe.wav_bytes_to_waveform(wav)
         assert sr == 16000
         assert waveform.shape == [1, 8000]
 
     def test_stereo_downmix(self):
         wav = _make_wav_bytes(duration_s=0.5, sample_rate=16000, channels=2)
-        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        with self._patch_torch():
+            waveform, sr = transcribe.wav_bytes_to_waveform(wav)
         assert sr == 16000
         assert waveform.shape == [1, 8000]
 
     def test_8bit_unsigned_pcm(self):
         wav = _make_wav_bytes_8bit(duration_s=0.5, sample_rate=16000)
-        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        with self._patch_torch():
+            waveform, sr = transcribe.wav_bytes_to_waveform(wav)
         assert sr == 16000
         assert waveform.shape == [1, 8000]
 
     def test_32bit_pcm(self):
         wav = _make_wav_bytes_32bit(duration_s=0.5, sample_rate=16000)
-        waveform, sr = transcribe.wav_bytes_to_waveform(wav)
+        with self._patch_torch():
+            waveform, sr = transcribe.wav_bytes_to_waveform(wav)
         assert sr == 16000
         assert waveform.shape == [1, 8000]
 
@@ -139,9 +153,10 @@ class TestGetEmbedding:
         wav = _make_wav_bytes(duration_s=1.0)
         worker = _mock_gpu_worker(embedding_model=True)
 
-        with patch.object(transcribe, '_gpu_worker', worker):
-            with patch.object(transcribe, '_get_embedding_http') as http_mock:
-                result = transcribe._get_embedding(wav)
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(16000), 16000)
+        ), patch.object(transcribe, '_get_embedding_http') as http_mock:
+            result = transcribe._get_embedding(wav)
 
         assert result is not None
         assert result.shape == (1, 256)
@@ -171,14 +186,15 @@ class TestGetEmbedding:
         worker = _mock_gpu_worker(embedding_model=True)
         worker.submit_embedding_sync.side_effect = RuntimeError("GPU error")
 
-        with patch.object(transcribe, '_gpu_worker', worker):
-            with patch.object(transcribe, '_get_embedding_http', return_value=http_emb) as http_mock:
-                old_url = transcribe.SPEAKER_EMBEDDING_URL
-                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
-                try:
-                    result = transcribe._get_embedding(wav)
-                finally:
-                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(16000), 16000)
+        ), patch.object(transcribe, '_get_embedding_http', return_value=http_emb) as http_mock:
+            old_url = transcribe.SPEAKER_EMBEDDING_URL
+            transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+            try:
+                result = transcribe._get_embedding(wav)
+            finally:
+                transcribe.SPEAKER_EMBEDDING_URL = old_url
 
         http_mock.assert_called_once_with(wav)
         np.testing.assert_array_equal(result, http_emb)
@@ -202,14 +218,15 @@ class TestGetEmbedding:
         worker = _mock_gpu_worker(embedding_model=True)
         worker.submit_embedding_sync.side_effect = RuntimeError("GPU error")
 
-        with patch.object(transcribe, '_gpu_worker', worker):
-            with patch.object(transcribe, '_get_embedding_http', return_value=None):
-                old_url = transcribe.SPEAKER_EMBEDDING_URL
-                transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
-                try:
-                    result = transcribe._get_embedding(wav)
-                finally:
-                    transcribe.SPEAKER_EMBEDDING_URL = old_url
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(16000), 16000)
+        ), patch.object(transcribe, '_get_embedding_http', return_value=None):
+            old_url = transcribe.SPEAKER_EMBEDDING_URL
+            transcribe.SPEAKER_EMBEDDING_URL = 'http://fake-diarizer'
+            try:
+                result = transcribe._get_embedding(wav)
+            finally:
+                transcribe.SPEAKER_EMBEDDING_URL = old_url
 
         assert result is None
 
@@ -218,7 +235,9 @@ class TestGetEmbedding:
         worker = _mock_gpu_worker(embedding_model=True)
         worker.submit_embedding_sync.return_value = np.zeros(128, dtype=np.float32)
 
-        with patch.object(transcribe, '_gpu_worker', worker):
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(16000), 16000)
+        ):
             result = transcribe._get_embedding(wav)
 
         assert result.shape == (1, 128)
@@ -229,7 +248,9 @@ class TestEmbeddingBuiltinDuration:
         wav = _make_wav_bytes(duration_s=0.3)
         worker = _mock_gpu_worker(embedding_model=True)
 
-        with patch.object(transcribe, '_gpu_worker', worker):
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(4800), 16000)
+        ):
             result = transcribe._get_embedding_builtin(wav)
 
         assert result is None
@@ -239,7 +260,9 @@ class TestEmbeddingBuiltinDuration:
         wav = _make_wav_bytes(duration_s=0.6)
         worker = _mock_gpu_worker(embedding_model=True)
 
-        with patch.object(transcribe, '_gpu_worker', worker):
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(9600), 16000)
+        ):
             result = transcribe._get_embedding_builtin(wav)
 
         assert result is not None
@@ -249,7 +272,9 @@ class TestEmbeddingBuiltinDuration:
         wav = _make_wav_bytes(duration_s=0.7)
         worker = _mock_gpu_worker(embedding_model=True)
 
-        with patch.object(transcribe, '_gpu_worker', worker):
+        with patch.object(transcribe, '_gpu_worker', worker), patch.object(
+            transcribe, 'wav_bytes_to_waveform', return_value=(_fake_waveform(11200), 16000)
+        ):
             result = transcribe._get_embedding_builtin(wav)
 
         assert result is not None
