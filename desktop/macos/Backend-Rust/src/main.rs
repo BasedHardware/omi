@@ -129,7 +129,12 @@ async fn main() {
     let firebase_auth = Arc::new(FirebaseAuth::new(auth_project_id.clone()));
 
     // Refresh Firebase keys with retry (transient network failures at startup)
-    {
+    if FirebaseAuth::auth_emulator_active() {
+        tracing::info!(
+            "Firebase Auth emulator active — skipping Google public key fetch (project={})",
+            auth_project_id
+        );
+    } else {
         let max_attempts = 3u32;
         let mut last_err = None;
         for attempt in 1..=max_attempts {
