@@ -5,7 +5,7 @@
 	<key>API_KEY</key>
 	<string>local-firebase-auth-emulator-api-key</string>
 	<key>BUNDLE_ID</key>
-	<string>com.omi.omi-local-v17</string>
+	<string>com.omi.desktop-dev</string>
 	<key>CLIENT_ID</key>
 	<string>local-omi-dev-local.apps.localhost</string>
 	<key>GCM_SENDER_ID</key>
