@@ -268,6 +268,9 @@ struct DesktopHomeView: View {
               didScheduleAgentVMProvisioning = false
               appState.conversations = []
               appState.folders = []
+              appState.selectedFolderId = nil
+              appState.selectedDateFilter = nil
+              appState.showStarredOnly = false
               appState.totalConversationsCount = nil
               appState.conversationsError = nil
               appState.isLoadingConversations = false
