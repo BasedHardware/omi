@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Premium trial no longer starts automatically \u2014 opt in from the welcome popup or Settings \u2192 Plan & Usage"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.493",
+      "date": "2026-06-22",
+      "changes": [
+        "Premium trial no longer starts automatically \u2014 opt in from the welcome popup or Settings \u2192 Plan & Usage"
+      ]
+    },
     {
       "version": "0.11.492",
       "date": "2026-06-21",
