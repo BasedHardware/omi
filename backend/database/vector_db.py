@@ -19,9 +19,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-if os.getenv('PINECONE_API_KEY') is not None:
-    pc = Pinecone(api_key=os.getenv('PINECONE_API_KEY', ''))
-    index = pc.Index(os.getenv('PINECONE_INDEX_NAME', ''))
+_pinecone_api_key = os.getenv('PINECONE_API_KEY')
+_pinecone_index_name = os.getenv('PINECONE_INDEX_NAME')
+if _pinecone_api_key and _pinecone_index_name:
+    pc = Pinecone(api_key=_pinecone_api_key)
+    index = pc.Index(_pinecone_index_name)
 else:
     index = None
 
