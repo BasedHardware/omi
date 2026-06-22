@@ -1,9 +1,10 @@
 """Desktop local profile resolution and static safety scanning.
 
 This module is the harness-owned source of truth for the macOS desktop
-``Omi Dev Local`` profile.  It intentionally resolves a launch configuration
-without reading provider-bearing ``.env`` files and can be exercised on Linux for
-static verification when the native macOS build/launch path is unavailable.
+``Omi Dev`` local harness profile.  It intentionally resolves a launch
+configuration without reading provider-bearing ``.env`` files and can be
+exercised on Linux for static verification when the native macOS build/launch
+path is unavailable.
 """
 
 from __future__ import annotations
@@ -17,17 +18,17 @@ from urllib.parse import urlparse
 
 from . import config, safety
 
-LOCAL_APP_NAME = "omi-local-v17"
-LOCAL_DISPLAY_NAME = "Omi Dev Local"
-LOCAL_BUNDLE_ID = "com.omi.omi-local-v17"
-LOCAL_URL_SCHEME = "omi-omi-local-v17"
-LOCAL_STORAGE_NAME = "Omi Dev Local"
+LOCAL_APP_NAME = "Omi Dev"
+LOCAL_DISPLAY_NAME = "Omi Dev"
+LOCAL_BUNDLE_ID = "com.omi.desktop-dev"
+LOCAL_URL_SCHEME = "omi-computer-dev"
+LOCAL_STORAGE_NAME = "Omi"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 LOCAL_FIREBASE_APP_ID = "1:000000000000:ios:omi-dev-local"
 LOCAL_FIREBASE_CLIENT_ID = "local-omi-dev-local.apps.localhost"
 LOCAL_FIREBASE_GCM_SENDER_ID = "000000000000"
 LOCAL_FIREBASE_PLIST = "GoogleService-Info-Local.plist"
-LOCAL_ACCESS_GROUP = "com.omi.omi-local-v17.local-auth"
+LOCAL_ACCESS_GROUP = "com.omi.desktop-dev.local-auth"
 
 PROHIBITED_ENDPOINT_PATTERNS = (
     re.compile(r"https://api\.omi\.me", re.IGNORECASE),
@@ -120,11 +121,9 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
     display_name = payload.get("displayName", f"Synthetic {user}")
     password = payload.get("password", f"{user}-local-password-030")
     python_api_url = cfg.backend_url
-    desktop_api_url = cfg.backend_url
+    desktop_api_url = cfg.desktop_backend_url
     env = {
         "OMI_DESKTOP_LOCAL_PROFILE": "1",
-        "OMI_APP_NAME": LOCAL_APP_NAME,
-        "OMI_DISPLAY_NAME": LOCAL_DISPLAY_NAME,
         "OMI_SKIP_BACKEND": "1",
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,
@@ -175,8 +174,12 @@ def validate_profile(profile: DesktopLocalProfile) -> list[str]:
     errors: list[str] = []
     if profile.app_name != LOCAL_APP_NAME or profile.bundle_id != LOCAL_BUNDLE_ID:
         errors.append("local profile app/bundle identity drifted")
-    if profile.bundle_id in {"com.omi.computer-macos", "com.omi.desktop-dev"}:
-        errors.append("local profile collides with production/beta/default dev bundle")
+    if profile.bundle_id == "com.omi.computer-macos":
+        errors.append("local profile must not use production bundle")
+    if profile.bundle_id == "com.omi.omi-local-v17" or profile.app_name == "omi-local-v17":
+        errors.append("legacy omi-local-v17 bundle is disabled; use default Omi Dev")
+    if "OMI_APP_NAME" in profile.env:
+        errors.append("OMI_APP_NAME must not be set for harness local profile (use default Omi Dev)")
     if profile.url_scheme != LOCAL_URL_SCHEME:
         errors.append("local URL scheme drifted")
     if profile.firebase_project_id != safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID:
