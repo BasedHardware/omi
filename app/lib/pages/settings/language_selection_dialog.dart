@@ -37,21 +37,7 @@ class LanguageSelectionDialog {
         : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
-    final ScrollController _scrollController = ScrollController();
-
-    // Function to scroll to the selected language
-    void scrollToSelectedLanguage() {
-      if (selectedLanguage != null) {
-        final selectedIndex = filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
-        if (selectedIndex != -1 && _scrollController.hasClients) {
-          _scrollController.animateTo(
-            selectedIndex * 56.0, // Approximate height of each list item
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
-    }
+    final ScrollController scrollController = ScrollController();
 
     await showDialog(
       context: context,
@@ -155,7 +141,7 @@ class LanguageSelectionDialog {
                               child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
                             )
                           : ListView.builder(
-                              controller: _scrollController,
+                              controller: scrollController,
                               itemCount: filteredLanguages.length,
                               itemBuilder: (context, index) {
                                 final language = filteredLanguages[index];
@@ -192,8 +178,8 @@ class LanguageSelectionDialog {
                             final selectedIndex = filteredLanguages.indexWhere(
                               (lang) => lang.value == selectedLanguage,
                             );
-                            if (selectedIndex != -1 && _scrollController.hasClients) {
-                              _scrollController.animateTo(
+                            if (selectedIndex != -1 && scrollController.hasClients) {
+                              scrollController.animateTo(
                                 selectedIndex * 56.0, // Approximate height of each list item
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
