@@ -17,37 +17,13 @@ WORKDIR /app
 RUN pip install --no-cache-dir --no-deps --force-reinstall \
     "nemo_toolkit[asr] @ git+https://github.com/beastoin/NeMo.git@68d99a17944181452205dc60da21e82bf3647054"
 
-# NGC torch ABI is incompatible with torchaudio C extensions.
-# Pin torchaudio==2.5.1 which has all symbols pyannote.audio 3.3.2 needs
-# (AudioMetaData, list_audio_backends, info, load, save) in its pure-Python
-# _backend module. Patch __init__.py to import from real submodules while
-# skipping C-extension-dependent modules (datasets, models, transforms).
-RUN pip install --no-cache-dir --no-deps "torchaudio==2.5.1" && \
-    printf '__version__ = "2.5.1-ngc-compat"\nfrom . import _extension\nfrom ._backend import AudioMetaData, info, load, save, list_audio_backends, set_audio_backend, get_audio_backend\nfrom . import compliance, functional\n' > \
-    /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py && \
-    printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\n_IS_RIR_AVAILABLE = False\n_IS_ALIGN_AVAILABLE = False\nclass _MockLazy:\n    def is_available(self): return False\n    def __getattr__(self, name): return None\ndef lazy_import_sox_ext(): return _MockLazy()\ndef fail_if_no_align(fn): return fn\ndef fail_if_no_rir(fn): return fn\ndef fail_if_no_sox(fn): return fn\ndef fail_if_no_ffmpeg(fn): return fn\ndef fail_if_no_soundfile(fn): return fn\ndef fail_if_no_kaldi(fn): return fn\n' > \
-    /usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py
-
-# pyannote.audio.core.task imports torch_audiomentations for training-time
-# data augmentation. We only use Model + Inference (embedding extraction),
-# never the training pipeline. Stub the package with all symbols pyannote needs.
-RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torch_audiomentations/core \
-             /usr/local/lib/python3.12/dist-packages/torch_audiomentations/augmentations \
-             /usr/local/lib/python3.12/dist-packages/torch_audiomentations/utils && \
-    printf '__version__ = "stub"\nclass Identity:\n    pass\nclass Mix:\n    pass\n' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/__init__.py && \
-    printf '' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/core/__init__.py && \
-    printf 'class BaseWaveformTransform:\n    pass\n' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/core/transforms_interface.py && \
-    printf '' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/augmentations/__init__.py && \
-    printf 'class Mix:\n    pass\n' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/augmentations/mix.py && \
-    printf '' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/utils/__init__.py && \
-    printf 'def from_dict(*a, **kw):\n    pass\n' > \
-    /usr/local/lib/python3.12/dist-packages/torch_audiomentations/utils/config.py
+# NGC's custom torch ABI is incompatible with ALL standard torchaudio
+# wheels (PyPI, cu128 index).  NeMo imports torchaudio at module level
+# (via squim metrics) but parakeet never calls those functions.
+# Create a lightweight stub that satisfies `import torchaudio`.
+RUN mkdir -p /usr/local/lib/python3.12/dist-packages/torchaudio && \
+    printf '__version__ = "stub"\n' > \
+    /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py
 
 # Extra deps not in the NGC image.
 # pyannote.audio and torch-dependent deps installed --no-deps to prevent
@@ -61,19 +37,13 @@ RUN pip install --no-cache-dir \
     "prometheus-client>=0.21.0" \
     "soundfile>=0.13.0"
 
-# pyannote.audio + deps. Post-install: stub telemetry (needs opentelemetry
-# OTLP exporter which we don't need for inference-only usage).
-RUN pip install --no-cache-dir --no-deps "pyannote.audio==3.3.2" && \
+RUN pip install --no-cache-dir --no-deps "pyannote.audio>=3.1.0" && \
     pip install --no-cache-dir --no-deps \
-    "pyannote.core==5.0.0" "pyannote.database==5.1.0" "pyannote.pipeline==3.0.1" \
-    "speechbrain==1.1.0" "asteroid-filterbanks==0.4.0" "einops==0.8.1" "semver==3.0.4" \
-    "hf_transfer==0.1.9" "tensorboardX==2.6.5" "pyannote.metrics==3.2.1" && \
-    mkdir -p /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry && \
-    printf 'def set_opentelemetry_log_level(*a, **kw): pass\ndef set_telemetry_metrics(*a, **kw): pass\ndef track_model_init(*a, **kw): pass\ndef track_pipeline_init(*a, **kw): pass\ndef track_pipeline_apply(*a, **kw): pass\n' > \
-    /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry/__init__.py
+    "pyannote.core" "pyannote.database" "pyannote.pipeline" \
+    "speechbrain" "asteroid-filterbanks" "einops" "semver" \
+    "hf_transfer" "tensorboardX"
 
 COPY backend/parakeet/ .
-COPY backend/tests/container/ tests/container/
 
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
