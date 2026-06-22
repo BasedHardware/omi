@@ -135,12 +135,28 @@ jobs:
                         BENCH_EXIT=$?
                         set -e
 
+                        if [ $BENCH_EXIT -ne 0 ]; then
+                          echo "DER benchmark failed (exit=$BENCH_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $BENCH_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 6: Concurrency Stress Test ---"
+                        set +e
+                        CONCURRENCY_LEVEL=8 CONCURRENCY_ROUNDS=3 \
+                        python -m pytest tests/container/test_parakeet_concurrency.py -v -s \
+                          --tb=short 2>&1
+                        CONC_EXIT=$?
+                        set -e
+
                         kill $SERVER_PID 2>/dev/null || true
                         wait $SERVER_PID 2>/dev/null || true
 
-                        if [ $BENCH_EXIT -ne 0 ]; then
-                          echo "DER benchmark failed (exit=$BENCH_EXIT)"
-                          exit $BENCH_EXIT
+                        if [ $CONC_EXIT -ne 0 ]; then
+                          echo "Concurrency test failed (exit=$CONC_EXIT)"
+                          exit $CONC_EXIT
                         fi
                         echo ""
 
