@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir --no-deps --force-reinstall \
 # __init__.py to skip the C extension loader and only expose compliance.
 # AudioMetaData stub needed by pyannote.audio.core.io at import time.
 RUN pip install --no-cache-dir --no-deps torchaudio && \
-    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nclass AudioMetaData:\n    def __init__(self, sample_rate=0, num_frames=0, num_channels=0, bits_per_sample=0, encoding=""):\n        self.sample_rate = sample_rate\n        self.num_frames = num_frames\n        self.num_channels = num_channels\n        self.bits_per_sample = bits_per_sample\n        self.encoding = encoding\ndef info(*a, **kw): raise RuntimeError("torchaudio.info unavailable in NGC-compat mode")\ndef load(*a, **kw): raise RuntimeError("torchaudio.load unavailable in NGC-compat mode")\ndef save(*a, **kw): raise RuntimeError("torchaudio.save unavailable in NGC-compat mode")\n' > \
+    printf '__version__ = "2.11.0-ngc-compat"\nfrom . import compliance\nclass AudioMetaData:\n    def __init__(self, sample_rate=0, num_frames=0, num_channels=0, bits_per_sample=0, encoding=""):\n        self.sample_rate = sample_rate\n        self.num_frames = num_frames\n        self.num_channels = num_channels\n        self.bits_per_sample = bits_per_sample\n        self.encoding = encoding\ndef info(*a, **kw): raise RuntimeError("torchaudio.info unavailable in NGC-compat mode")\ndef load(*a, **kw): raise RuntimeError("torchaudio.load unavailable in NGC-compat mode")\ndef save(*a, **kw): raise RuntimeError("torchaudio.save unavailable in NGC-compat mode")\ndef list_audio_backends(): return ["soundfile"]\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/__init__.py && \
     printf '_IS_TORCHAUDIO_EXT_AVAILABLE = False\ndef fail_if_no_align(*a, **kw): pass\ndef fail_if_no_sox(*a, **kw): pass\ndef fail_if_no_ffmpeg(*a, **kw): pass\ndef fail_if_no_soundfile(*a, **kw): pass\ndef fail_if_no_kaldi(*a, **kw): pass\n' > \
     /usr/local/lib/python3.12/dist-packages/torchaudio/_extension/__init__.py
@@ -65,7 +65,7 @@ RUN pip install --no-cache-dir \
 # OTLP exporter which we don't need for inference-only usage).
 RUN pip install --no-cache-dir --no-deps "pyannote.audio==3.3.2" && \
     pip install --no-cache-dir --no-deps \
-    "pyannote.core" "pyannote.database" "pyannote.pipeline" \
+    "pyannote.core==5.0.0" "pyannote.database==5.1.0" "pyannote.pipeline==3.0.1" \
     "speechbrain" "asteroid-filterbanks" "einops" "semver" \
     "hf_transfer" "tensorboardX" && \
     mkdir -p /usr/local/lib/python3.12/dist-packages/pyannote/audio/telemetry && \
