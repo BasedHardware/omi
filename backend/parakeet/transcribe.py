@@ -52,11 +52,19 @@ def get_builtin_embedding_model():
                 logger.warning("pyannote.audio not installed, built-in embedding unavailable")
                 return None
             # PyTorch 2.6+ defaults weights_only=True which rejects older checkpoints
-            try:
-                if _torch is not None and hasattr(_torch.serialization, 'add_safe_globals'):
-                    from torch.torch_version import TorchVersion
+            if _torch is not None and hasattr(_torch, 'load'):
+                _orig_load = _torch.load
 
-                    _torch.serialization.add_safe_globals([TorchVersion])
+                def _patched_load(*args, **kwargs):
+                    kwargs["weights_only"] = False
+                    return _orig_load(*args, **kwargs)
+
+                _torch.load = _patched_load
+            # pyannote.audio 3.3.2 check_version fails on stubbed torchaudio
+            try:
+                import pyannote.audio.core.model as _pam
+
+                _pam.check_version = lambda *a, **kw: None
             except (ImportError, AttributeError):
                 pass
             model = _PyannoteModel.from_pretrained(
