@@ -31,6 +31,7 @@ actor RewindIndexer {
     /// launch runs cleanup immediately; afterwards it runs at most every 6h.
     private var lastRetentionCleanupAt: Date = .distantPast
     private let retentionCleanupInterval: TimeInterval = 6 * 60 * 60
+    private var isRetentionCleanupRunning = false
 
     // MARK: - Initialization
 
@@ -415,9 +416,20 @@ actor RewindIndexer {
 
     /// Run cleanup to remove old screenshots
     func runCleanup() async {
+        guard !isRetentionCleanupRunning else {
+            log("RewindIndexer: Cleanup already in progress, skipping")
+            return
+        }
+        isRetentionCleanupRunning = true
+        defer { isRetentionCleanupRunning = false }
+
         let retentionDays = RewindSettings.shared.retentionDays
 
         do {
+            // Ensure recovery has a chance to run if a previous cleanup closed the DB
+            // after a corruption/I/O error.
+            try await RewindDatabase.shared.initialize()
+
             // Get cutoff date
             let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())!
 

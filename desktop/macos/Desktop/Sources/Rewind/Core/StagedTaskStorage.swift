@@ -84,18 +84,52 @@ actor StagedTaskStorage {
     func markSynced(id: Int64, backendId: String) async throws {
         let db = try await ensureInitialized()
 
-        try await db.write { database in
+        enum MarkSyncedResult {
+            case updated
+            case mergedDuplicate(existingId: Int64)
+        }
+
+        let result: MarkSyncedResult = try await db.write { database in
             guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
                 throw ActionItemStorageError.recordNotFound
+            }
+
+            // Sentry has seen UNIQUE constraint failures here when the same backend
+            // task already exists locally (for example, from an API refresh racing a
+            // local sync retry). Treat that as an idempotent sync completion: keep the
+            // canonical backend row and remove the duplicate local row instead of
+            // throwing and retrying forever.
+            if let existing = try StagedTaskRecord
+                .filter(Column("backendId") == backendId)
+                .filter(Column("id") != id)
+                .fetchOne(database),
+               let existingId = existing.id {
+                let now = Date()
+                try database.execute(
+                    sql: """
+                        UPDATE staged_tasks
+                        SET backendSynced = 1, updatedAt = ?
+                        WHERE id = ?
+                    """,
+                    arguments: [now, existingId]
+                )
+                try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
+                return .mergedDuplicate(existingId: existingId)
             }
 
             record.backendId = backendId
             record.backendSynced = true
             record.updatedAt = Date()
             try record.update(database)
+            return .updated
         }
 
-        log("StagedTaskStorage: Marked staged task \(id) as synced (backendId: \(backendId))")
+        switch result {
+        case .updated:
+            log("StagedTaskStorage: Marked staged task \(id) as synced (backendId: \(backendId))")
+        case .mergedDuplicate(let existingId):
+            log("StagedTaskStorage: Marked staged task sync idempotent by merging local duplicate \(id) into existing row \(existingId)")
+        }
     }
 
     /// Get unsynced staged tasks for retry

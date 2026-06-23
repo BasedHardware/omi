@@ -55,21 +55,47 @@ actor RewindDatabase {
     /// closes the database so the next initialize() call triggers recovery.
     func reportQueryError(_ error: Error) {
         guard dbQueue != nil else { return }  // DB already closed, nothing to do
-        guard let dbError = error as? DatabaseError else { return }
-        let code = dbError.resultCode
-        let extendedCode = dbError.extendedResultCode.rawValue
-        let isIOError = code == .SQLITE_IOERR
-        let isCorrupt = code == .SQLITE_CORRUPT
-        let isCorruptFS = extendedCode == 6922
-
-        guard isIOError || isCorrupt || isCorruptFS else { return }
+        guard isRecoverableDatabaseError(error) else { return }
 
         consecutiveQueryIOErrors += 1
         if consecutiveQueryIOErrors >= maxQueryIOErrorsBeforeRecovery {
-            logError("RewindDatabase: \(consecutiveQueryIOErrors) consecutive I/O errors during queries, closing database for recovery")
+            logError("RewindDatabase: \(consecutiveQueryIOErrors) consecutive recoverable SQLite errors during queries, closing database for recovery")
             close()
             // Next getDatabaseQueue() returns nil → callers get databaseNotInitialized
             // Next initialize() call will go through full recovery path
+        }
+    }
+
+    /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
+    private func isRecoverableDatabaseError(_ error: Error) -> Bool {
+        if let dbError = error as? DatabaseError {
+            let code = dbError.resultCode
+            let extendedCode = dbError.extendedResultCode.rawValue
+            return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+        }
+        let message = "\(error)".lowercased()
+        return message.contains("malformed") || message.contains("disk i/o") || message.contains("database disk image")
+    }
+
+    /// Handle corruption/I/O failures from cleanup and other maintenance operations.
+    /// Those paths can otherwise run repeatedly and emit the same Sentry error forever.
+    private func recoverFromMaintenanceError(_ error: Error, operation: String) async {
+        guard dbQueue != nil else { return }
+        guard isRecoverableDatabaseError(error) else { return }
+
+        let omiDir = userBaseDirectory()
+        let dbPath = omiDir.appendingPathComponent("omi.db").path
+        logError("RewindDatabase: recoverable SQLite error during \(operation); backing up and recreating local database")
+
+        // Close before file-level recovery so SQLite releases handles/WAL state.
+        close()
+
+        guard FileManager.default.fileExists(atPath: dbPath) else { return }
+        do {
+            try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+        } catch {
+            // Keep this sanitized: operation name and SQLite/file recovery action only.
+            logError("RewindDatabase: recovery after \(operation) failed; next initialization will retry")
         }
     }
 
@@ -2841,54 +2867,59 @@ actor RewindDatabase {
     // MARK: - Cleanup
 
     /// Delete screenshots older than the specified date
-    func deleteScreenshotsOlderThan(_ date: Date) throws -> DeleteResult {
+    func deleteScreenshotsOlderThan(_ date: Date) async throws -> DeleteResult {
         guard let dbQueue = dbQueue else {
             throw RewindError.databaseNotInitialized
         }
 
-        // First get the image paths to delete (legacy JPEGs)
-        let imagePaths = try dbQueue.read { db -> [String] in
-            try String.fetchAll(
-                db,
-                sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
-                arguments: [date]
-            )
-        }
-
-        // Get video chunk paths that will have frames deleted
-        let videoChunksToCheck = try dbQueue.read { db -> [String] in
-            try String.fetchAll(
-                db,
-                sql: "SELECT DISTINCT videoChunkPath FROM screenshots WHERE timestamp < ? AND videoChunkPath IS NOT NULL",
-                arguments: [date]
-            )
-        }
-
-        // Delete the records
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "DELETE FROM screenshots WHERE timestamp < ?",
-                arguments: [date]
-            )
-        }
-
-        // Check which video chunks are now orphaned (no remaining frames)
-        let orphanedChunks = try dbQueue.read { db -> [String] in
-            var orphaned: [String] = []
-            for chunkPath in videoChunksToCheck {
-                let remainingCount = try Int.fetchOne(
+        do {
+            // First get the image paths to delete (legacy JPEGs)
+            let imagePaths = try dbQueue.read { db -> [String] in
+                try String.fetchAll(
                     db,
-                    sql: "SELECT COUNT(*) FROM screenshots WHERE videoChunkPath = ?",
-                    arguments: [chunkPath]
-                ) ?? 0
-                if remainingCount == 0 {
-                    orphaned.append(chunkPath)
-                }
+                    sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
+                    arguments: [date]
+                )
             }
-            return orphaned
-        }
 
-        return DeleteResult(imagePaths: imagePaths, orphanedVideoChunks: orphanedChunks)
+            // Get video chunk paths that will have frames deleted
+            let videoChunksToCheck = try dbQueue.read { db -> [String] in
+                try String.fetchAll(
+                    db,
+                    sql: "SELECT DISTINCT videoChunkPath FROM screenshots WHERE timestamp < ? AND videoChunkPath IS NOT NULL",
+                    arguments: [date]
+                )
+            }
+
+            // Delete the records
+            try dbQueue.write { db in
+                try db.execute(
+                    sql: "DELETE FROM screenshots WHERE timestamp < ?",
+                    arguments: [date]
+                )
+            }
+
+            // Check which video chunks are now orphaned (no remaining frames)
+            let orphanedChunks = try dbQueue.read { db -> [String] in
+                var orphaned: [String] = []
+                for chunkPath in videoChunksToCheck {
+                    let remainingCount = try Int.fetchOne(
+                        db,
+                        sql: "SELECT COUNT(*) FROM screenshots WHERE videoChunkPath = ?",
+                        arguments: [chunkPath]
+                    ) ?? 0
+                    if remainingCount == 0 {
+                        orphaned.append(chunkPath)
+                    }
+                }
+                return orphaned
+            }
+
+            return DeleteResult(imagePaths: imagePaths, orphanedVideoChunks: orphanedChunks)
+        } catch {
+            await recoverFromMaintenanceError(error, operation: "retention_cleanup")
+            throw error
+        }
     }
 
     /// Delete a specific screenshot
