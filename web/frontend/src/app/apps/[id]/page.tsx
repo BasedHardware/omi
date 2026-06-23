@@ -9,6 +9,7 @@ import Image from 'next/image';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppById, getAppsByCategory } from '@/src/lib/api/apps';
 import envConfig from '@/src/constants/envConfig';
+import { PRODUCT_CONFIG } from '@/src/constants/product';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -69,10 +70,9 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 // Add a separate function to handle JSON-LD
 export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const canonicalUrl = `${envConfig.WEB_URL}/apps/${plugin.id}`;
-  const appStoreUrl = 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163';
-  const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
-  const productUrl =
-    'https://www.omi.me/products/friend-dev-kit-2?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner';
+  const appStoreUrl = PRODUCT_CONFIG.appStoreUrl;
+  const playStoreUrl = PRODUCT_CONFIG.playStoreUrl;
+  const productUrl = `${PRODUCT_CONFIG.productUrl}?ref=omi_marketplace&utm_source=h.omi.me&utm_campaign=omi_marketplace_floating_banner`;
 
   return {
     __html: JSON.stringify([
@@ -95,7 +95,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
           bestRating: '5',
           worstRating: '1',
         },
-        applicationSuite: 'Omi',
+        applicationSuite: PRODUCT_CONFIG.name,
         requiresSubscription: false,
         installUrl: canonicalUrl,
         interactionStatistic: {
@@ -107,16 +107,16 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
       {
         '@context': 'https://schema.org',
         '@type': 'Product',
-        name: 'OMI Necklace',
+        name: PRODUCT_CONFIG.name,
         description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
         brand: {
           '@type': 'Brand',
-          name: 'OMI',
+          name: PRODUCT_CONFIG.name,
         },
         offers: {
           '@type': 'Offer',
-          price: '89',
-          priceCurrency: 'USD',
+          price: PRODUCT_CONFIG.price,
+          priceCurrency: PRODUCT_CONFIG.currency,
           availability: 'https://schema.org/InStock',
           url: productUrl,
           priceValidUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
@@ -150,14 +150,7 @@ const formatCategoryName = (category: string): string => {
 
 // Helper function to determine platform and get appropriate link
 function getPlatformLink(userAgent: string) {
-  const isAndroid = /android/i.test(userAgent);
-  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
-
-  return isAndroid
-    ? 'https://play.google.com/store/apps/details?id=com.friend.ios'
-    : isIOS
-      ? 'https://apps.apple.com/us/app/friend-ai-wearable/id6502156163'
-      : 'https://omi.me';
+  return PRODUCT_CONFIG.getPlatformLink(userAgent);
 }
 
 // Helper function to format date
@@ -260,7 +253,7 @@ export default async function PluginDetailView(props: {
                     {/* Store Buttons */}
                     <div className="mt-4 flex items-center gap-4">
                       <a
-                        href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
+                        href={PRODUCT_CONFIG.appStoreUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"
@@ -274,7 +267,7 @@ export default async function PluginDetailView(props: {
                         />
                       </a>
                       <a
-                        href="https://play.google.com/store/apps/details?id=com.friend.ios"
+                        href={PRODUCT_CONFIG.playStoreUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="transition-transform duration-300 hover:scale-105"

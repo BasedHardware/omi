@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 
 // ── Pure logic copied from page.tsx (same implementation) ──────────────
 
-const SUPPORT_EMAIL = 'team@basedhardware.com';
+const SUPPORT_EMAIL = 'support@omi.me';
 const EMAIL_RE = /^[a-zA-Z0-9.!#$&'*+/=^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/;
 
 function safeEmail(raw) {

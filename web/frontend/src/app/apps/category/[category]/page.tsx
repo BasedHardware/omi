@@ -15,6 +15,7 @@ import {
 } from '../../utils/metadata';
 import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppsByCategory } from '@/src/lib/api/apps';
+import envConfig from '@/src/constants/envConfig';
 
 interface CategoryPageProps {
   params: Promise<{
@@ -34,10 +35,10 @@ export async function generateMetadata(props: CategoryPageProps): Promise<Metada
   const metadata = getCategoryMetadata(category);
 
   const title = `${metadata.title} - OMI Apps Marketplace`;
-  const description = `${metadata.description} Browse ${categoryPlugins.length}+ ${category} apps for your OMI Necklace.`;
+  const description = `${metadata.description} Browse ${categoryPlugins.length}+ ${category} apps for your Omi.`;
 
   const baseMetadata = getBaseMetadata(title, description);
-  const canonicalUrl = `https://omi.me/apps/category/${category}`;
+  const canonicalUrl = `${envConfig.WEB_URL}/apps/category/${category}`;
 
   return {
     ...baseMetadata,
