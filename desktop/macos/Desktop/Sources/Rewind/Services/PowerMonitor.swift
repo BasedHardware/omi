@@ -2,7 +2,7 @@ import Foundation
 import IOKit.ps
 
 /// Monitors the Mac's power source (battery vs AC) and publishes state changes.
-/// Used to pause OCR when on battery and trigger backfill when AC reconnects.
+/// Used to adapt capture cadence on battery and trigger legacy OCR backfill when AC reconnects.
 @MainActor
 class PowerMonitor: ObservableObject {
     static let shared = PowerMonitor()
@@ -11,6 +11,7 @@ class PowerMonitor: ObservableObject {
 
     /// Callback fired when switching from battery → AC power
     var onACReconnected: (() -> Void)?
+    var onPowerSourceChanged: ((Bool) -> Void)?
 
     private var runLoopSource: CFRunLoopSource?
 
@@ -69,9 +70,10 @@ class PowerMonitor: ObservableObject {
 
                 if wasOnBattery != nowOnBattery {
                     log("PowerMonitor: Power source changed — \(nowOnBattery ? "battery" : "AC power")")
+                    self.onPowerSourceChanged?(nowOnBattery)
 
                     if wasOnBattery && !nowOnBattery {
-                        // Switched from battery → AC: trigger OCR backfill
+                        // Switched from battery → AC: trigger legacy OCR backfill
                         self.onACReconnected?()
                     }
                 }

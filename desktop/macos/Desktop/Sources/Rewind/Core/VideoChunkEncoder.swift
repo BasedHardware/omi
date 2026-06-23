@@ -21,7 +21,7 @@ actor VideoChunkEncoder {
     /// see nothing on the Rewind page for ~1-2 minutes after every launch.
     private let firstChunkDuration: TimeInterval = 5.0
     private var frameRate: Double {
-        let interval = UserDefaults.standard.object(forKey: "rewindCaptureInterval") as? Double ?? 1.0
+        let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.checkBatteryState())
         return 1.0 / interval // e.g. 0.5s interval = 2 FPS
     }
     private let maxResolution: CGFloat = 3000 // Maximum dimension
