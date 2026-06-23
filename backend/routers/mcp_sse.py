@@ -45,6 +45,9 @@ from utils.memory.v17_product_authorization import (
     authorize_v17_external_default_memory_read,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.surface_routing import memorydb_list_with_locked_preview
 from utils.mcp_memories import (
     McpV17VerifiedAuth,
     build_mcp_v17_default_memory_read_context,
@@ -592,6 +595,22 @@ def execute_tool(
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
+        memory_system = resolve_memory_system(user_id, db_client=db)
+        if memory_system == MemorySystem.CANONICAL:
+            memories = memorydb_list_with_locked_preview(
+                MemoryService(db_client=db).read(user_id, limit=limit, offset=offset)
+            )
+            return {
+                "memories": [
+                    {
+                        "id": memory.id,
+                        "content": memory.content,
+                        "category": memory.category.value if hasattr(memory.category, "value") else memory.category,
+                    }
+                    for memory in memories
+                ]
+            }
+
         v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
         v17_list_results = list_v17_default_mcp_memories(
             uid=user_id,
@@ -655,6 +674,11 @@ def execute_tool(
         memory_id = arguments.get("memory_id")
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
+
+        memory_system = resolve_memory_system(user_id, db_client=db)
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db).delete(user_id, memory_id)
+            return {"success": True}
 
         v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
         v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
@@ -780,6 +804,11 @@ def execute_tool(
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
+
+        memory_system = resolve_memory_system(user_id, db_client=db)
+        if memory_system == MemorySystem.CANONICAL:
+            memory_service = MemoryService(db_client=db)
+            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
 
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for V17 memory authorization", code=-32009)
