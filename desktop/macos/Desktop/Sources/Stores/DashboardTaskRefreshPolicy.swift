@@ -5,6 +5,11 @@ enum DashboardTaskRefreshPolicy {
     static let shouldMarkIncompleteTasksLoaded = false
     static let shouldAssignTasksPageList = false
     static let serverFetchLimit = 100
+    /// Dashboard freshness reads are page-limited to avoid a full Tasks-page load,
+    /// but must not silently rely on only offset=0. Fetch a bounded number of
+    /// pages for each dashboard-scoped bucket, then let exact-ID refresh handle
+    /// the currently visible rows that moved out of those buckets.
+    static let maxServerFetchPages = 3
 }
 
 enum DashboardExactTaskFetchPolicy {

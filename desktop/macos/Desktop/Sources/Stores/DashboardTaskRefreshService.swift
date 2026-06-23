@@ -2,9 +2,24 @@ import Foundation
 
 @MainActor
 enum DashboardTaskRefreshService {
-    private static var isRefreshing = false
+    private static var inFlightRefreshTask: Task<Void, Never>?
 
     static func refresh(store: TasksStore) async {
+        if let inFlightRefreshTask {
+            await inFlightRefreshTask.value
+            await store.loadDashboardTasks()
+            return
+        }
+
+        let task = Task {
+            await refreshNow(store: store)
+        }
+        inFlightRefreshTask = task
+        await task.value
+        inFlightRefreshTask = nil
+    }
+
+    private static func refreshNow(store: TasksStore) async {
         guard DashboardTaskRefreshPolicy.shouldSyncFromServer else {
             await store.loadDashboardTasks()
             return
@@ -17,10 +32,6 @@ enum DashboardTaskRefreshService {
             await store.loadDashboardTasks()
             return
         }
-        guard !isRefreshing else { return }
-
-        isRefreshing = true
-        defer { isRefreshing = false }
 
         await store.loadDashboardTasks()
 
@@ -44,6 +55,10 @@ enum DashboardTaskRefreshService {
 
             if !plan.itemsToSync.isEmpty {
                 try await ActionItemStorage.shared.syncTaskActionItems(plan.itemsToSync)
+                let visibilityReconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(plan.itemsToSync)
+                if visibilityReconciled > 0 {
+                    log("DashboardTaskRefreshService: Reconciled \(visibilityReconciled) dashboard visibility field updates")
+                }
             }
             for backendId in plan.backendIdsToHardDelete {
                 try await ActionItemStorage.shared.hardDeleteByBackendId(backendId)
@@ -72,22 +87,39 @@ enum DashboardTaskRefreshService {
         let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: now) ?? now
         let limit = DashboardTaskRefreshPolicy.serverFetchLimit
 
-        async let dueWindowResponse = APIClient.shared.getActionItems(
-            limit: limit,
-            offset: 0,
-            completed: false,
-            dueStartDate: sevenDaysAgo,
-            dueEndDate: endOfToday
-        )
-        async let recentResponse = APIClient.shared.getActionItems(
-            limit: limit,
-            offset: 0,
-            completed: false,
-            startDate: sevenDaysAgo
-        )
+        async let dueWindowItems = fetchDashboardWindowPages(limit: limit) { offset in
+            try await APIClient.shared.getActionItems(
+                limit: limit,
+                offset: offset,
+                completed: false,
+                dueStartDate: sevenDaysAgo,
+                dueEndDate: endOfToday
+            )
+        }
+        async let recentItems = fetchDashboardWindowPages(limit: limit) { offset in
+            try await APIClient.shared.getActionItems(
+                limit: limit,
+                offset: offset,
+                completed: false,
+                startDate: sevenDaysAgo
+            )
+        }
 
-        let (dueWindow, recent) = try await (dueWindowResponse, recentResponse)
-        return [dueWindow, recent].flatMap(\.items)
+        let (dueWindow, recent) = try await (dueWindowItems, recentItems)
+        return dueWindow + recent
+    }
+
+    private static func fetchDashboardWindowPages(
+        limit: Int,
+        fetch: (Int) async throws -> ActionItemsListResponse
+    ) async throws -> [TaskActionItem] {
+        var items: [TaskActionItem] = []
+        for page in 0..<DashboardTaskRefreshPolicy.maxServerFetchPages {
+            let response = try await fetch(page * limit)
+            items.append(contentsOf: response.items)
+            if !response.hasMore || response.items.count < limit { break }
+        }
+        return items
     }
 
     private static func fetchExactServerTruth(
