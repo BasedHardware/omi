@@ -946,7 +946,7 @@ struct ChatPrompts {
             "windowTitle": "Active window title at capture time",
             "ocrText": "Full OCR-extracted text from the screen",
             "focusStatus": "Whether user was focused or distracted (focused/distracted)",
-            "skippedForBattery": "OCR was skipped on battery; text may be missing",
+            "skippedForBattery": "Legacy flag for screenshots captured before battery mode switched to adaptive capture cadence",
         ],
         "action_items": [
             "description": "The task text shown to the user",

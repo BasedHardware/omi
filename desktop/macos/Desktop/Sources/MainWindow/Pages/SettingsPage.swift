@@ -1021,7 +1021,7 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
-                "Pause text recognition on battery to save energy. OCR runs automatically when plugged back in."
+                "Screen capture slows automatically on battery to save energy. OCR always uses accurate recognition."
               )
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
@@ -1029,9 +1029,9 @@ struct SettingsContentView: View {
 
             Spacer()
 
-            Toggle("", isOn: $rewindSettings.pauseOCROnBattery)
-              .toggleStyle(.switch)
-              .labelsHidden()
+            Text("Automatic")
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
           }
         }
       }

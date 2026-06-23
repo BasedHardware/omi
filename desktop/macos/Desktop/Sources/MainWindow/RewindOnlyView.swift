@@ -183,7 +183,6 @@ struct RewindSettingsView: View {
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("rewindRetentionDays") private var retentionDays = 7
     @AppStorage("rewindCaptureInterval") private var captureInterval = 1.0
-    @AppStorage("rewindOCRFast") private var ocrFast = true
 
     @State private var excludedApps: [String] = []
 
@@ -225,19 +224,6 @@ struct RewindSettingsView: View {
                         Text("7 days").tag(7)
                         Text("14 days").tag(14)
                         Text("30 days").tag(30)
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 120)
-                }
-
-                // OCR Quality
-                settingsRow(
-                    title: "OCR Quality",
-                    subtitle: "Fast uses less CPU; Accurate extracts more text"
-                ) {
-                    Picker("", selection: $ocrFast) {
-                        Text("Fast").tag(true)
-                        Text("Accurate").tag(false)
                     }
                     .pickerStyle(.menu)
                     .frame(width: 120)

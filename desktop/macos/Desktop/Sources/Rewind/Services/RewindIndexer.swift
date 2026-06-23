@@ -18,7 +18,6 @@ actor RewindIndexer {
     private var statsOCRRan = 0
     private var statsSkippedFrequency = 0
     private var statsSkippedDedup = 0
-    private var statsSkippedBattery = 0
     private var statsLastLogTime = Date()
     private let statsLogInterval: TimeInterval = 60
 
@@ -110,7 +109,7 @@ actor RewindIndexer {
 
     // MARK: - OCR Stats
 
-    private enum OCROutcome { case ran, skippedFrequency, skippedDedup, skippedBattery }
+    private enum OCROutcome { case ran, skippedFrequency, skippedDedup }
 
     private func recordOCROutcome(_ outcome: OCROutcome) {
         statsTotalFrames += 1
@@ -118,28 +117,18 @@ actor RewindIndexer {
         case .ran: statsOCRRan += 1
         case .skippedFrequency: statsSkippedFrequency += 1
         case .skippedDedup: statsSkippedDedup += 1
-        case .skippedBattery: statsSkippedBattery += 1
         }
 
         let now = Date()
         if now.timeIntervalSince(statsLastLogTime) >= statsLogInterval {
-            var parts = ["\(statsTotalFrames) frames", "\(statsOCRRan) OCR'd", "\(statsSkippedFrequency) skipped (frequency)", "\(statsSkippedDedup) skipped (dedup)"]
-            if statsSkippedBattery > 0 {
-                parts.append("\(statsSkippedBattery) skipped (battery)")
-            }
+            let parts = ["\(statsTotalFrames) frames", "\(statsOCRRan) OCR'd", "\(statsSkippedFrequency) skipped (frequency)", "\(statsSkippedDedup) skipped (dedup)"]
             log("RewindIndexer: Last \(Int(statsLogInterval))s — \(parts.joined(separator: ", "))")
             statsTotalFrames = 0
             statsOCRRan = 0
             statsSkippedFrequency = 0
             statsSkippedDedup = 0
-            statsSkippedBattery = 0
             statsLastLogTime = now
         }
-    }
-
-    /// Check if OCR should be paused due to battery power
-    private func shouldPauseOCRForBattery() -> Bool {
-        return RewindSettings.shared.pauseOCROnBattery && PowerMonitor.checkBatteryState()
     }
 
     // MARK: - Frame Processing
@@ -178,7 +167,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -187,10 +175,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -218,8 +202,7 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                isIndexed: isIndexed
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -261,7 +244,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -270,10 +252,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -300,8 +278,7 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                isIndexed: isIndexed
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -355,7 +332,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -364,10 +340,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -406,8 +378,7 @@ actor RewindIndexer {
                 isIndexed: isIndexed,
                 focusStatus: focusStatus,
                 extractedTasksJson: tasksJson,
-                adviceJson: adviceJson,
-                skippedForBattery: skippedForBattery
+                adviceJson: adviceJson
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -509,22 +480,10 @@ actor RewindIndexer {
 
         do {
             while true {
-                // Stop backfill if we went back to battery
-                if shouldPauseOCRForBattery() {
-                    log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
-                    return
-                }
-
                 let pending = try await RewindDatabase.shared.getBatterySkippedScreenshots(limit: batchSize)
                 if pending.isEmpty { break }
 
                 for screenshot in pending {
-                    // Check battery again between frames
-                    if shouldPauseOCRForBattery() {
-                        log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
-                        return
-                    }
-
                     guard let id = screenshot.id else { continue }
 
                     do {

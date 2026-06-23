@@ -66,7 +66,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["exclude", "ignore", "block apps", "blocklist", "reset to defaults"],
       section: .rewind, icon: "clock.arrow.circlepath", settingId: "rewind.excludedapps"),
     SettingsSearchItem(
-      name: "Battery Optimization", subtitle: "Pause text recognition on battery to save energy",
+      name: "Battery Optimization", subtitle: "Automatically slows screen capture on battery",
       keywords: ["battery", "power", "energy", "low power"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.battery"),
     SettingsSearchItem(
