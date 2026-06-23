@@ -41,6 +41,9 @@ from database.apps import (
 from database.auth import get_user_name
 from database.conversations import get_conversations
 from database.memories import get_memories, get_user_public_memories
+from database._client import db as firestore_db
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from database.redis_db import (
     get_enabled_apps,
     get_app_reviews,
@@ -807,15 +810,19 @@ def update_personas_async(uid: str):
 
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest memories and conversations."""
-    # Get latest memories and user info
-    memories = await run_blocking(db_executor, get_user_public_memories, persona['uid'], limit=250)
-    user_name = await run_blocking(db_executor, get_user_name, persona['uid'])
+    uid = persona['uid']
+    memory_system = resolve_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        canonical_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+        memories = [memory.model_dump() for memory in canonical_memories if memory.visibility == 'public']
+    else:
+        memories = await run_blocking(db_executor, get_user_public_memories, uid, limit=250)
+    user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations
-    all_conversations = await run_blocking(db_executor, get_conversations, persona['uid'], limit=10)
+    all_conversations = await run_blocking(db_executor, get_conversations, uid, limit=10)
     conversations = deserialize_conversations(all_conversations)
     conversation_history = conversations_to_string(conversations)
-    uid = persona['uid']
     with track_usage(uid, Features.PERSONA):
         conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
 
