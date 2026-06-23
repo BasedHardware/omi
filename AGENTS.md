@@ -152,7 +152,7 @@ Rules:
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
 1. **Build + launch a named bundle:** `cd desktop/macos && OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
-2. **Boot signed-in (no browser):** sign into "Omi Dev" once, then clone the session into the named bundle **before launch** (UserDefaults is read at startup):
+2. **Boot signed-in (no browser):** sign into "Omi Dev" once; `./run.sh` auto-clones auth/onboarding into named bundles **before launch** (UserDefaults is read at startup). To do it manually:
    ```bash
    cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
    ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle

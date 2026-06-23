@@ -268,15 +268,11 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
   @AppStorage("conversationsCompactView") private var conversationsCompactView = true
+  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
   @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
-  // Realtime-as-hub (Phase 1, dev/BYOK only): the realtime model is the single
-  // tool-dispatching voice hub. Provider toggle persisted here; RealtimeHubSession
-  // reads it at connect.
-  @AppStorage("realtimeHubEnabled") private var realtimeHubEnabled = false
-  @AppStorage("realtimeHubProvider") private var realtimeHubProvider: String = RealtimeHubProvider.openai.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -308,7 +304,6 @@ struct SettingsContentView: View {
 
   enum SettingsSection: String, CaseIterable {
     case general = "General"
-    case device = "Device"
     case rewind = "Rewind"
     case transcription = "Transcription"
     case notifications = "Notifications"
@@ -457,8 +452,6 @@ struct SettingsContentView: View {
         switch selectedSection {
         case .general:
           generalSection
-        case .device:
-          DeviceSettingsPage()
         case .rewind:
           rewindSection
         case .transcription:
@@ -1649,7 +1642,6 @@ struct SettingsContentView: View {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
-              trackingItem("Device connection status")
               trackingItem("Transcript processing events")
               trackingItem("Conversation creation and updates")
               trackingItem("Memory extraction events")
@@ -2534,75 +2526,6 @@ struct SettingsContentView: View {
       voiceSpeedSlider(settingId: "floatingbar.voicespeed")
         .opacity(shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled ? 1 : 0.55)
         .disabled(!shortcutSettings.hasAnyFloatingBarVoiceAnswersEnabled)
-
-      realtimeHubCard
-      realtimeHubProviderCard
-        .opacity(realtimeHubEnabled ? 1 : 0.55)
-        .disabled(!realtimeHubEnabled)
-    }
-  }
-
-  // MARK: Realtime-as-hub (Phase 1, dev/BYOK only)
-
-  /// The realtime model becomes the single voice hub: in-session STT + reasoning
-  /// + tool-choice routing + spoken reply, bypassing the STT→Haiku router→Claude
-  /// cascade. Client-direct using the user's own BYOK key (dev/test only).
-  private var realtimeHubCard: some View {
-    settingsCard(settingId: "floatingbar.realtimehub") {
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Realtime Voice Hub (experimental)")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text(
-            "Let the realtime model run the whole voice turn — listen, decide, and speak — "
-              + "instead of the slower transcribe→route→answer pipeline. Uses your own provider key."
-          )
-          .scaledFont(size: 13)
-          .foregroundColor(OmiColors.textSecondary)
-        }
-        Spacer()
-        Toggle("", isOn: $realtimeHubEnabled)
-          .toggleStyle(.switch)
-          .tint(OmiColors.purplePrimary)
-          .onChange(of: realtimeHubEnabled) { _ in
-            NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
-          }
-      }
-    }
-  }
-
-  private var realtimeHubProviderCard: some View {
-    let provider = RealtimeHubProvider(rawValue: realtimeHubProvider) ?? .openai
-    let hasKey = APIKeyService.byokKey(provider.byokProvider) != nil
-    return settingsCard(settingId: "floatingbar.realtimehub.provider") {
-      HStack(spacing: 16) {
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Hub Provider")
-            .scaledFont(size: 16, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
-          Text(
-            hasKey
-              ? provider.subtitle
-              : "⚠️ No \(provider.byokProvider.displayName) key set — add one in Developer settings to use this provider."
-          )
-          .scaledFont(size: 13)
-          .foregroundColor(hasKey ? OmiColors.textSecondary : OmiColors.purplePrimary)
-        }
-        Spacer()
-        Picker("", selection: $realtimeHubProvider) {
-          ForEach(RealtimeHubProvider.allCases, id: \.rawValue) { p in
-            Text(p.displayName).tag(p.rawValue)
-          }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .frame(width: 180)
-        .tint(OmiColors.purplePrimary)
-        .onChange(of: realtimeHubProvider) { _ in
-          NotificationCenter.default.post(name: .realtimeHubSettingsDidChange, object: nil)
-        }
-      }
     }
   }
 
@@ -3494,6 +3417,10 @@ struct SettingsContentView: View {
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
               }
+              // The picker writes @AppStorage directly (bypassing the RealtimeOmniSettings
+              // setter), so post the change ourselves — this is what re-warms the realtime
+              // hub on the newly selected provider (and is a no-op for unchanged providers).
+              NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
             }
           }
 
@@ -5120,6 +5047,31 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "advanced.preferences.legacyhome") {
+        HStack(spacing: 16) {
+          Image(systemName: "rectangle.split.2x1")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Use old Home design")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text("Show the previous chat-first dashboard instead of the simplified Home")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $useLegacyHomeDesign)
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+        }
+      }
+
       // Launch at Login toggle
       settingsCard(settingId: "advanced.preferences.launchatlogin") {
         HStack(spacing: 16) {
@@ -6182,6 +6134,7 @@ struct SettingsContentView: View {
             .background(OmiColors.backgroundQuaternary)
 
           // Links
+          linkRow(title: "What's New", url: AppBuild.changelogURLString)
           linkRow(title: "Visit Website", url: "https://omi.me")
           linkRow(title: "Help Center", url: "https://help.omi.me")
           Button(action: {

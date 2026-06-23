@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -42,25 +43,15 @@ export async function GET(request: NextRequest) {
       SELECT
         toDate(timestamp) as day,
         countIf(event = 'App Crash Detected') as crashes,
-        countIf(DISTINCT distinct_id, event = 'App Became Active') as users
+        count(DISTINCT distinct_id) as users
       FROM events
-      WHERE (event = 'App Crash Detected' OR event = 'App Became Active')
-        AND properties.$os_name = 'macOS'
+      WHERE properties.$os_name = 'macOS'
         AND timestamp >= now() - interval ${days} day
       GROUP BY day
       ORDER BY day
     `;
 
-    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: { kind: "HogQLQuery", query: hogql },
-      }),
-    });
+    const response = await posthogFetch(host, projectId, apiKey, hogql);
 
     if (!response.ok) {
       // HogQL countIf with DISTINCT might not be supported — fall back to two queries
@@ -97,8 +88,7 @@ export async function GET(request: NextRequest) {
               query: `
                 SELECT toDate(timestamp) as day, count(DISTINCT distinct_id) as users
                 FROM events
-                WHERE event = 'App Became Active'
-                  AND properties.$os_name = 'macOS'
+                WHERE properties.$os_name = 'macOS'
                   AND timestamp >= now() - interval ${days} day
                 GROUP BY day ORDER BY day
               `,

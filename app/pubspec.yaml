@@ -104,7 +104,6 @@ dependencies:
     git:
       url: https://github.com/mdmohsin7/opus_dart.git
       ref: dev
-  growthbook_sdk_flutter: 3.9.2
   flutter_timezone: 3.0.1
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0

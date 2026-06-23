@@ -9253,4 +9253,27 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
+
+  @override
+  String get transcribeLaterTitle => 'תמלול מאוחר יותר';
+
+  @override
+  String get transcribeLaterDescription =>
+      'הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.';
+
+  @override
+  String get transcribeLaterNote => 'פועל עם מכשירי Omi בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.';
+
+  @override
+  String get unmute => 'בטל השתקה';
+
+  @override
+  String get newRecording => 'הקלטה חדשה';
+
+  @override
+  String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 }

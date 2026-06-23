@@ -50,12 +50,6 @@ class PushToTalkManager: ObservableObject {
   /// it uses the realtime omni STT and routes the transcript into the pill's agent
   /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
   private var followUpPill: AgentPill?
-  // Cached local cue for the instant PTT-up ack (preloaded so play() never hits disk).
-  private lazy var ackSound: NSSound? = {
-    let s = NSSound(named: "Pop")
-    s?.volume = 0.35
-    return s
-  }()
   // Mic chunks captured before the relay finishes connecting (raw 16k PCM),
   // flushed once the service exists so the user's first words aren't clipped.
   private var omniPreconnectBuffer: [Data] = []
@@ -385,6 +379,13 @@ class PushToTalkManager: ObservableObject {
     finalize()
   }
 
+  /// Cancel an in-progress voice follow-up for a pill that was dismissed.
+  func cancelPillFollowUp(for pillID: UUID) {
+    guard followUpPill?.id == pillID else { return }
+    log("PushToTalkManager: voice follow-up CANCEL for dismissed agent")
+    stopListening()
+  }
+
   private var finalizedMode: String = "hold"
 
   // MARK: - QueryTracer
@@ -523,10 +524,6 @@ class PushToTalkManager: ObservableObject {
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
-    // Flags only — the window keeps the bar expanded into "thinking" because commitTurn
-    // sets isVoiceThinking before the reactive resize observer settles (so isVoiceActive
-    // never dips), which is why there's no flicker and no skip-resize coordination here.
-    updateBarState()
 
     // Stop mic immediately — no more audio capture
     audioCaptureService?.stopCapture()
@@ -560,13 +557,12 @@ class PushToTalkManager: ObservableObject {
         updateBarState()  // clears the listening UI (no "…")
         return
       }
-      // Real speech — instant local ack + commit. The hub speaks the reply and
-      // dispatches tools itself; no transcript/router/LLM hop here.
-      if ShortcutSettings.shared.pttSoundsEnabled { ackSound?.play() }
-      barState?.voiceTranscript = "…"
+      // Real speech — commit. The hub speaks the reply and dispatches tools
+      // itself; no transcript/router/LLM hop here.
       RealtimeHubController.shared.commitTurn()
-      // Leave the bar showing "…"; the hub controller exits the voice UI on turn
-      // completion (so we skip the clearing updateBarState()).
+      // Collapse the bar on release — the hub speaks its reply as audio (no inline
+      // status UI), the same as the legacy voice path.
+      updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
       log("PushToTalkManager: hub turn committed (instant ack)")
@@ -595,15 +591,16 @@ class PushToTalkManager: ObservableObject {
       }
     }
 
-    // Play end-of-PTT sound
-    if ShortcutSettings.shared.pttSoundsEnabled {
-      let sound = NSSound(named: "Bottle")
-      sound?.volume = 0.3
-      sound?.play()
-    }
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
+      // The relay already died this turn (omniDidError nilled it) — don't wait on a dead
+      // socket; transcribe the buffered turn audio via Deepgram now so PTT still answers.
+      if realtimeOmniService == nil {
+        log("PushToTalkManager: omni relay unavailable — transcribing turn via Deepgram")
+        fallBackToDeepgram()
+        return
+      }
       // QueryTracer: the omni provider's post-commit finalization (VAD close +
       // final STT inference + round-trip) — closed at the top of sendTranscript().
       activeTracer?.begin(
@@ -613,8 +610,11 @@ class PushToTalkManager: ObservableObject {
       let timeout = DispatchWorkItem { [weak self] in
         Task { @MainActor in
           guard let self, self.state == .finalizing else { return }
-          log("PushToTalkManager: omni finalization timeout — sending transcript")
-          self.sendTranscript()
+          // No clean final transcript from the relay in time — don't ship the garbage
+          // interim it may have left behind; fall back to Deepgram on the full buffered
+          // turn audio. fallBackToDeepgram() no-ops if the turn was already sent.
+          log("PushToTalkManager: omni finalization timeout — falling back to Deepgram")
+          self.fallBackToDeepgram()
         }
       }
       liveFinalizationTimeout = timeout
@@ -729,14 +729,14 @@ class PushToTalkManager: ObservableObject {
 
     isCurrentSessionFollowUp = false
 
-    // Reset state. The reactive resize observer won't collapse the bar when a query is in
-    // flight or a conversation is open — it guards on showingAIConversation/showingAIResponse,
-    // which openAIInputWithQuery sets (to the correct response size) right after this.
+    // Reset state — skip PTT collapse resize when we have a query,
+    // because openAIInputWithQuery will resize to the correct size.
+    // Also skip resize when in follow-up mode (panel is already at response size).
     state = .idle
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
-    updateBarState()
+    updateBarState(skipResize: hasQuery || wasFollowUp)
 
     guard hasQuery else {
       log("PushToTalkManager: no transcript to send")
@@ -978,7 +978,11 @@ class PushToTalkManager: ObservableObject {
               self.transcriptionService?.sendAudio(audioData)
             }
           },
-          onAudioLevel: { _ in }
+          onAudioLevel: { level in
+            // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
+            // inside the monitor; used only for visualization.
+            AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          }
         )
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
@@ -1037,8 +1041,9 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Bar State Sync
 
-  private func updateBarState() {
+  private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
+    let wasListening = barState.isVoiceListening
     let isShowingVoiceUI = (state == .listening || state == .lockedListening)
     barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
@@ -1047,9 +1052,16 @@ class PushToTalkManager: ObservableObject {
       barState.voiceTranscript = ""
       barState.voiceFollowUpTranscript = ""
     }
-    // The bar's expand/collapse is derived reactively from these flags by the window
-    // (FloatingControlBarWindow.setupVoiceActivityObserver) — one resize per turn, no
-    // imperative calls or skip-flags to keep in sync here.
+
+    // Skip resize when in follow-up mode, expanded AI conversation, or during onboarding
+    // (during onboarding the floating bar shouldn't appear as a separate window)
+    let isOnboarding = !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+    guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
+    if barState.isVoiceListening && !wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: true)
+    } else if !barState.isVoiceListening && wasListening {
+      FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+    }
   }
 }
 
@@ -1179,14 +1191,23 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   func omniDidError(_ message: String) {
     logError("PushToTalkManager: omni STT error: \(message)")
-    // If the omni model already gave us a transcript this turn, the error is a
-    // benign teardown — ignore it. Otherwise the relay is unreachable (e.g. the
-    // backend isn't on prod yet): fall back to Deepgram so PTT never breaks.
-    guard !omniReceivedTranscript,
+    // Benign ONLY if the turn already completed (final transcript sent). A mid-turn relay
+    // death — even after a spurious interim like "Olha olha" that set omniReceivedTranscript
+    // — must NOT be ignored, or the turn is lost (garbage/no reply). The full turn audio is
+    // always buffered in batchAudioBuffer, so we re-transcribe it via Deepgram.
+    guard !omniTurnSent,
           state == .listening || state == .lockedListening
             || state == .pendingLockDecision || state == .finalizing
     else { return }
-    fallBackToDeepgram()
+    // Kill the dead relay so finalize() doesn't wait on it; the mic keeps buffering.
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    // If the user already released, transcribe the buffered turn now. If they're still
+    // holding, keep capturing — finalize()'s dead-relay branch falls back to Deepgram with
+    // the full turn audio (avoids cutting them off mid-sentence).
+    if state == .finalizing {
+      fallBackToDeepgram()
+    }
   }
 
   /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.

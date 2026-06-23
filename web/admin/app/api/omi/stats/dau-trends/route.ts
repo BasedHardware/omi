@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogFetch } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -30,29 +31,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: cache.data, days });
     }
 
-    // Use PostHog HogQL for daily unique macOS users with "App Became Active"
+    // Daily unique macOS users = distinct clients emitting ANY event (rename-proof;
+    // the old `App Became Active` lifecycle event was removed from the desktop app).
     const hogql = `
       SELECT
         toDate(timestamp) as day,
         count(DISTINCT distinct_id) as users
       FROM events
-      WHERE event = 'App Became Active'
-        AND properties.$os_name = 'macOS'
+      WHERE properties.$os_name = 'macOS'
         AND timestamp >= now() - interval ${days} day
       GROUP BY day
       ORDER BY day
     `;
 
-    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: { kind: "HogQLQuery", query: hogql },
-      }),
-    });
+    const response = await posthogFetch(host, projectId, apiKey, hogql);
 
     if (!response.ok) {
       const text = await response.text();

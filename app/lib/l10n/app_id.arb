@@ -3092,5 +3092,12 @@
     "recapRegenerateCooldown": "Mohon tunggu beberapa detik sebelum membuat ulang.",
     "recapRegenerateNoConversations": "Tidak ada percakapan untuk diringkas pada hari ini.",
     "syncCustomSttWarningTitle": "Sinkronisasi memakai transkripsi Omi",
-    "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda."
+    "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.",
+    "transcribeLaterTitle": "Transkripsi Nanti",
+    "transcribeLaterDescription": "Rekam audio sekarang dan transkripsikan saat dibutuhkan, bukan secara langsung. Rekaman disimpan di ponsel Anda, lalu Anda mengunggahnya untuk membuat percakapan.",
+    "transcribeLaterNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
+    "transcribeLaterStorageFull": "Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.",
+    "unmute": "Bunyikan",
+    "newRecording": "Rekaman baru",
+    "transcribeLaterPaused": "Dijeda — audio tidak sedang direkam"
 }

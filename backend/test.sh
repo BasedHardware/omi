@@ -25,6 +25,7 @@ pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
+pytest tests/unit/test_parakeet_builtin_embedding.py -v
 pytest tests/unit/test_parakeet_endpoints.py -v
 pytest tests/unit/test_audiobuffer_guard.py -v
 pytest tests/unit/test_memory_leak_buffers.py -v
@@ -37,6 +38,7 @@ pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
+pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_high_priority_usage_tracking.py -v
 pytest tests/unit/test_new_usage_tracking_gaps.py -v
@@ -57,6 +59,7 @@ pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
+pytest tests/unit/test_firestore_cache.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
@@ -71,6 +74,7 @@ pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
+pytest tests/unit/test_translation_dedup_edge_cases.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
 pytest tests/unit/test_conversation_model_split.py -v
 pytest tests/unit/test_transcribe_conversation_cache.py -v

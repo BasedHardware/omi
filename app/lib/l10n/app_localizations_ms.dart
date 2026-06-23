@@ -9346,4 +9346,28 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkrip Kemudian';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
+
+  @override
+  String get unmute => 'Nyahsenyap';
+
+  @override
+  String get newRecording => 'Rakaman baharu';
+
+  @override
+  String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
 }

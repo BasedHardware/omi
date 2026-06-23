@@ -9172,4 +9172,25 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
+
+  @override
+  String get transcribeLaterTitle => '後で文字起こし';
+
+  @override
+  String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
+
+  @override
+  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+
+  @override
+  String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
+
+  @override
+  String get unmute => 'ミュート解除';
+
+  @override
+  String get newRecording => '新規録音';
+
+  @override
+  String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
 }

@@ -9323,4 +9323,28 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.';
+
+  @override
+  String get transcribeLaterTitle => 'Litteroi myöhemmin';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
+
+  @override
+  String get unmute => 'Poista mykistys';
+
+  @override
+  String get newRecording => 'Uusi tallennus';
+
+  @override
+  String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 }

@@ -2,6 +2,18 @@
   "annotations": {
     "list": [
       {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
         "builtIn": 0,
         "datasource": {
           "type": "prometheus",
@@ -9,6 +21,7 @@
         },
         "enable": true,
         "expr": "changes(kube_deployment_status_observed_generation{namespace=\"prod-omi-backend\", deployment=\"prod-omi-parakeet\"}[2m]) > 0",
+        "hide": false,
         "iconColor": "blue",
         "name": "Deployments",
         "textFormat": "Deployment revision changed",
@@ -67,7 +80,7 @@
             "steps": [
               {
                 "color": "red",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -95,6 +108,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -102,16 +116,18 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (\n  sum(rate(parakeet_request_duration_seconds_count{container=\"parakeet\", namespace=\"prod-omi-backend\", exported_endpoint=\"\"}[5m])) or vector(0)\n) / (\n  sum(rate(parakeet_request_duration_seconds_count{container=\"parakeet\", namespace=\"prod-omi-backend\"}[5m])) > 0\n)",
+          "expr": "1 - (\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=~\"[45]..\"}[$__rate_interval])) or vector(0))\n  /\n  (sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)\n)",
           "instant": true,
           "legendFormat": "Success Rate",
           "refId": "A"
@@ -135,7 +151,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "yellow",
@@ -163,6 +179,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -170,9 +187,11 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -203,7 +222,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "yellow",
@@ -231,6 +250,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -238,9 +258,11 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -273,7 +295,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "yellow",
@@ -301,6 +323,7 @@
         "graphMode": "area",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -308,9 +331,11 @@
           "fields": "",
           "values": false
         },
+        "showPercentChange": false,
         "textMode": "auto",
         "wideLayout": true
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -334,7 +359,7 @@
         "x": 0,
         "y": 5
       },
-      "id": 100,
+      "id": 125,
       "panels": [],
       "title": "ASR Quality & Throughput",
       "type": "row"
@@ -348,6 +373,7 @@
       "fieldConfig": {
         "defaults": {
           "decimals": 1,
+          "mappings": [],
           "max": 50,
           "min": 0,
           "thresholds": {
@@ -355,7 +381,7 @@
             "steps": [
               {
                 "color": "red",
-                "value": null
+                "value": 0
               },
               {
                 "color": "orange",
@@ -383,6 +409,8 @@
       },
       "id": 101,
       "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -392,11 +420,13 @@
           "values": false
         },
         "showThresholdLabels": false,
-        "showThresholdMarkers": true
+        "showThresholdMarkers": true,
+        "sizing": "auto"
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "parakeet_rtfx{namespace=\"prod-omi-backend\"}",
+          "expr": "avg(parakeet_rtfx{namespace=\"prod-omi-backend\"})",
           "legendFormat": "RTFx",
           "refId": "A"
         }
@@ -416,20 +446,45 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 15,
             "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
             "thresholdsStyle": {
               "mode": "line"
             }
           },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "red",
-                "value": null
+                "value": 0
               },
               {
                 "color": "green",
@@ -450,15 +505,21 @@
       "id": 102,
       "options": {
         "legend": {
-          "displayMode": "list"
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "single"
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "parakeet_rtfx{namespace=\"prod-omi-backend\"}",
+          "expr": "avg(parakeet_rtfx{namespace=\"prod-omi-backend\"})",
           "legendFormat": "RTFx",
           "refId": "A"
         }
@@ -478,12 +539,51 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 30,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
             "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
             "stacking": {
+              "group": "A",
               "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "reqps"
         },
@@ -544,15 +644,21 @@
       "id": 103,
       "options": {
         "legend": {
-          "displayMode": "list"
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])",
+          "expr": "sum by (status)(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
           "legendFormat": "{{status}}",
           "refId": "A"
         }
@@ -568,20 +674,23 @@
       "description": "Total GPU out-of-memory events. Alert if > 0.",
       "fieldConfig": {
         "defaults": {
+          "decimals": 0,
+          "mappings": [],
           "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
                 "value": 1
               }
             ]
-          }
+          },
+          "unit": "short"
         },
         "overrides": []
       },
@@ -595,6 +704,9 @@
       "options": {
         "colorMode": "background",
         "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -602,11 +714,14 @@
           "fields": "",
           "values": false
         },
-        "textMode": "value_and_name"
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "parakeet_gpu_oom_total{namespace=\"prod-omi-backend\"}",
+          "expr": "sum(increase(parakeet_gpu_oom_total{namespace=\"prod-omi-backend\"}[$__range]))",
           "legendFormat": "OOM Events",
           "refId": "A"
         }
@@ -626,9 +741,51 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
-            "lineWidth": 2
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "s"
         },
@@ -643,26 +800,31 @@
       "id": 105,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50, sum by (le)(rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(parakeet_queue_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -682,9 +844,51 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
-            "lineWidth": 2
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "s"
         },
@@ -699,26 +903,31 @@
       "id": 106,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50, sum by (le)(rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(parakeet_inference_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -738,9 +947,51 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
-            "lineWidth": 2
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           },
           "unit": "s"
         },
@@ -755,26 +1006,31 @@
       "id": 107,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
-          "mode": "multi"
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.50, sum by (le)(rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(parakeet_audio_duration_seconds_bucket{namespace=\"prod-omi-backend\"}[$__rate_interval])))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -783,14 +1039,170 @@
       "type": "timeseries"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Total hours of audio transcribed in the selected dashboard time range.",
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 1,
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 20
+      },
+      "id": 110,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "expr": "sum(increase(parakeet_audio_duration_seconds_sum{namespace=\"prod-omi-backend\"}[$__range])) / 3600",
+          "instant": true,
+          "legendFormat": "audio hours",
+          "refId": "A"
+        }
+      ],
+      "title": "Audio Transcribed (range)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Hours of audio transcribed in each 1-hour interval. Shows transcription workload over time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "scheme",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "decimals": 1,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 6,
+        "y": 20
+      },
+      "id": 111,
+      "interval": "1h",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.1.0",
+      "targets": [
+        {
+          "expr": "sum(increase(parakeet_audio_duration_seconds_sum{namespace=\"prod-omi-backend\"}[1h])) / 3600",
+          "legendFormat": "audio hours",
+          "refId": "A"
+        }
+      ],
+      "title": "Audio Volume Per Hour",
+      "type": "timeseries"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 28
       },
-      "id": 101,
+      "id": 126,
       "panels": [],
       "title": "ASR Service RED Metrics",
       "type": "row"
@@ -803,15 +1215,29 @@
       "description": "Requests per second across all endpoints. Baseline ~7 RPS at peak traffic.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -831,7 +1257,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -843,20 +1269,23 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 22
+        "y": 29
       },
       "id": 5,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "desc"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -888,15 +1317,29 @@
       "description": "Request latency at p50, p95, and p99 percentiles. p99 spikes indicate tail latency issues.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 0,
             "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -916,7 +1359,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -974,20 +1417,23 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 22
+        "y": 29
       },
       "id": 6,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "desc"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -1028,15 +1474,29 @@
       "description": "Percentage of requests returning errors. Sustained >1% warrants investigation.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
             "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 20,
             "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
+            "pointSize": 5,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1062,7 +1522,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               },
               {
                 "color": "red",
@@ -1078,27 +1538,30 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 22
+        "y": 29
       },
       "id": 7,
       "options": {
         "legend": {
+          "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
+          "hideZeros": false,
           "mode": "multi",
           "sort": "desc"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (\n  sum(rate(parakeet_request_duration_seconds_count{container=\"parakeet\", namespace=\"prod-omi-backend\", exported_endpoint=~\"v1_transcribe|v2_transcribe\"}[5m]))\n  /\n  sum(rate(parakeet_request_duration_seconds_count{container=\"parakeet\", namespace=\"prod-omi-backend\"}[5m]))\n)",
+          "expr": "(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\", status=~\"[45]..\"}[$__rate_interval])) or vector(0))\n/\n(sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval])) > 0)",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
@@ -1113,14 +1576,25 @@
       },
       "description": "Latency distribution heatmap showing request density across time and duration buckets.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
         "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 22
+        "y": 29
       },
       "id": 8,
       "options": {
@@ -1135,8 +1609,14 @@
           "scheme": "Spectral",
           "steps": 64
         },
+        "exemplars": {
+          "color": "rgba(255,0,255,0.7)"
+        },
         "filterValues": {
           "le": 1e-09
+        },
+        "legend": {
+          "show": true
         },
         "rowsFrame": {
           "layout": "auto"
@@ -1153,6 +1633,7 @@
           "unit": "s"
         }
       },
+      "pluginVersion": "12.1.0",
       "targets": [
         {
           "datasource": {
@@ -1174,9 +1655,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 37
       },
-      "id": 102,
+      "id": 127,
       "panels": [],
       "title": "Batch & Queue Saturation",
       "type": "row"
@@ -1217,8 +1698,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -1238,7 +1718,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 31
+        "y": 38
       },
       "id": 9,
       "options": {
@@ -1302,8 +1782,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1315,7 +1794,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 31
+        "y": 38
       },
       "id": 10,
       "options": {
@@ -1379,8 +1858,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1392,7 +1870,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 31
+        "y": 38
       },
       "id": 11,
       "options": {
@@ -1456,8 +1934,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1469,7 +1946,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 31
+        "y": 38
       },
       "id": 12,
       "options": {
@@ -1503,9 +1980,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 46
       },
-      "id": 103,
+      "id": 128,
       "panels": [],
       "title": "GPU DCGM",
       "type": "row"
@@ -1547,8 +2024,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1564,7 +2040,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 40
+        "y": 47
       },
       "id": 13,
       "options": {
@@ -1628,8 +2104,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1672,7 +2147,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 40
+        "y": 47
       },
       "id": 14,
       "options": {
@@ -1745,8 +2220,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1762,7 +2236,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 40
+        "y": 47
       },
       "id": 15,
       "options": {
@@ -1835,8 +2309,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -1852,7 +2325,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 48
+        "y": 55
       },
       "id": 16,
       "options": {
@@ -1916,8 +2389,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1929,7 +2401,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 48
+        "y": 55
       },
       "id": 17,
       "options": {
@@ -1994,8 +2466,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2007,7 +2478,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 48
+        "y": 55
       },
       "id": 18,
       "options": {
@@ -2041,9 +2512,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 63
       },
-      "id": 104,
+      "id": 129,
       "panels": [],
       "title": "GKE Pod Health",
       "type": "row"
@@ -2084,8 +2555,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2127,7 +2597,7 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 57
+        "y": 64
       },
       "id": 19,
       "options": {
@@ -2200,8 +2670,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2243,7 +2712,7 @@
         "h": 8,
         "w": 6,
         "x": 6,
-        "y": 57
+        "y": 64
       },
       "id": 20,
       "options": {
@@ -2304,8 +2773,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -2325,7 +2793,7 @@
         "h": 8,
         "w": 6,
         "x": 12,
-        "y": 57
+        "y": 64
       },
       "id": 21,
       "options": {
@@ -2382,8 +2850,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2399,7 +2866,7 @@
         "h": 8,
         "w": 6,
         "x": 18,
-        "y": 57
+        "y": 64
       },
       "id": 22,
       "options": {
@@ -2438,9 +2905,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 65
+        "y": 72
       },
-      "id": 105,
+      "id": 130,
       "panels": [
         {
           "datasource": {
@@ -2478,8 +2945,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               },
@@ -2522,7 +2988,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 66
+            "y": 74
           },
           "id": 23,
           "options": {
@@ -2596,8 +3062,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               },
@@ -2609,7 +3074,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 66
+            "y": 74
           },
           "id": 24,
           "options": {
@@ -2674,8 +3139,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               },
@@ -2687,7 +3151,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 66
+            "y": 74
           },
           "id": 25,
           "options": {
@@ -2718,16 +3182,546 @@
       ],
       "title": "Infrastructure",
       "type": "row"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      },
+      "id": 120,
+      "panels": [],
+      "title": "HPA & Load Balancer",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Shows HPA scaling decisions. Gap between desired and current indicates scaling lag. Sustained max replicas may signal capacity exhaustion.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisLabel": "Replicas",
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineWidth": 1,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "decimals": 0,
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Ready (serving)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 15
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Total (incl. pending)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    10
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Unavailable (pending)"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 20
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Desired"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    4,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Max"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    2,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Min"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    2,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 74
+      },
+      "id": 121,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_deployment_status_replicas_ready{namespace=\"prod-omi-backend\", deployment=\"prod-omi-parakeet\"}",
+          "legendFormat": "Ready (serving)",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"prod-omi-backend\", horizontalpodautoscaler=\"prod-omi-parakeet\"}",
+          "legendFormat": "Total (incl. pending)",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_horizontalpodautoscaler_status_desired_replicas{namespace=\"prod-omi-backend\", horizontalpodautoscaler=\"prod-omi-parakeet\"}",
+          "legendFormat": "Desired",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"prod-omi-backend\", horizontalpodautoscaler=\"prod-omi-parakeet\"}",
+          "legendFormat": "Max",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_horizontalpodautoscaler_spec_min_replicas{namespace=\"prod-omi-backend\", horizontalpodautoscaler=\"prod-omi-parakeet\"}",
+          "legendFormat": "Min",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "kube_deployment_status_replicas_unavailable{namespace=\"prod-omi-backend\", deployment=\"prod-omi-parakeet\"}",
+          "legendFormat": "Unavailable (pending)",
+          "refId": "F"
+        }
+      ],
+      "title": "HPA Replicas (Ready / Total / Desired)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Requests hitting the internal load balancer for parakeet. Compare with server-side Request Rate by Status to detect dropped requests \u2014 if LB shows requests that the server doesn't, they were lost before reaching the pod.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*5xx.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*4xx.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*2xx.*|.*200.*"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 74
+      },
+      "id": 122,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (response_code_class)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=~\".*prod-omi-parakeet.*\"}[$__rate_interval]))",
+          "legendFormat": "LB {{response_code_class}}",
+          "refId": "A"
+        }
+      ],
+      "title": "LB Request Rate by Response Code",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Latency as measured by the internal load balancer. Includes queue time + network + server processing. Spikes here during deploys indicate requests waiting for pods to become ready.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "min": 0,
+          "unit": "ms"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 82
+      },
+      "id": 123,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=~\".*prod-omi-parakeet.*\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket{forwarding_rule_name=~\".*prod-omi-parakeet.*\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "title": "LB Backend Latency (p50/p95)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Compares LB-level request rate with server-side rate. If the LB line is higher than the Server line, requests are being dropped before reaching the pod \u2014 typically during deploys, OOM kills, or pod restarts.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "min": 0,
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "LB Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Server Total"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 82
+      },
+      "id": 124,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count{forwarding_rule_name=~\".*prod-omi-parakeet.*\"}[$__rate_interval]))",
+          "legendFormat": "LB Total",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(parakeet_requests_total{namespace=\"prod-omi-backend\"}[$__rate_interval]))",
+          "legendFormat": "Server Total",
+          "refId": "B"
+        }
+      ],
+      "title": "LB vs Server Request Rate (Drop Detection)",
+      "type": "timeseries"
     }
   ],
+  "preload": false,
   "refresh": "30s",
-  "schemaVersion": 39,
+  "schemaVersion": 41,
   "tags": [
     "parakeet",
     "asr",
     "gpu",
     "gke"
   ],
+  "templating": {
+    "list": []
+  },
   "time": {
     "from": "now-3h",
     "to": "now"
@@ -2739,16 +3733,6 @@
       "30s",
       "1m",
       "5m"
-    ],
-    "time_options": [
-      "5m",
-      "15m",
-      "1h",
-      "3h",
-      "6h",
-      "12h",
-      "24h",
-      "7d"
     ]
   },
   "timezone": "utc",

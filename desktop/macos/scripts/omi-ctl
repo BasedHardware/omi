@@ -54,7 +54,7 @@ case "$cmd" in
     done
     echo "omi-ctl: timed out waiting for app to reach \"main\" state" >&2; exit 1 ;;
   screens)
-    echo "dashboard|home  conversations  chat  memories  tasks  focus  insight  rewind  apps|integrations  settings  permissions  device  help" ;;
+    echo "dashboard|home  conversations  chat  memories  tasks  focus  insight  rewind  apps|integrations  settings  permissions  help" ;;
   *)
     cat <<EOF
 omi-ctl — drive the Omi desktop app via the local automation bridge

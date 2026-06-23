@@ -9320,4 +9320,28 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribeeri hiljem';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.';
+
+  @override
+  String get unmute => 'Tühista vaigistus';
+
+  @override
+  String get newRecording => 'Uus salvestus';
+
+  @override
+  String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 }

@@ -9372,4 +9372,28 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.';
+
+  @override
+  String get transcribeLaterTitle => 'Транскрибирај подоцна';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Снимај аудио сега, а транскрибирај го подоцна по потреба наместо во живо. Снимките се чуваат на твојот телефон, а потоа ги прикачуваш за да создадеш разговори.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Засега работи со Omi уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.';
+
+  @override
+  String get unmute => 'Вклучи звук';
+
+  @override
+  String get newRecording => 'Ново снимање';
+
+  @override
+  String get transcribeLaterPaused => 'Паузирано — аудиото не се снима';
 }

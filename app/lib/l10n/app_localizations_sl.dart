@@ -9350,4 +9350,28 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Uporabljate svojega ponudnika prepisa. Sinhronizacija teh posnetkov jih prepiše na strežnikih Omi in se štejejo v omejitev prepisa vašega paketa.';
+
+  @override
+  String get transcribeLaterTitle => 'Prepiši pozneje';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Zvok posnemite zdaj in ga prepišite pozneje, ko želite, namesto sproti. Posnetki se shranijo v vaš telefon, nato jih naložite in iz njih nastanejo pogovori.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Zaenkrat deluje z napravami Omi. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo.';
+
+  @override
+  String get unmute => 'Vklopi zvok';
+
+  @override
+  String get newRecording => 'Novo snemanje';
+
+  @override
+  String get transcribeLaterPaused => 'Premor – zvok se ne snema';
 }

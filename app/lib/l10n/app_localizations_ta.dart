@@ -9389,4 +9389,28 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
+
+  @override
+  String get transcribeLaterTitle => 'பின்னர் எழுத்தாக்கு';
+
+  @override
+  String get transcribeLaterDescription =>
+      'இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.';
+
+  @override
+  String get transcribeLaterNote =>
+      'தற்போது Omi சாதனங்களுடன் மட்டுமே இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.';
+
+  @override
+  String get unmute => 'ஒலியை இயக்கு';
+
+  @override
+  String get newRecording => 'புதிய பதிவு';
+
+  @override
+  String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
 }

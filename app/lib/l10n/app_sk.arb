@@ -3055,5 +3055,12 @@
     "recapRegenerateCooldown": "Pred opätovným generovaním prosím počkajte niekoľko sekúnd.",
     "recapRegenerateNoConversations": "Pre tento deň nie sú žiadne konverzácie na zhrnutie.",
     "syncCustomSttWarningTitle": "Synchronizácia používa prepis Omi",
-    "syncCustomSttWarningMessage": "Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu."
+    "syncCustomSttWarningMessage": "Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu.",
+    "transcribeLaterTitle": "Prepísať neskôr",
+    "transcribeLaterDescription": "Nahrávajte zvuk teraz a prepíšte ho neskôr podľa potreby, namiesto naživo. Nahrávky sa uložia v telefóne a potom ich odošlete na vytvorenie konverzácií.",
+    "transcribeLaterNote": "Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.",
+    "transcribeLaterStorageFull": "V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať.",
+    "unmute": "Zrušiť stlmenie",
+    "newRecording": "Nová nahrávka",
+    "transcribeLaterPaused": "Pozastavené – zvuk sa nenahráva"
 }

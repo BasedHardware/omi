@@ -9331,4 +9331,28 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkripsi Nanti';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Rekam audio sekarang dan transkripsikan saat dibutuhkan, bukan secara langsung. Rekaman disimpan di ponsel Anda, lalu Anda mengunggahnya untuk membuat percakapan.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.';
+
+  @override
+  String get unmute => 'Bunyikan';
+
+  @override
+  String get newRecording => 'Rekaman baru';
+
+  @override
+  String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 }

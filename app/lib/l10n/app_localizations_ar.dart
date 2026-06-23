@@ -9268,4 +9268,27 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
+
+  @override
+  String get transcribeLaterTitle => 'التفريغ النصي لاحقًا';
+
+  @override
+  String get transcribeLaterDescription =>
+      'سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.';
+
+  @override
+  String get transcribeLaterNote => 'يعمل مع أجهزة Omi في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.';
+
+  @override
+  String get unmute => 'إلغاء الكتم';
+
+  @override
+  String get newRecording => 'تسجيل جديد';
+
+  @override
+  String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
 }

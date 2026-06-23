@@ -16,8 +16,10 @@ description: "Sequence diagrams for the /v4/listen WebSocket and Pusher processi
 
 The STT provider is selected at session start via `STT_SERVICE_MODELS` env var
 (e.g., `modulate-velma-2,dg-nova-3`). The first provider supporting the
-requested language wins. All providers implement the `STTSocket` ABC and are
-wrapped by the universal `GatedSTTSocket` VAD gate.
+requested language wins. Listen startup loads transcription preferences once and
+reuses the embedded user language for translation targeting, avoiding a second
+user-preference read on WebSocket startup. All providers implement the
+`STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order

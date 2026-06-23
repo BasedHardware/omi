@@ -9334,4 +9334,27 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
+
+  @override
+  String get transcribeLaterTitle => 'Sonradan Transkribe Et';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
+
+  @override
+  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get unmute => 'Sesi aç';
+
+  @override
+  String get newRecording => 'Yeni kayıt';
+
+  @override
+  String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 }

@@ -113,6 +113,9 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "get_task_agent_status": return "Checking agents"
+        case "spawn_agent": return "Starting agent"
+        case "manage_agent_pills": return "Managing agents"
         case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
@@ -165,6 +168,18 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "spawn_agent":
+            summary = (input["brief"] ?? input["query"]) as? String
+        case "manage_agent_pills":
+            if let action = input["action"] as? String {
+                if let agentId = input["agent_id"] as? String, !agentId.isEmpty {
+                    summary = "\(action) \(agentId)"
+                } else {
+                    summary = action
+                }
+            } else {
+                summary = nil
+            }
         case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
@@ -335,6 +350,9 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
+            "get_task_agent_status",
+            "spawn_agent",
+            "manage_agent_pills",
             "search_tasks",
             "get_daily_recap",
             "complete_task",
@@ -581,6 +599,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     var isUsingOmiAccountProvider: Bool {
         bridgeMode != BridgeMode.userClaude.rawValue
+    }
+
+    /// The legacy "$50 lifetime Omi AI spend" upgrade nudge (`showOmiThresholdAlert`)
+    /// must never fire for users who already pay — paid subscribers and BYOK users
+    /// aren't capped by the free Omi quota. `omiAICumulativeCostUsd` is seeded from the
+    /// backend *lifetime* total, so without this guard any heavy paying user (e.g. on
+    /// Operator/Architect) trips $50 and gets a bogus "Upgrade Required" alert even
+    /// while well within their plan. The authoritative free-tier block is the
+    /// server-side quota in `FloatingBarUsageLimiter`; this is just a soft nudge.
+    var isExemptFromOmiUpgradeNudge: Bool {
+        FloatingBarUsageLimiter.shared.hasPaidPlan || APIKeyService.isByokActive
     }
 
     /// Whether the agent bridge requires authentication (shown as sheet in UI)
@@ -1887,6 +1916,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         do {
+            let currentChatMode = chatMode
             let result = try await agentBridge.query(
                 prompt: question,
                 systemPrompt: systemPrompt,
@@ -1895,7 +1925,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
+                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -1931,12 +1961,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         Task.detached(priority: .background) { [weak self] in
             guard let serverCost = await APIClient.shared.fetchTotalOmiAICost() else { return }
             guard let self else { return }
+            // Make sure the user's plan is known before deciding whether to nudge —
+            // otherwise a cold plan cache could flash the upgrade alert at a paid user.
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
                 // Always trust the server value — it's the authoritative total
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
-                // Show upgrade prompt if over threshold but don't block chat
-                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0 {
+                // Show upgrade prompt if over threshold but don't block chat. Never for
+                // paid/BYOK users — they aren't subject to the free Omi spend cap.
+                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0
+                    && !self.isExemptFromOmiUpgradeNudge {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
                 }
@@ -2347,6 +2382,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if case APIError.unauthorized = error {
                 AuthBackoffTracker.shared.reportAuthFailure()
             }
+            // Benign sign-out race: the isSignedIn guard above passed, but the
+            // token was cleared by the time getMessages ran. Expected, not a bug
+            // — log quietly (breadcrumb only) instead of flooding Sentry.
+            if case AuthError.notSignedIn = error {
+                log("ChatProvider poll skipped: signed out mid-cycle")
+                return
+            }
             // Silent failure — polling errors shouldn't disrupt the user
             logError("ChatProvider poll failed", error: error)
         }
@@ -2715,8 +2757,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
-        // Show upgrade prompt if over threshold but don't block the message
-        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
+        // Show upgrade prompt if over threshold but don't block the message.
+        // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
+        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0
+            && !isExemptFromOmiUpgradeNudge {
             showOmiThresholdAlert = true
         }
 
@@ -2920,6 +2964,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // text-streaming window so the `generation` span excludes tool time.
             var isFirstResponse = true
             var isGenerating = false
+            let currentChatMode = chatMode
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 if isFirstResponse {
                     isFirstResponse = false
@@ -2939,7 +2984,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
                 let toolStart = ContinuousClock.now
-                let result = await ChatToolExecutor.execute(toolCall)
+                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =
@@ -3244,7 +3289,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
                 // Show the upgrade flow when the free Omi usage threshold is reached.
-                if omiAICumulativeCostUsd >= 50.0 {
+                // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
+                if omiAICumulativeCostUsd >= 50.0 && !isExemptFromOmiUpgradeNudge {
                     showOmiThresholdAlert = true
                 }
             }

@@ -181,8 +181,18 @@ final class RawWebSocket {
         len = Int(inbound[base + 2]) << 8 | Int(inbound[base + 3]); hdr = 4
       } else if len == 127 {
         guard inbound.count >= 10 else { return }
-        len = 0
-        for i in 0..<8 { len = len << 8 | Int(inbound[base + 2 + i]) }
+        // Accumulate the 64-bit length in UInt64, not Int: shifting an 8-byte value into
+        // a signed Int traps on overflow. A length beyond a sane cap (Gemini Live frames
+        // are tiny) is a corrupt/hostile frame — close cleanly instead of crashing.
+        var u: UInt64 = 0
+        for i in 0..<8 { u = (u << 8) | UInt64(inbound[base + 2 + i]) }
+        guard u <= 64 * 1024 * 1024 else {
+          onError?("RawWebSocket: frame length \(u) exceeds 64MB cap — closing")
+          inbound.removeAll()
+          close()
+          return
+        }
+        len = Int(u)
         hdr = 10
       }
       let maskLen = masked ? 4 : 0

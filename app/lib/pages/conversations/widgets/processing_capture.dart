@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +31,26 @@ class ConversationCaptureWidget extends StatefulWidget {
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   bool _isPhoneMicPaused = false;
+  Timer? _offlineTicker;
+
+  @override
+  void initState() {
+    super.initState();
+    // Drive the "captured so far" timer on the offline capture card. Cheap no-op
+    // (just a null check) whenever an offline recording session isn't active.
+    _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (context.read<CaptureProvider>().offlineRecordingStartedAt != null) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _offlineTicker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +75,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
         return GestureDetector(
           onTap: () async {
+            // Offline/batch mode has no live transcript — the card is informational,
+            // so swallow taps instead of opening the (empty) capturing page.
+            if (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice) {
+              return;
+            }
             final isCaptureActive = provider.recordingState == RecordingState.record ||
                 provider.recordingState == RecordingState.systemAudioRecord ||
                 provider.recordingState == RecordingState.deviceRecord ||
@@ -284,6 +311,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
     bool isDeviceRecording = provider.havingRecordingDevice &&
         (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
+
+    // Offline/batch mode: device audio is saved locally with no live transcription, so
+    // show a dedicated, self-explanatory card instead of the "Listening" + transcript UI.
+    if (isDeviceRecording && SharedPreferencesUtil().batchModeEnabled) {
+      return _buildBatchRecordingUI(provider);
+    }
+
     bool isPhoneRecording = provider.recordingState == RecordingState.record ||
         provider.recordingState == RecordingState.systemAudioRecord ||
         provider.recordingState == RecordingState.initialising ||
@@ -462,6 +496,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       }
 
       return Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: statusRow);
+    } else if (provider.havingRecordingDevice && SharedPreferencesUtil().batchModeEnabled) {
+      // Device connected in offline mode but not yet in the recording state above.
+      return _buildBatchRecordingUI(provider);
     } else {
       // For non-recording states, show the original header-based UI
       return Column(
@@ -476,6 +513,120 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ],
       );
     }
+  }
+
+  /// Offline/batch-mode capture card. Self-explanatory and informational only —
+  /// there is no live transcript and no pause control (the native writer keeps
+  /// saving regardless of the Dart stream). Shows a live "captured so far" timer
+  /// for the current session. Tapping opens [_showOfflineModeInfoSheet].
+  Widget _buildBatchRecordingUI(CaptureProvider provider) {
+    final muted = provider.offlineMuted;
+    final elapsed = provider.offlineRecordingElapsedSeconds;
+    String? elapsedLabel;
+    if (elapsed != null) {
+      elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
+    }
+    final dotColor = muted ? Colors.grey.shade600 : const Color(0xFFFE5D50);
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF35343B),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
+                      style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              if (elapsedLabel != null)
+                Text(
+                  elapsedLabel,
+                  style: const TextStyle(
+                    color: Color(0xFFC9CBCF),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote,
+            style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              _buildOfflineControl(
+                icon: muted ? Icons.mic_none_rounded : Icons.mic_off_outlined,
+                label: muted ? context.l10n.unmute : context.l10n.mute,
+                primary: false,
+                onTap: () => provider.toggleOfflineMute(),
+              ),
+              const SizedBox(width: 10),
+              _buildOfflineControl(
+                icon: Icons.fiber_new_rounded,
+                label: context.l10n.newRecording,
+                primary: true,
+                onTap: () => provider.startNewOfflineRecording(),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfflineControl({
+    required IconData icon,
+    required String label,
+    required bool primary,
+    required VoidCallback onTap,
+  }) {
+    final color = primary ? Colors.white : const Color(0xFFC9CBCF);
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: primary ? const Color(0xFF35343B) : const Color(0xFF2A2A2E),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
