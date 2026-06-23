@@ -49,10 +49,10 @@ todos:
     status: pending
   - id: atom-keyword-index
     content: "WS-M (gated after WS-E+WS-I+WS-J, off critical path): hybrid exact-recall keyword index for long-term atoms in Typesense behind MemoryService.search; rebuildable + purge-on-delete (§9.8 column)"
-    status: pending
+    status: completed
   - id: graphrag-traversal
-    content: "WS-N (DEFERRED until after WS-H one-store): bounded read-only graph-traversal retrieval tool (≤2 hops) over canonical-derived Neo4j KG, registered in agentic tool set"
-    status: pending
+    content: "WS-N: bounded read-only graph-traversal retrieval tool (≤2 hops) over canonical-derived Firestore KG, registered in agentic tool set"
+    status: completed
 isProject: true
 ---
 
@@ -981,6 +981,18 @@ Drove the implementable rollout to local commits on `memory-canonical-rollout` (
 - **Test-isolation fix (discovered during coordinator end-to-end verification):** the FULL single-process suite was RED — `test_ws_i_write_convergence._install_heavy_import_stubs` overwrote `sys.modules["database.vector_db"]` with a partial stub lacking `query_v17_memory_vector_candidates`, leaking across the process and breaking a later `routers.mcp_sse` import (failing the WS-L SSE parity test). **Production code was correct; WS-K was innocent** (each file passed alone). Fix is harness-only: incomplete `database.*` stubs switched to auto-attribute mock modules (`_AutoMockModule`) in `test_ws_i_write_convergence.py` + `test_ws_c_backfill.py`, plus a defensive stub-upgrade on `mcp_sse` load in `test_ws_l_surface_routing.py`. No assertion changed (SSE test still asserts vector-only order + full docs).
 - **Coordinator verification:** full memory suite in ONE process → **128 passed**; troublesome orderings (`ws_i→ws_l`, `ws_k→ws_i→ws_l`) green; confirmed `query_v17_memory_vector_candidates` exists in the real `vector_db.py`.
 - **Commits:** isolation `1603c4bb8`+`4d7a97cb3`+`a4fe12ad3`; WS-K `577935342` layer field · `f146b7c93` client doc · `90d0f0961`+`03000426b` tests/test.sh.
+
+### Wave 13 — WS-M (hybrid exact-recall keyword index for long-term atoms) — ✅ committed 2026-06-24
+
+- **Scope:** Typesense `memories` collection (reuses existing deployment client from `utils/conversations/search.py`); indexes canonical-cohort `layer=long_term` + `status=active` + `processing_state=processed` only; `e2ee` users skipped (Q13). Hybrid `search_canonical_memories` = Typesense keyword ids merged keyword-first with Pinecone vector candidates (`query_v17_memory_vector_candidates`) + `rrf_rerank`; exposed via `MemoryService.search` / `search_mcp` for canonical cohort. Index-on-apply hooks: promotion (`short_term_promotion`), backfill (`legacy_backfill`), write when committed item is long_term; purge on tombstone, account delete (`purge_canonical_derived_user_data`), conversation cascade retract. Library rebuild: `rebuild_atom_keyword_index(uid)`. Prod-inert (empty canonical cohort; no cron/router wiring). Legacy cohort byte-unchanged.
+- **Coordinator verification:** full memory suite in ONE process → **156 passed, 0 failed**; `ws_i→ws_l` ordering → **67 passed**; `test_ws_m_atom_keyword_index.py` → **15 passed**; async scan clean on `utils/memory`; black-clean.
+- **Carry-forward:** no router/cron auto-backfill; `entity_terms`/`predicate` only populated from `promotion` metadata today (content is primary search field); archive transition purge not separately wired (archive items fail `is_indexable` and are removed on next sync/rebuild).
+
+### Wave 14 — WS-N (bounded read-only GraphRAG traversal) — ✅ committed 2026-06-24
+
+- **Scope:** read-only BFS traversal over the existing Firestore KG (`database/knowledge_graph.py` — **no live Neo4j** in this repo; plan Neo4j references are stale). Core module `utils/memory/kg_graph_traversal.py` with Q14 caps (`MAX_TRAVERSAL_HOPS=2`, `MAX_EDGES_PER_NODE=25`, `MAX_TRIPLES=60`); long_term-only citations via `is_indexable_long_term_atom`. Agentic tool `traverse_knowledge_graph_tool` in `utils/retrieval/tools/graph_tools.py`, registered in `CORE_TOOLS` (`utils/retrieval/agentic.py`). Canonical-cohort gated via `resolve_memory_system`; legacy users get unavailable message, zero graph reads. No writes, no new HTTP surface.
+- **Verification:** baseline pre-change → **89 passed, 0 failed** (10-module suite); post-change full memory suite in ONE process → **101 passed, 0 failed**; `ws_i→ws_l` ordering → **52 passed, 0 failed**; `test_ws_n_graph_traversal.py` → **12 passed**; async scan clean on new modules; black-clean.
+- **Carry-forward:** KG still built from legacy extraction path for non-canonical users; canonical cohort selective KG invalidation remains deferred (WS-J hook logs only); v2 items (community detection, subgraph summaries) unbuilt by design.
 
 > Append-only record of executed waves for review later. All work lands on worktree branch
 > `memory-canonical-rollout` (worktree `/Users/dazheng/workspace/omi-memory-rollout`), **committed
