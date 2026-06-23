@@ -35,7 +35,12 @@ from jobs.v17_short_term_lifecycle_worker import (
     fetch_short_term_memory_items_firestore,
     process_short_term_lifecycle_item,
 )
-from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
+from models.memory_domain import (
+    MemoryLayer,
+    MemoryProcessingState,
+    assert_legal_state,
+    physical_status_to_record_status,
+)
 from models.memory_evidence import SourceState
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
@@ -226,7 +231,7 @@ def promote_short_term_item_via_apply(
 
     assert_legal_state(
         MemoryLayer(promoted.tier.value),
-        MemoryRecordStatus(promoted.status.value),
+        physical_status_to_record_status(promoted.status.value),
         MemoryProcessingState(promoted.processing_state.value),
     )
     if promoted.tier != MemoryTier.long_term:
