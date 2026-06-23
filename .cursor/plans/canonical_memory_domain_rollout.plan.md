@@ -869,9 +869,10 @@ Drove the implementable rollout to local commits on `memory-canonical-rollout` (
   51 tests green, **no done-wave code bug to fix** (work is solid). Full writeup +
   round-2 multi-agent synthesis in **`canonical_memory_overnight_review_2026-06-23.md`**. Confirmed by all
   3 reviewers: (A) cohort resolution must NOT consume `V17_MODE` [patched into WS-L + §9.9 — please bless];
-  (B/G) the §1.3 "processed short-term stays visible" override is per-adapter and **already drops processed
-  short-term un-masked** in `v17_read_api.query_default_product_memory_items` — fold it into the shared
-  `filter_default_product_memory_items` before WS-L finishes routing surfaces. New, needing your call:
+  **(B, RESOLVED 2026-06-23):** `v17_read_api.query_default_product_memory_items` now calls shared
+  `filter_canonical_default_visible_items` (§1.3 processed short_term override); regression tests in
+  `test_v17_read_api.py`. **V17-read dogfood display change:** processed active short_term items that
+  were hidden by base L2 lifecycle filter are now default-visible (intentional §1.3 alignment). New, needing your call:
   **(I, HARD PRE-EXPANSION GATE — RESOLVED 2026-06-23):** whitelist-authoritative kill-switch landed
   in WS-E hardening — `MEMORY_CANONICAL_USERS` is sole cohort signal; stale persisted `memory_system=canonical`
   ignored on whitelist removal; empty whitelist = everyone legacy instantly. Canonical-era rows not
@@ -945,7 +946,8 @@ Drove the implementable rollout to local commits on `memory-canonical-rollout` (
   - Reviewer **cleared the four edited existing test files** as legitimate seam relocations (no weakened/vacuous assertions) — checked because editing prior tests is a reward-hacking risk.
 - **Coordinator independent verification:** re-ran full batch → **106 passed**; read the SSE diff directly and confirmed the legacy block matches HEAD (only canonical early-return added above it); async scan clean for touched dirs.
 - **Commits:** 15 on branch (`1d9c05e91` shared filter → `7ceda7f62` test.sh; SSE preserve at `80617e4b6`).
-- **Carry-forward (see §11b):** MCP/developer create-edit canonical writes not routed (need evidence/apply path); canonical MCP list lacks category/sort filter parity (cohort empty); `v17_read_api.py` doesn't yet use the shared §1.3 filter (V17-read path, not a legacy regression); Desktop Rust reads Firestore directly (no backend routing — WS-K/needs-local-build).
+- **Carry-forward (see §11b):** MCP/developer create-edit canonical writes not routed (need evidence/apply path); canonical MCP list lacks category/sort filter parity (cohort empty); Desktop Rust reads Firestore directly (no backend routing — WS-K/needs-local-build).
+- **WS-L finding B follow-up (2026-06-23):** `v17_read_api.py` wired to `filter_canonical_default_visible_items`; 2 new tests in `test_v17_read_api.py` (processed short_term visible, tombstoned/restricted excluded).
 - **WS-L pinning follow-up (2026-06-23):** `memory_system_pin.py` lands §4 split-brain protection — pin once at MCP REST/SSE `execute_tool`, developer/integration/memories routers, chat `tool_services/memories`, persona `update_persona_prompt`, conversation cascade retract, and extraction `memory_system_request_scope`; `MemoryService` honors pin. Still per-call: `canonical_memory_adapter` gate helpers, `short_term_promotion` (canonical-only cron path, not user-facing request).
 
 ### Wave 9 — WS-I hardening (atomic bump + redaction preserve) — ✅ committed 2026-06-24
