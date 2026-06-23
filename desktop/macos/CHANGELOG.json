@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed voice replies sometimes doing nothing after the Mac wakes from sleep \u2014 the realtime voice session now refreshes on wake instead of using a stale connection"
+  ],
   "releases": [
     {
       "version": "0.11.498",
