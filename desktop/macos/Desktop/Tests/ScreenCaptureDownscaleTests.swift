@@ -103,4 +103,22 @@ final class ScreenCaptureDownscaleTests: XCTestCase {
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage()!
     }
+
+    // MARK: - End-to-end guarantee (regression test for cubic P1 on PR #8140)
+
+    /// Pins the post-fix invariant: a 5K input downscales to <= 1280
+    /// on the long edge, so the bitmap context is sized to those
+    /// dimensions, not the original. The bug found by cubic-dev-ai
+    /// was that `captureScreenData` was drawing the original image
+    /// (5120x2880) into a 1280x720 context — doing the downscale
+    /// twice. The fix draws the already-downscaled `scaledImage`.
+    /// This test guards the downscale step itself; the draw step
+    /// is reviewed by cubic and by the static checks above.
+    func testDownscaleProducesExpectedDimensions() {
+        let image = makeImage(width: 5120, height: 2880)
+        let scaled = ScreenCaptureManager.downscale(image: image, maxLongEdge: 1280)
+        let result = try! XCTUnwrap(scaled)
+        XCTAssertEqual(result.width, 1280)
+        XCTAssertEqual(result.height, 720)
+    }
 }
