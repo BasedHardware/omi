@@ -279,3 +279,55 @@ class TestMcpSseLegacySearchParity:
         assert set(memories[0].keys()) != {"id", "content", "category", "relevance_score"}
         find_similar.assert_called_once_with(LEGACY_SSE_UID, "vector match", threshold=0.0, limit=30)
         rrf_mock.assert_not_called()
+
+
+class TestMemorySystemRequestPinning:
+    def test_pin_stable_when_underlying_resolver_would_flip(self, monkeypatch):
+        from utils.memory.memory_system_pin import (
+            clear_memory_system_pin,
+            pin_memory_system,
+            resolve_pinned_memory_system,
+        )
+
+        uid = "uid-pin-flip"
+        calls = {"count": 0}
+
+        def flipping_resolve(_uid, *, db_client=None):
+            calls["count"] += 1
+            return MemorySystem.CANONICAL if calls["count"] == 1 else MemorySystem.LEGACY
+
+        monkeypatch.setattr("utils.memory.memory_system_pin.resolve_memory_system", flipping_resolve)
+
+        assert pin_memory_system(uid) == MemorySystem.CANONICAL
+        assert resolve_pinned_memory_system(uid) == MemorySystem.CANONICAL
+        assert resolve_pinned_memory_system(uid) == MemorySystem.CANONICAL
+        assert calls["count"] == 1
+
+        clear_memory_system_pin()
+        assert resolve_pinned_memory_system(uid) == MemorySystem.LEGACY
+        assert calls["count"] == 2
+
+    def test_request_scope_resets_pin_after_block(self, monkeypatch):
+        from utils.memory.memory_system_pin import (
+            get_pinned_memory_system,
+            memory_system_request_scope,
+            resolve_pinned_memory_system,
+        )
+
+        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-scope")
+        with memory_system_request_scope("uid-scope") as pinned:
+            assert pinned == MemorySystem.CANONICAL
+            assert get_pinned_memory_system(uid="uid-scope") == MemorySystem.CANONICAL
+        assert get_pinned_memory_system(uid="uid-scope") is None
+        assert resolve_pinned_memory_system("uid-scope") == MemorySystem.CANONICAL
+
+    def test_unpinned_resolve_matches_static_legacy_and_canonical(self, monkeypatch):
+        from utils.memory.memory_system_pin import clear_memory_system_pin, resolve_pinned_memory_system
+
+        clear_memory_system_pin()
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        assert resolve_pinned_memory_system("uid-legacy") == MemorySystem.LEGACY
+
+        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical")
+        assert resolve_pinned_memory_system("uid-canonical") == MemorySystem.CANONICAL
+        assert resolve_pinned_memory_system("uid-other") == MemorySystem.LEGACY
