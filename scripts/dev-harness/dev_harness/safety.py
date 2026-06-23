@@ -75,6 +75,12 @@ _STRIPPED_ENV_PREFIXES = (
     "FIREBASE_ADMIN",
 )
 _LOCAL_BACKEND_SECRET_KEYS = {"ENCRYPTION_SECRET", "ADMIN_KEY", "TYPESENSE_API_KEY", "FIREBASE_API_KEY"}
+_OFFLINE_PROVIDER_PLACEHOLDERS = {
+    "OPENAI_API_KEY": "sk-omi-local-harness-offline-not-real",
+    "DEEPGRAM_API_KEY": "omi-local-harness-offline-deepgram-not-real",
+    "GEMINI_API_KEY": "omi-local-harness-offline-gemini-not-real",
+    "ANTHROPIC_API_KEY": "omi-local-harness-offline-anthropic-not-real",
+}
 _PROVIDER_SECRET_RE = re.compile(
     r"(API_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET|DEEPGRAM|OPENAI|ANTHROPIC|GROQ|ELEVENLABS)", re.IGNORECASE
 )
@@ -165,6 +171,12 @@ def validate_harness_runtime_config(
     validate_database_id(database_id)
     for name, host in emulator_hosts.items():
         validate_loopback_emulator_host(host, name=name)
+
+
+def offline_provider_placeholders() -> dict[str, str]:
+    """Non-secret placeholders so backend modules can import under PROVIDER_MODE=offline."""
+
+    return dict(_OFFLINE_PROVIDER_PLACEHOLDERS)
 
 
 def build_child_env(

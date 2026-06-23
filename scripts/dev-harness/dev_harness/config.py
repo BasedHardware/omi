@@ -174,6 +174,7 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
 
 
 def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
+    canonical_users = os.environ.get("MEMORY_CANONICAL_USERS", "alice").strip()
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
@@ -183,6 +184,7 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "FIREBASE_PROJECT_ID": cfg.project_id,
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
+        "MEMORY_CANONICAL_USERS": canonical_users,
         "REDIS_DB_HOST": cfg.redis_host,
         "REDIS_DB_PORT": str(cfg.redis_port),
         "REDIS_DB_PASSWORD": "",
@@ -202,10 +204,14 @@ def child_env_for(cfg: HarnessConfig) -> dict[str, str]:
         **_harness_service_extra(cfg),
         "PORT": str(BACKEND_PORT),
         "PYTHONUNBUFFERED": "1",
+        "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }
     if cfg.provider_mode != "offline":
         extra.update(provider_secrets_from_file(cfg))
-    return safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
+    env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
+    if cfg.provider_mode == "offline":
+        env.update(safety.offline_provider_placeholders())
+    return env
 
 
 def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
@@ -213,7 +219,11 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
         **_harness_service_extra(cfg),
         "PORT": str(DESKTOP_BACKEND_PORT),
         "USE_VERTEX_AI": "false",
+        "OMI_ENV_STAGE": "offline" if cfg.provider_mode == "offline" else "local",
     }
     if cfg.provider_mode != "offline":
         extra.update(provider_secrets_from_file(cfg))
-    return safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
+    env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
+    if cfg.provider_mode == "offline":
+        env.update(safety.offline_provider_placeholders())
+    return env
