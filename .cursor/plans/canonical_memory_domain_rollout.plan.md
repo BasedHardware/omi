@@ -1090,3 +1090,9 @@ Q9/Q10/Q11/Q12/Q13/Q14 not yet needed (WS-L/WS-F/WS-M/WS-N) — ratify before th
   5. **`_persist_evidence` overwrites full evidence doc** — could clobber `redaction_status`/`provenance_visibility` if a security-redaction worker and canonical extraction share an `evidence_id` (theoretical until such a worker writes canonical evidence) → preserve redaction on rewrite.
   6. **Canonical extraction skips** legacy conflict-resolution / supersession / per-memory vector upsert (short_term-only scope) — revisit when promotion (WS-B) + vectors (WS-J) land.
 - **Status:** `write-convergence` todo = **in_progress** (primary seam routed + reads consistent for cohort; external writers + MCP/tools remain).
+
+### WS-F / WS-K — Desktop layer badge (macOS) — ✅ built + self-verified (2026-06-23)
+
+- **Scope:** decode additive `layer` on `ServerMemory`; badge Short-term/Long-term when `tierIsExplicit`; concise layer info popover on badge. **Excluded:** conversation-delete `cascade=true` (Q8 deferred).
+- **Verification:** `xcrun swift test --filter ServerMemoryV17DecodingTests` (12 passed); `xcrun swift build -c debug`. E2E: `omi-layer-test` bundle + mock `/v3/memories` on `:8899` → SQLite `tier`/`tierIsExplicit` correct for layer-only vs legacy-absent rows. **Not exercised:** real canonical cohort backend against prod Firestore (local creds dev project; prod API has no `layer` yet).
+- **Commits:** (per-file on `memory-canonical-rollout` — see agent deliverable).
