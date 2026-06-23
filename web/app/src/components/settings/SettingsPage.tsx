@@ -111,6 +111,35 @@ import type {
 
 type SettingsSection = 'profile' | 'privacy' | 'integrations' | 'developer' | 'account';
 
+const MCP_KEYS_STORAGE_KEY = 'omi_mcp_api_key_secrets';
+
+function getStoredMcpKeySecrets(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(localStorage.getItem(MCP_KEYS_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function storeMcpKeySecret(keyId: string, key: string): void {
+  if (typeof window === 'undefined') return;
+  const secrets = getStoredMcpKeySecrets();
+  secrets[keyId] = key;
+  localStorage.setItem(MCP_KEYS_STORAGE_KEY, JSON.stringify(secrets));
+}
+
+function removeMcpKeySecret(keyId: string): void {
+  if (typeof window === 'undefined') return;
+  const secrets = getStoredMcpKeySecrets();
+  delete secrets[keyId];
+  localStorage.setItem(MCP_KEYS_STORAGE_KEY, JSON.stringify(secrets));
+}
+
+function withStoredMcpKey(key: McpApiKey): McpApiKey {
+  return { ...key, key: key.key ?? getStoredMcpKeySecrets()[key.id] };
+}
+
 // ============================================================================
 // Reusable Components
 // ============================================================================
@@ -2156,12 +2185,13 @@ function DeveloperSection({
   const [copiedClaudeClientId, setCopiedClaudeClientId] = useState(false);
   const [copiedClaudeSecret, setCopiedClaudeSecret] = useState(false);
 
+  const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
+
   // Claude connector values — mirror the 4 fields in Claude's "Add custom connector" form
   const claudeConnectorName = 'Omi Memory';
   const claudeConnectorUrl = mcpServerUrl;
   const claudeConnectorClientId = 'omi';
-  // Use the first MCP key as the client secret; fall back to placeholder
-  const claudeConnectorSecret = mcpKeys.length > 0 ? mcpKeys[0].key : '';
+  const claudeConnectorSecret = mcpKeys.find((k) => k.key)?.key ?? '';
 
   // Experimental features (stored in localStorage)
   const [experimentalFeatures, setExperimentalFeatures] = useState({
@@ -2256,8 +2286,6 @@ function DeveloperSection({
       icon: Calendar,
     },
   ];
-
-  const mcpServerUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me'}/v1/mcp/sse`;
 
   const claudeDesktopConfig = `{
   "mcpServers": {
@@ -2568,7 +2596,9 @@ function DeveloperSection({
               ) : (
                 <div className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] opacity-60">
                   <span className="text-sm text-text-quaternary italic">
-                    Create an MCP key first (above)
+                    {mcpKeys.length > 0
+                      ? 'Create a new MCP key above to copy the secret'
+                      : 'Create an MCP key first (above)'}
                   </span>
                 </div>
               )}
@@ -3159,7 +3189,7 @@ export function SettingsPage() {
               getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
             ]);
             setApiKeys(keys);
-            setMcpKeys(mKeys);
+            setMcpKeys(mKeys.map(withStoredMcpKey));
             // Combine status (booleans) with URLs
             const statusMap = webhookStatus as Record<string, boolean>;
             setWebhooks({
@@ -3310,6 +3340,9 @@ export function SettingsPage() {
   const handleCreateMcpKey = async (name: string): Promise<McpApiKey | null> => {
     try {
       const newKey = await createMcpApiKey(name);
+      if (newKey.key) {
+        storeMcpKeySecret(newKey.id, newKey.key);
+      }
       setMcpKeys([...mcpKeys, newKey]);
       return newKey;
     } catch (error) {
@@ -3321,6 +3354,7 @@ export function SettingsPage() {
   const handleDeleteMcpKey = async (keyId: string) => {
     try {
       await deleteMcpApiKey(keyId);
+      removeMcpKeySecret(keyId);
       setMcpKeys(mcpKeys.filter((k) => k.id !== keyId));
     } catch (error) {
       console.error('Failed to delete MCP key:', error);
