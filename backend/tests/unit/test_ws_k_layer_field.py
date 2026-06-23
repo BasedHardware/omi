@@ -1,0 +1,80 @@
+"""WS-K: additive ``layer`` on MemoryDB API responses, derived from ``memory_tier``."""
+
+import hashlib
+import os
+import sys
+import types
+import uuid
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+
+_db_client_mod = types.ModuleType("database._client")
+_db_client_mod.db = MagicMock()
+
+
+def _document_id_from_seed(seed: str) -> str:
+    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
+    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
+
+
+_db_client_mod.document_id_from_seed = _document_id_from_seed
+sys.modules.setdefault("database._client", _db_client_mod)
+
+from models.memory_domain import tier_to_layer
+from models.memories import MemoryDB
+from models.v17_product_memory import MemoryTier
+
+
+def _minimal_memorydb_payload(**overrides):
+    now = datetime.now(timezone.utc)
+    payload = {
+        "id": "mem-test-1",
+        "uid": "uid-test",
+        "content": "User lives in Seattle",
+        "created_at": now,
+        "updated_at": now,
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.parametrize(
+    "tier",
+    [MemoryTier.short_term, MemoryTier.long_term, MemoryTier.archive],
+)
+def test_memorydb_serializes_layer_from_memory_tier(tier):
+    memory = MemoryDB(**_minimal_memorydb_payload(memory_tier=tier))
+    serialized = memory.model_dump(mode="json")
+
+    assert serialized["layer"] == tier_to_layer(tier).value
+    assert serialized["memory_tier"] == tier.value
+
+
+def test_layer_always_present_for_default_long_term_legacy_row():
+    memory = MemoryDB(**_minimal_memorydb_payload())
+    serialized = memory.model_dump(mode="json")
+
+    assert "layer" in serialized
+    assert serialized["layer"] == tier_to_layer(MemoryTier.long_term).value
+    assert serialized["memory_tier"] == MemoryTier.long_term.value
+
+
+def test_legacy_firestore_dict_without_memory_tier_still_serializes_layer():
+    memory = MemoryDB.model_validate(_minimal_memorydb_payload())
+    serialized = memory.model_dump(mode="json")
+
+    assert serialized["memory_tier"] == MemoryTier.long_term.value
+    assert serialized["layer"] == tier_to_layer(MemoryTier.long_term).value
+
+
+def test_layer_uses_real_tier_to_layer_not_hardcoded_mapping():
+    for tier in MemoryTier:
+        memory = MemoryDB(**_minimal_memorydb_payload(memory_tier=tier))
+        assert memory.layer == tier_to_layer(tier).value
