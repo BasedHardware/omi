@@ -763,6 +763,29 @@ def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
     logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
 
 
+def delete_pinecone_memory_vectors_by_id(vector_ids: List[str]) -> int:
+    """Delete ns2 memory vectors by exact Pinecone id.
+
+    Supports legacy ``{uid}-{memory_id}``, V17 ``v17mem:…``, and canonical neutral ``mem_…`` ids.
+    Used by canonical account-delete purge; legacy batch delete keeps ``{uid}-{id}`` scheme unchanged.
+    """
+    if index is None:
+        logger.warning("Pinecone index not initialized, skipping memory vector delete by id")
+        return 0
+    if not vector_ids:
+        return 0
+    total_deleted = 0
+    for i in range(0, len(vector_ids), 1000):
+        chunk = vector_ids[i : i + 1000]
+        try:
+            index.delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
+            total_deleted += len(chunk)
+        except Exception:
+            logger.warning("delete_pinecone_memory_vectors_by_id chunk failed chunk=%d", i // 1000)
+    logger.info("delete_pinecone_memory_vectors_by_id total_deleted=%d", total_deleted)
+    return total_deleted
+
+
 def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
     """Delete a user's memory vectors (ns2) in batched, chunked calls.
 
