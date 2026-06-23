@@ -1813,7 +1813,8 @@ class FloatingControlBarManager {
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
             await limiter.syncQuota()
-            // Race: the user may have cancelled or fired a new query while
+            // (cubic P2 on PR #8141, fixed)
+        // Race: the user may have cancelled or fired a new query while
             // we were awaiting the network call. Re-check the query
             // generation; if this query was superseded, bail before
             // doing any more work (limiter.recordQuery() below would
@@ -2081,3 +2082,4 @@ extension FloatingControlBarWindow {
         resignKeyAnimationToken += 1
     }
 }
+
