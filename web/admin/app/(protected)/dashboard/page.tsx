@@ -30,7 +30,6 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
   BarChart,
   LineChart,
   Area,
@@ -41,6 +40,10 @@ import {
   PieChart,
   Pie,
 } from "recharts";
+// recharts' own ResponsiveContainer renders blank in our Next.js production
+// build (works in dev). Use a plain measuring container that passes explicit
+// pixel dimensions to the chart instead. See components/ui/measured-container.
+import { ResponsiveContainer } from "@/components/ui/measured-container";
 import {
   Select,
   SelectContent,
