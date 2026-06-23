@@ -5,7 +5,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
@@ -329,19 +328,9 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, setSheetState) {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
             Future<void> setEnabled(bool value) async {
-              SharedPreferencesUtil().batchModeEnabled = value;
-              PlatformManager.instance.analytics.transcribeLaterToggled(enabled: value);
-              final docs = await getApplicationDocumentsDirectory();
-              await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
-              // Batch capture takes precedence over background streaming.
-              await SharedPreferencesUtil()
-                  .saveBool('nativeBleStreamingEnabled', !value && SharedPreferencesUtil().backgroundModeEnabled);
+              await captureProvider.setBatchMode(value);
               setSheetState(() {});
               setState(() {});
-              // Re-apply capture so the transcription socket closes/opens to match.
-              try {
-                await captureProvider.onRecordProfileSettingChanged();
-              } catch (_) {}
             }
 
             return SafeArea(
