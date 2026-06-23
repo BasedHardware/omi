@@ -352,3 +352,37 @@ must remain byte-unchanged.
   (legacy store deletion) without explicit owner sign-off at full-migration time.
 - **Consequence for Q1 cutover:** "cutover" governs the *write/read routing* for a canonical user
   (their NEW writes go canonical-only), not destruction of their pre-existing legacy data.
+
+---
+
+## Delete / privacy matrix (WS-J)
+
+Status legend: ✅ handled in code today · ⚠️ gated / needs sign-off · 🔜 future wave · — not applicable
+
+| Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical neutral `mem_…`) | Pinecone ns2 (V17 `v17mem:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
+|---------|-------------------|--------------------------|-------------------|---------------------|-------------------------------------|------------------------------------------|-------------------------------|--------------|----------|-------------------|
+| **Conversation delete, `cascade=false`** (current server default) | — (no cascade) | — | — | — | — | — | — | — | — | — |
+| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ `MemoryService.retract_conversation_memories` (canonical cohort only) | ✅ tombstone in retract | — | ✅ `delete_memory_vector` for retracted legacy ids | ✅ purge outbox via retract (`neutral_vector_id_for_memory`) | 🔜 V17-read vectors not purged on cascade yet | 🔜 no cascade purge wired | 🔜 `invalidate_kg_for_memory_retraction` logs deferral | 🔜 TBD (WS-M) |
+| **Account delete** | ✅ Firestore recursive wipe + `delete_memory_vectors_batch` | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ `_purge_derived_user_data` | ✅ `purge_canonical_derived_user_data` (canonical cohort only) | 🔜 not enumerated on account delete | ✅ subcollection wipe | ✅ `knowledge_nodes` / `knowledge_edges` wiped | 🔜 TBD (WS-M) |
+| **Reprocess / sync-merge (Q7 full retract)** | ✅ legacy path in `_extract_memories_inner` | ✅ `retract_conversation_sourced_memories` | ✅ evidence tombstone in retract | — | ✅ legacy delete in reprocess inner | ✅ purge outbox in retract | 🔜 apply `vector_sync` still writes `v17mem:` (carry-forward WS-G) | 🔜 | 🔜 KG hook defers to rebuild | 🔜 TBD (WS-M) |
+| **Supersede / tombstone (single memory)** | ✅ `invalidate_memory` / ripple | ✅ `delete_canonical_memory` | ✅ per-item tombstone | ✅ via apply path | ✅ router delete | ✅ purge outbox | 🔜 | 🔜 | 🔜 | 🔜 TBD (WS-M) |
+| **Archive transition** | 🔜 legacy archive path | 🔜 canonical archive workers | — | — | 🔜 archive vector filter exists; purge on transition not wired | 🔜 | 🔜 | — | — | 🔜 TBD (WS-M) |
+
+### Q8 — conversation-delete cascade default (⚠️ gated)
+
+**Ratified (Q8):** server-default `cascade=true` + client parity (desktop omits flag today).
+
+**Shipped (WS-J):** default remains **`cascade=false`** — intentional; flipping the default is a
+production behavior change for every user and requires explicit owner sign-off while asleep.
+
+**Characterization test:** `test_conversation_delete_cascade_default_is_false` in
+`backend/tests/unit/test_ws_j_delete_privacy.py`.
+
+**When approved:** change `Query(False)` → `Query(True)` in `routers/conversations.py` and land
+desktop client fix (WS-K).
+
+### Q5 — neutral vector id (canonical)
+
+Canonical purge paths use `neutral_vector_id_for_memory` (`mem_…` = `memory_id`). V17 apply
+`vector_sync` / repair worker still upserts `v17mem:…` via `deterministic_v17_memory_vector_id` —
+**carry-forward to WS-G**; do not break existing V17 vectors in shared Pinecone ns2.
