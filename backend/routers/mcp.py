@@ -25,7 +25,9 @@ from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
-from utils.retrieval.hybrid import rrf_rerank
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.surface_routing import memorydb_list_with_locked_preview
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_v17_default_memory_read_context
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
@@ -118,6 +120,11 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    memory_system = resolve_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        MemoryService(db_client=db).delete(uid, memory_id)
+        return {"status": "ok"}
+
     v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
     v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         v17_rollout,
@@ -210,6 +217,12 @@ def search_memories(
     uid = auth_context.uid
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
+    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_service = MemoryService(db_client=db)
+
+    if memory_system == MemorySystem.CANONICAL:
+        return memory_service.search_mcp(uid, query, limit=limit)
+
     v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
     v17_vector_results = search_v17_default_mcp_memories_vector(
         uid=uid,
@@ -223,47 +236,7 @@ def search_memories(
     if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
         return []
 
-    fetch_limit = min(limit * 3, 60)
-    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
-    if not matches:
-        return []
-    memory_ids = [m.get("memory_id") for m in matches if m.get("memory_id")]
-    scores = {m.get("memory_id"): m.get("score", 0) for m in matches}
-    if not memory_ids:
-        return []
-    docs = {m.get("id"): m for m in memories_db.get_memories_by_ids(uid, memory_ids)}
-
-    # Build candidates in vector-relevance order, excluding rejected / locked / superseded
-    # memories so the brain never returns a fact that is no longer true.
-    candidates = []
-    for mid in memory_ids:
-        m = docs.get(mid)
-        if not m:
-            continue
-        if m.get('user_review') is False or m.get('is_locked', False) or m.get('invalid_at') is not None:
-            continue
-        candidates.append(
-            {
-                "id": m.get("id", ""),
-                "content": m.get("content", ""),
-                "category": m.get("category", "other"),
-                "vector_score": scores.get(mid, 0),
-            }
-        )
-
-    # Order by semantic score first (RRF uses this as the vector rank), then fuse with
-    # keyword (BM25) ranking so exact-keyword lookups surface reliably.
-    candidates.sort(key=lambda c: c.get("vector_score", 0), reverse=True)
-    reranked = rrf_rerank(query, candidates, limit)
-    return [
-        {
-            "id": c["id"],
-            "content": c["content"],
-            "category": c["category"],
-            "relevance_score": round(c.get("vector_score", 0), 4),
-        }
-        for c in reranked
-    ]
+    return memory_service.search_mcp(uid, query, limit=limit)
 
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
@@ -294,6 +267,18 @@ def get_memories(
             status_code=400,
             detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
         )
+
+    memory_system = resolve_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
+        return [
+            {
+                "id": memory.id,
+                "content": memory.content,
+                "category": memory.category.value if hasattr(memory.category, "value") else memory.category,
+            }
+            for memory in memories
+        ]
 
     category_list = []
     if categories:
