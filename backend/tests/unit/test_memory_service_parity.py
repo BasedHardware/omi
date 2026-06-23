@@ -1,7 +1,4 @@
-import importlib
 import os
-import sys
-import types
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -58,21 +55,15 @@ def _sample_memory_dict(memory_id: str = "mem-1", *, locked: bool = False) -> di
 
 
 def _load_memory_service(monkeypatch):
-    sys.modules.pop("utils.memory.memory_service", None)
+    import utils.memory.memory_service as service_mod
 
-    memory_db_mod = types.ModuleType("database.memories")
-    memory_db_mod.get_memories = lambda *args, **kwargs: []
-    memory_db_mod.get_memories_by_ids = lambda *args, **kwargs: []
-    memory_db_mod.create_memory = lambda *args, **kwargs: None
-    memory_db_mod.delete_memory = lambda *args, **kwargs: None
-    memory_db_mod.delete_all_memories = lambda *args, **kwargs: None
-    monkeypatch.setitem(sys.modules, "database.memories", memory_db_mod)
-
-    vector_db_mod = types.ModuleType("database.vector_db")
-    vector_db_mod.find_similar_memories = lambda *args, **kwargs: []
-    monkeypatch.setitem(sys.modules, "database.vector_db", vector_db_mod)
-
-    return importlib.import_module("utils.memory.memory_service")
+    monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *args, **kwargs: [])
+    monkeypatch.setattr(service_mod.memories_db, "create_memory", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service_mod.memories_db, "delete_memory", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service_mod.memories_db, "delete_all_memories", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *args, **kwargs: [])
+    return service_mod
 
 
 @pytest.fixture(autouse=True)
@@ -217,3 +208,54 @@ class TestMemoryServiceParity:
 
         assert len(result) == 1
         assert result[0].id == "mem-1"
+
+    def test_search_mcp_legacy_fetch_limit_filters_and_rrf(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        vector_matches = [
+            {"memory_id": "mem-rejected", "score": 0.99},
+            {"memory_id": "mem-ok", "score": 0.80},
+        ]
+        now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        memories_by_id = [
+            {
+                "id": "mem-rejected",
+                "uid": "uid-test",
+                "content": "rejected",
+                "category": "other",
+                "created_at": now,
+                "updated_at": now,
+                "user_review": False,
+                "is_locked": False,
+            },
+            {
+                "id": "mem-ok",
+                "uid": "uid-test",
+                "content": "visible",
+                "category": "interesting",
+                "created_at": now,
+                "updated_at": now,
+                "scoring": "01_00_1736899200",
+                "is_locked": False,
+                "manually_added": False,
+                "visibility": "private",
+            },
+        ]
+
+        with (
+            patch.object(service_mod.vector_db, "find_similar_memories", return_value=vector_matches) as find_similar,
+            patch.object(service_mod.memories_db, "get_memories_by_ids", return_value=memories_by_id),
+            patch.object(
+                service_mod, "rrf_rerank", side_effect=lambda query, candidates, limit, k=60: candidates[:limit]
+            ) as rerank,
+        ):
+            direct = service_mod._legacy_search_memories_mcp("uid-test", "visible", limit=10)
+            via_service = service_mod.MemoryService(db_client=_FirestoreFake()).search_mcp(
+                "uid-test", "visible", limit=10
+            )
+
+        assert find_similar.call_count == 2
+        find_similar.assert_called_with("uid-test", "visible", threshold=0.0, limit=30)
+        assert rerank.call_count == 2
+        assert direct == via_service
+        assert len(direct) == 1
+        assert direct[0]["id"] == "mem-ok"
