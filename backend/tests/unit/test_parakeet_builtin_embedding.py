@@ -43,6 +43,8 @@ for _mod in [
     'nemo.collections.asr.models',
     'pyannote',
     'pyannote.audio',
+    'pyannote.audio.core',
+    'pyannote.audio.core.model',
 ]:
     if _mod not in sys.modules:
         sys.modules[_mod] = MagicMock()

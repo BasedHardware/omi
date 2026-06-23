@@ -11,6 +11,20 @@ from typing import Any, Optional
 
 import torch
 
+try:
+    import nemo.collections.asr as nemo_asr
+except ImportError:
+    nemo_asr = None
+
+try:
+    import pyannote.audio.core.model as pam
+    from pyannote.audio import Inference as PyannoteInference
+    from pyannote.audio import Model as PyannoteModel
+except ImportError:
+    pam = None
+    PyannoteModel = None
+    PyannoteInference = None
+
 logger = logging.getLogger(__name__)
 
 _MAX_GPU_QUEUE = 512
@@ -179,8 +193,6 @@ class GPUWorker:
             item.loop.call_soon_threadsafe(_safe_set_exception, item.future, exc)
 
     def _load_model(self) -> None:
-        import nemo.collections.asr as nemo_asr
-
         model_name = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
@@ -222,15 +234,11 @@ class GPUWorker:
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
-        try:
-            from pyannote.audio import Model as PyannoteModel, Inference as PyannoteInference
-        except ImportError:
+        if PyannoteModel is None:
             logger.warning("pyannote.audio not installed, built-in embedding unavailable")
             return
 
         try:
-            import pyannote.audio.core.model as pam
-
             orig_load = torch.load
             orig_check = pam.check_version
             try:
