@@ -1,0 +1,445 @@
+"""WS-M atom keyword index — Typesense exact-recall for canonical long-term atoms."""
+
+from __future__ import annotations
+
+import os
+import sys
+import types
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from types import ModuleType
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+os.environ.setdefault("TYPESENSE_HOST", "localhost")
+os.environ.setdefault("TYPESENSE_HOST_PORT", "8108")
+os.environ.setdefault("TYPESENSE_API_KEY", "test-key-not-real")
+
+import hashlib
+import uuid
+
+_db_client_mod = types.ModuleType("database._client")
+_db_client_mod.db = MagicMock()
+
+
+def _document_id_from_seed(seed: str) -> str:
+    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
+    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
+
+
+_db_client_mod.document_id_from_seed = _document_id_from_seed
+sys.modules.setdefault("database._client", _db_client_mod)
+
+
+class _AutoMockModule(ModuleType):
+    def __getattr__(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        mock = MagicMock()
+        setattr(self, name, mock)
+        return mock
+
+
+@dataclass
+class _EmptyVectorResult:
+    hits: list = None
+    rejected_count: int = 0
+
+    def __post_init__(self):
+        if self.hits is None:
+            self.hits = []
+
+
+def _empty_vector_query(*args, **kwargs):
+    return _EmptyVectorResult()
+
+
+def _install_heavy_import_stubs():
+    firebase_admin = types.ModuleType("firebase_admin")
+    firebase_admin.auth = MagicMock()
+    sys.modules["firebase_admin"] = firebase_admin
+
+    pinecone_mod = types.ModuleType("pinecone")
+    pinecone_mod.Pinecone = MagicMock()
+    sys.modules["pinecone"] = pinecone_mod
+
+    vector_db_mod = _AutoMockModule("database.vector_db")
+    vector_db_mod.find_similar_memories = MagicMock(return_value=[])
+    vector_db_mod.query_v17_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
+    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
+    sys.modules["database.vector_db"] = vector_db_mod
+    import database
+
+    database.vector_db = vector_db_mod
+
+    users_mod = _AutoMockModule("database.users")
+    users_mod.get_data_protection_level = MagicMock(return_value="enhanced")
+    sys.modules["database.users"] = users_mod
+
+    for name in [
+        "database.redis_db",
+        "database.conversations",
+        "database.memories",
+        "utils.subscription",
+        "utils.executors",
+        "utils.llm.knowledge_graph",
+        "stripe",
+        "pytz",
+        "google.cloud",
+        "google.api_core",
+        "modal",
+        "ulid",
+        "typesense",
+    ]:
+        if name not in sys.modules:
+            sys.modules[name] = _AutoMockModule(name)
+
+
+_install_heavy_import_stubs()
+
+
+@pytest.fixture(autouse=True)
+def _reinstall_stubs():
+    _install_heavy_import_stubs()
+
+
+from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.atom_keyword_index import (
+    AtomKeywordRebuildReport,
+    build_atom_keyword_document,
+    is_indexable_long_term_atom,
+    keyword_search_memory_ids,
+    merge_memory_search_ids,
+    rebuild_atom_keyword_index,
+    sync_atom_keyword_index_for_item,
+    upsert_atom_keyword_doc,
+)
+from utils.memory.canonical_memory_adapter import (
+    purge_canonical_derived_user_data,
+    retract_conversation_sourced_memories,
+    search_canonical_memories,
+)
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+
+CANONICAL_UID = "uid-canonical-ws-m"
+LEGACY_UID = "uid-legacy-ws-m"
+NEEDLE = "CONFIRM-XYZZY-99182"
+
+
+def _evidence(*, source_id: str = "conv-1") -> MemoryEvidence:
+    return MemoryEvidence(
+        evidence_id="ev_ws_m",
+        source_id=source_id,
+        source_type="conversation",
+        source_version="v1",
+        conversation_id=source_id,
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+
+
+def _long_term_item(
+    *,
+    uid: str = CANONICAL_UID,
+    memory_id: str = "mem_lt_needle",
+    content: str = f"Hotel reservation {NEEDLE}",
+    tier: MemoryTier = MemoryTier.long_term,
+    status: MemoryItemStatus = MemoryItemStatus.active,
+    processing_state: ProcessingState = ProcessingState.processed,
+) -> V17MemoryItem:
+    now = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    expires_at = now + timedelta(days=30) if tier == MemoryTier.short_term else None
+    ledger_commit_id = "commit_ws_m" if tier == MemoryTier.long_term and status == MemoryItemStatus.active else None
+    return V17MemoryItem(
+        memory_id=memory_id,
+        uid=uid,
+        version=1,
+        tier=tier,
+        status=status,
+        processing_state=processing_state,
+        content=content,
+        evidence=[_evidence()],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=now,
+        updated_at=now,
+        expires_at=expires_at,
+        ledger_commit_id=ledger_commit_id,
+        ledger_sequence=1 if ledger_commit_id else None,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _canonical_cohort(monkeypatch):
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_UID)
+
+
+@pytest.fixture
+def mock_typesense():
+    docs_store: dict = {}
+    typesense_client = MagicMock()
+
+    def _upsert(doc):
+        docs_store[doc["id"]] = doc
+        return doc
+
+    def _delete_filter(params):
+        filter_by = params.get("filter_by", "")
+        if f"userId:={CANONICAL_UID}" in filter_by:
+            to_delete = [doc_id for doc_id, doc in docs_store.items() if doc.get("userId") == CANONICAL_UID]
+            for doc_id in to_delete:
+                docs_store.pop(doc_id, None)
+            return {"num_deleted": len(to_delete)}
+        return {"num_deleted": 0}
+
+    def _search(params):
+        query = (params.get("q") or "").lower()
+        hits = []
+        for doc in docs_store.values():
+            haystack = " ".join(
+                [
+                    doc.get("content", ""),
+                    doc.get("entity_terms", ""),
+                    doc.get("predicate", ""),
+                ]
+            ).lower()
+            if query and query in haystack:
+                hits.append({"document": doc})
+        return {"hits": hits}
+
+    documents = MagicMock()
+    documents.upsert.side_effect = _upsert
+    documents.delete.side_effect = _delete_filter
+    documents.__getitem__.side_effect = lambda doc_id: MagicMock(delete=lambda: docs_store.pop(doc_id, None))
+    documents.search.side_effect = _search
+
+    memories_collection = MagicMock()
+    memories_collection.documents = documents
+    memories_collection.retrieve.side_effect = Exception("missing")
+
+    typesense_client.collections.__getitem__.return_value = memories_collection
+    typesense_client.collections.create.return_value = None
+
+    with patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client):
+        yield typesense_client, docs_store
+
+
+class TestIndexability:
+    def test_long_term_active_processed_is_indexable(self):
+        assert is_indexable_long_term_atom(_long_term_item()) is True
+
+    def test_short_term_excluded(self):
+        item = _long_term_item(tier=MemoryTier.short_term, memory_id="mem_st")
+        assert is_indexable_long_term_atom(item) is False
+
+    def test_archive_excluded(self):
+        item = _long_term_item(tier=MemoryTier.archive, memory_id="mem_ar")
+        assert is_indexable_long_term_atom(item) is False
+
+    def test_tombstoned_excluded(self):
+        item = _long_term_item(status=MemoryItemStatus.tombstoned, memory_id="mem_tomb")
+        assert is_indexable_long_term_atom(item) is False
+
+
+class TestMergeMemorySearchIds:
+    def test_keyword_first_deduplicated(self):
+        assert merge_memory_search_ids(["k1", "k2"], ["v1", "k2"]) == ["k1", "k2", "v1"]
+
+
+class TestKeywordSearchAndHybrid:
+    def test_canonical_keyword_search_returns_exact_needle(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        item = _long_term_item()
+        upsert_atom_keyword_doc(item)
+        assert item.memory_id in docs_store
+
+        ids = keyword_search_memory_ids(CANONICAL_UID, NEEDLE, limit=5)
+        assert ids == [item.memory_id]
+
+    def test_legacy_user_indexes_nothing(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        item = _long_term_item(uid=LEGACY_UID, memory_id="mem_legacy")
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        assert upsert_atom_keyword_doc(item) is False
+        assert docs_store == {}
+
+    def test_literal_needle_found_with_vector_disabled(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        item = _long_term_item()
+        upsert_atom_keyword_doc(item)
+
+        def _empty_vector(*args, **kwargs):
+            return _EmptyVectorResult()
+
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [item],
+        )
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector,
+        )
+        assert len(results) == 1
+        assert results[0]["memory_id"] == item.memory_id
+        assert NEEDLE in results[0]["content"]
+
+    def test_memory_service_search_hybrid_for_canonical(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        item = _long_term_item()
+        upsert_atom_keyword_doc(item)
+
+        monkeypatch.setattr(
+            "utils.memory.memory_service.resolve_pinned_memory_system",
+            lambda uid, **_: MemorySystem.CANONICAL,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [item],
+        )
+
+        def _empty_vector(*args, **kwargs):
+            return _EmptyVectorResult()
+
+        with patch("database.vector_db.query_v17_memory_vector_candidates", side_effect=_empty_vector):
+            matches = MemoryService().search(CANONICAL_UID, NEEDLE, limit=5)
+
+        assert len(matches) == 1
+        assert matches[0].memory.id == item.memory_id
+
+    def test_legacy_memory_service_search_unchanged(self, monkeypatch):
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        import utils.memory.memory_service as service_mod
+
+        vector_matches = [{"memory_id": "mem-legacy-1", "score": 0.9}]
+        memories = [
+            {
+                "id": "mem-legacy-1",
+                "uid": LEGACY_UID,
+                "content": "legacy content",
+                "category": "interesting",
+                "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+                "is_locked": False,
+            }
+        ]
+        keyword_called = {"count": 0}
+
+        def _keyword_guard(*args, **kwargs):
+            keyword_called["count"] += 1
+            return []
+
+        monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *a, **k: memories)
+        monkeypatch.setattr(service_mod.vector_db, "find_similar_memories", lambda *a, **k: vector_matches)
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.keyword_search_memory_ids",
+            _keyword_guard,
+        )
+
+        matches = MemoryService().search(LEGACY_UID, "legacy", limit=5)
+        assert keyword_called["count"] == 0
+        assert len(matches) == 1
+        assert matches[0].memory.id == "mem-legacy-1"
+
+
+class TestPurgeAndRebuild:
+    def test_account_delete_purges_keyword_index(self, mock_typesense, monkeypatch):
+        collections, docs_store = mock_typesense
+        item = _long_term_item()
+        upsert_atom_keyword_doc(item)
+        assert item.memory_id in docs_store
+
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.resolve_memory_system",
+            lambda uid, **_: MemorySystem.CANONICAL,
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [item],
+        )
+        monkeypatch.setattr(
+            "database.vector_db.delete_pinecone_memory_vectors_by_id",
+            lambda ids: len(ids),
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+            lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
+        )
+
+        result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=MagicMock())
+        assert result["purged"] is True
+        assert result["keyword_docs_deleted"] >= 0
+        assert item.memory_id not in docs_store
+
+    def test_conversation_cascade_deletes_keyword_doc(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        item = _long_term_item(memory_id="mem_cascade")
+        item = item.model_copy(update={"evidence": [_evidence(source_id="conv-1")]})
+        upsert_atom_keyword_doc(item)
+        assert item.memory_id in docs_store
+
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [item],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+            lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.atomic_bump_source_generation",
+            lambda uid, db_client=None: types.SimpleNamespace(source_generation=2),
+        )
+
+        retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
+        assert item.memory_id not in docs_store
+
+    def test_rebuild_reconstructs_index_count_verified(self, mock_typesense, monkeypatch):
+        _, docs_store = mock_typesense
+        items = [
+            _long_term_item(memory_id="mem_a", content="alpha token"),
+            _long_term_item(memory_id="mem_b", content="beta token"),
+            _long_term_item(memory_id="mem_st", tier=MemoryTier.short_term, content="short"),
+        ]
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: items,
+        )
+
+        report = rebuild_atom_keyword_index(CANONICAL_UID)
+        assert isinstance(report, AtomKeywordRebuildReport)
+        assert report.expected_count == 2
+        assert report.indexed_count == 2
+        assert report.verified is True
+        assert set(docs_store.keys()) == {"mem_a", "mem_b"}
+
+    def test_sync_removes_short_term_from_index(self, mock_typesense):
+        _, docs_store = mock_typesense
+        long_item = _long_term_item(memory_id="mem_lt")
+        upsert_atom_keyword_doc(long_item)
+        assert "mem_lt" in docs_store
+
+        short_item = _long_term_item(memory_id="mem_lt", tier=MemoryTier.short_term, content="gone")
+        sync_atom_keyword_index_for_item(short_item)
+        assert "mem_lt" not in docs_store
+
+
+class TestDocumentShape:
+    def test_build_document_uses_long_term_layer(self):
+        doc = build_atom_keyword_document(_long_term_item())
+        assert doc["layer"] == MemoryTier.long_term.value
+        assert doc["status"] == MemoryItemStatus.active.value
+        assert doc["userId"] == CANONICAL_UID
+        assert NEEDLE in doc["content"]
