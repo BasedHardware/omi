@@ -183,7 +183,7 @@ struct RewindSettingsView: View {
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("rewindRetentionDays") private var retentionDays = 7
     @AppStorage("rewindCaptureInterval") private var captureInterval = 1.0
-    @AppStorage("rewindOCRFast") private var ocrFast = true
+    @AppStorage("rewindOCRFast") private var ocrFast = false
 
     @State private var excludedApps: [String] = []
 
