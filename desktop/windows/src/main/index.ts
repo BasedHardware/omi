@@ -231,7 +231,8 @@ function createWindow(): BrowserWindow {
       // Keep renderer timers running at full rate when the window is minimized/
       // hidden, so Rewind's background screen capture keeps sampling instead of
       // being throttled to ~once/minute by Chromium's background policy.
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      spellcheck: true
     }
   })
 
@@ -560,12 +561,17 @@ app.whenReady().then(async () => {
   ipcMain.handle('window:setAlwaysOnTop', (_e, enabled: boolean) => {
     mainWindow.setAlwaysOnTop(enabled, 'floating')
   })
+  ipcMain.handle('win:isMaximized', () => mainWindow.isMaximized())
   ipcMain.on('win:minimize', () => mainWindow.minimize())
   ipcMain.on('win:maximize', () => {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
   ipcMain.on('win:close', () => mainWindow.close())
+  // Broadcast maximize state changes so the custom title bar can toggle its icon.
+  // Covers all paths: button click, Win+↑, drag to screen top, snap layouts.
+  mainWindow.on('maximize', () => mainWindow.webContents.send('win:maximizeChanged', true))
+  mainWindow.on('unmaximize', () => mainWindow.webContents.send('win:maximizeChanged', false))
 
   // System tray — mirrors macOS menu bar icon. Created immediately so the tray
   // appears as soon as the app launches. Left-click and "Open Omi" show the window.
