@@ -183,6 +183,55 @@ def test_query_default_product_memory_items_applies_product_filter_before_matchi
     assert results[0]["agent_use"] == "default_access_memory"
 
 
+def test_query_default_product_memory_items_keeps_processed_short_term_visible():
+    processed_short = _product_item(
+        "processed-short",
+        "User prefers processed short-term capture.",
+        processing_state=ProcessingState.processed,
+        ledger_commit_id="commit1",
+        ledger_sequence=1,
+        source_commit_id="commit1",
+        source_commit_sequence=1,
+        content_hash="hash_processed",
+    )
+
+    results = query_default_product_memory_items(
+        "processed", [processed_short], policy=MemoryAccessPolicy.for_omi_chat(), now=NOW
+    )
+
+    assert [result["memory_id"] for result in results] == ["processed-short"]
+    assert results[0]["access_reason"] == "default_memory_allowed"
+    assert results[0]["processing_state"] == "processed"
+
+
+def test_query_default_product_memory_items_excludes_tombstoned_and_restricted_sensitivity():
+    tombstoned = _product_item(
+        "tombstoned-short",
+        "User tombstoned short-term memory.",
+        source_state=SourceState.tombstoned,
+    )
+    restricted = _product_item(
+        "restricted-short",
+        "User restricted sensitivity memory.",
+        processing_state=ProcessingState.processed,
+        sensitivity_labels=["credential"],
+        ledger_commit_id="commit1",
+        ledger_sequence=1,
+        source_commit_id="commit1",
+        source_commit_sequence=1,
+        content_hash="hash_restricted",
+    )
+
+    results = query_default_product_memory_items(
+        "User",
+        [tombstoned, restricted],
+        policy=MemoryAccessPolicy.for_omi_chat(),
+        now=NOW,
+    )
+
+    assert results == []
+
+
 def test_query_archive_product_memory_items_is_explicit_and_capability_gated():
     archive = _product_item(
         "archive",
