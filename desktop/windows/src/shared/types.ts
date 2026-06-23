@@ -327,6 +327,8 @@ export type OmiBridgeApi = {
   winMinimize?: () => void
   winMaximize?: () => void
   winClose?: () => void
+  /** Snapshot the current Win32 foreground window (handle, exePath, className). Windows only. */
+  getForegroundNow?: () => Promise<{ handle: string | null; exePath: string | null; className: string | null } | null>
 }
 
 // --- Screen activity → memories (Rewind OCR synthesis) ---
