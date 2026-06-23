@@ -24,7 +24,12 @@ from database._client import db as default_db_client
 from database.memories import get_non_filtered_memories
 from database.v17_collections import V17Collections
 from database.v17_memory_apply_store import apply_long_term_patch_firestore
-from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
+from models.memory_domain import (
+    MemoryLayer,
+    MemoryProcessingState,
+    assert_legal_state,
+    physical_status_to_record_status,
+)
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
@@ -291,7 +296,7 @@ def _apply_one_legacy_row(
     if item is not None:
         assert_legal_state(
             MemoryLayer(item.tier.value),
-            MemoryRecordStatus(item.status.value),
+            physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
 
