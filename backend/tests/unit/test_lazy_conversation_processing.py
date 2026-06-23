@@ -110,3 +110,30 @@ class TestShouldDeferDesktopProcessing:
     def test_lookup_error_fails_safe_to_not_deferred(self):
         self._users.is_byok_active.side_effect = RuntimeError("firestore down")
         assert self._sub.should_defer_desktop_processing('uid') is False
+
+
+class TestDeferredNotRequeuedBySweeper:
+    """Deferred conversations sit in status=processing until opened — they must NOT be returned by
+    get_processing_conversations (the listen-session sweeper re-sends those to pusher, which would
+    background-process deferred rows and defeat the cost saving)."""
+
+    def test_get_processing_conversations_excludes_deferred(self):
+        import database.conversations as cdb
+
+        def _doc(d):
+            m = MagicMock()
+            m.to_dict.return_value = d
+            return m
+
+        docs = [
+            _doc({'id': 'a', 'deferred': True}),  # deferred -> excluded
+            _doc({'id': 'b', 'deferred': False}),  # not deferred -> kept
+            _doc({'id': 'c'}),  # no deferred field (normal processing) -> kept
+        ]
+        chain = MagicMock()
+        chain.stream.return_value = docs
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value.where.return_value = chain
+        with __import__('unittest.mock', fromlist=['patch']).patch.object(cdb, 'db', mock_db):
+            result = cdb.get_processing_conversations('uid-x')
+        assert [c['id'] for c in result] == ['b', 'c']
