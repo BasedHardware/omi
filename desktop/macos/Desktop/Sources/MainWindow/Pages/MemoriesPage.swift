@@ -182,6 +182,42 @@ class MemoriesViewModel: ObservableObject {
       .store(in: &cancellables)
   }
 
+  func resetSessionState() {
+    deleteTask?.cancel()
+    deleteTask = nil
+    memories = []
+    isLoading = false
+    isLoadingMore = false
+    hasMoreMemories = true
+    errorMessage = nil
+    searchText = ""
+    isSearching = false
+    searchResults = []
+    selectedTags = []
+    filteredFromDatabase = []
+    isLoadingFiltered = false
+    refreshInvocations = 0
+    showingAddMemory = false
+    newMemoryText = ""
+    editingMemory = nil
+    editText = ""
+    selectedMemory = nil
+    pendingDeleteMemory = nil
+    undoTimeRemaining = 0
+    hasLoadedInitially = false
+    isActive = false
+    currentOffset = 0
+    showingDeleteAllConfirmation = false
+    isBulkOperationInProgress = false
+    linkedConversation = nil
+    isLoadingConversation = false
+    isTogglingVisibility = false
+    totalMemoriesCount = 0
+    hasMoreFilteredResults = false
+    allFilteredResults = []
+    displayLimit = pageSize
+  }
+
   /// Refresh memories if already loaded (for auto-refresh)
   private func refreshMemoriesIfNeeded() async {
     refreshInvocations += 1
