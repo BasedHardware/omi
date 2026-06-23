@@ -379,6 +379,13 @@ class PushToTalkManager: ObservableObject {
     finalize()
   }
 
+  /// Cancel an in-progress voice follow-up for a pill that was dismissed.
+  func cancelPillFollowUp(for pillID: UUID) {
+    guard followUpPill?.id == pillID else { return }
+    log("PushToTalkManager: voice follow-up CANCEL for dismissed agent")
+    stopListening()
+  }
+
   private var finalizedMode: String = "hold"
 
   // MARK: - QueryTracer

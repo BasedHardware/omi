@@ -469,6 +469,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
         ).resultText
       }
+    case .getTaskAgentStatus:
+      let result = TaskAgentStatusRegistry.shared.combinedSummary()
+      log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
+      session?.sendToolResult(callId: callId, name: name, output: result)
+    case .manageAgentPills:
+      let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
+        .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
+      let agentId = (arguments["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
+      log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
+      session?.sendToolResult(callId: callId, name: name, output: result)
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
       let query = arg("query")

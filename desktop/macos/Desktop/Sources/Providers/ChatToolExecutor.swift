@@ -37,12 +37,21 @@ class ChatToolExecutor {
   }
 
   /// Execute a tool call and return the result as a string
-  static func execute(_ toolCall: ToolCall) async -> String {
+  static func execute(_ toolCall: ToolCall, originatingChatMode: ChatMode? = nil) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
     case "get_local_status":
       return await executeLocalStatus()
+
+    case "get_task_agent_status":
+      return await executeTaskAgentStatus()
+
+    case "spawn_agent":
+      return await executeSpawnAgent(toolCall.arguments, originatingChatMode: originatingChatMode)
+
+    case "manage_agent_pills":
+      return await executeManageAgentPills(toolCall.arguments)
 
     case "execute_sql":
       return await executeSQL(toolCall.arguments)
@@ -418,6 +427,45 @@ class ChatToolExecutor {
     }
 
     return "OK: \(changes) row(s) affected"
+  }
+
+  // MARK: - Task Agent Status
+
+  private static func executeTaskAgentStatus() async -> String {
+    return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
+  }
+
+  private static func executeSpawnAgent(_ args: [String: Any], originatingChatMode: ChatMode?) async -> String {
+    if originatingChatMode == .ask {
+      return "Error: spawn_agent is unavailable in Ask mode. Switch to Act mode before starting a background agent."
+    }
+    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !brief.isEmpty else {
+      return "Error: Missing brief. Pass a clear, self-contained task brief."
+    }
+    let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let model = ShortcutSettings.shared.selectedModel.isEmpty
+      ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+    let pill = AgentPillsManager.shared.spawnFromUserQuery(
+      brief,
+      model: model,
+      fromVoice: false,
+      preFetchedTitle: (title?.isEmpty == false) ? title : nil
+    )
+    return """
+    Agent started as a floating agent pill.
+    id: \(pill.id.uuidString)
+    title: \(pill.title)
+    status: \(pill.status.displayLabel)
+    """
+  }
+
+  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
+    let action = ((args["action"] as? String) ?? "list")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
   }
 
   // MARK: - Local Status

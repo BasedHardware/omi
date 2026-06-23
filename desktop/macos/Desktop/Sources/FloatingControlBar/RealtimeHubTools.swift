@@ -24,6 +24,10 @@ enum HubTool: String {
   /// due-date range). Fast READ — use for completed tasks, date ranges, or the whole list
   /// (get_tasks only covers overdue + due-today).
   case getActionItems = "get_action_items"
+  /// Inspect Omi's local task-chat/background agents. Fast local READ.
+  case getTaskAgentStatus = "get_task_agent_status"
+  /// Manage floating-bar agent pills. Fast local action.
+  case manageAgentPills = "manage_agent_pills"
   /// Read what Omi knows about the user (memories / facts) and return it inline to speak.
   /// Fast synchronous READ — the answer to "who am I" / "what do you know about me".
   case getMemories = "get_memories"
@@ -64,6 +68,8 @@ enum RealtimeHubTools {
     Reply in the same language the user is speaking.
 
     \(aboutUser)
+
+    \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
     IMPORTANT: You CAN read the user's Omi data directly with fast tools — their tasks \
     (get_tasks), what Omi knows about them / their memories & facts (get_memories, \
@@ -298,6 +304,37 @@ enum RealtimeHubTools {
               "type": "string", "description": "Optional ISO-8601 end of the due-date range.",
             ],
           ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.getTaskAgentStatus.rawValue,
+        "description":
+          "Inspect Omi's local task-chat/background agents and floating agent pills, including recent completed/failed ones. "
+          + "Use when the user asks about your subagents, task agents, background agents, "
+          + "running agents, finished agents, errors, or timeouts. Fast local read.",
+        "parameters": ["type": "object", "properties": [:]],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.manageAgentPills.rawValue,
+        "description":
+          "Manage the circular floating agent pills shown below the floating bar. Use to list pills, dismiss one by id, "
+          + "or clear completed pills after checking get_task_agent_status.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "action": [
+              "type": "string",
+              "enum": ["list", "dismiss", "clear_completed"],
+              "description": "Management action to perform.",
+            ],
+            "agent_id": [
+              "type": "string",
+              "description": "Floating agent pill id from get_task_agent_status; required for dismiss.",
+            ],
+          ],
+          "required": ["action"],
         ],
       ],
       [

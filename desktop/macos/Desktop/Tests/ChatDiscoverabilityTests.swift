@@ -95,14 +95,80 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Vector similarity search on tasks"))
     }
 
-    func testToolPromptHas7Tools() {
+    func testToolPromptDoesNotPinStaleToolCount() {
         let prompt = ChatPrompts.desktopChat
-        XCTAssertTrue(prompt.contains("You have 7 tools"))
+        XCTAssertFalse(prompt.contains("You have 7 tools"))
+        XCTAssertFalse(prompt.contains("You have \(DesktopCapabilityRegistry.desktopToolNames.count) Omi tools"))
     }
 
     func testToolPromptListsSearchTasksInWhenToUse() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("find tasks about shopping"))
+    }
+
+    func testDesktopPromptMentionsEveryDesktopCapability() {
+        let prompt = ChatPrompts.desktopChat
+        for toolName in DesktopCapabilityRegistry.desktopToolNames {
+            XCTAssertTrue(prompt.contains("**\(toolName)**"), "Missing desktop capability \(toolName)")
+        }
+    }
+
+    func testDesktopPromptMentionsTaskAgentStatus() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**get_task_agent_status**"))
+        XCTAssertTrue(prompt.contains("your subagents"))
+        XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
+        XCTAssertTrue(prompt.contains("floating_agent_pills"))
+    }
+
+    func testDesktopPromptCanSpawnAndManageFloatingAgents() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**spawn_agent**"))
+        XCTAssertTrue(prompt.contains("call spawn_agent"))
+        XCTAssertTrue(prompt.contains("**manage_agent_pills**"))
+        XCTAssertTrue(prompt.contains("circular floating agent pills"))
+    }
+
+    func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("Do not guess when you can look it up"))
+        XCTAssertTrue(prompt.contains("Supports SELECT, INSERT, UPDATE, DELETE"))
+        XCTAssertTrue(prompt.contains("Supports FTS5 MATCH queries"))
+        XCTAssertTrue(prompt.contains("More reliable than hand-writing MATCH queries for task search"))
+        XCTAssertTrue(prompt.contains("**save_knowledge_graph**"))
+        XCTAssertTrue(prompt.contains("Deduplication is handled automatically"))
+    }
+
+    func testDesktopPromptPreservesPersonalDataLookupContract() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("For ANY personal question"))
+        XCTAssertTrue(prompt.contains("FIRST check <user_facts>"))
+        XCTAssertTrue(prompt.contains("before saying you don't know"))
+        XCTAssertTrue(prompt.contains("transcription_sessions/transcription_segments"))
+        XCTAssertTrue(prompt.contains("NEVER say \"I don't know\""))
+    }
+
+    func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
+        let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
+            .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
+
+        for toolName in DesktopCapabilityRegistry.desktopToolNames {
+            XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
+        }
+    }
+
+    private func readToolNames(from relativePath: String) throws -> Set<String> {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let desktopDir = testFile.deletingLastPathComponent().deletingLastPathComponent()
+        let macOSDir = desktopDir.deletingLastPathComponent()
+        let file = macOSDir.appendingPathComponent(relativePath)
+        let text = try String(contentsOf: file)
+        let regex = try NSRegularExpression(pattern: #"name:\s*"([^"]+)""#)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return Set(regex.matches(in: text, range: range).compactMap { match in
+            guard let nameRange = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[nameRange])
+        })
     }
 
     // MARK: - Table Annotations Completeness
