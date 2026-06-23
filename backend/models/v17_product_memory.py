@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -109,6 +109,7 @@ class V17MemoryItem(BaseModel):
     source_commit_sequence: Optional[int] = None
     content_hash: Optional[str] = None
     account_generation: int = 0
+    promotion: Optional[Dict[str, Any]] = None
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
