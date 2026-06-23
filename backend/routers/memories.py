@@ -21,7 +21,8 @@ from utils.apps import update_personas_async
 from utils.memory.v17_v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
 from utils.memory.v17_v3_production_runtime import build_v17_v3_production_runtime
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -274,7 +275,7 @@ def get_memories(
     uid: str = Depends(auth.get_current_user_uid),
     v17_runtime: V17V3GetRuntime = Depends(get_v17_v3_get_runtime),
 ):
-    if resolve_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
+    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(uid, limit=limit, offset=offset)
 
     if not v17_runtime.enabled or v17_runtime.source_decision == 'disabled':
