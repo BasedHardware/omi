@@ -656,6 +656,22 @@ class TestSyncEndpointPrefsWiring:
         fn_body = source[fn_start:]
         assert 'transcription_prefs' in fn_body
 
+    def test_endpoint_forwards_private_cloud_and_data_protection(self):
+        """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_end = source.index(
+            '# ---------------------------------------------------------------------------\n# v2 async sync-local-files',
+            fn_start,
+        )
+        fn_body = source[fn_start:fn_end]
+
+        assert 'get_user_private_cloud_sync_enabled' in fn_body
+        assert 'get_data_protection_level' in fn_body
+        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in fn_body
+        assert 'data_protection_level=data_protection_level' in fn_body
+        assert '_finalize_sync_audio_files' in fn_body
+
 
 # ---------------------------------------------------------------------------
 # get_deepgram_model_for_language edge cases

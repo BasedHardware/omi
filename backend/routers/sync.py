@@ -1526,6 +1526,11 @@ async def sync_local_files(
         private_cloud_sync_enabled = bool(
             await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
         )
+        data_protection_level = (
+            await run_blocking(db_executor, users_db.get_data_protection_level, uid)
+            if private_cloud_sync_enabled
+            else None
+        )
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
@@ -1558,12 +1563,15 @@ async def sync_local_files(
                     conversation_id,
                     assignment_turnstile,
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 for path in ordered_paths
             ]
         )
 
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+        if private_cloud_sync_enabled:
+            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
