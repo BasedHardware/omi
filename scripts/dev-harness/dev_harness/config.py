@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -173,8 +174,32 @@ def load_config(repo_root: Path, env: Mapping[str, str] | None = None, *, create
     return cfg
 
 
+def _canonical_users_for_harness(cfg: HarnessConfig) -> str:
+    manifest_path = cfg.layout.state_root / "manifests" / "canonical-auth-uids.json"
+    if manifest_path.is_file():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, dict):
+            canonical = payload.get("canonical_users")
+            if isinstance(canonical, list):
+                values = [str(item).strip() for item in canonical if str(item).strip()]
+                if values:
+                    return ",".join(values)
+            users = payload.get("users")
+            if isinstance(users, dict):
+                alice_uid = users.get("alice")
+                if isinstance(alice_uid, str) and alice_uid.strip():
+                    return alice_uid.strip()
+            selected = payload.get("selected_user")
+            if isinstance(selected, str) and selected.strip():
+                return selected.strip()
+    return os.environ.get("MEMORY_CANONICAL_USERS", "alice").strip()
+
+
 def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
-    canonical_users = os.environ.get("MEMORY_CANONICAL_USERS", "alice").strip()
+    canonical_users = _canonical_users_for_harness(cfg)
     return {
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_HARNESS_STATE_ROOT": str(cfg.layout.state_root),
