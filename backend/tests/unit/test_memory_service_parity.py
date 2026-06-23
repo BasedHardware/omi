@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -284,3 +284,30 @@ class TestMemoryServiceParity:
         assert direct == via_service
         assert len(direct) == 1
         assert direct[0]["id"] == "mem-ok"
+
+
+class TestMemoryServiceUsesRequestPin:
+    def test_search_mcp_stays_on_pinned_legacy_backend_when_resolver_flips(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        uid = "uid-service-pin"
+        calls = {"count": 0}
+
+        def flipping_resolve(_uid, *, db_client=None):
+            calls["count"] += 1
+            from utils.memory.memory_system import MemorySystem
+
+            return MemorySystem.LEGACY if calls["count"] == 1 else MemorySystem.CANONICAL
+
+        monkeypatch.setattr("utils.memory.memory_system_pin.resolve_memory_system", flipping_resolve)
+        canonical_mock = MagicMock(return_value=[{"id": "canonical-only"}])
+        monkeypatch.setattr(service_mod, "_canonical_search_memories_mcp", canonical_mock)
+
+        from utils.memory.memory_system_pin import pin_memory_system
+
+        pin_memory_system(uid)
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service.search_mcp(uid, "query", limit=5)
+        service.search_mcp(uid, "query", limit=5)
+
+        assert calls["count"] == 1
+        canonical_mock.assert_not_called()
