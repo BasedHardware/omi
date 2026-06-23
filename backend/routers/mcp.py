@@ -26,8 +26,8 @@ from utils.conversations.render import populate_speaker_names, redact_conversati
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.surface_routing import memorydb_list_with_locked_preview
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_v17_default_memory_read_context
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
@@ -120,7 +120,7 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         MemoryService(db_client=db).delete(uid, memory_id)
         return {"status": "ok"}
@@ -217,7 +217,7 @@ def search_memories(
     uid = auth_context.uid
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     memory_service = MemoryService(db_client=db)
 
     if memory_system == MemorySystem.CANONICAL:
@@ -268,7 +268,7 @@ def get_memories(
             detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
         )
 
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
         return [
