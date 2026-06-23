@@ -150,7 +150,9 @@ def _send_summary_notification(user_data: tuple):
         )
         return
 
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if not conversations_data or len(conversations_data) == 0:
         return
 
