@@ -7,12 +7,25 @@
 
 ## Morning-review checklist
 
-- [ ] Desktop decodes `layer` from `/v3/memories` (and falls back from `memory_tier` / `tier`)
-- [ ] Desktop local cache (`RewindDatabase`) stores `layer` column or derives on read
-- [ ] Desktop conversation delete passes `cascade=true` (Q8 — coordinate with server-default flip)
+- [x] Desktop decodes `layer` from `/v3/memories` (and falls back from `memory_tier` / `tier`)
+- [x] Desktop local cache (`RewindDatabase`) stores tier + `tierIsExplicit` derived from `layer` when present (no new column)
+- [ ] Desktop conversation delete passes `cascade=true` (Q8 — **deferred**; owner kept `cascade=False` this session)
 - [ ] Flutter `memory.dart` gains optional `layer` field
 - [ ] Flutter `memories.dart` provider uses `layer` when canonical cohort is enabled
-- [ ] E2E: canonical-cohort user sees layer badges; legacy user unchanged
+- [ ] E2E: canonical-cohort user sees layer badges against **real** rollout backend (desktop verified via mock API + local DB; see Verification)
+
+## Shipped (desktop — 2026-06-23)
+
+| Item | Status |
+|------|--------|
+| `ServerMemory` decodes `layer` with priority `layer` > `tier` > `memory_tier` | **Done** |
+| `tierIsExplicit` true when any of `layer`/`tier`/`memory_tier` present | **Done** |
+| `MemoryTierBadge` shows "Short-term" / "Long-term" when `tierIsExplicit` | **Done** |
+| Layer info popover on badge click + `.help()` copy | **Done** |
+| `MemoryLayer` typealias + `layerInfoText` on `MemoryTier` | **Done** |
+| `ServerMemoryV17DecodingTests` layer fixtures | **Done** |
+| Conversation delete `cascade=true` | **Deferred** (out of scope) |
+| Flutter parity | **Deferred** |
 
 ## API contract (backend — done)
 
@@ -102,15 +115,21 @@ Mirror mobile: ensure `cascade=true` on conversation delete API call.
 
 ```bash
 cd desktop/macos && ./scripts/omi-auth-dump.sh   # once, from Omi Dev
-OMI_APP_NAME="omi-ws-k-layer" ./scripts/omi-auth-seed.sh com.omi.omi-ws-k-layer
-cd desktop/macos && OMI_APP_NAME="omi-ws-k-layer" OMI_SKIP_TUNNEL=1 ./run.sh
+./scripts/omi-auth-seed.sh com.omi.omi-layer-test
+# Point at rollout Python backend with MEMORY_CANONICAL_USERS=<uid>, or mock:
+#   OMI_PYTHON_API_URL=http://127.0.0.1:8899/  (controlled layer fixtures)
+OMI_APP_NAME="omi-layer-test" OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+  OMI_PYTHON_API_URL=http://127.0.0.1:8001/ \
+  OMI_AUTOMATION_PORT=47779 ./run.sh
 ```
 
-1. `./scripts/omi-ctl navigate memories`
-2. Confirm canonical-cohort memories show Short-term / Long-term badges from `layer`.
-3. Legacy user: no badges; `layer` in JSON ignored safely.
-4. Delete a conversation with linked memories → memories tombstoned when `cascade=true`.
-5. `agent-swift screenshot /tmp/ws-k-evidence.png`
+1. `./scripts/omi-ctl navigate memories` (set `OMI_AUTOMATION_PORT=47779` if Omi Dev is also running)
+2. Confirm canonical memories show Short-term / Long-term badges from `layer`.
+3. Legacy row (no `layer`/`tier`/`memory_tier` in JSON): no badge (`tierIsExplicit=false`).
+4. ~~Delete conversation cascade~~ — deferred this session.
+5. Screenshot: `/tmp/omi-layer-badges.png` (or verify via local DB: `tier` + `tierIsExplicit` columns).
+
+**Agent self-verify (2026-06-23):** mock `/v3/memories` on `:8899` with `layer`-only payloads → app synced to SQLite (`mock-st-1` `tierIsExplicit=1`, `mock-legacy-1` `tierIsExplicit=0`). Full rollout backend against prod Firestore **not** exercised (local creds = `based-hardware-dev`, empty for test uid). Prod `api.omi.me` does not yet emit `layer`.
 
 ### Flutter
 
