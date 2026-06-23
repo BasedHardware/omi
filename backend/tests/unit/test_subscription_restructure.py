@@ -50,7 +50,7 @@ def test_operator_chat_cap_independent_from_unlimited(monkeypatch):
 
 
 def test_operator_and_neo_defaults(monkeypatch):
-    """Operator defaults to 500, Neo defaults to 200."""
+    """Operator defaults to 500, Neo defaults to 30 (freemium-aligned)."""
     monkeypatch.delenv("OPERATOR_CHAT_QUESTIONS_PER_MONTH", raising=False)
     monkeypatch.delenv("NEO_CHAT_QUESTIONS_PER_MONTH", raising=False)
 
@@ -63,7 +63,7 @@ def test_operator_and_neo_defaults(monkeypatch):
     unlimited_limits = sub_mod.get_plan_limits(PlanType.unlimited)
 
     assert operator_limits.chat_questions_per_month == 500
-    assert unlimited_limits.chat_questions_per_month == 200
+    assert unlimited_limits.chat_questions_per_month == 30
 
 
 def test_architect_uses_dollar_cap():
