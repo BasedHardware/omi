@@ -247,14 +247,6 @@ const omiOverlay: OmiOverlayApi = {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ;(omi as any).winClose = (): void => ipcRenderer.send('win:close')
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(omi as any).winIsMaximized = (): Promise<boolean> => ipcRenderer.invoke('win:isMaximized')
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-;(omi as any).onWinMaximizeChange = (cb: (maximized: boolean) => void): (() => void) => {
-  const listener = (_e: Electron.IpcRendererEvent, v: boolean): void => cb(v)
-  ipcRenderer.on('win:maximizeChanged', listener)
-  return () => ipcRenderer.removeListener('win:maximizeChanged', listener)
-}
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 ;(omi as any).getForegroundNow = (): Promise<{ handle: string | null; exePath: string | null; className: string | null } | null> =>
   ipcRenderer.invoke('usage:foregroundNow')
 
