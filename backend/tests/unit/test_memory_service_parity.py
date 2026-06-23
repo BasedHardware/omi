@@ -164,21 +164,48 @@ class TestMemoryServiceParity:
         get_by_ids.assert_called_with("uid-test", ["mem-1", "mem-2"])
         assert via_service == direct
 
-    def test_canonical_backend_raises_not_implemented(self, monkeypatch):
+    def test_canonical_backend_delegates_to_adapter(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         backend = service_mod.CanonicalMemoryBackend()
-        message = "canonical backend lands in WS-B/WS-C/WS-I"
 
-        with pytest.raises(NotImplementedError, match=message):
-            backend.read("uid-test")
-        with pytest.raises(NotImplementedError, match=message):
-            backend.search("uid-test", "query")
-        with pytest.raises(NotImplementedError, match=message):
-            backend.write("uid-test", {"id": "mem-1"})
-        with pytest.raises(NotImplementedError, match=message):
+        with (
+            patch(
+                "utils.memory.memory_service.read_canonical_memories",
+                return_value=[],
+            ) as read_mock,
+            patch(
+                "utils.memory.memory_service.search_canonical_memories",
+                return_value=[],
+            ) as search_mock,
+            patch(
+                "utils.memory.memory_service.write_canonical_extraction_memory",
+            ) as write_mock,
+            patch(
+                "utils.memory.memory_service.delete_canonical_memory",
+            ) as delete_mock,
+            patch(
+                "utils.memory.memory_service.delete_all_canonical_memories",
+            ) as delete_all_mock,
+        ):
+            assert backend.read("uid-test") == []
+            assert backend.search("uid-test", "query") == []
+            backend.write(
+                "uid-test",
+                {
+                    "id": "mem-1",
+                    "content": "x",
+                    "conversation_id": "conv-1",
+                    "evidence": [{"evidence_id": "e1", "source_id": "conv-1", "source_type": "conversation"}],
+                },
+            )
             backend.delete("uid-test", "mem-1")
-        with pytest.raises(NotImplementedError, match=message):
             backend.delete_all("uid-test")
+
+        read_mock.assert_called_once()
+        search_mock.assert_called_once()
+        write_mock.assert_called_once()
+        delete_mock.assert_called_once()
+        delete_all_mock.assert_called_once()
 
     def test_memory_service_uses_legacy_backend_by_default(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
