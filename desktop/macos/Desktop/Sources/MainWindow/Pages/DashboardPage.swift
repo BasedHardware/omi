@@ -63,6 +63,14 @@ class DashboardViewModel: ObservableObject {
         await loadGoalsFromLocalSnapshot()
     }
 
+    func resetSessionState() {
+        scoreResponse = nil
+        goals = []
+        isLoading = false
+        error = nil
+        lastGoalRefreshTime = .distantPast
+    }
+
     private func loadScores() async {
         do {
             scoreResponse = try await APIClient.shared.getScores()
