@@ -1813,6 +1813,15 @@ class FloatingControlBarManager {
         let limiter = FloatingBarUsageLimiter.shared
         if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
             await limiter.syncQuota()
+            // Race: the user may have cancelled or fired a new query while
+            // we were awaiting the network call. Re-check the query
+            // generation; if this query was superseded, bail before
+            // doing any more work (limiter.recordQuery() below would
+            // consume a local quota slot for a cancelled query; the
+            // screenshot + provider.sendMessage would spend CPU/tokens
+            // on a response the user no longer wants). Bug identified
+            // by cubic-dev-ai on PR #8141 — P2.
+            guard isActiveQueryGeneration(generation) else { return }
         }
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
