@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors"
+    "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors",
+    "Fixed Rewind screen recording dropping ~2.5s of footage and logging spurious errors when the video encoder failed to start, by retrying immediately on the next frame instead of waiting for an emergency reset"
   ],
   "releases": [
     {
