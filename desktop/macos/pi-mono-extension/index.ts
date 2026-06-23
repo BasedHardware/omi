@@ -640,6 +640,33 @@ export const OMI_TOOLS = [
     required: ["task_id"],
   }),
   omiTool({
+    name: "save_knowledge_graph",
+    label: "Save Knowledge Graph",
+    description: "Save a knowledge graph of entities and relationships discovered about the user.",
+    promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
+    promptGuidelines: [
+      "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      "Deduplication is handled automatically; include all meaningful entities and relationships you found.",
+    ],
+    properties: {
+      nodes: Type.Array(Type.Object({
+        id: Type.String({ description: "Stable node id, referenced by edges." }),
+        label: Type.String({ description: "Human-readable entity label." }),
+        node_type: Type.String({
+          enum: ["person", "organization", "place", "thing", "concept"],
+          description: "Entity type.",
+        }),
+        aliases: Type.Optional(Type.Array(Type.String({ description: "Alternate labels for the same entity." }))),
+      })),
+      edges: Type.Array(Type.Object({
+        source_id: Type.String({ description: "Source node id." }),
+        target_id: Type.String({ description: "Target node id." }),
+        label: Type.String({ description: "Relationship label, such as works_on, uses, built_with, part_of, or knows." }),
+      })),
+    },
+    required: ["nodes", "edges"],
+  }),
+  omiTool({
     name: "get_conversations",
     label: "Get Conversations",
     description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",

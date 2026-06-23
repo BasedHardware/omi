@@ -1920,6 +1920,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         do {
+            let currentChatMode = chatMode
             let result = try await agentBridge.query(
                 prompt: question,
                 systemPrompt: systemPrompt,
@@ -1928,7 +1929,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
+                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -2957,6 +2958,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // text-streaming window so the `generation` span excludes tool time.
             var isFirstResponse = true
             var isGenerating = false
+            let currentChatMode = chatMode
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 if isFirstResponse {
                     isFirstResponse = false
@@ -2976,7 +2978,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
                 let toolStart = ContinuousClock.now
-                let result = await ChatToolExecutor.execute(toolCall)
+                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =

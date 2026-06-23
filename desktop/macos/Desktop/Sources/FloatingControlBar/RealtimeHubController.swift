@@ -474,7 +474,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
       session?.sendToolResult(callId: callId, name: name, output: result)
     case .manageAgentPills:
-      let action = arg("action").isEmpty ? "list" : arg("action")
+      let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
+        .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
       let agentId = (arguments["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
       log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")

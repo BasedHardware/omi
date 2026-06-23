@@ -139,6 +139,7 @@ class TaskChatState: ObservableObject {
         } catch {
             logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
             errorMessage = "AI not available: \(error.localizedDescription)"
+            TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: errorMessage ?? error.localizedDescription)
             return false
         }
     }
@@ -190,6 +191,7 @@ class TaskChatState: ObservableObject {
 
         do {
             let systemPrompt = systemPromptBuilder?() ?? ""
+            let currentChatMode = chatMode
 
             let textDeltaHandler: @Sendable (String) -> Void = { [weak self] delta in
                 Task { @MainActor [weak self] in
@@ -198,7 +200,7 @@ class TaskChatState: ObservableObject {
             }
             let toolCallHandler: @Sendable (String, String, [String: Any]) async -> String = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                let result = await ChatToolExecutor.execute(toolCall)
+                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                 log("TaskChat OMI tool \(name) executed for callId=\(callId)")
                 return result
             }

@@ -40,10 +40,20 @@ final class TaskAgentStatusRegistry {
   private let maxSnapshotEntries = 20
   private let maxRetainedEntries = 100
   private let encoder: JSONEncoder
+  private var signOutObserver: NSObjectProtocol?
 
   private init() {
     encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    signOutObserver = NotificationCenter.default.addObserver(
+      forName: .userDidSignOut,
+      object: nil,
+      queue: nil
+    ) { [weak self] _ in
+      Task { @MainActor in
+        self?.reset()
+      }
+    }
   }
 
   func registerTask(taskId: String, title: String?) {
@@ -86,6 +96,10 @@ final class TaskAgentStatusRegistry {
 
   func markStopped(taskId: String) {
     update(taskId: taskId, status: .stopped, statusText: nil, lastError: "Stopped by user")
+  }
+
+  func reset() {
+    entries.removeAll()
   }
 
   func snapshotJSON() -> String {
