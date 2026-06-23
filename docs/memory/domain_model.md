@@ -339,3 +339,16 @@ extraction to canonical-only, and route the cohort's read path (at least `/v3` G
 canonical user is fully self-consistent. The canonical cohort stays **empty in production**
 (`MEMORY_CANONICAL_USERS` unset); only explicitly-added test users are affected. Legacy-cohort behavior
 must remain byte-unchanged.
+
+### Backfill & reversibility directive (locked 2026-06-23)
+
+- **Backfill is NON-DESTRUCTIVE.** Legacy `memories` / `short_term` rows are **retained** for a migrated
+  user, not moved or deleted. WS-C copies legacy → canonical (`layer=long_term`) idempotently
+  (hash key, Q4); the legacy data stays intact as a fallback.
+- **Reversibility:** because legacy data is preserved, flipping a user `canonical → legacy` is a pure
+  routing change with the original data fully available — no restore step needed.
+- **Clean cut-over / decommission (WS-H) is GATED:** legacy stores are deleted ONLY once **all** users
+  are fully migrated and verified. Until then, legacy is the durable fallback. No agent may run WS-H
+  (legacy store deletion) without explicit owner sign-off at full-migration time.
+- **Consequence for Q1 cutover:** "cutover" governs the *write/read routing* for a canonical user
+  (their NEW writes go canonical-only), not destruction of their pre-existing legacy data.
