@@ -14,7 +14,12 @@ from models.v17_memory_contracts import (
     deterministic_contract_id,
 )
 from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, logical_payload_digest
-from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
+from models.memory_domain import (
+    MemoryLayer,
+    MemoryProcessingState,
+    assert_legal_state,
+    physical_status_to_record_status,
+)
 from models.v17_product_memory import (
     MemoryItemStatus,
     MemoryTier,
@@ -220,7 +225,7 @@ def _materialize_memory_item(
     processing_state = ProcessingState.processed
     assert_legal_state(
         MemoryLayer(tier.value),
-        MemoryRecordStatus(status.value),
+        physical_status_to_record_status(status.value),
         MemoryProcessingState(processing_state.value),
     )
     return V17MemoryItem(
@@ -283,7 +288,7 @@ def _apply_update_memory_item(
     processing_state = ProcessingState.processed
     assert_legal_state(
         MemoryLayer(tier.value),
-        MemoryRecordStatus(status.value),
+        physical_status_to_record_status(status.value),
         MemoryProcessingState(processing_state.value),
     )
     updates: Dict[str, Any] = {
