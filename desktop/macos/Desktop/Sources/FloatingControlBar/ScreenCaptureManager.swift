@@ -58,8 +58,14 @@ class ScreenCaptureManager {
     ) -> Data? {
         guard let image = captureScreenImage() else { return nil }
 
-        // Downscale before encoding. Cheap (CGContext blit) and avoids the
-        // 50-150ms cost of WebP-encoding a 5120x2880 buffer.
+        // Downscale before encoding. `downscale` returns nil when the image
+        // is already at or below `maxLongEdge`; fall back to the original in
+        // that case. The resulting `scaledImage` is the bitmap we encode —
+        // we MUST draw it (not the original `image`) into the bitmap context
+        // below, otherwise the CGContext draw silently re-scales a
+        // 5120x2880 source into a 1280x720 destination, doubling the
+        // downscale work and defeating the optimization. (Bug found by
+        // cubic-dev-ai on PR #8140 — P1.)
         let scaledImage = downscale(image: image, maxLongEdge: maxLongEdge) ?? image
         let width = scaledImage.width
         let height = scaledImage.height
@@ -77,7 +83,7 @@ class ScreenCaptureManager {
             log("ScreenCaptureManager: Could not create bitmap context")
             return nil
         }
-        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(scaledImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
         guard let pixelData = context.data else {
             log("ScreenCaptureManager: Could not get pixel data from context")
