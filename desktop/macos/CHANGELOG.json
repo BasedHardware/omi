@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed corrupted screenshot OCR that broke screen search by defaulting Rewind OCR to Accurate mode and enabling Vision language correction"
+  ],
   "releases": [
     {
       "version": "0.11.495",
