@@ -8,6 +8,7 @@ cd "$ROOT_DIR"
 PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
 VENV_PATH="${VENV_PATH:-.venv}"
 LOCK_FILE="pylock.toml"
+PYTHON_BIN="$VENV_PATH/bin/python"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64|Darwin-aarch64)
@@ -18,6 +19,7 @@ case "$(uname -s)-$(uname -m)" in
     ;;
   MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64)
     LOCK_FILE="pylock.windows.toml"
+    PYTHON_BIN="$VENV_PATH/Scripts/python.exe"
     ;;
 esac
 
@@ -33,6 +35,6 @@ fi
 
 uv python install "$PYTHON_VERSION"
 uv venv --python "$PYTHON_VERSION" "$VENV_PATH"
-uv pip sync "$LOCK_FILE" --python "$VENV_PATH/bin/python"
+uv pip sync "$LOCK_FILE" --python "$PYTHON_BIN"
 
 echo "Backend dependencies synced from $LOCK_FILE into $ROOT_DIR/$VENV_PATH"
