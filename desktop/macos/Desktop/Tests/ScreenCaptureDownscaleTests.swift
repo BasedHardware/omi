@@ -104,7 +104,7 @@ final class ScreenCaptureDownscaleTests: XCTestCase {
         return context.makeImage()!
     }
 
-    // MARK: - End-to-end guarantee (regression test for cubic P1 on PR #8140)
+    // MARK: - End-to-end (regression for cubic P1 on PR #8140, addressed in 56f5d57d3)
 
     /// Pins the post-fix invariant: a 5K input downscales to <= 1280
     /// on the long edge, so the bitmap context is sized to those
