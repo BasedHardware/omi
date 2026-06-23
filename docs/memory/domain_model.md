@@ -213,6 +213,10 @@ anything else is a bug a validator should reject.
 - **Promotion requires `processing_state=processed`** — a `pending`/`blocked` item never reaches `long_term`.
 - `archive` items are **never `superseded`** (terminal) — they tombstone or are resurfaced.
 - `status=tombstoned` overrides visibility at **every** layer (hard-excluded from default reads).
+- Physical storage may carry `status=hidden` (V17 pipeline outcome for secret/rejected items). It has
+  **no** §1.3 axis value — boundary-map to `tombstoned` at validation/materialization
+  (`physical_status_to_record_status()` in `memory_domain.py`). Persisted rows keep `hidden`; canonical
+  validation treats them as tombstoned (same default-read exclusion).
 - `context_only` is **not** a value on any axis — normalize to `layer=archive` or a non-default outcome (§1.1).
 - A read surface requesting `layer=archive` still honors `status` filtering.
 
