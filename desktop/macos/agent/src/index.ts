@@ -43,9 +43,11 @@ import type {
   RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
+import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
+import { legacyPermissionPolicy } from "./legacy-permission-policy.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +71,26 @@ function send(msg: OutboundMessage): void {
   } catch (err) {
     logErr(`Failed to write to stdout: ${err}`);
   }
+}
+
+function withQueryCorrelation<T extends OutboundMessage>(
+  msg: T,
+  query: QueryMessage,
+  adapterSessionId?: string
+): T {
+  if (query.protocolVersion !== 2) return msg;
+  return {
+    ...msg,
+    protocolVersion: 2,
+    requestId: requestIdFor(query),
+    clientId: query.clientId,
+    sessionId: query.sessionId,
+    runId: query.runId,
+    attemptId: query.attemptId,
+    eventId: query.eventId,
+    adapterSessionId,
+    legacyAdapterSessionId: query.legacyAdapterSessionId ?? query.resume,
+  };
 }
 
 function logErr(msg: string): void {
@@ -295,17 +317,17 @@ function startAcpProcess(): void {
         const method = msg.method as string;
 
         if (method === "session/request_permission") {
-          // Auto-approve all tool permissions (matches agent-bridge's bypassPermissions behavior)
           const params = msg.params as Record<string, unknown> | undefined;
           const options = (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
-          const allowAlways = options.find((o) => o.kind === "allow_always");
-          const allowOnce = options.find((o) => o.kind === "allow_once");
-          const optionId = allowAlways?.optionId ?? allowOnce?.optionId ?? "allow";
-          logErr(`Auto-approving permission for tool (id=${id})`);
+          const decision = legacyPermissionPolicy.resolveAcpPermission({
+            requestId: id,
+            options,
+          });
+          logErr(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
           acpStdinWriter?.(JSON.stringify({
             jsonrpc: "2.0",
             id,
-            result: { outcome: { outcome: "selected", optionId } },
+            result: decision.acpResult,
           }));
         } else if (method === "session/update") {
           // session/update can also arrive as a request (with id) — handle and ack
@@ -766,7 +788,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
         const p = params as Record<string, unknown>;
         handleSessionUpdate(p, pendingTools, (text) => {
           fullText += text;
-        });
+        }, msg, sessionId);
       }
     };
 
@@ -795,7 +817,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 
       // Mark any remaining pending tools as completed
       for (const name of pendingTools) {
-        send({ type: "tool_activity", name, status: "completed" });
+        send(withQueryCorrelation({ type: "tool_activity", name, status: "completed" }, msg, sessionId));
       }
       pendingTools.length = 0;
 
@@ -804,7 +826,18 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       const cacheReadTokens = promptResult.usage?.cachedReadTokens ?? 0;
       const cacheWriteTokens = promptResult.usage?.cachedWriteTokens ?? 0;
       const costUsd = promptResult._meta?.costUsd ?? 0;
-      send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
+      send(withQueryCorrelation({
+        type: "result",
+        text: fullText,
+        sessionId,
+        adapterSessionId: sessionId,
+        terminalStatus: "succeeded",
+        costUsd,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens,
+        cacheWriteTokens,
+      }, msg, sessionId));
     };
 
     try {
@@ -813,7 +846,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       if (abortController.signal.aborted) {
         if (interruptRequested) {
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            send(withQueryCorrelation({ type: "tool_activity", name, status: "completed" }, msg, sessionId));
           }
           pendingTools.length = 0;
           logErr(
@@ -821,7 +854,18 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           );
           const inputTokens = Math.ceil(fullPrompt.length / 4);
           const outputTokens = Math.ceil(fullText.length / 4);
-          send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 });
+          send(withQueryCorrelation({
+            type: "result",
+            text: fullText,
+            sessionId,
+            adapterSessionId: sessionId,
+            terminalStatus: "cancelled",
+            costUsd: 0,
+            inputTokens,
+            outputTokens,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          }, msg, sessionId));
         } else {
           logErr("Query aborted (superseded by new query)");
         }
@@ -832,7 +876,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
       if (err instanceof AcpError && err.code === -32000) {
         if (authRetryCount >= MAX_AUTH_RETRIES) {
           logErr(`session/prompt auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-          send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+          send(withQueryCorrelation({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." }, msg, sessionId));
           return;
         }
         authRetryCount++;
@@ -856,12 +900,21 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     if (abortController.signal.aborted) {
       if (interruptRequested) {
         for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
+          send(withQueryCorrelation({ type: "tool_activity", name, status: "completed" }, msg, activeSessionId));
         }
         pendingTools.length = 0;
         const inputTokens = Math.ceil(fullPrompt.length / 4);
         const outputTokens = Math.ceil(fullText.length / 4);
-        send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0, inputTokens, outputTokens });
+        send(withQueryCorrelation({
+          type: "result",
+          text: fullText,
+          sessionId: activeSessionId,
+          adapterSessionId: activeSessionId,
+          terminalStatus: "cancelled",
+          costUsd: 0,
+          inputTokens,
+          outputTokens,
+        }, msg, activeSessionId));
       }
       return;
     }
@@ -870,7 +923,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     if (err instanceof AcpError && err.code === -32000) {
       if (authRetryCount >= MAX_AUTH_RETRIES) {
         logErr(`Query auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-        send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
+        send(withQueryCorrelation({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." }, msg, activeSessionId));
         return;
       }
       authRetryCount++;
@@ -880,7 +933,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     }
     const errMsg = err instanceof Error ? err.message : String(err);
     logErr(`Query error: ${errMsg}`);
-    send({ type: "error", message: errMsg });
+    send(withQueryCorrelation({ type: "error", message: errMsg }, msg, activeSessionId));
   } finally {
     if (activeAbort === abortController) {
       activeAbort = null;
@@ -901,7 +954,9 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
 function handleSessionUpdate(
   params: Record<string, unknown>,
   pendingTools: string[],
-  onText: (text: string) => void
+  onText: (text: string) => void,
+  query: QueryMessage,
+  adapterSessionId: string
 ): void {
   const update = params.update as Record<string, unknown> | undefined;
   if (!update) {
@@ -919,12 +974,12 @@ function handleSessionUpdate(
         // If tools were pending, they're now complete
         if (pendingTools.length > 0) {
           for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
+            send(withQueryCorrelation({ type: "tool_activity", name, status: "completed" }, query, adapterSessionId));
           }
           pendingTools.length = 0;
         }
         onText(text);
-        send({ type: "text_delta", text });
+        send(withQueryCorrelation({ type: "text_delta", text }, query, adapterSessionId));
       }
       break;
     }
@@ -933,7 +988,7 @@ function handleSessionUpdate(
       const content = update.content as { type: string; text?: string } | undefined;
       const text = content?.text ?? "";
       if (text) {
-        send({ type: "thinking_delta", text });
+        send(withQueryCorrelation({ type: "thinking_delta", text }, query, adapterSessionId));
       }
       break;
     }
@@ -961,23 +1016,23 @@ function handleSessionUpdate(
 
       if (status === "pending" || status === "in_progress") {
         pendingTools.push(title);
-        send({
+        send(withQueryCorrelation({
           type: "tool_activity",
           name: title,
           status: "started",
           toolUseId: toolCallId,
-        });
+        }, query, adapterSessionId));
 
         // Extract input from rawInput if available
         const rawInput = update.rawInput as Record<string, unknown> | undefined;
         if (rawInput && Object.keys(rawInput).length > 0) {
-          send({
+          send(withQueryCorrelation({
             type: "tool_activity",
             name: title,
             status: "started",
             toolUseId: toolCallId,
             input: rawInput,
-          });
+          }, query, adapterSessionId));
         }
 
         logErr(`Tool started: ${title} (id=${toolCallId}, kind=${kind})`);
@@ -1004,12 +1059,12 @@ function handleSessionUpdate(
         const idx = pendingTools.indexOf(title);
         if (idx >= 0) pendingTools.splice(idx, 1);
 
-        send({
+        send(withQueryCorrelation({
           type: "tool_activity",
           name: title,
           status: "completed",
           toolUseId: toolCallId,
-        });
+        }, query, adapterSessionId));
 
         // Extract output from content array or rawOutput
         let output = "";
@@ -1034,12 +1089,12 @@ function handleSessionUpdate(
             output.length > 2000
               ? output.slice(0, 2000) + "\n... (truncated)"
               : output;
-          send({
+          send(withQueryCorrelation({
             type: "tool_result_display",
             toolUseId: toolCallId,
             name: title,
             output: truncated,
-          });
+          }, query, adapterSessionId));
         }
 
         logErr(
@@ -1056,7 +1111,7 @@ function handleSessionUpdate(
       if (entries && Array.isArray(entries)) {
         for (const entry of entries) {
           if (entry.content) {
-            send({ type: "thinking_delta", text: entry.content + "\n" });
+            send(withQueryCorrelation({ type: "thinking_delta", text: entry.content + "\n" }, query, adapterSessionId));
           }
         }
       }
@@ -1328,7 +1383,7 @@ async function runPiMonoMode(): Promise<void> {
               // the Unix socket relay). Forwarding tool_use here would cause
               // Swift to double-execute the tool.
               if ((event as any).type === "tool_use") return;
-              send(event as OutboundMessage);
+              send(withQueryCorrelation(event as OutboundMessage, qm, sessionId));
             },
             async (_name, _input) => {
               // Tool executor — pi-mono handles tools internally
@@ -1361,7 +1416,7 @@ async function runPiMonoMode(): Promise<void> {
           }
         } catch (err) {
           logErr(`Pi-mono query error: ${err}`);
-          send({ type: "error", message: String(err) });
+          send(withQueryCorrelation({ type: "error", message: String(err) }, qm));
         }
         break;
       }
@@ -1394,10 +1449,24 @@ async function runPiMonoMode(): Promise<void> {
         const activeEntry = piActiveSessionKey
           ? piSessions.get(piActiveSessionKey)
           : undefined;
+        const activePiSessionId = activeEntry?.sessionId ?? "";
         if (activeEntry?.sessionId) {
           adapter.abort(activeEntry.sessionId);
         } else {
           adapter.abort("");
+        }
+        if (msg.protocolVersion === 2) {
+          send({
+            type: "cancel_ack",
+            protocolVersion: 2,
+            requestId: requestIdFor(msg),
+            clientId: msg.clientId,
+            sessionId: msg.sessionId,
+            adapterSessionId: activePiSessionId,
+            accepted: true,
+            dispatchAttempted: true,
+            adapterAcknowledged: false,
+          });
         }
         break;
       }
@@ -1536,6 +1605,19 @@ async function main(): Promise<void> {
         if (activeAbort) activeAbort.abort();
         if (activeSessionId) {
           acpNotify("session/cancel", { sessionId: activeSessionId });
+        }
+        if (msg.protocolVersion === 2) {
+          send({
+            type: "cancel_ack",
+            protocolVersion: 2,
+            requestId: requestIdFor(msg),
+            clientId: msg.clientId,
+            sessionId: msg.sessionId,
+            adapterSessionId: activeSessionId,
+            accepted: true,
+            dispatchAttempted: Boolean(activeSessionId),
+            adapterAcknowledged: false,
+          });
         }
         break;
 

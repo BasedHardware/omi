@@ -578,7 +578,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       case HarnessFeature.MCP_CLIENT:
         return false; // Pi-mono doesn't use MCP
       case HarnessFeature.SESSION_RESUME:
-        return true;
+        return false;
       case HarnessFeature.OAUTH:
         return false; // Uses Firebase token, not OAuth
       default:

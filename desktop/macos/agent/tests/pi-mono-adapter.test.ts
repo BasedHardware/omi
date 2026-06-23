@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
 import { PiMonoAdapter } from "../src/adapters/pi-mono.js";
-import type { HarnessConfig } from "../src/adapters/interface.js";
+import { HarnessFeature, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
 // Mock child_process.spawn so start() doesn't launch a real subprocess.
@@ -227,6 +227,14 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
   });
 });
 
+describe("PiMonoAdapter capabilities", () => {
+  it("does not advertise native session resume", () => {
+    const { adapter } = createAdapter();
+
+    expect(adapter.supportsFeature(HarnessFeature.SESSION_RESUME)).toBe(false);
+  });
+});
+
 describe("tool_use event filtering", () => {
   // Two-layer defense:
   // 1. Source-level assertion verifies the filter EXISTS in the real code
@@ -244,7 +252,7 @@ describe("tool_use event filtering", () => {
   });
 
   it("source: non-tool_use events are forwarded via send()", () => {
-    expect(indexSrc).toMatch(/send\(event\s+as\s+OutboundMessage\)/);
+    expect(indexSrc).toMatch(/send\(withQueryCorrelation\(event\s+as\s+OutboundMessage/);
   });
 
   it("behavioral: suppresses tool_use events and forwards all other types", () => {

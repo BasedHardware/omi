@@ -3,11 +3,36 @@
 
 // === Swift → Bridge (stdin) ===
 
-export interface QueryMessage {
+export type ProtocolVersion = 1 | 2;
+
+export interface ProtocolEnvelope {
+  /** v1 omits this field; v2 sends 2. */
+  protocolVersion?: ProtocolVersion;
+  /** v1 `id` maps to requestId during the compatibility window. */
+  requestId?: string;
+  clientId?: string;
+}
+
+export interface CanonicalCorrelation {
+  /** Canonical Omi IDs are optional until the Phase 1 kernel owns them. */
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  eventId?: string;
+}
+
+export interface QueryMessage extends ProtocolEnvelope, CanonicalCorrelation {
   type: "query";
-  id: string;
+  id?: string;
   prompt: string;
   systemPrompt: string;
+  adapterId?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
+  legacyClientScope?: string;
+  legacySessionKey?: string;
+  legacyAdapterSessionId?: string;
   sessionKey?: string;
   cwd?: string;
   mode?: "ask" | "act";
@@ -26,11 +51,11 @@ export interface StopMessage {
   type: "stop";
 }
 
-export interface InterruptMessage {
+export interface InterruptMessage extends ProtocolEnvelope, CanonicalCorrelation {
   type: "interrupt";
 }
 
-export interface InvalidateSessionMessage {
+export interface InvalidateSessionMessage extends ProtocolEnvelope {
   type: "invalidate_session";
   sessionKey: string;
 }
@@ -48,7 +73,7 @@ export interface WarmupSessionConfig {
 }
 
 /** Swift tells the bridge to pre-create an ACP session in the background */
-export interface WarmupMessage {
+export interface WarmupMessage extends ProtocolEnvelope {
   type: "warmup";
   cwd?: string;
   model?: string;       // backward compat
@@ -74,27 +99,39 @@ export type InboundMessage =
 
 // === Bridge → Swift (stdout) ===
 
-export interface InitMessage {
+export interface OutboundEnvelope {
+  protocolVersion?: ProtocolVersion;
+  requestId?: string;
+  clientId?: string;
+}
+
+export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelation {
+  adapterSessionId?: string;
+  legacyAdapterSessionId?: string;
+}
+
+export interface InitMessage extends OutboundEnvelope {
   type: "init";
   sessionId: string;
 }
 
-export interface TextDeltaMessage {
+export interface TextDeltaMessage extends QueryScopedOutbound {
   type: "text_delta";
   text: string;
 }
 
-export interface ToolUseMessage {
+export interface ToolUseMessage extends QueryScopedOutbound {
   type: "tool_use";
   callId: string;
   name: string;
   input: Record<string, unknown>;
 }
 
-export interface ResultMessage {
+export interface ResultMessage extends QueryScopedOutbound {
   type: "result";
   text: string;
   sessionId: string;
+  terminalStatus?: "succeeded" | "failed" | "cancelled";
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -102,7 +139,7 @@ export interface ResultMessage {
   cacheWriteTokens?: number;
 }
 
-export interface ToolActivityMessage {
+export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
   status: "started" | "completed";
@@ -110,19 +147,19 @@ export interface ToolActivityMessage {
   input?: Record<string, unknown>;
 }
 
-export interface ToolResultDisplayMessage {
+export interface ToolResultDisplayMessage extends QueryScopedOutbound {
   type: "tool_result_display";
   toolUseId: string;
   name: string;
   output: string;
 }
 
-export interface ThinkingDeltaMessage {
+export interface ThinkingDeltaMessage extends QueryScopedOutbound {
   type: "thinking_delta";
   text: string;
 }
 
-export interface ErrorMessage {
+export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
 }
@@ -147,6 +184,13 @@ export interface AuthSuccessMessage {
   type: "auth_success";
 }
 
+export interface CancelAckMessage extends QueryScopedOutbound {
+  type: "cancel_ack";
+  accepted: boolean;
+  dispatchAttempted: boolean;
+  adapterAcknowledged: boolean;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -157,4 +201,9 @@ export type OutboundMessage =
   | ResultMessage
   | ErrorMessage
   | AuthRequiredMessage
-  | AuthSuccessMessage;
+  | AuthSuccessMessage
+  | CancelAckMessage;
+
+export function requestIdFor(message: ProtocolEnvelope & { id?: string }): string | undefined {
+  return message.requestId ?? message.id;
+}
