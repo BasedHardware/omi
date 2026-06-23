@@ -1,10 +1,15 @@
 {
-  "unreleased": [
-    "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors",
-    "Fixed Rewind screen recording dropping ~2.5s of footage and logging spurious errors when the video encoder failed to start, by retrying immediately on the next frame instead of waiting for an emergency reset",
-    "Fixed a task-sync crash that could fail with a database UNIQUE constraint error when a task was synced more than once"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.503",
+      "date": "2026-06-23",
+      "changes": [
+        "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors",
+        "Fixed Rewind screen recording dropping ~2.5s of footage and logging spurious errors when the video encoder failed to start, by retrying immediately on the next frame instead of waiting for an emergency reset",
+        "Fixed a task-sync crash that could fail with a database UNIQUE constraint error when a task was synced more than once"
+      ]
+    },
     {
       "version": "0.11.501",
       "date": "2026-06-23",
