@@ -4,6 +4,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
 import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { ResumeFidelity, RunMode } from "../runtime/types.js";
 
 /**
  * Configuration for creating a harness adapter.
@@ -126,4 +127,90 @@ export interface HarnessAdapter {
 
   /** Check if this harness supports a given feature */
   supportsFeature(feature: HarnessFeature): boolean;
+}
+
+export interface AdapterCapabilities {
+  readonly resumeFidelity: ResumeFidelity;
+  readonly supportsNativeResume: boolean;
+  readonly supportsCancellation: boolean;
+  readonly requiresPinnedWorker?: boolean;
+}
+
+export interface OpenBindingInput {
+  sessionId: string;
+  cwd: string;
+  model?: string;
+  systemPrompt?: string;
+  mcpServers?: Record<string, unknown>[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ResumeBindingInput extends OpenBindingInput {
+  adapterNativeSessionId: string;
+}
+
+export interface AdapterBindingHandle {
+  bindingId?: string;
+  sessionId: string;
+  adapterId: string;
+  adapterNativeSessionId: string;
+  resumeFidelity: ResumeFidelity;
+  cwd: string;
+  model?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type OpenedBinding = AdapterBindingHandle;
+
+export interface AdapterAttemptContext {
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  binding: AdapterBindingHandle;
+  prompt: PromptBlock[];
+  mode: RunMode;
+  model?: string;
+  tools?: ToolDef[];
+  metadata?: Record<string, unknown>;
+}
+
+export type AdapterEventSink = (event: OutboundMessage) => void;
+
+export interface AdapterAttemptResult extends PromptResult {
+  adapterSessionId: string;
+  terminalStatus: "succeeded" | "failed" | "cancelled";
+}
+
+export interface CancelAttemptContext {
+  sessionId: string;
+  runId?: string;
+  attemptId?: string;
+  binding?: AdapterBindingHandle;
+}
+
+export interface CancelDispatchResult {
+  accepted: boolean;
+  dispatchAttempted: boolean;
+  adapterAcknowledged: boolean;
+  message?: string;
+}
+
+export interface RuntimeAdapter {
+  readonly adapterId: string;
+  readonly capabilities: AdapterCapabilities;
+
+  start(): Promise<void>;
+  stop(): Promise<void>;
+
+  openBinding(input: OpenBindingInput): Promise<OpenedBinding>;
+  resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding>;
+
+  executeAttempt(
+    context: AdapterAttemptContext,
+    sink: AdapterEventSink,
+    signal: AbortSignal
+  ): Promise<AdapterAttemptResult>;
+
+  cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>;
+  closeBinding?(binding: AdapterBindingHandle): Promise<void>;
 }

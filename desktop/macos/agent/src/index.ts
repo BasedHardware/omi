@@ -27,7 +27,6 @@
  * 6. On interrupt: cancel the session
  */
 
-import { spawn, type ChildProcess } from "child_process";
 import { createInterface } from "readline";
 import { dirname, join } from "path";
 import { resolveSession, needsModelUpdate, filterSessionsToWarm, getRetryDeleteKey, type SessionEntry } from "./session-manager.js";
@@ -47,7 +46,7 @@ import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
-import { legacyPermissionPolicy } from "./legacy-permission-policy.js";
+import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -223,32 +222,14 @@ function startOmiToolsRelay(): Promise<string> {
 
 // --- ACP subprocess management ---
 
-let acpProcess: ChildProcess | null = null;
-let acpStdinWriter: ((line: string) => void) | null = null;
-let acpResponseHandlers = new Map<
-  number,
-  { resolve: (result: unknown) => void; reject: (err: Error) => void }
->();
-let acpNotificationHandler: ((method: string, params: unknown) => void) | null =
-  null;
-let nextRpcId = 1;
+const acpAdapter = new AcpRuntimeAdapter({ log: logErr });
 
 /** Send a JSON-RPC request to the ACP subprocess and wait for the response */
 async function acpRequest(
   method: string,
   params: Record<string, unknown> = {}
 ): Promise<unknown> {
-  const id = nextRpcId++;
-  const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-
-  return new Promise((resolve, reject) => {
-    acpResponseHandlers.set(id, { resolve, reject });
-    if (acpStdinWriter) {
-      acpStdinWriter(msg);
-    } else {
-      reject(new Error("ACP process stdin not available"));
-    }
-  });
+  return acpAdapter.request(method, params);
 }
 
 /** Send a JSON-RPC notification (no response expected) to ACP */
@@ -256,157 +237,20 @@ function acpNotify(
   method: string,
   params: Record<string, unknown> = {}
 ): void {
-  const msg = JSON.stringify({ jsonrpc: "2.0", method, params });
-  if (acpStdinWriter) {
-    acpStdinWriter(msg);
-  }
+  acpAdapter.notify(method, params);
 }
 
 /** Start the ACP subprocess */
-function startAcpProcess(): void {
-  // Build environment for ACP subprocess — user's own Claude OAuth only (issue #6594).
-  // ANTHROPIC_API_KEY is never passed to the ACP subprocess.
-  const env = { ...process.env };
-  delete env.ANTHROPIC_API_KEY;
-  delete env.CLAUDE_CODE_USE_VERTEX;
-  // Remove CLAUDECODE so the ACP subprocess (and the Claude Code it spawns) don't
-  // inherit the nested-session guard. Without this, `--resume` silently fails when
-  // Claude Code detects it's being launched from inside another Claude Code session.
-  delete env.CLAUDECODE;
-  env.NODE_NO_WARNINGS = "1";
+async function startAcpProcess(): Promise<void> {
+  await acpAdapter.start();
+}
 
-  // Use our patched ACP entry point (adds model selection support)
-  // Located in dist/ (same as __dirname) so it's included in the app bundle
-  const acpEntry = join(__dirname, "patched-acp-entry.mjs");
-  const nodeBin = process.execPath;
-
-  logErr(`Starting ACP subprocess [Claude OAuth]: ${nodeBin} ${acpEntry}`);
-
-  acpProcess = spawn(nodeBin, [acpEntry], {
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  if (!acpProcess.stdin || !acpProcess.stdout || !acpProcess.stderr) {
-    throw new Error("Failed to create ACP subprocess pipes");
-  }
-
-  // Write to ACP stdin
-  acpStdinWriter = (line: string) => {
-    try {
-      acpProcess?.stdin?.write(line + "\n");
-    } catch (err) {
-      logErr(`Failed to write to ACP stdin: ${err}`);
-    }
-  };
-
-  // Read ACP stdout (JSON-RPC responses and notifications)
-  const rl = createInterface({
-    input: acpProcess.stdout,
-    terminal: false,
-  });
-
-  rl.on("line", (line: string) => {
-    if (!line.trim()) return;
-    try {
-      const msg = JSON.parse(line) as Record<string, unknown>;
-
-      if ("method" in msg && "id" in msg && msg.id !== null && msg.id !== undefined) {
-        // Server-initiated JSON-RPC request (has both method and id, expects a response)
-        const id = msg.id as number;
-        const method = msg.method as string;
-
-        if (method === "session/request_permission") {
-          const params = msg.params as Record<string, unknown> | undefined;
-          const options = (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
-          const decision = legacyPermissionPolicy.resolveAcpPermission({
-            requestId: id,
-            options,
-          });
-          logErr(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
-          acpStdinWriter?.(JSON.stringify({
-            jsonrpc: "2.0",
-            id,
-            result: decision.acpResult,
-          }));
-        } else if (method === "session/update") {
-          // session/update can also arrive as a request (with id) — handle and ack
-          if (acpNotificationHandler) {
-            acpNotificationHandler(method, msg.params as unknown);
-          }
-          acpStdinWriter?.(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
-        } else {
-          logErr(`Unhandled ACP request: ${method} (id=${id})`);
-          acpStdinWriter?.(JSON.stringify({
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32601, message: `Method not handled: ${method}` },
-          }));
-        }
-      } else if ("id" in msg && msg.id !== null && msg.id !== undefined) {
-        // JSON-RPC response (has id but no method)
-        const id = msg.id as number;
-        const handler = acpResponseHandlers.get(id);
-        if (handler) {
-          acpResponseHandlers.delete(id);
-          if ("error" in msg) {
-            const err = msg.error as {
-              code: number;
-              message: string;
-              data?: unknown;
-            };
-            const error = new AcpError(err.message, err.code, err.data);
-            handler.reject(error);
-          } else {
-            handler.resolve(msg.result);
-          }
-        }
-      } else if ("method" in msg) {
-        // JSON-RPC notification (has method but no id)
-        if (acpNotificationHandler) {
-          acpNotificationHandler(
-            msg.method as string,
-            msg.params as unknown
-          );
-        }
-      }
-    } catch (err) {
-      logErr(`Failed to parse ACP message: ${line.slice(0, 200)}`);
-    }
-  });
-
-  // Read ACP stderr for logging
-  acpProcess.stderr.on("data", (data: Buffer) => {
-    const text = data.toString().trim();
-    if (text) {
-      logErr(`ACP stderr: ${text}`);
-    }
-  });
-
-  acpProcess.on("exit", (code) => {
-    logErr(`ACP process exited with code ${code}`);
-    acpProcess = null;
-    acpStdinWriter = null;
-    // All sessions are lost when ACP process dies
+acpAdapter.onProcessExit = () => {
+  // All sessions are lost when ACP process dies
     sessions.clear();
     activeSessionId = "";
     isInitialized = false;
-    for (const [, handler] of acpResponseHandlers) {
-      handler.reject(new Error(`ACP process exited (code ${code})`));
-    }
-    acpResponseHandlers.clear();
-  });
-}
-
-class AcpError extends Error {
-  code: number;
-  data?: unknown;
-  constructor(message: string, code: number, data?: unknown) {
-    super(message);
-    this.code = code;
-    this.data = data;
-  }
-}
+};
 
 // --- State ---
 
@@ -430,15 +274,8 @@ let activeOAuthFlow: OAuthFlowHandle | null = null;
 /** Restart the ACP subprocess so it picks up freshly-stored credentials */
 async function restartAcpProcess(): Promise<void> {
   logErr("Restarting ACP subprocess to pick up new credentials...");
-  if (acpProcess) {
-    const exitPromise = new Promise<void>((resolve) => {
-      acpProcess!.once("exit", () => resolve());
-    });
-    acpProcess.kill();
-    await exitPromise;
-  }
   // State is cleaned up by the exit handler (sessions, handlers, etc.)
-  startAcpProcess();
+  await acpAdapter.restart();
 }
 
 /**
@@ -781,7 +618,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     fullPrompt = msg.prompt;
 
     // Set up notification handler for this query
-    acpNotificationHandler = (method: string, params: unknown) => {
+    acpAdapter.setNotificationHandler((method: string, params: unknown) => {
       if (abortController.signal.aborted) return;
 
       if (method === "session/update") {
@@ -790,7 +627,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
           fullText += text;
         }, msg, sessionId);
       }
-    };
+    });
 
     // Send the prompt — retry with fresh session if stale
     const sendPrompt = async (): Promise<void> => {
@@ -938,7 +775,7 @@ async function handleQuery(msg: QueryMessage): Promise<void> {
     if (activeAbort === abortController) {
       activeAbort = null;
     }
-    acpNotificationHandler = null;
+    acpAdapter.setNotificationHandler(null);
   }
 }
 
@@ -1552,7 +1389,7 @@ async function main(): Promise<void> {
   logErr("omi-tools relay started");
 
   // 2. Start the ACP subprocess
-  startAcpProcess();
+  await startAcpProcess();
   logErr("ACP subprocess spawned");
 
   // 3. Signal readiness
@@ -1562,7 +1399,7 @@ async function main(): Promise<void> {
   // 4. Read JSON lines from Swift
   const rl = createInterface({ input: process.stdin, terminal: false });
 
-  rl.on("line", (line: string) => {
+  rl.on("line", async (line: string) => {
     if (!line.trim()) return;
 
     let msg: InboundMessage;
@@ -1641,9 +1478,7 @@ async function main(): Promise<void> {
       case "stop":
         logErr("Received stop signal, exiting");
         if (activeAbort) activeAbort.abort();
-        if (acpProcess) {
-          acpProcess.kill();
-        }
+        await acpAdapter.stop();
         process.exit(0);
         break;
 
@@ -1656,7 +1491,7 @@ async function main(): Promise<void> {
     logErr("stdin closed, exiting");
     logCrash("stdin closed, exiting");
     if (activeAbort) activeAbort.abort();
-    if (acpProcess) acpProcess.kill();
+    void acpAdapter.stop();
     process.exit(0);
   });
 }

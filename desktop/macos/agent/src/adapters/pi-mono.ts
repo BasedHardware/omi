@@ -11,8 +11,19 @@ import { existsSync } from "fs";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import {
   HarnessAdapter,
+  AdapterAttemptContext,
+  AdapterAttemptResult,
+  AdapterBindingHandle,
+  AdapterCapabilities,
+  AdapterEventSink,
+  CancelAttemptContext,
+  CancelDispatchResult,
   HarnessConfig,
   HarnessFeature,
+  OpenBindingInput,
+  OpenedBinding,
+  ResumeBindingInput,
+  RuntimeAdapter,
   SessionOpts,
   PromptBlock,
   PromptResult,
@@ -830,5 +841,98 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = null;
     this.toolExecutor = null;
+  }
+}
+
+export class PiMonoRuntimeAdapter implements RuntimeAdapter {
+  readonly adapterId = "pi-mono";
+  readonly capabilities: AdapterCapabilities = {
+    resumeFidelity: "none",
+    supportsNativeResume: false,
+    supportsCancellation: true,
+    requiresPinnedWorker: true,
+  };
+
+  private readonly harness: PiMonoAdapter;
+
+  constructor(harness: PiMonoAdapter) {
+    this.harness = harness;
+  }
+
+  start(): Promise<void> {
+    return this.harness.start();
+  }
+
+  stop(): Promise<void> {
+    return this.harness.stop();
+  }
+
+  async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    const adapterNativeSessionId = await this.harness.createSession({
+      cwd: input.cwd,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      mcpServers: input.mcpServers,
+    });
+    return this.binding(input, adapterNativeSessionId);
+  }
+
+  async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    // pi-mono session IDs are process-local and cannot be resumed after worker
+    // loss. Keep this explicit until the runtime kernel can mark old bindings
+    // stale and create a new generation.
+    return this.openBinding(input);
+  }
+
+  async executeAttempt(
+    context: AdapterAttemptContext,
+    sink: AdapterEventSink,
+    signal: AbortSignal
+  ): Promise<AdapterAttemptResult> {
+    const result = await this.harness.sendPrompt(
+      context.binding.adapterNativeSessionId,
+      context.prompt,
+      context.tools ?? [],
+      context.mode,
+      sink,
+      async () => "",
+      signal
+    );
+
+    return {
+      ...result,
+      adapterSessionId: result.sessionId,
+      terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+    };
+  }
+
+  async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
+    const sessionId = context.binding?.adapterNativeSessionId ?? context.sessionId;
+    this.harness.abort(sessionId);
+    return {
+      accepted: true,
+      dispatchAttempted: true,
+      adapterAcknowledged: false,
+    };
+  }
+
+  async closeBinding(binding: AdapterBindingHandle): Promise<void> {
+    this.harness.invalidateSession?.(binding.adapterNativeSessionId);
+  }
+
+  private binding(
+    input: OpenBindingInput,
+    adapterNativeSessionId: string
+  ): AdapterBindingHandle {
+    return {
+      bindingId: input.metadata?.bindingId as string | undefined,
+      sessionId: input.sessionId,
+      adapterId: this.adapterId,
+      adapterNativeSessionId,
+      resumeFidelity: "none",
+      cwd: input.cwd,
+      model: input.model,
+      metadata: input.metadata,
+    };
   }
 }
