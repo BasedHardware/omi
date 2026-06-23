@@ -32,7 +32,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Spring profile for AI response panel state transitions.
     /// Snappier than the SwiftUI default `0.4/0.8` — saves ~250ms user-perceived per response.
     /// Used at all 6 call sites that toggle `showingAIConversation` / `showingAIResponse`.
-    static let responseSpring = Animation.spring(response: 0.18, dampingFraction: 0.88)
+    /// Constants are split out (not inline) so tests can pin the profile without
+    /// reflecting into `Animation` (which doesn't expose its parameters).
+    static let responseSpringResponse: Double = 0.18
+    static let responseSpringDampingFraction: Double = 0.88
+    static let responseSpring = Animation.spring(
+        response: responseSpringResponse,
+        dampingFraction: responseSpringDampingFraction
+    )
 
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
