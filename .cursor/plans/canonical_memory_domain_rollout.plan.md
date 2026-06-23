@@ -949,6 +949,7 @@ Drove the implementable rollout to local commits on `memory-canonical-rollout` (
 - **Carry-forward (see §11b):** MCP/developer create-edit canonical writes not routed (need evidence/apply path); canonical MCP list lacks category/sort filter parity (cohort empty); Desktop Rust reads Firestore directly (no backend routing — WS-K/needs-local-build).
 - **WS-L finding B follow-up (2026-06-23):** `v17_read_api.py` wired to `filter_canonical_default_visible_items`; 2 new tests in `test_v17_read_api.py` (processed short_term visible, tombstoned/restricted excluded).
 - **WS-L pinning follow-up (2026-06-23):** `memory_system_pin.py` lands §4 split-brain protection — pin once at MCP REST/SSE `execute_tool`, developer/integration/memories routers, chat `tool_services/memories`, persona `update_persona_prompt`, conversation cascade retract, and extraction `memory_system_request_scope`; `MemoryService` honors pin. Still per-call: `canonical_memory_adapter` gate helpers, `short_term_promotion` (canonical-only cron path, not user-facing request).
+- **WS-L pinning follow-up (2026-06-23):** reconciled WS-I monkeypatch targets after resolve→pin rename (`test_ws_i_write_convergence.py` patches `memory_system_pin.resolve_memory_system` + router `pin_memory_system`; autouse `clear_memory_system_pin`).
 
 ### Wave 9 — WS-I hardening (atomic bump + redaction preserve) — ✅ committed 2026-06-24
 
