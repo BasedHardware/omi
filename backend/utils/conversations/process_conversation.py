@@ -44,7 +44,7 @@ from models.conversation import (
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
 from models.structured import Structured
 from utils.notifications import send_important_conversation_message
@@ -720,6 +720,36 @@ def _update_personas_async(uid: str):
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
+def _build_deferred_structured(conversation) -> Structured:
+    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
+    the first few words of the transcript so the conversation list stays usable until the user
+    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
+    marks the conversation discarded in `_get_conversation_obj`."""
+    text = ''
+    for seg in getattr(conversation, 'transcript_segments', None) or []:
+        seg_text = (getattr(seg, 'text', '') or '').strip()
+        if seg_text:
+            text = seg_text
+            break
+    words = text.split()
+    title = ' '.join(words[:8]).strip() if words else ''
+    return Structured(title=title or 'Recording')
+
+
+def _store_deferred_conversation(uid: str, conversation):
+    """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
+    all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
+    `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
+    later via the lazy trigger in `get_conversation_by_id`."""
+    structured = _build_deferred_structured(conversation)
+    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation.deferred = True
+    conversation.status = ConversationStatus.completed
+    conversations_db.upsert_conversation(uid, conversation.dict())
+    logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    return conversation
+
+
 def process_conversation(
     uid: str,
     language_code: str,
@@ -755,6 +785,22 @@ def process_conversation(
             except Exception:
                 pass
         return conversation
+
+    # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
+    # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
+    # enrichment (summary, action items, memories, embeddings, app results) is deferred until
+    # they first OPEN the conversation (get_conversation_by_id reprocesses it with
+    # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
+    # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
+    # trigger and manual reprocess — bypass this so the enrichment actually runs.
+    if (
+        not force_process
+        and not is_reprocess
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+        and should_defer_desktop_processing(uid)
+    ):
+        return _store_deferred_conversation(uid, conversation)
 
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
     if hasattr(conversation, 'id') and conversation.id:
