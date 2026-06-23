@@ -95,7 +95,7 @@ class TestResolveMemorySystem:
         assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
         assert resolve_memory_system("uid-not-canonical", db_client=_FirestoreFake()) == MemorySystem.LEGACY
 
-    def test_persisted_canonical_control_state(self):
+    def test_stale_persisted_canonical_without_whitelist_resolves_legacy(self):
         db = _FirestoreFake(
             {
                 "users/uid-persisted/memory_control/state": {
@@ -103,7 +103,32 @@ class TestResolveMemorySystem:
                 }
             }
         )
-        assert resolve_memory_system("uid-persisted", db_client=db) == MemorySystem.CANONICAL
+        assert resolve_memory_system("uid-persisted", db_client=db) == MemorySystem.LEGACY
+
+    def test_whitelist_removal_reverts_stale_persisted_canonical(self, monkeypatch):
+        db = _FirestoreFake(
+            {
+                "users/uid-flip/memory_control/state": {
+                    "memory_system": "canonical",
+                }
+            }
+        )
+        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-flip")
+        assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.CANONICAL
+
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.LEGACY
+
+    def test_empty_whitelist_is_global_kill_switch(self, monkeypatch):
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        db = _FirestoreFake(
+            {
+                "users/uid-a/memory_control/state": {"memory_system": "canonical"},
+                "users/uid-b/memory_control/state": {"memory_system": "legacy"},
+            }
+        )
+        assert resolve_memory_system("uid-a", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-b", db_client=db) == MemorySystem.LEGACY
 
 
 class TestMemoryServiceParity:
