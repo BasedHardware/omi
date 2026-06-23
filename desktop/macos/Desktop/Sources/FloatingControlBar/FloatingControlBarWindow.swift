@@ -1772,9 +1772,24 @@ class FloatingControlBarManager {
     }
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Check for parent-task cancellation first. `routeQuery` launches
+        // this as a child task and cancels it when the router decides
+        // `.agent`. If we get here and the task is already cancelled,
+        // bail before any work happens — especially before the limiter
+        // check (which would record an optimistic query) and before
+        // `provider.sendMessage` (which spends Anthropic tokens). This
+        // closes the gap noted in code review: previously the chat task
+        // would run to completion even after the router said `.agent`,
+        // because `provider.stopAgent()` is a no-op when `isSending` is
+        // still false, and `Task.cancel()` only flips a flag.
+        guard !Task.isCancelled else { return }
+
         let queryFromVoice = barWindow.state.currentQueryFromVoice
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
+
+        // Re-check after the await-free setup above.
+        guard !Task.isCancelled else { return }
 
         // Defensive: if routeQuery wasn't called (e.g. direct call from a
         // follow-up helper), start a timing now so we still record telemetry.
@@ -1790,7 +1805,20 @@ class FloatingControlBarManager {
         }
 
         // Check monthly usage limit for free users (shared with main chat page).
+        //
+        // `FloatingBarUsageLimiter.isLimitReached` returns `false` (fail-open)
+        // when `serverQuota == nil`. The old per-query bridge check enforced
+        // the cap server-side; with that gone (PR #2), we must force a fresh
+        // sync at the start of the first query after sign-in / cold start /
+        // any long-idle window so a free user who has exhausted their quota
+        // doesn't get to keep chatting past their limit. The TTL cache on
+        // `APIClient.fetchChatUsageQuota` makes subsequent checks a memory
+        // lookup, not a network round trip — only this cold-start call hits
+        // the network.
         let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
+            await limiter.syncQuota()
+        }
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
                 guard isActiveQueryGeneration(generation) else { return }
