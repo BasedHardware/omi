@@ -73,11 +73,8 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
-    func testFloatingBarPlanFetchWaitsUntilAfterDeferredWarmupStarts() {
-        XCTAssertGreaterThan(
-            StartupWarmupPolicy.floatingBarPlanFetchDelay,
-            StartupWarmupPolicy.deferredWarmupDelay
-        )
+    func testFloatingBarPlanFetchRunsImmediatelyForQuotaGate() {
+        XCTAssertEqual(StartupWarmupPolicy.floatingBarPlanFetchDelay, 0)
     }
 
     func testInitialSettingsSyncWaitsUntilAfterDeferredWarmupStarts() {
@@ -219,6 +216,25 @@ final class StartupWarmupPolicyTests: XCTestCase {
             hydrationGuardRange.lowerBound,
             dashboardRefreshRange.lowerBound,
             "Dashboard-only activation/Cmd+R refresh must fall back to the scoped dashboard refresh from the Tasks page hydration guard"
+        )
+    }
+
+    func testDatabaseWarmupSchedulesTaskMaintenanceWithoutTasksPageHydration() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/StartupWarmupCoordinator.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        guard let maintenanceRange = source.range(of: "tasksStore.scheduleStartupMaintenanceIfNeeded()"),
+              let lifecycleRange = source.range(of: "DATA LOAD: DB lifecycle warmup") else {
+            return XCTFail("Startup warmup must schedule task maintenance before DB lifecycle warmup")
+        }
+
+        XCTAssertLessThan(
+            maintenanceRange.lowerBound,
+            lifecycleRange.lowerBound,
+            "Startup maintenance must run from the startup warmup path, not only after opening Tasks"
         )
     }
 }
