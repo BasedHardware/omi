@@ -4,7 +4,7 @@ from enum import Enum
 import re
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, computed_field, validator
 
 from config.memory_confidence import (
     CONFIDENCE_BANDS,
@@ -14,6 +14,7 @@ from config.memory_confidence import (
     VERACITY_PRIORS,
 )
 from database._client import document_id_from_seed
+from models.memory_domain import tier_to_layer
 from models.v17_product_memory import MemoryTier
 
 
@@ -536,6 +537,12 @@ class MemoryDB(Memory):
     # the existing UI is unchanged; newly produced memories are tiered at birth
     # (decide_initial_memory_tier) and may be promoted on corroboration.
     memory_tier: MemoryTier = MemoryTier.long_term
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def layer(self) -> str:
+        """Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only."""
+        return tier_to_layer(self.memory_tier).value
 
     # Temporal lifecycle — the "constantly updated brain". All optional, so existing
     # docs (which lack these fields) read back as active with no migration.
