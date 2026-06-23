@@ -10,6 +10,7 @@ import sys
 import types
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -31,6 +32,16 @@ def _document_id_from_seed(seed: str) -> str:
 _db_client_mod.document_id_from_seed = _document_id_from_seed
 sys.modules.setdefault("database._client", _db_client_mod)
 
+
+class _AutoMockModule(ModuleType):
+    def __getattr__(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        mock = MagicMock()
+        setattr(self, name, mock)
+        return mock
+
+
 firebase_admin = types.ModuleType("firebase_admin")
 firebase_admin.auth = MagicMock()
 sys.modules["firebase_admin"] = firebase_admin
@@ -42,7 +53,7 @@ pinecone_mod = types.ModuleType("pinecone")
 pinecone_mod.Pinecone = MagicMock()
 sys.modules["pinecone"] = pinecone_mod
 
-vector_db_mod = types.ModuleType("database.vector_db")
+vector_db_mod = _AutoMockModule("database.vector_db")
 vector_db_mod.find_similar_memories = MagicMock(return_value=[])
 vector_db_mod.get_memories_by_ids = MagicMock(return_value=[])
 sys.modules["database.vector_db"] = vector_db_mod
