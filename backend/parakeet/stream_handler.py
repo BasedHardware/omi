@@ -20,10 +20,23 @@ from concurrent.futures import ThreadPoolExecutor
 
 import httpx
 import numpy as np
+import torch
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.spatial.distance import cdist
 import transcribe as _transcribe_mod
+
+try:
+    from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig
+    from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses
+    from nemo.collections.asr.parts.utils.streaming_utils import ContextSize, StreamingBatchedAudioBuffer
+    from omegaconf import open_dict
+except ImportError:
+    RNNTDecodingConfig = None
+    batched_hyps_to_hypotheses = None
+    ContextSize = None
+    StreamingBatchedAudioBuffer = None
+    open_dict = None
 
 from transcribe import (
     transcribe_file,
@@ -51,15 +64,9 @@ MIN_EMBEDDING_AUDIO_S = 0.5
 _vad_model = None
 _vad_lock = threading.Lock()
 _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
-_streaming_import_error_logged = False
 _rnnt_model_initialized = False
 
-try:
-    import torch
-
-    _torch = torch
-except ImportError:
-    _torch = None
+_torch = torch
 
 
 def _make_divisible_by(num, factor: int) -> int:
@@ -149,7 +156,7 @@ class _NemoRNNTStreamingDecoder:
         self._text = ""
 
     def _ensure_initialized(self):
-        global _streaming_import_error_logged, _rnnt_model_initialized
+        global _rnnt_model_initialized
 
         if self._initialized:
             return
@@ -157,17 +164,8 @@ class _NemoRNNTStreamingDecoder:
         if _torch is None:
             raise RuntimeError("torch is required for NeMo RNNT streaming")
 
-        try:
-            from omegaconf import open_dict
-
-            from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig
-            from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses
-            from nemo.collections.asr.parts.utils.streaming_utils import ContextSize, StreamingBatchedAudioBuffer
-        except Exception as e:
-            if not _streaming_import_error_logged:
-                logger.warning(f"NeMo RNNT streaming utilities unavailable, using batch fallback: {e}")
-                _streaming_import_error_logged = True
-            raise
+        if RNNTDecodingConfig is None:
+            raise RuntimeError("NeMo RNNT streaming utilities not installed")
 
         self._batched_hyps_to_hypotheses = batched_hyps_to_hypotheses
         self._ContextSize = ContextSize

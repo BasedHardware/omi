@@ -98,6 +98,24 @@ _torch.hub = MagicMock()
 _torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
 sys.modules.setdefault('torch', _torch)
 
+_nemo_rnnt_decoding = MagicMock()
+_nemo_rnnt_utils = MagicMock()
+_nemo_streaming_utils = MagicMock()
+_omegaconf = MagicMock()
+for _mod_name, _mod_obj in [
+    ('nemo', MagicMock()),
+    ('nemo.collections', MagicMock()),
+    ('nemo.collections.asr', MagicMock()),
+    ('nemo.collections.asr.parts', MagicMock()),
+    ('nemo.collections.asr.parts.submodules', MagicMock()),
+    ('nemo.collections.asr.parts.submodules.rnnt_decoding', _nemo_rnnt_decoding),
+    ('nemo.collections.asr.parts.utils', MagicMock()),
+    ('nemo.collections.asr.parts.utils.rnnt_utils', _nemo_rnnt_utils),
+    ('nemo.collections.asr.parts.utils.streaming_utils', _nemo_streaming_utils),
+    ('omegaconf', _omegaconf),
+]:
+    sys.modules.setdefault(_mod_name, _mod_obj)
+
 import stream_handler as sh
 
 
