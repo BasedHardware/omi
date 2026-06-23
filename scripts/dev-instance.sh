@@ -26,7 +26,9 @@ _omi_wt="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 # (comparing `git rev-parse --git-dir` vs `--git-common-dir` is NOT — they can return
 # different absolute/relative formats from a subdir and give a false positive).
 _omi_linked=0
-[ -f "$_omi_wt/.git" ] && _omi_linked=1
+# `if`, not `[ -f ] && …` — the latter returns non-zero when false and would trip a
+# caller's `set -e` (run.sh has it) on the primary checkout, aborting it instantly.
+if [ -f "$_omi_wt/.git" ]; then _omi_linked=1; fi
 
 : "${OMI_INSTANCE:=$(basename "$_omi_wt")}"
 
