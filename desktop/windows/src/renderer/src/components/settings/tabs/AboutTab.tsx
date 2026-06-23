@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, RefreshCw, Heart } from 'lucide-react'
+import omiLogo from '../../../assets/omilogo.png'
 
 export function AboutTab(): React.JSX.Element {
   const [version, setVersion] = useState<string>('1.0.0')
@@ -28,7 +29,7 @@ export function AboutTab(): React.JSX.Element {
       {/* App info */}
       <div className="flex items-center gap-5">
         <img
-          src="https://personas.omi.me/omilogo.png"
+          src={omiLogo}
           alt="Omi"
           className="h-16 w-16 rounded-2xl"
         />
