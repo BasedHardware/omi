@@ -1,16 +1,49 @@
-// Shared PostHog HogQL access with 429 backoff + Redis result caching.
+// Shared PostHog HogQL access with 429 backoff + Firestore result caching.
 //
 // PostHog's query endpoint is aggressively rate-limited. The dashboard fires
 // ~8 HogQL queries on every load; without caching, reloads + SWR retries blow
 // the personal-API-key quota and every panel 429s.
 //
-// `posthogResults` caches each query's result in Redis (shared across Cloud
-// Run instances), so a given query hits PostHog at most once per soft-TTL
-// window instead of on every load. On throttle/error it serves the last good
-// cached value (bounded by a hard TTL) rather than failing the panel.
+// Cache backend = Firestore. The admin service's configured Redis
+// (light-eel-27878.upstash.io) is dead — the logs are flooded with
+// "Redis error: getaddrinfo ENOTFOUND" — so Redis caching was a silent no-op
+// and every load re-queried PostHog. Firestore is always reachable here via
+// firebase-admin (same path macos-versions already uses). Results are stored
+// JSON-stringified to sidestep Firestore's no-nested-arrays rule.
+//
+// `posthogResults` caches each query's result, so a given query hits PostHog at
+// most once per soft-TTL window instead of on every load. On throttle/error it
+// serves the last good cached value rather than failing the panel.
 
 import { createHash } from "crypto";
-import { getJsonCache, setJsonCache } from "@/lib/redis";
+import { getDb } from "@/lib/firebase/admin";
+
+const CACHE_COLLECTION = "admin_stats_cache";
+const SOFT_TTL_MS = 30 * 60 * 1000; // serve cached without re-querying for 30 min
+
+type CacheDoc = { payload: string; freshAt: number };
+
+async function readCache(key: string): Promise<{ results: unknown[]; freshAt: number } | null> {
+  try {
+    const snap = await getDb().collection(CACHE_COLLECTION).doc(key).get();
+    if (!snap.exists) return null;
+    const d = snap.data() as CacheDoc;
+    if (!d?.payload) return null;
+    return { results: JSON.parse(d.payload), freshAt: d.freshAt ?? 0 };
+  } catch {
+    return null; // best-effort cache read
+  }
+}
+
+async function writeCache(key: string, results: unknown[]): Promise<void> {
+  try {
+    const payload = JSON.stringify(results);
+    if (payload.length > 900_000) return; // Firestore field cap ~1 MB; skip oversized
+    await getDb().collection(CACHE_COLLECTION).doc(key).set({ payload, freshAt: Date.now() });
+  } catch {
+    // best-effort cache write; never block the response
+  }
+}
 
 export async function posthogFetch(
   host: string,
@@ -38,30 +71,24 @@ export async function posthogFetch(
   return res;
 }
 
-type CachedResults = { results: unknown[]; freshAt: number };
-
-const SOFT_TTL_MS = 30 * 60 * 1000; // serve cached without re-querying for 30 min
-const HARD_TTL_S = 6 * 60 * 60; // keep last-good up to 6h to survive throttling
-
 /**
- * Run a HogQL query and return its `results` array, cached in Redis.
+ * Run a HogQL query and return its `results` array, cached in Firestore.
  * - Fresh cache (< soft TTL): returned without touching PostHog.
  * - Stale/miss: query PostHog (with 429 backoff); on success refresh the cache.
- * - On PostHog error/throttle: fall back to the last good cached value if any
- *   (within hard TTL), otherwise throw so the route surfaces the failure.
+ * - On PostHog error/throttle: fall back to the last good cached value if any,
+ *   otherwise throw so the route surfaces the failure.
  */
 export async function posthogResults(
   host: string,
   projectId: string,
   apiKey: string,
   query: string,
-  opts: { softTtlMs?: number; hardTtlS?: number } = {},
+  opts: { softTtlMs?: number } = {},
 ): Promise<unknown[]> {
   const softTtlMs = opts.softTtlMs ?? SOFT_TTL_MS;
-  const hardTtlS = opts.hardTtlS ?? HARD_TTL_S;
-  const key = `admin:ph:${createHash("sha1").update(`${projectId}|${query}`).digest("hex")}`;
+  const key = createHash("sha1").update(`${projectId}|${query}`).digest("hex");
 
-  const cached = await getJsonCache<CachedResults>(key);
+  const cached = await readCache(key);
   if (cached && Date.now() - cached.freshAt < softTtlMs) return cached.results;
 
   try {
@@ -72,7 +99,7 @@ export async function posthogResults(
     }
     const raw = await res.json();
     const results = Array.isArray(raw.results) ? raw.results : [];
-    await setJsonCache(key, { results, freshAt: Date.now() }, hardTtlS);
+    await writeCache(key, results);
     return results;
   } catch (err) {
     if (cached) return cached.results; // serve last good value through the throttle
