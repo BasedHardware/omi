@@ -711,6 +711,10 @@ def get_processing_conversations(uid: str):
         filter=FieldFilter('status', '==', 'processing')
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
+    # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
+    # back to pusher for background processing — that would defeat the freemium cost saving.
+    conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
 
 

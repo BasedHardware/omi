@@ -68,6 +68,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
     return subscription.current_period_end
 
 
+def should_defer_desktop_processing(uid: str) -> bool:
+    """True for desktop users on a non-desktop-entitled plan (basic / Neo) without active
+    BYOK — their conversations are stored as raw transcript on capture and the expensive LLM
+    enrichment is deferred until they first open the conversation (freemium cost cut).
+
+    Operator / Architect (desktop-entitled) and BYOK users (who pay their own LLM bill) are
+    processed normally. The caller restricts this to `source == desktop`. Fails safe to False
+    (process normally) on any error so a Firestore blip never silently strips a paid user's
+    summaries.
+    """
+    try:
+        if users_db.is_byok_active(uid):
+            return False
+        subscription = users_db.get_user_valid_subscription(uid)
+        plan = subscription.plan if subscription else PlanType.basic
+        return plan not in DESKTOP_ENTITLED_PLAN_TYPES
+    except Exception as e:
+        logger.warning("should_defer_desktop_processing lookup failed for uid=%s: %s", uid, e)
+        return False
+
+
 # Desktop-only 3-day trial paywall.
 #
 # Applies to desktop users without a desktop-entitled plan (basic OR Neo) once
