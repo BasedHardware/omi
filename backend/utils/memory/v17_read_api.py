@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 from database.product_memory_items import filter_default_product_memory_items
+from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from models.v17_memory_contracts import (
     L1MemoryArchiveClass,
     L1MemoryArchiveItem,
@@ -134,13 +135,15 @@ def query_default_product_memory_items(
 
     items = [_coerce_product_memory_item(record) for record in records]
     report = filter_default_product_memory_items(items, policy=policy, now=now)
+    visible_items = filter_canonical_default_visible_items(items, policy=policy, now=now)
     results = []
-    for item in report.visible_items:
+    for item in visible_items:
         content = item.content or ""
         if not _matches(query, content):
             continue
         decision = report.decisions[item.memory_id]
-        results.append(_product_memory_result(item, agent_use="default_access_memory", access_reason=decision.reason))
+        access_reason = decision.reason if decision.allowed else "default_memory_allowed"
+        results.append(_product_memory_result(item, agent_use="default_access_memory", access_reason=access_reason))
     return results
 
 
