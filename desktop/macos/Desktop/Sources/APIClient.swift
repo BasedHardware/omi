@@ -1202,7 +1202,24 @@ enum MemoryTier: String, Codable, CaseIterable, Identifiable {
   var isDefaultAccessible: Bool {
     self == .shortTerm || self == .longTerm
   }
+
+  /// Concise product copy for layer info popovers (WS-F).
+  var layerInfoText: String {
+    switch self {
+    case .shortTerm:
+      return
+        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+    case .longTerm:
+      return
+        "Durable facts Omi keeps long-term — stable details about you, your preferences, and your life."
+    case .archive:
+      return "Aged-out long-term memories. Hidden by default; search Archive to find them."
+    }
+  }
 }
+
+/// Canonical product lifecycle layer (WS-K). Same string values as ``MemoryTier``.
+typealias MemoryLayer = MemoryTier
 
 struct MemoryTierScope: Equatable {
   let tiers: [MemoryTier]
@@ -1283,7 +1300,7 @@ struct ServerMemory: Decodable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline, tier
+      headline, tier, layer
     case memoryId = "memory_id"
     case memoryTier = "memory_tier"
     case createdAt = "created_at"
@@ -1331,18 +1348,32 @@ struct ServerMemory: Decodable, Identifiable {
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
 
+    let layerValue = try container.decodeIfPresent(MemoryTier.self, forKey: .layer)
     let tierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .tier)
     let memoryTierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .memoryTier)
-    tierIsExplicit = tierValue != nil || memoryTierValue != nil
-    switch (tierValue, memoryTierValue) {
-    case let (.some(tier), .some(memoryTier)) where tier != memoryTier:
-      throw ServerMemoryAliasDecodeError.conflict(
-        "tier", tier.rawValue, "memory_tier", memoryTier.rawValue, codingPath: container.codingPath)
-    case let (.some(tier), _):
+    tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
+
+    let presentTierAliases: [(String, MemoryTier)] = [
+      layerValue.map { ("layer", $0) },
+      tierValue.map { ("tier", $0) },
+      memoryTierValue.map { ("memory_tier", $0) },
+    ].compactMap { $0 }
+    if presentTierAliases.count >= 2 {
+      let first = presentTierAliases[0]
+      for other in presentTierAliases.dropFirst() where other.1 != first.1 {
+        throw ServerMemoryAliasDecodeError.conflict(
+          first.0, first.1.rawValue, other.0, other.1.rawValue, codingPath: container.codingPath)
+      }
+    }
+
+    switch (layerValue, tierValue, memoryTierValue) {
+    case let (.some(layer), _, _):
+      self.tier = layer
+    case let (_, .some(tier), _):
       self.tier = tier
-    case let (_, .some(memoryTier)):
+    case let (_, _, .some(memoryTier)):
       self.tier = memoryTier
-    case (.none, .none):
+    case (.none, .none, .none):
       // Legacy records before V17 tiering default to Long-term only when no tier alias is present.
       self.tier = .longTerm
     }
