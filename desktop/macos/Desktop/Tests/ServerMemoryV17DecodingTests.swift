@@ -166,4 +166,78 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         XCTAssertEqual(memory.id, "mem-a")
     }
 
+    func testDecodesLayerFieldWithoutTierAliases() throws {
+        let json = """
+        {
+          "id": "mem-layer-1",
+          "content": "Canonical short-term via layer field",
+          "category": "interesting",
+          "layer": "short_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z",
+          "expires_at": "2026-06-28T10:00:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+
+        XCTAssertEqual(memory.id, "mem-layer-1")
+        XCTAssertEqual(memory.tier, .shortTerm)
+        XCTAssertTrue(memory.tierIsExplicit)
+    }
+
+    func testLayerPreferredOverTierAlias() throws {
+        let json = """
+        {
+          "id": "mem-layer-priority",
+          "content": "Layer wins when all aliases agree on short_term",
+          "category": "system",
+          "layer": "short_term",
+          "tier": "short_term",
+          "memory_tier": "short_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+
+        XCTAssertEqual(memory.tier, .shortTerm)
+        XCTAssertTrue(memory.tierIsExplicit)
+    }
+
+    func testConflictingLayerAndTierAliasesFailClosed() {
+        let json = """
+        {
+          "id": "mem-layer-conflict",
+          "content": "Conflicting layer",
+          "category": "system",
+          "layer": "short_term",
+          "memory_tier": "long_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
+    }
+
+    func testLayerOnlyLongTermSetsExplicitBadge() throws {
+        let json = """
+        {
+          "id": "mem-layer-lt",
+          "content": "Canonical long-term via layer field",
+          "category": "manual",
+          "layer": "long_term",
+          "created_at": "2026-06-21T10:00:00Z",
+          "updated_at": "2026-06-21T10:05:00Z"
+        }
+        """.data(using: .utf8)!
+
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+
+        XCTAssertEqual(memory.tier, .longTerm)
+        XCTAssertTrue(memory.tierIsExplicit)
+    }
+
 }
