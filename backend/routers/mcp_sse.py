@@ -46,8 +46,8 @@ from utils.memory.v17_product_authorization import (
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.surface_routing import memorydb_list_with_locked_preview
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.mcp_memories import (
     McpV17VerifiedAuth,
     build_mcp_v17_default_memory_read_context,
@@ -557,6 +557,7 @@ def execute_tool(
     auth_context: Optional[V17ProductAuthorizationContext] = None,
 ) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
+    memory_system = pin_memory_system(user_id, db_client=db)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
@@ -595,7 +596,6 @@ def execute_tool(
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
-        memory_system = resolve_memory_system(user_id, db_client=db)
         if memory_system == MemorySystem.CANONICAL:
             memories = memorydb_list_with_locked_preview(
                 MemoryService(db_client=db).read(user_id, limit=limit, offset=offset)
@@ -675,7 +675,6 @@ def execute_tool(
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
-        memory_system = resolve_memory_system(user_id, db_client=db)
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db).delete(user_id, memory_id)
             return {"success": True}
@@ -805,7 +804,6 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
 
-        memory_system = resolve_memory_system(user_id, db_client=db)
         if memory_system == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db)
             return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
