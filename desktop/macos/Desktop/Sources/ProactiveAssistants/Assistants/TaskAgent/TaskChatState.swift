@@ -23,7 +23,9 @@ class TaskChatState: ObservableObject {
     /// Workspace path for file-system tools
     let workspacePath: String
 
-    @Published var currentSessionId: String?
+    /// Adapter-native ACP session used only for legacy resume/adoption.
+    /// Canonical Omi runtime sessions are tracked separately in currentOmiSessionId.
+    @Published var legacyAcpSessionId: String?
     @Published var currentOmiSessionId: String?
 
     /// Closure to build system prompt from ChatProvider's cached data
@@ -66,7 +68,7 @@ class TaskChatState: ObservableObject {
             messages = records.map { $0.toChatMessage() }
 
             if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                currentSessionId = legacyAcpSessionId
+                self.legacyAcpSessionId = legacyAcpSessionId
             }
 
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
@@ -78,10 +80,10 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let sessionId = self.currentSessionId
+        let legacyAcpSessionId = self.legacyAcpSessionId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: sessionId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: legacyAcpSessionId)
             } catch {
                 logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
             }
@@ -251,7 +253,7 @@ class TaskChatState: ObservableObject {
                 legacyClientScope: "task-chat",
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,
-                resume: currentSessionId,
+                resume: legacyAcpSessionId,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -265,7 +267,7 @@ class TaskChatState: ObservableObject {
             // acpSessionId column remains a legacy adapter binding only.
             currentOmiSessionId = queryResult.omiSessionId
             if let adapterSessionId = queryResult.adapterSessionId {
-                currentSessionId = adapterSessionId
+                legacyAcpSessionId = adapterSessionId
             }
 
             // Flush remaining streaming buffers
