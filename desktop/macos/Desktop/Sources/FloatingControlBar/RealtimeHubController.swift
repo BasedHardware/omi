@@ -17,6 +17,38 @@ import Foundation
 //
 // This BYPASSES the Haiku classify() router — routing is the model's tool choice.
 
+
+/// Safe, non-sensitive classification for realtime WebSocket teardown messages.
+///
+/// Gemini can idle-close warm sessions with WebSocket 1008 after the socket has
+/// lived for a while. That path is expected and should re-warm quietly rather
+/// than page Sentry as a production error. Fast 1008 closes are different: they
+/// usually mean provider policy/auth/config rejection and should still be
+/// reported, but with a stable category instead of raw provider text.
+enum RealtimeHubCloseCategory: String {
+  case expectedIdleTeardown = "expected_idle_teardown"
+  case providerPolicyCloseFast = "provider_policy_close_fast"
+}
+
+enum RealtimeHubCloseClassifier {
+  static let idleTeardownThreshold: TimeInterval = 60
+
+  static func category(
+    message: String,
+    aliveFor: TimeInterval,
+    hasActiveTurn: Bool = false
+  ) -> RealtimeHubCloseCategory? {
+    let lower = message.lowercased()
+    guard lower.contains("websocket closed (1008)") else { return nil }
+    if !hasActiveTurn && aliveFor >= idleTeardownThreshold { return .expectedIdleTeardown }
+    return .providerPolicyCloseFast
+  }
+
+  static func shouldReportToSentry(_ category: RealtimeHubCloseCategory?) -> Bool {
+    category != .expectedIdleTeardown
+  }
+}
+
 @MainActor
 final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   static let shared = RealtimeHubController()
@@ -590,13 +622,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
+    let hasActiveTurn = responding || (barState?.isVoiceListening == true)
     responding = false
-    logError("RealtimeHub: session error — \(message)")
+    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
+    let closeCategory = RealtimeHubCloseClassifier.category(
+      message: message,
+      aliveFor: aliveFor,
+      hasActiveTurn: hasActiveTurn)
+    let categoryText = closeCategory.map { " category=\($0.rawValue)" } ?? ""
+    if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
+      logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag) \(message)")
+    } else {
+      log("RealtimeHub: session closed —\(categoryText) provider=\(providerTag) aliveFor=\(Int(aliveFor))s \(message)")
+    }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     exitVoiceUI()
-    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
