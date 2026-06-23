@@ -217,3 +217,101 @@ anything else is a bug a validator should reject.
 - A read surface requesting `layer=archive` still honors `status` filtering.
 
 Implementation: `is_legal_state_combination()` and `assert_legal_state()` in `backend/models/memory_domain.py`.
+
+---
+
+## Upstream boundary (§ WS-D)
+
+> **Normative lock (WS-D).** Conversations are upstream session records — never Memories.
+> This section documents the **current** extraction seam as implemented today. WS-I will
+> route writes through `MemoryService` but must preserve these boundaries.
+
+### Rule
+
+**Conversations** (`users/{uid}/conversations`, `database/conversations.py`) are persisted
+**session records**: processed `transcript_segments`, session metadata (`structured`,
+`apps_results`), audio/photo linkage, and status. They are **never** stored as, surfaced as,
+or merged into Memories.
+
+On a Conversation document:
+
+| Field | Role | Memory? |
+|-------|------|---------|
+| `transcript_segments` | Processed STT input to extraction | **No** — upstream processed input |
+| `structured` (`title`, `overview`, `action_items`, `events`, …) | Derived session artifacts from post-processing | **No** — session summary, not extracted facts |
+| `apps_results` | Per-app plugin output on the session | **No** — derived session artifacts |
+| `plugins_results`, `processing_memory_id` | Legacy mirrors of `apps_results` / `processing_conversation_id` | **No** — frozen legacy names (§1.1) |
+
+Memories are **extracted facts** written to separate stores (`users/{uid}/memories`, and
+interim shadow `users/{uid}/short_term`) with provenance pointing *back* at the Conversation.
+
+### Firestore store separation
+
+| Domain | Collection constant | Module |
+|--------|---------------------|--------|
+| Conversation (upstream) | `conversations` | `database/conversations.py` |
+| Long-term memories (interim) | `memories` | `database/memories.py` |
+| Short-term shadow (interim) | `short_term` | `database/short_term_memories.py` |
+| Workflow — action items | `action_items` | `database/action_items.py` |
+| Workflow — goals | `goals` | `database/goals.py` |
+
+No code path may point the Conversation store and a Memory store at the same collection name.
+Enforced by `backend/tests/unit/test_upstream_boundary.py`.
+
+### Single extraction seam
+
+When a Conversation completes post-processing, `process_conversation()` in
+`backend/utils/conversations/process_conversation.py` fans out **one upstream record** into
+**separate downstream destinations**:
+
+```
+Conversation (completed)
+  ├─► Memories        _extract_memories → _extract_memories_inner
+  │                     → new_memories_extractor / extract_memories_from_text
+  │                     → memories_db.save_memories (+ optional short_term shadow)
+  ├─► action_items    _save_action_items
+  │                     → action_items_db.create_action_items_batch
+  └─► goals           _update_goal_progress
+                        → extract_and_update_goal_progress (utils/llm/goals.py)
+```
+
+The three WS-D fan-out calls (`_extract_memories`, `_save_action_items`, `_update_goal_progress`)
+are submitted separately from `process_conversation()` at lines ~946 and ~948–949 via
+`submit_with_context(postprocess_executor, …)` — the Conversation is **decomposed**, not
+persisted verbatim as a memory row.
+
+`action_items` and `goals` are **Workflow** domains: downstream of the same seam, stored in
+their own collections, not inside Memories. Long-term memory may later absorb a *fact about* a
+commitment; the task/goal row stays in workflow.
+
+### How memories cite their source Conversation
+
+Extraction builds `MemoryDB` rows via `MemoryDB.from_memory()` (`models/memories.py`):
+
+- **`conversation_id`** — primary upstream link (set to `conversation.id`).
+- **`evidence[].source_id`** — provenance id (also `conversation.id` for voice paths;
+  `source_type="conversation"`, `source_signal="transcription"`).
+- Legacy mirror **`memory_id`** — set equal to `conversation_id` in `MemoryDB.__init__` for
+  older query paths (e.g. `get_memory_ids_for_conversation` filters on `memory_id`).
+
+**Conversation delete cascade** keys on this provenance: `memories_db.delete_memories_for_conversation`
+→ `ripple_source_deletion(uid, conversation_id)` tombstones evidence where
+`evidence[].source_id == conversation_id` and retracts facts with no surviving evidence; shadow
+short-term rows are tombstoned via `short_term_db.tombstone_source(uid, source_id)`.
+
+Action items link via **`conversation_id`** on each `action_items` row (`_save_action_items`).
+
+### What this forbids
+
+1. **No Conversation-as-Memory persistence** — no code path may write a Conversation document
+   (or its full `dict()`) into `memories` / `short_term` / canonical Memories as a memory row.
+2. **No Conversation-as-Memory reads** — memory read surfaces must not return a raw Conversation
+   doc shaped as a memory item.
+3. **No Conversations tab merge** — merging the Conversations timeline into the Memories tab is
+   permanently out of scope; Conversations stay upstream.
+4. **No workflow-in-memory** — `action_items` and `goals` remain separate workflow collections;
+   they are not memory layers.
+
+WS-I (write convergence) may relocate *where* memory rows are written (`MemoryService`), but must
+preserve: separate stores, separate fan-out, extracted-fact payloads (not session records), and
+provenance via `conversation_id` / `evidence[].source_id`.
