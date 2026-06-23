@@ -39,6 +39,7 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.memory.memory_service import MemoryService
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -383,6 +384,9 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -399,6 +403,9 @@ def delete_conversation(
         deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
         for memory_id in deletion_result.get('vector_delete_ids', []):
             delete_memory_vector(uid, memory_id)
+
+        # Canonical cohort: tombstone conversation-sourced items + neutral vector purge outbox (inert when legacy).
+        MemoryService().retract_conversation_memories(uid, conversation_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
