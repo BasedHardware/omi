@@ -11,7 +11,12 @@ from utils.memory.canonical_visibility_filter import filter_canonical_default_vi
 from database.v17_collections import V17Collections
 from database.v17_memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
 from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
-from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
+from models.memory_domain import (
+    MemoryLayer,
+    MemoryProcessingState,
+    assert_legal_state,
+    physical_status_to_record_status,
+)
 from models.memory_evidence import (
     ArtifactPreservationState,
     MemoryEvidence,
@@ -338,7 +343,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     if item is not None:
         assert_legal_state(
             MemoryLayer(item.tier.value),
-            MemoryRecordStatus(item.status.value),
+            physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
 
