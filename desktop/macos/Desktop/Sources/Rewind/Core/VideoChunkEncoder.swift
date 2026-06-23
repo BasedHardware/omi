@@ -44,6 +44,10 @@ actor VideoChunkEncoder {
     /// Maximum consecutive ffmpeg failures before emergency reset
     private let maxConsecutiveFailures = 5
 
+    /// Consecutive nil-process/stdin states that force an encoder reset. This keeps
+    /// "FFmpeg not ready" loops bounded instead of emitting one Sentry event per frame.
+    private let maxConsecutiveNotReadyFailures = 3
+
     // MARK: - State
 
     /// Buffer stores only timestamps, not CGImages (memory optimization)
@@ -52,6 +56,9 @@ actor VideoChunkEncoder {
 
     /// Track consecutive ffmpeg write failures for recovery
     private var consecutiveWriteFailures = 0
+    private var encoderRestartCount = 0
+    private var emergencyResetCount = 0
+    private var ffmpegNotReadyCount = 0
 
     /// Pending aspect ratio debounce state
     private var pendingAspectRatioSize: CGSize?
@@ -117,7 +124,7 @@ actor VideoChunkEncoder {
         if frameTimestamps.count >= maxBufferFrames {
             log("VideoChunkEncoder: Buffer exceeded \(maxBufferFrames) frames, forcing flush to prevent memory leak")
             logError("VideoChunkEncoder: Emergency buffer flush triggered - \(frameTimestamps.count) frames")
-            try await emergencyReset()
+            try await emergencyReset(reason: "buffer_overflow")
         }
 
         // Check if aspect ratio changed significantly.
@@ -169,13 +176,15 @@ actor VideoChunkEncoder {
                     imageSize: newFrameSize
                 )
                 consecutiveWriteFailures = 0 // Reset on successful start
+                ffmpegNotReadyCount = 0
+                encoderRestartCount += 1
             } catch {
                 consecutiveWriteFailures += 1
                 logError("VideoChunkEncoder: Failed to start ffmpeg (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
 
                 if consecutiveWriteFailures >= maxConsecutiveFailures {
                     logError("VideoChunkEncoder: Too many ffmpeg failures, performing emergency reset")
-                    try await emergencyReset()
+                    try await emergencyReset(reason: "ffmpeg_start_failure")
                 }
                 throw error
             }
@@ -203,7 +212,7 @@ actor VideoChunkEncoder {
 
             if consecutiveWriteFailures >= maxConsecutiveFailures {
                 logError("VideoChunkEncoder: Too many write failures, performing emergency reset")
-                try await emergencyReset()
+                try await emergencyReset(reason: "write_failure")
             }
             throw error
         }
@@ -319,6 +328,15 @@ actor VideoChunkEncoder {
         guard let stdin = ffmpegStdin,
               let outputSize = currentOutputSize
         else {
+            ffmpegNotReadyCount += 1
+
+            if ffmpegNotReadyCount >= maxConsecutiveNotReadyFailures {
+                logError("VideoChunkEncoder: FFmpeg not ready \(ffmpegNotReadyCount)x, resetting encoder state")
+                try await emergencyReset(reason: "ffmpeg_not_ready_loop")
+            } else {
+                log("VideoChunkEncoder: FFmpeg not ready (\(ffmpegNotReadyCount)/\(maxConsecutiveNotReadyFailures))")
+            }
+
             throw RewindError.storageError("FFmpeg not ready")
         }
 
@@ -374,7 +392,7 @@ actor VideoChunkEncoder {
             if process.terminationStatus != 0 {
                 logError("VideoChunkEncoder: FFmpeg exited with status \(process.terminationStatus)")
             } else {
-                log("VideoChunkEncoder: Finalized chunk with \(frameCount) frames")
+                log("VideoChunkEncoder: Finalized chunk with \(frameCount) frames (restartCount=\(encoderRestartCount), emergencyResets=\(emergencyResetCount))")
             }
 
             ffmpegProcess = nil
@@ -573,27 +591,34 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+        ffmpegNotReadyCount = 0
     }
 
     /// Emergency reset when ffmpeg fails repeatedly or buffer overflows
     /// Clears all state and allows fresh start on next frame
-    private func emergencyReset() async throws {
+    private func emergencyReset(reason: String = "failure_threshold") async throws {
         stalenessCheckTask?.cancel()
         stalenessCheckTask = nil
 
         let droppedFrames = frameTimestamps.count
+        emergencyResetCount += 1
 
         // Report to Sentry for monitoring
         let breadcrumb = Breadcrumb(level: .error, category: "video_encoder")
         breadcrumb.message = "Emergency reset triggered"
         breadcrumb.data = [
+            "reason": reason,
             "dropped_frames": droppedFrames,
             "consecutive_failures": consecutiveWriteFailures,
+            "ffmpeg_not_ready_count": ffmpegNotReadyCount,
+            "encoder_restart_count": encoderRestartCount,
+            "emergency_reset_count": emergencyResetCount,
+            "buffer_limit": maxBufferFrames,
             "chunk_path": currentChunkPath ?? "none"
         ]
         SentrySDK.addBreadcrumb(breadcrumb)
 
-        logError("VideoChunkEncoder: Emergency reset - dropping \(droppedFrames) frames to prevent memory leak")
+        logError("VideoChunkEncoder: Emergency reset (reason=\(reason)) - dropping \(droppedFrames) frames to prevent memory leak")
 
         // Close stdin first (don't wait for ffmpeg to finish - it may be hung)
         if let stdin = ffmpegStdin {
@@ -628,14 +653,36 @@ actor VideoChunkEncoder {
         currentOutputSize = nil
         currentChunkInputSize = nil
         consecutiveWriteFailures = 0
+        ffmpegNotReadyCount = 0
 
         log("VideoChunkEncoder: Emergency reset complete, ready for new frames")
     }
 
-    /// Get current buffer status for debugging
-    func getBufferStatus() -> (frameCount: Int, oldestFrameAge: TimeInterval?) {
-        let count = frameTimestamps.count
-        let age = frameTimestamps.first.map { Date().timeIntervalSince($0) }
-        return (count, age)
+    struct EncoderStatus {
+        let frameCount: Int
+        let maxBufferFrames: Int
+        let oldestFrameAge: TimeInterval?
+        let currentChunkAge: TimeInterval?
+        let isFFmpegRunning: Bool
+        let consecutiveWriteFailures: Int
+        let encoderRestartCount: Int
+        let emergencyResetCount: Int
+        let ffmpegNotReadyCount: Int
+    }
+
+    /// Get current buffer and lifecycle status for memory diagnostics.
+    func getBufferStatus() -> EncoderStatus {
+        let now = Date()
+        return EncoderStatus(
+            frameCount: frameTimestamps.count,
+            maxBufferFrames: maxBufferFrames,
+            oldestFrameAge: frameTimestamps.first.map { now.timeIntervalSince($0) },
+            currentChunkAge: currentChunkStartTime.map { now.timeIntervalSince($0) },
+            isFFmpegRunning: ffmpegProcess?.isRunning ?? false,
+            consecutiveWriteFailures: consecutiveWriteFailures,
+            encoderRestartCount: encoderRestartCount,
+            emergencyResetCount: emergencyResetCount,
+            ffmpegNotReadyCount: ffmpegNotReadyCount
+        )
     }
 }
