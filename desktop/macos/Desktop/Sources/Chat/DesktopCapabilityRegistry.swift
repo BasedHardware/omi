@@ -244,6 +244,26 @@ enum DesktopCapabilityRegistry {
         "Use after get_agent_run when the user asks what files or outputs an agent produced."
       ]),
     Capability(
+      toolName: "send_agent_message",
+      title: "Send Agent Message",
+      latency: .asyncBackground,
+      surfaces: [.desktopChat],
+      summary: "Send a follow-up message to an existing canonical Omi agent session.",
+      bullets: [
+        "Use when continuing a multi-turn conversation with an Omi-managed agent by omiSessionId.",
+        "Creates a new run in the existing session; do not use it to create a delegated child."
+      ]),
+    Capability(
+      toolName: "delegate_agent",
+      title: "Delegate Agent",
+      latency: .asyncBackground,
+      surfaces: [.desktopChat],
+      summary: "Create or continue a distinct child agent session linked to a parent run.",
+      bullets: [
+        "Use call for a structured child result, spawn for immediate child handles, and continue for another run in an existing child session.",
+        "Pass a concise objective and optional short context; do not pass full transcripts by default."
+      ]),
+    Capability(
       toolName: "spawn_agent",
       title: "Spawn Agent",
       latency: .asyncBackground,
@@ -329,6 +349,8 @@ enum DesktopCapabilityRegistry {
     - Complete/delete local tasks -> find the backendId, then complete_task/delete_task.
     - Subagents/task-agent status -> get_task_agent_status.
     - Canonical Omi-managed agent sessions/runs -> list_agent_sessions, get_agent_run.
+    - Continue an existing canonical Omi agent session -> send_agent_message.
+    - Delegate to a distinct child Omi agent session -> delegate_agent.
     - Stop a canonical Omi agent run -> cancel_agent_run.
     - Agent output references/artifacts -> inspect_agent_artifacts.
     - Start a floating-bar subagent/background agent -> spawn_agent.

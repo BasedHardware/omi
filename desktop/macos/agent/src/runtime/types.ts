@@ -160,6 +160,21 @@ export interface AgentArtifact {
   createdAtMs: number;
 }
 
+export interface AgentDelegation {
+  delegationId: string;
+  parentSessionId: string;
+  parentRunId: string;
+  childSessionId: string;
+  childRunId: string;
+  mode: DelegationMode;
+  status: DelegationStatus;
+  objective: string;
+  requestJson: string;
+  resultArtifactId: string | null;
+  createdAtMs: number;
+  completedAtMs: number | null;
+}
+
 export type NewAgentSession = Partial<AgentSession> & Pick<AgentSession, "ownerId" | "surfaceKind" | "defaultAdapterId">;
 
 export type NewAgentRun = Partial<AgentRun> &

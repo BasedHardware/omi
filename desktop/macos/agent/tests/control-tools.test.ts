@@ -38,6 +38,8 @@ describe("agent control tools", () => {
       "get_agent_run",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "send_agent_message",
+      "delegate_agent",
     ]);
     for (const tool of agentControlToolDefinitions) {
       expect(isAgentControlToolName(tool.name)).toBe(true);
@@ -119,6 +121,226 @@ describe("agent control tools", () => {
         metadata: { source: "test" },
       }),
     ]);
+    store.close();
+  });
+
+  it("sends a follow-up message as a new run in an existing canonical session", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const first = await kernel.executeRun(baseRunInput);
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "send_agent_message", {
+        ownerId: "owner",
+        sessionId: first.session.sessionId,
+        prompt: "follow up",
+        requestId: "request-follow-up",
+        clientId: "client-follow-up",
+      }),
+    );
+
+    expect(sent.ok).toBe(true);
+    expect(sent.session.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.run.runId).not.toBe(first.run.runId);
+    expect(sent.run.status).toBe("succeeded");
+    expect(adapter.executed).toHaveLength(2);
+    expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
+
+    const listed = parseToolResult(await handleAgentControlToolCall({ kernel }, "list_agent_sessions", { ownerId: "owner" }));
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0].latestRun.runId).toBe(sent.run.runId);
+    store.close();
+  });
+
+  it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "call",
+        parentRunId: parent.run.runId,
+        objective: "summarize the child task",
+        context: "only concise parent context",
+        requestId: "delegate-call-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(true);
+    expect(delegated.delegation).toMatchObject({
+      parentSessionId: parent.session.sessionId,
+      parentRunId: parent.run.runId,
+      childSessionId: delegated.childSession.omiSessionId,
+      childRunId: delegated.childRun.runId,
+      mode: "call",
+      status: "succeeded",
+      objective: "summarize the child task",
+    });
+    expect(delegated.childSession.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(delegated.childRun.parentRunId).toBe(parent.run.runId);
+    expect(delegated.result).toMatchObject({
+      summary: expect.stringContaining("done-"),
+      verifiedEffects: [],
+      openQuestions: [],
+      usage: { inputTokens: 1, outputTokens: 2 },
+    });
+
+    const row = store.getRow("SELECT * FROM delegations WHERE delegation_id = ?", [delegated.delegation.delegationId]);
+    expect(row.parent_run_id).toBe(parent.run.runId);
+    expect(row.child_run_id).toBe(delegated.childRun.runId);
+
+    const parentInspect = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: parent.run.runId }));
+    expect(parentInspect.parentDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
+    const childInspect = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: delegated.childRun.runId }));
+    expect(childInspect.childDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
+    store.close();
+  });
+
+  it("delegates spawn mode and returns child handles before the child finishes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    adapter.deferResult();
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "spawn",
+        parentRunId: parent.run.runId,
+        objective: "run in the background",
+        requestId: "delegate-spawn-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.result).toBeNull();
+    expect(spawned.childSession.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(spawned.childRun.status).toBe("queued");
+    await waitUntil(() => adapter.executed.length === 2);
+
+    const running = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: spawned.childRun.runId }));
+    expect(["starting", "running"]).toContain(running.run.status);
+    expect(running.childDelegations[0].delegationId).toBe(spawned.delegation.delegationId);
+
+    adapter.resolveDeferred({
+      text: "spawn complete",
+      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM delegations WHERE delegation_id = ?", [spawned.delegation.delegationId]);
+      return row.status === "succeeded";
+    });
+    store.close();
+  });
+
+  it("marks spawned delegations failed when child execution fails", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    adapter.failNextExecutionError = new Error("spawn failed");
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "spawn",
+        parentRunId: parent.run.runId,
+        objective: "fail in the background",
+        requestId: "delegate-spawn-failure",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM delegations WHERE delegation_id = ?", [spawned.delegation.delegationId]);
+      return row.status === "failed";
+    });
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.childRun.runId]).status).toBe("failed");
+    store.close();
+  });
+
+  it("delegates continue mode as another run in an existing child session", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    const firstChild = await kernel.delegateAgent({
+      mode: "call",
+      parentRunId: parent.run.runId,
+      objective: "first child objective",
+      ownerId: "owner",
+      clientId: "delegate-client",
+      requestId: "delegate-call-seed",
+    });
+
+    const continued = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "continue",
+        parentRunId: parent.run.runId,
+        childSessionId: firstChild.childSession.sessionId,
+        objective: "continue the child",
+        requestId: "delegate-continue-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(continued.ok).toBe(true);
+    expect(continued.childSession.omiSessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.childRun.runId).not.toBe(firstChild.childRun.runId);
+    expect(continued.childRun.parentRunId).toBe(parent.run.runId);
+    expect(continued.delegation).toMatchObject({
+      parentRunId: parent.run.runId,
+      childSessionId: firstChild.childSession.sessionId,
+      childRunId: continued.childRun.runId,
+      mode: "continue",
+      status: "succeeded",
+    });
+    expect(adapter.resumed.at(-1)?.sessionId).toBe(firstChild.childSession.sessionId);
+    store.close();
+  });
+
+  it("enforces simple delegation depth and budget constraints", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+
+    const invalidBudget = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "call",
+        parentRunId: parent.run.runId,
+        objective: "too expensive",
+        maxBudgetUsd: 11,
+      }),
+    );
+    expect(invalidBudget.ok).toBe(false);
+    expect(invalidBudget.error.code).toBe("invalid_tool_input");
+
+    const child = await kernel.delegateAgent({
+      mode: "call",
+      parentRunId: parent.run.runId,
+      objective: "depth one",
+      ownerId: "owner",
+      clientId: "delegate-client",
+      requestId: "delegate-depth-one",
+      maxDepth: 1,
+    });
+    const tooDeep = await kernel
+      .delegateAgent({
+        mode: "call",
+        parentRunId: child.childRun.runId,
+        objective: "depth two",
+        ownerId: "owner",
+        clientId: "delegate-client",
+        requestId: "delegate-depth-two",
+        maxDepth: 1,
+      })
+      .then(
+        () => undefined,
+        (error) => error,
+      );
+    expect(tooDeep).toBeInstanceOf(Error);
+    expect(String(tooDeep.message)).toContain("exceeds maxDepth");
     store.close();
   });
 

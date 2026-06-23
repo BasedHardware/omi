@@ -8,10 +8,12 @@ import type {
 } from "../adapters/interface.js";
 import type { OutboundMessage } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
+import { generateAgentId } from "./sqlite-store.js";
 import type {
   AdapterBinding,
   AgentEvent,
   AgentArtifact,
+  AgentDelegation,
   AgentRun,
   AgentSession,
   AgentStore,
@@ -21,10 +23,16 @@ import type {
   RunAttempt,
   RunMode,
   RunStatus,
+  DelegationMode,
+  DelegationStatus,
 } from "./types.js";
 
 const ACTIVE_STATUSES: readonly RunStatus[] = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"];
 const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"];
+const DEFAULT_DELEGATION_MAX_DEPTH = 3;
+const HARD_DELEGATION_MAX_DEPTH = 5;
+const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
+const HARD_DELEGATION_MAX_BUDGET_USD = 10;
 
 export interface KernelSessionResolutionInput {
   sessionId?: string;
@@ -53,6 +61,7 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   maxAttempts?: number;
   tools?: ToolDef[];
   metadata?: Record<string, unknown>;
+  parentRunId?: string;
   recoverAfterError?: (error: unknown) => Promise<boolean>;
 }
 
@@ -101,6 +110,8 @@ export interface KernelRunDetails {
   adapterBindings: AdapterBinding[];
   artifacts: AgentArtifact[];
   events: AgentEvent[];
+  parentDelegations: AgentDelegation[];
+  childDelegations: AgentDelegation[];
 }
 
 export interface InspectArtifactsInput {
@@ -119,6 +130,65 @@ export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
 export interface InvalidateBindingsResult {
   sessionId?: string;
   invalidatedBindingIds: string[];
+}
+
+export interface SendAgentMessageInput {
+  sessionId: string;
+  ownerId: string;
+  clientId: string;
+  requestId: string;
+  prompt: string;
+  promptBlocks?: PromptBlock[];
+  mode?: RunMode;
+  adapterId?: string;
+  cwd?: string;
+  model?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DelegateAgentInput {
+  mode: DelegationMode;
+  parentRunId: string;
+  objective: string;
+  ownerId?: string;
+  clientId: string;
+  requestId: string;
+  childSessionId?: string;
+  childSurfaceKind?: string;
+  childExternalRefKind?: string;
+  childExternalRefId?: string;
+  childTitle?: string;
+  adapterId?: string;
+  defaultAdapterId?: string;
+  cwd?: string;
+  model?: string;
+  runMode?: RunMode;
+  context?: string;
+  maxDepth?: number;
+  maxBudgetUsd?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DelegateAgentResult {
+  delegation: AgentDelegation;
+  childSession: AgentSession;
+  childRun: AgentRun;
+  childAttempt?: RunAttempt;
+  adapterSessionId?: string | null;
+  terminalStatus?: KernelRunResult["terminalStatus"];
+  result?: {
+    summary: string;
+    artifacts: AgentArtifact[];
+    verifiedEffects: unknown[];
+    openQuestions: unknown[];
+    usage: {
+      inputTokens: number | null;
+      outputTokens: number | null;
+      cacheReadTokens: number | null;
+      cacheWriteTokens: number | null;
+      costUsd: number | null;
+    };
+  };
 }
 
 export type KernelEventSubscriber = (event: AgentEvent) => void;
@@ -163,10 +233,85 @@ export class AgentRuntimeKernel {
   }
 
   async executeRun(input: ExecuteAgentRunInput): Promise<KernelRunResult> {
-    const accepted = this.store.withTransaction(() => {
+    const accepted = this.createAcceptedRun(input);
+    return this.executeAcceptedRun(input, accepted);
+  }
+
+  async sendAgentMessage(input: SendAgentMessageInput): Promise<KernelRunResult> {
+    const session = this.readSession(input.sessionId);
+    return this.executeRun({
+      ownerId: input.ownerId,
+      sessionId: input.sessionId,
+      surfaceKind: session.surfaceKind,
+      defaultAdapterId: session.defaultAdapterId,
+      clientId: input.clientId,
+      requestId: input.requestId,
+      prompt: input.prompt,
+      promptBlocks: input.promptBlocks,
+      mode: input.mode,
+      adapterId: input.adapterId ?? session.defaultAdapterId,
+      cwd: input.cwd ?? session.defaultCwd ?? undefined,
+      model: input.model,
+      metadata: input.metadata,
+    });
+  }
+
+  async delegateAgent(input: DelegateAgentInput): Promise<DelegateAgentResult> {
+    this.assertDelegationConstraints(input);
+    const parentRun = this.readRun(input.parentRunId);
+    const parentSession = this.readSession(parentRun.sessionId);
+    if (input.ownerId && parentSession.ownerId !== input.ownerId) {
+      throw new Error(`Parent run ${input.parentRunId} does not belong to owner ${input.ownerId}`);
+    }
+    const ownerId = input.ownerId ?? parentSession.ownerId;
+    const childPrompt = buildDelegatedPrompt(input.objective, input.context);
+    const childRunInput: ExecuteAgentRunInput = {
+      ownerId,
+      sessionId: input.mode === "continue" ? requiredChildSessionId(input.childSessionId) : input.childSessionId,
+      surfaceKind: input.childSurfaceKind ?? "delegated_agent",
+      externalRefKind: input.childExternalRefKind,
+      externalRefId: input.childExternalRefId,
+      title: input.childTitle ?? `Delegated: ${input.objective.slice(0, 80)}`,
+      defaultAdapterId: input.defaultAdapterId ?? input.adapterId ?? parentSession.defaultAdapterId,
+      adapterId: input.adapterId ?? input.defaultAdapterId ?? parentSession.defaultAdapterId,
+      clientId: input.clientId,
+      requestId: input.requestId,
+      prompt: childPrompt,
+      mode: input.runMode ?? "ask",
+      cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
+      model: input.model,
+      parentRunId: parentRun.runId,
+      metadata: {
+        ...(input.metadata ?? {}),
+        delegationMode: input.mode,
+        parentRunId: parentRun.runId,
+        maxDepth: input.maxDepth ?? DEFAULT_DELEGATION_MAX_DEPTH,
+        maxBudgetUsd: input.maxBudgetUsd ?? DEFAULT_DELEGATION_MAX_BUDGET_USD,
+      },
+    };
+    const created = this.createDelegatedRun(parentSession, parentRun, childRunInput, input);
+
+    if (input.mode === "spawn") {
+      const runningDelegation = this.updateDelegationStatus(created.delegation, "running");
+      void this.executeDelegationAsync(childRunInput, { ...created, delegation: runningDelegation }, false).catch((error) => {
+        this.updateDelegationStatus(runningDelegation, "failed", messageFrom(error));
+      });
+      return {
+        delegation: runningDelegation,
+        childSession: created.session,
+        childRun: created.run,
+      };
+    }
+
+    return this.executeDelegationAsync(childRunInput, created);
+  }
+
+  private createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
+    return this.store.withTransaction(() => {
       const session = this.resolveSession(input);
       const run = this.store.insertRun({
         sessionId: session.sessionId,
+        parentRunId: input.parentRunId ?? null,
         clientId: input.clientId,
         requestId: input.requestId,
         status: "queued",
@@ -188,6 +333,12 @@ export class AgentRuntimeKernel {
       });
       return { session, run };
     });
+  }
+
+  private async executeAcceptedRun(
+    input: ExecuteAgentRunInput,
+    accepted: { session: AgentSession; run: AgentRun }
+  ): Promise<KernelRunResult> {
 
     const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
@@ -449,6 +600,8 @@ export class AgentRuntimeKernel {
       adapterBindings: this.readBindingsForSession(session.sessionId),
       artifacts: this.readArtifacts({ runId: run.runId, limit: 100 }),
       events: input.includeEvents ? this.readEventsForRun(run.runId, boundedLimit(input.eventLimit, 100, 500)) : [],
+      parentDelegations: this.readParentDelegationsForRun(run.runId),
+      childDelegations: this.readChildDelegationsForRun(run.runId),
     };
   }
 
@@ -499,6 +652,168 @@ export class AgentRuntimeKernel {
     });
 
     return { sessionId: session?.sessionId, invalidatedBindingIds };
+  }
+
+  private createDelegatedRun(
+    parentSession: AgentSession,
+    parentRun: AgentRun,
+    childRunInput: ExecuteAgentRunInput,
+    input: DelegateAgentInput
+  ): { session: AgentSession; run: AgentRun; delegation: AgentDelegation } {
+    return this.store.withTransaction(() => {
+      const session = this.resolveSession(childRunInput);
+      if (session.sessionId === parentSession.sessionId) {
+        throw new Error("Delegated child session must be distinct from parent session");
+      }
+      const run = this.store.insertRun({
+        sessionId: session.sessionId,
+        parentRunId: parentRun.runId,
+        clientId: childRunInput.clientId,
+        requestId: childRunInput.requestId,
+        status: "queued",
+        mode: childRunInput.mode ?? "ask",
+        inputJson: JSON.stringify({
+          prompt: childRunInput.prompt,
+          systemPrompt: childRunInput.systemPrompt ?? "",
+          metadata: childRunInput.metadata ?? {},
+        }),
+        requestedModelId: childRunInput.model ?? null,
+        cwd: childRunInput.cwd ?? session.defaultCwd,
+      });
+      const now = Date.now();
+      const delegation: AgentDelegation = {
+        delegationId: generateAgentId("delegation"),
+        parentSessionId: parentSession.sessionId,
+        parentRunId: parentRun.runId,
+        childSessionId: session.sessionId,
+        childRunId: run.runId,
+        mode: input.mode,
+        status: "pending",
+        objective: input.objective,
+        requestJson: JSON.stringify({
+          mode: input.mode,
+          objective: input.objective,
+          contextProvided: Boolean(input.context),
+          childSurfaceKind: childRunInput.surfaceKind,
+          childExternalRefKind: childRunInput.externalRefKind ?? null,
+          childExternalRefId: childRunInput.externalRefId ?? null,
+          maxDepth: input.maxDepth ?? DEFAULT_DELEGATION_MAX_DEPTH,
+          maxBudgetUsd: input.maxBudgetUsd ?? DEFAULT_DELEGATION_MAX_BUDGET_USD,
+        }),
+        resultArtifactId: null,
+        createdAtMs: now,
+        completedAtMs: null,
+      };
+      this.store.execute(
+        `INSERT INTO delegations (
+          delegation_id, parent_session_id, parent_run_id, child_session_id, child_run_id,
+          mode, status, objective, request_json, result_artifact_id, created_at_ms, completed_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        delegationValues(delegation),
+      );
+      this.touchSession(session.sessionId);
+      this.appendEvent({
+        sessionId: parentSession.sessionId,
+        runId: parentRun.runId,
+        type: "delegation.created",
+        payload: {
+          delegationId: delegation.delegationId,
+          mode: delegation.mode,
+          childSessionId: session.sessionId,
+          childRunId: run.runId,
+        },
+      });
+      this.appendEvent({
+        sessionId: session.sessionId,
+        runId: run.runId,
+        type: "run.created",
+        payload: {
+          runId: run.runId,
+          requestId: run.requestId,
+          parentRunId: parentRun.runId,
+          delegationId: delegation.delegationId,
+        },
+      });
+      return { session, run, delegation };
+    });
+  }
+
+  private async executeDelegationAsync(
+    childRunInput: ExecuteAgentRunInput,
+    created: { session: AgentSession; run: AgentRun; delegation: AgentDelegation },
+    markRunning = true
+  ): Promise<DelegateAgentResult> {
+    if (markRunning) {
+      created = { ...created, delegation: this.updateDelegationStatus(created.delegation, "running") };
+    }
+    const result = await this.executeAcceptedRun(childRunInput, {
+      session: created.session,
+      run: created.run,
+    });
+    const status = result.terminalStatus === "succeeded" ? "succeeded" : result.terminalStatus;
+    const delegation = this.updateDelegationStatus(created.delegation, status);
+    const artifacts = this.readArtifacts({ runId: result.run.runId, limit: 50 });
+    return {
+      delegation,
+      childSession: result.session,
+      childRun: result.run,
+      childAttempt: result.attempt,
+      adapterSessionId: result.adapterSessionId,
+      terminalStatus: result.terminalStatus,
+      result: {
+        summary: result.text,
+        artifacts,
+        verifiedEffects: [],
+        openQuestions: [],
+        usage: {
+          inputTokens: result.run.inputTokens,
+          outputTokens: result.run.outputTokens,
+          cacheReadTokens: result.run.cacheReadTokens,
+          cacheWriteTokens: result.run.cacheWriteTokens,
+          costUsd: result.run.costUsd,
+        },
+      },
+    };
+  }
+
+  private updateDelegationStatus(delegation: AgentDelegation, status: DelegationStatus, errorMessage?: string): AgentDelegation {
+    const now = Date.now();
+    this.store.withTransaction(() => {
+      this.store.execute(
+        `UPDATE delegations
+         SET status = ?, completed_at_ms = ?, result_artifact_id = result_artifact_id
+         WHERE delegation_id = ?`,
+        [status, status === "running" || status === "pending" ? null : now, delegation.delegationId],
+      );
+      this.appendEvent({
+        sessionId: delegation.parentSessionId,
+        runId: delegation.parentRunId,
+        type: status === "running" ? "delegation.running" : "delegation.completed",
+        payload: {
+          delegationId: delegation.delegationId,
+          childSessionId: delegation.childSessionId,
+          childRunId: delegation.childRunId,
+          status,
+          errorMessage,
+        },
+      });
+    });
+    return this.readDelegation(delegation.delegationId);
+  }
+
+  private assertDelegationConstraints(input: DelegateAgentInput): void {
+    const maxDepth = input.maxDepth ?? DEFAULT_DELEGATION_MAX_DEPTH;
+    if (!Number.isInteger(maxDepth) || maxDepth < 1 || maxDepth > HARD_DELEGATION_MAX_DEPTH) {
+      throw new Error(`Delegation maxDepth must be between 1 and ${HARD_DELEGATION_MAX_DEPTH}`);
+    }
+    const maxBudgetUsd = input.maxBudgetUsd ?? DEFAULT_DELEGATION_MAX_BUDGET_USD;
+    if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd <= 0 || maxBudgetUsd > HARD_DELEGATION_MAX_BUDGET_USD) {
+      throw new Error(`Delegation maxBudgetUsd must be greater than 0 and at most ${HARD_DELEGATION_MAX_BUDGET_USD}`);
+    }
+    const parentDepth = this.delegationDepth(input.parentRunId);
+    if (parentDepth + 1 > maxDepth) {
+      throw new Error(`Delegation depth ${parentDepth + 1} exceeds maxDepth ${maxDepth}`);
+    }
   }
 
   private resolveSession(input: KernelSessionResolutionInput): AgentSession {
@@ -1107,6 +1422,38 @@ export class AgentRuntimeKernel {
       .map(artifactFromRow);
   }
 
+  private readDelegation(delegationId: string): AgentDelegation {
+    return delegationFromRow(this.store.getRow("SELECT * FROM delegations WHERE delegation_id = ?", [delegationId]));
+  }
+
+  private readParentDelegationsForRun(runId: string): AgentDelegation[] {
+    return this.store
+      .allRows("SELECT * FROM delegations WHERE parent_run_id = ? ORDER BY created_at_ms ASC", [runId])
+      .map(delegationFromRow);
+  }
+
+  private readChildDelegationsForRun(runId: string): AgentDelegation[] {
+    return this.store
+      .allRows("SELECT * FROM delegations WHERE child_run_id = ? ORDER BY created_at_ms ASC", [runId])
+      .map(delegationFromRow);
+  }
+
+  private delegationDepth(parentRunId: string): number {
+    const row = this.store.getRow(
+      `WITH RECURSIVE ancestors(run_id, depth) AS (
+         SELECT ?, 0
+         UNION ALL
+         SELECT r.parent_run_id, ancestors.depth + 1
+         FROM runs r
+         JOIN ancestors ON r.run_id = ancestors.run_id
+         WHERE r.parent_run_id IS NOT NULL
+       )
+       SELECT COALESCE(MAX(depth), 0) AS depth FROM ancestors`,
+      [parentRunId],
+    );
+    return Number(row.depth);
+  }
+
   private nextBindingGeneration(sessionId: string, adapterId: string): number {
     const row = this.store.getRow(
       "SELECT COALESCE(MAX(binding_generation), 0) AS max_generation FROM adapter_bindings WHERE session_id = ? AND adapter_id = ?",
@@ -1239,6 +1586,56 @@ function runFromRow(row: Record<string, unknown>): AgentRun {
     completedAtMs: nullableNumber(row.completed_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
+}
+
+function delegationFromRow(row: Record<string, unknown>): AgentDelegation {
+  return {
+    delegationId: text(row.delegation_id),
+    parentSessionId: text(row.parent_session_id),
+    parentRunId: text(row.parent_run_id),
+    childSessionId: text(row.child_session_id),
+    childRunId: text(row.child_run_id),
+    mode: text(row.mode) as DelegationMode,
+    status: text(row.status) as DelegationStatus,
+    objective: text(row.objective),
+    requestJson: text(row.request_json),
+    resultArtifactId: nullableText(row.result_artifact_id),
+    createdAtMs: Number(row.created_at_ms),
+    completedAtMs: nullableNumber(row.completed_at_ms),
+  };
+}
+
+function delegationValues(delegation: AgentDelegation): unknown[] {
+  return [
+    delegation.delegationId,
+    delegation.parentSessionId,
+    delegation.parentRunId,
+    delegation.childSessionId,
+    delegation.childRunId,
+    delegation.mode,
+    delegation.status,
+    delegation.objective,
+    delegation.requestJson,
+    delegation.resultArtifactId,
+    delegation.createdAtMs,
+    delegation.completedAtMs,
+  ];
+}
+
+function buildDelegatedPrompt(objective: string, context: string | undefined): string {
+  const trimmedObjective = objective.trim();
+  const trimmedContext = context?.trim();
+  if (!trimmedContext) {
+    return trimmedObjective;
+  }
+  return `Objective:\n${trimmedObjective}\n\nContext:\n${trimmedContext}`;
+}
+
+function requiredChildSessionId(sessionId: string | undefined): string {
+  if (!sessionId) {
+    throw new Error("delegate_agent continue mode requires childSessionId");
+  }
+  return sessionId;
 }
 
 function attemptFromRow(row: Record<string, unknown>): RunAttempt {

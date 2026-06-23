@@ -1,9 +1,11 @@
 import { z } from "zod";
-import type { AgentArtifact, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
+import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
 import { AgentRuntimeKernel } from "./kernel.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
+const runModeSchema = z.enum(["ask", "act"]);
+const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 
 const listAgentSessionsSchema = z.object({
   ownerId: z.string().min(1).default("desktop-local-user"),
@@ -35,11 +37,49 @@ const inspectAgentArtifactsSchema = z
     message: "Provide sessionId, runId, or attemptId",
   });
 
+const sendAgentMessageSchema = z.object({
+  sessionId: z.string().min(1),
+  ownerId: z.string().min(1).default("desktop-local-user"),
+  prompt: z.string().min(1),
+  mode: runModeSchema.default("ask"),
+  adapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
+const delegateAgentSchema = z.object({
+  mode: delegationModeSchema,
+  parentRunId: z.string().min(1),
+  objective: z.string().min(1),
+  context: z.string().max(4000).optional(),
+  ownerId: z.string().min(1).optional(),
+  childSessionId: z.string().min(1).optional(),
+  childSurfaceKind: z.string().min(1).default("delegated_agent"),
+  childExternalRefKind: z.string().min(1).optional(),
+  childExternalRefId: z.string().min(1).optional(),
+  childTitle: z.string().min(1).optional(),
+  adapterId: z.string().min(1).optional(),
+  defaultAdapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  runMode: runModeSchema.default("ask"),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  maxDepth: z.coerce.number().int().min(1).max(5).default(3),
+  maxBudgetUsd: z.coerce.number().positive().max(10).default(5),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
 export const agentControlToolSchemas = {
   list_agent_sessions: listAgentSessionsSchema,
   get_agent_run: getAgentRunSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
+  send_agent_message: sendAgentMessageSchema,
+  delegate_agent: delegateAgentSchema,
 } as const;
 
 export type AgentControlToolName = keyof typeof agentControlToolSchemas;
@@ -118,6 +158,60 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       required: [],
     },
   },
+  {
+    name: "send_agent_message",
+    description: `Send a follow-up message to an existing canonical Omi agent session.
+
+Creates a new run in that session through the runtime kernel. Use this for multi-turn conversations with Omi-managed agents when you already have an omiSessionId.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string", description: "Canonical Omi session_id to continue." },
+        ownerId: { type: "string", description: "Owner id. Defaults to the local desktop user." },
+        prompt: { type: "string", description: "The follow-up message." },
+        mode: { type: "string", enum: ["ask", "act"], description: "Run mode. Default ask." },
+        adapterId: { type: "string", description: "Optional adapter override." },
+        cwd: { type: "string", description: "Optional working directory override." },
+        model: { type: "string", description: "Optional model override." },
+        requestId: { type: "string", description: "Optional caller-provided idempotent request id." },
+        clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
+        metadata: { type: "object", description: "Small structured metadata for this run." },
+      },
+      required: ["sessionId", "prompt"],
+    },
+  },
+  {
+    name: "delegate_agent",
+    description: `Create or continue a distinct delegated child agent session linked to a parent run.
+
+Supports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns child handles immediately; call and continue return a structured child result without the full transcript.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        mode: { type: "string", enum: ["call", "spawn", "continue"] },
+        parentRunId: { type: "string", description: "Canonical parent Omi run_id." },
+        objective: { type: "string", description: "Delegated objective for the child agent." },
+        context: { type: "string", description: "Optional concise context, not a full transcript." },
+        ownerId: { type: "string", description: "Optional owner guard for the parent run." },
+        childSessionId: { type: "string", description: "Required for continue mode; optional only to resume a known child." },
+        childSurfaceKind: { type: "string", description: "Child session surface kind. Default delegated_agent." },
+        childExternalRefKind: { type: "string", description: "Optional child external reference kind." },
+        childExternalRefId: { type: "string", description: "Optional child external reference id." },
+        childTitle: { type: "string", description: "Optional title for a newly created child session." },
+        adapterId: { type: "string", description: "Optional adapter override." },
+        defaultAdapterId: { type: "string", description: "Optional child session default adapter." },
+        cwd: { type: "string", description: "Optional working directory." },
+        model: { type: "string", description: "Optional model override." },
+        runMode: { type: "string", enum: ["ask", "act"], description: "Child run mode. Default ask." },
+        requestId: { type: "string", description: "Optional caller-provided idempotent request id." },
+        clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
+        maxDepth: { type: "number", description: "Maximum delegation depth for this call. Default 3, hard max 5." },
+        maxBudgetUsd: { type: "number", description: "Per-delegation budget guard. Default 5, hard max 10." },
+        metadata: { type: "object", description: "Small structured metadata for the child run." },
+      },
+      required: ["mode", "parentRunId", "objective"],
+    },
+  },
 ];
 
 export interface AgentControlToolContext {
@@ -164,6 +258,42 @@ export async function handleAgentControlToolCall(
         const artifacts = context.kernel.inspectArtifacts(parsed);
         return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
       }
+      case "send_agent_message": {
+        const parsed = agentControlToolSchemas.send_agent_message.parse(input);
+        const result = await context.kernel.sendAgentMessage({
+          ...parsed,
+          requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        });
+        return stringifyToolResult({
+          session: serializeSession(result.session),
+          run: serializeRun(result.run),
+          attempt: serializeAttempt(result.attempt),
+          adapterSessionId: result.adapterSessionId,
+          terminalStatus: result.terminalStatus,
+          text: result.text,
+        });
+      }
+      case "delegate_agent": {
+        const parsed = agentControlToolSchemas.delegate_agent.parse(input);
+        const result = await context.kernel.delegateAgent({
+          ...parsed,
+          requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        });
+        return stringifyToolResult({
+          delegation: serializeDelegation(result.delegation),
+          childSession: serializeSession(result.childSession),
+          childRun: serializeRun(result.childRun),
+          childAttempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
+          adapterSessionId: result.adapterSessionId ?? null,
+          terminalStatus: result.terminalStatus ?? null,
+          result: result.result
+            ? {
+                ...result.result,
+                artifacts: result.result.artifacts.map(serializeArtifact),
+              }
+            : null,
+        });
+      }
     }
   } catch (error) {
     return JSON.stringify({
@@ -201,6 +331,8 @@ function serializeRunDetails(details: {
   adapterBindings: AdapterBinding[];
   artifacts: AgentArtifact[];
   events: AgentEvent[];
+  parentDelegations: AgentDelegation[];
+  childDelegations: AgentDelegation[];
 }): Record<string, unknown> {
   return {
     session: serializeSession(details.session),
@@ -209,6 +341,8 @@ function serializeRunDetails(details: {
     adapterBindings: details.adapterBindings.map(serializeBinding),
     artifacts: details.artifacts.map(serializeArtifact),
     events: details.events.map(serializeEvent),
+    parentDelegations: details.parentDelegations.map(serializeDelegation),
+    childDelegations: details.childDelegations.map(serializeDelegation),
   };
 }
 
@@ -342,6 +476,23 @@ function serializeEvent(event: AgentEvent): Record<string, unknown> {
     visibility: event.visibility,
     payload: parseJsonObject(event.payloadJson),
     createdAtMs: event.createdAtMs,
+  };
+}
+
+function serializeDelegation(delegation: AgentDelegation): Record<string, unknown> {
+  return {
+    delegationId: delegation.delegationId,
+    parentSessionId: delegation.parentSessionId,
+    parentRunId: delegation.parentRunId,
+    childSessionId: delegation.childSessionId,
+    childRunId: delegation.childRunId,
+    mode: delegation.mode,
+    status: delegation.status,
+    objective: delegation.objective,
+    request: parseJsonObject(delegation.requestJson),
+    resultArtifactId: delegation.resultArtifactId,
+    createdAtMs: delegation.createdAtMs,
+    completedAtMs: delegation.completedAtMs,
   };
 }
 
