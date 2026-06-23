@@ -24,6 +24,25 @@ import {
 } from '../lib/focusEngine'
 import { getPreferences, onPreferencesChange, setPreferences } from '../lib/preferences'
 
+// ── Exe basename → display name ─────────────────────────────────────────────
+const EXE_DISPLAY: Record<string, string> = {
+  chrome: 'Chrome', msedge: 'Edge', firefox: 'Firefox', brave: 'Brave', opera: 'Opera',
+  code: 'VS Code', cursor: 'Cursor', 'sublime_text': 'Sublime Text', notepad: 'Notepad',
+  winword: 'Word', excel: 'Excel', powerpnt: 'PowerPoint', onenote: 'OneNote',
+  outlook: 'Outlook', teams: 'Teams', slack: 'Slack', zoom: 'Zoom',
+  devenv: 'Visual Studio', rider: 'Rider', idea64: 'IntelliJ IDEA', pycharm64: 'PyCharm',
+  webstorm64: 'WebStorm', clion64: 'CLion', datagrip64: 'DataGrip',
+  powershell: 'PowerShell', pwsh: 'PowerShell', cmd: 'Command Prompt',
+  wt: 'Windows Terminal', alacritty: 'Alacritty',
+  figma: 'Figma', blender: 'Blender', photoshop: 'Photoshop', lightroom: 'Lightroom',
+  spotify: 'Spotify', discord: 'Discord', steam: 'Steam',
+  explorer: 'Explorer', taskmgr: 'Task Manager',
+}
+
+function exeDisplayName(exe: string): string {
+  return EXE_DISPLAY[exe.toLowerCase()] ?? exe.charAt(0).toUpperCase() + exe.slice(1)
+}
+
 // ── App classification (for Rewind activity breakdown) ──────────────────────
 const FOCUS_PATTERNS = [
   'code', 'cursor', 'vim', 'neovim', 'nvim', 'emacs', 'sublime', 'notepad', 'word', 'excel',
@@ -448,6 +467,33 @@ export function Focus(): React.JSX.Element {
     saveSessions(next)
   }
 
+  // Live foreground window polling (Win32 via IPC)
+  const [liveApp, setLiveApp] = useState<string | null>(null)
+  useEffect(() => {
+    if (!window.omi.getForegroundNow) return
+    let alive = true
+    const poll = async (): Promise<void> => {
+      try {
+        const info = await window.omi.getForegroundNow!()
+        if (!alive) return
+        if (info?.exePath) {
+          const base = info.exePath.split(/[\\/]/).pop() ?? ''
+          setLiveApp(base.replace(/\.exe$/i, '') || null)
+        } else {
+          setLiveApp(null)
+        }
+      } catch {
+        // koffi unavailable or platform not Windows — silently no-op
+      }
+    }
+    void poll()
+    const id = setInterval(() => void poll(), 3000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [])
+
   // Derived stats from Rewind
   const focusMs = appStats.filter((a) => a.class === 'focus').reduce((s, a) => s + a.estimatedMs, 0)
   const distractMs = appStats
@@ -476,10 +522,27 @@ export function Focus(): React.JSX.Element {
       )}
       <div className="mb-6 flex items-center gap-3 px-1">
         <Target className="h-6 w-6 shrink-0 text-green-400" />
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-bold tracking-tight text-white">Focus</h1>
           <p className="text-sm text-white/50">Track your focus sessions and app activity</p>
         </div>
+        {liveApp && (
+          <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1">
+            <span
+              className={cn(
+                'h-1.5 w-1.5 rounded-full',
+                classifyApp(liveApp) === 'focus'
+                  ? 'bg-green-400'
+                  : classifyApp(liveApp) === 'distract'
+                    ? 'bg-orange-400'
+                    : 'bg-white/30'
+              )}
+            />
+            <span className="text-xs text-white/60">
+              Now: <span className="font-medium text-white/80">{exeDisplayName(liveApp)}</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Manual Timer ─────────────────────────────────────────────────────── */}
