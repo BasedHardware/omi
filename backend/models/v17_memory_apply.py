@@ -7,7 +7,12 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_contracts import DurableMemoryPatch, deterministic_contract_id
+from models.v17_memory_contracts import (
+    DurableMemoryPatch,
+    DurablePatchDecision,
+    LifecycleState,
+    deterministic_contract_id,
+)
 from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, logical_payload_digest
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
 from models.v17_product_memory import (
@@ -54,6 +59,7 @@ class MemoryControlState(BaseModel):
     projection_watermark_commit_id: Optional[str] = None
     projection_watermark_sequence: int = 0
     vector_watermark_commit_id: Optional[str] = None
+    last_promotion_run_at: Optional[datetime] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("uid", "head_commit_id")
@@ -69,6 +75,15 @@ class MemoryControlState(BaseModel):
         if value < 0:
             raise ValueError("control counters must be nonnegative")
         return value
+
+    @field_validator("last_promotion_run_at", "updated_at")
+    @classmethod
+    def coerce_timezone_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
     def next_commit_id(self, operation_id: str) -> str:
         return (
@@ -227,6 +242,59 @@ def _materialize_memory_item(
     )
 
 
+def _apply_update_memory_item(
+    *,
+    existing: V17MemoryItem,
+    patch: DurableMemoryPatch,
+    evidence: List[MemoryEvidence],
+    commit_id: str,
+    sequence: int,
+    promotion_audit: Optional[Dict[str, Any]] = None,
+) -> V17MemoryItem:
+    now = datetime.now(timezone.utc)
+    if patch.target_tier is not None:
+        tier = patch.target_tier if isinstance(patch.target_tier, MemoryTier) else MemoryTier(patch.target_tier)
+    else:
+        tier = existing.tier
+    content = patch.memory_text if patch.memory_text is not None else existing.content
+    status = existing.status
+    if patch.result_status in {LifecycleState.hidden, LifecycleState.rejected}:
+        status = MemoryItemStatus.hidden
+    elif patch.result_status == LifecycleState.superseded:
+        status = MemoryItemStatus.superseded
+    elif patch.result_status == LifecycleState.active:
+        status = MemoryItemStatus.active
+
+    if tier == MemoryTier.short_term:
+        expires_at = (
+            existing.expires_at if existing.expires_at is not None else default_short_term_expiry(existing.captured_at)
+        )
+    else:
+        expires_at = None
+    processing_state = ProcessingState.processed
+    assert_legal_state(
+        MemoryLayer(tier.value),
+        MemoryRecordStatus(status.value),
+        MemoryProcessingState(processing_state.value),
+    )
+    updates: Dict[str, Any] = {
+        "tier": tier,
+        "status": status,
+        "processing_state": processing_state,
+        "content": content,
+        "evidence": evidence or existing.evidence,
+        "updated_at": now,
+        "expires_at": expires_at,
+        "ledger_commit_id": commit_id,
+        "ledger_sequence": sequence,
+        "version": existing.version + 1,
+        "item_revision": existing.item_revision + 1,
+    }
+    if promotion_audit is not None:
+        updates["promotion"] = promotion_audit
+    return existing.model_copy(update=updates)
+
+
 def _stale_operation(operation: MemoryOperation) -> MemoryOperation:
     data = operation.model_dump()
     data.update({"status": MemoryOperationStatus.stale_generation, "updated_at": datetime.now(timezone.utc)})
@@ -275,6 +343,8 @@ def apply_long_term_patch_transaction(
     control head/generations, operation journal status, memory item mutation, and outbox append.
     """
     raw = dict(patch_payload)
+    existing_item_raw = raw.pop("existing_item", None)
+    promotion_audit = raw.pop("promotion_audit", None)
     evidence = raw.pop("evidence", None) or [
         MemoryEvidence(
             evidence_id=evidence_id,
@@ -347,14 +417,41 @@ def apply_long_term_patch_transaction(
             memory_items=[],
             outbox_events=outbox_events,
         )
-    memory_item = _materialize_memory_item(
-        uid=operation.uid,
-        patch=patch,
-        evidence=evidence,
-        commit_id=commit_id,
-        sequence=next_control.commit_sequence,
-        account_generation=control_state.account_generation,
-    )
+    if patch.decision == DurablePatchDecision.update:
+        if existing_item_raw is None:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="update patch requires authoritative existing_item",
+            )
+        existing_item = (
+            existing_item_raw if isinstance(existing_item_raw, V17MemoryItem) else V17MemoryItem(**existing_item_raw)
+        )
+        if not patch.target_memory_id or existing_item.memory_id != patch.target_memory_id:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="update patch target_memory_id mismatch",
+            )
+        memory_item = _apply_update_memory_item(
+            existing=existing_item,
+            patch=patch,
+            evidence=evidence,
+            commit_id=commit_id,
+            sequence=next_control.commit_sequence,
+            promotion_audit=promotion_audit,
+        )
+    else:
+        memory_item = _materialize_memory_item(
+            uid=operation.uid,
+            patch=patch,
+            evidence=evidence,
+            commit_id=commit_id,
+            sequence=next_control.commit_sequence,
+            account_generation=control_state.account_generation,
+        )
     outbox_events = [
         MemoryOutboxEvent(
             event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),
