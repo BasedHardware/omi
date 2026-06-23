@@ -221,6 +221,15 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: 'hidden',
+    // Win11 Snap Layouts: native caption buttons rendered by the OS so hovering
+    // the maximize button shows the snap-grid. Transparent background lets the
+    // DWM Acrylic material show behind the buttons; symbolColor matches our
+    // text-white/45 design token.
+    titleBarOverlay: {
+      color: 'rgba(0,0,0,0)',
+      symbolColor: 'rgba(255,255,255,0.45)',
+      height: 32
+    },
     transparent: false,
     backgroundColor: '#121212',
     icon,
@@ -271,13 +280,13 @@ function createWindow(): BrowserWindow {
         }
       }
     }
-    // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
-    // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
-    // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
-    // the renderer's Markdown scheme allow-list.
+    // Hand safe links to the OS. Block file://, UNC, and unknown protocols to
+    // prevent prompt-injection NTLM-hash-leak / protocol-handler abuse.
+    // obsidian: is allowed for the memory-export vault deep-link.
     try {
       const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+      const allowed = ['http:', 'https:', 'mailto:', 'obsidian:']
+      if (allowed.includes(scheme)) {
         shell.openExternal(url)
       } else {
         console.warn('[main] blocked external open of non-web URL scheme:', scheme)
@@ -518,7 +527,11 @@ app.whenReady().then(async () => {
   ipcMain.on('shell:openExternal', (_e, url: string) => {
     try {
       const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+      // Allow safe schemes: web links, mail, and the Obsidian vault deep-link
+      // used by the memory export panel. file://, UNC, and unknown protocols
+      // are blocked to prevent prompt-injection path abuse.
+      const allowed = ['http:', 'https:', 'mailto:', 'obsidian:']
+      if (allowed.includes(scheme)) {
         void shell.openExternal(url)
       }
     } catch {
@@ -561,17 +574,12 @@ app.whenReady().then(async () => {
   ipcMain.handle('window:setAlwaysOnTop', (_e, enabled: boolean) => {
     mainWindow.setAlwaysOnTop(enabled, 'floating')
   })
-  ipcMain.handle('win:isMaximized', () => mainWindow.isMaximized())
   ipcMain.on('win:minimize', () => mainWindow.minimize())
   ipcMain.on('win:maximize', () => {
     if (mainWindow.isMaximized()) mainWindow.unmaximize()
     else mainWindow.maximize()
   })
   ipcMain.on('win:close', () => mainWindow.close())
-  // Broadcast maximize state changes so the custom title bar can toggle its icon.
-  // Covers all paths: button click, Win+↑, drag to screen top, snap layouts.
-  mainWindow.on('maximize', () => mainWindow.webContents.send('win:maximizeChanged', true))
-  mainWindow.on('unmaximize', () => mainWindow.webContents.send('win:maximizeChanged', false))
 
   // System tray — mirrors macOS menu bar icon. Created immediately so the tray
   // appears as soon as the app launches. Left-click and "Open Omi" show the window.
