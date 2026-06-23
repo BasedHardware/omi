@@ -155,10 +155,14 @@ class TestHighConcurrency:
 
         cuda_errors = [r for r in all_results if r["status"] == 500 and b"CUDA" in r["body"]]
         assert len(cuda_errors) == 0, f"{len(cuda_errors)} CUDA errors in high-concurrency test"
-        assert total_500 == 0, f"{total_500}/{total} requests returned 500 under high concurrency"
+
+        failures = [r for r in all_results if r["status"] != 200 or r["error"] is not None]
+        if failures:
+            detail = "; ".join(f"req {r['request_id']}: status={r['status']} err={r['error']}" for r in failures[:5])
+            assert False, f"{len(failures)}/{total} requests failed under high concurrency: {detail}"
 
     def test_high_concurrency_all_responses_valid(self, wav_data):
-        """Under high load, every 200 response must contain valid JSON with segments."""
+        """Under high load, every request must succeed with valid JSON."""
         results = []
 
         with ThreadPoolExecutor(max_workers=HIGH_CONCURRENCY) as pool:
@@ -166,11 +170,14 @@ class TestHighConcurrency:
             for f in as_completed(futures):
                 results.append(f.result())
 
-        successes = [r for r in results if r["status"] == 200]
-        print(f"\n  Validating {len(successes)} successful responses...")
+        failures = [r for r in results if r["status"] != 200 or r["error"] is not None]
+        assert len(failures) == 0, f"{len(failures)}/{len(results)} requests failed: " + "; ".join(
+            f"req {r['request_id']}: status={r['status']} err={r['error']}" for r in failures[:3]
+        )
 
+        print(f"\n  Validating {len(results)} responses...")
         invalid = []
-        for r in successes:
+        for r in results:
             try:
                 data = json.loads(r["body"])
                 if "segments" not in data:
@@ -194,9 +201,11 @@ class TestHighConcurrency:
             for f in as_completed(futures):
                 results.append(f.result())
 
-        successes = [r for r in results if r["status"] == 200]
+        failures = [r for r in results if r["status"] != 200 or r["error"] is not None]
+        assert len(failures) == 0, f"{len(failures)} requests failed — cannot verify diarization"
+
         diarized = 0
-        for r in successes:
+        for r in results:
             try:
                 data = json.loads(r["body"])
                 for seg in data.get("segments", []):
@@ -206,8 +215,8 @@ class TestHighConcurrency:
             except json.JSONDecodeError:
                 pass
 
-        print(f"\n  Diarized: {diarized}/{len(successes)} under high concurrency")
-        assert diarized > 0, "No responses had speaker labels under high concurrency — " "embedding path not exercised"
+        print(f"\n  Diarized: {diarized}/{len(results)} under high concurrency")
+        assert diarized > 0, "No responses had speaker labels under high concurrency — embedding path not exercised"
 
     def test_sustained_ramp(self, wav_data):
         """Ramp from low to high concurrency and verify no degradation.
@@ -227,8 +236,10 @@ class TestHighConcurrency:
 
             elapsed = time.time() - t0
             successes = sum(1 for r in results if r["status"] == 200)
-            failures_500 = sum(1 for r in results if r["status"] == 500)
+            failures = [r for r in results if r["status"] != 200 or r["error"] is not None]
 
-            print(f"  level={level}: {successes}/{level} succeeded " f"in {elapsed:.1f}s, {failures_500} x 500")
+            print(f"  level={level}: {successes}/{level} succeeded in {elapsed:.1f}s, {len(failures)} failures")
 
-            assert failures_500 == 0, f"Ramp failed at concurrency={level}: {failures_500} x 500 errors"
+            if failures:
+                statuses = ", ".join(f"status={r['status']}" for r in failures[:3])
+                assert False, f"Ramp failed at concurrency={level}: {len(failures)} requests failed ({statuses})"
