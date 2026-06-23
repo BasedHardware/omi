@@ -25,10 +25,36 @@ from models.v17_product_memory import (
     V17MemoryItem,
     is_default_access_eligible,
 )
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
 
 logger = logging.getLogger(__name__)
+
+# Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``v17mem:`` or ``{uid}-{id}``).
+# V17 apply ``vector_sync`` outbox still emits ``v17mem:`` via ``deterministic_v17_memory_vector_id``
+# — carry-forward until WS-G migrates shared vector writes; purge paths here use neutral ids only.
+
+
+def neutral_vector_id_for_memory(memory_id: str) -> str:
+    """Return the canonical neutral vector id for a memory item (identity = ``memory_id``)."""
+    return memory_id
+
+
+def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str]) -> None:
+    """WS-J hook: KG nodes/edges track ``memory_ids`` but lack selective invalidation.
+
+    Full retract/reprocess defers to eventual ``rebuild_knowledge_graph`` until a targeted
+    purge lands. Account delete wipes KG subcollections via ``delete_user_data`` recursion.
+    """
+    if not memory_ids:
+        return
+    logger.info(
+        "kg_invalidation_deferred uid=%s retracted_memory_count=%d",
+        uid,
+        len(memory_ids),
+    )
+
 
 # L2 lifecycle hides processed short_term until disposition workers run (WS-B).
 # WS-I extractions land as processed short_term and must remain default-visible.
@@ -369,7 +395,7 @@ def _tombstone_memory_item(uid: str, item: V17MemoryItem, *, db_client, reason: 
 
     purge_candidates = [
         {
-            "vector_id": item.memory_id,
+            "vector_id": neutral_vector_id_for_memory(item.memory_id),
             "memory_id": item.memory_id,
             "reason": reason,
             "required_projection_commit_id": projection_commit_id,
@@ -396,6 +422,7 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
         retracted_ids.append(item.memory_id)
 
     bumped_control = _bump_source_generation(uid, db_client=client)
+    invalidate_kg_for_memory_retraction(uid, retracted_ids)
 
     return {
         "retracted_memory_ids": retracted_ids,
@@ -422,3 +449,43 @@ def delete_all_canonical_memories(uid: str, *, db_client=None) -> None:
     for item in items:
         if item.status == MemoryItemStatus.active:
             _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete_all")
+
+
+def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, Any]:
+    """Best-effort purge of canonical Pinecone vectors before Firestore account wipe.
+
+    Inert for legacy cohort users (immediate return). Canonical cohort is empty in production
+    until ``MEMORY_CANONICAL_USERS`` is populated.
+    """
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+        return {"purged": False, "reason": "not_canonical_cohort", "vector_ids": [], "memory_ids": []}
+
+    client = db_client if db_client is not None else default_db_client
+    items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    memory_ids = [item.memory_id for item in items]
+    vector_ids = [neutral_vector_id_for_memory(memory_id) for memory_id in memory_ids]
+
+    if vector_ids:
+        # lazy: avoid importing Pinecone client at module import
+        from database.vector_db import delete_pinecone_memory_vectors_by_id
+
+        delete_pinecone_memory_vectors_by_id(vector_ids)
+
+    trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=client)
+    account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
+    projection_commit_id = trusted.head_commit_id or "head0"
+    for item in items:
+        purge_candidates = [
+            {
+                "vector_id": neutral_vector_id_for_memory(item.memory_id),
+                "memory_id": item.memory_id,
+                "reason": "account_delete_canonical_purge",
+                "required_projection_commit_id": projection_commit_id,
+                "required_account_generation": account_generation,
+                "authoritative_account_generation": account_generation,
+            }
+        ]
+        for record in build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
+            client.document(record["outbox_path"]).set(record)
+
+    return {"purged": True, "reason": "canonical_cohort", "vector_ids": vector_ids, "memory_ids": memory_ids}
