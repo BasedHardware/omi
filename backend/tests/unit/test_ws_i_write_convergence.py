@@ -107,13 +107,13 @@ def _install_heavy_import_stubs():
     pinecone_mod.Pinecone = MagicMock()
     sys.modules["pinecone"] = pinecone_mod
 
-    auth_mod = types.ModuleType("database.auth")
+    auth_mod = _AutoMockModule("database.auth")
     auth_mod.get_user_name = lambda uid: "Test User"
     auth_mod.get_current_user_uid = MagicMock()
     auth_mod.with_rate_limit = lambda fn, *args, **kwargs: fn
     sys.modules["database.auth"] = auth_mod
 
-    users_mod = types.ModuleType("database.users")
+    users_mod = _AutoMockModule("database.users")
     users_mod.get_user_language_preference = lambda uid: "en"
     sys.modules["database.users"] = users_mod
 
@@ -122,7 +122,7 @@ def _install_heavy_import_stubs():
     subscription_mod.is_trial_paywalled = lambda uid: False
     sys.modules["utils.subscription"] = subscription_mod
 
-    vector_db_mod = types.ModuleType("database.vector_db")
+    vector_db_mod = _AutoMockModule("database.vector_db")
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
     vector_db_mod.delete_memory_vector = MagicMock()
     vector_db_mod.upsert_memory_vector = MagicMock()
@@ -137,7 +137,7 @@ def _install_heavy_import_stubs():
     vector_db_mod.query_vectors = MagicMock(return_value=[])
     sys.modules["database.vector_db"] = vector_db_mod
 
-    memories_mod = types.ModuleType("database.memories")
+    memories_mod = _AutoMockModule("database.memories")
     memories_mod.save_memories = MagicMock()
     memories_mod.delete_memories_for_conversation = MagicMock(return_value={"vector_delete_ids": []})
     memories_mod.get_memories = MagicMock(return_value=[])
