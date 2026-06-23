@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from database._client import db
 from database.v17_collections import V17Collections
 from models.memory_evidence import MemoryEvidence
+from models.v17_memory_contracts import DurablePatchDecision
 from models.v17_memory_apply import (
     ApplyResult,
     ApplyStatus,
@@ -141,6 +142,14 @@ def _apply_long_term_patch_firestore_transaction(
 
     authoritative_payload = dict(patch_payload)
     authoritative_payload["evidence"] = evidence_items
+    existing_item = _read_authoritative_target_item(
+        db_client=db_client,
+        transaction=transaction,
+        collections=collections,
+        operation=operation,
+    )
+    if existing_item is not None:
+        authoritative_payload["existing_item"] = existing_item.model_dump(mode="python")
 
     result = apply_long_term_patch_transaction(
         control_state=control_state,
@@ -175,6 +184,25 @@ def _read_authoritative_evidence(
         )
         evidence_items.append(evidence)
     return evidence_items
+
+
+def _read_authoritative_target_item(
+    *,
+    db_client,
+    transaction,
+    collections: V17Collections,
+    operation: MemoryOperation,
+) -> Optional[V17MemoryItem]:
+    if operation.logical_payload.decision != DurablePatchDecision.update.value:
+        return None
+    target_id = operation.logical_payload.target_memory_id or operation.target_memory_id
+    if not target_id:
+        return None
+    target_ref = db_client.document(f"{collections.memory_items}/{target_id}")
+    snapshot = target_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    return V17MemoryItem(**(snapshot.to_dict() or {}))
 
 
 def _validate_authoritative_targets(
