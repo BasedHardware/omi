@@ -315,3 +315,27 @@ Action items link via **`conversation_id`** on each `action_items` row (`_save_a
 WS-I (write convergence) may relocate *where* memory rows are written (`MemoryService`), but must
 preserve: separate stores, separate fan-out, extracted-fact payloads (not session records), and
 provenance via `conversation_id` / `evidence[].source_id`.
+
+---
+
+## Ratified rollout decisions (§10) — locked 2026-06-23
+
+Authoritative record of the §10 blocking decisions. Ratified by product owner before WS-I start.
+
+| # | Decision | **Ratified choice** | Notes / implications |
+|---|----------|---------------------|----------------------|
+| Q1 | Write convergence for `process_conversation` | **Hard cutover** | Canonical-cohort extraction writes go to the canonical store **only** — no legacy write/fallback for canonical users. (Override of the dual-write default.) |
+| Q2 | Interim split-brain tolerance | **None — disallowed** | A canonical-cohort user must read AND write the canonical store. Consequence: WS-I must also route that cohort's **reads** to canonical (cannot leave reads on legacy), else the user loses freshly written memories. |
+| Q3 | Promotion trigger Short→Long | **Batch-or-daily** | Short-term promotes to Long-term in batches once enough accumulate to process a full batch, OR once per day, whichever comes first. (Implemented in WS-B, not WS-I.) |
+| Q4 | Backfill dedup (both stores) | **Hash-based idempotency key** | Deterministic id derived from source so re-runs never duplicate. (WS-C.) |
+| Q5 | Vector ID strategy | **Neutral prefix** | Drop `v17mem:`; canonical items use neutral vector IDs. (WS-J/WS-G.) |
+| Q6 | API field name for layer axis | **`layer`** | Desktop aliases `tier` during WS-G. |
+| Q7 | Reprocess semantics | **Full retract** | Reprocess/sync-merge retracts conversation-sourced items across ALL stores + vectors before re-extract. |
+| Q8 | Conversation-delete cascade | **Server-default `cascade=true` + fix clients** | Belt-and-suspenders; desktop currently omits the flag. (WS-J/WS-K.) |
+
+**WS-I scope consequence of Q1+Q2:** WS-I is NOT a dual-write add-on. For the canonical cohort it must
+make the `CanonicalMemoryBackend` real for **both write and read**, route `process_conversation`
+extraction to canonical-only, and route the cohort's read path (at least `/v3` GET) to canonical — so a
+canonical user is fully self-consistent. The canonical cohort stays **empty in production**
+(`MEMORY_CANONICAL_USERS` unset); only explicitly-added test users are affected. Legacy-cohort behavior
+must remain byte-unchanged.
