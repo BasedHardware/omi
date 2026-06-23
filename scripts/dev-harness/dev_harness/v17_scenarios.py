@@ -32,6 +32,9 @@ WATERMARK = "NOT_ACTIVATION_EVIDENCE"
 DEFAULT_LOCAL_USER_ID = "local_default_user"
 ALICE_USER_ID = "alice"
 BOB_USER_ID = "bob"
+# Short-term seeds must stay visible across long local-dev sessions.
+SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
+AUTH_UID_MANIFEST = "canonical-auth-uids.json"
 LOCAL_DEV_PROJECT_ID = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
 LOCAL_DEV_DATABASE_ID = safety.DEFAULT_FIRESTORE_DATABASE_ID
 GLOBAL_READ_GATE_PATH = "memory_control/v17_global_read_gate"
@@ -214,9 +217,39 @@ def _clock() -> DeterministicContext:
         ids={
             "alice_short_active": "mem_alice_short_active_030",
             "alice_short_stale": "mem_alice_short_stale_030",
+            "alice_short_demo": "mem_alice_short_demo_030",
+            "alice_short_dentist": "mem_alice_short_dentist_030",
+            "alice_short_grocery": "mem_alice_short_grocery_030",
+            "alice_short_call_mom": "mem_alice_short_call_mom_030",
+            "alice_short_pr_review": "mem_alice_short_pr_review_030",
+            "alice_short_yoga": "mem_alice_short_yoga_030",
+            "alice_short_presentation": "mem_alice_short_presentation_030",
+            "alice_short_flights": "mem_alice_short_flights_030",
             "alice_long": "mem_alice_long_030",
+            "alice_long_birthplace": "mem_alice_long_birthplace_030",
+            "alice_long_partner": "mem_alice_long_partner_030",
+            "alice_long_work": "mem_alice_long_work_030",
+            "alice_long_tool_warp": "mem_alice_long_tool_warp_030",
+            "alice_long_tool_obsidian": "mem_alice_long_tool_obsidian_030",
+            "alice_long_pref_coffee": "mem_alice_long_pref_coffee_030",
+            "alice_long_pref_sf": "mem_alice_long_pref_sf_030",
+            "alice_long_family_sister": "mem_alice_long_family_sister_030",
+            "alice_long_commit_rust": "mem_alice_long_commit_rust_030",
+            "alice_long_health_running": "mem_alice_long_health_running_030",
+            "alice_long_lang_spanish": "mem_alice_long_lang_spanish_030",
+            "alice_long_pet": "mem_alice_long_pet_030",
+            "alice_long_goal_marathon": "mem_alice_long_goal_marathon_030",
+            "alice_long_edu": "mem_alice_long_edu_030",
             "alice_archive": "mem_alice_archive_030",
             "bob_long": "mem_bob_long_030",
+            "kg_alice": "kg_alice_030",
+            "kg_jordan": "kg_jordan_030",
+            "kg_mia": "kg_mia_030",
+            "kg_omi": "kg_omi_030",
+            "kg_sf": "kg_sf_030",
+            "kg_portland": "kg_portland_030",
+            "kg_warp": "kg_warp_030",
+            "kg_pixel": "kg_pixel_030",
             "projection_commit": "projection_commit_local_030",
             "source_commit": "source_commit_local_030",
         },
@@ -328,7 +361,15 @@ def _memory_doc(uid: str, memory_id: str, tier: str, content: str, captured: str
     return FirestoreSeed(path=f"users/{uid}/memory_items/{memory_id}", protected=True, data=data)
 
 
-def _projection_item(uid: str, memory_id: str, content: str, created: str, *, archive: bool = False) -> FirestoreSeed:
+def _projection_item(
+    uid: str,
+    memory_id: str,
+    content: str,
+    created: str,
+    *,
+    archive: bool = False,
+    category: str = "v17-local-synthetic",
+) -> FirestoreSeed:
     return FirestoreSeed(
         path=f"users/{uid}/v3_compatibility_projection_items/{memory_id}",
         protected=True,
@@ -336,7 +377,7 @@ def _projection_item(uid: str, memory_id: str, content: str, created: str, *, ar
             "id": memory_id,
             "uid": uid,
             "content": content,
-            "category": "v17-local-synthetic",
+            "category": category,
             "visibility": "private",
             "created_at": created,
             "updated_at": created,
@@ -351,29 +392,158 @@ def _projection_item(uid: str, memory_id: str, content: str, created: str, *, ar
     )
 
 
+def _kg_node(uid: str, node_id: str, label: str, node_type: str, *, memory_ids: Sequence[str] = ()) -> FirestoreSeed:
+    label_lower = label.lower()
+    return FirestoreSeed(
+        path=f"users/{uid}/knowledge_nodes/{node_id}",
+        protected=True,
+        data={
+            "id": node_id,
+            "label": label,
+            "node_type": node_type,
+            "aliases": [],
+            "memory_ids": list(memory_ids),
+            "created_at": "2026-01-10T09:00:00Z",
+            "updated_at": "2026-01-10T09:00:00Z",
+            "label_lower": label_lower,
+            "aliases_lower": [],
+        },
+    )
+
+
+def _kg_edge(uid: str, edge_id: str, source_id: str, target_id: str, label: str, *, memory_ids: Sequence[str] = ()) -> FirestoreSeed:
+    return FirestoreSeed(
+        path=f"users/{uid}/knowledge_edges/{edge_id}",
+        protected=True,
+        data={
+            "id": edge_id,
+            "source_id": source_id,
+            "target_id": target_id,
+            "label": label,
+            "memory_ids": list(memory_ids),
+            "created_at": "2026-01-10T09:00:00Z",
+        },
+    )
+
+
+def _alice_default_memory_ids(ctx: DeterministicContext) -> tuple[str, ...]:
+    short_keys = (
+        "alice_short_active",
+        "alice_short_demo",
+        "alice_short_dentist",
+        "alice_short_grocery",
+        "alice_short_call_mom",
+        "alice_short_pr_review",
+        "alice_short_yoga",
+        "alice_short_presentation",
+        "alice_short_flights",
+    )
+    long_keys = (
+        "alice_long",
+        "alice_long_birthplace",
+        "alice_long_partner",
+        "alice_long_work",
+        "alice_long_tool_warp",
+        "alice_long_tool_obsidian",
+        "alice_long_pref_coffee",
+        "alice_long_pref_sf",
+        "alice_long_family_sister",
+        "alice_long_commit_rust",
+        "alice_long_health_running",
+        "alice_long_lang_spanish",
+        "alice_long_pet",
+        "alice_long_goal_marathon",
+        "alice_long_edu",
+    )
+    return tuple(ctx.ids[key] for key in (*short_keys, *long_keys))
+
+
+def _alice_knowledge_graph_seeds(uid: str, ctx: DeterministicContext) -> list[FirestoreSeed]:
+    ids = ctx.ids
+    long_work = ids["alice_long_work"]
+    long_partner = ids["alice_long_partner"]
+    long_sf = ids["alice_long_pref_sf"]
+    long_warp = ids["alice_long_tool_warp"]
+    long_pet = ids["alice_long_pet"]
+    long_sister = ids["alice_long_family_sister"]
+    long_birthplace = ids["alice_long_birthplace"]
+    return [
+        _kg_node(uid, ids["kg_alice"], "Alice", "person"),
+        _kg_node(uid, ids["kg_jordan"], "Jordan Chen", "person", memory_ids=(long_partner,)),
+        _kg_node(uid, ids["kg_mia"], "Mia", "person", memory_ids=(long_sister,)),
+        _kg_node(uid, ids["kg_omi"], "Omi", "organization", memory_ids=(long_work,)),
+        _kg_node(uid, ids["kg_sf"], "San Francisco", "place", memory_ids=(long_sf,)),
+        _kg_node(uid, ids["kg_portland"], "Portland", "place", memory_ids=(long_birthplace,)),
+        _kg_node(uid, ids["kg_warp"], "Warp", "thing", memory_ids=(long_warp,)),
+        _kg_node(uid, ids["kg_pixel"], "Pixel", "thing", memory_ids=(long_pet,)),
+        _kg_edge(uid, "kg_edge_alice_lives_sf_030", ids["kg_alice"], ids["kg_sf"], "lives_in", memory_ids=(long_sf,)),
+        _kg_edge(uid, "kg_edge_alice_works_omi_030", ids["kg_alice"], ids["kg_omi"], "works_at", memory_ids=(long_work,)),
+        _kg_edge(uid, "kg_edge_alice_partner_jordan_030", ids["kg_alice"], ids["kg_jordan"], "partner", memory_ids=(long_partner,)),
+        _kg_edge(uid, "kg_edge_alice_sister_mia_030", ids["kg_alice"], ids["kg_mia"], "sibling", memory_ids=(long_sister,)),
+        _kg_edge(uid, "kg_edge_alice_uses_warp_030", ids["kg_alice"], ids["kg_warp"], "uses", memory_ids=(long_warp,)),
+        _kg_edge(uid, "kg_edge_alice_pet_pixel_030", ids["kg_alice"], ids["kg_pixel"], "owns", memory_ids=(long_pet,)),
+        _kg_edge(uid, "kg_edge_alice_from_portland_030", ids["kg_alice"], ids["kg_portland"], "grew_up_in", memory_ids=(long_birthplace,)),
+    ]
+
+
 def _base_firestore(ctx: DeterministicContext, *, global_enabled: bool = True, kill: bool = False) -> list[FirestoreSeed]:
+    uid = ALICE_USER_ID
     alice_short = "Alice has a synthetic local standup at 09:00 in the lab room."
     alice_long = "Alice prefers concise memory summaries for local QA."
     alice_archive = "Alice archived an old synthetic project codename: Blue Acorn."
     alice_stale = "Alice stale short memory that should not appear after expiry."
     bob_long = "Bob keeps a separate synthetic notebook for isolation checks."
-    return [
+    short_memories: tuple[tuple[str, str, str], ...] = (
+        ("alice_short_active", alice_short, "2026-01-15T11:30:00Z"),
+        ("alice_short_demo", "Alice is presenting the memory platform demo to the team on Friday at 14:00.", "2026-06-18T16:00:00Z"),
+        ("alice_short_dentist", "Alice has a dentist appointment on Thursday at 14:30 downtown.", "2026-06-19T09:15:00Z"),
+        ("alice_short_grocery", "Alice needs to pick up oat milk and espresso beans after work.", "2026-06-20T18:45:00Z"),
+        ("alice_short_call_mom", "Alice promised to call her mom this weekend about summer travel plans.", "2026-06-21T10:00:00Z"),
+        ("alice_short_pr_review", "Alice needs to review PR #482 for the canonical memory adapter before end of day.", "2026-06-22T11:00:00Z"),
+        ("alice_short_yoga", "Alice has yoga class Wednesday at 07:00 at Mission Yoga Studio.", "2026-06-16T06:30:00Z"),
+        ("alice_short_presentation", "Alice is preparing slides for next week's product review on Brain Map UX.", "2026-06-17T13:20:00Z"),
+        ("alice_short_flights", "Alice should check her SFO to Seattle flight status before Friday's trip to visit Mia.", "2026-06-23T08:00:00Z"),
+    )
+    long_memories: tuple[tuple[str, str, str, str], ...] = (
+        ("alice_long", alice_long, "2026-01-10T09:00:00Z", "preferences"),
+        ("alice_long_birthplace", "Alice grew up in Portland, Oregon and visits her parents there each winter.", "2024-11-03T10:00:00Z", "biographical"),
+        ("alice_long_partner", "Alice's partner is Jordan Chen; they have been together since 2019.", "2025-02-14T12:00:00Z", "relationships"),
+        ("alice_long_work", "Alice is a software engineer at Omi working on the memory platform and desktop sync.", "2025-08-01T09:00:00Z", "work"),
+        ("alice_long_tool_warp", "Alice uses Warp as her primary terminal on macOS for local development.", "2025-09-12T15:30:00Z", "tools"),
+        ("alice_long_tool_obsidian", "Alice keeps personal research notes in Obsidian with a daily journaling workflow.", "2025-10-02T08:45:00Z", "tools"),
+        ("alice_long_pref_coffee", "Alice prefers oat milk lattes with no sugar, usually from local cafes in the Mission.", "2025-05-20T07:30:00Z", "preferences"),
+        ("alice_long_pref_sf", "Alice lives in San Francisco's Mission District and bikes to work when weather allows.", "2025-01-08T18:00:00Z", "location"),
+        ("alice_long_family_sister", "Alice's younger sister Mia lives in Seattle and works in UX research.", "2025-03-22T19:00:00Z", "relationships"),
+        ("alice_long_commit_rust", "Alice is learning Rust to contribute to Omi's desktop backend components.", "2026-02-01T10:00:00Z", "commitments"),
+        ("alice_long_health_running", "Alice runs a 5K three times per week, usually along the Embarcadero.", "2025-07-15T06:00:00Z", "health"),
+        ("alice_long_lang_spanish", "Alice speaks conversational Spanish and is studying for professional fluency.", "2025-11-11T20:00:00Z", "skills"),
+        ("alice_long_pet", "Alice has a tabby cat named Pixel who often sits on her desk during standups.", "2025-04-18T21:00:00Z", "relationships"),
+        ("alice_long_goal_marathon", "Alice is training for the Oakland Marathon in fall 2026.", "2026-01-05T07:00:00Z", "commitments"),
+        ("alice_long_edu", "Alice earned a BS in Computer Science from the University of Washington in 2018.", "2024-09-01T12:00:00Z", "biographical"),
+    )
+    seeds: list[FirestoreSeed] = [
         _global_gate(enabled=global_enabled, kill=kill),
         _write_convergence(),
         _control(ALICE_USER_ID, read=True, default_grant=True, archive=True),
         _control(BOB_USER_ID, read=True, default_grant=True, archive=False),
         _projection_state(ALICE_USER_ID, ctx),
         _projection_state(BOB_USER_ID, ctx),
-        _memory_doc(ALICE_USER_ID, ctx.ids["alice_short_active"], "short_term", alice_short, "2026-01-15T11:30:00Z", "2026-01-15T13:00:00Z"),
         _memory_doc(ALICE_USER_ID, ctx.ids["alice_short_stale"], "short_term", alice_stale, "2026-01-01T11:30:00Z", "2026-01-02T11:30:00Z"),
-        _memory_doc(ALICE_USER_ID, ctx.ids["alice_long"], "long_term", alice_long, "2026-01-10T09:00:00Z"),
         _memory_doc(ALICE_USER_ID, ctx.ids["alice_archive"], "archive", alice_archive, "2025-12-01T08:00:00Z"),
         _memory_doc(BOB_USER_ID, ctx.ids["bob_long"], "long_term", bob_long, "2026-01-11T09:00:00Z"),
-        _projection_item(ALICE_USER_ID, ctx.ids["alice_short_active"], alice_short, "2026-01-15T11:30:00Z"),
-        _projection_item(ALICE_USER_ID, ctx.ids["alice_long"], alice_long, "2026-01-10T09:00:00Z"),
-        _projection_item(ALICE_USER_ID, ctx.ids["alice_archive"], alice_archive, "2025-12-01T08:00:00Z", archive=True),
-        _projection_item(BOB_USER_ID, ctx.ids["bob_long"], bob_long, "2026-01-11T09:00:00Z"),
+        _projection_item(ALICE_USER_ID, ctx.ids["alice_archive"], alice_archive, "2025-12-01T08:00:00Z", archive=True, category="archive"),
+        _projection_item(BOB_USER_ID, ctx.ids["bob_long"], bob_long, "2026-01-11T09:00:00Z", category="work"),
     ]
+    for key, content, captured in short_memories:
+        memory_id = ctx.ids[key]
+        seeds.append(_memory_doc(uid, memory_id, "short_term", content, captured, SHORT_TERM_EXPIRES_AT))
+        seeds.append(_projection_item(uid, memory_id, content, captured, category="commitments"))
+    for key, content, captured, category in long_memories:
+        memory_id = ctx.ids[key]
+        seeds.append(_memory_doc(uid, memory_id, "long_term", content, captured))
+        seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
+    seeds.extend(_alice_knowledge_graph_seeds(uid, ctx))
+    return seeds
 
 
 def _local_flags(ctx: DeterministicContext, *, enabled: bool = True) -> Mapping[str, object]:
@@ -396,6 +566,8 @@ def _expected_protected() -> tuple[ExpectedProtectedCollectionChange, ...]:
         ExpectedProtectedCollectionChange("memory_control", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/memory_items", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/v3_compatibility_projection_items", ()),
+        ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_nodes", ()),
+        ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_edges", ()),
         ExpectedProtectedCollectionChange(f"users/{BOB_USER_ID}/memory_items", ()),
     )
 
@@ -432,7 +604,7 @@ def _scenario(
 
 def _build_scenarios() -> dict[str, V17Scenario]:
     ctx = _clock()
-    default_reads = (ctx.ids["alice_short_active"], ctx.ids["alice_long"])
+    default_reads = _alice_default_memory_ids(ctx)
     base_reads = (
         GLOBAL_READ_GATE_PATH,
         f"users/{ALICE_USER_ID}/memory_control/state",
@@ -582,6 +754,111 @@ def _metadata_operation(scenario: V17Scenario) -> SeedOperation:
             "report_metadata": _jsonable(scenario.report_metadata),
         },
     )
+
+
+def _lookup_auth_uid(cfg: config.HarnessConfig, email: str, password: str) -> str:
+    url = f"http://{cfg.auth_host}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=local-dev-harness"
+    status, body = _request_json(
+        "POST",
+        url,
+        {"email": email, "password": password, "returnSecureToken": True},
+    )
+    if status >= 400:
+        raise RuntimeError(f"Auth uid lookup failed for {email}: HTTP {status} {body[:200]}")
+    payload = json.loads(body)
+    local_id = payload.get("localId")
+    if not isinstance(local_id, str) or not local_id.strip():
+        raise RuntimeError(f"Auth uid lookup for {email} returned no localId")
+    return local_id
+
+
+def _resolve_auth_uid_map(cfg: config.HarnessConfig, users: Sequence[ScenarioUser]) -> dict[str, str]:
+    return {user.uid: _lookup_auth_uid(cfg, user.email, user.password) for user in users}
+
+
+def _remap_firestore_seed(seed: FirestoreSeed, uid_map: Mapping[str, str]) -> FirestoreSeed:
+    parts = seed.path.split("/")
+    if len(parts) >= 2 and parts[0] == "users" and parts[1] in uid_map:
+        parts[1] = uid_map[parts[1]]
+        data = dict(seed.data)
+        uid_value = data.get("uid")
+        if isinstance(uid_value, str) and uid_value in uid_map:
+            data["uid"] = uid_map[uid_value]
+        return FirestoreSeed(path="/".join(parts), protected=seed.protected, data=data)
+    return seed
+
+
+def _remap_auth_operation(op: SeedOperation, uid_map: Mapping[str, str]) -> SeedOperation:
+    if op.kind != "auth":
+        return op
+    resolved = uid_map.get(op.target, op.target)
+    return SeedOperation(op.kind, op.action, resolved, op.payload, op.protected)
+
+
+def _remap_seed_operation(op: SeedOperation, uid_map: Mapping[str, str]) -> SeedOperation:
+    if op.kind != "firestore" or not isinstance(op.payload, Mapping):
+        return op
+    remapped = _remap_firestore_seed(FirestoreSeed(path=op.target, data=op.payload, protected=op.protected), uid_map)
+    return SeedOperation(op.kind, op.action, remapped.path, remapped.data, remapped.protected)
+
+
+def _auth_uid_manifest_path(cfg: config.HarnessConfig) -> Path:
+    return cfg.layout.state_root / "manifests" / AUTH_UID_MANIFEST
+
+
+def write_auth_uid_manifest(cfg: config.HarnessConfig, uid_map: Mapping[str, str]) -> Path:
+    path = _auth_uid_manifest_path(cfg)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "schema_version": 1,
+        "generated_at": _now(),
+        "users": dict(uid_map),
+        "canonical_users": [uid_map[ALICE_USER_ID], uid_map[BOB_USER_ID]],
+        "selected_user": uid_map[ALICE_USER_ID],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+def read_auth_uid_manifest(cfg: config.HarnessConfig) -> dict[str, object]:
+    path = _auth_uid_manifest_path(cfg)
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def canonical_users_from_manifest(cfg: config.HarnessConfig) -> str | None:
+    payload = read_auth_uid_manifest(cfg)
+    canonical = payload.get("canonical_users")
+    if isinstance(canonical, list):
+        values = [str(item).strip() for item in canonical if str(item).strip()]
+        if values:
+            return ",".join(values)
+    users = payload.get("users")
+    if isinstance(users, dict):
+        alice_uid = users.get(ALICE_USER_ID)
+        if isinstance(alice_uid, str) and alice_uid.strip():
+            return alice_uid.strip()
+    selected = payload.get("selected_user")
+    if isinstance(selected, str) and selected.strip():
+        return selected.strip()
+    return None
+
+
+def _apply_seed_operations(cfg: config.HarnessConfig, scenario: V17Scenario, ops: tuple[SeedOperation, ...]) -> dict[str, str] | None:
+    auth_ops = [op for op in ops if op.kind == "auth"]
+    other_ops = [op for op in ops if op.kind != "auth"]
+    for op in auth_ops:
+        _apply_operation(cfg, op)
+    uid_map = _resolve_auth_uid_map(cfg, scenario.users)
+    write_auth_uid_manifest(cfg, uid_map)
+    for op in other_ops:
+        _apply_operation(cfg, _remap_seed_operation(op, uid_map))
+    return uid_map
 
 
 def build_seed_operations(scenario: V17Scenario) -> tuple[SeedOperation, ...]:
@@ -797,8 +1074,7 @@ def seed_scenario(scenario_id: str, cfg: config.HarnessConfig, *, dry_run: bool 
     applied = False
     if not effective_dry_run:
         safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
-        for op in ops:
-            _apply_operation(cfg, op)
+        _apply_seed_operations(cfg, scenario, ops)
         applied = True
     else:
         # Still materialize local metadata/file intent under sentinel-owned state
@@ -820,8 +1096,16 @@ def reset_scenario(scenario_id: str, cfg: config.HarnessConfig, *, dry_run: bool
     applied = False
     if not effective_dry_run:
         safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
+        uid_map = read_auth_uid_manifest(cfg).get("users")
+        if not isinstance(uid_map, dict):
+            uid_map = _resolve_auth_uid_map(cfg, scenario.users)
+        typed_uid_map = {str(k): str(v) for k, v in uid_map.items()}
         for op in ops:
-            _apply_operation(cfg, op)
+            remapped = _remap_auth_operation(op, typed_uid_map) if op.kind == "auth" else _remap_seed_operation(op, typed_uid_map)
+            _apply_operation(cfg, remapped)
+        manifest_path = _auth_uid_manifest_path(cfg)
+        if manifest_path.exists():
+            manifest_path.unlink()
         applied = True
     else:
         if cfg.layout.sentinel_path.exists():
