@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -76,6 +77,42 @@ def apply_long_term_patch_firestore(
         operation_id,
         patch_payload,
     )
+
+
+def atomic_bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
+    """Atomically advance ``source_generation`` on memory_control/state (Q7 reprocess)."""
+    transaction = db_client.transaction()
+    return _atomic_bump_source_generation_transaction(transaction, db_client, uid)
+
+
+@transactional
+def _atomic_bump_source_generation_transaction(
+    transaction,
+    db_client,
+    uid: str,
+) -> MemoryControlState:
+    now = datetime.now(timezone.utc)
+    collections = V17Collections(uid=uid)
+    control_ref = db_client.document(collections.memory_control_state)
+    snapshot = control_ref.get(transaction=transaction)
+    if not getattr(snapshot, "exists", False):
+        control = MemoryControlState(
+            uid=uid,
+            head_commit_id="head0",
+            account_generation=1,
+            source_generation=1,
+            updated_at=now,
+        )
+    else:
+        control = MemoryControlState(**(snapshot.to_dict() or {}))
+    bumped = control.model_copy(
+        update={
+            "source_generation": control.source_generation + 1,
+            "updated_at": now,
+        }
+    )
+    transaction.set(control_ref, _firestore_data(bumped))
+    return bumped
 
 
 @transactional
