@@ -744,7 +744,11 @@ def _store_deferred_conversation(uid: str, conversation):
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     conversation.deferred = True
-    conversation.status = ConversationStatus.completed
+    # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
+    # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
+    # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
+    # back to `completed`.
+    conversation.status = ConversationStatus.processing
     conversations_db.upsert_conversation(uid, conversation.dict())
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
