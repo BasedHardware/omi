@@ -2,22 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
 import { getStripe } from '@/lib/stripe';
+import { getPayload, setPayload } from '@/lib/payload-cache';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+function cacheKey(): string {
+  return `app-subscriptions:v1`;
+}
 
-  const stripe = getStripe();
-  try {
+export { cacheKey as appSubscriptionsCacheKey };
+
+// Thrown when OMI price IDs are not configured — GET maps it to a 500.
+class PriceIdsMissingError extends Error {}
+
+export async function computeAppSubscriptions() {
+    const stripe = getStripe();
     const omiMonthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const omiAnnualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
     if (!omiMonthlyPriceId || !omiAnnualPriceId) {
-      return NextResponse.json(
-        { error: 'OMI price IDs not configured' },
-        { status: 500 }
-      );
+      throw new PriceIdsMissingError('OMI price IDs not configured');
     }
 
     // Fetch ALL active subscriptions with pagination
@@ -73,13 +77,33 @@ export async function GET(request: NextRequest) {
       });
     });
 
-    return NextResponse.json({
+    return {
       totalAppSubscriptions: appSubscriptions.length,
       uniqueCustomers: Object.keys(customerSubscriptions).length,
       priceBreakdown,
       uniquePriceIds: Object.keys(priceBreakdown).length,
-    });
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const key = cacheKey();
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeAppSubscriptions>>>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    const payload = await computeAppSubscriptions();
+    await setPayload(key, payload);
+    return NextResponse.json(payload);
   } catch (error) {
+    if (error instanceof PriceIdsMissingError) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
     console.error('Error fetching app subscription stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch app subscription data' },
