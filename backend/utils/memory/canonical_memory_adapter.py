@@ -9,10 +9,17 @@ from typing import Any, Dict, List, Optional
 from database._client import db as default_db_client
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.v17_collections import V17Collections
-from database.v17_memory_apply_store import apply_long_term_patch_firestore
+from database.v17_memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
 from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
-from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
+from models.memory_evidence import (
+    ArtifactPreservationState,
+    MemoryEvidence,
+    ProvenanceVisibility,
+    RedactionStatus,
+    SourceState,
+    SourceStateReason,
+)
 from models.memories import MemoryDB, MemoryCategory
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
@@ -207,30 +214,47 @@ def _legacy_evidence_to_v17(evidence_data: Dict[str, Any], *, conversation_id: O
     )
 
 
+_PRESERVED_EVIDENCE_SECURITY_FIELDS = (
+    "redaction_status",
+    "provenance_visibility",
+    "encryption_or_redaction_status",
+)
+
+
+def _preserved_evidence_security_fields(existing_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Carry forward security/redaction fields when reactivating evidence on reprocess."""
+    preserved: Dict[str, Any] = {}
+    for field in _PRESERVED_EVIDENCE_SECURITY_FIELDS:
+        value = existing_data.get(field)
+        if value is None:
+            continue
+        if field == "redaction_status":
+            preserved[field] = value if isinstance(value, RedactionStatus) else RedactionStatus(value)
+        elif field == "provenance_visibility":
+            preserved[field] = value if isinstance(value, ProvenanceVisibility) else ProvenanceVisibility(value)
+        elif field == "encryption_or_redaction_status":
+            preserved[field] = value if isinstance(value, RedactionStatus) else RedactionStatus(value)
+    return preserved
+
+
 def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client) -> None:
     collections = V17Collections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
     ref = db_client.document(path)
-    active_evidence = evidence.model_copy(
-        update={
-            "source_state": SourceState.active,
-            "source_state_reason": None,
-        }
-    )
+    snapshot = ref.get()
+    reactivation_updates: Dict[str, Any] = {
+        "source_state": SourceState.active,
+        "source_state_reason": None,
+    }
+    if getattr(snapshot, "exists", False):
+        reactivation_updates.update(_preserved_evidence_security_fields(snapshot.to_dict() or {}))
+    active_evidence = evidence.model_copy(update=reactivation_updates)
     ref.set(active_evidence.model_dump(mode="json"))
 
 
 def _bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
     """Advance source_generation so re-extract gets a fresh operation identity space (Q7)."""
-    control = _ensure_control_state(uid, db_client=db_client)
-    bumped = control.model_copy(
-        update={
-            "source_generation": control.source_generation + 1,
-            "updated_at": datetime.now(timezone.utc),
-        }
-    )
-    db_client.document(V17Collections(uid=uid).memory_control_state).set(bumped.model_dump(mode="json"))
-    return bumped
+    return atomic_bump_source_generation(uid, db_client=db_client)
 
 
 def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client=None) -> str:
