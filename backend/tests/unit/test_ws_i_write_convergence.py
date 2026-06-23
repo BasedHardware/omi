@@ -143,7 +143,13 @@ def _install_heavy_import_stubs():
     memories_mod.get_memories = MagicMock(return_value=[])
     memories_mod.get_memory = MagicMock(return_value=None)
     memories_mod.invalidate_memory = MagicMock()
+    memories_mod.set_memory_kg_extracted = MagicMock()
     sys.modules["database.memories"] = memories_mod
+
+    import database
+
+    database.vector_db = vector_db_mod
+    database.memories = memories_mod
 
     for name in [
         "database.redis_db",

@@ -55,8 +55,9 @@ def _install_heavy_import_stubs():
     pinecone_mod.Pinecone = MagicMock()
     sys.modules["pinecone"] = pinecone_mod
 
-    vector_db_mod = types.ModuleType("database.vector_db")
+    vector_db_mod = _AutoMockModule("database.vector_db")
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
+    vector_db_mod.upsert_memory_vector = MagicMock()
     vector_db_mod.delete_memory_vector = MagicMock()
     vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     vector_db_mod.delete_memory_vectors_batch = MagicMock()
