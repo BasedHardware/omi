@@ -1,4 +1,4 @@
-name: Parakeet GPU Tests (Smoke + DER Gate)
+name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency)
 
 on:
   workflow_dispatch:
@@ -8,6 +8,10 @@ on:
         required: true
       der_report_only:
         description: 'DER benchmark report-only mode (true = no fail gate)'
+        required: false
+        default: 'false'
+      wer_report_only:
+        description: 'WER gate report-only mode (true = no fail gate)'
         required: false
         default: 'false'
   schedule:
@@ -70,7 +74,7 @@ jobs:
 
       - name: Create GPU test job
         run: |
-          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_TAG $DER_REPORT_ONLY' | kubectl apply -f -
+          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_TAG $DER_REPORT_ONLY $WER_REPORT_ONLY' | kubectl apply -f -
           apiVersion: batch/v1
           kind: Job
           metadata:
@@ -151,12 +155,44 @@ jobs:
                         CONC_EXIT=$?
                         set -e
 
+                        if [ $CONC_EXIT -ne 0 ]; then
+                          echo "Concurrency test failed (exit=$CONC_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $CONC_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 7: WER Regression Gate (LibriSpeech) ---"
+                        set +e
+                        WER_REPORT_ONLY=${WER_REPORT_ONLY:-false} \
+                        python -m pytest tests/container/test_parakeet_wer_gate.py -v -s \
+                          --tb=short 2>&1
+                        WER_EXIT=$?
+                        set -e
+
+                        if [ $WER_EXIT -ne 0 ]; then
+                          echo "WER gate failed (exit=$WER_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $WER_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 8: High-Concurrency Stress Test ---"
+                        set +e
+                        HIGH_CONCURRENCY_LEVEL=16 HIGH_CONCURRENCY_ROUNDS=5 \
+                        python -m pytest tests/container/test_parakeet_high_concurrency.py -v -s \
+                          --tb=short 2>&1
+                        HCONC_EXIT=$?
+                        set -e
+
                         kill $SERVER_PID 2>/dev/null || true
                         wait $SERVER_PID 2>/dev/null || true
 
-                        if [ $CONC_EXIT -ne 0 ]; then
-                          echo "Concurrency test failed (exit=$CONC_EXIT)"
-                          exit $CONC_EXIT
+                        if [ $HCONC_EXIT -ne 0 ]; then
+                          echo "High-concurrency test failed (exit=$HCONC_EXIT)"
+                          exit $HCONC_EXIT
                         fi
                         echo ""
 
@@ -175,6 +211,8 @@ jobs:
                         value: "all"
                       - name: DER_REPORT_ONLY
                         value: "${DER_REPORT_ONLY}"
+                      - name: WER_REPORT_ONLY
+                        value: "${WER_REPORT_ONLY}"
                     resources:
                       requests:
                         cpu: 1
@@ -201,6 +239,7 @@ jobs:
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.tag }}
           DER_REPORT_ONLY: ${{ github.event.inputs.der_report_only || 'false' }}
+          WER_REPORT_ONLY: ${{ github.event.inputs.wer_report_only || 'false' }}
 
       - name: Wait for job completion
         run: |
