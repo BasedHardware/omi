@@ -9340,6 +9340,18 @@ class AppLocalizationsFi extends AppLocalizations {
       'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
 
   @override
+  String get recordingMode => 'Tallennustila';
+
+  @override
+  String get captureModeLater => 'Myöhemmin';
+
+  @override
+  String get captureModeLiveDescription => 'Litteroi reaaliajassa puhuessasi.';
+
+  @override
+  String get captureModeLaterDescription => 'Tallenna ääni nyt ja litteroi milloin haluat.';
+
+  @override
   String get unmute => 'Poista mykistys';
 
   @override

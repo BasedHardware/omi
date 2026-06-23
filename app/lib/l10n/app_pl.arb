@@ -3092,5 +3092,9 @@
     "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
     "unmute": "Wyłącz wyciszenie",
     "newRecording": "Nowe nagranie",
-    "transcribeLaterPaused": "Wstrzymano — dźwięk nie jest nagrywany"
+    "transcribeLaterPaused": "Wstrzymano — dźwięk nie jest nagrywany",
+    "recordingMode": "Tryb nagrywania",
+    "captureModeLater": "Później",
+    "captureModeLiveDescription": "Transkrybuj w czasie rzeczywistym podczas mówienia.",
+    "captureModeLaterDescription": "Zapisz dźwięk teraz i transkrybuj, kiedy chcesz."
 }

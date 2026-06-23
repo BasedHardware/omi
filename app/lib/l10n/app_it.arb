@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.",
     "unmute": "Riattiva audio",
     "newRecording": "Nuova registrazione",
-    "transcribeLaterPaused": "In pausa — l'audio non viene registrato"
+    "transcribeLaterPaused": "In pausa — l'audio non viene registrato",
+    "recordingMode": "Modalità di registrazione",
+    "captureModeLater": "Più tardi",
+    "captureModeLiveDescription": "Trascrivi in tempo reale mentre parli.",
+    "captureModeLaterDescription": "Salva l'audio ora e trascrivilo quando vuoi."
 }

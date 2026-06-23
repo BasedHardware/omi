@@ -3066,5 +3066,9 @@
     "transcribeLaterStorageFull": "Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.",
     "unmute": "Slå lyd til",
     "newRecording": "Ny optagelse",
-    "transcribeLaterPaused": "Sat på pause — lyden optages ikke"
+    "transcribeLaterPaused": "Sat på pause — lyden optages ikke",
+    "recordingMode": "Optagetilstand",
+    "captureModeLater": "Senere",
+    "captureModeLiveDescription": "Transskriber i realtid, mens du taler.",
+    "captureModeLaterDescription": "Gem lyden nu, og transskriber den, når du vil."
 }

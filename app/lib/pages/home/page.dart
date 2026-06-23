@@ -71,6 +71,7 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -1074,6 +1075,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                       ),
                     ),
+                  );
+                },
+              ),
+              // Recording mode chip — home tab only, when a Transcribe-Later-capable device is connected
+              Consumer2<HomeProvider, DeviceProvider>(
+                builder: (context, homeProvider, deviceProvider, _) {
+                  final device = deviceProvider.connectedDevice;
+                  if (homeProvider.selectedIndex != 0 ||
+                      device == null ||
+                      !CaptureModeChip.supportsDevice(device.type)) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: CaptureModeChip(deviceType: device.type),
                   );
                 },
               ),

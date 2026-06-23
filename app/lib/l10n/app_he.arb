@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.",
     "unmute": "בטל השתקה",
     "newRecording": "הקלטה חדשה",
-    "transcribeLaterPaused": "מושהה — האודיו אינו מוקלט"
+    "transcribeLaterPaused": "מושהה — האודיו אינו מוקלט",
+    "recordingMode": "מצב הקלטה",
+    "captureModeLater": "מאוחר יותר",
+    "captureModeLiveDescription": "תמלול בזמן אמת תוך כדי דיבור.",
+    "captureModeLaterDescription": "שמרו את האודיו עכשיו ותמללו מתי שתרצו."
 }

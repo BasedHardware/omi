@@ -3026,5 +3026,9 @@
     "transcribeLaterStorageFull": "Паметта на телефона ви е на изчерпване, затова записването е спряно на пауза. Освободете място или качете записите си и то ще се възобнови автоматично.",
     "unmute": "Включи звука",
     "newRecording": "Нов запис",
-    "transcribeLaterPaused": "На пауза — звукът не се записва"
+    "transcribeLaterPaused": "На пауза — звукът не се записва",
+    "recordingMode": "Режим на запис",
+    "captureModeLater": "По-късно",
+    "captureModeLiveDescription": "Транскрибиране в реално време, докато говорите.",
+    "captureModeLaterDescription": "Запазете звука сега и го транскрибирайте, когато пожелаете."
 }

@@ -3092,5 +3092,9 @@
     "transcribeLaterStorageFull": "На телефоне заканчивается память, поэтому запись приостановлена. Освободите место или загрузите записи — и она возобновится автоматически.",
     "unmute": "Включить звук",
     "newRecording": "Новая запись",
-    "transcribeLaterPaused": "Пауза — аудио не записывается"
+    "transcribeLaterPaused": "Пауза — аудио не записывается",
+    "recordingMode": "Режим записи",
+    "captureModeLater": "Позже",
+    "captureModeLiveDescription": "Расшифровка в реальном времени, пока вы говорите.",
+    "captureModeLaterDescription": "Сохраните аудио сейчас и расшифруйте, когда захотите."
 }

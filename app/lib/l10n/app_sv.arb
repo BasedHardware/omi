@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.",
     "unmute": "Slå på ljud",
     "newRecording": "Ny inspelning",
-    "transcribeLaterPaused": "Pausad – inget ljud spelas in"
+    "transcribeLaterPaused": "Pausad – inget ljud spelas in",
+    "recordingMode": "Inspelningsläge",
+    "captureModeLater": "Senare",
+    "captureModeLiveDescription": "Transkribera i realtid medan du talar.",
+    "captureModeLaterDescription": "Spara ljudet nu och transkribera när du vill."
 }
