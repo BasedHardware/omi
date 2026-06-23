@@ -162,6 +162,7 @@ struct DesktopHomeView: View {
                   appState.startTranscription()
                 } else {
                   log("DesktopHomeView: Deferring transcription — API keys not yet loaded")
+                  Task { await APIKeyService.shared.waitForKeys() }
                 }
               } else if !settings.transcriptionEnabled {
                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
