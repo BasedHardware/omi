@@ -18,33 +18,57 @@ public enum QueryVisualIntent {
         let lowered = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !lowered.isEmpty else { return false }
 
-        // Fast visual signals: deictics, screen nouns, visual verbs.
-        // Each entry is matched as a substring (so signals can appear
-        // anywhere in the query). Deictics are listed both with a
-        // trailing space (for "in this") and without (for "what is
-        // this" where "this" is at the end of the string).
-        let visualSignals = [
-            // Deictics (this/that/these) — both with trailing space
-            // (mid-sentence) and without (end-of-string)
-            "this", "that", "these", "those",
+        // Noun and verb signals first — these are unambiguous screen
+        // references ("click the button", "on my screen", "open Linear").
+        // Matched as substrings because the phrases are screen-specific
+        // and don't have false-positive cases like the bare deictics do.
+        let nounAndVerbSignals = [
             // Screen / window / app nouns
             "screen", "window", "tab", "page", "site", "app ",
             "document", "spreadsheet", "presentation", "slide",
-            "code", "error message", "image", "picture", "photo",
+            "error message", "image", "picture", "photo",
             "screenshot", "diagram", "chart", "graph", "map",
-            "file ", "folder", "icon", "button", "menu", "link",
+            "folder", "icon", "button", "menu", "link", "header",
             "notification", "popup", "dialog", "modal",
-            // Visual verbs
-            "see", "look at", "show me", "read this", "read that",
+            // Visual verbs (with leading space for word boundary to
+            // avoid matching "see" inside "user" or "coffee", and to
+            // avoid matching "open" at the end of "reopen" or "open ")
+            "see ", " look at", "show me", "read this", "read that",
             "what does this say", "what does that say",
-            "what's on", "what is on", "on my screen", "open ",
-            "scroll", "zoom", "click", "tap", "highlight", "select",
-            "color", "size", "shape",
+            "what's on", "what is on", "on my screen",
+            "open ", "scroll", "zoom", "click", "tap", "highlight", "select",
             // Screenshot-related phrasings
             "can you see", "do you see", "are you seeing",
         ]
-        for signal in visualSignals {
+        for signal in nounAndVerbSignals {
             if lowered.contains(signal) { return true }
+        }
+
+        // Deictic detection ("this", "that", "these", "those") is
+        // ambiguous on its own: "this morning" / "translate this" are
+        // NOT screen references. Require the deictic to be the object
+        // of a question or imperative verb, which signals the user is
+        // pointing at something on screen. Patterns:
+        //   "what is this", "what's this", "what is that", "what are these"
+        //   "explain this", "summarize that", "read this"
+        //   "do this", "fix this", "open this" (imperative)
+        //   "what should i do today/now" (likely tasks/calendar on screen)
+        let deicticQuestionPatterns = [
+            "what is this", "what's this", "what is that", "what's that",
+            "what are these", "what are those", "what're these",
+            "what does this", "what does that",
+            "explain this", "explain that",
+            "summarize this", "summarize that", "summarize these",
+            "describe this", "describe that",
+            "fix this", "fix that",
+            "do this", "do that",
+            "open this", "open that",
+            "close this", "close that",
+            "what should i do",
+            "look at this", "look at that",
+        ]
+        for pattern in deicticQuestionPatterns {
+            if lowered.contains(pattern) { return true }
         }
         return false
     }

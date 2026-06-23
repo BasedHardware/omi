@@ -78,12 +78,36 @@ final class QueryVisualIntentTests: XCTestCase {
 
     // MARK: - Deictic references
 
-    /// "This", "that", "these" — common in screen-grounded queries.
+    /// "This", "that", "these" — common in screen-grounded queries
+    /// when paired with a question/imperative verb.
     func testDeicticReferences() {
         XCTAssertTrue(QueryVisualIntent.wantsScreenshot("explain this"))
         XCTAssertTrue(QueryVisualIntent.wantsScreenshot("what is that"))
         XCTAssertTrue(QueryVisualIntent.wantsScreenshot("summarize these"))
-        XCTAssertTrue(QueryVisualIntent.wantsScreenshot("translate this for me"))
+        XCTAssertTrue(QueryVisualIntent.wantsScreenshot("fix this"))
+    }
+
+    /// Time references using "this" / "that" should NOT trigger a
+    /// screen capture — the user is talking about time, not the screen.
+    /// Code review on PR #7889 caught this false positive.
+    func testTimeDeicticsDoNotCapture() {
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("this morning"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("that afternoon"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("this evening"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("yesterday"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("next week"))
+    }
+
+    /// "Translate this" / "spell this" / "read this sentence" are
+    /// talking about text, not the screen. "read this" is in the
+    /// noun-signal list for screen-content queries, but bare "translate
+    /// this" without "screen" / "page" / "document" should not capture.
+    /// The deictic patterns require a question or specific verb, so
+    /// "translate this" does not match.
+    func testTextDeicticsDoNotCapture() {
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("translate this for me"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("spell this word"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("define this term"))
     }
 
     // MARK: - Screen nouns
@@ -115,10 +139,12 @@ final class QueryVisualIntentTests: XCTestCase {
 
     func testSubstringMatchAnywhere() {
         // Visual signals can appear anywhere in the query, not just the
-        // start. "Translate this" has "this" mid-phrase; the detector
-        // should still match.
-        XCTAssertTrue(QueryVisualIntent.wantsScreenshot("can you translate this for me"))
+        // start. "Look at" appears mid-phrase; the detector should
+        // match it. (We don't test "translate this" here anymore —
+        // that case is in `testTextDeicticsDoNotCapture` and verifies
+        // the refined deictic check correctly does NOT match.)
         XCTAssertTrue(QueryVisualIntent.wantsScreenshot("I want to see the settings"))
+        XCTAssertTrue(QueryVisualIntent.wantsScreenshot("can you look at this window"))
     }
 
     // MARK: - Conservative: ambiguous → capture
@@ -127,7 +153,7 @@ final class QueryVisualIntentTests: XCTestCase {
     /// to over-capture than to miss a screenshot the user expected.
     func testAmbiguousQueriesCapture() {
         let ambiguous = [
-            "help", "what is this", "show me", "look at this",
+            "what is this", "show me", "look at this",
         ]
         for q in ambiguous {
             XCTAssertTrue(
@@ -135,5 +161,12 @@ final class QueryVisualIntentTests: XCTestCase {
                 "Ambiguous query should capture (conservative): \(q)"
             )
         }
+    }
+
+    /// "Help" alone is too ambiguous — the user might want general
+    /// assistance, not screen context. Don't waste a screenshot on it.
+    func testBareHelpDoesNotCapture() {
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("help"))
+        XCTAssertFalse(QueryVisualIntent.wantsScreenshot("help me"))
     }
 }
