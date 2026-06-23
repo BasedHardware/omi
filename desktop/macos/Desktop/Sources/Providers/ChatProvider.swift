@@ -824,15 +824,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self = self else { return }
-                    guard self.agentBridgeStarted else { return }
-                    log("ChatProvider: userDidSignOut — stopping agent bridge so the next user gets a fresh subprocess")
-                    await self.agentBridge.stop()
-                    self.agentBridgeStarted = false
-                    self.messages.removeAll()
-                    self.resetMessagesPagination()
-                    self.pendingAttachments.removeAll()
-                    self.sessions.removeAll()
-                    self.currentSession = nil
+                    log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
+                    if self.agentBridgeStarted {
+                        await self.agentBridge.stop()
+                        self.agentBridgeStarted = false
+                    }
+                    self.resetSessionStateForAuthChange()
                 }
             }
 
@@ -1006,6 +1003,26 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Ensures all prompt-backed local context is loaded before we build and cache the ACP session prompt.
     private func preparePromptContextIfNeeded() async {
         await warmupPromptContext()
+    }
+
+    private func resetSessionStateForAuthChange() {
+        messages.removeAll()
+        resetMessagesPagination()
+        pendingAttachments.removeAll()
+        sessions.removeAll()
+        currentSession = nil
+        cachedMemories = []
+        memoriesLoaded = false
+        cachedGoals = []
+        goalsLoaded = false
+        cachedTasks = []
+        tasksLoaded = false
+        cachedAIProfile = ""
+        aiProfileLoaded = false
+        cachedDatabaseSchema = ""
+        schemaLoaded = false
+        cachedMainSystemPrompt = ""
+        cachedFloatingSystemPrompt = ""
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
