@@ -7,6 +7,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
+from utils.memory.atom_keyword_index import (
+    delete_atom_keyword_doc,
+    keyword_search_memory_ids,
+    merge_memory_search_ids,
+    purge_user_atom_keyword_index,
+    sync_atom_keyword_index_for_item,
+)
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.v17_collections import V17Collections
 from database.v17_memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
@@ -31,6 +38,7 @@ from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, de
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
 from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
 
@@ -160,12 +168,16 @@ def search_canonical_memories(
     *,
     limit: int = 5,
     db_client=None,
+    vector_query=None,
 ) -> List[Dict[str, Any]]:
-    """Keyword search over WS-I default-visible canonical items."""
+    """Hybrid keyword (Typesense) + vector search over canonical long-term atoms."""
     client = db_client if db_client is not None else default_db_client
-    memories = read_canonical_memories(uid, limit=500, offset=0, db_client=client)
-    query_tokens = {token.lower() for token in (query or "").split() if len(token) > 2}
-    if not query_tokens:
+    capped_limit = max(1, min(limit, 20))
+    fetch_limit = min(capped_limit * 3, 60)
+    normalized_query = (query or "").strip()
+
+    if not normalized_query:
+        memories = read_canonical_memories(uid, limit=capped_limit, offset=0, db_client=client)
         return [
             {
                 "memory_id": memory.id,
@@ -174,23 +186,56 @@ def search_canonical_memories(
                 "date": memory.updated_at.isoformat(),
                 "visibility": memory.visibility,
             }
-            for memory in memories[:limit]
+            for memory in memories[:capped_limit]
         ]
 
-    matches = []
-    for memory in memories:
-        content_lower = (memory.content or "").lower()
-        if any(token in content_lower for token in query_tokens):
-            matches.append(
-                {
-                    "memory_id": memory.id,
-                    "content": memory.content,
-                    "tier": memory.memory_tier.value,
-                    "date": memory.updated_at.isoformat(),
-                    "visibility": memory.visibility,
-                }
-            )
-    return matches[: max(1, min(limit, 20))]
+    keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit)
+    if vector_query is None:
+        from database.vector_db import query_v17_memory_vector_candidates
+
+        vector_query_fn = query_v17_memory_vector_candidates
+    else:
+        vector_query_fn = vector_query
+    vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
+    vector_ids = [hit.memory_id for hit in vector_result.hits if hit.memory_id]
+    merged_ids = merge_memory_search_ids(keyword_ids, vector_ids)
+    if not merged_ids:
+        return []
+
+    items_by_id = {item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=client)}
+    vector_scores = {hit.memory_id: float(hit.score or 0.0) for hit in vector_result.hits}
+
+    candidates = []
+    for memory_id in merged_ids:
+        item = items_by_id.get(memory_id)
+        if item is None:
+            continue
+        if item.tier != MemoryTier.long_term or item.status != MemoryItemStatus.active:
+            continue
+        candidates.append(
+            {
+                "id": item.memory_id,
+                "content": item.content or "",
+                "category": "interesting",
+                "vector_score": vector_scores.get(memory_id, 0.0),
+                "item": item,
+            }
+        )
+
+    reranked = rrf_rerank(normalized_query, candidates, capped_limit)
+    results: List[Dict[str, Any]] = []
+    for candidate in reranked:
+        item = candidate["item"]
+        results.append(
+            {
+                "memory_id": item.memory_id,
+                "content": item.content or "",
+                "tier": item.tier.value,
+                "date": item.updated_at.isoformat(),
+                "visibility": item.visibility,
+            }
+        )
+    return results
 
 
 def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
@@ -346,6 +391,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+        sync_atom_keyword_index_for_item(item, db_client=client)
 
     return committed_id
 
@@ -402,6 +448,8 @@ def _tombstone_memory_item(uid: str, item: V17MemoryItem, *, db_client, reason: 
     ]
     for record in build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
+
+    delete_atom_keyword_doc(uid, item.memory_id)
 
 
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client=None) -> Dict[str, Any]:
@@ -463,10 +511,11 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
     vector_ids = [neutral_vector_id_for_memory(memory_id) for memory_id in memory_ids]
 
     if vector_ids:
-        # lazy: avoid importing Pinecone client at module import
         from database.vector_db import delete_pinecone_memory_vectors_by_id
 
         delete_pinecone_memory_vectors_by_id(vector_ids)
+
+    keyword_deleted = purge_user_atom_keyword_index(uid)
 
     trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
@@ -485,4 +534,10 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
         for record in build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
             client.document(record["outbox_path"]).set(record)
 
-    return {"purged": True, "reason": "canonical_cohort", "vector_ids": vector_ids, "memory_ids": memory_ids}
+    return {
+        "purged": True,
+        "reason": "canonical_cohort",
+        "vector_ids": vector_ids,
+        "memory_ids": memory_ids,
+        "keyword_docs_deleted": keyword_deleted,
+    }
