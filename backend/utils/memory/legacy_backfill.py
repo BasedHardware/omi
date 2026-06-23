@@ -35,6 +35,7 @@ from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_memory_adapter import neutral_vector_id_for_memory
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
 
@@ -299,6 +300,7 @@ def _apply_one_legacy_row(
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+        sync_atom_keyword_index_for_item(item, db_client=db_client)
 
     written = result.status == ApplyStatus.committed
     return result.control_state, written, None if written else "idempotent_skip"
