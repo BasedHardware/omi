@@ -14,6 +14,22 @@ from config.memory_confidence import (
     VERACITY_PRIORS,
 )
 from database._client import document_id_from_seed
+from models.v17_product_memory import MemoryTier
+
+
+def decide_initial_memory_tier(manually_added: bool, durability: Optional[str]) -> MemoryTier:
+    """Tier a memory at birth.
+
+    Faithful to the V17 design (memories are born short-term and promoted on
+    corroboration): user-asserted facts and explicitly long-horizon facts are
+    durable from the start; everything else starts short-term and can be
+    promoted later (see the corroboration path in process_conversation).
+    """
+    if manually_added:
+        return MemoryTier.long_term
+    if (durability or '').lower() == 'long_term':
+        return MemoryTier.long_term
+    return MemoryTier.short_term
 
 
 class MemoryCategory(str, Enum):
@@ -516,6 +532,11 @@ class MemoryDB(Memory):
     kg_extracted: bool = False
     evidence: List[Evidence] = Field(default_factory=list)
 
+    # V17 tiering. Pre-V17 docs lack this field and read back as long_term, so
+    # the existing UI is unchanged; newly produced memories are tiered at birth
+    # (decide_initial_memory_tier) and may be promoted on corroboration.
+    memory_tier: MemoryTier = MemoryTier.long_term
+
     # Temporal lifecycle — the "constantly updated brain". All optional, so existing
     # docs (which lack these fields) read back as active with no migration.
     #   valid_at:      when the fact became true (defaults to created_at)
@@ -612,6 +633,7 @@ class MemoryDB(Memory):
             veracity=confidence_fields['veracity'],
             uncertainty_reasons=confidence_fields['uncertainty_reasons'],
             durability=memory.durability,
+            memory_tier=decide_initial_memory_tier(manually_added, memory.durability),
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db

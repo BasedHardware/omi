@@ -16,6 +16,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var content: String
     var category: String                // system, interesting, manual
     var tier: String                    // short_term, long_term, archive
+    var tierIsExplicit: Bool            // true only when the backend sent a tier (legacy rows: false → no badge)
     var tagsJson: String?               // JSON array: ["tips"], ["focus", "focused"]
     var visibility: String
     var reviewed: Bool
@@ -56,6 +57,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         content: String,
         category: String = "system",
         tier: String = MemoryTier.longTerm.rawValue,
+        tierIsExplicit: Bool = false,
         tagsJson: String? = nil,
         visibility: String = "private",
         reviewed: Bool = false,
@@ -85,6 +87,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.content = content
         self.category = category
         self.tier = tier
+        self.tierIsExplicit = tierIsExplicit
         self.tagsJson = tagsJson
         self.visibility = visibility
         self.reviewed = reviewed
@@ -185,6 +188,7 @@ extension MemoryRecord {
             content: memory.content,
             category: memory.category.rawValue,
             tier: memory.tier.rawValue,
+            tierIsExplicit: memory.tierIsExplicit,
             tagsJson: tagsJson,
             visibility: memory.visibility,
             reviewed: memory.reviewed,
@@ -220,6 +224,7 @@ extension MemoryRecord {
         self.content = memory.content
         self.category = memory.category.rawValue
         self.tier = memory.tier.rawValue
+        self.tierIsExplicit = memory.tierIsExplicit
         self.visibility = memory.visibility
         self.reviewed = memory.reviewed
         self.userReview = memory.userReview
@@ -292,6 +297,7 @@ extension MemoryRecord {
             content: content,
             category: memoryCategory,
             tier: memoryTier,
+            tierIsExplicit: tierIsExplicit,
             createdAt: createdAt,
             updatedAt: updatedAt,
             conversationId: conversationId,
@@ -325,6 +331,7 @@ extension ServerMemory {
         content: String,
         category: MemoryCategory,
         tier: MemoryTier = .longTerm,
+        tierIsExplicit: Bool = false,
         createdAt: Date,
         updatedAt: Date,
         capturedAt: Date? = nil,
@@ -352,6 +359,7 @@ extension ServerMemory {
         self.content = content
         self.category = category
         self.tier = tier
+        self.tierIsExplicit = tierIsExplicit
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.capturedAt = capturedAt

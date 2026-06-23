@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Memory tier badge now only shows for memories the backend actually tiered; legacy untiered memories show no badge"
+  ],
   "releases": [
     {
       "version": "0.11.492",

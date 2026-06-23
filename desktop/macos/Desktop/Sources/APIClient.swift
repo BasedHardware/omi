@@ -1251,6 +1251,10 @@ struct ServerMemory: Decodable, Identifiable {
   let capturedAt: Date?
   let expiresAt: Date?
   let tier: MemoryTier
+  // True only when the backend actually sent a tier (`tier`/`memory_tier`). Legacy
+  // records carry no tier, so `tier` falls back to `.longTerm` for filtering but we
+  // suppress the tier badge for them (tierIsExplicit == false).
+  let tierIsExplicit: Bool
   let conversationId: String?
   let reviewed: Bool
   let userReview: Bool?
@@ -1329,6 +1333,7 @@ struct ServerMemory: Decodable, Identifiable {
 
     let tierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .tier)
     let memoryTierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .memoryTier)
+    tierIsExplicit = tierValue != nil || memoryTierValue != nil
     switch (tierValue, memoryTierValue) {
     case let (.some(tier), .some(memoryTier)) where tier != memoryTier:
       throw ServerMemoryAliasDecodeError.conflict(

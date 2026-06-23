@@ -36,6 +36,7 @@ from database.vector_db import upsert_vector2, update_vector_metadata, upsert_tr
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory, ShortTermMemory, render_memory
+from models.v17_product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     AppResult,
@@ -575,6 +576,11 @@ def _extract_memories_inner(uid: str, conversation: Conversation):
             subject_attribution=subject_attribution,
         )
         memory_db_obj.is_locked = is_locked
+        # Corroboration is durability: a fact that updates/merges/supersedes an
+        # existing memory has now been seen more than once, so promote it out of
+        # the short-term tier it was born into.
+        if supersede_ids:
+            memory_db_obj.memory_tier = MemoryTier.long_term
         parsed_memories.append(memory_db_obj)
 
         for old_id in supersede_ids:

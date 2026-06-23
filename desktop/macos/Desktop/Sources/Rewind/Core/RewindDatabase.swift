@@ -2173,6 +2173,15 @@ actor RewindDatabase {
             try db.create(index: "idx_dropped_artifacts_timestamp", on: "dropped_artifacts", columns: ["timestamp"])
         }
 
+        // Records cached before tiering shipped were all defaulted to "long_term".
+        // Default this flag to false so those legacy rows render with no tier badge;
+        // a backend sync re-flags any memory the server actually tiers.
+        migrator.registerMigration("addMemoryTierIsExplicit") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "tierIsExplicit", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

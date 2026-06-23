@@ -40,6 +40,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
 
         XCTAssertEqual(memory.id, "mem-short-1")
         XCTAssertEqual(memory.tier, .shortTerm)
+        XCTAssertTrue(memory.tierIsExplicit)
         XCTAssertEqual(memory.category, .system)
         XCTAssertNotNil(memory.capturedAt)
         XCTAssertNotNil(memory.expiresAt)
@@ -61,6 +62,7 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
 
         XCTAssertEqual(memory.id, "mem-archive-1")
         XCTAssertEqual(memory.tier, .archive)
+        XCTAssertTrue(memory.tierIsExplicit)
         XCTAssertFalse(memory.tier.isDefaultAccessible)
     }
 
@@ -79,6 +81,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
 
         XCTAssertEqual(memory.tier, .longTerm)
         XCTAssertTrue(memory.tier.isDefaultAccessible)
+        // Legacy records carry no tier from the backend, so the badge is suppressed.
+        XCTAssertFalse(memory.tierIsExplicit)
     }
 
     func testUnknownPresentTierFailsClosed() {

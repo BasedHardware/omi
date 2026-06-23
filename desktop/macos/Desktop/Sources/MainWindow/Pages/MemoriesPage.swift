@@ -1881,7 +1881,11 @@ private struct MemoryCardView: View {
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textSecondary)
 
-          MemoryTierBadge(tier: memory.tier)
+          // Only badge memories the backend actually tiered; legacy/untiered
+          // records carry no real tier, so we show no badge for them.
+          if memory.tierIsExplicit {
+            MemoryTierBadge(tier: memory.tier)
+          }
 
           if let sourceName = memory.sourceName {
             Text("From \(sourceName)")
@@ -1994,8 +1998,8 @@ private struct MemoryDetailTooltip: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      tooltipRow("Tier", memory.tier.displayName)
-      if memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
+      tooltipRow("Tier", memory.tierIsExplicit ? memory.tier.displayName : "Legacy (untiered)")
+      if memory.tierIsExplicit, memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
         tooltipRow("Expires", expiresAt.formatted(date: .abbreviated, time: .shortened))
       }
 
