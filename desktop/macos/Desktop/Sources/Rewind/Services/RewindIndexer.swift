@@ -480,10 +480,20 @@ actor RewindIndexer {
 
         do {
             while true {
+                if PowerMonitor.cachedBatteryState() {
+                    log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
+                    return
+                }
+
                 let pending = try await RewindDatabase.shared.getBatterySkippedScreenshots(limit: batchSize)
                 if pending.isEmpty { break }
 
                 for screenshot in pending {
+                    if PowerMonitor.cachedBatteryState() {
+                        log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
+                        return
+                    }
+
                     guard let id = screenshot.id else { continue }
 
                     do {

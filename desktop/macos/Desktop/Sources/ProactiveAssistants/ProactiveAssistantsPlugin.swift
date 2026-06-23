@@ -484,7 +484,7 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     private func restartCaptureTimer(reason: String) {
         captureTimer?.invalidate()
-        let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.checkBatteryState())
+        let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
         captureTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.captureFrame()
