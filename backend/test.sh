@@ -47,6 +47,7 @@ pytest tests/unit/test_ws_c_backfill.py -v
 pytest tests/unit/test_ws_j_delete_privacy.py -v
 pytest tests/unit/test_ws_l_surface_routing.py -v
 pytest tests/unit/test_ws_m_atom_keyword_index.py -v
+pytest tests/unit/test_ws_n_graph_traversal.py -v
 pytest tests/unit/test_upstream_boundary.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_short_term_lifecycle.py -v
