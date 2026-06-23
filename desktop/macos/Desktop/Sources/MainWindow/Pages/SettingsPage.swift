@@ -1021,7 +1021,7 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
-                "Screen capture slows automatically on battery to save energy. OCR always uses accurate recognition."
+                "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
               )
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
