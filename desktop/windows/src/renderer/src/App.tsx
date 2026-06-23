@@ -26,6 +26,7 @@ import { InsightToast } from './components/insight/InsightToast'
 import { GoalCelebration } from './components/ui/GoalCelebration'
 import { LiveTranscriptPanel } from './components/recording/LiveTranscriptPanel'
 import { LiveNotesPanel } from './components/recording/LiveNotesPanel'
+import { ToastHost } from './components/ui/ToastHost'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -218,6 +219,7 @@ function App(): React.JSX.Element {
     <HashRouter>
       <ConditionalTitleBar />
       <SandboxBadge />
+      <ToastHost />
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
         <Route path="/overlay" element={<OverlayApp />} />

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download, Share2 } from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download, Copy } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -343,7 +343,7 @@ export function Memories(): React.JSX.Element {
                       title="Copy memory to clipboard"
                       className="rounded-md p-1 hover:text-white/80"
                     >
-                      <Share2 className="h-3.5 w-3.5" />
+                      <Copy className="h-3.5 w-3.5" />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); startMemEdit(m) }}
