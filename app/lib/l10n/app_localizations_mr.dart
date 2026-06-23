@@ -9350,6 +9350,18 @@ class AppLocalizationsMr extends AppLocalizations {
       'तुमच्या फोनवर पुरेशी जागा नसल्याने रेकॉर्डिंग थांबवली आहे. जागा रिकामी करा किंवा तुमच्या रेकॉर्डिंग अपलोड करा, मग ती आपोआप पुन्हा सुरू होईल.';
 
   @override
+  String get recordingMode => 'रेकॉर्डिंग मोड';
+
+  @override
+  String get captureModeLater => 'नंतर';
+
+  @override
+  String get captureModeLiveDescription => 'तुम्ही बोलत असताना रिअल-टाइममध्ये ट्रान्सक्राइब करा.';
+
+  @override
+  String get captureModeLaterDescription => 'आता ऑडिओ जतन करा आणि तुम्हाला हवे तेव्हा ट्रान्सक्राइब करा.';
+
+  @override
   String get unmute => 'आवाज सुरू करा';
 
   @override

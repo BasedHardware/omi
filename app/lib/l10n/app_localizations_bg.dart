@@ -9375,6 +9375,18 @@ class AppLocalizationsBg extends AppLocalizations {
       'Паметта на телефона ви е на изчерпване, затова записването е спряно на пауза. Освободете място или качете записите си и то ще се възобнови автоматично.';
 
   @override
+  String get recordingMode => 'Режим на запис';
+
+  @override
+  String get captureModeLater => 'По-късно';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибиране в реално време, докато говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Запазете звука сега и го транскрибирайте, когато пожелаете.';
+
+  @override
   String get unmute => 'Включи звука';
 
   @override

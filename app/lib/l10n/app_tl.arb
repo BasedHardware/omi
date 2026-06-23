@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
     "unmute": "I-unmute",
     "newRecording": "Bagong recording",
-    "transcribeLaterPaused": "Naka-pause — hindi nire-record ang audio"
+    "transcribeLaterPaused": "Naka-pause — hindi nire-record ang audio",
+    "recordingMode": "Mode ng pag-record",
+    "captureModeLater": "Mamaya",
+    "captureModeLiveDescription": "I-transcribe nang real time habang nagsasalita ka.",
+    "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto."
 }

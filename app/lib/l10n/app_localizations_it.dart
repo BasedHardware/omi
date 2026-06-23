@@ -9395,6 +9395,18 @@ class AppLocalizationsIt extends AppLocalizations {
       'Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.';
 
   @override
+  String get recordingMode => 'Modalità di registrazione';
+
+  @override
+  String get captureModeLater => 'Più tardi';
+
+  @override
+  String get captureModeLiveDescription => 'Trascrivi in tempo reale mentre parli.';
+
+  @override
+  String get captureModeLaterDescription => 'Salva l\'audio ora e trascrivilo quando vuoi.';
+
+  @override
   String get unmute => 'Riattiva audio';
 
   @override

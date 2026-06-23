@@ -9187,6 +9187,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
 
   @override
+  String get recordingMode => '녹음 모드';
+
+  @override
+  String get captureModeLater => '나중에';
+
+  @override
+  String get captureModeLiveDescription => '말하는 동안 실시간으로 변환합니다.';
+
+  @override
+  String get captureModeLaterDescription => '지금 오디오를 저장하고 원할 때 변환하세요.';
+
+  @override
   String get unmute => '음소거 해제';
 
   @override
