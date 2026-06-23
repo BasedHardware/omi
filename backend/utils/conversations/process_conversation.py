@@ -47,6 +47,9 @@ from models.conversation import (
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.subscription import is_trial_paywalled
 from models.other import Person
 from models.structured import Structured
@@ -453,7 +456,67 @@ def _extract_memories(uid: str, conversation: Conversation):
         _extract_memories_inner(uid, conversation)
 
 
+def _extract_memories_canonical(uid: str, conversation: Conversation):
+    """Canonical-cohort extraction: retract-then-write to memory_items only (Q1/Q7)."""
+    memory_service = MemoryService()
+    memory_service.retract_conversation_memories(uid, conversation.id)
+
+    language = users_db.get_user_language_preference(uid)
+    new_memories: List[Memory] = []
+
+    if conversation.source == ConversationSource.external_integration:
+        text_content = conversation.external_data.get('text')
+        if text_content and len(text_content) > 0:
+            text_source = conversation.external_data.get('text_source', 'other')
+            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+    else:
+        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+
+    is_locked = conversation.is_locked
+    parsed_memories = []
+    seen_norm = set()
+    subject_entity_id, subject_attribution = infer_subject_from_segments(conversation.transcript_segments)
+
+    for memory in new_memories:
+        norm = ' '.join((memory.content or '').lower().split())
+        if not norm or norm in seen_norm:
+            continue
+        seen_norm.add(norm)
+
+        memory_db_obj = MemoryDB.from_memory(
+            memory,
+            uid,
+            conversation.id,
+            False,
+            source_id=conversation.id,
+            source_type="conversation",
+            source_signal="transcription",
+            artifact_ref=_transcript_artifact_ref(conversation),
+            extractor_id="new_memories_extractor",
+            subject_entity_id=subject_entity_id,
+            subject_attribution=subject_attribution,
+        )
+        memory_db_obj.is_locked = is_locked
+        memory_db_obj.id = extraction_memory_id(uid=uid, source_id=conversation.id, content=memory_db_obj.content)
+        memory_db_obj.memory_tier = MemoryTier.short_term
+        parsed_memories.append(memory_db_obj)
+
+    if len(parsed_memories) == 0:
+        logger.info(f"No canonical memories extracted for conversation {conversation.id}")
+        return
+
+    logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
+    for memory_db_obj in parsed_memories:
+        memory_service.write(uid, memory_db_obj.dict())
+
+    record_usage(uid, memories_created=len(parsed_memories))
+
+
 def _extract_memories_inner(uid: str, conversation: Conversation):
+    if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+        _extract_memories_canonical(uid, conversation)
+        return
+
     # Delete old memories for this conversation (if reprocessing)
     # Also get the IDs to delete from Pinecone
     deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
