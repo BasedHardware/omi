@@ -32,6 +32,10 @@ import pytest
 PARAKEET_URL = os.getenv("PARAKEET_URL", "http://127.0.0.1:8080")
 HIGH_CONCURRENCY = int(os.getenv("HIGH_CONCURRENCY_LEVEL", "16"))
 HIGH_ROUNDS = int(os.getenv("HIGH_CONCURRENCY_ROUNDS", "5"))
+RTFX_CONCURRENCY = int(os.getenv("RTFX_CONCURRENCY", "16"))
+RTFX_REQUESTS = int(os.getenv("RTFX_REQUESTS", "50"))
+RTFX_AUDIO_DURATION = float(os.getenv("RTFX_AUDIO_DURATION", "5.0"))
+RTFX_MIN_THRESHOLD = float(os.getenv("RTFX_MIN_THRESHOLD", "50.0"))
 
 
 def _make_speech_wav(duration_s=3.0, sample_rate=16000):
@@ -243,3 +247,44 @@ class TestHighConcurrency:
             if failures:
                 statuses = ", ".join(f"status={r['status']}" for r in failures[:3])
                 assert False, f"Ramp failed at concurrency={level}: {len(failures)} requests failed ({statuses})"
+
+    def test_rtfx_gate(self):
+        """RTFx must exceed threshold at cc=16 on L4.
+
+        Sends RTFX_REQUESTS concurrent requests with RTFX_AUDIO_DURATION audio
+        and gates on aggregate RTFx >= RTFX_MIN_THRESHOLD.
+        """
+        wav_data = _make_speech_wav(duration_s=RTFX_AUDIO_DURATION, sample_rate=16000)
+
+        print(
+            f"\n  RTFx gate: cc={RTFX_CONCURRENCY}, "
+            f"{RTFX_REQUESTS} requests, "
+            f"{RTFX_AUDIO_DURATION}s audio, "
+            f"threshold={RTFX_MIN_THRESHOLD}x"
+        )
+
+        t_start = time.time()
+        with ThreadPoolExecutor(max_workers=RTFX_CONCURRENCY) as pool:
+            futures = [pool.submit(_send_request, wav_data, True, i, timeout=180) for i in range(RTFX_REQUESTS)]
+            results = [f.result() for f in as_completed(futures)]
+        t_total = time.time() - t_start
+
+        successes = [r for r in results if r["status"] == 200]
+        failures = [r for r in results if r["status"] != 200 or r["error"] is not None]
+
+        assert len(failures) == 0, f"{len(failures)}/{len(results)} requests failed — " f"cannot measure RTFx"
+
+        rps = len(successes) / t_total
+        rtfx = rps * RTFX_AUDIO_DURATION
+
+        print(
+            f"  Result: {len(successes)}/{len(results)} OK in {t_total:.1f}s, "
+            f"RPS={rps:.2f}, RTFx={rtfx:.1f}x "
+            f"(threshold={RTFX_MIN_THRESHOLD}x)"
+        )
+
+        assert rtfx >= RTFX_MIN_THRESHOLD, (
+            f"RTFx {rtfx:.1f}x below threshold {RTFX_MIN_THRESHOLD}x "
+            f"at cc={RTFX_CONCURRENCY} "
+            f"(RPS={rps:.2f}, {RTFX_AUDIO_DURATION}s audio)"
+        )
