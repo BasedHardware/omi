@@ -40,6 +40,7 @@ from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.memory.memory_service import MemoryService
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -405,6 +406,7 @@ def delete_conversation(
             delete_memory_vector(uid, memory_id)
 
         # Canonical cohort: tombstone conversation-sourced items + neutral vector purge outbox (inert when legacy).
+        pin_memory_system(uid)
         MemoryService().retract_conversation_memories(uid, conversation_id)
 
         # Delete associated action items
