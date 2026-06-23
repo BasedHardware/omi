@@ -72,6 +72,47 @@ export async function posthogFetch(
 }
 
 /**
+ * Drop-in replacement for `fetch(<posthog query endpoint>, {...})` that adds
+ * Firestore result caching + stale-on-throttle, returning a `Response` whose
+ * body is always `{ results: [...] }`. Lets routes with many inline query
+ * fetches (notifications, floating-bar-usage, message-ratings) get caching
+ * without restructuring — just swap the `fetch(...)` call for this and keep the
+ * existing `.ok` / `.json()` handling.
+ */
+export async function cachedPosthogFetch(
+  host: string,
+  projectId: string,
+  apiKey: string,
+  query: string,
+  opts: { softTtlMs?: number } = {},
+): Promise<Response> {
+  const softTtlMs = opts.softTtlMs ?? SOFT_TTL_MS;
+  const key = createHash("sha1").update(`${projectId}|${query}`).digest("hex");
+  const hit = (results: unknown[]) =>
+    new Response(JSON.stringify({ results }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  const cached = await readCache(key);
+  if (cached && Date.now() - cached.freshAt < softTtlMs) return hit(cached.results);
+
+  const res = await posthogFetch(host, projectId, apiKey, query);
+  if (res.ok) {
+    try {
+      const raw = await res.clone().json();
+      const results = Array.isArray(raw.results) ? raw.results : [];
+      await writeCache(key, results);
+    } catch {
+      // ignore caching errors; return the live response below
+    }
+    return res;
+  }
+  if (cached) return hit(cached.results); // serve last good through the throttle
+  return res; // no cache to fall back on — surface the error
+}
+
+/**
  * Run a HogQL query and return its `results` array, cached in Firestore.
  * - Fresh cache (< soft TTL): returned without touching PostHog.
  * - Stale/miss: query PostHog (with 429 backoff); on success refresh the cache.
