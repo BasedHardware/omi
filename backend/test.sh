@@ -41,6 +41,7 @@ pytest tests/unit/test_memory_domain.py -v
 pytest tests/unit/test_memory_service_parity.py -v
 pytest tests/unit/test_ws_i_write_convergence.py -v
 pytest tests/unit/test_ws_b_short_term_lifecycle.py -v
+pytest tests/unit/test_ws_c_backfill.py -v
 pytest tests/unit/test_upstream_boundary.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_short_term_lifecycle.py -v
