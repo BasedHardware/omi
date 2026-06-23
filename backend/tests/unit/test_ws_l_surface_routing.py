@@ -65,7 +65,8 @@ def _load_mcp_sse_module():
         "utils.conversations.render",
         "utils.subscription",
     ]:
-        if mod_name not in sys.modules:
+        existing = sys.modules.get(mod_name)
+        if not isinstance(existing, _AutoMockModule):
             sys.modules[mod_name] = _AutoMockModule(mod_name)
 
     sys.modules["utils.other.endpoints"].check_rate_limit_inline = MagicMock()
