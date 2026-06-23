@@ -602,6 +602,10 @@ export class SqliteAgentStore implements AgentStore {
     return { ...event, eventSeq: Number(row.event_seq) };
   }
 
+  execute(sql: string, values: SQLInputValue[] = []): number {
+    return Number(this.db.prepare(sql).run(...values).changes);
+  }
+
   getPragma(name: string): SQLOutputValue | undefined {
     return Object.values(this.getRow(`PRAGMA ${name}`))[0];
   }
@@ -611,6 +615,11 @@ export class SqliteAgentStore implements AgentStore {
     if (!row) {
       throw new Error(`Expected row for query: ${sql}`);
     }
+    return row;
+  }
+
+  getOptionalRow(sql: string, values: SQLInputValue[] = []): Row | undefined {
+    const row = this.db.prepare(sql).get(...values);
     return row;
   }
 

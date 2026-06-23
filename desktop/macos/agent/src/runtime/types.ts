@@ -178,4 +178,8 @@ export interface AgentStore {
   insertAttempt(input: NewRunAttempt): RunAttempt;
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;
   appendEvent(input: NewAgentEvent): AgentEvent;
+  execute(sql: string, values?: unknown[]): number;
+  getOptionalRow(sql: string, values?: unknown[]): Record<string, unknown> | undefined;
+  getRow(sql: string, values?: unknown[]): Record<string, unknown>;
+  allRows(sql: string, values?: unknown[]): Record<string, unknown>[];
 }
