@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Refresh the backend uv pylock from the human-maintained requirements files.
+# Refresh the backend uv pylocks from the human-maintained requirements files.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -18,5 +18,14 @@ uv pip compile \
   testing/e2e/requirements.txt \
   --format pylock.toml \
   --python "$PYTHON_VERSION" \
+  --python-platform x86_64-unknown-linux-gnu \
   --output-file pylock.toml \
+  --custom-compile-command 'backend/scripts/update-python-lock.sh'
+uv pip compile \
+  requirements.txt \
+  testing/e2e/requirements.txt \
+  --format pylock.toml \
+  --python "$PYTHON_VERSION" \
+  --python-platform macos \
+  --output-file pylock.macos.toml \
   --custom-compile-command 'backend/scripts/update-python-lock.sh'

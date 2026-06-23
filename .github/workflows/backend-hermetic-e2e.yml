@@ -28,7 +28,7 @@ jobs:
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock.toml
+          cache-dependency-glob: backend/pylock*.toml
 
       - name: Install backend and e2e dependencies
         working-directory: backend

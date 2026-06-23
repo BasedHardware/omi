@@ -7,6 +7,15 @@ cd "$ROOT_DIR"
 
 PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
 VENV_PATH="${VENV_PATH:-.venv}"
+LOCK_FILE="pylock.toml"
+
+case "$(uname -s)-$(uname -m)" in
+  Darwin-arm64|Darwin-aarch64)
+    if [[ -f pylock.macos.toml ]]; then
+      LOCK_FILE="pylock.macos.toml"
+    fi
+    ;;
+esac
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required. Install it from https://docs.astral.sh/uv/getting-started/installation/" >&2
@@ -15,6 +24,6 @@ fi
 
 uv python install "$PYTHON_VERSION"
 uv venv --python "$PYTHON_VERSION" "$VENV_PATH"
-uv pip sync pylock.toml --python "$VENV_PATH/bin/python"
+uv pip sync "$LOCK_FILE" --python "$VENV_PATH/bin/python"
 
-echo "Backend dependencies synced into $ROOT_DIR/$VENV_PATH"
+echo "Backend dependencies synced from $LOCK_FILE into $ROOT_DIR/$VENV_PATH"

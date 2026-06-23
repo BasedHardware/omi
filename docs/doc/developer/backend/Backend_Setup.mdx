@@ -247,15 +247,18 @@ OAuth is required for user authentication. You need to configure both Google and
     <Tabs>
       <Tab title="macOS">
         ```bash
-        brew install python@3.11 git ffmpeg opus
+        brew install python@3.11 git ffmpeg opus uv
+        uv --version
         ```
       </Tab>
       <Tab title="Windows">
-        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools:
+        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools and `uv`:
 
         ```powershell
         choco install git.install ffmpeg
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
         python --version  # should print 3.11.x
+        uv --version
         ```
         <Note>
           The Python `opuslib` package still needs a native `libopus` DLL on `PATH`. One common setup is MSYS2 UCRT64:
@@ -264,7 +267,12 @@ OAuth is required for user authentication. You need to configure both Google and
         </Note>
       </Tab>
       <Tab title="Linux/Nix">
-        Python, Git, and FFmpeg are typically pre-installed. Install opus via your package manager if needed.
+        Python, Git, and FFmpeg are typically pre-installed. Install opus and `uv` via your package manager if needed, or use the standalone installer:
+
+        ```bash
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv --version
+        ```
       </Tab>
     </Tabs>
   </Step>
