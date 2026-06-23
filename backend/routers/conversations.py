@@ -39,6 +39,7 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.executors import postprocess_executor, submit_with_context
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -72,30 +73,38 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
 
 
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
-    """First open of a lazily-deferred desktop conversation: run the full LLM enrichment now
-    (summary, action items, memories, embeddings, app results), clear the `deferred` flag, and
-    return the enriched conversation. The flag is flipped off first so concurrent opens don't
-    double-process. On any failure, re-arm the flag and return the raw conversation so the user
-    still sees their transcript."""
+    """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
+    items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
+    the conversation immediately: the client gets an instant open (transcript already present) and
+    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
+    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
+    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
     conversation_id = conversation.get('id')
     try:
         conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
-        conv_obj = deserialize_conversation(conversation)
-        conv_obj.deferred = False
-        enriched = process_conversation(
-            uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
-        )
-        result = enriched.dict()
-        result['deferred'] = False
-        return result
     except Exception as e:
-        logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
-        try:
-            conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
-        except Exception:
-            pass
-        conversation['deferred'] = True
+        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
         return conversation
+
+    def _run_enrichment():
+        try:
+            conv_obj = deserialize_conversation(conversation)
+            conv_obj.deferred = False
+            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
+        except Exception as e:
+            logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            try:
+                conversations_db.update_conversation(
+                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
+                )
+            except Exception:
+                pass
+
+    submit_with_context(postprocess_executor, _run_enrichment)
+    # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    conversation['deferred'] = False
+    return conversation
 
 
 class ProcessConversationRequest(BaseModel):
