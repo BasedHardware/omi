@@ -857,6 +857,16 @@ no agent may start a blocked WS against an unanswered question.
 - §10 Q1–Q8 ratified (see §10 + domain_model.md). Q1 cutover = routing only; legacy data preserved.
 - Backfill non-destructive; canonical↔legacy flip is pure routing; WS-H gated on full verified migration.
 
+### Owner decisions — 2026-06-23 (morning review session, all 6 open issues closed)
+1. **Kill-switch / cohort precedence (finding I):** the `MEMORY_CANONICAL_USERS` whitelist is the SOLE source of truth. In it → canonical experience; removed → back to legacy instantly; canonical-era memories are NOT backfilled into legacy on removal (accepted non-destructive staleness). Empty whitelist = global kill-switch. → landed (Wave 12).
+2. **Q8 conversation-delete `cascade`:** KEEP `cascade=False`, no default change; revisit later. `Query(False)` + characterization test stay as-is. No client cascade work now.
+3. **Findings A / H / J (split-brain guardrails):** bless A (V17_MODE ≠ cohort signal) and J (`hidden`→`tombstoned` mapping) as landed; H (decide-once request/job pinning) wired now → landed.
+4. **Finding B (shared visibility filter):** fold `v17_read_api` onto the shared §1.3 filter NOW. KEEP the resulting V17-read dogfood display change (processed+active short_term now default-visible) — it matches the ratified §1.3 model and dogfood should see corrected behavior.
+5. **Client runtime parity (desktop Swift / Flutter):** DEFER all client work; keep `docs/memory/ws_k_client_parity.md` as needs-local-build; revisit under WS-F UI wave.
+6. **Deferred-by-design:** DEFER WS-H (decommission, gated on full verified migration). WS-M, WS-N, WS-G are IN-SCOPE for this plan — to be slotted in. Agreed sequencing (serialized to avoid the concurrent-edit regression seen this session): **WS-M (keyword index) → WS-N (bounded read-only GraphRAG over canonical-derived KG, ≤2 hops; old "after WS-H" gate RELAXED — read-only does not require one-store) → WS-G (alias-first rename, run last when the tree is quiet).** Each runs solo, verified green in one process before the next starts.
+
+> Post-decision branch state: full memory suite **136 passed, 0 failed** in one process (`ws_i→ws_l`, `ws_k→ws_i→ws_l` orderings green) after reconciling WS-I monkeypatch targets to the new pinning seam. Safe baseline for WS-M/N/G.
+
 ### Overnight run summary (read me first)
 Drove the implementable rollout to local commits on `memory-canonical-rollout` (worktree `/Users/dazheng/workspace/omi-memory-rollout`). **Nothing pushed/merged.** Per wave: implement → independent review → fix blockers → coordinator re-verify (I re-ran tests myself, not just trusting subagents) → commit per file → audit in §11.
 - **Committed waves:** WS-B (short-term lifecycle/promotion), WS-C (non-destructive backfill), WS-J (vectors + delete/privacy matrix), WS-L (surface routing: MCP/chat/dev-API/integration/persona), WS-I-hardening (atomic bump + redaction preserve), WS-G (finding-J status reconciliation + alias shims), WS-K (additive `layer` API field). Full memory suite **128 passed** in one process.
