@@ -1797,7 +1797,23 @@ class FloatingControlBarManager {
         let generation = activeQueryGeneration
 
         // Check monthly usage limit for free users (shared with main chat page).
+        //
+        // `FloatingBarUsageLimiter.isLimitReached` returns `false` (fail-open)
+        // when `serverQuota == nil`. The optimistic check is fast and doesn't
+        // need a network round trip, but it relies on having a snapshot to
+        // check against. If app-launch `fetchPlan()` failed (network blip,
+        // first-run offline, etc.) and the user has been signing queries
+        // without ever refreshing the quota, a free user past their limit
+        // can keep chatting — the local limiter has no data to enforce.
+        //
+        // Fix: at the start of every floating-bar query, if `serverQuota`
+        // is nil, force a fresh `syncQuota()` before the limit check. This
+        // is one network round trip on cold start, zero on every subsequent
+        // query (serverQuota is populated for the session lifetime).
         let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
+            await limiter.syncQuota()
+        }
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
                 guard isActiveQueryGeneration(generation) else { return }
