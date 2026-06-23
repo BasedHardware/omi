@@ -112,7 +112,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Use unified recording UI for all recording types
+                  if (provider.havingRecordingDevice && provider.deviceSupportsTranscribeLater) ...[
+                    _buildCaptureModeToggle(context, provider),
+                    const SizedBox(height: 14),
+                  ],
                   _buildUnifiedRecordingUI(provider, header),
                 ],
               ),
@@ -306,6 +309,59 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ],
       ),
     );
+  }
+
+  Widget _buildCaptureModeToggle(BuildContext context, CaptureProvider provider) {
+    final batch = SharedPreferencesUtil().batchModeEnabled;
+    return Container(
+      margin: const EdgeInsets.only(left: 8, right: 6),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: [
+          _buildModeSegment(label: context.l10n.live, active: !batch, onTap: () => _setCaptureMode(provider, false)),
+          _buildModeSegment(
+            label: context.l10n.transcribeLaterTitle,
+            active: batch,
+            onTap: () => _setCaptureMode(provider, true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeSegment({required String label, required bool active, required VoidCallback onTap}) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: active ? null : onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: active ? const Color(0xFF45444D) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: active ? Colors.white : Colors.grey.shade400,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _setCaptureMode(CaptureProvider provider, bool batch) async {
+    if (SharedPreferencesUtil().batchModeEnabled == batch) return;
+    await provider.setBatchMode(batch);
+    if (mounted) setState(() {});
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
@@ -550,7 +606,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
+                      muted ? context.l10n.muted : context.l10n.recording,
                       style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
