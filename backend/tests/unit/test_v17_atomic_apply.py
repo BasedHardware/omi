@@ -11,7 +11,7 @@ from models.v17_memory_apply import (
 )
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
 from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, V17MemoryItem, new_memory_id
+from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem, new_memory_id
 
 
 def _evidence():
@@ -213,3 +213,59 @@ def test_firestore_transaction_retry_produces_identical_memory_commit_and_outbox
     assert [event.event_id for event in first.outbox_events] == [event.event_id for event in retry.outbox_events]
     assert first.operation.committed_memory_item_ids == retry.operation.committed_memory_item_ids
     assert first.operation.committed_outbox_event_ids == retry.operation.committed_outbox_event_ids
+
+
+def _short_term_existing(**overrides):
+    now = datetime.now(timezone.utc)
+    data = dict(
+        memory_id="mem_st",
+        uid="u1",
+        version=1,
+        tier=MemoryTier.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content="Short term fact.",
+        evidence=[_evidence()],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=now,
+        updated_at=now,
+        expires_at=now + timedelta(days=30),
+        ledger_commit_id="head0",
+        ledger_sequence=1,
+        source_commit_id="head0",
+        source_commit_sequence=1,
+        content_hash="hash1",
+        account_generation=1,
+    )
+    data.update(overrides)
+    return V17MemoryItem(**data)
+
+
+def test_update_without_target_tier_preserves_existing_short_term_tier():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _short_term_existing()
+    operation = _operation(
+        target_memory_id="mem_st",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem_st",
+            "memory_text": "Updated text only.",
+            "result_status": "active",
+        },
+    )
+    patch_payload = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id="mem_st",
+        memory_text="Updated text only.",
+    )
+    patch_payload["existing_item"] = existing.model_dump(mode="python")
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch_payload)
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].tier == MemoryTier.short_term
+    assert result.memory_items[0].content == "Updated text only."
+    assert result.memory_items[0].expires_at is not None
