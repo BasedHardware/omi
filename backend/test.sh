@@ -39,6 +39,7 @@ pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memory_domain.py -v
 pytest tests/unit/test_memory_service_parity.py -v
+pytest tests/unit/test_upstream_boundary.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_short_term_lifecycle.py -v
 pytest tests/unit/test_v17_product_memory_items.py -v
