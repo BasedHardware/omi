@@ -15,8 +15,8 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     // Core ServerMemory fields
     var content: String
     var category: String                // system, interesting, manual
-    var tier: String                    // short_term, long_term, archive
-    var tierIsExplicit: Bool            // true only when the backend sent a tier (legacy rows: false → no badge)
+    var tier: String                    // short_term, long_term, archive (canonical product layer; API field `layer`)
+    var tierIsExplicit: Bool            // true when backend sent layer/tier/memory_tier (legacy rows: false → no badge)
     var tagsJson: String?               // JSON array: ["tips"], ["focus", "focused"]
     var visibility: String
     var reviewed: Bool
