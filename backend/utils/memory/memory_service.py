@@ -1,4 +1,4 @@
-"""Memory routing seam — WS-L will rewire callers to use MemoryService."""
+"""Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
 import logging
 from dataclasses import dataclass
@@ -19,6 +19,7 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_extraction_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,66 @@ def _legacy_search_memories(uid: str, query: str, *, limit: int = 5) -> List[Mem
             continue
         results.append(MemorySearchMatch(memory=memory_obj, score=scores_by_id.get(memory_id, 0.0)))
     return results
+
+
+def _legacy_search_memories_mcp(uid: str, query: str, *, limit: int = 5) -> List[dict]:
+    """Legacy MCP search path: over-fetch, filter, RRF rerank (Wave 2 cf#1 parity)."""
+    capped_limit = max(1, min(limit, 20))
+    fetch_limit = min(capped_limit * 3, 60)
+    matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
+    if not matches:
+        return []
+
+    memory_ids = [match.get("memory_id") for match in matches if match.get("memory_id")]
+    scores = {match.get("memory_id"): float(match.get("score", 0) or 0) for match in matches}
+    if not memory_ids:
+        return []
+
+    docs = {memory.get("id"): memory for memory in memories_db.get_memories_by_ids(uid, memory_ids)}
+
+    candidates = []
+    for memory_id in memory_ids:
+        memory = docs.get(memory_id)
+        if not memory:
+            continue
+        if memory.get("user_review") is False or memory.get("is_locked", False) or memory.get("invalid_at") is not None:
+            continue
+        candidates.append(
+            {
+                "id": memory.get("id", ""),
+                "content": memory.get("content", ""),
+                "category": memory.get("category", "other"),
+                "vector_score": scores.get(memory_id, 0),
+            }
+        )
+
+    candidates.sort(key=lambda candidate: candidate.get("vector_score", 0), reverse=True)
+    reranked = rrf_rerank(query, candidates, capped_limit)
+    return [
+        {
+            "id": candidate["id"],
+            "content": candidate["content"],
+            "category": candidate["category"],
+            "relevance_score": round(candidate.get("vector_score", 0), 4),
+        }
+        for candidate in reranked
+    ]
+
+
+def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5, db_client=None) -> List[dict]:
+    capped_limit = max(1, min(limit, 20))
+    items = search_canonical_memories(uid, query, limit=capped_limit, db_client=db_client)
+    formatted = []
+    for rank, item in enumerate(items):
+        formatted.append(
+            {
+                "id": item["memory_id"],
+                "content": item.get("content") or "",
+                "category": "other",
+                "relevance_score": round(1.0 - (rank * 0.0001), 4),
+            }
+        )
+    return formatted
 
 
 class LegacyMemoryBackend:
@@ -140,6 +201,12 @@ class MemoryService:
 
     def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
         return self._resolve_backend(uid).search(uid, query, limit=limit)
+
+    def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[dict]:
+        """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
+        if resolve_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
+            return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
+        return _legacy_search_memories_mcp(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> None:
         self._resolve_backend(uid).write(uid, data)
