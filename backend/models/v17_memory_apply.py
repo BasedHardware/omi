@@ -9,12 +9,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_memory_contracts import DurableMemoryPatch, deterministic_contract_id
 from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, logical_payload_digest
+from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus, assert_legal_state
 from models.v17_product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
     V17MemoryItem,
 )
+from utils.memory.short_term_lifecycle import default_short_term_expiry
 
 
 class ApplyStatus(str, Enum):
@@ -188,13 +190,22 @@ def _materialize_memory_item(
     account_generation: int,
 ) -> V17MemoryItem:
     now = datetime.now(timezone.utc)
+    tier = patch.initial_tier if isinstance(patch.initial_tier, MemoryTier) else MemoryTier(patch.initial_tier)
+    expires_at = default_short_term_expiry(now) if tier == MemoryTier.short_term else None
+    status = MemoryItemStatus.active
+    processing_state = ProcessingState.processed
+    assert_legal_state(
+        MemoryLayer(tier.value),
+        MemoryRecordStatus(status.value),
+        MemoryProcessingState(processing_state.value),
+    )
     return V17MemoryItem(
         memory_id=_deterministic_materialized_memory_id(uid=uid, patch=patch, commit_id=commit_id),
         uid=uid,
         version=1,
-        tier=MemoryTier.long_term,
-        status=MemoryItemStatus.active,
-        processing_state=ProcessingState.processed,
+        tier=tier,
+        status=status,
+        processing_state=processing_state,
         content=patch.memory_text,
         evidence=evidence,
         source_state=SourceState.active,
@@ -203,7 +214,7 @@ def _materialize_memory_item(
         user_asserted=False,
         captured_at=now,
         updated_at=now,
-        expires_at=None,
+        expires_at=expires_at,
         ledger_commit_id=commit_id,
         ledger_sequence=sequence,
         item_revision=1,
