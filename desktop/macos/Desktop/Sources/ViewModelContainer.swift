@@ -101,6 +101,21 @@ class ViewModelContainer: ObservableObject {
         warmupCoordinator.schedulePostInteractiveWarmup(dbAvailable: dbAvailable)
     }
 
+    @discardableResult
+    func scheduleSessionWarmup(
+        id: StartupWarmupTaskID,
+        delay: TimeInterval,
+        onCancel: (@MainActor () -> Void)? = nil,
+        operation: @MainActor @escaping () async -> Void
+    ) -> Bool {
+        warmupCoordinator.scheduleSessionWarmup(
+            id: id,
+            delay: delay,
+            onCancel: onCancel,
+            operation: operation
+        )
+    }
+
     func resetStartupState() {
         warmupCoordinator.reset()
         tasksStore.resetSessionState()

@@ -35,6 +35,27 @@ struct RetryableDelayedStartGate {
     }
 }
 
+enum StartupWarmupTaskID: Hashable {
+    case serviceWarmup
+    case databaseWarmup
+    case dashboardNetworkRefresh
+    case chatPromptContextWarmup
+    case databaseRetry
+    case crispInitialPoll
+    case agentVMProvisioning
+    case conversationWarmup
+    case initialFileIndexing
+    case proactiveAssistantsStart
+}
+
+struct StartupWarmupSessionScope: Equatable {
+    let userId: String?
+
+    func matches(currentUserId: String?, isSignedIn: Bool) -> Bool {
+        isSignedIn && userId != nil && currentUserId == userId
+    }
+}
+
 struct DelayedFileIndexingBackfillState {
     private var isScheduled = false
     private(set) var shouldMarkComplete = false

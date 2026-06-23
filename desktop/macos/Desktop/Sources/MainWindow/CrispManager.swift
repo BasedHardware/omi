@@ -72,7 +72,7 @@ class CrispManager: ObservableObject {
     ///     without touching the network, auth state, or firing real notifications.
     ///   - initialPollDelay: Optional delay before the initial poll. Activation and
     ///     Cmd+R events still poll immediately.
-    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0) {
+    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0, sessionUserId: String? = nil) {
         guard !isStarted else { return }
         isStarted = true
 
@@ -90,6 +90,10 @@ class CrispManager: ObservableObject {
                     try? await Task.sleep(nanoseconds: UInt64(initialPollDelay * 1_000_000_000))
                     guard !Task.isCancelled else { return }
                     guard let self, self.isStarted else { return }
+                    guard StartupWarmupSessionScope(userId: sessionUserId).matches(
+                        currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+                        isSignedIn: AuthState.shared.isSignedIn
+                    ) else { return }
                     self.pollForMessages()
                 }
             } else {
