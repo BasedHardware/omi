@@ -439,7 +439,7 @@ OAuth is required for user authentication. You need to configure both Google and
     Try reinstalling dependencies:
 
     ```bash
-    pip install -r requirements.txt --upgrade --force-reinstall
+    ./scripts/sync-python-deps.sh
     ```
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
@@ -510,7 +510,8 @@ The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a
 We use `black` for code formatting with a line length of 120 characters.
 
 ```bash
-pip install black
+source .venv/bin/activate
+uv pip install black
 ```
 
 To auto-format on commit, install the pre-commit hook from the repository root:
