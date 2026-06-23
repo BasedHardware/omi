@@ -114,6 +114,7 @@ from database.vector_db import (
     delete_action_item_vectors_batch,
     delete_screen_activity_vectors,
 )
+from utils.memory.canonical_memory_adapter import purge_canonical_derived_user_data
 from utils.webhooks import webhook_first_time_setup
 from database.action_items import get_action_items as get_standalone_action_items
 from utils.byok import has_byok_keys, invalidate_byok_state_cache
@@ -205,6 +206,11 @@ def _purge_derived_user_data(uid: str):
         delete_all_conversation_recordings(uid)
     except Exception as e:
         logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
+
+    try:
+        purge_canonical_derived_user_data(uid)
+    except Exception as e:
+        logger.error(f'delete_account purge canonical vectors failed for {uid}: {sanitize(str(e))}')
 
 
 def _background_wipe_user_data(uid: str):
