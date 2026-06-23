@@ -221,3 +221,6 @@ app/macos/Runner/LocalDev.entitlements
 # Generated browser snapshots (contain PII)
 builds-snapshot.md
 *-snapshot.md
+
+# Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
+.dev/
