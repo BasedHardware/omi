@@ -77,12 +77,6 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 # exempt.
 TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 
-# Master switch for the desktop trial paywall. Default OFF: freemium is reactivated —
-# basic/Neo desktop users are never locked out, they just get the metered free tier
-# (unlimited data intake + the per-plan chat-question cap). Set TRIAL_PAYWALL_ENABLED=true
-# to bring the 3-day lockout back without a code change.
-TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
-
 # Platform identifiers that count as desktop for paywall purposes. The Swift
 # client sends X-App-Platform: macos and the listen WS uses source=desktop.
 # Anything else (ios, android, omi device, phone_call, unknown) is exempt.
@@ -168,8 +162,6 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
     """
-    if not TRIAL_PAYWALL_ENABLED:
-        return False  # freemium reactivated — no desktop lockout
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
     return _is_trial_expired_cached(uid)
@@ -510,7 +502,7 @@ BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH = int(os.getenv('BASIC_TIER_INSIGHTS_
 
 # Chat caps per plan. Env-overridable for ops.
 FREE_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('FREE_CHAT_QUESTIONS_PER_MONTH', '30'))
-NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '30'))
+NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '200'))
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
