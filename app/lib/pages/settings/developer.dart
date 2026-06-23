@@ -805,8 +805,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () async {
+                                  final message = context.l10n.debugLogCleared;
                                   await DebugLogManager.clear();
-                                  AppSnackbar.showSnackbar(context.l10n.debugLogCleared);
+                                  if (!context.mounted) return;
+                                  AppSnackbar.showSnackbar(message);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
