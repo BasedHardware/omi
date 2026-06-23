@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
-from database.product_memory_items import filter_default_product_memory_items
+from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.v17_collections import V17Collections
 from database.v17_memory_apply_store import apply_long_term_patch_firestore
 from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
@@ -17,14 +17,7 @@ from models.memories import MemoryDB, MemoryCategory
 from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
-from models.v17_product_memory import (
-    MemoryAccessPolicy,
-    MemoryItemStatus,
-    MemoryTier,
-    ProcessingState,
-    V17MemoryItem,
-    is_default_access_eligible,
-)
+from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
@@ -54,11 +47,6 @@ def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str]) -> None
         uid,
         len(memory_ids),
     )
-
-
-# L2 lifecycle hides processed short_term until disposition workers run (WS-B).
-# WS-I extractions land as processed short_term and must remain default-visible.
-_L2_PROCESSED_REQUIRES_DISPOSITION = "short_term_l2_processed_requires_explicit_lifecycle_disposition"
 
 
 def extraction_memory_id(*, uid: str, source_id: str, content: str) -> str:
@@ -149,27 +137,7 @@ def read_canonical_memories(
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
-    report = filter_default_product_memory_items(items, policy=policy, now=now)
-    visible_by_id = {item.memory_id: item for item in report.visible_items}
-
-    # Reconcile WS-I extraction state: processed short_term passes access policy but is
-    # withheld by L2 lifecycle until explicit disposition (promotion is WS-B).
-    for item in items:
-        if item.memory_id in visible_by_id:
-            continue
-        decision = report.decisions.get(item.memory_id)
-        if decision is None or not decision.lifecycle_reason:
-            continue
-        if (
-            decision.lifecycle_reason == _L2_PROCESSED_REQUIRES_DISPOSITION
-            and item.tier == MemoryTier.short_term
-            and item.status == MemoryItemStatus.active
-            and item.processing_state == ProcessingState.processed
-            and is_default_access_eligible(item, policy, now=now).allowed
-        ):
-            visible_by_id[item.memory_id] = item
-
-    visible = sorted(visible_by_id.values(), key=lambda item: (-item.updated_at.timestamp(), item.memory_id))
+    visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
     paged = visible[offset : offset + limit]
     return [v17_memory_item_to_memorydb(item) for item in paged]
 
