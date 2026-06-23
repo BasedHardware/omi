@@ -60,6 +60,9 @@ class MemoryControlState(BaseModel):
     projection_watermark_sequence: int = 0
     vector_watermark_commit_id: Optional[str] = None
     last_promotion_run_at: Optional[datetime] = None
+    legacy_backfill_processed_count: int = 0
+    legacy_backfill_source_fingerprint: Optional[str] = None
+    legacy_backfill_completed_at: Optional[datetime] = None
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("uid", "head_commit_id")
@@ -69,14 +72,20 @@ class MemoryControlState(BaseModel):
             raise ValueError("required control fields must not be blank")
         return value
 
-    @field_validator("account_generation", "source_generation", "commit_sequence", "projection_watermark_sequence")
+    @field_validator(
+        "account_generation",
+        "source_generation",
+        "commit_sequence",
+        "projection_watermark_sequence",
+        "legacy_backfill_processed_count",
+    )
     @classmethod
     def validate_nonnegative(cls, value: int) -> int:
         if value < 0:
             raise ValueError("control counters must be nonnegative")
         return value
 
-    @field_validator("last_promotion_run_at", "updated_at")
+    @field_validator("last_promotion_run_at", "legacy_backfill_completed_at", "updated_at")
     @classmethod
     def coerce_timezone_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
         if value is None:
