@@ -104,6 +104,8 @@ class ViewModelContainer: ObservableObject {
     func resetStartupState() {
         warmupCoordinator.reset()
         tasksStore.resetSessionState()
+        dashboardViewModel.resetSessionState()
+        memoriesViewModel.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false
