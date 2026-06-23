@@ -3,8 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
+import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade } from "../src/runtime/compatibility-facade.js";
-import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
+import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
 
@@ -153,6 +156,108 @@ describe("JsonlCompatibilityFacade", () => {
     });
     await running;
     expect(sent.some((message) => message.type === "result" && message.terminalStatus === "cancelled")).toBe(true);
+    store.close();
+  });
+
+  it("queues overlapping v2 requests on one worker without mixing request-scoped results", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const first = facade.handleQuery({
+      ...v1Query({ prompt: "first" }),
+      protocolVersion: 2,
+      requestId: "request-one",
+      clientId: "client-one",
+      legacySessionKey: "shared-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    const second = facade.handleQuery({
+      ...v1Query({ prompt: "second" }),
+      protocolVersion: 2,
+      requestId: "request-two",
+      clientId: "client-two",
+      legacySessionKey: "shared-key",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(adapter.executed).toHaveLength(1);
+    expect(sent.some((message) => message.type === "error")).toBe(false);
+
+    adapter.resolveDeferred({
+      text: "first done",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await first;
+    await second;
+
+    expect(adapter.executed).toHaveLength(2);
+    const results = sent.filter((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
+    expect(results.map((message) => message.requestId).sort()).toEqual(["request-one", "request-two"]);
+    expect(results.find((message) => message.requestId === "request-one")?.text).toBe("first done");
+    expect(results.find((message) => message.requestId === "request-two")?.text).toMatch(/^done-att_/);
+    expect(new Set(results.map((message) => message.runId)).size).toBe(2);
+    expect(store.allRows("SELECT status FROM runs ORDER BY created_at_ms")).toEqual([
+      expect.objectContaining({ status: "succeeded" }),
+      expect.objectContaining({ status: "succeeded" }),
+    ]);
+    store.close();
+  });
+
+  it("serves acp and pi-mono requests through one facade without adapter conflict", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const acpAdapter = new FakeRuntimeAdapter("acp");
+    const piMonoAdapter = new FakeRuntimeAdapter("pi-mono");
+    const registry = new AdapterRegistry();
+    registry.register("acp", () => acpAdapter, 1);
+    registry.register("pi-mono", () => piMonoAdapter, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "acp",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await Promise.all([
+      facade.handleQuery({
+        ...v1Query({ prompt: "use acp" }),
+        protocolVersion: 2,
+        requestId: "request-acp",
+        clientId: "client-acp",
+        adapterId: "acp",
+        legacySessionKey: "mixed-acp",
+      }),
+      facade.handleQuery({
+        ...v1Query({ prompt: "use pi" }),
+        protocolVersion: 2,
+        requestId: "request-pi",
+        clientId: "client-pi",
+        adapterId: "pi-mono",
+        legacySessionKey: "mixed-pi",
+      }),
+    ]);
+
+    expect(acpAdapter.executed).toHaveLength(1);
+    expect(piMonoAdapter.executed).toHaveLength(1);
+    const results = sent.filter((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
+    expect(results.map((message) => message.requestId).sort()).toEqual(["request-acp", "request-pi"]);
+    expect(results.find((message) => message.requestId === "request-acp")?.adapterSessionId).toBe("native-1");
+    expect(results.find((message) => message.requestId === "request-pi")?.adapterSessionId).toBe("native-1");
+    expect(store.allRows("SELECT adapter_id, status FROM adapter_bindings ORDER BY adapter_id")).toEqual([
+      expect.objectContaining({ adapter_id: "acp", status: "active" }),
+      expect.objectContaining({ adapter_id: "pi-mono", status: "active" }),
+    ]);
     store.close();
   });
 

@@ -250,18 +250,20 @@ describe("tool_use event filtering", () => {
     "utf8"
   );
 
-  it("source: runPiMonoMode enables facade tool_use suppression", () => {
-    expect(indexSrc).toMatch(/defaultAdapterId:\s*["']pi-mono["'][\s\S]*suppressToolUseEvents:\s*true/);
+  it("source: shared runtime registers pi-mono in the same daemon", () => {
+    expect(indexSrc).toMatch(/Default harness mode/);
+    expect(indexSrc).toMatch(/registry\.register\(["']acp["']/);
+    expect(indexSrc).toMatch(/registry\.register\(["']pi-mono["']/);
   });
 
-  it("source: compatibility facade suppresses tool_use only when configured", () => {
-    expect(facadeSrc).toMatch(/case\s+["']tool_use["'][\s\S]*if\s+\(!this\.suppressToolUseEvents\)/);
+  it("source: compatibility facade suppresses tool_use when configured or routed to pi-mono", () => {
+    expect(facadeSrc).toMatch(/case\s+["']tool_use["'][\s\S]*!this\.suppressToolUseEvents\s*&&\s*context\.adapterId\s*!==\s*["']pi-mono["']/);
   });
 
   it("behavioral: suppresses tool_use events and forwards all other types", () => {
     const forwarded: any[] = [];
 
-    // Exact callback from runPiMonoMode() line ~1273
+    // Equivalent filtering path used by the compatibility facade for pi-mono events.
     const eventCallback = (event: any) => {
       if ((event as any).type === "tool_use") return;
       forwarded.push(event);

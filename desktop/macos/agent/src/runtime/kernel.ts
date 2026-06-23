@@ -166,22 +166,21 @@ export class AgentRuntimeKernel {
       lastAttempt = attempt;
 
       const pool = this.registry.get(adapterId);
-      let worker = pool.acquire();
-      if (!worker) {
-        this.failAttemptBeforeExecution(attempt, "worker_unavailable", `No idle worker available for adapter ${adapterId}`, false);
-        break;
-      }
 
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
       try {
-        const resolved = await this.resolveBindingForAttempt({
-          input,
-          session: accepted.session,
-          adapter: worker.adapter,
-          attempt,
-          adapterId,
-        });
+        const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
+        const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
+        const resolved = await pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
+          this.resolveBindingForAttempt({
+            input,
+            session: accepted.session,
+            adapter: worker.adapter,
+            attempt,
+            adapterId,
+          })
+        );
         binding = resolved.binding;
         handle = resolved.handle;
       } catch (error) {
@@ -200,23 +199,20 @@ export class AgentRuntimeKernel {
         break;
       }
 
-      worker = pool.acquire(handle);
-      if (!worker) {
-        this.failAttemptBeforeExecution(attempt, "worker_unavailable", `No idle worker available for binding ${binding.bindingId}`, false);
-        break;
-      }
-
       const abortController = new AbortController();
-      this.activeExecutions.set(accepted.run.runId, {
-        adapter: worker.adapter,
-        abortController,
-        binding: handle,
-        attemptId: attempt.attemptId,
-        sessionId: accepted.session.sessionId,
-      });
 
       try {
-        const result = await worker.runExclusive(attempt.attemptId, async () => {
+        const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
+          if (this.runStatus(accepted.run.runId) === "cancelling") {
+            throw new Error("cancelled_before_adapter_dispatch");
+          }
+          this.activeExecutions.set(accepted.run.runId, {
+            adapter: worker.adapter,
+            abortController,
+            binding: handle,
+            attemptId: attempt.attemptId,
+            sessionId: accepted.session.sessionId,
+          });
           this.markAttemptRunning(attempt, binding);
           return worker.adapter.executeAttempt(
             {
@@ -543,6 +539,18 @@ export class AgentRuntimeKernel {
 
     const previousBinding = nextGeneration > 1 ? this.readLatestBinding(input.session.sessionId, input.adapterId) : undefined;
     return this.openNewBinding(input, nextGeneration, previousBinding?.bindingId ?? null);
+  }
+
+  private handleForExistingBinding(binding: AdapterBinding): AdapterBindingHandle {
+    return {
+      bindingId: binding.bindingId,
+      sessionId: binding.sessionId,
+      adapterId: binding.adapterId,
+      adapterNativeSessionId: binding.adapterNativeSessionId ?? "",
+      resumeFidelity: binding.resumeFidelity,
+      cwd: binding.cwd ?? process.cwd(),
+      model: binding.modelId ?? undefined,
+    };
   }
 
   private async resumeOrReplaceBinding(

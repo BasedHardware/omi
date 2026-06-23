@@ -275,7 +275,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
-    // The pipe is already set in process.env by runPiMonoMode().
+    // The shared runtime process sets the pipe in process.env before starting pi-mono.
 
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],

@@ -21,7 +21,7 @@ export interface KernelHarness {
 }
 
 export class FakeRuntimeAdapter implements RuntimeAdapter {
-  readonly adapterId = "fake";
+  readonly adapterId: string;
   readonly capabilities = {
     resumeFidelity: "native" as const,
     supportsNativeResume: true,
@@ -45,6 +45,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     | undefined;
 
   private nextNativeSession = 1;
+
+  constructor(adapterId = "fake") {
+    this.adapterId = adapterId;
+  }
 
   async start(): Promise<void> {}
 
@@ -156,11 +160,11 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   }
 }
 
-export function createKernelHarness(databasePath: string, adapterId = "fake"): KernelHarness {
+export function createKernelHarness(databasePath: string, adapterId = "fake", maxWorkers = 4): KernelHarness {
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
-  const adapter = new FakeRuntimeAdapter();
+  const adapter = new FakeRuntimeAdapter(adapterId);
   const registry = new AdapterRegistry();
-  registry.register(adapterId, () => adapter, 4);
+  registry.register(adapterId, () => adapter, maxWorkers);
   const kernel = new AgentRuntimeKernel({ store, registry });
   return { store, adapter, kernel };
 }

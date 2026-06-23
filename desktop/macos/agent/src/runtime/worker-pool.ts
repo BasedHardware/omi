@@ -63,11 +63,18 @@ export class AdapterWorker {
 }
 
 type AdapterFactory = () => RuntimeAdapter;
+type WorkerLeaseResolver = (worker: AdapterWorker) => void;
+
+interface PendingWorkerLease {
+  binding?: AdapterBindingHandle;
+  resolve: WorkerLeaseResolver;
+}
 
 export class AdapterWorkerPool {
   private readonly maxWorkers: number;
   private readonly adapterFactory: AdapterFactory;
   private readonly workers: AdapterWorker[] = [];
+  private readonly waiters: PendingWorkerLease[] = [];
   private nextWorkerId = 1;
 
   constructor(adapterFactory: AdapterFactory, maxWorkers = configuredMaxWorkers()) {
@@ -106,5 +113,41 @@ export class AdapterWorkerPool {
     }
     this.workers.push(worker);
     return worker;
+  }
+
+  async runExclusiveQueued<T>(
+    binding: AdapterBindingHandle | undefined,
+    attemptId: string,
+    work: (worker: AdapterWorker) => Promise<T>
+  ): Promise<T> {
+    const worker = await this.acquireQueued(binding);
+    try {
+      return await worker.runExclusive(attemptId, () => work(worker));
+    } finally {
+      this.drainWaiters();
+    }
+  }
+
+  private acquireQueued(binding?: AdapterBindingHandle): Promise<AdapterWorker> {
+    const worker = this.acquire(binding);
+    if (worker) {
+      return Promise.resolve(worker);
+    }
+    return new Promise((resolve) => {
+      this.waiters.push({ binding, resolve });
+    });
+  }
+
+  private drainWaiters(): void {
+    for (let i = 0; i < this.waiters.length;) {
+      const waiter = this.waiters[i]!;
+      const worker = this.acquire(waiter.binding);
+      if (!worker) {
+        i += 1;
+        continue;
+      }
+      this.waiters.splice(i, 1);
+      waiter.resolve(worker);
+    }
   }
 }

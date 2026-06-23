@@ -42,6 +42,7 @@ interface ActiveRequestContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
   clientId: string;
+  adapterId: string;
   sessionId?: string;
   runId?: string;
   attemptId?: string;
@@ -96,6 +97,7 @@ export class JsonlCompatibilityFacade {
       protocolVersion: message.protocolVersion,
       requestId: input.requestId,
       clientId: input.clientId,
+      adapterId: input.adapterId ?? this.defaultAdapterId,
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
     };
@@ -163,6 +165,7 @@ export class JsonlCompatibilityFacade {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
         clientId,
+        adapterId: this.defaultAdapterId,
         sessionId: message.sessionId,
         runId,
         attemptId: message.attemptId,
@@ -321,7 +324,7 @@ export class JsonlCompatibilityFacade {
         }));
         break;
       case "tool_use":
-        if (!this.suppressToolUseEvents) {
+        if (!this.suppressToolUseEvents && context.adapterId !== "pi-mono") {
           this.send(this.withCorrelation({
             ...adapterEvent,
             type,
@@ -351,7 +354,7 @@ export class JsonlCompatibilityFacade {
       protocolVersion: 2,
       requestId: context.requestId,
       clientId: context.clientId,
-      sessionId: context.sessionId,
+      sessionId: context.sessionId ?? message.sessionId,
       runId: context.runId,
       attemptId: context.attemptId,
       eventId: context.eventId,

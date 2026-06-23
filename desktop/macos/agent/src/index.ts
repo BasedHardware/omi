@@ -521,163 +521,19 @@ process.stderr.on("error", (err) => {
   }
 });
 
-// --- Pi-mono mode ---
-
-async function runPiMonoMode(): Promise<void> {
-  const { PiMonoAdapter, PiMonoRuntimeAdapter } = await import("./adapters/pi-mono.js");
-
-  // SECURITY: pi-mono mode authenticates to api.omi.me with a Firebase ID
-  // token. Never fall back to ANTHROPIC_API_KEY — that would leak the
-  // upstream Anthropic provider secret to the Omi backend. If the token is
-  // missing the bridge must fail loudly so Swift can prompt the user to
-  // re-auth.
-  const omiAuthToken = process.env.OMI_AUTH_TOKEN;
-  if (!omiAuthToken) {
-    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
-    logErr(msg);
-    send({ type: "error", message: msg });
-    process.exit(1);
-  }
-
-  // Start the omi-tools relay so pi-mono extension can forward tool calls
-  // back to Swift (execute_sql, semantic_search, etc.)
-  omiToolsPipePath = await startOmiToolsRelay();
-  // Set in process.env so it flows to the pi subprocess (which spreads process.env)
-  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
-  logErr("omi-tools relay started for pi-mono");
-
-  const config = {
-    omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-    authToken: omiAuthToken,
-  };
-
-  const adapter = new PiMonoAdapter(config);
-  const runtimeAdapter = new PiMonoRuntimeAdapter(adapter);
-  await runtimeAdapter.start();
-  logErr("Pi-mono adapter started");
-
-  const store = new SqliteAgentStore({ stateDir: agentStateDir() });
-  const registry = new AdapterRegistry();
-  registry.register("pi-mono", () => runtimeAdapter, 1);
-  const kernel = new AgentRuntimeKernel({ store, registry });
-  const facade = new JsonlCompatibilityFacade({
-    kernel,
-    send,
-    log: logErr,
-    defaultAdapterId: "pi-mono",
-    suppressToolUseEvents: true,
-  });
-
-  // Signal readiness
-  send({ type: "init", sessionId: "" });
-  logErr("Pi-mono Bridge started, waiting for queries...");
-
-  const rl = createInterface({ input: process.stdin, terminal: false });
-
-  rl.on("line", async (line: string) => {
-    if (!line.trim()) return;
-
-    let msg: InboundMessage;
-    try {
-      msg = JSON.parse(line) as InboundMessage;
-    } catch {
-      logErr(`Invalid JSON: ${line}`);
-      return;
-    }
-
-    switch (msg.type) {
-      case "query": {
-        facade.handleQuery(msg as QueryMessage).catch((err) => {
-          logErr(`Pi-mono query error: ${err}`);
-          send({ type: "error", message: String(err) });
-        });
-        break;
-      }
-
-      case "warmup": {
-        facade.handleWarmup(msg as WarmupMessage);
-        break;
-      }
-
-      case "interrupt": {
-        logErr("Interrupt requested by user (pi-mono)");
-        facade.handleInterrupt(msg).catch((err) => {
-          logErr(`Pi-mono interrupt error: ${err}`);
-        });
-        break;
-      }
-
-      case "invalidate_session":
-        facade.handleInvalidateSession(msg);
-        break;
-
-      case "refresh_token": {
-        // Swift pushes a refreshed Firebase ID token. Restart the subprocess
-        // (only when idle) so the extension picks up the fresh credential.
-        // If busy, deferred restart happens after the current prompt completes.
-        const rtm = msg as RefreshTokenMessage;
-        process.env.OMI_AUTH_TOKEN = rtm.token;
-        try {
-          const restarted = await adapter.updateAuthToken(rtm.token);
-          if (restarted) {
-            kernel.invalidateBindings({
-              ownerId: "desktop-local-user",
-              surfaceKind: "legacy_jsonl",
-              defaultAdapterId: "pi-mono",
-              adapterId: "pi-mono",
-              reason: "pi_mono_token_refresh_restart",
-            });
-            logErr("Pi-mono: token refresh restarted subprocess; active bindings invalidated");
-          }
-          // If not restarted (busy), PiMonoRuntimeAdapter runs the deferred
-          // restart after the active kernel attempt completes.
-        } catch (err) {
-          logErr(`Pi-mono token refresh error: ${err}`);
-        }
-        break;
-      }
-
-      case "stop":
-        logErr("Received stop signal, exiting (pi-mono)");
-        store.close();
-        await runtimeAdapter.stop();
-        process.exit(0);
-        break;
-
-      case "tool_result":
-        resolveToolCall(msg as { callId: string; result: string });
-        break;
-
-      default:
-        logErr(`Unknown message type (pi-mono): ${(msg as any).type}`);
-    }
-  });
-
-  rl.on("close", async () => {
-    logErr("stdin closed, exiting (pi-mono)");
-    store.close();
-    await runtimeAdapter.stop();
-    process.exit(0);
-  });
-}
-
 // --- Main ---
 
 async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
-  const harnessMode = process.env.HARNESS_MODE || "acp";
-  logErr(`Harness mode: ${harnessMode}`);
-
-  if (harnessMode === "piMono") {
-    // Pi-mono mode: use PiMonoAdapter instead of ACP subprocess
-    await runPiMonoMode();
-    return;
-  }
+  const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
+  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  logErr(`Default harness mode: ${defaultHarnessMode}`);
 
   // 1. Start Unix socket for omi-tools relay
   omiToolsPipePath = await startOmiToolsRelay();
   logErr("omi-tools relay started");
+  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
 
   // 2. Start the ACP subprocess
   await startAcpProcess();
@@ -686,12 +542,36 @@ async function main(): Promise<void> {
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
+  let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
+  let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
+  const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
+    if (piMonoRuntimeAdapter) return true;
+    if (!authToken) return false;
+    const { PiMonoAdapter, PiMonoRuntimeAdapter } = await import("./adapters/pi-mono.js");
+    piMonoAdapter = new PiMonoAdapter({
+      omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+      authToken,
+    });
+    piMonoRuntimeAdapter = new PiMonoRuntimeAdapter(piMonoAdapter);
+    await piMonoRuntimeAdapter.start();
+    registry.register("pi-mono", () => piMonoRuntimeAdapter!, 1);
+    logErr("Pi-mono adapter started");
+    return true;
+  };
+
+  const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
+    const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
   const kernel = new AgentRuntimeKernel({ store, registry });
   const facade = new JsonlCompatibilityFacade({
     kernel,
     send,
     log: logErr,
-    defaultAdapterId: "acp",
+    defaultAdapterId,
     buildMcpServers,
     isRecoverableError: (error) => error instanceof AcpError && error.code === -32000,
     onRecoverableError: async () => {
@@ -703,7 +583,7 @@ async function main(): Promise<void> {
 
   // 3. Signal readiness
   send({ type: "init", sessionId: "" });
-  logErr("ACP Bridge started, waiting for queries...");
+  logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift
   const rl = createInterface({ input: process.stdin, terminal: false });
@@ -722,11 +602,22 @@ async function main(): Promise<void> {
     switch (msg.type) {
       case "query":
         (async () => {
-          await initializeAcp();
-          await facade.handleQuery(msg);
+          const query = msg as QueryMessage;
+          const adapterId = query.adapterId ?? defaultAdapterId;
+          if (adapterId === "acp") {
+            await initializeAcp();
+          }
+          await facade.handleQuery(query);
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
-          send({ type: "error", message: String(err) });
+          const query = msg as QueryMessage;
+          send({
+            type: "error",
+            message: String(err),
+            protocolVersion: query.protocolVersion,
+            requestId: requestIdFor(query),
+            clientId: query.clientId,
+          });
         });
         break;
 
@@ -751,6 +642,31 @@ async function main(): Promise<void> {
         facade.handleInvalidateSession(msg);
         break;
 
+      case "refresh_token": {
+        const rtm = msg as RefreshTokenMessage;
+        process.env.OMI_AUTH_TOKEN = rtm.token;
+        try {
+          if (!piMonoAdapter) {
+            await ensurePiMonoAdapter(rtm.token);
+            break;
+          }
+          const restarted = await piMonoAdapter.updateAuthToken(rtm.token);
+          if (restarted) {
+            kernel.invalidateBindings({
+              ownerId: "desktop-local-user",
+              surfaceKind: "legacy_jsonl",
+              defaultAdapterId: "pi-mono",
+              adapterId: "pi-mono",
+              reason: "pi_mono_token_refresh_restart",
+            });
+            logErr("Pi-mono: token refresh restarted subprocess; active bindings invalidated");
+          }
+        } catch (err) {
+          logErr(`Pi-mono token refresh error: ${err}`);
+        }
+        break;
+      }
+
       case "authenticate": {
         // Legacy fallback: OAuth flow now handles auth internally.
         // This handler is kept for backward compatibility.
@@ -767,6 +683,7 @@ async function main(): Promise<void> {
         logErr("Received stop signal, exiting");
         store.close();
         await acpAdapter.stop();
+        await piMonoRuntimeAdapter?.stop();
         process.exit(0);
         break;
 
@@ -780,6 +697,7 @@ async function main(): Promise<void> {
     logCrash("stdin closed, exiting");
     store.close();
     void acpAdapter.stop();
+    void piMonoRuntimeAdapter?.stop();
     process.exit(0);
   });
 }
