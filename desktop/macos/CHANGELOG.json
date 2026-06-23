@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors"
+  ],
   "releases": [
     {
       "version": "0.11.500",

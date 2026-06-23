@@ -616,12 +616,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
     responding = false
-    logError("RealtimeHub: session error — \(message)")
+    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
+    // Most "session error" closes are expected lifecycle events, not bugs: a socket
+    // that lived past the idle window is a normal provider idle-close (Gemini ~2.5min,
+    // 1008), and a client "operation was aborted"/cancellation is a teardown. Reporting
+    // these to Sentry as errors created the high-volume OMI-DESKTOP-27C cluster. Keep
+    // them as local logs; only capture genuine fast-fail provider errors.
+    let lower = message.lowercased()
+    let expectedClose =
+      aliveFor > 60
+      || lower.contains("aborted") || lower.contains("cancel")
+      || lower.contains("(1000)") || lower.contains("(1001)") || lower.contains("(1005)")
+    if expectedClose {
+      log("RealtimeHub: session closed (expected, alive \(Int(aliveFor))s) — \(message)")
+    } else {
+      logError("RealtimeHub: session error — \(message)")
+    }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     exitVoiceUI()
-    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
