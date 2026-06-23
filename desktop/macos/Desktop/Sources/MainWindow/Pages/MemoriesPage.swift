@@ -1821,19 +1821,39 @@ struct MemoriesPage: View {
 
 private struct MemoryTierBadge: View {
   let tier: MemoryTier
+  @State private var showLayerInfo = false
 
   var body: some View {
-    HStack(spacing: 4) {
-      Image(systemName: tier.icon)
-        .scaledFont(size: 9, weight: .medium)
-      Text(tier.displayName)
-        .scaledFont(size: 10, weight: .medium)
+    Button {
+      showLayerInfo.toggle()
+    } label: {
+      HStack(spacing: 4) {
+        Image(systemName: tier.icon)
+          .scaledFont(size: 9, weight: .medium)
+        Text(tier.displayName)
+          .scaledFont(size: 10, weight: .medium)
+      }
+      .foregroundColor(tier == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, 7)
+      .padding(.vertical, 3)
+      .background(tier == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
+      .clipShape(Capsule())
     }
-    .foregroundColor(tier == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
-    .padding(.horizontal, 7)
-    .padding(.vertical, 3)
-    .background(tier == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
-    .clipShape(Capsule())
+    .buttonStyle(.plain)
+    .help(tier.layerInfoText)
+    .popover(isPresented: $showLayerInfo, arrowEdge: .top) {
+      VStack(alignment: .leading, spacing: 6) {
+        Text(tier.displayName)
+          .scaledFont(size: 12, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(tier.layerInfoText)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textSecondary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .padding(12)
+      .frame(maxWidth: 240)
+    }
   }
 }
 
@@ -1998,7 +2018,7 @@ private struct MemoryDetailTooltip: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      tooltipRow("Tier", memory.tierIsExplicit ? memory.tier.displayName : "Legacy (untiered)")
+      tooltipRow("Layer", memory.tierIsExplicit ? memory.tier.displayName : "Legacy (untiered)")
       if memory.tierIsExplicit, memory.tier == .shortTerm, let expiresAt = memory.expiresAt {
         tooltipRow("Expires", expiresAt.formatted(date: .abbreviated, time: .shortened))
       }
