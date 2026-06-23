@@ -708,7 +708,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       return;
                                     }
 
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     final selected = await showModalBottomSheet<File>(
                                       context: context,
                                       backgroundColor: const Color(0xFF1C1C1E),
