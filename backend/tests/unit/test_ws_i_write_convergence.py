@@ -378,6 +378,19 @@ def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, co
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
     monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from utils.memory.memory_system_pin import clear_memory_system_pin
+
+    clear_memory_system_pin()
+    yield
+    clear_memory_system_pin()
+
+
+def _patch_cohort_resolver(monkeypatch, system: MemorySystem):
+    """Pin tests to a cohort via the real request-scope resolver seam."""
+    monkeypatch.setattr(
+        "utils.memory.memory_system_pin.resolve_memory_system",
+        lambda uid, **_: system,
+    )
 
 
 def test_arbitrary_uid_defaults_to_legacy():
@@ -469,16 +482,24 @@ def test_legacy_extract_path_unchanged_for_non_canonical():
         node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "_extract_memories_inner"
     )
     first_stmt = inner_fn.body[0]
-    assert isinstance(first_stmt, ast.If)
+    assert isinstance(first_stmt, ast.With)
+    assert any(
+        isinstance(node, ast.Call)
+        and isinstance(getattr(node.func, "id", None), str)
+        and node.func.id == "memory_system_request_scope"
+        for node in ast.walk(first_stmt)
+    )
     assert any(
         isinstance(node, ast.Call)
         and isinstance(getattr(node.func, "id", None), str)
         and node.func.id == "_extract_memories_canonical"
-        for node in ast.walk(first_stmt)
+        for node in ast.walk(inner_fn)
     )
-    legacy_delete_idx = source.index("deletion_result = memories_db.delete_memories_for_conversation")
-    canonical_return_idx = source.index("_extract_memories_canonical(uid, conversation)")
-    assert canonical_return_idx < legacy_delete_idx
+    assert "_extract_memories_legacy(uid, conversation)" in source
+    canonical_fn_idx = source.index("def _extract_memories_canonical")
+    legacy_fn_idx = source.index("def _extract_memories_legacy")
+    assert canonical_fn_idx < legacy_fn_idx
+    assert "deletion_result = memories_db.delete_memories_for_conversation" in source
     assert "memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])" in source
 
 
@@ -550,7 +571,7 @@ def test_extract_memories_inner_legacy_calls_save_memories(monkeypatch):
     legacy_delete.reset_mock(return_value={"vector_delete_ids": []})
 
     memory = Memory(content="User likes coffee", category=MemoryCategory.interesting)
-    monkeypatch.setattr(pc, "resolve_memory_system", lambda uid, **_: MemorySystem.LEGACY)
+    _patch_cohort_resolver(monkeypatch, MemorySystem.LEGACY)
     monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: [memory])
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
 
@@ -582,7 +603,7 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     service.write = write_mock
     service.retract_conversation_memories = retract_mock
 
-    monkeypatch.setattr(pc, "resolve_memory_system", lambda uid, **_: MemorySystem.CANONICAL)
+    _patch_cohort_resolver(monkeypatch, MemorySystem.CANONICAL)
     monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: [memory])
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, "MemoryService", lambda **_: service)
@@ -620,7 +641,7 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
 
     monkeypatch.setattr(
         memories_router,
-        "resolve_memory_system",
+        "pin_memory_system",
         lambda uid, **_: MemorySystem.CANONICAL if uid == "uid-canonical" else MemorySystem.LEGACY,
     )
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
@@ -657,7 +678,7 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
     legacy_get = MagicMock(return_value=legacy_memories)
     service_read = MagicMock()
 
-    monkeypatch.setattr(memories_router, "resolve_memory_system", lambda uid, **_: MemorySystem.LEGACY)
+    monkeypatch.setattr(memories_router, "pin_memory_system", lambda uid, **_: MemorySystem.LEGACY)
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
     monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
 
