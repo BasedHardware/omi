@@ -140,8 +140,8 @@
         }
       }
     ],
-    "updated": "2026-06-23T01:20:16Z",
-    "noDataState": "OK",
+    "updated": "2026-06-23T01:27:10Z",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "5m",
     "keep_firing_for": "0s",
@@ -297,8 +297,8 @@
         }
       }
     ],
-    "updated": "2026-06-23T01:20:16Z",
-    "noDataState": "OK",
+    "updated": "2026-06-23T01:27:10Z",
+    "noDataState": "Alerting",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",
