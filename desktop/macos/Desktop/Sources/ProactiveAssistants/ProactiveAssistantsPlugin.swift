@@ -431,13 +431,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         }
         windowMonitor?.start()
 
-        // Start capture timer (invalidate any orphaned timer first as safety measure)
-        captureTimer?.invalidate()
-        captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                await self?.captureFrame()
-            }
-        }
+        setupPowerAwareCaptureTimer()
+        restartCaptureTimer(reason: "monitoring start")
 
         isMonitoring = true
 
@@ -461,6 +456,41 @@ public class ProactiveAssistantsPlugin: NSObject {
         log("Proactive assistants started")
 
         completion(true, nil)
+    }
+
+    private func setupPowerAwareCaptureTimer() {
+        PowerMonitor.shared.onPowerSourceChanged = { [weak self] isOnBattery in
+            Task { @MainActor in
+                guard let self, self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+
+                self.captureTimer?.invalidate()
+                self.captureTimer = nil
+
+                Task {
+                    do {
+                        _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
+                    } catch {
+                        logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch: \(error)")
+                    }
+
+                    await MainActor.run {
+                        guard self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+                        self.restartCaptureTimer(reason: "power source changed to \(isOnBattery ? "battery" : "AC")")
+                    }
+                }
+            }
+        }
+    }
+
+    private func restartCaptureTimer(reason: String) {
+        captureTimer?.invalidate()
+        let interval = RewindSettings.shared.effectiveCaptureInterval(isOnBattery: PowerMonitor.shared.isOnBattery)
+        captureTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                await self?.captureFrame()
+            }
+        }
+        log("ProactiveAssistantsPlugin: Capture timer set to \(String(format: "%.1f", interval))s (\(reason))")
     }
 
     /// Stop monitoring
@@ -1179,12 +1209,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             captureTimer = nil
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self = self, self.isMonitoring else { return }
-                self.captureTimer?.invalidate()
-                self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-                    Task { @MainActor in
-                        await self?.captureFrame()
-                    }
-                }
+                self.restartCaptureTimer(reason: "system wake")
                 log("ProactiveAssistantsPlugin: Capture timer restarted after wake")
             }
         }
@@ -1218,12 +1243,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             screenCaptureService = ScreenCaptureService()
 
             // Restart capture timer
-            captureTimer?.invalidate()
-            captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.captureFrame()
-                }
-            }
+            restartCaptureTimer(reason: "screen unlock")
         } else if wasMonitoringBeforeLock && !isMonitoring {
             // We stopped monitoring while locked, restart it
             log("ProactiveAssistantsPlugin: Restarting monitoring after unlock")
@@ -1460,12 +1480,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             lastCaptureSucceeded = true
 
             // Restart normal capture timer
-            captureTimer?.invalidate()
-            captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.captureFrame()
-                }
-            }
+            restartCaptureTimer(reason: "recovery success")
         } else {
             // Recovery failed - enter background polling before giving up
             log("ProactiveAssistantsPlugin: Initial recovery failed, entering background polling mode")
@@ -1528,11 +1543,7 @@ public class ProactiveAssistantsPlugin: NSObject {
             lastCaptureSucceeded = true
 
             // Resume normal capture
-            captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.captureFrame()
-                }
-            }
+            restartCaptureTimer(reason: "background polling recovery")
         } else {
             attemptAutoReset()
         }
@@ -1554,12 +1565,7 @@ public class ProactiveAssistantsPlugin: NSObject {
                         self.lastCaptureSucceeded = true
 
                         // Restart normal capture timer
-                        self.captureTimer?.invalidate()
-                        self.captureTimer = Timer.scheduledTimer(withTimeInterval: RewindSettings.shared.captureInterval, repeats: true) { [weak self] _ in
-                            Task { @MainActor in
-                                await self?.captureFrame()
-                            }
-                        }
+                        self.restartCaptureTimer(reason: "soft recovery success")
                     } else {
                         // Soft recovery failed in-process, restart app to refresh permission state
                         // This still avoids wiping TCC — the restart itself often fixes stale caches
