@@ -29,6 +29,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let defaultBaseResponseHeight: CGFloat = 430
     /// Overhead (px) added to measured scroll content to account for control bar, header, follow-up input, and padding.
     private static let responseViewOverhead: CGFloat = 190
+    /// Spring profile for AI response panel state transitions.
+    /// Snappier than the SwiftUI default `0.4/0.8` — saves ~250ms user-perceived per response.
+    /// Used at all 6 call sites that toggle `showingAIConversation` / `showingAIResponse`.
+    static let responseSpring = Animation.spring(response: 0.18, dampingFraction: 0.88)
 
     let state = FloatingControlBarState()
     private var hostingView: NSHostingView<AnyView>?
@@ -334,7 +338,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             PushToTalkManager.shared.cancelListening()
         }
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        withAnimation(Self.responseSpring) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
@@ -437,7 +441,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(Self.responseSpring) {
                 state.showingAIConversation = true
                 state.showingAIResponse = true
                 state.isAILoading = false
@@ -449,7 +453,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
             resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
 
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(Self.responseSpring) {
                 state.showingAIConversation = true
                 state.showingAIResponse = false
                 state.isAILoading = false
@@ -525,7 +529,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         switch type {
         case "data":
             if state.isAILoading {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                withAnimation(Self.responseSpring) {
                     state.isAILoading = false
                     state.showingAIResponse = true
                 }
@@ -1884,7 +1888,7 @@ class FloatingControlBarManager {
                     if let barWindow = barWindow, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            withAnimation(FloatingControlBarWindow.responseSpring) {
                                 barWindow.state.showingAIResponse = true
                             }
                         }
@@ -1948,7 +1952,7 @@ class FloatingControlBarManager {
         // Ensure the response view is visible and resized (handles the case where
         // the sink never fired because no streaming data arrived before the error)
         if !barWindow.state.showingAIResponse {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(FloatingControlBarWindow.responseSpring) {
                 barWindow.state.showingAIResponse = true
             }
             barWindow.resizeToResponseHeightPublic(animated: true)
