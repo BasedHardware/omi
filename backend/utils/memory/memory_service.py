@@ -18,7 +18,8 @@ from utils.memory.canonical_memory_adapter import (
     search_result_to_memorydb,
     write_canonical_extraction_memory,
 )
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system_pin import resolve_pinned_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
@@ -191,7 +192,7 @@ class MemoryService:
         self._canonical = CanonicalMemoryBackend(db_client=db_client)
 
     def _resolve_backend(self, uid: str):
-        system = resolve_memory_system(uid, db_client=self._db_client)
+        system = resolve_pinned_memory_system(uid, db_client=self._db_client)
         if system == MemorySystem.CANONICAL:
             return self._canonical
         return self._legacy
@@ -204,7 +205,7 @@ class MemoryService:
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[dict]:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
-        if resolve_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
+        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
             return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 
@@ -218,6 +219,6 @@ class MemoryService:
         self._resolve_backend(uid).delete_all(uid)
 
     def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
-        if resolve_memory_system(uid, db_client=self._db_client) != MemorySystem.CANONICAL:
+        if resolve_pinned_memory_system(uid, db_client=self._db_client) != MemorySystem.CANONICAL:
             return None
         return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
