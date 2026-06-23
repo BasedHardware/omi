@@ -179,8 +179,8 @@ class TestSearchMemoriesEndpoint:
             'is_locked': locked,
         }
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_returns_empty_when_no_matches(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         result = search_memories(query="test", limit=10, auth_context=_auth_context())
@@ -188,8 +188,8 @@ class TestSearchMemoriesEndpoint:
         # limit=10 → fetch_limit = min(10*3, 60) = 30
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_returns_ranked_results(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'category': 'work', 'score': 0.95},
@@ -206,8 +206,8 @@ class TestSearchMemoriesEndpoint:
         assert result[1]['id'] == 'mem-2'
         assert result[1]['relevance_score'] == 0.80
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_locked_memory_excluded_from_search(self, mock_vector_db, mock_memories_db):
         # Search drops locked hits entirely (matches tool_services/memories.py behaviour);
         # even short content must not leak via an MCP API key.
@@ -223,32 +223,32 @@ class TestSearchMemoriesEndpoint:
         assert len(result) == 1
         assert result[0]['id'] == 'mem-2'
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_limit_capped_at_20_fetches_60_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=100, auth_context=_auth_context())
         # limit clamps to 20, fetch_limit = min(20*3, 60) = 60
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=60)
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_limit_zero_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=0, auth_context=_auth_context())
         # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_negative_limit_clamped_to_1_fetches_3_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", limit=-5, auth_context=_auth_context())
         # limit clamps to 1, fetch_limit = min(1*3, 60) = 3
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=3)
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_results_sorted_by_relevance_desc(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.5},
@@ -263,8 +263,8 @@ class TestSearchMemoriesEndpoint:
         result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert [r['relevance_score'] for r in result] == [0.99, 0.75, 0.5]
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_skips_matches_with_no_memory_id(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.9},
@@ -279,8 +279,8 @@ class TestSearchMemoriesEndpoint:
         assert result[0]['id'] == 'mem-1'
         mock_memories_db.get_memories_by_ids.assert_called_once_with("user-1", ['mem-1'])
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_returns_empty_when_all_ids_filtered(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'category': 'other', 'score': 0.5},
@@ -289,16 +289,16 @@ class TestSearchMemoriesEndpoint:
         assert result == []
         mock_memories_db.get_memories_by_ids.assert_not_called()
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_default_limit_fetches_3x_candidates(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = []
         search_memories(query="test", auth_context=_auth_context())
         # default limit=10, fetch_limit = min(10*3, 60) = 30
         mock_vector_db.find_similar_memories.assert_called_once_with("user-1", "test", threshold=0.0, limit=30)
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_locked_top_hit_does_not_exhaust_budget(self, mock_vector_db, mock_memories_db):
         # Reviewer's exact scenario: best Pinecone hit is locked, second is accessible.
         # With exact-limit fetching this returned [], now returns the accessible memory.
@@ -318,8 +318,8 @@ class TestSearchMemoriesEndpoint:
 class TestSearchMemoriesUserReview:
     """search_memories must not surface memories the user explicitly rejected."""
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_rejected_memory_excluded(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.9},
@@ -333,8 +333,8 @@ class TestSearchMemoriesUserReview:
         assert len(result) == 1
         assert result[0]['id'] == 'mem-1'
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_unreviewed_memory_included(self, mock_vector_db, mock_memories_db):
         # user_review=None means not yet reviewed — should still appear
         mock_vector_db.find_similar_memories.return_value = [
@@ -346,8 +346,8 @@ class TestSearchMemoriesUserReview:
         result = search_memories(query="test", limit=10, auth_context=_auth_context())
         assert len(result) == 1
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_all_rejected_returns_empty(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.9},
@@ -363,8 +363,8 @@ class TestSearchMemoriesInvalidated:
     """search_memories must not surface superseded/invalidated memories — the brain
     only returns facts that are currently true."""
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_invalidated_memory_excluded(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-old', 'score': 0.95},
@@ -386,8 +386,8 @@ class TestSearchMemoriesInvalidated:
         assert len(result) == 1
         assert result[0]['id'] == 'mem-new'
 
-    @patch('routers.mcp.memories_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.memory.memory_service.memories_db')
+    @patch('utils.memory.memory_service.vector_db')
     def test_active_memory_with_null_invalid_at_included(self, mock_vector_db, mock_memories_db):
         mock_vector_db.find_similar_memories.return_value = [
             {'memory_id': 'mem-1', 'score': 0.9},
