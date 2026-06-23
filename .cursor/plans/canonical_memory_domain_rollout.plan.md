@@ -27,8 +27,8 @@ todos:
     content: "WS-F: minimal intuitive Short-term/Long-term UI (badge=layer, info popovers) + onboarding tweak for opted-in users only"
     status: pending
   - id: naming-sweep
-    content: "WS-G: phased rename — V17, L1/L2 processing jargon, tier→layer, rollout modes, v17 API paths (~280 files; alias first, waves)"
-    status: pending
+    content: "WS-G: phased rename — V17, L1/L2 processing jargon, tier→layer, rollout modes, v17 API paths (~280 files; alias first, waves; models + database core shims landed)"
+    status: in_progress
   - id: decommission
     content: "WS-H: migrate remaining cohorts, retire legacy stores/code, land on ONE canonical system"
     status: pending
@@ -569,8 +569,9 @@ are inert for the legacy cohort.
 
 ### WS-N — Graph-traversal retrieval / GraphRAG (deferred: starts only AFTER WS-H decommission)
 
-- **Problem (verified):** the Neo4j knowledge graph exists and is rebuildable
-  (`database/knowledge_graph.py`, `utils/llm/knowledge_graph.py:rebuild_knowledge_graph`), but chat
+- **Problem (verified):** the canonical-derived Firestore KG (`knowledge_nodes`/`knowledge_edges` in
+  `database/knowledge_graph.py`, `utils/llm/knowledge_graph.py:rebuild_knowledge_graph`) exists and is
+  rebuildable, but chat
   retrieval is **flat agentic RAG** (`utils/retrieval/agentic.py` + `utils/retrieval/tools/`): no
   multi-hop traversal, no subgraph assembly feeding generation. Relationship questions ("how does my
   unemployment situation interact with joining Omi?") cannot traverse linked atoms.
@@ -583,7 +584,8 @@ are inert for the legacy cohort.
 - **Scope (prescriptive, v1 — intentionally minimal):**
   1. **New retrieval tool** `utils/retrieval/tools/graph_tools.py`, registered in the agentic tool set
      (`utils/retrieval/agentic.py`). Read-only; never writes the KG.
-  2. **Traversal contract:** resolve query entities → fetch the **≤2-hop** neighborhood from Neo4j with
+  2. **Traversal contract:** resolve query entities → fetch the **≤2-hop** neighborhood from the
+     canonical-derived Firestore KG with
      a **fan-out cap** (e.g. ≤25 edges/node, hard subgraph cap ≤60 triples) → return triples joined to
      their backing canonical atom `content` + `memory_id` for citation. Hop budget and caps are config
      constants, not magic numbers (decision §10 Q14).
@@ -993,6 +995,13 @@ Drove the implementable rollout to local commits on `memory-canonical-rollout` (
 - **Scope:** read-only BFS traversal over the existing Firestore KG (`database/knowledge_graph.py` — **no live Neo4j** in this repo; plan Neo4j references are stale). Core module `utils/memory/kg_graph_traversal.py` with Q14 caps (`MAX_TRAVERSAL_HOPS=2`, `MAX_EDGES_PER_NODE=25`, `MAX_TRIPLES=60`); long_term-only citations via `is_indexable_long_term_atom`. Agentic tool `traverse_knowledge_graph_tool` in `utils/retrieval/tools/graph_tools.py`, registered in `CORE_TOOLS` (`utils/retrieval/agentic.py`). Canonical-cohort gated via `resolve_memory_system`; legacy users get unavailable message, zero graph reads. No writes, no new HTTP surface.
 - **Verification:** baseline pre-change → **89 passed, 0 failed** (10-module suite); post-change full memory suite in ONE process → **101 passed, 0 failed**; `ws_i→ws_l` ordering → **52 passed, 0 failed**; `test_ws_n_graph_traversal.py` → **12 passed**; async scan clean on new modules; black-clean.
 - **Carry-forward:** KG still built from legacy extraction path for non-canonical users; canonical cohort selective KG invalidation remains deferred (WS-J hook logs only); v2 items (community detection, subgraph summaries) unbuilt by design.
+
+### Wave 15 — WS-G (bounded: database-layer alias shims) — ✅ committed 2026-06-24
+
+- **Scope (bounded slice, NOT the full ~280-file sweep):** additive neutral alias modules re-exporting existing `database/v17_*` symbols — no file moves, no call-site churn. Shims: `database/memory_collections.py` → `v17_collections`, `database/memory_apply_store.py` → `v17_memory_apply_store`, `database/memory_vector_metadata.py` → `v17_vector_metadata`. Import-parity tests extended in `test_ws_g_module_aliases.py`; registered in `test.sh`. Plan doc fix: WS-N spec Neo4j wording → canonical-derived Firestore KG (matches Wave 14 implementation).
+- **Module-group choice:** **database layer** (not config/env) — Wave 10 already aliased `models/`; config flags (`V17_MODE`, etc.) are scattered across utils/routers with no single importable module, so database `v17_*` modules are the next clean additive group per WS-G ordering (config → database → utils → routers → clients).
+- **Deliberately NOT touched:** frozen names, PostHog/usage event keys, persisted Firestore `tier` field, remaining `database/v17_*` modules (`v17_v3_compatibility_projection`, `v17_non_active_memory_routes`, `v17_app_key_memory_grants`, vector-repair outbox family), utils/routers/clients rename backlog.
+- **Note:** the full `v17_*`/`tier`→`layer` product-surface rename remains a continuous WS-G backlog (never big-bang); only these 3 database shims + doc wording fix landed.
 
 > Append-only record of executed waves for review later. All work lands on worktree branch
 > `memory-canonical-rollout` (worktree `/Users/dazheng/workspace/omi-memory-rollout`), **committed
