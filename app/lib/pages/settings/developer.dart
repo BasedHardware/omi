@@ -371,8 +371,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              final message = context.l10n.apiEnvSavedRestartRequired;
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              AppSnackbar.showSnackbar(context.l10n.apiEnvSavedRestartRequired, duration: const Duration(seconds: 5));
+              if (!ctx.mounted) return;
+              AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
