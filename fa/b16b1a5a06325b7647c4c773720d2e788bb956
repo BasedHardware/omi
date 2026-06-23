@@ -1,0 +1,21 @@
+desktop/macos/Desktop/Tests/StartupWarmupPolicyTests.swift
+  s_838ede91b21776::t_bfbdbc4b96335a 101-119
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_838ede91b21776::t_be8d7724240e39 165
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.11",
+  "base_commit_sha": "fab16b1a5a06325b7647c4c773720d2e788bb956",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
