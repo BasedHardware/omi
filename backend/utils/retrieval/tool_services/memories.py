@@ -10,6 +10,8 @@ import database.memories as memory_db
 import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.v17_chat_memory_adapter import (
     list_v17_default_chat_memories_decision_text,
     search_v17_default_chat_memories_vector_decision_text,
@@ -35,7 +37,6 @@ def get_memories_text(
     limit = max(1, min(limit, 5000))
     offset = max(0, offset)
 
-    # Parse dates
     start_dt = None
     end_dt = None
     if start_date:
@@ -48,6 +49,23 @@ def get_memories_text(
             end_dt = parse_iso_date(end_date, 'end_date')
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
+
+    memory_system = resolve_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+        if start_dt or end_dt:
+            filtered = []
+            for memory in memories:
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                filtered.append(memory)
+            memories = filtered
+        if not memories:
+            return "No memories found."
+        return f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}".strip()
 
     v17_default_memories = list_v17_default_chat_memories_decision_text(
         uid=uid,
@@ -114,6 +132,21 @@ def search_memories_text(
     logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
 
     limit = max(1, min(limit, 20))
+
+    memory_system = resolve_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        if not matches:
+            return f"No memories found matching '{query}'."
+        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        for match in matches:
+            memory = match.memory
+            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            result += (
+                f"- {memory.content} (relevance: {match.score:.2f}, "
+                f"category: {memory.category.value}, date: {date_str})\n"
+            )
+        return result.strip()
 
     v17_default_memories = search_v17_default_chat_memories_vector_decision_text(
         uid=uid,
