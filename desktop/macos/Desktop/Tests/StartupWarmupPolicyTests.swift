@@ -187,8 +187,10 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
         try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertTrue(store.hasScheduledStartupMaintenance)
-        XCTAssertEqual(await counter.fullSyncAndRetryCount, 1)
-        XCTAssertEqual(await counter.relevanceBackfillCount, 1)
+        let initialFullSyncAndRetryCount = await counter.fullSyncAndRetryCount
+        let initialRelevanceBackfillCount = await counter.relevanceBackfillCount
+        XCTAssertEqual(initialFullSyncAndRetryCount, 1)
+        XCTAssertEqual(initialRelevanceBackfillCount, 1)
 
         store.scheduleStartupMaintenanceIfNeeded(
             fullSyncAndRetry: { await counter.recordFullSyncAndRetry() },
@@ -196,8 +198,10 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
 
         try? await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertEqual(await counter.fullSyncAndRetryCount, 1)
-        XCTAssertEqual(await counter.relevanceBackfillCount, 1)
+        let finalFullSyncAndRetryCount = await counter.fullSyncAndRetryCount
+        let finalRelevanceBackfillCount = await counter.relevanceBackfillCount
+        XCTAssertEqual(finalFullSyncAndRetryCount, 1)
+        XCTAssertEqual(finalRelevanceBackfillCount, 1)
     }
 
     func testDashboardOnlyActivationRefreshDoesNotRequireTasksPageHydration() throws {
@@ -235,6 +239,91 @@ final class StartupWarmupPolicyTests: XCTestCase {
             maintenanceRange.lowerBound,
             lifecycleRange.lowerBound,
             "Startup maintenance must run from the startup warmup path, not only after opening Tasks"
+        )
+    }
+
+    func testStartupResetClearsPerUserMemoriesState() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let containerURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/ViewModelContainer.swift")
+        let memoriesURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/Pages/MemoriesPage.swift")
+        let containerSource = try String(contentsOf: containerURL, encoding: .utf8)
+        let memoriesSource = try String(contentsOf: memoriesURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            containerSource.contains("memoriesViewModel.resetSessionState()"),
+            "Startup reset must clear MemoriesViewModel so account switches cannot show the previous user's memories"
+        )
+        XCTAssertTrue(
+            memoriesSource.contains("hasLoadedInitially = false"),
+            "Memories reset must release the first-use load guard for the next signed-in user"
+        )
+        XCTAssertTrue(
+            memoriesSource.contains("memories = []"),
+            "Memories reset must clear any previous user's published memory rows"
+        )
+    }
+
+    func testStartupResetClearsPerUserDashboardState() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let containerURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/ViewModelContainer.swift")
+        let dashboardURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
+        let containerSource = try String(contentsOf: containerURL, encoding: .utf8)
+        let dashboardSource = try String(contentsOf: dashboardURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            containerSource.contains("dashboardViewModel.resetSessionState()"),
+            "Startup reset must clear DashboardViewModel so account switches cannot show the previous user's score or goals"
+        )
+        XCTAssertTrue(
+            dashboardSource.contains("scoreResponse = nil"),
+            "Dashboard reset must clear the previous user's score"
+        )
+        XCTAssertTrue(
+            dashboardSource.contains("goals = []"),
+            "Dashboard reset must clear the previous user's goals"
+        )
+    }
+
+    func testAuthSignInFetchesFloatingBarPlanImmediately() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let authURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/AuthService.swift")
+        let source = try String(contentsOf: authURL, encoding: .utf8)
+
+        XCTAssertGreaterThanOrEqual(
+            source.components(separatedBy: "FloatingBarUsageLimiter.shared.fetchPlan()").count - 1,
+            2,
+            "Both Apple and web OAuth sign-in paths must fetch quota immediately after successful sign-in"
+        )
+    }
+
+    func testChatProviderClearsPromptContextOnSignOut() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let chatURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+        let source = try String(contentsOf: chatURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            source.contains("resetSessionStateForAuthChange()"),
+            "Sign-out must clear ChatProvider prompt caches and visible chat state"
+        )
+        XCTAssertTrue(
+            source.contains("memoriesLoaded = false"),
+            "ChatProvider auth reset must release the memories-loaded guard"
+        )
+        XCTAssertTrue(
+            source.contains("cachedMainSystemPrompt = \"\""),
+            "ChatProvider auth reset must drop cached system prompts built for the previous user"
         )
     }
 }
