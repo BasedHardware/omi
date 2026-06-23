@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
-import { posthogFetch } from "@/lib/posthog";
+import { posthogResults } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +32,7 @@ type Breakdown = {
 };
 
 async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await posthogFetch(host, projectId, apiKey, query);
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PostHog API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json();
-  return Array.isArray(raw.results) ? raw.results : [];
+  return posthogResults(host, projectId, apiKey, query);
 }
 
 function chunk<T>(items: T[], size: number) {
