@@ -103,6 +103,7 @@ final class AgentPillsManager: ObservableObject {
     /// parallel with the others.
     private var providersByPill: [UUID: ChatProvider] = [:]
     private var streamsByPill: [UUID: AnyCancellable] = [:]
+    private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var bootChain: Task<Void, Never> = Task {}
@@ -363,6 +364,13 @@ final class AgentPillsManager: ObservableObject {
                 guard let self, let pill else { return }
                 self.handle(messages: messages, since: messageCountBefore, for: pill)
             }
+        let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
+        projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
+            .receive(on: DispatchQueue.main)
+            .sink { [weak pill] projections in
+                guard let pill, let projection = projections[surfaceRef.key] else { return }
+                AgentPillsManager.apply(projection: projection, to: pill)
+            }
 
         // Stagger bridge boots: chain this pill's warmup after the previous
         // pill's. Once warmed, the actual sendMessage runs in parallel with
@@ -419,7 +427,9 @@ final class AgentPillsManager: ObservableObject {
                 model: pill.model,
                 systemPromptSuffix: systemPromptSuffix,
                 systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)"
+                sessionKey: "agent-\(pill.id.uuidString)",
+                surfaceRef: surfaceRef,
+                legacyClientScope: "floating-pill"
             )
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
@@ -462,9 +472,12 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id]?.cancel()
         let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
+            let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             await provider.sendMessage(
                 text, model: pill.model, systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)")
+                sessionKey: "agent-\(pill.id.uuidString)",
+                surfaceRef: surfaceRef,
+                legacyClientScope: "floating-pill")
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
         }
@@ -494,6 +507,8 @@ final class AgentPillsManager: ObservableObject {
         providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil
+        projectionStreamsByPill[pillID]?.cancel()
+        projectionStreamsByPill[pillID] = nil
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
@@ -625,23 +640,56 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func complete(pill: AgentPill, provider: ChatProvider) {
+        if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
+            Self.apply(projection: projection, to: pill)
+            if projection.status.isTerminal {
+                pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+                return
+            }
+        }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
         } else {
+            pill.latestActivity = pill.latestActivity.isEmpty ? "Finished" : pill.latestActivity
+        }
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        // Keep the provider + stream alive after completion so a voice/text follow-up
+        // can continue THIS agent's session with full context. They're torn down on
+        // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+    }
+
+    private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
+        switch projection.status {
+        case .queued:
+            pill.status = .queued
+        case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
+            pill.status = .running
+            pill.completedAt = nil
+        case .succeeded:
             pill.status = .done
+            pill.completedAt = projection.completedAt ?? Date()
             if let last = pill.aiMessage, !last.text.isEmpty {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 pill.latestActivity = String(trimmed.prefix(140))
             } else {
                 pill.latestActivity = "Done"
             }
+        case .failed, .timedOut, .orphaned:
+            let message = projection.errorMessage ?? "Agent failed"
+            pill.status = .failed(message)
+            pill.latestActivity = message
+            pill.completedAt = projection.completedAt ?? Date()
+        case .cancelled:
+            pill.status = .failed("Stopped by user")
+            pill.latestActivity = "Stopped by user"
+            pill.completedAt = projection.completedAt ?? Date()
+        case .idle:
+            break
         }
-        pill.completedAt = Date()
-        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
-        // Keep the provider + stream alive after completion so a voice/text follow-up
-        // can continue THIS agent's session with full context. They're torn down on
-        // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+        if let statusText = projection.statusText, !statusText.isEmpty {
+            pill.latestActivity = statusText
+        }
     }
 
     /// Tiny heuristic to suggest 1–2 follow-ups based on the original query.

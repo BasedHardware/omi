@@ -76,6 +76,7 @@ actor AgentRuntimeProcess {
   private struct ActiveRequest {
     let clientId: String
     let requestId: String
+    let surfaceRef: AgentSurfaceReference?
     let onTextDelta: AgentBridge.TextDeltaHandler
     let onToolCall: AgentBridge.ToolCallHandler
     let onToolActivity: AgentBridge.ToolActivityHandler
@@ -209,6 +210,10 @@ actor AgentRuntimeProcess {
     systemPrompt: String,
     sessionKey: String?,
     omiSessionId: String?,
+    surfaceKind: String?,
+    externalRefKind: String?,
+    externalRefId: String?,
+    legacyClientScope: String?,
     cwd: String?,
     mode: String?,
     model: String?,
@@ -225,9 +230,20 @@ actor AgentRuntimeProcess {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
 
     return try await withCheckedThrowingContinuation { continuation in
+      let surfaceRef: AgentSurfaceReference?
+      if let surfaceKind, let externalRefKind, let externalRefId {
+        surfaceRef = AgentSurfaceReference(
+          surfaceKind: surfaceKind,
+          externalRefKind: externalRefKind,
+          externalRefId: externalRefId
+        )
+      } else {
+        surfaceRef = nil
+      }
       let request = ActiveRequest(
         clientId: clientId,
         requestId: requestId,
+        surfaceRef: surfaceRef,
         onTextDelta: onTextDelta,
         onToolCall: onToolCall,
         onToolActivity: onToolActivity,
@@ -238,6 +254,11 @@ actor AgentRuntimeProcess {
         continuation: continuation
       )
       activeRequests[requestId] = request
+      if let surfaceRef {
+        Task { @MainActor in
+          AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
+        }
+      }
 
       var queryDict: [String: Any] = [
         "type": "query",
@@ -255,6 +276,18 @@ actor AgentRuntimeProcess {
       }
       if let omiSessionId {
         queryDict["sessionId"] = omiSessionId
+      }
+      if let surfaceKind {
+        queryDict["surfaceKind"] = surfaceKind
+      }
+      if let externalRefKind {
+        queryDict["externalRefKind"] = externalRefKind
+      }
+      if let externalRefId {
+        queryDict["externalRefId"] = externalRefId
+      }
+      if let legacyClientScope {
+        queryDict["legacyClientScope"] = legacyClientScope
       }
       if let cwd { queryDict["cwd"] = cwd }
       if let mode { queryDict["mode"] = mode }
@@ -494,6 +527,12 @@ actor AgentRuntimeProcess {
   }
 
   private func handleMessage(_ message: RuntimeMessage) {
+    if let request = routedRequest(for: message), let surfaceRef = request.surfaceRef {
+      Task { @MainActor in
+        AgentRuntimeStatusStore.shared.ingest(message: message, surface: surfaceRef)
+      }
+    }
+
     switch message.kind {
     case .initMessage:
       log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")

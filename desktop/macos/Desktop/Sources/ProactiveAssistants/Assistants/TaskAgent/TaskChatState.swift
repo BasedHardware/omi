@@ -3,7 +3,8 @@ import Combine
 
 /// Per-task chat state with its own bridge process and message history.
 /// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Uses Claude SDK's native `resume: sessionId` for conversation persistence.
+/// Uses canonical Omi sessions for continuity and preserves legacy ACP IDs only
+/// for transitional adapter-native resume compatibility.
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -23,6 +24,7 @@ class TaskChatState: ObservableObject {
     let workspacePath: String
 
     @Published var currentSessionId: String?
+    @Published var currentOmiSessionId: String?
 
     /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
@@ -63,8 +65,8 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            if let sessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                currentSessionId = sessionId
+            if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
+                currentSessionId = legacyAcpSessionId
             }
 
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
@@ -241,6 +243,12 @@ class TaskChatState: ObservableObject {
             let queryResult = try await bridge.query(
                 prompt: fullPrompt,
                 systemPrompt: systemPrompt,
+                sessionKey: taskId,
+                omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId)),
+                surfaceKind: "task_chat",
+                externalRefKind: "task",
+                externalRefId: taskId,
+                legacyClientScope: "task-chat",
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,
                 resume: currentSessionId,
@@ -253,8 +261,12 @@ class TaskChatState: ObservableObject {
                 onAuthSuccess: onAuthSuccess ?? { }
             )
 
-            // Store session ID so subsequent queries can resume
-            currentSessionId = queryResult.sessionId
+            // Store canonical and adapter-native IDs separately. The persisted
+            // acpSessionId column remains a legacy adapter binding only.
+            currentOmiSessionId = queryResult.omiSessionId
+            if let adapterSessionId = queryResult.adapterSessionId {
+                currentSessionId = adapterSessionId
+            }
 
             // Flush remaining streaming buffers
             streamingFlushWorkItem?.cancel()

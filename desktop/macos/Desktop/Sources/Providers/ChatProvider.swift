@@ -2706,7 +2706,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, systemPromptStyle: ChatSystemPromptStyle = .main, sessionKey: String? = nil, resume: String? = nil, imageData: Data? = nil) async {
+    func sendMessage(
+        _ text: String,
+        model: String? = nil,
+        isFollowUp: Bool = false,
+        systemPromptSuffix: String? = nil,
+        systemPromptPrefix: String? = nil,
+        systemPromptStyle: ChatSystemPromptStyle = .main,
+        sessionKey: String? = nil,
+        omiSessionId: String? = nil,
+        surfaceRef: AgentSurfaceReference? = nil,
+        legacyClientScope: String? = nil,
+        resume: String? = nil,
+        imageData: Data? = nil
+    ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -3084,10 +3097,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
+            let resolvedSurface =
+                surfaceRef
+                ?? (systemPromptStyle == .main && !isOnboarding ? AgentSurfaceReference.mainChat(chatId: sessionId) : nil)
+            let resolvedOmiSessionId = omiSessionId ?? resolvedSurface.flatMap {
+                AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
+            }
+            let resolvedLegacyClientScope =
+                legacyClientScope
+                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat" : nil)
+
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
                 sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
+                omiSessionId: resolvedOmiSessionId,
+                surfaceKind: resolvedSurface?.surfaceKind,
+                externalRefKind: resolvedSurface?.externalRefKind,
+                externalRefId: resolvedSurface?.externalRefId,
+                legacyClientScope: resolvedLegacyClientScope,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,

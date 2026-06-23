@@ -1,10 +1,9 @@
 import Foundation
 
-/// In-memory status surface for Omi task-chat agents.
+/// Compatibility status surface for Omi task-chat agents.
 ///
-/// Main/floating chat runs in a separate bridge from task chats, so without a
-/// small shared registry the assistant cannot answer questions like "what are
-/// your subagents doing?" or diagnose task-agent timeouts/errors.
+/// The runtime projection is the lifecycle authority. This registry only keeps
+/// task titles and forwards old call sites while tool output migrates.
 @MainActor
 final class TaskAgentStatusRegistry {
   static let shared = TaskAgentStatusRegistry()
@@ -30,7 +29,6 @@ final class TaskAgentStatusRegistry {
   private struct Entry {
     var taskId: String
     var title: String?
-    var status: Status
     var statusText: String?
     var lastError: String?
     var updatedAt: Date
@@ -60,7 +58,6 @@ final class TaskAgentStatusRegistry {
     var entry = entries[taskId] ?? Entry(
       taskId: taskId,
       title: nil,
-      status: .idle,
       statusText: nil,
       lastError: nil,
       updatedAt: Date())
@@ -73,7 +70,8 @@ final class TaskAgentStatusRegistry {
   }
 
   func markRunning(taskId: String, title: String? = nil, statusText: String = "Responding...") {
-    update(taskId: taskId, title: title, status: .running, statusText: statusText, lastError: nil)
+    update(taskId: taskId, title: title, statusText: statusText, lastError: nil)
+    AgentRuntimeStatusStore.shared.updateActivity(surface: .taskChat(taskId: taskId), statusText: statusText)
   }
 
   func updateStatus(taskId: String, statusText: String?) {
@@ -81,21 +79,21 @@ final class TaskAgentStatusRegistry {
     entry.statusText = statusText
     entry.updatedAt = Date()
     entries[taskId] = entry
+    AgentRuntimeStatusStore.shared.updateActivity(surface: .taskChat(taskId: taskId), statusText: statusText)
     pruneIfNeeded()
   }
 
   func markCompleted(taskId: String) {
-    update(taskId: taskId, status: .completed, statusText: nil, lastError: nil)
+    update(taskId: taskId, statusText: nil, lastError: nil)
   }
 
   func markFailed(taskId: String, error: String) {
-    let lower = error.lowercased()
-    let status: Status = lower.contains("took too long") || lower.contains("timeout") ? .timedOut : .failed
-    update(taskId: taskId, status: status, statusText: nil, lastError: error)
+    update(taskId: taskId, statusText: nil, lastError: error)
+    AgentRuntimeStatusStore.shared.recordLocalFailure(surface: .taskChat(taskId: taskId), error: error)
   }
 
   func markStopped(taskId: String) {
-    update(taskId: taskId, status: .stopped, statusText: nil, lastError: "Stopped by user")
+    update(taskId: taskId, statusText: nil, lastError: "Stopped by user")
   }
 
   func reset() {
@@ -127,21 +125,20 @@ final class TaskAgentStatusRegistry {
   }
 
   func voiceSummary() -> String {
-    let recent = entries.values
-      .sorted { $0.updatedAt > $1.updatedAt }
+    let recent = snapshots()
       .prefix(5)
 
     guard !recent.isEmpty else {
       return "No task agents are running or recently finished."
     }
 
-    let lines = recent.map { entry -> String in
-      let title = (entry.title?.isEmpty == false ? entry.title! : "Untitled task")
-      var parts = ["\(title): \(entry.status.rawValue.replacingOccurrences(of: "_", with: " "))"]
-      if let statusText = entry.statusText, !statusText.isEmpty {
+    let lines = recent.map { snapshot -> String in
+      let title = (snapshot.title?.isEmpty == false ? snapshot.title! : "Untitled task")
+      var parts = ["\(title): \(snapshot.status.replacingOccurrences(of: "_", with: " "))"]
+      if let statusText = snapshot.statusText, !statusText.isEmpty {
         parts.append(statusText)
       }
-      if let lastError = entry.lastError, !lastError.isEmpty {
+      if let lastError = snapshot.lastError, !lastError.isEmpty {
         parts.append("error: \(lastError)")
       }
       return "- " + parts.joined(separator: "; ")
@@ -157,38 +154,51 @@ final class TaskAgentStatusRegistry {
   }
 
   private func snapshots() -> [Snapshot] {
-    entries.values
+    let projectionSnapshots = AgentRuntimeStatusStore.shared.taskProjections(limit: maxSnapshotEntries).map { projection in
+      let taskId = projection.surface.externalRefId
+      let entry = entries[taskId]
+      return Snapshot(
+        taskId: taskId,
+        title: entry?.title,
+        status: taskStatus(for: projection.status),
+        statusText: projection.statusText ?? entry?.statusText,
+        lastError: projection.errorMessage ?? entry?.lastError,
+        updatedAt: ISO8601DateFormatter().string(from: projection.updatedAt))
+    }
+
+    let projectedTaskIds = Set(projectionSnapshots.map(\.taskId))
+    let titleOnlySnapshots = entries.values
+      .filter { !projectedTaskIds.contains($0.taskId) }
       .sorted { $0.updatedAt > $1.updatedAt }
-      .prefix(maxSnapshotEntries)
+      .prefix(max(0, maxSnapshotEntries - projectionSnapshots.count))
       .map { entry in
         Snapshot(
           taskId: entry.taskId,
           title: entry.title,
-          status: entry.status.rawValue,
+          status: "idle",
           statusText: entry.statusText,
           lastError: entry.lastError,
           updatedAt: ISO8601DateFormatter().string(from: entry.updatedAt))
       }
+
+    return projectionSnapshots + titleOnlySnapshots
   }
 
   private func update(
     taskId: String,
     title: String? = nil,
-    status: Status,
     statusText: String?,
     lastError: String?
   ) {
     var entry = entries[taskId] ?? Entry(
       taskId: taskId,
       title: nil,
-      status: .idle,
       statusText: nil,
       lastError: nil,
       updatedAt: Date())
     if let title, !title.isEmpty {
       entry.title = title
     }
-    entry.status = status
     entry.statusText = statusText
     entry.lastError = lastError
     entry.updatedAt = Date()
@@ -205,5 +215,22 @@ final class TaskAgentStatusRegistry {
         .map(\.taskId)
     )
     entries = entries.filter { retainedIds.contains($0.key) }
+  }
+
+  private func taskStatus(for status: AgentRunProjectionStatus) -> String {
+    switch status {
+    case .succeeded:
+      return Status.completed.rawValue
+    case .failed:
+      return Status.failed.rawValue
+    case .cancelled:
+      return Status.stopped.rawValue
+    case .timedOut:
+      return Status.timedOut.rawValue
+    case .queued, .starting, .running, .waitingInput, .waitingApproval, .cancelling:
+      return Status.running.rawValue
+    case .idle, .orphaned:
+      return Status.idle.rawValue
+    }
   }
 }
