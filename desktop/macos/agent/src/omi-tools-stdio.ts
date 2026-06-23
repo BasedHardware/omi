@@ -12,6 +12,7 @@ import { createConnection } from "net";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { agentControlToolDefinitions, isAgentControlToolName } from "./runtime/control-tools.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -234,6 +235,7 @@ Returns JSON with recent task_agents and floating_agent_pills. floating_agent_pi
       required: [],
     },
   },
+  ...agentControlToolDefinitions,
   {
     name: "spawn_agent",
     description: `Start a floating background agent pill.
@@ -886,6 +888,17 @@ async function handleJsonRpc(
                 text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
               }],
             },
+          });
+        }
+      } else if (isAgentControlToolName(toolName)) {
+        // Runtime control tools are handled by the Node parent/kernel. They
+        // still travel over the relay so MCP clients use the same tool path.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (

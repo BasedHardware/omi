@@ -144,6 +144,22 @@ export interface AgentEvent {
   createdAtMs: number;
 }
 
+export interface AgentArtifact {
+  artifactId: string;
+  sessionId: string;
+  runId: string | null;
+  attemptId: string | null;
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName: string | null;
+  mimeType: string | null;
+  contentHash: string | null;
+  sizeBytes: number | null;
+  metadataJson: string;
+  createdAtMs: number;
+}
+
 export type NewAgentSession = Partial<AgentSession> & Pick<AgentSession, "ownerId" | "surfaceKind" | "defaultAdapterId">;
 
 export type NewAgentRun = Partial<AgentRun> &

@@ -11,9 +11,11 @@ import { AdapterRegistry } from "./adapter-registry.js";
 import type {
   AdapterBinding,
   AgentEvent,
+  AgentArtifact,
   AgentRun,
   AgentSession,
   AgentStore,
+  ArtifactRole,
   AttemptStatus,
   ResumeFidelity,
   RunAttempt,
@@ -69,6 +71,44 @@ export interface CancelRunResult {
   adapterAcknowledged: boolean;
   runId: string;
   attemptId?: string;
+}
+
+export interface ListSessionsInput {
+  ownerId?: string;
+  status?: AgentSession["status"];
+  surfaceKind?: string;
+  limit?: number;
+  beforeUpdatedAtMs?: number;
+}
+
+export interface KernelSessionSummary {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+  adapterBindings: AdapterBinding[];
+}
+
+export interface GetRunInput {
+  runId: string;
+  includeEvents?: boolean;
+  eventLimit?: number;
+}
+
+export interface KernelRunDetails {
+  session: AgentSession;
+  run: AgentRun;
+  attempts: RunAttempt[];
+  adapterBindings: AdapterBinding[];
+  artifacts: AgentArtifact[];
+  events: AgentEvent[];
+}
+
+export interface InspectArtifactsInput {
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  role?: ArtifactRole;
+  limit?: number;
 }
 
 export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
@@ -276,6 +316,14 @@ export class AgentRuntimeKernel {
   async cancelRun(runId: string): Promise<CancelRunResult> {
     const active = this.activeExecutions.get(runId);
     const run = this.readRun(runId);
+    if (TERMINAL_STATUSES.includes(run.status)) {
+      return {
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+        runId,
+      };
+    }
     const attempt = this.readActiveAttempt(runId);
     const requestedAt = Date.now();
 
@@ -351,6 +399,61 @@ export class AgentRuntimeKernel {
       runId,
       attemptId: attempt?.attemptId,
     };
+  }
+
+  listSessions(input: ListSessionsInput = {}): KernelSessionSummary[] {
+    const where: string[] = [];
+    const values: unknown[] = [];
+    if (input.ownerId) {
+      where.push("owner_id = ?");
+      values.push(input.ownerId);
+    }
+    if (input.status) {
+      where.push("status = ?");
+      values.push(input.status);
+    }
+    if (input.surfaceKind) {
+      where.push("surface_kind = ?");
+      values.push(input.surfaceKind);
+    }
+    if (input.beforeUpdatedAtMs !== undefined) {
+      where.push("updated_at_ms < ?");
+      values.push(input.beforeUpdatedAtMs);
+    }
+    const limit = boundedLimit(input.limit, 50, 200);
+    const sessions = this.store
+      .allRows(
+        `SELECT * FROM sessions
+         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY last_activity_at_ms DESC, created_at_ms DESC
+         LIMIT ?`,
+        [...values, limit],
+      )
+      .map(sessionFromRow);
+
+    return sessions.map((session) => ({
+      session,
+      latestRun: this.readLatestRunForSession(session.sessionId),
+      activeRun: this.readActiveRunForSession(session.sessionId),
+      adapterBindings: this.readBindingsForSession(session.sessionId),
+    }));
+  }
+
+  getRun(input: GetRunInput): KernelRunDetails {
+    const run = this.readRun(input.runId);
+    const session = this.readSession(run.sessionId);
+    return {
+      session,
+      run,
+      attempts: this.readAttemptsForRun(run.runId),
+      adapterBindings: this.readBindingsForSession(session.sessionId),
+      artifacts: this.readArtifacts({ runId: run.runId, limit: 100 }),
+      events: input.includeEvents ? this.readEventsForRun(run.runId, boundedLimit(input.eventLimit, 100, 500)) : [],
+    };
+  }
+
+  inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    return this.readArtifacts(input);
   }
 
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {
@@ -908,12 +1011,29 @@ export class AgentRuntimeKernel {
     return runFromRow(this.store.getRow("SELECT * FROM runs WHERE run_id = ?", [runId]));
   }
 
+  private readLatestRunForSession(sessionId: string): AgentRun | undefined {
+    const row = this.store.getOptionalRow("SELECT * FROM runs WHERE session_id = ? ORDER BY created_at_ms DESC LIMIT 1", [sessionId]);
+    return row ? runFromRow(row) : undefined;
+  }
+
+  private readActiveRunForSession(sessionId: string): AgentRun | undefined {
+    const row = this.store.getOptionalRow(
+      `SELECT * FROM runs WHERE session_id = ? AND status IN (${placeholders(ACTIVE_STATUSES.length)}) ORDER BY created_at_ms DESC LIMIT 1`,
+      [sessionId, ...ACTIVE_STATUSES],
+    );
+    return row ? runFromRow(row) : undefined;
+  }
+
   private readAttempt(attemptId: string): RunAttempt {
     return attemptFromRow(this.store.getRow("SELECT * FROM run_attempts WHERE attempt_id = ?", [attemptId]));
   }
 
   private readLatestAttempt(runId: string): RunAttempt {
     return attemptFromRow(this.store.getRow("SELECT * FROM run_attempts WHERE run_id = ? ORDER BY attempt_no DESC LIMIT 1", [runId]));
+  }
+
+  private readAttemptsForRun(runId: string): RunAttempt[] {
+    return this.store.allRows("SELECT * FROM run_attempts WHERE run_id = ? ORDER BY attempt_no ASC", [runId]).map(attemptFromRow);
   }
 
   private readActiveAttempt(runId: string): RunAttempt | undefined {
@@ -942,6 +1062,49 @@ export class AgentRuntimeKernel {
       [sessionId, adapterId],
     );
     return row ? bindingFromRow(row) : undefined;
+  }
+
+  private readBindingsForSession(sessionId: string): AdapterBinding[] {
+    return this.store
+      .allRows("SELECT * FROM adapter_bindings WHERE session_id = ? ORDER BY adapter_id ASC, binding_generation DESC", [sessionId])
+      .map(bindingFromRow);
+  }
+
+  private readEventsForRun(runId: string, limit: number): AgentEvent[] {
+    return this.store
+      .allRows("SELECT * FROM events WHERE run_id = ? ORDER BY event_seq ASC LIMIT ?", [runId, limit])
+      .map(eventFromRow);
+  }
+
+  private readArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    const where: string[] = [];
+    const values: unknown[] = [];
+    if (input.sessionId) {
+      where.push("session_id = ?");
+      values.push(input.sessionId);
+    }
+    if (input.runId) {
+      where.push("run_id = ?");
+      values.push(input.runId);
+    }
+    if (input.attemptId) {
+      where.push("attempt_id = ?");
+      values.push(input.attemptId);
+    }
+    if (input.role) {
+      where.push("role = ?");
+      values.push(input.role);
+    }
+    const limit = boundedLimit(input.limit, 50, 200);
+    return this.store
+      .allRows(
+        `SELECT * FROM artifacts
+         ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+         ORDER BY created_at_ms DESC
+         LIMIT ?`,
+        [...values, limit],
+      )
+      .map(artifactFromRow);
   }
 
   private nextBindingGeneration(sessionId: string, adapterId: string): number {
@@ -1018,6 +1181,11 @@ function nullableText(value: unknown): string | null {
 
 function nullableNumber(value: unknown): number | null {
   return value === null || value === undefined ? null : Number(value);
+}
+
+function boundedLimit(value: number | undefined, fallback: number, max: number): number {
+  if (value === undefined || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(max, Math.floor(value)));
 }
 
 function sessionFromRow(row: Record<string, unknown>): AgentSession {
@@ -1119,6 +1287,39 @@ function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     updatedAtMs: Number(row.updated_at_ms),
     lastUsedAtMs: nullableNumber(row.last_used_at_ms),
     invalidatedAtMs: nullableNumber(row.invalidated_at_ms),
+  };
+}
+
+function eventFromRow(row: Record<string, unknown>): AgentEvent {
+  return {
+    eventSeq: Number(row.event_seq),
+    eventId: text(row.event_id),
+    sessionId: text(row.session_id),
+    runId: nullableText(row.run_id),
+    attemptId: nullableText(row.attempt_id),
+    type: text(row.type),
+    retentionClass: text(row.retention_class) as AgentEvent["retentionClass"],
+    visibility: text(row.visibility) as AgentEvent["visibility"],
+    payloadJson: text(row.payload_json),
+    createdAtMs: Number(row.created_at_ms),
+  };
+}
+
+function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
+  return {
+    artifactId: text(row.artifact_id),
+    sessionId: text(row.session_id),
+    runId: nullableText(row.run_id),
+    attemptId: nullableText(row.attempt_id),
+    kind: text(row.kind),
+    role: text(row.role) as ArtifactRole,
+    uri: text(row.uri),
+    displayName: nullableText(row.display_name),
+    mimeType: nullableText(row.mime_type),
+    contentHash: nullableText(row.content_hash),
+    sizeBytes: nullableNumber(row.size_bytes),
+    metadataJson: text(row.metadata_json),
+    createdAtMs: Number(row.created_at_ms),
   };
 }
 

@@ -74,6 +74,23 @@ describe("AgentRuntimeKernel cancellation", () => {
     ]);
     store.close();
   });
+
+  it("does not mutate terminal runs when cancellation is requested later", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const result = await kernel.executeRun(baseRunInput);
+
+    const ack = await kernel.cancelRun(result.run.runId);
+
+    expect(ack).toMatchObject({
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+      runId: result.run.runId,
+    });
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [result.run.runId]).status).toBe("succeeded");
+    expect(store.allRows("SELECT type FROM events WHERE type = 'run.cancellation_requested'")).toHaveLength(0);
+    store.close();
+  });
 });
 
 function newDatabasePath(): string {

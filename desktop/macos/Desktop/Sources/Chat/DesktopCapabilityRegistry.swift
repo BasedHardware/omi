@@ -204,6 +204,46 @@ enum DesktopCapabilityRegistry {
         "Returns both task_agents and floating_agent_pills; floating_agent_pills are the circular agent pills below the floating bar."
       ]),
     Capability(
+      toolName: "list_agent_sessions",
+      title: "List Agent Sessions",
+      latency: .fastLocal,
+      surfaces: [.desktopChat],
+      summary: "List canonical Omi-managed agent sessions and latest run state.",
+      bullets: [
+        "Use for current or recent Omi agents/subagents across main chat, task chat, and floating pills.",
+        "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
+      ]),
+    Capability(
+      toolName: "get_agent_run",
+      title: "Get Agent Run",
+      latency: .fastLocal,
+      surfaces: [.desktopChat],
+      summary: "Inspect one canonical Omi agent run.",
+      bullets: [
+        "Use a runId from list_agent_sessions or a correlated Omi result.",
+        "Returns the run, attempts, adapter bindings, events, and artifact metadata."
+      ]),
+    Capability(
+      toolName: "cancel_agent_run",
+      title: "Cancel Agent Run",
+      latency: .fastLocal,
+      surfaces: [.desktopChat],
+      summary: "Request cancellation for an Omi agent run through the runtime kernel.",
+      bullets: [
+        "Use when the user asks to stop a running Omi agent/subagent.",
+        "Returns whether cancellation was accepted, dispatched, and acknowledged."
+      ]),
+    Capability(
+      toolName: "inspect_agent_artifacts",
+      title: "Inspect Agent Artifacts",
+      latency: .fastLocal,
+      surfaces: [.desktopChat],
+      summary: "List canonical artifact metadata for an Omi agent session, run, or attempt.",
+      bullets: [
+        "Returns artifact references and metadata only.",
+        "Use after get_agent_run when the user asks what files or outputs an agent produced."
+      ]),
+    Capability(
       toolName: "spawn_agent",
       title: "Spawn Agent",
       latency: .asyncBackground,
@@ -288,6 +328,9 @@ enum DesktopCapabilityRegistry {
     - Create/update tasks -> create_action_item/update_action_item when available; use execute_sql only for exact local inspection or legacy local writes.
     - Complete/delete local tasks -> find the backendId, then complete_task/delete_task.
     - Subagents/task-agent status -> get_task_agent_status.
+    - Canonical Omi-managed agent sessions/runs -> list_agent_sessions, get_agent_run.
+    - Stop a canonical Omi agent run -> cancel_agent_run.
+    - Agent output references/artifacts -> inspect_agent_artifacts.
     - Start a floating-bar subagent/background agent -> spawn_agent.
     - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
     - Onboarding knowledge graph -> save_knowledge_graph.
