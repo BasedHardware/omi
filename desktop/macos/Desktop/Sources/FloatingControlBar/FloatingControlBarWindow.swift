@@ -1828,10 +1828,24 @@ class FloatingControlBarManager {
 
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
 
-        let screenshotData = await Task.detached { () -> Data? in
-            return ScreenCaptureManager.captureScreenData()
-        }.value
-        activeTiming?.mark(.screenshotDone, note: screenshotData == nil ? "skipped" : nil)
+        // Track 2 PR 4 — skip screenshot for non-visual queries. For
+        // "Hi, how are you?" or "translate 'good morning' to Spanish"
+        // the screen capture is wasted 100-300ms CPU. `QueryVisualIntent`
+        // is conservative: ambiguous queries still capture.
+        let wantsScreenshot = QueryVisualIntent.wantsScreenshot(message)
+        let screenshotData: Data? = if wantsScreenshot {
+            await Task.detached { () -> Data? in
+                return ScreenCaptureManager.captureScreenData()
+            }.value
+        } else {
+            nil
+        }
+        activeTiming?.mark(
+            .screenshotDone,
+            note: screenshotData == nil
+                ? (wantsScreenshot ? "capture_failed" : "skipped")
+                : nil
+        )
         barWindow.orderFrontRegardless()
 
         AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
