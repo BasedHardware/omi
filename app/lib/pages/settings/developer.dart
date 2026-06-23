@@ -373,7 +373,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               Navigator.of(ctx).pop();
               final message = context.l10n.apiEnvSavedRestartRequired;
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              if (!ctx.mounted) return;
+              if (!context.mounted) return;
               AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
