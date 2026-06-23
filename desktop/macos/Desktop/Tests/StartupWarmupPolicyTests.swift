@@ -216,9 +216,9 @@ final class StartupWarmupPolicyTests: XCTestCase {
         }
 
         XCTAssertLessThan(
+            hydrationGuardRange.lowerBound,
             dashboardRefreshRange.lowerBound,
-            hydrationGuardRange.upperBound,
-            "Dashboard-only activation/Cmd+R refresh must not be blocked by the Tasks page hydration guard"
+            "Dashboard-only activation/Cmd+R refresh must fall back to the scoped dashboard refresh from the Tasks page hydration guard"
         )
     }
 }
