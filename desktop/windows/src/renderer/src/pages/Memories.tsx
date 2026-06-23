@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download } from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download, Share2 } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -108,6 +108,15 @@ export function Memories(): React.JSX.Element {
     } finally {
       setSavingMem(false)
       cancelMemEdit()
+    }
+  }
+
+  const copyMemory = async (content: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(content)
+      toast('Copied to clipboard', { tone: 'info' })
+    } catch {
+      toast('Could not copy', { tone: 'error' })
     }
   }
 
@@ -326,15 +335,24 @@ export function Memories(): React.JSX.Element {
                   isSel ? 'ring-2 ring-white/40' : ''
                 }`}
               >
-                {/* Edit button — only in non-manage mode */}
+                {/* Share + Edit buttons — only in non-manage mode */}
                 {!manage && !isEditing && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startMemEdit(m) }}
-                    title="Edit memory"
-                    className="absolute right-3 top-3 rounded-md p-1 text-white/0 transition-colors group-hover/card:text-white/30 group-hover/card:hover:text-white/80"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="absolute right-3 top-3 flex items-center gap-0.5 text-white/0 transition-colors group-hover/card:text-white/30">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void copyMemory(m.content) }}
+                      title="Copy memory to clipboard"
+                      className="rounded-md p-1 hover:text-white/80"
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startMemEdit(m) }}
+                      title="Edit memory"
+                      className="rounded-md p-1 hover:text-white/80"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )}
                 <div className="flex items-start gap-3">
                   {manage && (
