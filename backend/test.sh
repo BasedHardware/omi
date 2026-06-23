@@ -37,6 +37,7 @@ pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
+pytest tests/unit/test_memory_domain.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_short_term_lifecycle.py -v
 pytest tests/unit/test_v17_product_memory_items.py -v
