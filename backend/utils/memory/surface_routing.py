@@ -2,20 +2,35 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system_pin import (
+    clear_memory_system_pin,
+    get_pinned_memory_system,
+    memory_system_request_scope,
+    pin_memory_system,
+    resolve_pinned_memory_system,
+)
 
-
-def pin_memory_system(uid: str, *, db_client=None) -> MemorySystem:
-    """Resolve and pin the memory cohort for one request / tool invocation."""
-    return resolve_memory_system(uid, db_client=db_client)
+__all__ = [
+    "MemorySystem",
+    "clear_memory_system_pin",
+    "get_memory_service",
+    "get_pinned_memory_system",
+    "is_canonical_cohort",
+    "memory_system_request_scope",
+    "memorydb_list_with_locked_preview",
+    "pin_memory_system",
+    "resolve_pinned_memory_system",
+    "truncate_locked_memory_content",
+]
 
 
 def is_canonical_cohort(uid: str, *, db_client=None) -> bool:
-    return pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    return resolve_pinned_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
 
 
 def get_memory_service(*, db_client=None) -> MemoryService:
