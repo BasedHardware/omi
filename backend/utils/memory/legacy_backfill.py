@@ -30,6 +30,7 @@ from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.v17_memory_operations import MemoryOperation, MemoryOperationType
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.canonical_memory_adapter import neutral_vector_id_for_memory
 from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
@@ -71,11 +72,6 @@ def legacy_backfill_idempotency_key(*, uid: str, legacy_memory_id: str) -> str:
         "legacy-backfill-idempotency",
         {"uid": uid, "legacy_memory_id": legacy_memory_id},
     )
-
-
-def neutral_vector_id_for_memory(memory_id: str) -> str:
-    """Q5: canonical vector identity is the neutral ``mem_`` memory id (no ``v17mem:`` prefix)."""
-    return memory_id
 
 
 def legacy_source_fingerprint(legacy_rows: Sequence[Dict[str, Any]]) -> str:
