@@ -144,6 +144,12 @@ actor OCREmbeddingService {
                 }
 
                 log("OCREmbeddingService: Batch embedded \(chunk.count) unique items (applied to \(chunk.reduce(0) { $0 + (duplicateGroups[$1.contentHash]?.count ?? 1) }) screenshots)")
+            } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
+                // Expected product-gating/limit (e.g. trial expired, rate limited): drop this
+                // batch instead of re-queueing. Re-queueing here tight-loops the 60s flush
+                // forever while gated, flooding Sentry; missing screenshots get re-embedded
+                // via backfill once the user is un-gated.
+                log("OCREmbeddingService: Skipping batch of \(chunk.count) items — backend gating/limit: \(error.localizedDescription)")
             } catch {
                 logError("OCREmbeddingService: Batch embed failed for \(chunk.count) items", error: error)
                 // Re-queue failed items for next flush
@@ -188,6 +194,10 @@ actor OCREmbeddingService {
                 let embeddings: [[Float]]
                 do {
                     embeddings = try await EmbeddingService.shared.embedBatch(texts: texts, taskType: "RETRIEVAL_DOCUMENT")
+                } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
+                    log("OCREmbeddingService: Backfill paused at \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
+                    hitError = true
+                    break
                 } catch {
                     logError("OCREmbeddingService: Batch embed failed at \(totalProcessed) items, will retry on next launch", error: error)
                     hitError = true
@@ -224,6 +234,8 @@ actor OCREmbeddingService {
                 log("OCREmbeddingService: Backfill complete — \(totalProcessed) items embedded")
             }
 
+        } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
+            log("OCREmbeddingService: Backfill stopped — backend gating/limit: \(error.localizedDescription)")
         } catch {
             logError("OCREmbeddingService: Backfill failed", error: error)
         }
