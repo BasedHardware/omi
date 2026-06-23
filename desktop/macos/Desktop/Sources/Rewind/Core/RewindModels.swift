@@ -408,7 +408,7 @@ class RewindSettings: ObservableObject {
         // Load settings with defaults
         self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
         self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
-        self.ocrRecognitionFast = defaults.object(forKey: "rewindOCRFast") as? Bool ?? true
+        self.ocrRecognitionFast = defaults.object(forKey: "rewindOCRFast") as? Bool ?? false
         self.pauseOCROnBattery = defaults.object(forKey: "rewindPauseOCROnBattery") as? Bool ?? true
         self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 
