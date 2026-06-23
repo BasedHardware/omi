@@ -71,6 +71,33 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+    """First open of a lazily-deferred desktop conversation: run the full LLM enrichment now
+    (summary, action items, memories, embeddings, app results), clear the `deferred` flag, and
+    return the enriched conversation. The flag is flipped off first so concurrent opens don't
+    double-process. On any failure, re-arm the flag and return the raw conversation so the user
+    still sees their transcript."""
+    conversation_id = conversation.get('id')
+    try:
+        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+        conv_obj = deserialize_conversation(conversation)
+        conv_obj.deferred = False
+        enriched = process_conversation(
+            uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False
+        )
+        result = enriched.dict()
+        result['deferred'] = False
+        return result
+    except Exception as e:
+        logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+        try:
+            conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
+        except Exception:
+            pass
+        conversation['deferred'] = True
+        return conversation
+
+
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
@@ -179,7 +206,12 @@ def get_conversations_count(
 @router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    return _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # enriched on first open. Other conversations are returned unchanged.
+    if conversation.get('deferred'):
+        conversation = _enrich_deferred_conversation(uid, conversation)
+    return conversation
 
 
 @router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
