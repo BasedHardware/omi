@@ -7,9 +7,10 @@ from models.memory_domain import (
     assert_legal_state,
     is_legal_state_combination,
     layer_to_tier,
+    physical_status_to_record_status,
     tier_to_layer,
 )
-from models.v17_product_memory import MemoryTier
+from models.v17_product_memory import MemoryItemStatus, MemoryTier
 
 
 def _all_legal_combinations():
@@ -62,3 +63,36 @@ def test_tier_to_layer_mapping(tier, expected_layer):
 @pytest.mark.parametrize("layer", list(MemoryLayer))
 def test_layer_to_tier_round_trip(layer):
     assert tier_to_layer(layer_to_tier(layer)) is layer
+
+
+@pytest.mark.parametrize(
+    "physical_status,expected",
+    [
+        (MemoryItemStatus.active, MemoryRecordStatus.ACTIVE),
+        (MemoryItemStatus.superseded, MemoryRecordStatus.SUPERSEDED),
+        (MemoryItemStatus.tombstoned, MemoryRecordStatus.TOMBSTONED),
+        (MemoryItemStatus.hidden, MemoryRecordStatus.TOMBSTONED),
+    ],
+)
+def test_physical_status_to_record_status_mapping(physical_status, expected):
+    assert physical_status_to_record_status(physical_status.value) is expected
+
+
+@pytest.mark.parametrize(
+    "layer,processing_state",
+    [
+        (MemoryLayer.SHORT_TERM, MemoryProcessingState.PENDING),
+        (MemoryLayer.LONG_TERM, MemoryProcessingState.PROCESSED),
+        (MemoryLayer.ARCHIVE, MemoryProcessingState.PROCESSED),
+    ],
+)
+def test_hidden_physical_status_passes_assert_legal_state(layer, processing_state):
+    """Stored ``hidden`` must not crash the §1.3 validator (maps to tombstoned)."""
+    canonical_status = physical_status_to_record_status(MemoryItemStatus.hidden.value)
+    assert canonical_status is MemoryRecordStatus.TOMBSTONED
+    assert_legal_state(layer, canonical_status, processing_state)
+
+
+def test_physical_status_unknown_raises():
+    with pytest.raises(ValueError, match="unknown physical memory status"):
+        physical_status_to_record_status("bogus")
