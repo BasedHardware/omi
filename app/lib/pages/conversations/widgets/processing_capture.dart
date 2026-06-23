@@ -313,45 +313,60 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   Widget _buildCaptureModeToggle(BuildContext context, CaptureProvider provider) {
     final batch = SharedPreferencesUtil().batchModeEnabled;
-    return Container(
-      margin: const EdgeInsets.only(left: 8, right: 6),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        children: [
-          _buildModeSegment(label: context.l10n.live, active: !batch, onTap: () => _setCaptureMode(provider, false)),
-          _buildModeSegment(
-            label: context.l10n.transcribeLaterTitle,
-            active: batch,
-            onTap: () => _setCaptureMode(provider, true),
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, right: 6),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _setCaptureMode(provider, !batch),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.fromLTRB(12, 6, 7, 6),
+            decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(22)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.schedule_rounded, size: 14, color: batch ? Colors.white : Colors.grey.shade500),
+                const SizedBox(width: 6),
+                Text(
+                  context.l10n.transcribeLaterTitle,
+                  style: TextStyle(
+                    color: batch ? Colors.white : Colors.grey.shade400,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildModeSwitch(batch),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildModeSegment({required String label, required bool active, required VoidCallback onTap}) {
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: active ? null : onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(vertical: 8),
+  Widget _buildModeSwitch(bool on) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: 38,
+      height: 22,
+      decoration: BoxDecoration(
+        color: on ? Colors.white : const Color(0xFF45444D),
+        borderRadius: BorderRadius.circular(11),
+      ),
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 18,
+          height: 18,
+          margin: const EdgeInsets.all(2),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF45444D) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: active ? Colors.white : Colors.grey.shade400,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
+            color: on ? const Color(0xFF1F1F25) : Colors.grey.shade300,
+            shape: BoxShape.circle,
           ),
         ),
       ),
