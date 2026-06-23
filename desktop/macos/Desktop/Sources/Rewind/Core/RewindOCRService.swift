@@ -161,7 +161,7 @@ actor RewindOCRService {
 
     /// Extract text with bounding boxes from a CGImage
     func extractTextWithBounds(from cgImage: CGImage) async throws -> OCRResult {
-        let useFastOCR = UserDefaults.standard.object(forKey: "rewindOCRFast") as? Bool ?? true
+        let useFastOCR = UserDefaults.standard.object(forKey: "rewindOCRFast") as? Bool ?? false
         let modeName = useFastOCR ? "fast" : "accurate"
         let recognitionLevel: VNRequestTextRecognitionLevel = useFastOCR ? .fast : .accurate
 
@@ -224,7 +224,9 @@ actor RewindOCRService {
             }
 
             request.recognitionLevel = recognitionLevel
-            request.usesLanguageCorrection = false
+            // Vision defaults this to true; language correction fixes the o/0, m/rn, l/i, $/s
+            // character-substitution errors that otherwise corrupt OCR text and break screen search.
+            request.usesLanguageCorrection = true
             request.recognitionLanguages = Self.recognitionLanguages
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
