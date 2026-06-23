@@ -48,7 +48,8 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.subscription import is_trial_paywalled
 from models.other import Person
@@ -513,11 +514,15 @@ def _extract_memories_canonical(uid: str, conversation: Conversation):
 
 
 def _extract_memories_inner(uid: str, conversation: Conversation):
-    if resolve_memory_system(uid) == MemorySystem.CANONICAL:
-        _extract_memories_canonical(uid, conversation)
-        return
+    with memory_system_request_scope(uid) as memory_system:
+        if memory_system == MemorySystem.CANONICAL:
+            _extract_memories_canonical(uid, conversation)
+            return
 
-    # Delete old memories for this conversation (if reprocessing)
+        _extract_memories_legacy(uid, conversation)
+
+
+def _extract_memories_legacy(uid: str, conversation: Conversation):
     # Also get the IDs to delete from Pinecone
     deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
     for memory_id in deletion_result.get('vector_delete_ids', []):
