@@ -179,7 +179,8 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
     @MainActor
     func testTasksStoreStartupMaintenanceSchedulesOnceForFirstUseLoadPath() async {
-        let store = TasksStore()
+        let store = TasksStore.shared
+        store.resetSessionState()
         let counter = StartupMaintenanceCounter()
 
         store.scheduleStartupMaintenanceIfNeeded(
@@ -200,6 +201,25 @@ final class StartupWarmupPolicyTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(await counter.fullSyncAndRetryCount, 1)
         XCTAssertEqual(await counter.relevanceBackfillCount, 1)
+    }
+
+    func testDashboardOnlyActivationRefreshDoesNotRequireTasksPageHydration() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Stores/TasksStore.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        guard let dashboardRefreshRange = source.range(of: "await refreshDashboardTasksFromServer()"),
+              let hydrationGuardRange = source.range(of: "guard hasLoadedIncomplete else") else {
+            return XCTFail("TasksStore.refreshTasksIfNeeded must refresh dashboard slices before requiring Tasks page hydration")
+        }
+
+        XCTAssertLessThan(
+            dashboardRefreshRange.lowerBound,
+            hydrationGuardRange.upperBound,
+            "Dashboard-only activation/Cmd+R refresh must not be blocked by the Tasks page hydration guard"
+        )
     }
 }
 

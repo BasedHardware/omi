@@ -234,8 +234,14 @@ class TasksStore: ObservableObject {
         // Skip if currently loading
         guard !isLoadingIncomplete, !isLoadingCompleted, !isLoadingDeleted, !isLoadingMore else { return }
 
-        // Only refresh if we've already loaded tasks
-        guard hasLoadedIncomplete else { return }
+        // Dashboard-only users may never open the full Tasks page, so the
+        // incomplete task list may not be hydrated. Still keep dashboard task
+        // slices fresh on app activation / Cmd+R using the scoped dashboard
+        // refresh path instead of requiring full Tasks-page hydration first.
+        guard hasLoadedIncomplete else {
+            await refreshDashboardTasksFromServer()
+            return
+        }
 
         // Silently sync and reload incomplete tasks (local-first, like Memories)
         do {
