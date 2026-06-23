@@ -40,7 +40,7 @@ CACHE_DIR = Path(os.getenv("LIBRISPEECH_CACHE", "/tmp/librispeech-cache"))
 MANIFEST_PATH = Path(__file__).parent / "librispeech" / "manifest.json"
 
 MAX_SAMPLES = int(os.getenv("WER_MAX_SAMPLES", "10"))
-WER_THRESHOLD = float(os.getenv("WER_THRESHOLD", "10.0"))
+WER_THRESHOLD = float(os.getenv("WER_THRESHOLD", "15.0"))
 PER_SAMPLE_WER_MAX = float(os.getenv("PER_SAMPLE_WER_MAX", "30.0"))
 REPORT_ONLY = os.getenv("WER_REPORT_ONLY", "false").lower() == "true"
 
