@@ -878,10 +878,10 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
-    // pi-mono session IDs are process-local and cannot be resumed after worker
-    // loss. Keep this explicit until the runtime kernel can mark old bindings
-    // stale and create a new generation.
-    return this.openBinding(input);
+    // pi-mono has no native resume after daemon/process loss, but while this
+    // RuntimeAdapter instance is alive the opaque session id is still usable as
+    // process-local state. Startup reconciliation marks these bindings stale.
+    return this.binding(input, input.adapterNativeSessionId);
   }
 
   async executeAttempt(
@@ -889,21 +889,27 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
-    const result = await this.harness.sendPrompt(
-      context.binding.adapterNativeSessionId,
-      context.prompt,
-      context.tools ?? [],
-      context.mode,
-      sink,
-      async () => "",
-      signal
-    );
+    try {
+      const result = await this.harness.sendPrompt(
+        context.binding.adapterNativeSessionId,
+        context.prompt,
+        context.tools ?? [],
+        context.mode,
+        sink,
+        async () => "",
+        signal
+      );
 
-    return {
-      ...result,
-      adapterSessionId: result.sessionId,
-      terminalStatus: signal.aborted ? "cancelled" : "succeeded",
-    };
+      return {
+        ...result,
+        adapterSessionId: result.sessionId,
+        terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+      };
+    } finally {
+      if (this.harness.hasPendingRestart) {
+        await this.harness.executePendingRestart();
+      }
+    }
   }
 
   async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {

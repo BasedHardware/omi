@@ -2,6 +2,7 @@ import type {
   AdapterAttemptResult,
   AdapterBindingHandle,
   OpenedBinding,
+  PromptBlock,
   RuntimeAdapter,
   ToolDef,
 } from "../adapters/interface.js";
@@ -39,15 +40,18 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   clientId: string;
   requestId: string;
   prompt: string;
+  promptBlocks?: PromptBlock[];
   systemPrompt?: string;
   mode?: RunMode;
   adapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   legacyAdapterSessionId?: string;
   maxAttempts?: number;
   tools?: ToolDef[];
   metadata?: Record<string, unknown>;
+  recoverAfterError?: (error: unknown) => Promise<boolean>;
 }
 
 export interface KernelRunResult {
@@ -65,6 +69,16 @@ export interface CancelRunResult {
   adapterAcknowledged: boolean;
   runId: string;
   attemptId?: string;
+}
+
+export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
+  adapterId?: string;
+  reason?: string;
+}
+
+export interface InvalidateBindingsResult {
+  sessionId?: string;
+  invalidatedBindingIds: string[];
 }
 
 export type KernelEventSubscriber = (event: AgentEvent) => void;
@@ -177,6 +191,11 @@ export class AgentRuntimeKernel {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
+        if (await this.tryRecoverAttempt(input, attempt, error, "binding_failed", attemptNo < maxAttempts)) {
+          retryReason = "recoverable_error";
+          resumeFromAttemptId = attempt.attemptId;
+          continue;
+        }
         this.failAttemptBeforeExecution(attempt, "binding_failed", messageFrom(error), false);
         break;
       }
@@ -205,7 +224,7 @@ export class AgentRuntimeKernel {
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               binding: handle,
-              prompt: [{ type: "text", text: input.prompt }],
+              prompt: input.promptBlocks ?? [{ type: "text", text: input.prompt }],
               mode: input.mode ?? "ask",
               model: input.model,
               tools: input.tools ?? [],
@@ -223,6 +242,11 @@ export class AgentRuntimeKernel {
           this.markBindingStale(binding, attempt, messageFrom(error));
           this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
           retryReason = "stale_binding";
+          resumeFromAttemptId = attempt.attemptId;
+          continue;
+        }
+        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)) {
+          retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
@@ -333,9 +357,73 @@ export class AgentRuntimeKernel {
     };
   }
 
+  invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {
+    const session = this.findExistingSession(input);
+    const sessionIds = session ? [session.sessionId] : this.findInvalidationSessionIds(input);
+    if (sessionIds.length === 0) {
+      return { invalidatedBindingIds: [] };
+    }
+
+    const rows = this.store.allRows(
+      `SELECT binding_id, session_id
+       FROM adapter_bindings
+       WHERE session_id IN (${placeholders(sessionIds.length)})
+         AND status = ?
+         ${input.adapterId ? "AND adapter_id = ?" : ""}`,
+      input.adapterId ? [...sessionIds, "active", input.adapterId] : [...sessionIds, "active"],
+    );
+    const invalidatedBindingIds = rows.map((row) => String(row.binding_id));
+    if (invalidatedBindingIds.length === 0) {
+      return { sessionId: session?.sessionId, invalidatedBindingIds };
+    }
+
+    const now = Date.now();
+    this.store.withTransaction(() => {
+      for (const bindingId of invalidatedBindingIds) {
+        this.updateBinding(bindingId, {
+          status: "invalid",
+          invalidatedAtMs: now,
+          updatedAtMs: now,
+        });
+        this.appendEvent({
+          sessionId: String(rows.find((row) => String(row.binding_id) === bindingId)?.session_id),
+          runId: null,
+          attemptId: null,
+          type: "binding.invalidated",
+          payload: {
+            bindingId,
+            adapterId: input.adapterId,
+            reason: input.reason ?? "compatibility_invalidate_session",
+          },
+        });
+      }
+    });
+
+    return { sessionId: session?.sessionId, invalidatedBindingIds };
+  }
+
   private resolveSession(input: KernelSessionResolutionInput): AgentSession {
+    const existing = this.findExistingSession(input);
+    if (existing) return existing;
+    return this.store.insertSession({
+      ownerId: input.ownerId,
+      surfaceKind: input.surfaceKind,
+      externalRefKind: input.externalRefKind ?? null,
+      externalRefId: input.externalRefId ?? null,
+      legacyClientScope: input.legacyClientScope ?? null,
+      legacySessionKey: input.legacySessionKey ?? null,
+      title: input.title ?? null,
+      defaultAdapterId: input.defaultAdapterId ?? "acp",
+    });
+  }
+
+  private findExistingSession(input: KernelSessionResolutionInput): AgentSession | undefined {
     if (input.sessionId) {
-      return this.readSession(input.sessionId);
+      const session = this.readSession(input.sessionId);
+      if (session.ownerId !== input.ownerId) {
+        throw new Error(`Session ${input.sessionId} does not belong to owner ${input.ownerId}`);
+      }
+      return session;
     }
     if (input.externalRefKind && input.externalRefId) {
       const row = this.store.getOptionalRow(
@@ -351,16 +439,16 @@ export class AgentRuntimeKernel {
       );
       if (row) return sessionFromRow(row);
     }
-    return this.store.insertSession({
-      ownerId: input.ownerId,
-      surfaceKind: input.surfaceKind,
-      externalRefKind: input.externalRefKind ?? null,
-      externalRefId: input.externalRefId ?? null,
-      legacyClientScope: input.legacyClientScope ?? null,
-      legacySessionKey: input.legacySessionKey ?? null,
-      title: input.title ?? null,
-      defaultAdapterId: input.defaultAdapterId ?? input.defaultAdapterId ?? "acp",
-    });
+    return undefined;
+  }
+
+  private findInvalidationSessionIds(input: KernelSessionResolutionInput): string[] {
+    if (input.sessionId || input.externalRefKind || input.externalRefId || input.legacyClientScope || input.legacySessionKey) {
+      return [];
+    }
+    return this.store
+      .allRows("SELECT session_id FROM sessions WHERE owner_id = ?", [input.ownerId])
+      .map((row) => String(row.session_id));
   }
 
   private createAttempt(input: {
@@ -467,7 +555,11 @@ export class AgentRuntimeKernel {
       adapterId: string;
     }
   ): Promise<AdapterBindingHandle> {
-    if (!binding.adapterNativeSessionId || !input.adapter.capabilities.supportsNativeResume || binding.resumeFidelity === "none") {
+    const canUseProcessLocalBinding =
+      binding.adapterInstanceId === this.runtimeNodeId &&
+      binding.adapterNativeSessionId &&
+      binding.resumeFidelity === "none";
+    if (!binding.adapterNativeSessionId || (!input.adapter.capabilities.supportsNativeResume && !canUseProcessLocalBinding)) {
       this.markBindingStale(binding, input.attempt, "binding_not_resumable");
       const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
       return opened.handle;
@@ -479,6 +571,7 @@ export class AgentRuntimeKernel {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
+        mcpServers: input.input.mcpServers,
       });
       this.store.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -526,6 +619,7 @@ export class AgentRuntimeKernel {
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
+      mcpServers: input.input.mcpServers,
       metadata: input.input.metadata,
     });
     const binding = this.store.withTransaction(() => {
@@ -712,6 +806,29 @@ export class AgentRuntimeKernel {
         payload: { attemptId: attempt.attemptId, errorCode, errorMessage, retryable },
       });
     });
+  }
+
+  private async tryRecoverAttempt(
+    input: ExecuteAgentRunInput,
+    attempt: RunAttempt,
+    error: unknown,
+    errorCode: string,
+    canRetry: boolean
+  ): Promise<boolean> {
+    if (!canRetry || !input.recoverAfterError) {
+      return false;
+    }
+    let recovered = false;
+    try {
+      recovered = await input.recoverAfterError(error);
+    } catch {
+      return false;
+    }
+    if (!recovered) {
+      return false;
+    }
+    this.failAttemptBeforeExecution(attempt, errorCode, messageFrom(error), true);
+    return true;
   }
 
   private persistAdapterEvent(sessionId: string, runId: string, attemptId: string, event: OutboundMessage): void {

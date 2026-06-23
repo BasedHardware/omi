@@ -33,6 +33,8 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   executed: AdapterAttemptContext[] = [];
   cancelled: CancelAttemptContext[] = [];
   sinks = new Map<string, AdapterEventSink>();
+  failNextOpenError: unknown;
+  failNextExecutionError: unknown;
   failNextResume = false;
   failNextExecutionAsStale = false;
   pendingResult:
@@ -50,6 +52,11 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
     this.opened.push(input);
+    if (this.failNextOpenError) {
+      const error = this.failNextOpenError;
+      this.failNextOpenError = undefined;
+      throw error;
+    }
     return {
       sessionId: input.sessionId,
       adapterId: this.adapterId,
@@ -91,6 +98,11 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.failNextExecutionAsStale) {
       this.failNextExecutionAsStale = false;
       throw new StaleAdapterBindingError("execute found stale binding");
+    }
+    if (this.failNextExecutionError) {
+      const error = this.failNextExecutionError;
+      this.failNextExecutionError = undefined;
+      throw error;
     }
     if (this.pendingResult) {
       return this.pendingResult.promise;
@@ -144,11 +156,11 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   }
 }
 
-export function createKernelHarness(databasePath: string): KernelHarness {
+export function createKernelHarness(databasePath: string, adapterId = "fake"): KernelHarness {
   const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
   const adapter = new FakeRuntimeAdapter();
   const registry = new AdapterRegistry();
-  registry.register("fake", () => adapter, 4);
+  registry.register(adapterId, () => adapter, 4);
   const kernel = new AgentRuntimeKernel({ store, registry });
   return { store, adapter, kernel };
 }

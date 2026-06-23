@@ -245,14 +245,17 @@ describe("tool_use event filtering", () => {
     fileURLToPath(new URL("../src/index.ts", import.meta.url)),
     "utf8"
   );
+  const facadeSrc = readFileSync(
+    fileURLToPath(new URL("../src/runtime/compatibility-facade.ts", import.meta.url)),
+    "utf8"
+  );
 
-  it("source: runPiMonoMode event callback checks type === 'tool_use'", () => {
-    // Guard against accidental removal of the filter in index.ts
-    expect(indexSrc).toMatch(/\.type\s*===\s*["']tool_use["']\)\s*return/);
+  it("source: runPiMonoMode enables facade tool_use suppression", () => {
+    expect(indexSrc).toMatch(/defaultAdapterId:\s*["']pi-mono["'][\s\S]*suppressToolUseEvents:\s*true/);
   });
 
-  it("source: non-tool_use events are forwarded via send()", () => {
-    expect(indexSrc).toMatch(/send\(withQueryCorrelation\(event\s+as\s+OutboundMessage/);
+  it("source: compatibility facade suppresses tool_use only when configured", () => {
+    expect(facadeSrc).toMatch(/case\s+["']tool_use["'][\s\S]*if\s+\(!this\.suppressToolUseEvents\)/);
   });
 
   it("behavioral: suppresses tool_use events and forwards all other types", () => {
