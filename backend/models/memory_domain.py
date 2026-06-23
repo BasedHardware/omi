@@ -51,6 +51,24 @@ class MemoryRecordStatus(str, Enum):
     TOMBSTONED = "tombstoned"
 
 
+# Physical ``MemoryItemStatus.hidden`` is a V17 storage value with no §1.3 axis counterpart.
+# Boundary-map to ``tombstoned`` (hard-excluded from default reads) for validation/materialization.
+_PHYSICAL_TO_CANONICAL_STATUS: dict[str, MemoryRecordStatus] = {
+    MemoryRecordStatus.ACTIVE.value: MemoryRecordStatus.ACTIVE,
+    MemoryRecordStatus.SUPERSEDED.value: MemoryRecordStatus.SUPERSEDED,
+    MemoryRecordStatus.TOMBSTONED.value: MemoryRecordStatus.TOMBSTONED,
+    "hidden": MemoryRecordStatus.TOMBSTONED,
+}
+
+
+def physical_status_to_record_status(physical_status: str) -> MemoryRecordStatus:
+    """Map physical ``MemoryItemStatus`` string to canonical ``MemoryRecordStatus``."""
+    try:
+        return _PHYSICAL_TO_CANONICAL_STATUS[physical_status]
+    except KeyError as exc:
+        raise ValueError(f"unknown physical memory status: {physical_status!r}") from exc
+
+
 class MemoryProcessingState(str, Enum):
     """Internal pipeline processing state; never surfaced to clients."""
 
