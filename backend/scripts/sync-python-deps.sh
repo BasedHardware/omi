@@ -11,11 +11,20 @@ LOCK_FILE="pylock.toml"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64|Darwin-aarch64)
-    if [[ -f pylock.macos.toml ]]; then
-      LOCK_FILE="pylock.macos.toml"
-    fi
+    LOCK_FILE="pylock.macos.toml"
+    ;;
+  Darwin-x86_64|Darwin-amd64)
+    LOCK_FILE="pylock.macos-x86_64.toml"
+    ;;
+  MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64)
+    LOCK_FILE="pylock.windows.toml"
     ;;
 esac
+
+if [[ ! -f "$LOCK_FILE" ]]; then
+  echo "Expected dependency lock $LOCK_FILE for platform $(uname -s)-$(uname -m), but it was not found." >&2
+  exit 1
+fi
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required. Install it from https://docs.astral.sh/uv/getting-started/installation/" >&2
