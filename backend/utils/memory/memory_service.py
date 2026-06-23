@@ -9,6 +9,15 @@ from pydantic import ValidationError
 import database.memories as memories_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB
+from utils.memory.canonical_memory_adapter import (
+    delete_all_canonical_memories,
+    delete_canonical_memory,
+    read_canonical_memories,
+    retract_conversation_sourced_memories,
+    search_canonical_memories,
+    search_result_to_memorydb,
+    write_canonical_extraction_memory,
+)
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 logger = logging.getLogger(__name__)
@@ -88,29 +97,37 @@ class LegacyMemoryBackend:
 
 
 class CanonicalMemoryBackend:
-    _NOT_IMPLEMENTED = "canonical backend lands in WS-B/WS-C/WS-I"
+    def __init__(self, *, db_client=None):
+        self._db_client = db_client
 
     def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-        raise NotImplementedError(self._NOT_IMPLEMENTED)
+        return read_canonical_memories(uid, limit=limit, offset=offset, db_client=self._db_client)
 
     def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
-        raise NotImplementedError(self._NOT_IMPLEMENTED)
+        items = search_canonical_memories(uid, query, limit=limit, db_client=self._db_client)
+        results: List[MemorySearchMatch] = []
+        for item in items:
+            if not item.get("memory_id"):
+                continue
+            memory_obj = search_result_to_memorydb(uid, item)
+            results.append(MemorySearchMatch(memory=memory_obj, score=1.0))
+        return results
 
     def write(self, uid: str, data: Dict[str, Any]) -> None:
-        raise NotImplementedError(self._NOT_IMPLEMENTED)
+        write_canonical_extraction_memory(uid, data, db_client=self._db_client)
 
     def delete(self, uid: str, memory_id: str) -> None:
-        raise NotImplementedError(self._NOT_IMPLEMENTED)
+        delete_canonical_memory(uid, memory_id, db_client=self._db_client)
 
     def delete_all(self, uid: str) -> None:
-        raise NotImplementedError(self._NOT_IMPLEMENTED)
+        delete_all_canonical_memories(uid, db_client=self._db_client)
 
 
 class MemoryService:
     def __init__(self, *, db_client=None):
         self._db_client = db_client
         self._legacy = LegacyMemoryBackend()
-        self._canonical = CanonicalMemoryBackend()
+        self._canonical = CanonicalMemoryBackend(db_client=db_client)
 
     def _resolve_backend(self, uid: str):
         system = resolve_memory_system(uid, db_client=self._db_client)
@@ -132,3 +149,8 @@ class MemoryService:
 
     def delete_all(self, uid: str) -> None:
         self._resolve_backend(uid).delete_all(uid)
+
+    def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
+        if resolve_memory_system(uid, db_client=self._db_client) != MemorySystem.CANONICAL:
+            return None
+        return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
