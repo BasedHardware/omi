@@ -38,6 +38,7 @@ pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memory_domain.py -v
+pytest tests/unit/test_ws_k_layer_field.py -v
 pytest tests/unit/test_memory_service_parity.py -v
 pytest tests/unit/test_ws_i_write_convergence.py -v
 pytest tests/unit/test_ws_i_hardening.py -v
