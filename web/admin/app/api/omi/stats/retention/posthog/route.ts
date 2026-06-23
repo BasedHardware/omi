@@ -1,21 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
-import { posthogFetch } from '@/lib/posthog';
+import { posthogResults } from '@/lib/posthog';
 export const dynamic = 'force-dynamic';
 
 type RetentionPoint = { day: number; retention: number };
 type CohortRow = { date: string; users: number; data: RetentionPoint[] };
 
-async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await posthogFetch(host, projectId, apiKey, query);
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PostHog API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json();
-  return Array.isArray(raw.results) ? raw.results : [];
+async function posthogQuery(host: string, projectId: string, apiKey: string, query: string): Promise<any[]> {
+  return (await posthogResults(host, projectId, apiKey, query)) as any[];
 }
 
 export async function GET(request: NextRequest) {
