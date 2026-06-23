@@ -159,20 +159,12 @@ Per repo `AGENTS.md` "Self-Testing the App" workflow:
 - **The 3 open Track 2 PRs (#8140, #8141, #8142)** — separate PRs, awaiting cubic-dev-ai re-review.
 - **Branch rebase to current `upstream/main` HEAD** — branch is already reset to `91d3cc188` (the current `upstream/main` HEAD); no further rebase needed in this cycle.
 
-## Open Questions
+## Open Questions — RESOLVED (2026-06-23)
 
-1. **Exact spring profile**: `0.18 / 0.88` is recommended (middle ground — clearly snappier than 0.4/0.8 but not "jumpy"). Alternatives:
-   - `0.15 / 0.85` — more aggressive, larger perceived speedup, higher "jumpy" risk
-   - `0.20 / 0.90` — safer, smaller perceived speedup, more conservative
-   - **Recommended: 0.18 / 0.88.** User should confirm before the plan phase locks the constant.
+All five open questions resolved. Each locked answer is binding for the plan and implement phases.
 
-2. **Uniform vs differentiated springs**: Apply the same profile to all 6 sites (recommended — simpler, easier to review, smaller diff), OR differentiate by UX moment (e.g. faster for "show response after stream done" at line 1887, slower for "restore conversation" at line 440)? **Recommended: uniform.** The differentiation argument is weak — all 6 moments are "AI response panel transitions" from the user's perspective.
-
-3. **Spring animation approach**: Two implementation options:
-   - **(a) Single `Self.responseSpring` constant** (recommended) — clean, testable, easy to grep
-   - (b) Computed property / function returning the animation — slightly more flexible but adds a method call per `withAnimation`
-   - **Recommended: (a) static let.**
-
-4. **Visual verification asset**: The PR description should include a screenshot of the floating bar mid-transition. Should that be captured as part of this AIDLC cycle, or left to PR-review time? **Recommended: capture now (in `implement` phase) using the named-bundle workflow, attach to PR description.**
-
-5. **Naming**: `responseSpring` vs `panelTransitionSpring` vs `aiResponseSpring`? **Recommended: `responseSpring`** — short, matches the file's terminology (the spring is for the AI response panel state transitions).
+1. **Exact spring profile** — **LOCKED: `0.18 / 0.88`** (user confirmed 2026-06-23). Middle ground — clearly snappier than 0.4/0.8 but not "jumpy."
+2. **Uniform vs differentiated springs** — **LOCKED: uniform** (same profile at all 6 sites). Simpler, easier to review, smaller diff.
+3. **Spring animation approach** — **LOCKED: `private static let responseSpring = Animation.spring(response: 0.18, dampingFraction: 0.88)` at file scope.**
+4. **Visual verification asset** — **LOCKED: capture in `implement` phase** using the named-bundle workflow (`OMI_APP_NAME="omi-spring-test"`); attach `/tmp/spring-evidence.png` to the PR description.
+5. **Naming** — **LOCKED: `responseSpring`** (matches file terminology, short, greppable).
