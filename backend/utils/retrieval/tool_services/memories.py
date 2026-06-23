@@ -11,7 +11,8 @@ import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import pin_memory_system
 from utils.memory.v17_chat_memory_adapter import (
     list_v17_default_chat_memories_decision_text,
     search_v17_default_chat_memories_vector_decision_text,
@@ -50,7 +51,7 @@ def get_memories_text(
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
 
-    memory_system = resolve_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
         memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
         if start_dt or end_dt:
@@ -133,7 +134,7 @@ def search_memories_text(
 
     limit = max(1, min(limit, 20))
 
-    memory_system = resolve_memory_system(uid, db_client=firestore_db)
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
         if not matches:
