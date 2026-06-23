@@ -130,6 +130,27 @@ def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(monkeypatch
     assert calls[1][2] and 'localId' not in calls[1][2]
 
 
+def test_happy_path_has_rich_default_memory_fixture_set() -> None:
+    ctx = v17_scenarios._clock()
+    default_ids = v17_scenarios._alice_default_memory_ids(ctx)
+    assert len(default_ids) == 24
+    assert ctx.ids["alice_short_active"] in default_ids
+    assert ctx.ids["alice_long_edu"] in default_ids
+    assert ctx.ids["alice_short_stale"] not in default_ids
+    assert ctx.ids["alice_archive"] not in default_ids
+
+
+def test_remap_firestore_seed_to_auth_uid() -> None:
+    seed = v17_scenarios.FirestoreSeed(
+        path="users/alice/memory_items/mem_alice_long_030",
+        protected=True,
+        data={"uid": "alice", "memory_id": "mem_alice_long_030"},
+    )
+    remapped = v17_scenarios._remap_firestore_seed(seed, {"alice": "auth-uid-123"})
+    assert remapped.path == "users/auth-uid-123/memory_items/mem_alice_long_030"
+    assert remapped.data["uid"] == "auth-uid-123"
+
+
 def test_entrypoint_seed_dry_run_outputs_manifest(tmp_path: Path) -> None:
     env = _env(tmp_path)
     result = subprocess.run(
