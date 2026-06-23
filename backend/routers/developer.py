@@ -49,8 +49,8 @@ from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.surface_routing import memorydb_list_with_locked_preview
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.memory.v17_developer_memory_adapter import (
     read_v17_developer_default_memory_rollout,
     search_v17_default_developer_memories,
@@ -273,7 +273,7 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
         return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
@@ -360,7 +360,7 @@ def search_memories_vector(
     """
 
     uid = auth_context.uid
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
         items = []
@@ -612,7 +612,7 @@ def delete_memory(
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
-    memory_system = resolve_memory_system(uid, db_client=db)
+    memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         MemoryService(db_client=db).delete(uid, memory_id)
         return
