@@ -33,9 +33,9 @@ REQUIRED_CASE_KEYS = {
 }
 
 REQUIRED_REFERENCE_TERMS = [
-    "backend/routers/v17_memory_product.py GET /v17/memory/search",
-    "backend/routers/v17_memory_product.py GET /v17/memory/vector/search",
-    "backend/routers/v17_memory_product.py GET /v17/memory/archive/search",
+    "backend/routers/memory_product.py GET /memory/search",
+    "backend/routers/memory_product.py GET /memory/vector/search",
+    "backend/routers/memory_product.py GET /memory/archive/search",
     "backend/routers/memories.py GET /v3/memories",
     "backend/routers/developer.py GET /v1/dev/user/memories",
     "backend/routers/developer.py GET /v1/dev/user/memories/vector/search",
