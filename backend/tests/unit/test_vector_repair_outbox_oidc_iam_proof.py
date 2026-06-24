@@ -15,7 +15,7 @@ def test_v17_vector_repair_outbox_oidc_iam_proof_runner_exists_and_is_read_only(
         "gcloud tasks queues describe",
         "gcloud projects get-iam-policy",
         "gcloud iam service-accounts get-iam-policy",
-        "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
+        "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
         "roles/run.invoker",
         "roles/datastore.user",
         "roles/iam.serviceAccountTokenCreator",
