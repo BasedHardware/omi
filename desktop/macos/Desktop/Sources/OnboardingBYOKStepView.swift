@@ -49,8 +49,8 @@ struct OnboardingBYOKStepView: View {
         }
 
         HStack(spacing: 12) {
-          Button("Use Omi for free") {
-            AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_UseFree")
+          Button("Skip for now") {
+            AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
             onSkip()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
