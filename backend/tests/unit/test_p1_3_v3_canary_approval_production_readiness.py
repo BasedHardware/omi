@@ -52,7 +52,7 @@ def test_production_readiness_runner_exists_and_is_fail_safe_not_run_by_default(
 
 def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeypatch):
     for key in list(os.environ):
-        if key.startswith("V17_V3_CANARY_APPROVAL_PROD_READ_") or key in {
+        if key.startswith("MEMORY_V3_CANARY_APPROVAL_PROD_READ_") or key in {
             "GOOGLE_CLOUD_PROJECT",
             "GOOGLE_APPLICATION_CREDENTIALS",
             "SERVICE_ACCOUNT_JSON",
@@ -68,10 +68,10 @@ def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeyp
     assert report["firestore_reads_executed"] is False
     missing = set(report["production_read_proof"]["missing_prerequisites"])
     assert {
-        "V17_V3_CANARY_APPROVAL_PROD_READ_ALLOW=1",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_ALLOW=1",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
         "GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_JSON",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL",
     }.issubset(missing)
     assert report["summary"]["backend_service_principal_read_proven"] is False
     assert report["summary"]["production_artifact_source_exists"] is False
@@ -82,10 +82,10 @@ def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeyp
 def test_injected_valid_artifact_read_proves_existence_and_shape_but_not_approval():
     module = _module()
     env = {
-        "V17_V3_CANARY_APPROVAL_PROD_READ_ALLOW": "1",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID": "omi-prod-example",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_ALLOW": "1",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID": "omi-prod-example",
         "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/non-secret-sa.json",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
     }
     artifact = {
         "schema_version": 1,
@@ -141,10 +141,10 @@ def test_injected_valid_artifact_read_proves_existence_and_shape_but_not_approva
 def test_injected_missing_or_invalid_artifact_fails_closed_without_claiming_failure():
     module = _module()
     env = {
-        "V17_V3_CANARY_APPROVAL_PROD_READ_ALLOW": "1",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID": "omi-prod-example",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_ALLOW": "1",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID": "omi-prod-example",
         "SERVICE_ACCOUNT_JSON": "{}",
-        "V17_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_CANARY_APPROVAL_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
     }
 
     missing = module.build_report(execute=True, env=env, reader=lambda: None)
@@ -190,9 +190,7 @@ def test_static_no_mutation_no_route_import_no_telemetry_sink_and_docs_links():
     assert "approval_claimed\": false" in report_json
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    source_readiness = (root / "scripts" / "p1_3_v3_canary_approval_source_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    source_readiness = (root / "scripts" / "p1_3_v3_canary_approval_source_readiness.py").read_text(encoding="utf-8")
     observability = (root / "scripts" / "p1_3_v3_observability_approval_readiness.py").read_text(encoding="utf-8")
     runtime = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
