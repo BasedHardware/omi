@@ -136,7 +136,8 @@ jobs:
 
       - name: Dry run — skip deploy
         if: needs.gate.outputs.dry_run == 'true'
-        run: echo "🧪 dry_run: image built from ${{ needs.gate.outputs.tag }} (${{ steps.sha.outputs.sha }}); SKIPPING prod deploy + channel flip." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "dry_run - image built from ${{ needs.gate.outputs.tag }} (${{ steps.sha.outputs.sha }}); SKIPPING prod deploy + channel flip." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy Desktop Backend to Production
         if: needs.gate.outputs.dry_run != 'true'
