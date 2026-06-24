@@ -629,6 +629,9 @@ def set_assignee_conversation_segment(
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
+    if not (0 <= segment_idx < len(conversation.transcript_segments)):
+        raise HTTPException(status_code=404, detail="Segment index out of range")
+
     if value == 'null':
         value = None
 
