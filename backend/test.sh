@@ -193,6 +193,7 @@ pytest tests/unit/test_trial_metadata.py -v
 pytest tests/unit/test_neo_desktop_grandfather.py -v
 pytest tests/unit/test_vertex_ai_system_role.py -v
 pytest tests/unit/test_tts.py -v
+pytest tests/unit/test_add_twitter_to_persona_none.py -v
 pytest tests/unit/test_webhook_auto_disable.py -v
 pytest tests/unit/test_merge_validation.py -v
 pytest tests/unit/test_phone_calls.py -v
