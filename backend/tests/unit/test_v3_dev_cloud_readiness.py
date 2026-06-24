@@ -14,24 +14,24 @@ from utils.memory.v3_dev_cloud_proof import (
 
 def _complete_env():
     return {
-        'V17_DEV_CLOUD_PROJECT_ID': 'omi-v17-dev',
-        'V17_DEV_CLOUD_PROJECT_NUMBER': '1234567890',
-        'V17_DEV_CLOUD_DATABASE_ID': '(default)',
-        'V17_DEV_CLOUD_REGION': 'us-central1',
-        'V17_DEV_CLOUD_BACKEND_URL': 'https://v17-dev.example.test',
-        'V17_DEV_CLOUD_DEPLOYED_REVISION': 'v17-dev-rev-1',
-        'V17_DEV_CLOUD_IMAGE_DIGEST': 'sha256:' + 'a' * 64,
-        'V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT': 'runtime@omi-v17-dev.iam.gserviceaccount.com',
-        'V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL': 'fixture-writer@omi-v17-dev.iam.gserviceaccount.com',
+        'MEMORY_DEV_CLOUD_PROJECT_ID': 'omi-v17-dev',
+        'MEMORY_DEV_CLOUD_PROJECT_NUMBER': '1234567890',
+        'MEMORY_DEV_CLOUD_DATABASE_ID': '(default)',
+        'MEMORY_DEV_CLOUD_REGION': 'us-central1',
+        'MEMORY_DEV_CLOUD_BACKEND_URL': 'https://v17-dev.example.test',
+        'MEMORY_DEV_CLOUD_DEPLOYED_REVISION': 'v17-dev-rev-1',
+        'MEMORY_DEV_CLOUD_IMAGE_DIGEST': 'sha256:' + 'a' * 64,
+        'MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT': 'runtime@omi-v17-dev.iam.gserviceaccount.com',
+        'MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL': 'fixture-writer@omi-v17-dev.iam.gserviceaccount.com',
         'GOOGLE_CLOUD_PROJECT': 'omi-v17-dev',
         'GOOGLE_CLOUD_PROJECT_NUMBER': '1234567890',
-        'V17_PRODUCTION_PROJECT_IDS': 'omi-prod,basedhardware-prod',
-        'V17_PRODUCTION_PROJECT_NUMBERS': '999,888',
-        'V17_V3_GET_ENABLED': 'true',
-        'V17_MODE': 'read',
-        'V17_MEMORY_ENABLED_USERS': 'v17-dev-synthetic-user-a,v17-dev-synthetic-user-b',
-        'V17_V3_CURSOR_SECRET': 'do-not-emit-this-secret',
-        'V17_V3_CURSOR_SECRET_VERSION': 'dev-v1',
+        'MEMORY_PRODUCTION_PROJECT_IDS': 'omi-prod,basedhardware-prod',
+        'MEMORY_PRODUCTION_PROJECT_NUMBERS': '999,888',
+        'MEMORY_V3_GET_ENABLED': 'true',
+        'MEMORY_MODE': 'read',
+        'MEMORY_ENABLED_USERS': 'v17-dev-synthetic-user-a,v17-dev-synthetic-user-b',
+        'MEMORY_V3_CURSOR_SECRET': 'do-not-emit-this-secret',
+        'MEMORY_V3_CURSOR_SECRET_VERSION': 'dev-v1',
     }
 
 
@@ -56,9 +56,9 @@ def test_complete_non_prod_preflight_is_ready_to_execute_but_not_gate_go():
 
 def test_preflight_hard_stops_on_production_project_id_and_number():
     env = _complete_env()
-    env['V17_DEV_CLOUD_PROJECT_ID'] = 'omi-prod'
+    env['MEMORY_DEV_CLOUD_PROJECT_ID'] = 'omi-prod'
     env['GOOGLE_CLOUD_PROJECT'] = 'omi-prod'
-    env['V17_DEV_CLOUD_PROJECT_NUMBER'] = '999'
+    env['MEMORY_DEV_CLOUD_PROJECT_NUMBER'] = '999'
     env['GOOGLE_CLOUD_PROJECT_NUMBER'] = '999'
 
     report = build_target_preflight_report(env)
@@ -73,7 +73,7 @@ def test_preflight_hard_stops_on_production_project_id_and_number():
 
 def test_preflight_rejects_runtime_identity_as_fixture_writer():
     env = _complete_env()
-    env['V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL'] = env['V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT']
+    env['MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL'] = env['MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT']
 
     report = build_target_preflight_report(env)
 
@@ -127,8 +127,8 @@ def test_write_prepared_bundle_creates_full_artifact_contract(tmp_path):
     for artifact in REQUIRED_ARTIFACTS:
         assert (output_dir / artifact).exists(), artifact
     manifest = json.loads((output_dir / 'candidate-manifest.json').read_text())
-    assert manifest['redacted_env']['V17_V3_CURSOR_SECRET'] == '<redacted>'
-    assert manifest['redacted_env']['V17_MEMORY_ENABLED_USERS'] == '<set:redacted-user-list>'
+    assert manifest['redacted_env']['MEMORY_V3_CURSOR_SECRET'] == '<redacted>'
+    assert manifest['redacted_env']['MEMORY_ENABLED_USERS'] == '<set:redacted-user-list>'
     checksums = (output_dir / 'checksums.sha256').read_text()
     assert 'candidate-manifest.json' in checksums
     assert 'fixtures.redacted.json' in checksums
