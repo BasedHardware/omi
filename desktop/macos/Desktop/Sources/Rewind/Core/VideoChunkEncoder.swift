@@ -173,6 +173,18 @@ actor VideoChunkEncoder {
                 consecutiveWriteFailures += 1
                 logError("VideoChunkEncoder: Failed to start ffmpeg (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
 
+                // Reset the half-initialized chunk state so the NEXT frame cleanly retries
+                // starting ffmpeg. Without this, currentChunkStartTime stays set while
+                // ffmpegStdin is nil, so every subsequent frame skips the start path and
+                // fails inside writeFrame() with "FFmpeg not ready" — needlessly dropping
+                // ~5 frames (2.5s of Rewind footage) and emitting misleading write-failure
+                // errors until the emergency-reset threshold finally clears the state.
+                currentChunkStartTime = nil
+                currentChunkPath = nil
+                currentChunkInputSize = nil
+                currentOutputSize = nil
+                frameOffsetInChunk = 0
+
                 if consecutiveWriteFailures >= maxConsecutiveFailures {
                     logError("VideoChunkEncoder: Too many ffmpeg failures, performing emergency reset")
                     try await emergencyReset()

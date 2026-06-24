@@ -120,8 +120,23 @@ actor StagedTaskStorage {
             record.backendId = backendId
             record.backendSynced = true
             record.updatedAt = Date()
-            try record.update(database)
-            return .updated
+            do {
+                try record.update(database)
+                return .updated
+            } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
+                // Another local staged row already holds this backendId (duplicate sync, or
+                // backend dedup returned an existing task's id). The UNIQUE index on
+                // staged_tasks.backendId would otherwise crash the sync-status update.
+                // Make it idempotent: drop this freshly-extracted duplicate and keep the
+                // existing canonical row that already represents the backend task.
+                let existingId = try StagedTaskRecord
+                    .filter(Column("backendId") == backendId)
+                    .filter(Column("id") != id)
+                    .fetchOne(database)?
+                    .id ?? id
+                try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
+                return .mergedDuplicate(existingId: existingId)
+            }
         }
 
         switch result {

@@ -11039,6 +11039,22 @@
     "@transcribeLaterStorageFull": {
         "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
     },
+    "recordingMode": "Recording mode",
+    "@recordingMode": {
+        "description": "Title of the bottom sheet for choosing between Live and Transcribe Later recording modes"
+    },
+    "captureModeLater": "Later",
+    "@captureModeLater": {
+        "description": "Short label for the Transcribe Later mode shown on the home app-bar mode chip"
+    },
+    "captureModeLiveDescription": "Transcribe in real time as you speak.",
+    "@captureModeLiveDescription": {
+        "description": "Subtitle for the Live option in the recording mode picker"
+    },
+    "captureModeLaterDescription": "Save audio now and transcribe whenever you want.",
+    "@captureModeLaterDescription": {
+        "description": "Subtitle for the Transcribe Later option in the recording mode picker"
+    },
     "unmute": "Unmute",
     "@unmute": {
         "description": "Button to resume Transcribe Later capture after muting"

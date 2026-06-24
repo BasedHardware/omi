@@ -68,13 +68,10 @@ actor RewindDatabase {
 
     /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
     private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-        if let dbError = error as? DatabaseError {
-            let code = dbError.resultCode
-            let extendedCode = dbError.extendedResultCode.rawValue
-            return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
-        }
-        let message = "\(error)".lowercased()
-        return message.contains("malformed") || message.contains("disk i/o") || message.contains("database disk image")
+        guard let dbError = error as? DatabaseError else { return false }
+        let code = dbError.resultCode
+        let extendedCode = dbError.extendedResultCode.rawValue
+        return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
     }
 
     /// Handle corruption/I/O failures from cleanup and other maintenance operations.
@@ -93,6 +90,8 @@ actor RewindDatabase {
         guard FileManager.default.fileExists(atPath: dbPath) else { return }
         do {
             try await handleCorruptedDatabase(at: dbPath, in: omiDir)
+            try await initialize()
+            log("RewindDatabase: recovered and reopened database after \(operation)")
         } catch {
             // Keep this sanitized: operation name and SQLite/file recovery action only.
             logError("RewindDatabase: recovery after \(operation) failed; next initialization will retry")

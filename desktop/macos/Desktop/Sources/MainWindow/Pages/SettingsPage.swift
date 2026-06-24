@@ -511,7 +511,13 @@ struct SettingsContentView: View {
         return
       }
       if newValue == .planUsage {
+        // Refetch everything for the CURRENT account. Without the trial + limiter
+        // refresh, switching accounts leaves the previous user's "Trial Ended" /
+        // over-limit state painted here (trialMetadata + serverQuota aren't reset
+        // per-account on a section switch).
         loadSubscriptionInfo()
+        AppState.current?.fetchTrialMetadata()
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in

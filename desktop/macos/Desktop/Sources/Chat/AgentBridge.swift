@@ -342,6 +342,13 @@ actor AgentBridge {
     closePipes()
     isRunning = false
 
+    // Clear the cached quota. It's only valid for the user/session that fetched it;
+    // on a provider switch or account change the bridge is stopped, and a stale
+    // `allowed=false` would otherwise block the next user's chat (e.g. a fresh
+    // account inheriting the previous account's over-limit cache). The next request
+    // re-checks live (and the backend enforces the real 402 if truly over).
+    lastKnownQuota = nil
+
     messageContinuation?.resume(throwing: BridgeError.stopped)
     messageContinuation = nil
   }
@@ -610,6 +617,10 @@ actor AgentBridge {
     guard isRunning else { return }
     isInterrupted = true
     sendLine("{\"type\":\"interrupt\"}")
+    if let continuation = messageContinuation {
+      messageContinuation = nil
+      continuation.resume(throwing: BridgeError.stopped)
+    }
   }
 
   /// Push a refreshed Firebase ID token to the bridge (piMono mode only).

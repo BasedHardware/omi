@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CoreGraphics
 import Foundation
@@ -132,9 +133,33 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     NotificationCenter.default.addObserver(
       self, selector: #selector(settingsChanged),
       name: .realtimeOmniSettingsDidChange, object: nil)
+    // After the Mac sleeps, a long-lived WS can come back a "zombie": still open at the
+    // socket level (so PTT routes a turn to it), but the server is gone — the turn commits
+    // and silently never replies, with no close event to trigger reconnect or fallback. The
+    // only reliable recovery today is a manual app restart. Observe system wake and drop +
+    // rebuild the session once, so the first PTT after sleep gets a fresh socket. Rare,
+    // discrete event (not a timer) → no reconnect churn. Register exactly once.
+    NSWorkspace.shared.notificationCenter.removeObserver(
+      self, name: NSWorkspace.didWakeNotification, object: nil)
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self, selector: #selector(systemDidWake),
+      name: NSWorkspace.didWakeNotification, object: nil)
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
     refreshAboutUserCard()
+  }
+
+  /// System woke from sleep — proactively replace a possibly-stale socket so the first PTT
+  /// after sleep doesn't hit a zombie session (commit → no reply → no fallback → hang).
+  /// Only acts when idle: a live session exists and we're neither mid-reply nor mid-mint, so
+  /// this never interrupts an active turn or races a connect already in flight. teardown
+  /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat the stale socket
+  /// as already-warm and no-op).
+  @objc private func systemDidWake() {
+    guard session != nil, !responding, !minting else { return }
+    log("RealtimeHub: system woke — re-warming session (dropping possibly-stale socket)")
+    teardownSession()
+    ensureWarm()
   }
 
   @objc private func settingsChanged() {
@@ -591,12 +616,26 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
     responding = false
-    logError("RealtimeHub: session error — \(message)")
+    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
+    // Most "session error" closes are expected lifecycle events, not bugs: a socket
+    // that lived past the idle window is a normal provider idle-close (Gemini ~2.5min,
+    // 1008), and a client "operation was aborted"/cancellation is a teardown. Reporting
+    // these to Sentry as errors created the high-volume OMI-DESKTOP-27C cluster. Keep
+    // them as local logs; only capture genuine fast-fail provider errors.
+    let lower = message.lowercased()
+    let expectedClose =
+      aliveFor > 60
+      || lower.contains("aborted") || lower.contains("cancel")
+      || lower.contains("(1000)") || lower.contains("(1001)") || lower.contains("(1005)")
+    if expectedClose {
+      log("RealtimeHub: session closed (expected, alive \(Int(aliveFor))s) — \(message)")
+    } else {
+      logError("RealtimeHub: session error — \(message)")
+    }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     exitVoiceUI()
-    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider

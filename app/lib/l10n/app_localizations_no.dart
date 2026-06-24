@@ -9337,6 +9337,18 @@ class AppLocalizationsNo extends AppLocalizations {
       'Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.';
 
   @override
+  String get recordingMode => 'Opptaksmodus';
+
+  @override
+  String get captureModeLater => 'Senere';
+
+  @override
+  String get captureModeLiveDescription => 'Transkriber i sanntid mens du snakker.';
+
+  @override
+  String get captureModeLaterDescription => 'Lagre lyden nå og transkriber når du vil.';
+
+  @override
   String get unmute => 'Slå på lyd';
 
   @override

@@ -4,12 +4,19 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 required (not 3.12+ — Dockerfile pins 3.11). Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
-pip install -r requirements.txt
+./scripts/sync-python-deps.sh  # creates .venv from .python-version + pylock.toml
+source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8080
+```
+
+When intentionally changing backend Python dependencies, edit the relevant `requirements*.txt` input file and refresh the lock:
+
+```bash
+./scripts/update-python-lock.sh
 ```
 
 Key env vars: `OPENAI_API_KEY` (LLM calls — not `OPENAI_ADMIN_KEY` which is billing-only), `DEEPGRAM_API_KEY` (STT), `ENCRYPTION_SECRET` (required for tests), `REDIS_DB_HOST` (cache/rate-limiting, fail-open without it), `ADMIN_KEY` (local dev auth bypass via token `ADMIN_KEY<uid>`), `SERVICE_ACCOUNT_JSON` (Firestore/GCS credentials).

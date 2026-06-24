@@ -112,7 +112,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Use unified recording UI for all recording types
                   _buildUnifiedRecordingUI(provider, header),
                 ],
               ),
@@ -550,7 +549,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      muted ? context.l10n.muted : context.l10n.transcribeLaterTitle,
+                      muted ? context.l10n.muted : context.l10n.recording,
                       style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],

@@ -9358,6 +9358,18 @@ class AppLocalizationsUk extends AppLocalizations {
       'На телефоні бракує місця, тому запис призупинено. Звільніть місце або завантажте свої записи — і запис автоматично відновиться.';
 
   @override
+  String get recordingMode => 'Режим запису';
+
+  @override
+  String get captureModeLater => 'Пізніше';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибуйте в реальному часі, поки говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Збережіть аудіо зараз і транскрибуйте коли завгодно.';
+
+  @override
   String get unmute => 'Увімкнути звук';
 
   @override

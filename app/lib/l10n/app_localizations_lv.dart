@@ -9362,6 +9362,18 @@ class AppLocalizationsLv extends AppLocalizations {
       'Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.';
 
   @override
+  String get recordingMode => 'Ierakstīšanas režīms';
+
+  @override
+  String get captureModeLater => 'Vēlāk';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribējiet reāllaikā, kamēr runājat.';
+
+  @override
+  String get captureModeLaterDescription => 'Saglabājiet audio tagad un transkribējiet, kad vēlaties.';
+
+  @override
   String get unmute => 'Ieslēgt skaņu';
 
   @override

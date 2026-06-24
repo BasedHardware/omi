@@ -1,0 +1,20 @@
+{
+  "dataset": "LibriSpeech",
+  "version": "test-clean",
+  "license": "CC-BY-4.0",
+  "source": "https://www.openslr.org/12",
+  "audio_url": "https://www.openslr.org/resources/12/test-clean.tar.gz",
+  "citation": "Panayotov, V., Chen, G., Povey, D. and Khudanpur, S. (2015) LibriSpeech: an ASR corpus based on public domain audio books. ICASSP.",
+  "samples": [
+    {"id": "61-70968-0000", "speaker": "61", "chapter": "70968"},
+    {"id": "121-121726-0000", "speaker": "121", "chapter": "121726"},
+    {"id": "672-122797-0000", "speaker": "672", "chapter": "122797"},
+    {"id": "908-157963-0000", "speaker": "908", "chapter": "157963"},
+    {"id": "1089-134686-0000", "speaker": "1089", "chapter": "134686"},
+    {"id": "1188-133604-0000", "speaker": "1188", "chapter": "133604"},
+    {"id": "1221-135767-0000", "speaker": "1221", "chapter": "135767"},
+    {"id": "1284-1180-0000", "speaker": "1284", "chapter": "1180"},
+    {"id": "1320-122612-0000", "speaker": "1320", "chapter": "122612"},
+    {"id": "2830-3980-0000", "speaker": "2830", "chapter": "3980"}
+  ]
+}

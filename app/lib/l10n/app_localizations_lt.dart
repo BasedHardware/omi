@@ -9354,6 +9354,18 @@ class AppLocalizationsLt extends AppLocalizations {
       'Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.';
 
   @override
+  String get recordingMode => 'Įrašymo režimas';
+
+  @override
+  String get captureModeLater => 'Vėliau';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribuokite tikruoju laiku, kol kalbate.';
+
+  @override
+  String get captureModeLaterDescription => 'Išsaugokite garsą dabar ir transkribuokite kada panorėję.';
+
+  @override
   String get unmute => 'Įjungti garsą';
 
   @override

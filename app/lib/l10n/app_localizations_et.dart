@@ -9337,6 +9337,18 @@ class AppLocalizationsEt extends AppLocalizations {
       'Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.';
 
   @override
+  String get recordingMode => 'Salvestusrežiim';
+
+  @override
+  String get captureModeLater => 'Hiljem';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribeeri reaalajas, kui räägid.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvesta heli kohe ja transkribeeri, millal soovid.';
+
+  @override
   String get unmute => 'Tühista vaigistus';
 
   @override

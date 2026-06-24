@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.",
     "unmute": "Dempen opheffen",
     "newRecording": "Nieuwe opname",
-    "transcribeLaterPaused": "Gepauzeerd — audio wordt niet opgenomen"
+    "transcribeLaterPaused": "Gepauzeerd — audio wordt niet opgenomen",
+    "recordingMode": "Opnamemodus",
+    "captureModeLater": "Later",
+    "captureModeLiveDescription": "Transcribeer in realtime terwijl je praat.",
+    "captureModeLaterDescription": "Sla audio nu op en transcribeer wanneer je wilt."
 }

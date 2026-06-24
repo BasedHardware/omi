@@ -9417,6 +9417,18 @@ class AppLocalizationsDe extends AppLocalizations {
       'Auf deinem Smartphone wird der Speicher knapp, daher ist die Aufnahme pausiert. Gib Speicher frei oder lade deine Aufnahmen hoch – danach wird sie automatisch fortgesetzt.';
 
   @override
+  String get recordingMode => 'Aufnahmemodus';
+
+  @override
+  String get captureModeLater => 'Später';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribiere in Echtzeit, während du sprichst.';
+
+  @override
+  String get captureModeLaterDescription => 'Audio jetzt speichern und transkribieren, wann du willst.';
+
+  @override
   String get unmute => 'Ton an';
 
   @override

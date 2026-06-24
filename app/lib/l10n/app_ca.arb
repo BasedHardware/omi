@@ -3026,5 +3026,9 @@
     "transcribeLaterStorageFull": "El telèfon té poc espai d'emmagatzematge i la gravació s'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.",
     "unmute": "Activar so",
     "newRecording": "Nou enregistrament",
-    "transcribeLaterPaused": "En pausa — no s'està gravant àudio"
+    "transcribeLaterPaused": "En pausa — no s'està gravant àudio",
+    "recordingMode": "Mode de gravació",
+    "captureModeLater": "Més tard",
+    "captureModeLiveDescription": "Transcriu en temps real mentre parles.",
+    "captureModeLaterDescription": "Desa l'àudio ara i transcriu-lo quan vulguis."
 }

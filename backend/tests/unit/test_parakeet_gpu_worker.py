@@ -34,6 +34,15 @@ sys.modules["nemo"] = _nemo
 sys.modules["nemo.collections"] = _nemo.collections
 sys.modules["nemo.collections.asr"] = _nemo_asr
 
+_pyannote = MagicMock()
+_pyannote_audio = MagicMock()
+_pyannote_audio_core = MagicMock()
+_pyannote_audio_core_model = MagicMock()
+sys.modules.setdefault("pyannote", _pyannote)
+sys.modules.setdefault("pyannote.audio", _pyannote_audio)
+sys.modules.setdefault("pyannote.audio.core", _pyannote_audio_core)
+sys.modules.setdefault("pyannote.audio.core.model", _pyannote_audio_core_model)
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from gpu_worker import GPUWorker, WorkItem, WorkType, _safe_set_result, _safe_set_exception
