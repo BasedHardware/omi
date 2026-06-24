@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-DEFAULT_ASSIGNMENT_FILE_ENV = "V17_APP_KEY_MEMORY_GRANT_ASSIGNMENTS"
+DEFAULT_ASSIGNMENT_FILE_ENV = "MEMORY_APP_KEY_MEMORY_GRANT_ASSIGNMENTS"
 V17_APP_KEY_MEMORY_GRANT_SUBPATH = "memory_control/v17_app_key_memory_grants"
 ALLOWED_CONSUMERS = frozenset({"developer_api", "mcp", "third_party"})
 ALLOWED_PERSISTED_SCOPES = frozenset({"memories.read", "memories.write", "memories.archive.read"})
