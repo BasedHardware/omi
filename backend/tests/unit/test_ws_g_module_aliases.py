@@ -467,44 +467,106 @@ def test_memory_contracts_extended_alias_reexports_match_v17():
 def test_product_memory_read_service_alias_reexports_match_v17():
     from utils.memory import product_memory_read_service, v17_product_memory_read_service
 
-    assert (
-        product_memory_read_service.DEFAULT_PRODUCT_MEMORY_READ_LIMIT
-        is v17_product_memory_read_service.DEFAULT_PRODUCT_MEMORY_READ_LIMIT
-    )
-    assert product_memory_read_service.fetch_archive_product_memory_search is (
-        v17_product_memory_read_service.fetch_archive_product_memory_search
-    )
+    for name in (
+        "DEFAULT_PRODUCT_MEMORY_READ_LIMIT",
+        "MAX_PRODUCT_MEMORY_READ_LIMIT",
+        "fetch_archive_product_memory_search",
+        "fetch_authoritative_product_memory_items",
+        "fetch_default_product_memory_search",
+    ):
+        assert getattr(product_memory_read_service, name) is getattr(v17_product_memory_read_service, name)
 
 
 def test_memory_read_api_alias_reexports_match_v17():
     from utils.memory import memory_read_api, v17_read_api
 
-    assert memory_read_api.query_default_product_memory_items is v17_read_api.query_default_product_memory_items
-    assert memory_read_api.query_durable_memory is v17_read_api.query_durable_memory
+    for name in (
+        "query_archive_product_memory_items",
+        "query_default_product_memory_items",
+        "query_durable_memory",
+        "query_l1_archive",
+        "query_memory_context",
+        "query_working_memory",
+    ):
+        assert getattr(memory_read_api, name) is getattr(v17_read_api, name)
+
+
+def test_memory_read_api_side_effect_reexports_match_v17():
+    from utils.memory import memory_read_api, v17_read_api
+
+    assert v17_read_api.MemoryLayer is memory_read_api.MemoryLayer
+    assert v17_read_api.MemoryAccessPolicy is memory_read_api.MemoryAccessPolicy
+    assert v17_read_api.V17MemoryItem is memory_read_api.V17MemoryItem
 
 
 def test_vector_search_service_alias_reexports_match_v17():
     from utils.memory import vector_search_service, v17_vector_search_service
 
-    assert (
-        vector_search_service.DEFAULT_V17_VECTOR_MAX_CANDIDATES
-        is v17_vector_search_service.DEFAULT_V17_VECTOR_MAX_CANDIDATES
-    )
-    assert vector_search_service.fetch_default_v17_vector_memory_search is (
-        v17_vector_search_service.fetch_default_v17_vector_memory_search
+    for name in (
+        "DEFAULT_V17_VECTOR_MAX_CANDIDATES",
+        "DEFAULT_V17_VECTOR_MAX_QUERIES",
+        "DEFAULT_V17_VECTOR_OVERFETCH_FACTOR",
+        "DEFAULT_V17_VECTOR_SEARCH_LIMIT",
+        "MAX_V17_VECTOR_MAX_QUERIES",
+        "MAX_V17_VECTOR_OVERFETCH_FACTOR",
+        "MAX_V17_VECTOR_SEARCH_LIMIT",
+        "fetch_default_v17_vector_memory_search",
+        "query_v17_memory_vector_candidates",
+    ):
+        assert getattr(vector_search_service, name) is getattr(v17_vector_search_service, name)
+
+
+def test_vector_search_service_neutral_symbols_are_canonical():
+    from utils.memory import vector_search_service
+
+    assert vector_search_service.DEFAULT_VECTOR_SEARCH_LIMIT is vector_search_service.DEFAULT_V17_VECTOR_SEARCH_LIMIT
+    assert vector_search_service.fetch_default_vector_memory_search is (
+        vector_search_service.fetch_default_v17_vector_memory_search
     )
 
 
 def test_default_read_rollout_alias_reexports_match_v17():
     from utils.memory import default_read_rollout, v17_default_read_rollout
 
-    assert default_read_rollout.V17DefaultReadRolloutDecision is v17_default_read_rollout.V17DefaultReadRolloutDecision
+    for name in (
+        "DEFAULT_READ_OBSERVABILITY_CONSUMERS",
+        "SUPPORTED_DEFAULT_READ_CONSUMERS",
+        "V17DefaultReadRolloutDecision",
+        "V17GlobalReadGateDecision",
+        "V17LegacyMemoryWriteGuardDecision",
+        "V17ReadDecision",
+        "V17WriteConvergencePolicy",
+        "V17_DEFAULT_READ_ROLLOUT_METRIC_NAME",
+        "V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION",
+        "V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS",
+        "V17_GLOBAL_READ_GATE_PATH",
+        "V17_WRITE_CONVERGENCE_GATE_PATH",
+        "assert_legacy_memory_write_allowed_for_default_read_decision",
+        "read_v17_default_read_rollout",
+        "read_v17_global_read_gate",
+    ):
+        assert getattr(default_read_rollout, name) is getattr(v17_default_read_rollout, name)
+
+
+def test_default_read_rollout_neutral_symbols_are_canonical():
+    from utils.memory import default_read_rollout
+
+    assert default_read_rollout.V17ReadDecision is default_read_rollout.ReadDecision
+    assert default_read_rollout.V17DefaultReadRolloutDecision is default_read_rollout.DefaultReadRolloutDecision
+    assert default_read_rollout.V17_GLOBAL_READ_GATE_PATH is default_read_rollout.GLOBAL_READ_GATE_PATH
 
 
 def test_projections_alias_reexports_match_v17():
     from utils.memory import projections, v17_projections
 
     assert projections.rebuild_v17_memory_projections is v17_projections.rebuild_v17_memory_projections
+    assert projections.rebuild_memory_projections is v17_projections.rebuild_memory_projections
+
+
+def test_projections_neutral_symbols_are_canonical():
+    from utils.memory import projections
+
+    assert projections.rebuild_v17_memory_projections is projections.rebuild_memory_projections
 
 
 def test_vector_search_telemetry_alias_reexports_match_v17():
@@ -518,15 +580,46 @@ def test_vector_search_telemetry_alias_reexports_match_v17():
 def test_chat_memory_adapter_alias_reexports_match_v17():
     from utils.memory import chat_memory_adapter, v17_chat_memory_adapter
 
-    assert chat_memory_adapter.V17ChatMemorySearchResult is v17_chat_memory_adapter.V17ChatMemorySearchResult
+    for name in (
+        "V17ChatDefaultMemoryRolloutDecision",
+        "V17ChatMemorySearchResult",
+        "V17_CHAT_MEMORY_BOUNDARY_NOTICE",
+        "V17_CHAT_MEMORY_CONTENT_MAX_CHARS",
+        "V17_CHAT_MEMORY_POLICY_MARKER",
+        "list_v17_default_chat_memories_decision_text",
+        "read_v17_chat_default_memory_rollout",
+        "search_v17_default_chat_memories_text",
+        "search_v17_default_chat_memories_vector_decision_text",
+        "search_v17_default_chat_memories_vector_text",
+    ):
+        assert getattr(chat_memory_adapter, name) is getattr(v17_chat_memory_adapter, name)
+
+
+def test_chat_memory_adapter_neutral_symbols_are_canonical():
+    from utils.memory import chat_memory_adapter
+
+    assert chat_memory_adapter.V17ChatMemorySearchResult is chat_memory_adapter.ChatMemorySearchResult
+    assert chat_memory_adapter.V17_CHAT_MEMORY_BOUNDARY_NOTICE is chat_memory_adapter.CHAT_MEMORY_BOUNDARY_NOTICE
 
 
 def test_developer_memory_adapter_alias_reexports_match_v17():
     from utils.memory import developer_memory_adapter, v17_developer_memory_adapter
 
+    for name in (
+        "V17DeveloperDefaultMemoryRolloutDecision",
+        "V17DeveloperMemorySearchResult",
+        "read_v17_developer_default_memory_rollout",
+        "search_v17_default_developer_memories",
+        "search_v17_default_developer_memories_vector",
+    ):
+        assert getattr(developer_memory_adapter, name) is getattr(v17_developer_memory_adapter, name)
+
+
+def test_developer_memory_adapter_neutral_symbols_are_canonical():
+    from utils.memory import developer_memory_adapter
+
     assert (
-        developer_memory_adapter.read_v17_developer_default_memory_rollout
-        is v17_developer_memory_adapter.read_v17_developer_default_memory_rollout
+        developer_memory_adapter.V17DeveloperMemorySearchResult is developer_memory_adapter.DeveloperMemorySearchResult
     )
 
 
@@ -539,7 +632,28 @@ def test_patch_adapter_alias_reexports_match_v17():
 def test_product_authorization_alias_reexports_match_v17():
     from utils.memory import product_authorization, v17_product_authorization
 
-    assert product_authorization.ReadGlobalGate is v17_product_authorization.ReadGlobalGate
+    for name in (
+        "EXTERNAL_V17_MEMORY_CONSUMERS",
+        "ReadAppKeyGrantsState",
+        "ReadGlobalGate",
+        "ReadRollout",
+        "V17AppKeyScopeGrantDecision",
+        "V17MemoryGrantOperation",
+        "V17ProductAuthorizationContext",
+        "V17ProductAuthorizationDecision",
+        "V17_MEMORY_OPERATION_REQUIRED_SCOPES",
+        "authorize_v17_app_key_scope_memory_grant",
+        "authorize_v17_external_default_memory_read",
+        "authorize_v17_product_memory_route",
+    ):
+        assert getattr(product_authorization, name) is getattr(v17_product_authorization, name)
+
+
+def test_product_authorization_neutral_symbols_are_canonical():
+    from utils.memory import product_authorization
+
+    assert product_authorization.V17ProductAuthorizationContext is product_authorization.ProductAuthorizationContext
+    assert product_authorization.EXTERNAL_V17_MEMORY_CONSUMERS is product_authorization.EXTERNAL_MEMORY_CONSUMERS
 
 
 def test_non_active_route_report_alias_reexports_match_v17():
@@ -554,9 +668,12 @@ def test_non_active_route_report_alias_reexports_match_v17():
 def test_non_active_route_audit_alias_reexports_match_v17():
     from utils.memory import non_active_route_audit, v17_non_active_route_audit
 
-    assert non_active_route_audit.build_non_active_route_audit_report is (
-        v17_non_active_route_audit.build_non_active_route_audit_report
-    )
+    for name in (
+        "NonActiveRouteAuditEvidence",
+        "NonActiveRouteAuditReport",
+        "build_non_active_route_audit_report",
+    ):
+        assert getattr(non_active_route_audit, name) is getattr(v17_non_active_route_audit, name)
 
 
 def test_v3_memory_read_service_alias_reexports_match_v17():
