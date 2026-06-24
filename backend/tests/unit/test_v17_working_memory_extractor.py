@@ -6,8 +6,8 @@ os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test")
 from langchain_core.messages import AIMessage
 
 from models.v17_memory_contracts import L1MemoryArchiveItem
-from utils.llm import working_memory
-from utils.llm.working_memory import extract_l1_memory_archive_items_from_text
+from utils.llm import working_observations
+from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 
 
 class FakeLLM:
@@ -21,7 +21,8 @@ class FakeLLM:
 
 
 def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_routes():
-    fake_llm = FakeLLM("""
+    fake_llm = FakeLLM(
+        """
         {
           "items": [
             {
@@ -35,7 +36,8 @@ def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_rout
             }
           ]
         }
-        """)
+        """
+    )
 
     items = extract_l1_memory_archive_items_from_text(
         uid="user_1",
@@ -57,7 +59,8 @@ def test_l1_archive_extractor_emits_general_archive_items_without_lifecycle_rout
 
 
 def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():
-    fake_llm = FakeLLM("""
+    fake_llm = FakeLLM(
+        """
         {
           "items": [
             {
@@ -69,7 +72,8 @@ def test_l1_archive_extractor_converts_secret_risk_to_sensitive_archive():
             }
           ]
         }
-        """)
+        """
+    )
 
     items = extract_l1_memory_archive_items_from_text(
         uid="user_1",
@@ -93,8 +97,9 @@ def test_l1_archive_extractor_persists_archive_route_outcomes_with_deterministic
         persisted.append(outcome)
         return outcome
 
-    monkeypatch.setattr(working_memory, "persist_non_active_route_outcome", fake_persist)
-    fake_llm = FakeLLM("""
+    monkeypatch.setattr(working_observations, "persist_non_active_route_outcome", fake_persist)
+    fake_llm = FakeLLM(
+        """
         {
           "items": [
             {
@@ -105,7 +110,8 @@ def test_l1_archive_extractor_persists_archive_route_outcomes_with_deterministic
             }
           ]
         }
-        """)
+        """
+    )
 
     items = extract_l1_memory_archive_items_from_text(
         uid="user_1",
@@ -150,7 +156,8 @@ def test_l1_archive_extractor_skips_tiny_sources_without_llm_call():
 
 
 def test_l1_archive_extractor_accepts_short_security_relevant_sources():
-    fake_llm = FakeLLM("""
+    fake_llm = FakeLLM(
+        """
         {
           "items": [
             {
@@ -161,7 +168,8 @@ def test_l1_archive_extractor_accepts_short_security_relevant_sources():
             }
           ]
         }
-        """)
+        """
+    )
 
     items = extract_l1_memory_archive_items_from_text(
         uid="user_1",
