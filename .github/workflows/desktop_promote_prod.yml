@@ -1,0 +1,144 @@
+name: Promote Desktop Backend to Prod
+
+# Deploys the desktop (Rust) backend to PRODUCTION only when a desktop release is
+# promoted to the stable channel. Merges to main deploy ONLY to development
+# (see desktop_auto_release.yml) so beta testers get every build, while prod
+# users stay on the last promoted, version-locked release.
+#
+# Trigger: editing a GitHub release's body to `channel: stable` fires
+# `release: edited`; this workflow then deploys the backend built from THAT
+# release's tag (not main HEAD), so prod only ever runs promoted code.
+# `workflow_dispatch` is a manual fallback (pass the v*-macos tag to promote).
+
+on:
+  release:
+    types: [edited, released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to promote to prod (e.g. v0.11.498+11498-macos)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-promote-prod
+  cancel-in-progress: false
+
+env:
+  SERVICE: desktop-backend
+  REGION: us-central1
+
+jobs:
+  # Decide whether to promote and which tag, without touching prod credentials.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.g.outputs.proceed }}
+      tag: ${{ steps.g.outputs.tag }}
+    steps:
+      - name: Resolve tag + gate on stable channel
+        id: g
+        env:
+          EVENT: ${{ github.event_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            echo "Manual promotion of $DISPATCH_TAG"
+            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Only desktop releases (v*-macos) are relevant.
+          case "$RELEASE_TAG" in
+            *-macos) ;;
+            *) echo "Not a desktop tag ($RELEASE_TAG) — skipping."; echo "proceed=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          # Promote only when the release body declares the stable channel.
+          if printf '%s\n' "$RELEASE_BODY" | grep -qiE '^[[:space:]]*channel:[[:space:]]*stable[[:space:]]*$'; then
+            echo "$RELEASE_TAG is channel: stable — promoting to prod."
+            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$RELEASE_TAG is not channel: stable — skipping prod deploy."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  promote-prod:
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout promoted tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.tag }}
+
+      - name: Resolve commit sha
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Google Service Account
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
+
+      - name: Build and Push Desktop Backend Image (from promoted tag)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
+          push: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.sha.outputs.sha }}
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:prod
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Deploy Desktop Backend to Production
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.sha.outputs.sha }}
+          flags: '--allow-unauthenticated'
+          env_vars: |
+            FIREBASE_PROJECT_ID=based-hardware
+            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+            AGENT_GCS_BUCKET=based-hardware-agent
+          secrets: |
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+            REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
+            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
+            REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
+            REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
+            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
+            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
+            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
+            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+
+      - name: Summary
+        run: |
+          echo "✅ Promoted desktop-backend to PROD from ${{ needs.gate.outputs.tag }} (${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"
