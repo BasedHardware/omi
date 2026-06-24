@@ -77,6 +77,7 @@ from utils.cloud_tasks import (
 )
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
+from utils.multipart import MultipartMaxPartSizeRoute, SYNC_AUDIO_MAX_PART_SIZE, max_part_size
 from utils.sync import playback as sync_playback
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
 from utils.stt.pre_recorded import postprocess_words, prerecorded
@@ -109,7 +110,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -810,6 +811,7 @@ def _cleanup_files(file_paths):
 
 
 @router.post("/v1/sync-local-files", deprecated=True)
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files(
     request: Request,
     response: Response,
@@ -1445,6 +1447,7 @@ def _download_staged_files(blob_paths: list) -> bool:
 
 
 @router.post("/v2/sync-local-files")
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),

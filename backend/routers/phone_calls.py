@@ -16,6 +16,7 @@ import database.phone_call_usage as phone_call_usage_db
 from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
+from utils.multipart import MultipartMaxPartSizeRoute, PHONE_CALL_MAX_PART_SIZE, parse_multipart_form
 from utils.twilio_service import (
     generate_access_token,
     start_caller_id_verification,
@@ -35,7 +36,7 @@ def _redact_phone(number: str) -> str:
     return '***'
 
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 # ************************************************
 # *********** REQUEST/RESPONSE MODELS ************
@@ -238,7 +239,7 @@ async def twiml_voice_webhook(request: Request):
         url = f"{base_api_url}{request.url.path}"
     else:
         url = str(request.url)
-    form_data = await request.form()
+    form_data = await parse_multipart_form(request, max_part_size=PHONE_CALL_MAX_PART_SIZE)
     params = dict(form_data)
 
     if not validate_twilio_signature(url, params, signature):
