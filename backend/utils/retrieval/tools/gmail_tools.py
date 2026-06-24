@@ -13,11 +13,10 @@ import database.users as users_db
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     prepare_access,
-    retry_on_auth,
 )
 
 # Import shared Google utilities
-from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request
+from utils.retrieval.tools.google_utils import refresh_google_token, google_api_request, GoogleAPIError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,7 +29,7 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
-def get_gmail_messages(
+async def get_gmail_messages(
     access_token: str,
     query: Optional[str] = None,
     max_results: int = 10,
@@ -67,7 +66,7 @@ def get_gmail_messages(
         if page_token:
             page_params['pageToken'] = page_token
 
-        data = google_api_request(
+        data = await google_api_request(
             "GET",
             'https://www.googleapis.com/gmail/v1/users/me/messages',
             access_token,
@@ -87,7 +86,7 @@ def get_gmail_messages(
 
     messages = []
     for msg_id in message_ids:
-        msg_data = google_api_request(
+        msg_data = await google_api_request(
             "GET",
             f'https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}',
             access_token,
@@ -167,7 +166,7 @@ def parse_gmail_message(message: dict) -> dict:
 
 
 @tool
-def get_gmail_messages_tool(
+async def get_gmail_messages_tool(
     query: Optional[str] = None,
     max_results: int = 10,
     label: Optional[str] = None,
@@ -238,26 +237,30 @@ def get_gmail_messages_tool(
                 label_ids = [label_upper]
 
         # Fetch messages
-        messages, err = retry_on_auth(
-            get_gmail_messages,
-            {
-                'access_token': access_token,
-                'query': query,
-                'max_results': max_results,
-                'label_ids': label_ids,
-            },
-            refresh_google_token,
-            uid,
-            integration,
-            "Google authentication expired. Please reconnect your Google account from settings.",
-            (
-                "Authentication failed",
-                "401",
-                "token may be expired",
-            ),
-        )
-        if err:
-            return err
+        try:
+            messages = await get_gmail_messages(
+                access_token=access_token,
+                query=query,
+                max_results=max_results,
+                label_ids=label_ids,
+            )
+        except GoogleAPIError as e:
+            if e.is_auth_error:
+                new_token = await refresh_google_token(uid, integration)
+                if not new_token:
+                    return "Google authentication expired. Please reconnect your Google account from settings."
+                messages = await get_gmail_messages(
+                    access_token=new_token,
+                    query=query,
+                    max_results=max_results,
+                    label_ids=label_ids,
+                )
+            elif e.is_permission_error:
+                return (
+                    "Gmail access denied. Please reconnect your Google account from settings with proper permissions."
+                )
+            else:
+                return f"Error fetching Gmail messages: {e.message}"
 
         messages_count = len(messages) if messages else 0
 
