@@ -12,7 +12,7 @@ import importlib.util
 import os
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -106,3 +106,18 @@ def test_valid_recent_created_at_returns_uid():
     with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': now_iso, 'uid': 'u1'}))):
         result = phone_db.get_pending_verification_uid('+15551234567')
     assert result == 'u1'
+
+
+def test_naive_recent_created_at_returns_uid_not_500():
+    # A parseable but timezone-naive recent created_at must not crash the aware-minus-naive subtraction.
+    naive_recent = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': naive_recent, 'uid': 'u1'}))):
+        result = phone_db.get_pending_verification_uid('+15551234567')
+    assert result == 'u1'
+
+
+def test_naive_old_created_at_treated_expired_not_500():
+    naive_old = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=365)).isoformat()
+    with patch.object(phone_db, 'db', _db_returning(_doc({'created_at': naive_old, 'uid': 'u1'}))):
+        result = phone_db.get_pending_verification_uid('+15551234567')
+    assert result is None
