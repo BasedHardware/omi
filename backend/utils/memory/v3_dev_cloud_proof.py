@@ -95,23 +95,23 @@ PROOF_MATRIX = (
 )
 
 _REQUIRED_ENV = (
-    'V17_DEV_CLOUD_PROJECT_ID',
-    'V17_DEV_CLOUD_PROJECT_NUMBER',
-    'V17_DEV_CLOUD_DATABASE_ID',
-    'V17_DEV_CLOUD_REGION',
-    'V17_DEV_CLOUD_BACKEND_URL',
-    'V17_DEV_CLOUD_DEPLOYED_REVISION',
-    'V17_DEV_CLOUD_IMAGE_DIGEST',
-    'V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT',
-    'V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL',
+    'MEMORY_DEV_CLOUD_PROJECT_ID',
+    'MEMORY_DEV_CLOUD_PROJECT_NUMBER',
+    'MEMORY_DEV_CLOUD_DATABASE_ID',
+    'MEMORY_DEV_CLOUD_REGION',
+    'MEMORY_DEV_CLOUD_BACKEND_URL',
+    'MEMORY_DEV_CLOUD_DEPLOYED_REVISION',
+    'MEMORY_DEV_CLOUD_IMAGE_DIGEST',
+    'MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT',
+    'MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL',
 )
 
 _REDACTED_ENV_KEYS = (
-    'V17_V3_GET_ENABLED',
-    'V17_MODE',
-    'V17_MEMORY_ENABLED_USERS',
-    'V17_V3_CURSOR_SECRET_VERSION',
-    'V17_V3_CURSOR_TTL_SECONDS',
+    'MEMORY_V3_GET_ENABLED',
+    'MEMORY_MODE',
+    'MEMORY_ENABLED_USERS',
+    'MEMORY_V3_CURSOR_SECRET_VERSION',
+    'MEMORY_V3_CURSOR_TTL_SECONDS',
 )
 
 
@@ -151,8 +151,8 @@ class DevCloudPreflight:
 
 def target_from_env(env: dict[str, str] | None = None) -> DevCloudTarget:
     effective_env = env if env is not None else dict(os.environ)
-    expected_project_id = effective_env.get('V17_DEV_CLOUD_PROJECT_ID', '')
-    expected_project_number = effective_env.get('V17_DEV_CLOUD_PROJECT_NUMBER', '')
+    expected_project_id = effective_env.get('MEMORY_DEV_CLOUD_PROJECT_ID', '')
+    expected_project_number = effective_env.get('MEMORY_DEV_CLOUD_PROJECT_NUMBER', '')
     return DevCloudTarget(
         expected_project_id=expected_project_id,
         expected_project_number=expected_project_number,
@@ -163,15 +163,15 @@ def target_from_env(env: dict[str, str] | None = None) -> DevCloudTarget:
         actual_project_number=effective_env.get('GOOGLE_CLOUD_PROJECT_NUMBER')
         or effective_env.get('FIREBASE_PROJECT_NUMBER')
         or '',
-        database_id=effective_env.get('V17_DEV_CLOUD_DATABASE_ID', ''),
-        region=effective_env.get('V17_DEV_CLOUD_REGION', ''),
-        backend_url=effective_env.get('V17_DEV_CLOUD_BACKEND_URL', ''),
-        deployed_revision=effective_env.get('V17_DEV_CLOUD_DEPLOYED_REVISION', ''),
-        image_digest=effective_env.get('V17_DEV_CLOUD_IMAGE_DIGEST', ''),
-        runtime_service_account=effective_env.get('V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT', ''),
-        fixture_writer_principal=effective_env.get('V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL', ''),
-        production_project_ids=split_csv(effective_env.get('V17_PRODUCTION_PROJECT_IDS')),
-        production_project_numbers=split_csv(effective_env.get('V17_PRODUCTION_PROJECT_NUMBERS')),
+        database_id=effective_env.get('MEMORY_DEV_CLOUD_DATABASE_ID', ''),
+        region=effective_env.get('MEMORY_DEV_CLOUD_REGION', ''),
+        backend_url=effective_env.get('MEMORY_DEV_CLOUD_BACKEND_URL', ''),
+        deployed_revision=effective_env.get('MEMORY_DEV_CLOUD_DEPLOYED_REVISION', ''),
+        image_digest=effective_env.get('MEMORY_DEV_CLOUD_IMAGE_DIGEST', ''),
+        runtime_service_account=effective_env.get('MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT', ''),
+        fixture_writer_principal=effective_env.get('MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL', ''),
+        production_project_ids=split_csv(effective_env.get('MEMORY_PRODUCTION_PROJECT_IDS')),
+        production_project_numbers=split_csv(effective_env.get('MEMORY_PRODUCTION_PROJECT_NUMBERS')),
     )
 
 
@@ -259,8 +259,8 @@ def build_candidate_manifest(
         'artifact': 'candidate-manifest.json',
         'status': GATE_STATUS_NOT_RUN,
         'run_id': run_id,
-        'git_sha': effective_env.get('V17_DEV_CLOUD_GIT_SHA', ''),
-        'clean_tree_asserted': effective_env.get('V17_DEV_CLOUD_CLEAN_TREE_ASSERTED', '').lower() == 'true',
+        'git_sha': effective_env.get('MEMORY_DEV_CLOUD_GIT_SHA', ''),
+        'clean_tree_asserted': effective_env.get('MEMORY_DEV_CLOUD_CLEAN_TREE_ASSERTED', '').lower() == 'true',
         'image_digest': target.image_digest,
         'deployed_revision': target.deployed_revision,
         'backend_url': target.backend_url,
@@ -280,11 +280,11 @@ def redacted_env_snapshot(env: dict[str, str]) -> dict:
     snapshot = {}
     for key in _REDACTED_ENV_KEYS:
         value = env.get(key, '')
-        if key == 'V17_MEMORY_ENABLED_USERS' and value:
+        if key == 'MEMORY_ENABLED_USERS' and value:
             snapshot[key] = '<set:redacted-user-list>'
         else:
             snapshot[key] = value
-    snapshot['V17_V3_CURSOR_SECRET'] = '<redacted>' if env.get('V17_V3_CURSOR_SECRET') else '<unset>'
+    snapshot['MEMORY_V3_CURSOR_SECRET'] = '<redacted>' if env.get('MEMORY_V3_CURSOR_SECRET') else '<unset>'
     return snapshot
 
 
