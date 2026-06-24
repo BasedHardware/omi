@@ -15,55 +15,13 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
-
-
-def _ensure_package_path(name, path):
-    module = sys.modules.get(name)
-    if not isinstance(module, ModuleType):
-        module = ModuleType(name)
-        sys.modules[name] = module
-    module.__path__ = [path]
-    if '.' in name:
-        parent_name, child_name = name.rsplit('.', 1)
-        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
-        setattr(parent, child_name, module)
-    return module
-
-
-def _drop_stale_module(module_name, expected_file):
-    module = sys.modules.get(module_name)
-    if module is None:
-        return
-    module_file = getattr(module, '__file__', None)
-    if isinstance(module_file, str) and os.path.abspath(module_file) == expected_file:
-        return
-    sys.modules.pop(module_name, None)
-    parent_name, child_name = module_name.rsplit('.', 1)
-    parent = sys.modules.get(parent_name)
-    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
-        delattr(parent, child_name)
-
-
-_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
-_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
-_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
-_drop_stale_module(
-    'utils.retrieval.hybrid',
-    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+from tests.unit.memory_import_isolation import (
+    install_mcp_search_memories_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
 )
-_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
-_drop_stale_module('models.conversation_enums', os.path.join(_BACKEND_DIR, 'models', 'conversation_enums.py'))
-_drop_stale_module('models.mcp_api_key', os.path.join(_BACKEND_DIR, 'models', 'mcp_api_key.py'))
 
-_stubs = [
+_MCP_STUB_NAMES = [
     'database._client',
     'database.redis_db',
     'database.conversations',
@@ -112,29 +70,57 @@ _stubs = [
     'utils.log_sanitizer',
     'utils.executors',
     'dependencies',
+    'routers.mcp',
+    'utils',
+    'utils.retrieval',
+    'models',
 ]
-for mod_name in _stubs:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
-    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
-sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
-sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
-sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
-sys.modules['utils.other.endpoints'].check_rate_limit_inline = MagicMock()
-sys.modules['utils.apps'].update_personas_async = MagicMock()
-sys.modules['utils.executors'].db_executor = MagicMock()
-sys.modules['utils.executors'].postprocess_executor = MagicMock()
-sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+mcp_router = None
+search_memories = None
+delete_memory = None
+edit_memory = None
 
-import routers.mcp as mcp_router
-from routers.mcp import search_memories, delete_memory, edit_memory
+
+@pytest.fixture(scope='module', autouse=True)
+def _mcp_search_import_isolation():
+    saved = snapshot_sys_modules(_MCP_STUB_NAMES)
+    install_mcp_search_memories_stubs(_BACKEND_DIR)
+    import routers.mcp as mcp_router_mod
+    from routers.mcp import search_memories as search_memories_fn
+    from routers.mcp import delete_memory as delete_memory_fn
+    from routers.mcp import edit_memory as edit_memory_fn
+
+    def _allow_v17_auth(_auth_context, db_client=None):
+        return SimpleNamespace(allowed=True, status_code=200, observability={})
+
+    def _legacy_safe_vector_result(*_args, **_kwargs):
+        return SimpleNamespace(read_decision=mcp_router_mod.V17ReadDecision.USE_LEGACY_SAFE, memories=[])
+
+    def _allow_legacy_write(*_args, **_kwargs):
+        return SimpleNamespace(allowed=True, status_code=200, detail={})
+
+    mcp_router_mod.authorize_v17_external_default_memory_read = _allow_v17_auth
+    mcp_router_mod.read_v17_mcp_default_memory_rollout = MagicMock(
+        return_value=SimpleNamespace(read_decision=mcp_router_mod.V17ReadDecision.USE_LEGACY_SAFE)
+    )
+    mcp_router_mod.search_v17_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
+    mcp_router_mod.read_v17_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
+    mcp_router_mod.assert_legacy_memory_write_allowed_for_default_read_decision = MagicMock(
+        side_effect=_allow_legacy_write
+    )
+
+    globals()['mcp_router'] = mcp_router_mod
+    globals()['search_memories'] = search_memories_fn
+    globals()['delete_memory'] = delete_memory_fn
+    globals()['edit_memory'] = edit_memory_fn
+    yield
+    restore_sys_modules(saved)
+    sys.modules.pop('routers.mcp', None)
+    globals()['mcp_router'] = None
+    globals()['search_memories'] = None
+    globals()['delete_memory'] = None
+    globals()['edit_memory'] = None
 
 
 def _auth_context(uid: str = "user-1"):
@@ -146,27 +132,6 @@ def _auth_context(uid: str = "user-1"):
         key_id="test-key",
         scopes=("memories.read", "memories.write"),
     )
-
-
-def _allow_v17_auth(_auth_context, db_client=None):
-    return SimpleNamespace(allowed=True, status_code=200, observability={})
-
-
-def _legacy_safe_vector_result(*_args, **_kwargs):
-    return SimpleNamespace(read_decision=mcp_router.V17ReadDecision.USE_LEGACY_SAFE, memories=[])
-
-
-def _allow_legacy_write(*_args, **_kwargs):
-    return SimpleNamespace(allowed=True, status_code=200, detail={})
-
-
-mcp_router.authorize_v17_external_default_memory_read = _allow_v17_auth
-mcp_router.read_v17_mcp_default_memory_rollout = MagicMock(
-    return_value=SimpleNamespace(read_decision=mcp_router.V17ReadDecision.USE_LEGACY_SAFE)
-)
-mcp_router.search_v17_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
-mcp_router.read_v17_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
-mcp_router.assert_legacy_memory_write_allowed_for_default_read_decision = MagicMock(side_effect=_allow_legacy_write)
 
 
 class TestSearchMemoriesEndpoint:

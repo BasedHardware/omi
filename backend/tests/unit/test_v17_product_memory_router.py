@@ -46,18 +46,44 @@ fastapi_stub.Depends = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
-sys.modules["fastapi"] = fastapi_stub
-sys.modules["database._client"] = MagicMock()
-
 auth_stub = types.ModuleType("utils.other.endpoints")
 auth_stub.get_current_user_uid = lambda: "u1"
-sys.modules["utils.other.endpoints"] = auth_stub
+
+import pytest
+
+from tests.unit.memory_import_isolation import (
+    install_v17_product_router_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
+_ROUTER_STUB_NAMES = ("fastapi", "database._client", "utils.other.endpoints", "routers.v17_memory_product")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _v17_product_router_import_isolation():
+    saved = snapshot_sys_modules(_ROUTER_STUB_NAMES)
+    for name in ("routers.v17_memory_product", "routers.memory_product"):
+        sys.modules.pop(name, None)
+    existing_fastapi = sys.modules.get("fastapi")
+    if existing_fastapi is not None and getattr(existing_fastapi, "APIRouter", None) is not fastapi_stub.APIRouter:
+        sys.modules.pop("fastapi", None)
+    install_v17_product_router_stubs(fastapi_stub, auth_stub)
+    import routers.v17_memory_product as v17_memory_product
+
+    globals()["v17_memory_product"] = v17_memory_product
+    yield
+    restore_sys_modules(saved)
+    for name in ("routers.v17_memory_product", "routers.memory_product"):
+        sys.modules.pop(name, None)
+    globals()["v17_memory_product"] = None
+
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
-import routers.v17_memory_product as v17_memory_product
+v17_memory_product = None  # populated by _v17_product_router_import_isolation
 
 
 class _Snapshot:
