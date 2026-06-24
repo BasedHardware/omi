@@ -142,3 +142,16 @@ def test_triggers_on_empty_webhook_url_returns_422():
     with pytest.raises(HTTPException) as e:
         _call({'triggers_on': 'memory_creation', 'webhook_url': ''})
     assert e.value.status_code == 422
+
+
+def test_triggers_on_whitespace_webhook_url_returns_422():
+    with pytest.raises(HTTPException) as e:
+        _call({'triggers_on': 'memory_creation', 'webhook_url': '   '})
+    assert e.value.status_code == 422
+
+
+def test_triggers_on_non_string_webhook_url_returns_422():
+    for bad in (123, ['http://x'], {'u': 'http://x'}, True):
+        with pytest.raises(HTTPException) as e:
+            _call({'triggers_on': 'memory_creation', 'webhook_url': bad})
+        assert e.value.status_code == 422
