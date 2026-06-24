@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
-from utils.llm.durable_memory_patches import (
+from utils.llm.promotion_proposals import (
     CandidateOutcomeStatus,
     SynthesisStatus,
     synthesize_durable_memory_patch_result,
