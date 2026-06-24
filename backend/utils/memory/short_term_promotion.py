@@ -26,9 +26,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from database._client import db as default_db_client
-from database.v17_collections import V17Collections
-from database.v17_memory_apply_store import apply_long_term_patch_firestore
-from jobs.v17_short_term_lifecycle_worker import (
+from database.memory_collections import V17Collections
+from database.memory_apply_store import apply_long_term_patch_firestore
+from jobs.short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
     ShortTermLifecycleTransitionRecord,
     build_short_term_lifecycle_transition_record,
@@ -42,10 +42,10 @@ from models.memory_domain import (
     physical_status_to_record_status,
 )
 from models.memory_evidence import SourceState
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
-from models.v17_memory_operations import MemoryOperation, MemoryOperationType
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
+from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle

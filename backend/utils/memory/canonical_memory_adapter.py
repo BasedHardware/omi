@@ -15,9 +15,9 @@ from utils.memory.atom_keyword_index import (
     sync_atom_keyword_index_for_item,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
-from database.v17_collections import V17Collections
-from database.v17_memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
-from database.v17_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
+from database.memory_collections import V17Collections
+from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
+from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
 from models.memory_domain import (
     MemoryLayer,
     MemoryProcessingState,
@@ -33,14 +33,14 @@ from models.memory_evidence import (
     SourceStateReason,
 )
 from models.memories import MemoryDB, MemoryCategory
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
-from models.v17_memory_operations import MemoryOperation, MemoryOperationType
-from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, V17MemoryItem
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
+from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
-from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
-from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
+from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
 
 logger = logging.getLogger(__name__)
 

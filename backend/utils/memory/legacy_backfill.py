@@ -22,8 +22,8 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from database._client import db as default_db_client
 from database.memories import get_non_filtered_memories
-from database.v17_collections import V17Collections
-from database.v17_memory_apply_store import apply_long_term_patch_firestore
+from database.memory_collections import V17Collections
+from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_domain import (
     MemoryLayer,
     MemoryProcessingState,
@@ -31,13 +31,13 @@ from models.memory_domain import (
     physical_status_to_record_status,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
-from models.v17_memory_operations import MemoryOperation, MemoryOperationType
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
+from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_memory_adapter import neutral_vector_id_for_memory
-from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
 

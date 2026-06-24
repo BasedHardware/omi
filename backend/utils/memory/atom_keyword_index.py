@@ -14,9 +14,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
 

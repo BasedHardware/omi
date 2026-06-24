@@ -16,7 +16,7 @@ from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
 from utils.memory.atom_keyword_index import is_indexable_long_term_atom
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.v17_product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
 
