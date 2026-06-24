@@ -38,6 +38,7 @@ from models.chat import (
     MessageConversation,
     FileChat,
 )
+from pydantic import ValidationError
 from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
@@ -467,7 +468,17 @@ def get_messages(
 
     if not messages:
         return [initial_message_util(uid, compat_app_id)]
-    return messages
+    # Validate each record individually so one malformed/legacy message doesn't fail the whole list
+    # with a 500.
+    valid_messages = []
+    for m in messages:
+        try:
+            valid_messages.append(Message.model_validate(m))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid message for uid {uid}: {invalid_fields}")
+            continue
+    return valid_messages
 
 
 @router.post("/v2/voice-messages")
