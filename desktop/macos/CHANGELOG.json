@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Changed the default Ask Omi keyboard shortcut to Command-O"
+  ],
   "releases": [
     {
       "version": "0.11.513",
