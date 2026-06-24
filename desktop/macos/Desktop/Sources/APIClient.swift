@@ -684,6 +684,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
+  // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
+  // cleared once enriched on first open (get_conversation_by_id).
+  let deferred: Bool
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -704,6 +707,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
+    case deferred
   }
 
   init(from decoder: Decoder) throws {
@@ -728,6 +732,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
     folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
+    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
   }
 
   /// Memberwise initializer for creating from local storage
@@ -749,7 +754,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     isLocked: Bool,
     starred: Bool,
     folderId: String?,
-    inputDeviceName: String?
+    inputDeviceName: String?,
+    deferred: Bool = false
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -769,6 +775,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
+    self.deferred = deferred
   }
 
   /// Returns the title from structured data, or a fallback

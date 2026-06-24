@@ -11,6 +11,20 @@ from typing import Any, Optional
 
 import torch
 
+try:
+    import nemo.collections.asr as nemo_asr
+except ImportError:
+    nemo_asr = None
+
+try:
+    import pyannote.audio.core.model as pam
+    from pyannote.audio import Inference as PyannoteInference
+    from pyannote.audio import Model as PyannoteModel
+except ImportError:
+    pam = None
+    PyannoteModel = None
+    PyannoteInference = None
+
 logger = logging.getLogger(__name__)
 
 _MAX_GPU_QUEUE = 512
@@ -18,6 +32,7 @@ _MAX_GPU_QUEUE = 512
 
 class WorkType(Enum):
     BATCH_TRANSCRIBE = "batch_transcribe"
+    EMBEDDING = "embedding"
     SHUTDOWN = "shutdown"
 
 
@@ -39,6 +54,7 @@ class GPUWorker:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model = None
+        self._embedding_model = None
         self._poll_timeout = float(os.getenv("PARAKEET_GPU_POLL_TIMEOUT", "0.05"))
         self._gc_interval = int(os.getenv("PARAKEET_GC_INTERVAL", "50"))
         self._gc_counter = 0
@@ -101,6 +117,21 @@ class GPUWorker:
             raise item.sync_error
         return item.sync_result
 
+    def submit_embedding_sync(self, payload: dict, timeout: float = 30.0):
+        if not self.is_ready:
+            raise RuntimeError("GPU worker not ready")
+        evt = threading.Event()
+        item = WorkItem(WorkType.EMBEDDING, payload, sync_event=evt)
+        try:
+            self._queue.put(item, timeout=5)
+        except queue.Full:
+            raise RuntimeError("GPU queue full")
+        if not evt.wait(timeout=timeout):
+            raise TimeoutError("GPU embedding timed out")
+        if item.sync_error is not None:
+            raise item.sync_error
+        return item.sync_result
+
     def _maybe_gc(self) -> None:
         gc.collect(0)
         self._gc_counter += 1
@@ -131,7 +162,10 @@ class GPUWorker:
 
             try:
                 t_infer = time.monotonic()
-                result = self._batch_transcribe(item.payload)
+                if item.work_type == WorkType.EMBEDDING:
+                    result = self._compute_embedding(item.payload)
+                else:
+                    result = self._batch_transcribe(item.payload)
                 item.inference_seconds = time.monotonic() - t_infer
                 self._deliver_result(item, result)
             except Exception as exc:
@@ -159,8 +193,6 @@ class GPUWorker:
             item.loop.call_soon_threadsafe(_safe_set_exception, item.future, exc)
 
     def _load_model(self) -> None:
-        import nemo.collections.asr as nemo_asr
-
         model_name = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
         device = os.getenv("PARAKEET_DEVICE", "cuda:0")
         do_compile = os.getenv("PARAKEET_TORCH_COMPILE", "false").lower() in ("true", "1", "yes")
@@ -194,10 +226,47 @@ class GPUWorker:
         self._model = model
         torch.cuda.empty_cache()
 
+        self._load_embedding_model()
+
         vram_used = torch.cuda.memory_allocated() / 1024**2
         vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**2
         logger.info(f"VRAM after model load: {vram_used:.0f}MiB / {vram_total:.0f}MiB")
         logger.info("Batch model loaded and ready")
+
+    def _load_embedding_model(self) -> None:
+        if PyannoteModel is None:
+            logger.warning("pyannote.audio not installed, built-in embedding unavailable")
+            return
+
+        try:
+            orig_load = torch.load
+            orig_check = pam.check_version
+            try:
+                torch.load = lambda *a, **kw: orig_load(*a, **{**kw, "weights_only": False})
+                pam.check_version = lambda *a, **kw: True
+                model = PyannoteModel.from_pretrained(
+                    "pyannote/wespeaker-voxceleb-resnet34-LM",
+                    token=os.getenv("HUGGINGFACE_TOKEN"),
+                )
+            finally:
+                torch.load = orig_load
+                pam.check_version = orig_check
+
+            inference = PyannoteInference(model, window="whole")
+            if torch.cuda.is_available():
+                inference.to(torch.device("cuda"))
+            self._embedding_model = inference
+            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
+        except Exception as e:
+            logger.warning(f"Could not load built-in embedding model: {e}")
+
+    @torch.inference_mode()
+    def _compute_embedding(self, payload: dict):
+        if self._embedding_model is None:
+            return None
+        waveform = payload["waveform"]
+        sample_rate = payload["sample_rate"]
+        return self._embedding_model({"waveform": waveform, "sample_rate": sample_rate})
 
     @torch.inference_mode()
     def _batch_transcribe(self, payload: dict) -> list:

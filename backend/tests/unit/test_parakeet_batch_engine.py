@@ -31,6 +31,9 @@ sys.modules["nemo"] = _nemo
 sys.modules["nemo.collections"] = _nemo.collections
 sys.modules["nemo.collections.asr"] = _nemo_asr
 
+for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
+    sys.modules.setdefault(_mod, MagicMock())
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from batch_engine import BatchEngine, QueueFullError, _unlink_safe

@@ -80,6 +80,17 @@ impl PaywallChecker {
         request_headers: &HeaderMap,
         byok_stripped: bool,
     ) -> bool {
+        // Master switch: the trial paywall is OFF by default (freemium). When disabled,
+        // no user is ever paywalled by account age — mirrors the Python backend's
+        // TRIAL_PAYWALL_ENABLED flag. Set TRIAL_PAYWALL_ENABLED=true to restore the
+        // 3-day desktop trial lockout.
+        if !std::env::var("TRIAL_PAYWALL_ENABLED")
+            .map(|v| v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+        {
+            return false;
+        }
+
         // BYOK escape hatch: a request carrying all 4 BYOK provider headers
         // is never paywalled, regardless of cached state. This handles the
         // race where Firestore hasn't caught up after BYOK activation.
@@ -151,7 +162,11 @@ impl PaywallChecker {
         let plan = match self.firestore.get_user_effective_plan(uid).await {
             Ok(p) => p,
             Err(e) => {
-                tracing::warn!("paywall: failed to read subscription plan for uid={}: {}", uid, e);
+                tracing::warn!(
+                    "paywall: failed to read subscription plan for uid={}: {}",
+                    uid,
+                    e
+                );
                 return None;
             }
         };
@@ -190,7 +205,11 @@ impl PaywallChecker {
                 return None;
             }
             Err(e) => {
-                tracing::warn!("paywall: failed to get creation time for uid={}: {}", uid, e);
+                tracing::warn!(
+                    "paywall: failed to get creation time for uid={}: {}",
+                    uid,
+                    e
+                );
                 return None;
             }
         };
@@ -275,24 +294,21 @@ mod tests {
     #[test]
     fn basic_plan_old_account_no_byok_paywalled() {
         // Account created 10 days ago → past 3-day trial
-        let ten_days_ago_ms =
-            (chrono::Utc::now().timestamp() - 10 * 24 * 60 * 60) * 1000;
+        let ten_days_ago_ms = (chrono::Utc::now().timestamp() - 10 * 24 * 60 * 60) * 1000;
         assert!(is_trial_expired("basic", false, Some(ten_days_ago_ms)));
     }
 
     #[test]
     fn basic_plan_exactly_3_days_not_paywalled() {
         // Account created exactly 3 days ago → age == TRIAL_LENGTH, not > TRIAL_LENGTH
-        let exactly_3d_ms =
-            (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS) * 1000;
+        let exactly_3d_ms = (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS) * 1000;
         assert!(!is_trial_expired("basic", false, Some(exactly_3d_ms)));
     }
 
     #[test]
     fn basic_plan_just_over_3_days_paywalled() {
         // Account created 3 days + 1 second ago
-        let just_over_3d_ms =
-            (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS - 1) * 1000;
+        let just_over_3d_ms = (chrono::Utc::now().timestamp() - TRIAL_LENGTH_SECONDS - 1) * 1000;
         assert!(is_trial_expired("basic", false, Some(just_over_3d_ms)));
     }
 
@@ -340,7 +356,10 @@ mod tests {
         let byok_stripped = true;
         // The escape hatch condition:
         let would_escape = !byok_stripped && byok::has_all_byok_keys(&h);
-        assert!(!would_escape, "stripped headers must not trigger escape hatch");
+        assert!(
+            !would_escape,
+            "stripped headers must not trigger escape hatch"
+        );
     }
 
     #[test]
@@ -348,6 +367,9 @@ mod tests {
         let h = all_byok_headers();
         let byok_stripped = false;
         let would_escape = !byok_stripped && byok::has_all_byok_keys(&h);
-        assert!(would_escape, "validated headers should trigger escape hatch");
+        assert!(
+            would_escape,
+            "validated headers should trigger escape hatch"
+        );
     }
 }

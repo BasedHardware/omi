@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.",
     "unmute": "Slå på lyd",
     "newRecording": "Nytt opptak",
-    "transcribeLaterPaused": "På pause – lyd tas ikke opp"
+    "transcribeLaterPaused": "På pause – lyd tas ikke opp",
+    "recordingMode": "Opptaksmodus",
+    "captureModeLater": "Senere",
+    "captureModeLiveDescription": "Transkriber i sanntid mens du snakker.",
+    "captureModeLaterDescription": "Lagre lyden nå og transkriber når du vil."
 }

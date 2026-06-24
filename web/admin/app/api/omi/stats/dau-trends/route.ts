@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
-import { posthogFetch } from "@/lib/posthog";
+import { posthogResults } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -44,19 +44,13 @@ export async function GET(request: NextRequest) {
       ORDER BY day
     `;
 
-    const response = await posthogFetch(host, projectId, apiKey, hogql);
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("PostHog query error:", response.status, text);
-      return NextResponse.json(
-        { error: `PostHog API error: ${response.status}` },
-        { status: 502 }
-      );
+    let results: [string, number][];
+    try {
+      results = (await posthogResults(host, projectId, apiKey, hogql)) as [string, number][];
+    } catch (err) {
+      console.error("PostHog query error:", err);
+      return NextResponse.json({ error: "PostHog API error" }, { status: 502 });
     }
-
-    const raw = await response.json();
-    const results: [string, number][] = raw.results || [];
 
     // Build map from results
     const dateMap: Record<string, number> = {};

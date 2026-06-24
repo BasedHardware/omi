@@ -10,7 +10,10 @@ actor MemoryAssistant: ProactiveAssistant {
     var isEnabled: Bool {
         get async {
             await MainActor.run {
+                // Gate the Gemini screen analysis on notifications (off by default) — no
+                // notification, no Gemini call. Re-enabling notifications resumes analysis.
                 MemoryAssistantSettings.shared.isEnabled
+                    && MemoryAssistantSettings.shared.notificationsEnabled
             }
         }
     }

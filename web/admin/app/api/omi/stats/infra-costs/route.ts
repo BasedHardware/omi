@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
-import { getJsonCache, setJsonCache } from "@/lib/redis";
+import { getPayload, setPayload } from "@/lib/payload-cache";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 3600;
 
 // Daily infrastructure cost, split by platform.
 //
@@ -44,7 +45,7 @@ interface ServiceCostRow {
   mobileProjectionUsd: number;
 }
 
-interface InfraCostsPayload {
+export interface InfraCostsPayload {
   days: number;
   daily: DailyCostPoint[];
   breakdown: ServiceCostRow[];
@@ -153,9 +154,6 @@ function computeMonthlyOverheadByPlatform(services: ServiceCostEntry[]): { deskt
   return { desktop, mobile, total };
 }
 
-const CACHE_PREFIX = "admin:stats:infra-costs:v3";
-const CACHE_TTL_SECONDS = 30 * 60;
-
 // User-provided April projection. Override with ADMIN_INFRA_OVERHEAD_MONTHLY
 // env var or ?overhead_monthly= query param.
 const DEFAULT_OVERHEAD_MONTHLY = 57447;
@@ -249,29 +247,31 @@ async function fetchLlmCostsPerDay(
   }
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+// Parse the infra-costs request params the same way the GET handler does, so
+// the cache key derived from them matches between the route and the precompute
+// cron. `days` is clamped 7..90; overhead falls back to the env var then the
+// hard-coded April projection.
+export function parseInfraCostsParams(searchParams: URLSearchParams): { days: number; overheadMonthly: number } {
+  const days = Math.min(Math.max(parseInt(searchParams.get("days") || "30", 10), 7), 90);
+  const overheadMonthlyParam = parseFloat(searchParams.get("overhead_monthly") || "");
+  const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
+  const overheadMonthly =
+    Number.isFinite(overheadMonthlyParam) && overheadMonthlyParam >= 0
+      ? overheadMonthlyParam
+      : Number.isFinite(envOverhead) && envOverhead >= 0
+        ? envOverhead
+        : DEFAULT_OVERHEAD_MONTHLY;
+  return { days, overheadMonthly };
+}
 
-  try {
-    const { searchParams } = new URL(request.url);
-    const days = Math.min(Math.max(parseInt(searchParams.get("days") || "30", 10), 7), 90);
-    const overheadMonthlyParam = parseFloat(searchParams.get("overhead_monthly") || "");
-    const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
-    const overheadMonthly =
-      Number.isFinite(overheadMonthlyParam) && overheadMonthlyParam >= 0
-        ? overheadMonthlyParam
-        : Number.isFinite(envOverhead) && envOverhead >= 0
-          ? envOverhead
-          : DEFAULT_OVERHEAD_MONTHLY;
+export function infraCostsCacheKey(days: number, overheadMonthly: number): string {
+  return `infra-costs:v1:${days}:${overheadMonthly}`;
+}
 
-    const cacheKey = `${CACHE_PREFIX}:${days}:${overheadMonthly}`;
-    const cached = await getJsonCache<InfraCostsPayload>(cacheKey);
-    if (cached && Date.now() - cached.generatedAt < CACHE_TTL_SECONDS * 1000) {
-      return NextResponse.json(cached);
-    }
+export async function computeInfraCosts(opts: { days: number; overheadMonthly: number }): Promise<InfraCostsPayload> {
+  const { days, overheadMonthly } = opts;
 
-    const llmByDay = await fetchLlmCostsPerDay(days);
+  const llmByDay = await fetchLlmCostsPerDay(days);
     const partial = llmByDay == null;
     const dateKeys = buildDayKeys(days);
 
@@ -349,7 +349,28 @@ export async function GET(request: NextRequest) {
       generatedAt: Date.now(),
     };
 
-    await setJsonCache(cacheKey, payload, CACHE_TTL_SECONDS);
+    return payload;
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const { days, overheadMonthly } = parseInfraCostsParams(searchParams);
+    const key = infraCostsCacheKey(days, overheadMonthly);
+
+    // Cache-first: precompute writes this off the request path. If present at
+    // any age, serve it (this route is too heavy to recompute inline).
+    const cached = await getPayload<InfraCostsPayload>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    // Cold start before the first precompute: compute inline (may be slow), cache, return.
+    const payload = await computeInfraCosts({ days, overheadMonthly });
+    await setPayload(key, payload);
     return NextResponse.json(payload);
   } catch (err: any) {
     console.error("Infra costs error:", err);

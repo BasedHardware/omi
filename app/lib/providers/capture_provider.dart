@@ -538,6 +538,25 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
+  bool get deviceSupportsTranscribeLater {
+    final t = _recordingDevice?.type;
+    return t == DeviceType.omi || t == DeviceType.openglass || t == DeviceType.friendPendant;
+  }
+
+  Future<void> setBatchMode(bool enabled) async {
+    if (SharedPreferencesUtil().batchModeEnabled == enabled) return;
+    SharedPreferencesUtil().batchModeEnabled = enabled;
+    PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
+    final docs = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+    await SharedPreferencesUtil()
+        .saveBool('nativeBleStreamingEnabled', !enabled && SharedPreferencesUtil().backgroundModeEnabled);
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
   /// Called when transcription settings are changed (e.g., custom STT provider)
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
