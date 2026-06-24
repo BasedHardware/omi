@@ -664,6 +664,12 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             # Decrypt first to get a clean state
             plain_photo_data = _prepare_photo_for_read(photo_data, uid)
 
+            # A photo doc with no base64 payload (legacy or partial write) has nothing to re-encrypt; skip
+            # it so one bad photo doesn't abort the whole multi-conversation migration batch.
+            if not plain_photo_data or plain_photo_data.get('base64') is None:
+                logger.warning(f"Skipping photo with no base64 data during level migration for uid {uid}")
+                continue
+
             # Prepare the specific fields for update
             photo_update_payload = {'data_protection_level': target_level}
             if target_level == 'enhanced':
