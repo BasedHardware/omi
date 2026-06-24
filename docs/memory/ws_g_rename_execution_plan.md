@@ -37,7 +37,7 @@ Executors must **not** re-do Waves 10/15 or re-touch persisted Firestore `tier` 
 **Reference counts:**
 - **288** Python files under `backend/` contain the substring `v17_` (includes tests).
 - **182** Python files import a `v17_*` module directly.
-- **262** repo-wide paths match `**/v17_*` (includes `docs/epics/v17_*`, `docs/runbooks/v17-*`, scripts).
+- **262** repo-wide paths match `**/v17_*` (includes `docs/epics/v17_*`, `docs/runbooks/memory-v3-*`, scripts).
 
 ### 1.2 `utils/memory/v17_*.py` (39 files) + importers
 
