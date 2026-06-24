@@ -1,5 +1,7 @@
 # memory T19/T20/T21 Oracle Milestone Review
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Date:** 2026-06-19T10:20:49Z
 **Oracle session:** `memory-t20-vector-review`
 **Oracle CLI:** `/usr/local/bin/consult-oracle` (`oracle 0.14.0`)
