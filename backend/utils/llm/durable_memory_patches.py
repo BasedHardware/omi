@@ -8,7 +8,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from models.v17_memory_contracts import (
+from models.memory_contracts import (
     DurableMemoryPatch,
     DurablePatchDecision,
     LifecycleState,
@@ -37,6 +37,14 @@ _CONTROL_FIELDS = {
     "new_memory_id",
     "evidence_refs",
 }
+
+PROMOTION_RUBRIC = """
+- Promote to active when a Future agent/user would benefit from remembering this, it is stable or meaningfully recurring, it is about the primary user, user-owned work, a close relationship, or an entity the user cares about, and it has direct source evidence.
+- Use review when attribution, durability, or sensitivity is uncertain but the packet may still be useful.
+- Use context_only when the source may help future search/reasoning but should not become durable profile memory.
+- Use reject for unsupported, transient, generic, wrong-subject, media/story narration, or conversational activity facts.
+- Do not rewrite unidentified non-primary speaker facts as user facts; set relationship_to_user=other_speaker or unclear and choose review/context_only/reject unless the user tie is explicit.
+""".strip()
 
 
 class DurableMemoryPatchProposal(BaseModel):
