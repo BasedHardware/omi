@@ -298,6 +298,36 @@ class MemoriesViewModel: ObservableObject {
         Task { await self?.refreshMemoriesIfNeeded() }
       }
       .store(in: &cancellables)
+
+    // Conversation delete: purge conversation-sourced memories from local cache + re-fetch.
+    NotificationCenter.default.publisher(for: .conversationDeleted)
+      .sink { [weak self] notification in
+        guard let conversationId = notification.userInfo?["conversationId"] as? String else { return }
+        Task { await self?.handleConversationDeleted(conversationId) }
+      }
+      .store(in: &cancellables)
+  }
+
+  /// After conversation delete (server cascade retract + local cache purge).
+  func handleConversationDeleted(_ conversationId: String) async {
+    guard AuthState.shared.isSignedIn else { return }
+
+    do {
+      let removed = try await MemoryStorage.shared.softDeleteMemoriesByConversationId(conversationId)
+      if removed > 0 {
+        log("MemoriesViewModel: Soft-deleted \(removed) local memories for conversation \(conversationId)")
+      }
+    } catch {
+      logError("MemoriesViewModel: Failed to soft-delete memories for conversation \(conversationId)", error: error)
+    }
+
+    memories.removeAll { $0.conversationId == conversationId }
+    recomputeFilteredMemories()
+
+    // Re-fetch from backend (source of truth after cascade retract).
+    if hasLoadedInitially {
+      await loadMemories()
+    }
   }
 
   /// Refresh memories if already loaded (for auto-refresh)
