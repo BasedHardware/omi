@@ -1,8 +1,8 @@
 """Canonical rollout configuration (WS-G5).
 
 Neutral ``MemoryRollout*`` symbols are the source of truth. Legacy ``V17*`` names
-remain importable aliases until later rename waves. Env vars dual-read neutral keys
-with ``V17_*`` fallback; cohort membership stays on ``MEMORY_CANONICAL_USERS`` only.
+remain importable aliases until later rename waves. Env vars read neutral ``MEMORY_*``
+keys only; cohort membership stays on ``MEMORY_CANONICAL_USERS`` only.
 """
 
 import os
@@ -12,18 +12,12 @@ from enum import Enum
 from typing import Iterable, Optional, Set
 
 MEMORY_MODE_ENV = "MEMORY_MODE"
-V17_MODE_ENV = "V17_MODE"
 MEMORY_ENABLED_USERS_ENV = "MEMORY_ENABLED_USERS"
-V17_MEMORY_ENABLED_USERS_ENV = "V17_MEMORY_ENABLED_USERS"
 
 MEMORY_BACKFILL_ENABLED_ENV = "MEMORY_BACKFILL_ENABLED"
-V17_BACKFILL_ENABLED_ENV = "V17_BACKFILL_ENABLED"
 MEMORY_BACKFILL_DAILY_LIMIT_ENV = "MEMORY_BACKFILL_DAILY_LIMIT"
-V17_BACKFILL_DAILY_LIMIT_ENV = "V17_BACKFILL_DAILY_LIMIT"
 MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV = "MEMORY_ARCHIVE_OPT_IN_ENABLED"
-V17_ARCHIVE_OPT_IN_ENABLED_ENV = "V17_ARCHIVE_OPT_IN_ENABLED"
 MEMORY_V3_GET_ENABLED_ENV = "MEMORY_V3_GET_ENABLED"
-V17_V3_GET_ENABLED_ENV = "V17_V3_GET_ENABLED"
 
 
 class MemoryRolloutMode(str, Enum):
@@ -211,55 +205,38 @@ def parse_enabled_users(raw: str | Iterable[str]) -> Set[str]:
 def _env_raw_value(
     env: Mapping[str, str] | None,
     *,
-    neutral_key: str,
-    legacy_key: str,
+    key: str,
     default: str,
 ) -> str:
     source = env if env is not None else os.environ
-    if neutral_key in source:
-        return source.get(neutral_key, default) or default
-    return source.get(legacy_key, default) or default
+    if key in source:
+        return source.get(key, default) or default
+    return default
 
 
 def rollout_mode_env_value(env: Mapping[str, str] | None = None) -> str:
-    """Read rollout mode from ``MEMORY_MODE`` with fallback to ``V17_MODE``.
+    """Read rollout mode from ``MEMORY_MODE``.
 
-    Neutral key wins when present in the environment mapping (even if empty).
     Does **not** read ``MEMORY_CANONICAL_USERS`` — cohort membership is separate (WS-E).
     """
-    raw = _env_raw_value(env, neutral_key=MEMORY_MODE_ENV, legacy_key=V17_MODE_ENV, default="")
+    raw = _env_raw_value(env, key=MEMORY_MODE_ENV, default="")
     return (raw or MemoryRolloutMode.off.value).strip() or MemoryRolloutMode.off.value
 
 
 def rollout_enabled_users_env_raw(env: Mapping[str, str] | None = None) -> str:
-    """Read enabled-user list from ``MEMORY_ENABLED_USERS`` with fallback to ``V17_MEMORY_ENABLED_USERS``."""
-    return _env_raw_value(
-        env,
-        neutral_key=MEMORY_ENABLED_USERS_ENV,
-        legacy_key=V17_MEMORY_ENABLED_USERS_ENV,
-        default="",
-    )
+    """Read enabled-user list from ``MEMORY_ENABLED_USERS``."""
+    return _env_raw_value(env, key=MEMORY_ENABLED_USERS_ENV, default="")
 
 
 def rollout_backfill_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read backfill toggle from ``MEMORY_BACKFILL_ENABLED`` with fallback to ``V17_BACKFILL_ENABLED``."""
-    raw = _env_raw_value(
-        env,
-        neutral_key=MEMORY_BACKFILL_ENABLED_ENV,
-        legacy_key=V17_BACKFILL_ENABLED_ENV,
-        default="false",
-    )
+    """Read backfill toggle from ``MEMORY_BACKFILL_ENABLED``."""
+    raw = _env_raw_value(env, key=MEMORY_BACKFILL_ENABLED_ENV, default="false")
     return str(raw).lower() == "true"
 
 
 def rollout_backfill_daily_limit_env_value(env: Mapping[str, str] | None = None) -> int:
-    """Read backfill daily limit from neutral env with ``V17_BACKFILL_DAILY_LIMIT`` fallback."""
-    raw = _env_raw_value(
-        env,
-        neutral_key=MEMORY_BACKFILL_DAILY_LIMIT_ENV,
-        legacy_key=V17_BACKFILL_DAILY_LIMIT_ENV,
-        default="0",
-    )
+    """Read backfill daily limit from ``MEMORY_BACKFILL_DAILY_LIMIT``."""
+    raw = _env_raw_value(env, key=MEMORY_BACKFILL_DAILY_LIMIT_ENV, default="0")
     limit = int(raw or 0)
     if limit < 0:
         raise ValueError(f"{MEMORY_BACKFILL_DAILY_LIMIT_ENV} must be nonnegative")
@@ -267,24 +244,14 @@ def rollout_backfill_daily_limit_env_value(env: Mapping[str, str] | None = None)
 
 
 def rollout_archive_opt_in_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read archive opt-in from ``MEMORY_ARCHIVE_OPT_IN_ENABLED`` with ``V17_*`` fallback."""
-    raw = _env_raw_value(
-        env,
-        neutral_key=MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV,
-        legacy_key=V17_ARCHIVE_OPT_IN_ENABLED_ENV,
-        default="false",
-    )
+    """Read archive opt-in from ``MEMORY_ARCHIVE_OPT_IN_ENABLED``."""
+    raw = _env_raw_value(env, key=MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV, default="false")
     return str(raw).lower() == "true"
 
 
 def rollout_v3_get_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read v3 GET route toggle from ``MEMORY_V3_GET_ENABLED`` with ``V17_V3_GET_ENABLED`` fallback."""
-    raw = _env_raw_value(
-        env,
-        neutral_key=MEMORY_V3_GET_ENABLED_ENV,
-        legacy_key=V17_V3_GET_ENABLED_ENV,
-        default="",
-    )
+    """Read v3 GET route toggle from ``MEMORY_V3_GET_ENABLED``."""
+    raw = _env_raw_value(env, key=MEMORY_V3_GET_ENABLED_ENV, default="")
     return str(raw).strip().lower() == "true"
 
 
@@ -301,17 +268,11 @@ __all__ = [
     "MemoryRolloutStageGate",
     "MemoryRolloutState",
     "PASSED",
-    "V17_ARCHIVE_OPT_IN_ENABLED_ENV",
-    "V17_BACKFILL_DAILY_LIMIT_ENV",
-    "V17_BACKFILL_ENABLED_ENV",
     "V17Capabilities",
     "V17Mode",
     "V17RolloutConfig",
     "V17RolloutState",
     "V17StageGate",
-    "V17_MEMORY_ENABLED_USERS_ENV",
-    "V17_MODE_ENV",
-    "V17_V3_GET_ENABLED_ENV",
     "decide_v17_capabilities",
     "parse_enabled_users",
     "rollout_archive_opt_in_enabled_env_value",
