@@ -727,6 +727,8 @@ def update_app(
         data = json.loads(app_data)
     except (json.JSONDecodeError, TypeError):
         raise HTTPException(status_code=400, detail='Invalid app_data: must be valid JSON')
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail='Invalid app_data: must be a JSON object')
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')

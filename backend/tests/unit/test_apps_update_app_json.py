@@ -115,3 +115,12 @@ def test_update_app_invalid_json_returns_400_not_500():
     with pytest.raises(HTTPException) as e:
         apps_mod.update_app(app_id='a1', app_data='this is not json', file=MagicMock(), uid='uid1')
     assert e.value.status_code == 400
+
+
+def test_update_app_non_object_json_returns_400_not_500():
+    # Valid JSON that is not an object (array/scalar) must also be rejected with 400, not 500: the
+    # handler later does dict-style writes like data['image'] = ... and data['updated_at'] = ...
+    for payload in ('[1, 2, 3]', '"a string"', '42'):
+        with pytest.raises(HTTPException) as e:
+            apps_mod.update_app(app_id='a1', app_data=payload, file=MagicMock(), uid='uid1')
+        assert e.value.status_code == 400
