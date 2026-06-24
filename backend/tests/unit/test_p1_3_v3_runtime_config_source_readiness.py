@@ -56,7 +56,7 @@ def test_runtime_config_source_runner_exists_and_is_fail_safe_not_run_by_default
 
 def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeypatch):
     for key in list(os.environ):
-        if key.startswith("V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_") or key in {
+        if key.startswith("MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_") or key in {
             "GOOGLE_CLOUD_PROJECT",
             "GOOGLE_APPLICATION_CREDENTIALS",
             "SERVICE_ACCOUNT_JSON",
@@ -72,11 +72,11 @@ def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeyp
     assert report["firestore_reads_executed"] is False
     missing = set(report["source_selection_proof"]["missing_prerequisites"])
     assert {
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW=1",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW=1",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
         "GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_JSON",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS",
     }.issubset(missing)
     assert report["summary"]["backend_service_principal_read_proven"] is False
     assert report["summary"]["production_config_sources_exist"] is False
@@ -86,11 +86,11 @@ def test_execute_missing_env_is_blocked_not_run_with_exact_prerequisites(monkeyp
 def test_injected_config_read_proves_route_scoped_source_selection_but_does_not_approve_rollout():
     module = _module()
     env = {
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
         "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/non-secret-sa.json",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
     }
     docs = {
         "memory_control/v17_global_read_gate": {
@@ -137,11 +137,11 @@ def test_injected_config_read_proves_route_scoped_source_selection_but_does_not_
 def test_injected_missing_stale_or_invalid_config_fails_closed_without_runtime_change():
     module = _module()
     env = {
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
         "SERVICE_ACCOUNT_JSON": "{}",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
-        "V17_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
     }
 
     missing = module.build_report(execute=True, env=env, reader=lambda path: None)
