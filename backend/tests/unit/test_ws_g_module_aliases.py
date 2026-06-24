@@ -128,6 +128,21 @@ def test_memory_rollout_alias_reexports_match_v17():
     assert memory_rollout.parse_enabled_users is v17_memory.parse_enabled_users
     assert memory_rollout.rollout_mode_env_value is v17_memory.rollout_mode_env_value
     assert memory_rollout.rollout_enabled_users_env_raw is v17_memory.rollout_enabled_users_env_raw
+    assert v17_memory.V17Mode is memory_rollout.MemoryRolloutMode
+    assert v17_memory.V17RolloutConfig is memory_rollout.MemoryRolloutConfig
+    assert v17_memory.V17Capabilities is memory_rollout.MemoryRolloutCapabilities
+    assert v17_memory.V17RolloutState is memory_rollout.MemoryRolloutState
+    assert v17_memory.V17StageGate is memory_rollout.MemoryRolloutStageGate
+
+
+def test_memory_rollout_neutral_symbols_are_canonical():
+    from config import memory_rollout
+
+    assert memory_rollout.V17Mode is memory_rollout.MemoryRolloutMode
+    assert memory_rollout.V17RolloutConfig is memory_rollout.MemoryRolloutConfig
+    assert memory_rollout.V17RolloutState is memory_rollout.MemoryRolloutState
+    assert memory_rollout.V17Capabilities is memory_rollout.MemoryRolloutCapabilities
+    assert memory_rollout.V17StageGate is memory_rollout.MemoryRolloutStageGate
 
 
 def test_rollout_mode_env_dual_read_legacy_only():
@@ -179,6 +194,113 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
     assert V17RolloutConfig.from_env().enabled_users == {"rollout-user"}
     assert resolve_memory_system("cohort-user") == MemorySystem.CANONICAL
     assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
+
+
+def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
+    from config.v17_memory import V17Mode, V17RolloutConfig
+    from utils.memory.memory_system import MemorySystem, resolve_memory_system
+
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    monkeypatch.setenv("MEMORY_MODE", V17Mode.read.value)
+    monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-only-user")
+
+    assert V17RolloutConfig.from_env().mode == V17Mode.read
+    assert resolve_memory_system("rollout-only-user") == MemorySystem.LEGACY
+
+
+@pytest.mark.parametrize(
+    ("legacy_key", "neutral_key", "legacy_value", "neutral_value", "reader", "expected"),
+    [
+        (
+            "V17_BACKFILL_ENABLED",
+            "MEMORY_BACKFILL_ENABLED",
+            "true",
+            "false",
+            "rollout_backfill_enabled_env_value",
+            False,
+        ),
+        (
+            "V17_BACKFILL_DAILY_LIMIT",
+            "MEMORY_BACKFILL_DAILY_LIMIT",
+            "5",
+            "10",
+            "rollout_backfill_daily_limit_env_value",
+            10,
+        ),
+        (
+            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
+            "false",
+            "true",
+            "rollout_archive_opt_in_enabled_env_value",
+            True,
+        ),
+        ("V17_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "false", "true", "rollout_v3_get_enabled_env_value", True),
+    ],
+)
+def test_rollout_extended_env_dual_read_neutral_precedence(
+    legacy_key, neutral_key, legacy_value, neutral_value, reader, expected
+):
+    from config import memory_rollout
+
+    assert getattr(memory_rollout, reader)({legacy_key: legacy_value, neutral_key: neutral_value}) == expected
+
+
+@pytest.mark.parametrize(
+    ("legacy_key", "neutral_key", "legacy_value", "reader", "expected"),
+    [
+        ("V17_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "true", "rollout_backfill_enabled_env_value", True),
+        ("V17_BACKFILL_DAILY_LIMIT", "MEMORY_BACKFILL_DAILY_LIMIT", "7", "rollout_backfill_daily_limit_env_value", 7),
+        (
+            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
+            "true",
+            "rollout_archive_opt_in_enabled_env_value",
+            True,
+        ),
+        ("V17_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "true", "rollout_v3_get_enabled_env_value", True),
+    ],
+)
+def test_rollout_extended_env_dual_read_legacy_fallback(legacy_key, neutral_key, legacy_value, reader, expected):
+    from config import memory_rollout
+
+    assert getattr(memory_rollout, reader)({legacy_key: legacy_value}) == expected
+
+
+@pytest.mark.parametrize(
+    ("neutral_key", "legacy_key", "reader", "expected"),
+    [
+        ("MEMORY_BACKFILL_ENABLED", "V17_BACKFILL_ENABLED", "rollout_backfill_enabled_env_value", False),
+        ("MEMORY_BACKFILL_DAILY_LIMIT", "V17_BACKFILL_DAILY_LIMIT", "rollout_backfill_daily_limit_env_value", 0),
+        (
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
+            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "rollout_archive_opt_in_enabled_env_value",
+            False,
+        ),
+        ("MEMORY_V3_GET_ENABLED", "V17_V3_GET_ENABLED", "rollout_v3_get_enabled_env_value", False),
+    ],
+)
+def test_rollout_extended_env_dual_read_unset_defaults(neutral_key, legacy_key, reader, expected):
+    from config import memory_rollout
+
+    assert getattr(memory_rollout, reader)({}) == expected
+
+
+def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
+    from config.v17_memory import V17RolloutConfig
+
+    monkeypatch.delenv("V17_BACKFILL_ENABLED", raising=False)
+    monkeypatch.delenv("V17_BACKFILL_DAILY_LIMIT", raising=False)
+    monkeypatch.delenv("V17_ARCHIVE_OPT_IN_ENABLED", raising=False)
+    monkeypatch.setenv("MEMORY_BACKFILL_ENABLED", "true")
+    monkeypatch.setenv("MEMORY_BACKFILL_DAILY_LIMIT", "12")
+    monkeypatch.setenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", "true")
+
+    config = V17RolloutConfig.from_env()
+    assert config.backfill_enabled is True
+    assert config.backfill_daily_limit == 12
+    assert config.archive_opt_in_enabled is True
 
 
 def test_memory_non_active_routes_alias_reexports_match_v17():
