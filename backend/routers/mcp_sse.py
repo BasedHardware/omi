@@ -35,12 +35,12 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.v17_default_read_rollout import (
+from utils.memory.default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
     read_v17_write_convergence_gate,
 )
-from utils.memory.v17_product_authorization import (
+from utils.memory.product_authorization import (
     V17ProductAuthorizationContext,
     authorize_v17_external_default_memory_read,
 )
