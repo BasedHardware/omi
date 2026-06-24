@@ -481,11 +481,13 @@ def set_conversation_events_state(
 def set_action_item_status(
     data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
+    if len(data.items_idx) != len(data.values):
+        raise HTTPException(status_code=422, detail="items_idx and values must have the same length")
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
-        if action_item_idx >= len(action_items):
+        if not (0 <= action_item_idx < len(action_items)):
             continue
 
         action_item = action_items[action_item_idx]
@@ -522,7 +524,7 @@ def set_action_item_status(
             description_to_ids.setdefault(desc, []).append(ai['id'])
 
         for i, action_item_idx in enumerate(data.items_idx):
-            if action_item_idx >= len(action_items):
+            if not (0 <= action_item_idx < len(action_items)):
                 continue
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
