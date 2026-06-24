@@ -55,7 +55,7 @@ contract:
               - image: REGION-docker.pkg.dev/PROJECT_ID/omi/backend:V17_VECTOR_REPAIR_IMAGE_DIGEST
                 command: ["uvicorn"]
                 args:
-                  - scripts.v17_vector_repair_outbox_worker_entrypoint:app
+                  - scripts.vector_repair_outbox_worker_entrypoint:app
                   - --host
                   - 0.0.0.0
                   - --port
@@ -183,14 +183,14 @@ contract:
 
   proofChecklist:
     disabledSmoke:
-      command: python3 backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py
+      command: python3 backend/scripts/vector_repair_outbox_worker_entrypoint.py
       passCriteria:
         - JSON has enabled=false and config_valid=true
         - leased_count=0 processed_count=0 failed_count=0 ack_failed_count=0
         - no Pinecone/OpenAI/Firestore dependency initialization occurs
     staticConfigReview:
       passCriteria:
-        - Cloud Run service command exposes POST /v17-vector-repair-outbox-worker/tick via scripts.v17_vector_repair_outbox_worker_entrypoint:app
+        - Cloud Run service command exposes POST /v17-vector-repair-outbox-worker/tick via scripts.vector_repair_outbox_worker_entrypoint:app
         - V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains value: "false"
         - Cloud Scheduler state remains PAUSED
         - Cloud Run ingress is restricted and invoker IAM is required
@@ -245,10 +245,10 @@ contract:
           - telemetry exceptions change the worker outbox ack/delete/repair result
     readOnlyProofRunner:
       commandInventory: >-
-        python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py
+        python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py
         --project PROJECT_ID --region REGION
       executeCommand: >-
-        python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py
+        python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py
         --project PROJECT_ID --region REGION --execute
       notes:
         - The proof runner is read-only and allowlists only gcloud describe/get-iam-policy commands.
@@ -259,8 +259,8 @@ contract:
     commandsToRunLater:
       # Replace PROJECT_ID/REGION/service account names before execution. These
       # are proof commands only; they were not run while adding this artifact.
-      - python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION
-      - python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute
+      - python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION
+      - python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute
       - gcloud run services describe v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
       - gcloud run services get-iam-policy v17-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
       - gcloud scheduler jobs describe v17-vector-repair-outbox-worker-tick --location=REGION --project=PROJECT_ID --format=json

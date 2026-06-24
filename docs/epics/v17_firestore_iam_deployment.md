@@ -115,7 +115,7 @@ Contract:
 
 ### Disabled-by-default Cloud Run/Tasks wrapper contract
 
-`backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py` is the checked-in Cloud Run/Tasks wrapper contract for this tick. It now exposes both the CLI smoke path and a minimal ASGI HTTP shim at `POST /v17-vector-repair-outbox-worker/tick`. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients while disabled.
+`backend/scripts/vector_repair_outbox_worker_entrypoint.py` is the checked-in Cloud Run/Tasks wrapper contract for this tick. It now exposes both the CLI smoke path and a minimal ASGI HTTP shim at `POST /v17-vector-repair-outbox-worker/tick`. It is intentionally fake-injectable and does not create Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Firebase emulator processes, or Pinecone clients while disabled.
 
 The wrapper now includes a narrow production dependency resolver, but the resolver is invoked only after `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true` and config validation. Disabled/default CLI smoke still does not initialize Pinecone, the embedding provider, or the Firestore client singleton.
 
@@ -131,13 +131,13 @@ Wrapper behavior:
 Disabled CLI smoke command shape:
 
 ```bash
-python3 backend/scripts/v17_vector_repair_outbox_worker_entrypoint.py
+python3 backend/scripts/vector_repair_outbox_worker_entrypoint.py
 ```
 
 Proposed disabled Cloud Run service command shape (not yet applied):
 
 ```bash
-uvicorn scripts.v17_vector_repair_outbox_worker_entrypoint:app --host 0.0.0.0 --port 8080
+uvicorn scripts.vector_repair_outbox_worker_entrypoint:app --host 0.0.0.0 --port 8080
 ```
 
 Proposed env contract (not yet enabled):
@@ -218,17 +218,17 @@ Pass/fail criteria:
 - Server-owned uid-shard placeholders only; clients must not select arbitrary uid execution.
 - Explicit proof commands and pass/fail criteria to run later with `gcloud`/Firebase against the target project.
 
-`backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py` is the safe read-only proof runner for the Cloud Run/Tasks/Scheduler OIDC/IAM slice. Without `--execute`, it prints a `NOT_RUN` JSON readiness inventory containing the exact `gcloud run services describe`, `gcloud run services get-iam-policy`, `gcloud scheduler jobs describe`, `gcloud tasks queues describe`, `gcloud projects get-iam-policy`, and `gcloud iam service-accounts get-iam-policy` commands. With `--execute`, it only runs those allowlisted read-only describe/get-iam-policy commands, then checks that the worker env remains disabled, Scheduler is paused, OIDC `serviceAccountEmail`/`audience` match the contract, public Run invoker bindings are absent, and required worker/scheduler IAM bindings exist. It fails honestly when `gcloud`, project, region, service, job, queue, auth, or IAM resources are missing.
+`backend/scripts/vector_repair_outbox_oidc_iam_proof.py` is the safe read-only proof runner for the Cloud Run/Tasks/Scheduler OIDC/IAM slice. Without `--execute`, it prints a `NOT_RUN` JSON readiness inventory containing the exact `gcloud run services describe`, `gcloud run services get-iam-policy`, `gcloud scheduler jobs describe`, `gcloud tasks queues describe`, `gcloud projects get-iam-policy`, and `gcloud iam service-accounts get-iam-policy` commands. With `--execute`, it only runs those allowlisted read-only describe/get-iam-policy commands, then checks that the worker env remains disabled, Scheduler is paused, OIDC `serviceAccountEmail`/`audience` match the contract, public Run invoker bindings are absent, and required worker/scheduler IAM bindings exist. It fails honestly when `gcloud`, project, region, service, job, queue, auth, or IAM resources are missing.
 
 Important readiness caveat: the executable trigger surface now matches the intended HTTP/OIDC Cloud Run/Tasks shape through `POST /v17-vector-repair-outbox-worker/tick`, but OIDC is still enforced by Cloud Run IAM/platform configuration rather than local test credentials. In this local slice, `gcloud` was not installed/on PATH and no target project/region was configured, so the proof runner was run only in `NOT_RUN`/prerequisite-failure mode. No Cloud Run service, Cloud Tasks queue, Cloud Scheduler job, IAM binding, deployed rules validation, production Firestore IAM proof, or Pinecone operation was created or claimed.
 
 ### Production Firestore IAM and deployed Security Rules proof runner
 
-`backend/scripts/v17_firestore_rules_iam_proof.py` is the safe read-only readiness/proof runner for production Firestore IAM and deployed Security Rules on the V17 vector repair outbox paths. It inventories the exact production validation commands by default and only runs read-only commands when `--execute` is explicitly passed:
+`backend/scripts/firestore_rules_iam_proof.py` is the safe read-only readiness/proof runner for production Firestore IAM and deployed Security Rules on the V17 vector repair outbox paths. It inventories the exact production validation commands by default and only runs read-only commands when `--execute` is explicitly passed:
 
 ```bash
-python3 backend/scripts/v17_firestore_rules_iam_proof.py
-python3 backend/scripts/v17_firestore_rules_iam_proof.py --project PROJECT_ID --execute
+python3 backend/scripts/firestore_rules_iam_proof.py
+python3 backend/scripts/firestore_rules_iam_proof.py --project PROJECT_ID --execute
 ```
 
 Read-only inventory commands:
@@ -258,16 +258,16 @@ The runner is guarded against mutating commands: no `firebase deploy`, no `gclou
 
 ### Pinecone repair/shared-ns2 validation readiness runner
 
-`backend/scripts/v17_pinecone_repair_validation_readiness.py` is the safe-by-default readiness artifact for the real Pinecone validation still required by Oracle P0-4. Default mode is inventory only and prints `status=NOT_RUN`; it never deletes, upserts, queries, or mutates Pinecone in default mode:
+`backend/scripts/pinecone_repair_validation_readiness.py` is the safe-by-default readiness artifact for the real Pinecone validation still required by Oracle P0-4. Default mode is inventory only and prints `status=NOT_RUN`; it never deletes, upserts, queries, or mutates Pinecone in default mode:
 
 ```bash
-python3 backend/scripts/v17_pinecone_repair_validation_readiness.py
+python3 backend/scripts/pinecone_repair_validation_readiness.py
 ```
 
 A future real throwaway validation run must be explicitly gated with credentials and safety flags. The runner requires `PINECONE_API_KEY`, `PINECONE_INDEX_NAME`, `PINECONE_INDEX_HOST`, a non-`ns2` throwaway namespace, a long `v17-proof-...` throwaway vector id prefix, exact prefix confirmation, and explicit mutation acknowledgement before any future execute-mode mutation can be considered:
 
 ```bash
-python3 backend/scripts/v17_pinecone_repair_validation_readiness.py \
+python3 backend/scripts/pinecone_repair_validation_readiness.py \
   --execute \
   --allow-throwaway-mutation \
   --test-namespace v17-proof-throwaway-namespace \
@@ -289,8 +289,8 @@ Current local output is an honest readiness/non-claim artifact only. The local e
 
 Remaining deployment gates before enabling this contract in production:
 
-- Run `python3 backend/scripts/v17_vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
-- Run `python3 backend/scripts/v17_firestore_rules_iam_proof.py --project PROJECT_ID --execute` against the target Firebase project and attach exact JSON output before enabling `vector_repair_outbox_enabled` or the worker.
+- Run `python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute` against the target project and attach exact JSON output before unpausing Scheduler or enabling the worker.
+- Run `python3 backend/scripts/firestore_rules_iam_proof.py --project PROJECT_ID --execute` against the target Firebase project and attach exact JSON output before enabling `vector_repair_outbox_enabled` or the worker.
 - Production-safe uid sharding/backlog discovery and worker identity ownership model.
 - Real Pinecone delete/upsert validation with duplicate stale physical IDs and tombstone precedence in namespace `ns2`.
 - Retry/backoff/dead-letter central telemetry and alerts.

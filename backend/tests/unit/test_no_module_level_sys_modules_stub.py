@@ -62,8 +62,8 @@ def test_no_module_level_sys_modules_stub_in_unit_tests():
         "test_mcp_search_memories.py",
         "test_upstream_boundary.py",
         "test_canonical_memory_vectors.py",
-        "test_v17_read_api.py",
-        "test_v17_product_memory_router.py",
+        "test_read_api.py",
+        "test_product_memory_router.py",
     )
     guarded_paths = [unit_dir / name for name in guarded_filenames]
 

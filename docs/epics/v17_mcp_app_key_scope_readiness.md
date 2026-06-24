@@ -137,12 +137,12 @@ The REST dependency helper now exists as `get_mcp_v17_default_memory_read_contex
 
 ## MCP API-key scope readiness runner / server-owned assignment contract
 
-Added `backend/scripts/v17_mcp_api_key_scope_readiness.py` as the production-safe readiness runner for Oracle P0-1/P0-6 MCP key scope migration planning.
+Added `backend/scripts/mcp_api_key_scope_readiness.py` as the production-safe readiness runner for Oracle P0-1/P0-6 MCP key scope migration planning.
 
 Default command:
 
 ```bash
-python3 backend/scripts/v17_mcp_api_key_scope_readiness.py
+python3 backend/scripts/mcp_api_key_scope_readiness.py
 ```
 
 Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`, and no Firestore reads or writes. It is suitable for checked-in readiness evidence only; it is **not** production proof.
@@ -150,7 +150,7 @@ Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`
 Inventory command, when a real backend runtime/project context is intentionally supplied:
 
 ```bash
-python3 backend/scripts/v17_mcp_api_key_scope_readiness.py --execute
+python3 backend/scripts/mcp_api_key_scope_readiness.py --execute
 ```
 
 `--execute` inventories `mcp_api_keys/{key_id}` documents and reports:
@@ -167,13 +167,13 @@ The runner distinguishes missing scopes from verified `memories.read`. It does *
 Optional assignment command, only for a deterministic server-owned input file:
 
 ```bash
-python3 backend/scripts/v17_mcp_api_key_scope_readiness.py \
+python3 backend/scripts/mcp_api_key_scope_readiness.py \
   --execute \
   --allow-write \
   --assignment-file /secure/admin/mcp-key-scope-assignments.json
 ```
 
-The compact form is `python3 backend/scripts/v17_mcp_api_key_scope_readiness.py --execute --allow-write --assignment-file /secure/admin/mcp-key-scope-assignments.json`.
+The compact form is `python3 backend/scripts/mcp_api_key_scope_readiness.py --execute --allow-write --assignment-file /secure/admin/mcp-key-scope-assignments.json`.
 
 Assignment file shape:
 

@@ -52,7 +52,7 @@ def _sample_run_record(target_name: str, registry: EvidenceTargetRegistry) -> di
         "evidence_principal": target.evidence_principal,
         "approved_metadata_paths": list(target.approved_metadata_paths),
         "commit": "a" * 40,
-        "runner_hashes": {"backend/scripts/v17_v3_f5_real_service_evidence_readiness.py": f"sha256:{_hash64('b')}"},
+        "runner_hashes": {"backend/scripts/v3_f5_real_service_evidence_readiness.py": f"sha256:{_hash64('b')}"},
         "helper_hashes": {"backend/utils/memory/v17_v3_f5_evidence.py": f"sha256:{_hash64('c')}"},
         "execution_window": {
             "started_at": "2026-06-20T00:00:00Z",
@@ -167,7 +167,7 @@ def _smoke_current_local_contracts() -> dict[str, dict[str, Any]]:
         },
         "f6g_hermetic_v3_route_coverage": {
             "status": STATUS_PASS,
-            "evidence": "backend/testing/e2e/test_v17_v3_memories_route.py under PR #8004 harness",
+            "evidence": "backend/testing/e2e/test_v3_memories_route.py under PR #8004 harness",
         },
     }
 
