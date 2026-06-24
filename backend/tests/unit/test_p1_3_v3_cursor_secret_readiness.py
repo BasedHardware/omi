@@ -47,7 +47,7 @@ def test_cursor_secret_readiness_blocks_without_server_owned_secret_source_and_n
     assert secret_source["status"] == "BLOCKED"
     assert (
         secret_source["required_source"]
-        == "server-owned V17_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime"
+        == "server-owned MEMORY_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime"
     )
     assert secret_source["client_supplied_secret_trusted"] is False
     assert secret_source["invented_secret_material"] is False
