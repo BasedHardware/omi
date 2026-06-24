@@ -34,87 +34,34 @@ def _document_id_from_seed(seed: str) -> str:
 
 
 _db_client_mod.document_id_from_seed = _document_id_from_seed
-sys.modules.setdefault("database._client", _db_client_mod)
+
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    install_ws_j_heavy_import_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+@pytest.fixture(scope="module", autouse=True)
+def _ws_j_import_isolation():
+    saved = snapshot_sys_modules(["database._client"])
+    install_database_client_stub()
+    touched = install_ws_j_heavy_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
+    from utils.memory.memory_service import MemoryService
+
+    globals()["MemoryService"] = MemoryService
+    yield
+    restore_sys_modules(saved)
 
 
 def _install_heavy_import_stubs():
-    firebase_admin = types.ModuleType("firebase_admin")
-    firebase_admin.auth = MagicMock()
-    sys.modules["firebase_admin"] = firebase_admin
-
-    pinecone_mod = types.ModuleType("pinecone")
-    pinecone_mod.Pinecone = MagicMock()
-    sys.modules["pinecone"] = pinecone_mod
-
-    vector_db_mod = _AutoMockModule("database.vector_db")
-    vector_db_mod.find_similar_memories = MagicMock(return_value=[])
-    vector_db_mod.upsert_memory_vector = MagicMock()
-    vector_db_mod.delete_memory_vector = MagicMock()
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
-    vector_db_mod.delete_memory_vectors_batch = MagicMock()
-    sys.modules["database.vector_db"] = vector_db_mod
-    import database
-
-    database.vector_db = vector_db_mod
-
-    for name in [
-        "database.redis_db",
-        "database.conversations",
-        "database.notifications",
-        "database.action_items",
-        "database.short_term_memories",
-        "database.review_queue",
-        "utils.executors",
-        "utils.other.endpoints",
-        "utils.other.storage",
-        "utils.llm.knowledge_graph",
-        "utils.conversations.factory",
-        "utils.conversations.process_conversation",
-        "utils.conversations.search",
-        "utils.conversations.calendar_linking",
-        "utils.speaker_identification",
-        "utils.app_integrations",
-        "utils.analytics",
-        "utils.subscription",
-        "utils.webhooks",
-        "utils.billing",
-        "utils.llm.conversation_processing",
-        "utils.llm.conversations",
-        "database.auth",
-        "database.users",
-        "database.memories",
-        "database.chat",
-        "database.user_usage",
-        "database.daily_summaries",
-        "database.llm_usage",
-        "database.app_review_config",
-        "database.webhook_health",
-        "stripe",
-        "pytz",
-        "twilio",
-        "google.cloud",
-        "google.api_core",
-        "opuslib",
-        "pydub",
-        "modal",
-        "ulid",
-        "typesense",
-    ]:
-        if name not in sys.modules:
-            sys.modules[name] = _AutoMockModule(name)
+    install_ws_j_heavy_import_stubs()
 
 
-_install_heavy_import_stubs()
-
+ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memories import MemoryCategory
 from models.v17_memory_apply import MemoryControlState
 from models.v17_product_memory import MemoryItemStatus
@@ -126,7 +73,6 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_extraction_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
-from utils.memory.memory_service import MemoryService
 
 
 @pytest.fixture(autouse=True)

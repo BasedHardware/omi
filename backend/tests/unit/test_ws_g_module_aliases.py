@@ -9,7 +9,23 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-sys.modules.setdefault("database._client", MagicMock())
+import pytest
+
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ws_g_import_isolation():
+    saved = snapshot_sys_modules(["database._client"])
+    ensure_utils_memory_packages_importable()
+    install_database_client_stub()
+    yield
+    restore_sys_modules(saved)
 
 
 def test_product_memory_alias_reexports_match_v17():

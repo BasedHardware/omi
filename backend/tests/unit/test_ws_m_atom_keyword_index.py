@@ -36,21 +36,19 @@ def _document_id_from_seed(seed: str) -> str:
 
 
 _db_client_mod.document_id_from_seed = _document_id_from_seed
-sys.modules.setdefault("database._client", _db_client_mod)
 
-
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    install_ws_m_heavy_import_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 
 @dataclass
 class _EmptyVectorResult:
-    hits: list = None
+    hits: list | None = None
     rejected_count: int = 0
 
     def __post_init__(self):
@@ -62,55 +60,20 @@ def _empty_vector_query(*args, **kwargs):
     return _EmptyVectorResult()
 
 
-def _install_heavy_import_stubs():
-    firebase_admin = types.ModuleType("firebase_admin")
-    firebase_admin.auth = MagicMock()
-    sys.modules["firebase_admin"] = firebase_admin
+@pytest.fixture(scope="module", autouse=True)
+def _ws_m_import_isolation():
+    saved = snapshot_sys_modules(["database._client"])
+    install_database_client_stub()
+    touched = install_ws_m_heavy_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
+    from utils.memory.memory_service import MemoryService
 
-    pinecone_mod = types.ModuleType("pinecone")
-    pinecone_mod.Pinecone = MagicMock()
-    sys.modules["pinecone"] = pinecone_mod
-
-    vector_db_mod = _AutoMockModule("database.vector_db")
-    vector_db_mod.find_similar_memories = MagicMock(return_value=[])
-    vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
-    vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
-    sys.modules["database.vector_db"] = vector_db_mod
-    import database
-
-    database.vector_db = vector_db_mod
-
-    users_mod = _AutoMockModule("database.users")
-    users_mod.get_data_protection_level = MagicMock(return_value="enhanced")
-    sys.modules["database.users"] = users_mod
-
-    for name in [
-        "database.redis_db",
-        "database.conversations",
-        "database.memories",
-        "utils.subscription",
-        "utils.executors",
-        "utils.llm.knowledge_graph",
-        "stripe",
-        "pytz",
-        "google.cloud",
-        "google.api_core",
-        "modal",
-        "ulid",
-        "typesense",
-    ]:
-        if name not in sys.modules:
-            sys.modules[name] = _AutoMockModule(name)
+    globals()["MemoryService"] = MemoryService
+    yield
+    restore_sys_modules(saved)
 
 
-_install_heavy_import_stubs()
-
-
-@pytest.fixture(autouse=True)
-def _reinstall_stubs():
-    _install_heavy_import_stubs()
-
-
+ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import (
@@ -128,7 +91,6 @@ from utils.memory.canonical_memory_adapter import (
     retract_conversation_sourced_memories,
     search_canonical_memories,
 )
-from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 
 CANONICAL_UID = "uid-canonical-ws-m"

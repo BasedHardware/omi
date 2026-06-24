@@ -21,61 +21,38 @@ os.environ.setdefault(
 
 _db_client_mod = types.ModuleType("database._client")
 _db_client_mod.db = MagicMock()
-sys.modules.setdefault("database._client", _db_client_mod)
 
 
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+def _document_id_from_seed(seed: str) -> str:
+    import hashlib
+    import uuid
+
+    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
+    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
 
 
-def _install_heavy_import_stubs():
-    firebase_admin = types.ModuleType("firebase_admin")
-    firebase_admin.auth = MagicMock()
-    sys.modules["firebase_admin"] = firebase_admin
+_db_client_mod.document_id_from_seed = _document_id_from_seed
 
-    kg_mod = types.ModuleType("database.knowledge_graph")
-    kg_mod.get_knowledge_graph = MagicMock(return_value={"nodes": [], "edges": []})
-    kg_mod.get_knowledge_nodes = MagicMock(return_value=[])
-    kg_mod.get_knowledge_edges = MagicMock(return_value=[])
-    kg_mod.upsert_knowledge_node = MagicMock()
-    kg_mod.upsert_knowledge_edge = MagicMock()
-    kg_mod.delete_knowledge_graph = MagicMock()
-    sys.modules["database.knowledge_graph"] = kg_mod
-
-    for name in [
-        "database.redis_db",
-        "database.conversations",
-        "database.memories",
-        "database.vector_db",
-        "database.users",
-        "utils.subscription",
-        "utils.executors",
-        "utils.llm.knowledge_graph",
-        "stripe",
-        "pytz",
-        "google.cloud",
-        "google.api_core",
-        "modal",
-        "ulid",
-        "typesense",
-    ]:
-        if name not in sys.modules:
-            sys.modules[name] = _AutoMockModule(name)
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    install_ws_n_heavy_import_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 
-_install_heavy_import_stubs()
+@pytest.fixture(scope="module", autouse=True)
+def _ws_n_import_isolation():
+    saved = snapshot_sys_modules(["database._client"])
+    install_database_client_stub()
+    touched = install_ws_n_heavy_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
+    yield
+    restore_sys_modules(saved)
 
 
-@pytest.fixture(autouse=True)
-def _reinstall_stubs():
-    _install_heavy_import_stubs()
-
-
+ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.kg_graph_traversal import (

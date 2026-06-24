@@ -24,6 +24,10 @@ from models.v17_product_memory import (
     ProcessingState,
     V17MemoryItem,
 )
+
+from tests.unit.memory_import_isolation import ensure_utils_memory_packages_importable
+
+ensure_utils_memory_packages_importable()
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 

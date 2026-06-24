@@ -34,161 +34,29 @@ def _document_id_from_seed(seed: str) -> str:
 
 
 _db_client_mod.document_id_from_seed = _document_id_from_seed
-sys.modules.setdefault("database._client", _db_client_mod)
+
+from tests.unit.memory_import_isolation import (
+    AutoMockModule as _AutoMockModule,
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    install_ws_i_heavy_import_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+@pytest.fixture(scope="module", autouse=True)
+def _ws_i_import_isolation():
+    saved = snapshot_sys_modules(["database._client"])
+    install_database_client_stub()
+    touched = install_ws_i_heavy_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
+    yield
+    restore_sys_modules(saved)
 
 
 def _install_heavy_import_stubs():
-    firebase_admin = types.ModuleType("firebase_admin")
-    firebase_admin.auth = MagicMock()
-    sys.modules["firebase_admin"] = firebase_admin
-
-    langchain_core = types.ModuleType("langchain_core")
-    langchain_core.output_parsers = types.ModuleType("langchain_core.output_parsers")
-    langchain_core.output_parsers.PydanticOutputParser = MagicMock()
-    langchain_core.prompts = types.ModuleType("langchain_core.prompts")
-    langchain_core.prompts.ChatPromptTemplate = MagicMock()
-    sys.modules["langchain_core"] = langchain_core
-    sys.modules["langchain_core.output_parsers"] = langchain_core.output_parsers
-    sys.modules["langchain_core.prompts"] = langchain_core.prompts
-
-    langchain_core.callbacks = types.ModuleType("langchain_core.callbacks")
-    langchain_core.callbacks.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
-    sys.modules["langchain_core.callbacks"] = langchain_core.callbacks
-
-    usage_tracker_mod = types.ModuleType("utils.llm.usage_tracker")
-    usage_tracker_mod.track_usage = lambda *args, **kwargs: None
-
-    class _Features:
-        pass
-
-    usage_tracker_mod.Features = _Features
-    sys.modules["utils.llm.usage_tracker"] = usage_tracker_mod
-
-    sys.modules["anthropic"] = _AutoMockModule("anthropic")
-    sys.modules["utils.llm.clients"] = _AutoMockModule("utils.llm.clients")
-    sys.modules["utils.llm.chat"] = _AutoMockModule("utils.llm.chat")
-    sys.modules["utils.retrieval.rag"] = _AutoMockModule("utils.retrieval.rag")
-    sys.modules["utils.other.hume"] = _AutoMockModule("utils.other.hume")
-    sys.modules["utils.other.storage"] = _AutoMockModule("utils.other.storage")
-    sys.modules["utils.analytics"] = _AutoMockModule("utils.analytics")
-    sys.modules["utils.conversations.calendar_linking"] = _AutoMockModule("utils.conversations.calendar_linking")
-
-    langchain_core.runnables = types.ModuleType("langchain_core.runnables")
-    langchain_core.runnables.RunnableConfig = dict
-    sys.modules["langchain_core.runnables"] = langchain_core.runnables
-
-    langchain = types.ModuleType("langchain")
-    langchain.prompts = types.ModuleType("langchain.prompts")
-    langchain.prompts.PromptTemplate = MagicMock()
-    langchain.prompts.ChatPromptTemplate = MagicMock()
-    sys.modules["langchain"] = langchain
-    sys.modules["langchain.prompts"] = langchain.prompts
-
-    stripe_mod = types.ModuleType("stripe")
-    sys.modules["stripe"] = stripe_mod
-
-    subjects_mod = types.ModuleType("utils.conversations.subjects")
-    subjects_mod.infer_subject_from_segments = lambda segments: (None, None)
-    sys.modules["utils.conversations.subjects"] = subjects_mod
-
-    conversation_processing_mod = _AutoMockModule("utils.llm.conversation_processing")
-    sys.modules["utils.llm.conversation_processing"] = conversation_processing_mod
-
-    pinecone_mod = types.ModuleType("pinecone")
-    pinecone_mod.Pinecone = MagicMock()
-    sys.modules["pinecone"] = pinecone_mod
-
-    auth_mod = _AutoMockModule("database.auth")
-    auth_mod.get_user_name = lambda uid: "Test User"
-    auth_mod.get_current_user_uid = MagicMock()
-    auth_mod.with_rate_limit = lambda fn, *args, **kwargs: fn
-    sys.modules["database.auth"] = auth_mod
-
-    users_mod = _AutoMockModule("database.users")
-    users_mod.get_user_language_preference = lambda uid: "en"
-    sys.modules["database.users"] = users_mod
-
-    subscription_mod = types.ModuleType("utils.subscription")
-    subscription_mod.get_default_basic_subscription = MagicMock()
-    subscription_mod.is_trial_paywalled = lambda uid: False
-    sys.modules["utils.subscription"] = subscription_mod
-
-    vector_db_mod = _AutoMockModule("database.vector_db")
-    vector_db_mod.find_similar_memories = MagicMock(return_value=[])
-    vector_db_mod.delete_memory_vector = MagicMock()
-    vector_db_mod.upsert_memory_vector = MagicMock()
-    vector_db_mod.delete_memory_vectors_batch = MagicMock()
-    vector_db_mod.upsert_memory_vectors_batch = MagicMock()
-    vector_db_mod.upsert_action_item_vectors_batch = MagicMock()
-    vector_db_mod.delete_action_item_vectors_batch = MagicMock()
-    vector_db_mod.find_similar_action_items = MagicMock(return_value=[])
-    vector_db_mod.upsert_vector2 = MagicMock()
-    vector_db_mod.update_vector_metadata = MagicMock()
-    vector_db_mod.upsert_transcript_chunk_vectors = MagicMock()
-    vector_db_mod.query_vectors = MagicMock(return_value=[])
-    sys.modules["database.vector_db"] = vector_db_mod
-
-    memories_mod = _AutoMockModule("database.memories")
-    memories_mod.save_memories = MagicMock()
-    memories_mod.delete_memories_for_conversation = MagicMock(return_value={"vector_delete_ids": []})
-    memories_mod.get_memories = MagicMock(return_value=[])
-    memories_mod.get_memory = MagicMock(return_value=None)
-    memories_mod.invalidate_memory = MagicMock()
-    memories_mod.set_memory_kg_extracted = MagicMock()
-    sys.modules["database.memories"] = memories_mod
-
-    import database
-
-    database.vector_db = vector_db_mod
-    database.memories = memories_mod
-
-    for name in [
-        "database.redis_db",
-        "database.conversations",
-        "database.notifications",
-        "database.tasks",
-        "database.trends",
-        "database.action_items",
-        "database.folders",
-        "database.calendar_meetings",
-        "database.apps",
-        "database.short_term_memories",
-        "database.review_queue",
-        "utils.executors",
-        "utils.other.endpoints",
-        "utils.apps",
-        "utils.llm.memories",
-        "utils.llm.trends",
-        "utils.llm.goals",
-        "utils.llm.external_integrations",
-        "utils.llm.conversations",
-        "utils.llm.processing",
-        "utils.llm.speaker_assignment",
-        "utils.llm.diarization",
-        "utils.llm.speaker_id",
-        "utils.llm.speaker_embedding",
-        "utils.llm.speech_profile",
-        "utils.llm.knowledge_graph",
-        "utils.billing",
-        "utils.webhooks",
-        "utils.notifications",
-        "utils.conversations.memories",
-        "utils.conversations.factory",
-        "utils.conversations.subjects",
-        "utils.conversations.transcript_chunks",
-        "utils.retrieval.tools.memory_tools",
-    ]:
-        if name not in sys.modules:
-            sys.modules[name] = _AutoMockModule(name)
+    install_ws_i_heavy_import_stubs()
 
 
 def _load_process_conversation(monkeypatch):
@@ -209,6 +77,7 @@ def _load_memories_router(monkeypatch):
     return importlib.import_module("routers.memories")
 
 
+ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import Memory, MemoryDB, MemoryCategory

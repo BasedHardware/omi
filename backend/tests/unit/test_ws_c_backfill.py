@@ -30,47 +30,59 @@ def _document_id_from_seed(seed: str) -> str:
 
 
 _db_client_mod.document_id_from_seed = _document_id_from_seed
-sys.modules.setdefault("database._client", _db_client_mod)
+
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_database_client_stub,
+    install_ws_c_backfill_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 
-class _AutoMockModule(ModuleType):
-    def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
-            raise AttributeError(name)
-        mock = MagicMock()
-        setattr(self, name, mock)
-        return mock
+@pytest.fixture(scope="module", autouse=True)
+def _ws_c_import_isolation():
+    saved = snapshot_sys_modules(
+        [
+            "database._client",
+            "firebase_admin",
+            "utils.subscription",
+            "database.users",
+            "stripe",
+            "pinecone",
+            "database.vector_db",
+            "database.memories",
+        ]
+    )
+    install_database_client_stub()
+    install_ws_c_backfill_stubs()
+    from utils.memory.legacy_backfill import (
+        _fetch_active_legacy_memories,
+        backfill_user,
+        is_active_legacy_row,
+        legacy_backfill_memory_id,
+        reconcile_backfill_counts,
+    )
+
+    module_globals = globals()
+    module_globals["_fetch_active_legacy_memories"] = _fetch_active_legacy_memories
+    module_globals["backfill_user"] = backfill_user
+    module_globals["is_active_legacy_row"] = is_active_legacy_row
+    module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
+    module_globals["reconcile_backfill_counts"] = reconcile_backfill_counts
+    from utils.memory.memory_service import MemoryService
+
+    module_globals["MemoryService"] = MemoryService
+    yield
+    restore_sys_modules(saved)
 
 
-firebase_admin = types.ModuleType("firebase_admin")
-firebase_admin.auth = MagicMock()
-sys.modules["firebase_admin"] = firebase_admin
-
-stripe_mod = types.ModuleType("stripe")
-sys.modules["stripe"] = stripe_mod
-
-pinecone_mod = types.ModuleType("pinecone")
-pinecone_mod.Pinecone = MagicMock()
-sys.modules["pinecone"] = pinecone_mod
-
-vector_db_mod = _AutoMockModule("database.vector_db")
-vector_db_mod.find_similar_memories = MagicMock(return_value=[])
-vector_db_mod.get_memories_by_ids = MagicMock(return_value=[])
-sys.modules["database.vector_db"] = vector_db_mod
-
+ensure_utils_memory_packages_importable()
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import MemoryCategory
 from models.v17_memory_apply import MemoryControlState
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.canonical_memory_adapter import read_canonical_memories
-from utils.memory.legacy_backfill import (
-    _fetch_active_legacy_memories,
-    backfill_user,
-    is_active_legacy_row,
-    legacy_backfill_memory_id,
-    reconcile_backfill_counts,
-)
-from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from tests.unit.test_ws_b_short_term_lifecycle import (
     NOW,

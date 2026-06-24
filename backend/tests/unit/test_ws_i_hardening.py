@@ -28,8 +28,26 @@ def _document_id_from_seed(seed: str) -> str:
 _db_client_mod = types.ModuleType("database._client")
 _db_client_mod.db = MagicMock()
 _db_client_mod.document_id_from_seed = _document_id_from_seed
-sys.modules.setdefault("database._client", _db_client_mod)
 
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_canonical_write_runtime_stubs,
+    install_database_client_stub,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ws_i_hardening_import_isolation():
+    saved = snapshot_sys_modules(["database._client", "firebase_admin", "utils.subscription", "database.users"])
+    install_database_client_stub()
+    install_canonical_write_runtime_stubs()
+    yield
+    restore_sys_modules(saved)
+
+
+ensure_utils_memory_packages_importable()
 from database.v17_memory_apply_store import atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
     ArtifactPreservationState,
