@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 from starlette.datastructures import Headers
 from starlette.formparsers import MultiPartException, MultiPartParser
 from starlette.requests import Request
@@ -13,35 +14,35 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 EXPECTED_ROUTE_LIMITS = {
     'routers/apps.py': {
-        '/v1/apps': 'APP_IMAGE_MAX_PART_SIZE',
-        '/v1/personas': 'APP_IMAGE_MAX_PART_SIZE',
-        '/v1/personas/{persona_id}': 'APP_IMAGE_MAX_PART_SIZE',
-        '/v1/apps/{app_id}': 'APP_IMAGE_MAX_PART_SIZE',
-        '/v1/app/thumbnails': 'APP_IMAGE_MAX_PART_SIZE',
+        ('POST', '/v1/apps'): 'APP_IMAGE_MAX_PART_SIZE',
+        ('POST', '/v1/personas'): 'APP_IMAGE_MAX_PART_SIZE',
+        ('PATCH', '/v1/personas/{persona_id}'): 'APP_IMAGE_MAX_PART_SIZE',
+        ('PATCH', '/v1/apps/{app_id}'): 'APP_IMAGE_MAX_PART_SIZE',
+        ('POST', '/v1/app/thumbnails'): 'APP_IMAGE_MAX_PART_SIZE',
     },
     'routers/chat.py': {
-        '/v2/voice-messages': 'VOICE_MESSAGE_MAX_PART_SIZE',
-        '/v2/voice-message/transcribe': 'VOICE_MESSAGE_MAX_PART_SIZE',
-        '/v2/files': 'CHAT_FILE_MAX_PART_SIZE',
-        '/v1/files': 'CHAT_FILE_MAX_PART_SIZE',
+        ('POST', '/v2/voice-messages'): 'VOICE_MESSAGE_MAX_PART_SIZE',
+        ('POST', '/v2/voice-message/transcribe'): 'VOICE_MESSAGE_MAX_PART_SIZE',
+        ('POST', '/v2/files'): 'CHAT_FILE_MAX_PART_SIZE',
+        ('POST', '/v1/files'): 'CHAT_FILE_MAX_PART_SIZE',
     },
     'routers/imports.py': {
-        '/v1/import/limitless': 'IMPORT_MAX_PART_SIZE',
+        ('POST', '/v1/import/limitless'): 'IMPORT_MAX_PART_SIZE',
     },
     'routers/phone_calls.py': {
-        '/v1/phone/twiml': 'PHONE_CALL_MAX_PART_SIZE',
+        ('POST', '/v1/phone/twiml'): 'PHONE_CALL_MAX_PART_SIZE',
     },
     'routers/speech_profile.py': {
-        '/v3/upload-audio': 'SPEECH_PROFILE_MAX_PART_SIZE',
+        ('POST', '/v3/upload-audio'): 'SPEECH_PROFILE_MAX_PART_SIZE',
     },
     'routers/sync.py': {
-        '/v1/sync-local-files': 'SYNC_AUDIO_MAX_PART_SIZE',
-        '/v2/sync-local-files': 'SYNC_AUDIO_MAX_PART_SIZE',
+        ('POST', '/v1/sync-local-files'): 'SYNC_AUDIO_MAX_PART_SIZE',
+        ('POST', '/v2/sync-local-files'): 'SYNC_AUDIO_MAX_PART_SIZE',
     },
 }
 
 
-def _route_limits_for_file(relative_path: str) -> dict[str, str]:
+def _route_limits_for_file(relative_path: str) -> dict[tuple[str, str], str]:
     tree = ast.parse((BACKEND_DIR / relative_path).read_text())
     route_limits = {}
 
@@ -49,7 +50,7 @@ def _route_limits_for_file(relative_path: str) -> dict[str, str]:
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
 
-        route_paths = []
+        route_keys = []
         limit_name = None
         for decorator in node.decorator_list:
             if not isinstance(decorator, ast.Call):
@@ -60,14 +61,14 @@ def _route_limits_for_file(relative_path: str) -> dict[str, str]:
                     and decorator.args
                     and isinstance(decorator.args[0], ast.Constant)
                 ):
-                    route_paths.append(decorator.args[0].value)
+                    route_keys.append((decorator.func.attr.upper(), decorator.args[0].value))
             if isinstance(decorator.func, ast.Name) and decorator.func.id == 'max_part_size':
                 if decorator.args and isinstance(decorator.args[0], ast.Name):
                     limit_name = decorator.args[0].id
 
         if limit_name:
-            for route_path in route_paths:
-                route_limits[route_path] = limit_name
+            for route_key in route_keys:
+                route_limits[route_key] = limit_name
             continue
 
         for child in ast.walk(node):
@@ -77,8 +78,8 @@ def _route_limits_for_file(relative_path: str) -> dict[str, str]:
                 continue
             for keyword in child.keywords:
                 if keyword.arg == 'max_part_size' and isinstance(keyword.value, ast.Name):
-                    for route_path in route_paths:
-                        route_limits[route_path] = keyword.value.id
+                    for route_key in route_keys:
+                        route_limits[route_key] = keyword.value.id
 
     return route_limits
 
@@ -165,10 +166,17 @@ def test_multipart_parser_rejects_form_field_over_limit():
 def test_parse_multipart_form_preserves_urlencoded_forms():
     request = _request_with_body('application/x-www-form-urlencoded', b'From=user-1&To=%2B15555550123')
 
-    form = asyncio.run(parse_multipart_form(request, max_part_size=8))
+    form = asyncio.run(parse_multipart_form(request, max_part_size=64))
 
     assert form['From'] == 'user-1'
     assert form['To'] == '+15555550123'
+
+
+def test_parse_multipart_form_rejects_oversized_urlencoded_body():
+    request = _request_with_body('application/x-www-form-urlencoded', b'From=user-1&To=%2B15555550123')
+
+    with pytest.raises(HTTPException, match='Form body exceeded maximum size'):
+        asyncio.run(parse_multipart_form(request, max_part_size=8))
 
 
 def test_starlette_global_multipart_limit_is_not_mutated():
@@ -178,5 +186,5 @@ def test_starlette_global_multipart_limit_is_not_mutated():
 def test_production_multipart_routes_have_declared_limits():
     for relative_path, expected_limits in EXPECTED_ROUTE_LIMITS.items():
         route_limits = _route_limits_for_file(relative_path)
-        for route_path, expected_limit in expected_limits.items():
-            assert route_limits.get(route_path) == expected_limit
+        for route_key, expected_limit in expected_limits.items():
+            assert route_limits.get(route_key) == expected_limit

@@ -3,7 +3,7 @@ from collections.abc import Callable
 from fastapi import HTTPException, Request
 from fastapi.routing import APIRoute
 from starlette.datastructures import FormData
-from starlette.formparsers import MultiPartException, MultiPartParser
+from starlette.formparsers import FormParser, MultiPartException, MultiPartParser
 
 MULTIPART_MAX_PART_SIZE_ATTR = '_multipart_max_part_size'
 
@@ -59,6 +59,12 @@ class FileSizeLimitedMultiPartParser(MultiPartParser):
 async def parse_multipart_form(request: Request, *, max_part_size: int) -> FormData:
     if request._form is not None:
         return request._form
+    if _is_urlencoded(request):
+        request._form = await FormParser(
+            request.headers,
+            _size_limited_stream(request, max_size=max_part_size),
+        ).parse()
+        return request._form
     if not _is_multipart(request):
         return await request.form()
 
@@ -72,3 +78,24 @@ async def parse_multipart_form(request: Request, *, max_part_size: int) -> FormD
 
 def _is_multipart(request: Request) -> bool:
     return request.headers.get('content-type', '').lower().startswith('multipart/form-data')
+
+
+def _is_urlencoded(request: Request) -> bool:
+    return request.headers.get('content-type', '').lower().startswith('application/x-www-form-urlencoded')
+
+
+async def _size_limited_stream(request: Request, *, max_size: int):
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > max_size:
+                raise HTTPException(status_code=400, detail=f'Form body exceeded maximum size of {max_size} bytes.')
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid Content-Length header.')
+
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > max_size:
+            raise HTTPException(status_code=400, detail=f'Form body exceeded maximum size of {max_size} bytes.')
+        yield chunk

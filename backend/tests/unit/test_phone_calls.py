@@ -285,6 +285,19 @@ def test_check_verification_no_pending_record(mock_check, mock_db, client):
 # ---------------------------------------------------------------------------
 
 
+def test_twiml_rejects_oversized_urlencoded_body(client):
+    body = b'payload=' + (b'x' * (5 * 1024 * 1024))
+
+    resp = client.post(
+        '/v1/phone/twiml',
+        content=body,
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()['detail'] == 'Form body exceeded maximum size of 5242880 bytes.'
+
+
 @patch('routers.phone_calls.validate_twilio_signature', return_value=True)
 @patch('routers.phone_calls.phone_calls_db')
 def test_twiml_no_destination(mock_db, mock_sig, client):
