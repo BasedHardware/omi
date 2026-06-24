@@ -15,7 +15,7 @@ from config.memory_confidence import (
 )
 from database._client import document_id_from_seed
 from models.memory_domain import tier_to_layer
-from models.v17_product_memory import MemoryTier
+from models.product_memory import MemoryTier
 
 
 def decide_initial_memory_tier(manually_added: bool, durability: Optional[str]) -> MemoryTier:
