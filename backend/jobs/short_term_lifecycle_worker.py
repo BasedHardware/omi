@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
 
-from database.v17_collections import V17Collections
-from models.v17_product_memory import MemoryTier, V17MemoryItem
+from database.memory_collections import V17Collections
+from models.product_memory import MemoryTier, V17MemoryItem
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
     ShortTermLifecycleDecision,

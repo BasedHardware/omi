@@ -7,7 +7,7 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.scopes import Scopes, has_scope
-from utils.memory.v17_product_authorization import V17ProductAuthorizationContext
+from utils.memory.product_authorization import V17ProductAuthorizationContext
 from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
 import logging
 

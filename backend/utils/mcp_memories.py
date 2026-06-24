@@ -2,18 +2,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from config.v17_memory import V17Capabilities
-from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
-from utils.memory.v17_product_authorization import V17ProductAuthorizationContext
-from utils.memory.v17_default_read_rollout import (
+from config.memory_rollout import V17Capabilities
+from models.product_memory import MemoryAccessPolicy, MemoryConsumer
+from utils.memory.product_authorization import V17ProductAuthorizationContext
+from utils.memory.default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17ReadDecision,
     build_v17_default_read_rollout_observability,
     disabled_v17_default_read_rollout_decision,
     read_v17_default_read_rollout,
 )
-from utils.memory.v17_product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
+from utils.memory.product_memory_read_service import fetch_default_product_memory_search
+from utils.memory.vector_search_service import fetch_default_v17_vector_memory_search
 
 ACTIVITY_TAGS = {
     'activity',
