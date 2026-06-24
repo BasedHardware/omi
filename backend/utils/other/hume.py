@@ -17,7 +17,12 @@ class HumePredictionEmotionResponseModel:
 
     @classmethod
     def from_dict(cls, data: dict) -> "HumePredictionEmotionResponseModel":
-        model = cls(data["name"], data["score"])
+        # Default to safe values for a malformed entry: a missing/invalid score must stay numeric so
+        # downstream math in get_top_emotion_names (sum and threshold comparison) does not hit None.
+        score = data.get("score")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            score = 0.0
+        model = cls(data.get("name") or "", score)
         return model
 
     def to_dict(self):
@@ -35,9 +40,11 @@ class HumeJobModelPredictionResponseModel:
     def __init__(
         self,
         time,
-        emotions: [HumePredictionEmotionResponseModel] = [],
+        emotions=None,
     ) -> None:
-        self.emotions = emotions
+        # Use a fresh list per instance, never a shared mutable default. from_dict appends to
+        # self.emotions, so a shared default would leak emotions across parsed callbacks.
+        self.emotions = emotions if emotions is not None else []
         self.time = time
 
     @classmethod
@@ -65,8 +72,16 @@ class HumeJobModelPredictionResponseModel:
     @classmethod
     def from_dict(cls, data: dict) -> "HumeJobModelPredictionResponseModel":
         grouped_prediction_prediction = data
-        model = cls((data["time"]["begin"], data["time"]["end"]))
-        for emotion in grouped_prediction_prediction['emotions']:
+        time_data = data.get("time") or {}
+        # Keep the interval numeric so downstream consumers comparing begin/end never hit None.
+        begin = time_data.get("begin")
+        end = time_data.get("end")
+        if not isinstance(begin, (int, float)) or isinstance(begin, bool):
+            begin = 0.0
+        if not isinstance(end, (int, float)) or isinstance(end, bool):
+            end = 0.0
+        model = cls((begin, end))
+        for emotion in grouped_prediction_prediction.get('emotions') or []:
             emo = HumePredictionEmotionResponseModel.from_dict(emotion)
             model.emotions.append(emo)
 
@@ -104,7 +119,7 @@ class HumeJobCallbackModel:
         if "predictions" in data and len(data["predictions"]) > 0:
             predictions = HumeJobModelPredictionResponseModel.from_multi_dict(prediction_model, data["predictions"][0])
 
-        model = cls(data["job_id"], data["status"], predictions)
+        model = cls(data.get("job_id"), data.get("status"), predictions)
         return model
 
 
