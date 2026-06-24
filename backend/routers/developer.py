@@ -51,16 +51,16 @@ from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from utils.memory.v17_developer_memory_adapter import (
+from utils.memory.developer_memory_adapter import (
     read_v17_developer_default_memory_rollout,
     search_v17_default_developer_memories,
     search_v17_default_developer_memories_vector,
 )
-from utils.memory.v17_product_authorization import (
+from utils.memory.product_authorization import (
     V17ProductAuthorizationContext,
     authorize_v17_external_default_memory_read,
 )
-from utils.memory.v17_default_read_rollout import (
+from utils.memory.default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
     read_v17_write_convergence_gate,
