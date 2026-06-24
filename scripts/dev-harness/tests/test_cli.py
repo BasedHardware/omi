@@ -78,7 +78,7 @@ def test_status_reports_seeded_scenario_and_summary_path(tmp_path: Path) -> None
     env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
 
     seed = subprocess.run(
-        [sys.executable, "scripts/dev-harness/seed-v17-scenario.py", "happy_path", "--dry-run"],
+        [sys.executable, "scripts/dev-harness/seed-memory-scenario.py", "happy_path", "--dry-run"],
         cwd=REPO_ROOT,
         env=env,
         text=True,
@@ -111,7 +111,7 @@ def test_session_summary_is_local_emulator_non_activation(tmp_path: Path) -> Non
     env["PYTHONPATH"] = f"{REPO_ROOT / 'scripts' / 'dev-harness'}:{env.get('PYTHONPATH', '')}"
 
     seed = subprocess.run(
-        [sys.executable, "scripts/dev-harness/seed-v17-scenario.py", "happy_path", "--dry-run"],
+        [sys.executable, "scripts/dev-harness/seed-memory-scenario.py", "happy_path", "--dry-run"],
         cwd=REPO_ROOT,
         env=env,
         text=True,
@@ -135,6 +135,6 @@ def test_session_summary_is_local_emulator_non_activation(tmp_path: Path) -> Non
     assert payload["evidence_class"] == "LOCAL_EMULATOR_DEV"
     assert payload["activation_eligible"] is False
     assert payload["provider_mode"] == "offline"
-    assert payload["v17_write_attempt_instrumentation"]["instrumented"] is False
+    assert payload["memory_write_attempt_instrumentation"]["instrumented"] is False
     assert "before_digest" in payload["protected_state_digest"]
     assert any("Not DEV_CLOUD_PROOF" in item for item in payload["non_claims"])
