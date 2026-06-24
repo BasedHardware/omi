@@ -96,12 +96,12 @@ This artifact is now partly route-wired for one Developer API default-list memor
 
 ## Safe admin assignment readiness runner
 
-Added `backend/scripts/v17_app_key_memory_grant_assignment_readiness.py` as the safe-by-default readiness runner for deterministic server/Admin-owned grant assignment planning.
+Added `backend/scripts/app_key_memory_grant_assignment_readiness.py` as the safe-by-default readiness runner for deterministic server/Admin-owned grant assignment planning.
 
 Default command:
 
 ```bash
-python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py
+python3 backend/scripts/app_key_memory_grant_assignment_readiness.py
 ```
 
 Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`, and no Firestore reads or writes. This is a readiness artifact only.
@@ -109,7 +109,7 @@ Default behavior is `status=NOT_RUN`, `read_only=true`, `mutation_allowed=false`
 Dry-run validation command:
 
 ```bash
-python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py \
+python3 backend/scripts/app_key_memory_grant_assignment_readiness.py \
   --execute \
   --assignment-file /secure/admin/memory-app-key-memory-grants.json
 ```
@@ -117,13 +117,13 @@ python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py \
 Write command, only for an intentional server/Admin context and deterministic input file:
 
 ```bash
-python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py \
+python3 backend/scripts/app_key_memory_grant_assignment_readiness.py \
   --execute \
   --allow-write \
   --assignment-file /secure/admin/memory-app-key-memory-grants.json
 ```
 
-The compact form is `python3 backend/scripts/v17_app_key_memory_grant_assignment_readiness.py --execute --allow-write --assignment-file /secure/admin/memory-app-key-memory-grants.json`.
+The compact form is `python3 backend/scripts/app_key_memory_grant_assignment_readiness.py --execute --allow-write --assignment-file /secure/admin/memory-app-key-memory-grants.json`.
 
 Assignment file shape:
 
