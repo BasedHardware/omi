@@ -77,6 +77,7 @@ def _require_v17_product_authorization(context: V17ProductAuthorizationContext):
     return decision
 
 
+@router.get('/memory/search', tags=['memories', 'memory'])
 @router.get('/v17/memory/search', tags=['memories', 'v17'])
 def search_v17_product_memory(
     query: str = Query(''),
@@ -119,6 +120,7 @@ def search_v17_product_memory(
     return response
 
 
+@router.get('/memory/vector/search', tags=['memories', 'memory'])
 @router.get('/v17/memory/vector/search', tags=['memories', 'v17'])
 def search_v17_vector_memory(
     query: str = Query(...),
@@ -174,6 +176,7 @@ def search_v17_vector_memory(
     return response
 
 
+@router.get('/memory/archive/search', tags=['memories', 'memory'])
 @router.get('/v17/memory/archive/search', tags=['memories', 'v17'])
 def search_v17_archive_memory(
     query: str = Query(''),

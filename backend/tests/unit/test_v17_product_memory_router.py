@@ -173,6 +173,14 @@ def test_product_router_registers_concrete_default_v17_search_route():
     )
 
 
+def test_product_router_registers_parallel_neutral_default_search_route():
+    routes = v17_memory_product.router.routes
+    v17_handlers = [func for method, path, _kwargs, func in routes if method == "GET" and path == "/v17/memory/search"]
+    neutral_handlers = [func for method, path, _kwargs, func in routes if method == "GET" and path == "/memory/search"]
+    assert v17_handlers and neutral_handlers
+    assert v17_handlers[0] is neutral_handlers[0]
+
+
 def test_product_router_registers_capability_gated_archive_search_route():
     assert any(
         method == "GET" and path == "/v17/memory/archive/search"
@@ -185,6 +193,20 @@ def test_product_router_registers_concrete_default_v17_vector_search_route():
         method == "GET" and path == "/v17/memory/vector/search"
         for method, path, _kwargs, _func in v17_memory_product.router.routes
     )
+
+
+def test_parallel_neutral_routes_delegate_to_same_handlers_as_v17():
+    routes = v17_memory_product.router.routes
+    pairs = [
+        ("/v17/memory/search", "/memory/search"),
+        ("/v17/memory/vector/search", "/memory/vector/search"),
+        ("/v17/memory/archive/search", "/memory/archive/search"),
+    ]
+    for v17_path, neutral_path in pairs:
+        v17_handlers = [func for method, path, _kwargs, func in routes if method == "GET" and path == v17_path]
+        neutral_handlers = [func for method, path, _kwargs, func in routes if method == "GET" and path == neutral_path]
+        assert v17_handlers and neutral_handlers, f"missing route pair {v17_path} / {neutral_path}"
+        assert v17_handlers[0] is neutral_handlers[0], f"handler mismatch for {neutral_path}"
 
 
 def test_main_registers_v17_product_memory_router():
