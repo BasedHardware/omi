@@ -2,7 +2,7 @@
 
 No cloud SDKs, clients, credentials, or network calls are imported or constructed
 here. This module owns the schema and validation logic; local placeholder
-defaults live in :mod:`utils.memory.v17_v3_f6.local_defaults`.
+defaults live in :mod:`utils.memory.v3_f6.local_defaults`.
 """
 
 from __future__ import annotations
