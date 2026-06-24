@@ -12,7 +12,7 @@ SHARED_NAMESPACE = "ns2"
 
 REQUIRED_ENVIRONMENT = {
     "pinecone": ["PINECONE_API_KEY", "PINECONE_INDEX_NAME", "PINECONE_INDEX_HOST"],
-    "firestore": ["V17_PROVIDER_PROOF_FIRESTORE_PROJECT", "V17_PROVIDER_PROOF_UID"],
+    "firestore": ["MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT", "MEMORY_PROVIDER_PROOF_UID"],
 }
 
 PROOF_CASES: Dict[str, Dict[str, Any]] = {
@@ -163,9 +163,9 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--pinecone-api-key", default=os.getenv("PINECONE_API_KEY", ""))
     parser.add_argument("--pinecone-index-name", default=os.getenv("PINECONE_INDEX_NAME", ""))
     parser.add_argument("--pinecone-index-host", default=os.getenv("PINECONE_INDEX_HOST", ""))
-    parser.add_argument("--firestore-project", default=os.getenv("V17_PROVIDER_PROOF_FIRESTORE_PROJECT", ""))
-    parser.add_argument("--proof-uid", default=os.getenv("V17_PROVIDER_PROOF_UID", ""))
-    parser.add_argument("--proof-namespace", default=os.getenv("V17_PROVIDER_PROOF_NAMESPACE", SHARED_NAMESPACE))
+    parser.add_argument("--firestore-project", default=os.getenv("MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT", ""))
+    parser.add_argument("--proof-uid", default=os.getenv("MEMORY_PROVIDER_PROOF_UID", ""))
+    parser.add_argument("--proof-namespace", default=os.getenv("MEMORY_PROVIDER_PROOF_NAMESPACE", SHARED_NAMESPACE))
     return parser.parse_args(argv)
 
 
@@ -190,9 +190,9 @@ def evaluate_prerequisites(config: VectorSearchProviderReadinessConfig) -> List[
     if not config.pinecone_index_host:
         prerequisites.append("PINECONE_INDEX_HOST is required")
     if not config.firestore_project:
-        prerequisites.append("V17_PROVIDER_PROOF_FIRESTORE_PROJECT or --firestore-project is required")
+        prerequisites.append("MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT or --firestore-project is required")
     if not config.proof_uid:
-        prerequisites.append("V17_PROVIDER_PROOF_UID or --proof-uid is required")
+        prerequisites.append("MEMORY_PROVIDER_PROOF_UID or --proof-uid is required")
     return prerequisites
 
 
@@ -225,7 +225,7 @@ def build_planned_commands() -> List[str]:
     return [
         "python3 backend/scripts/vector_search_provider_readiness.py",
         "python3 backend/scripts/vector_search_provider_readiness.py --execute",
-        "Required env: PINECONE_API_KEY, PINECONE_INDEX_NAME, PINECONE_INDEX_HOST, V17_PROVIDER_PROOF_FIRESTORE_PROJECT, V17_PROVIDER_PROOF_UID.",
+        "Required env: PINECONE_API_KEY, PINECONE_INDEX_NAME, PINECONE_INDEX_HOST, MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT, MEMORY_PROVIDER_PROOF_UID.",
     ]
 
 
