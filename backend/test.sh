@@ -25,6 +25,7 @@ pytest tests/unit/test_parakeet_prerecorded.py -v
 pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
+pytest tests/unit/test_fair_use_classifier_async_offload.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
 pytest tests/unit/test_parakeet_builtin_embedding.py -v
