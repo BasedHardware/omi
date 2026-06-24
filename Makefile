@@ -1,7 +1,7 @@
 PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bin/python; else printf python3; fi)
 DESKTOP_USER ?= alice
 
-.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-v17-scenarios seed-v17-scenario reset-v17-scenario desktop-run-local
+.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh
@@ -37,14 +37,14 @@ dev-down:
 dev-logs:
 	bash scripts/dev-harness/dev-logs.sh
 
-list-v17-scenarios:
-	$(PYTHON) scripts/dev-harness/list-v17-scenarios.py
+list-memory-scenarios:
+	$(PYTHON) scripts/dev-harness/list-memory-scenarios.py
 
-seed-v17-scenario:
-	$(PYTHON) scripts/dev-harness/seed-v17-scenario.py $(SCENARIO)
+seed-memory-scenario:
+	$(PYTHON) scripts/dev-harness/seed-memory-scenario.py $(SCENARIO)
 
-reset-v17-scenario:
-	$(PYTHON) scripts/dev-harness/reset-v17-scenario.py $(SCENARIO)
+reset-memory-scenario:
+	$(PYTHON) scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
 
 desktop-run-local:
 	PYTHON="$(PYTHON)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
