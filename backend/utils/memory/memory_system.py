@@ -22,6 +22,11 @@ def _canonical_users_from_env() -> Set[str]:
     return {uid.strip() for uid in raw.split(",") if uid.strip()}
 
 
+def list_canonical_cohort_uids() -> list[str]:
+    """Return sorted uids from ``MEMORY_CANONICAL_USERS`` (empty when unset)."""
+    return sorted(_canonical_users_from_env())
+
+
 def resolve_memory_system(uid: str, *, db_client=None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
