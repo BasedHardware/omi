@@ -286,6 +286,8 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         response = response.replace('\\"', '"')
 
         summary_data = json.loads(response)
+        if not isinstance(summary_data, dict):
+            raise json.JSONDecodeError("Top-level JSON is not an object", response, 0)
 
         # Helper to map conversation number to ID
         def get_convo_id(num):
@@ -349,7 +351,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "knowledge_nuggets": knowledge_nuggets,
             "locations": locations,
         }
-    except json.JSONDecodeError as e:
+    except (json.JSONDecodeError, TypeError, AttributeError) as e:
         logger.error(f"Failed to parse LLM response as JSON: {e}")
         logger.info(f"Response was: {response}")
         # Return a basic summary on parse failure
