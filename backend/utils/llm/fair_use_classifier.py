@@ -13,6 +13,7 @@ from typing import Optional
 
 import database.conversations as conversations_db
 from langchain_openai import ChatOpenAI
+from utils.executors import db_executor, run_blocking
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -211,7 +212,8 @@ async def classify_user_purpose(uid: str) -> dict:
     }
 
     try:
-        summaries = _prepare_conversation_summaries(uid)
+        # Offload the blocking Firestore read off the event loop (utils.executors db_executor).
+        summaries = await run_blocking(db_executor, _prepare_conversation_summaries, uid)
         if not summaries:
             logger.info(f'fair_use: no conversations to classify for {uid}')
             return default_result
