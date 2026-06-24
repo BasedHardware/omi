@@ -676,7 +676,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         return persona
 
     # Create a new persona for the user
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
