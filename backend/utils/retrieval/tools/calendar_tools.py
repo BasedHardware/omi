@@ -1196,6 +1196,8 @@ async def update_calendar_event_tool(
     title: Optional[str] = None,
     description: Optional[str] = None,
     location: Optional[str] = None,
+    new_start_time: Optional[str] = None,
+    new_end_time: Optional[str] = None,
     add_attendees: Optional[str] = None,
     remove_attendees: Optional[str] = None,
     set_attendees: Optional[str] = None,
@@ -1222,6 +1224,10 @@ async def update_calendar_event_tool(
     - set_attendees: Comma-separated list of names or emails to REPLACE all attendees
     - Names will be automatically resolved to email addresses via Google Contacts
 
+    Rescheduling (changing the event's time):
+    - new_start_time / new_end_time set the event's NEW start/end time (ISO format with timezone)
+    - start_date / end_date are only the search range used to FIND the event, not its new time
+
     Args:
         event_id: Optional specific event ID to update (if known)
         event_title: Optional event title to search for
@@ -1230,6 +1236,8 @@ async def update_calendar_event_tool(
         title: Optional new event title
         description: Optional new event description
         location: Optional new event location
+        new_start_time: Optional new event start time in ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM) to reschedule the event
+        new_end_time: Optional new event end time in ISO format with timezone (YYYY-MM-DDTHH:MM:SS+HH:MM) to reschedule the event
         add_attendees: Optional comma-separated list of attendee names or emails to add
         remove_attendees: Optional comma-separated list of attendee names or emails to remove
         set_attendees: Optional comma-separated list of attendee names or emails to set (replaces all)
@@ -1343,6 +1351,18 @@ async def update_calendar_event_tool(
         update_description = description if description is not None else None
         update_location = location if location is not None else None
 
+        # Parse new start/end times if the event is being rescheduled.
+        # Uses the same ISO + timezone validation as create_calendar_event_tool.
+        new_start_dt, err = parse_iso_with_tz('new_start_time', new_start_time, "in format YYYY-MM-DDTHH:MM:SS+HH:MM")
+        if err:
+            return err
+        new_end_dt, err = parse_iso_with_tz('new_end_time', new_end_time, "in format YYYY-MM-DDTHH:MM:SS+HH:MM")
+        if err:
+            return err
+
+        if new_start_dt is not None and new_end_dt is not None and new_end_dt <= new_start_dt:
+            return f"Error: new_end_time must be after new_start_time. Start: {new_start_dt.strftime('%Y-%m-%d %H:%M:%S')}, End: {new_end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+
         # Handle attendees
         update_attendees = None
         if set_attendees is not None:
@@ -1402,6 +1422,8 @@ async def update_calendar_event_tool(
                 access_token=access_token,
                 event_id=target_event_id,
                 summary=update_summary,
+                start_time=new_start_dt,
+                end_time=new_end_dt,
                 description=update_description,
                 location=update_location,
                 attendees=update_attendees,
@@ -1411,6 +1433,12 @@ async def update_calendar_event_tool(
 
             if update_summary:
                 result += f"   Title: {update_summary}\n"
+
+            if new_start_dt is not None:
+                result += f"   Start: {new_start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+
+            if new_end_dt is not None:
+                result += f"   End: {new_end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
 
             if update_location:
                 result += f"   Location: {update_location}\n"
@@ -1436,6 +1464,8 @@ async def update_calendar_event_tool(
                             access_token=new_token,
                             event_id=target_event_id,
                             summary=update_summary,
+                            start_time=new_start_dt,
+                            end_time=new_end_dt,
                             description=update_description,
                             location=update_location,
                             attendees=update_attendees,
