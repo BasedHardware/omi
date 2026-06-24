@@ -28,6 +28,26 @@ def test_memory_contracts_alias_reexports_match_v17():
     assert memory_contracts.deterministic_contract_id is v17_memory_contracts.deterministic_contract_id
 
 
+def test_memory_contracts_l1_l2_symbol_aliases_are_identity():
+    from models import memory_contracts, v17_memory_contracts
+
+    assert memory_contracts.WorkingObservation is v17_memory_contracts.WorkingMemoryObservation
+    assert memory_contracts.WorkingObservationArchiveItem is v17_memory_contracts.L1MemoryArchiveItem
+    assert memory_contracts.PromotionRoute is v17_memory_contracts.L2MemoryRoute
+
+
+def test_working_memory_batch_alias_is_identity():
+    from utils.llm.working_memory import L1MemoryArchiveItems, WorkingObservationBatch
+
+    assert L1MemoryArchiveItems is WorkingObservationBatch
+
+
+def test_l2_memory_route_response_alias_is_identity():
+    from utils.llm.l2_memory_routes import L2MemoryRouteResponse, PromotionRouteResponse
+
+    assert L2MemoryRouteResponse is PromotionRouteResponse
+
+
 def test_memory_collections_alias_reexports_match_v17():
     from database import memory_collections, v17_collections
 

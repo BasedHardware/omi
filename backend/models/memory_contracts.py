@@ -22,6 +22,11 @@ from models.v17_memory_contracts import (
     filter_l1_archive_for_normal_search,
 )
 
+# Neutral symbol aliases (WS-G Wave 31) — same types, canonical names for new code.
+WorkingObservation = WorkingMemoryObservation
+WorkingObservationArchiveItem = L1MemoryArchiveItem
+PromotionRoute = L2MemoryRoute
+
 __all__ = [
     "DurableMemoryPatch",
     "DurablePatchDecision",
@@ -33,8 +38,11 @@ __all__ = [
     "L2SearchRequest",
     "L2SearchResult",
     "LifecycleState",
+    "PromotionRoute",
     "SourceBackedMemoryCandidate",
     "WorkingMemoryObservation",
+    "WorkingObservation",
+    "WorkingObservationArchiveItem",
     "derive_allowed_use",
     "deterministic_contract_id",
     "filter_l1_archive_for_normal_search",

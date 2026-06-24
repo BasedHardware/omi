@@ -7,7 +7,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, ValidationError
 
-from models.v17_memory_contracts import L2MemoryRoute
+from models.memory_contracts import PromotionRoute
 
 try:
     from .clients import get_llm
@@ -23,8 +23,12 @@ logger = logging.getLogger(__name__)
 _QUOTE_WRAPPER_RE = re.compile(r"^\s*User\s+(said|mentioned|stated|talked about|noted)\s+['\"]", re.IGNORECASE)
 
 
-class L2MemoryRouteResponse(BaseModel):
-    route: L2MemoryRoute = Field(...)
+class PromotionRouteResponse(BaseModel):
+    route: PromotionRoute = Field(...)
+
+
+# Backward-compatible alias for callers/tests that still use the L2 name.
+L2MemoryRouteResponse = PromotionRouteResponse
 
 
 l2_memory_route_prompt = ChatPromptTemplate.from_messages(
@@ -94,8 +98,8 @@ def classify_l2_memory_route(
     custom_search_artifact: Dict[str, Any],
     observed_head_commit_id: Optional[str],
     llm=None,
-) -> Optional[L2MemoryRoute]:
-    parser = PydanticOutputParser(pydantic_object=L2MemoryRouteResponse)
+) -> Optional[PromotionRoute]:
+    parser = PydanticOutputParser(pydantic_object=PromotionRouteResponse)
     messages = l2_memory_route_prompt.format_messages(
         observed_head_commit_id=observed_head_commit_id or "unknown",
         packet_json=_canonical_json(packet),
@@ -115,7 +119,7 @@ def classify_l2_memory_route(
         parsed = parser.parse(_content_from_response(response))
         route = parsed.route
         if _is_quote_wrapper(route.memory_text):
-            return L2MemoryRoute(
+            return PromotionRoute(
                 route="review",
                 memory_text=route.memory_text,
                 evidence_quotes=route.evidence_quotes,

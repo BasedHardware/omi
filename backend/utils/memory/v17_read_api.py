@@ -3,15 +3,15 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from database.product_memory_items import filter_default_product_memory_items
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
-from models.v17_memory_contracts import (
+from models.memory_contracts import (
     L1MemoryArchiveClass,
-    L1MemoryArchiveItem,
+    WorkingObservationArchiveItem,
     LifecycleState,
-    WorkingMemoryObservation,
+    WorkingObservation,
     derive_allowed_use,
     filter_l1_archive_for_normal_search,
 )
-from models.v17_product_memory import MemoryAccessPolicy, MemoryTier, V17MemoryItem, is_archive_access_eligible
+from models.product_memory import MemoryAccessPolicy, MemoryTier, V17MemoryItem, is_archive_access_eligible
 
 
 def _tokens(query: str) -> set[str]:
@@ -50,12 +50,10 @@ def _agent_use_for_durable(status: str, risk_flags: List[str]) -> str:
     return "audit_only_not_profile_fact"
 
 
-def query_working_memory(
-    query: str, records: Iterable[WorkingMemoryObservation | Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def query_working_memory(query: str, records: Iterable[WorkingObservation | Dict[str, Any]]) -> List[Dict[str, Any]]:
     results = []
     for record in records:
-        if isinstance(record, WorkingMemoryObservation):
+        if isinstance(record, WorkingObservation):
             data = record.model_dump(mode="json")
         else:
             data = dict(record)
@@ -81,10 +79,10 @@ def query_working_memory(
     return results
 
 
-def _coerce_archive_item(record: L1MemoryArchiveItem | Dict[str, Any]) -> L1MemoryArchiveItem:
-    if isinstance(record, L1MemoryArchiveItem):
+def _coerce_archive_item(record: WorkingObservationArchiveItem | Dict[str, Any]) -> WorkingObservationArchiveItem:
+    if isinstance(record, WorkingObservationArchiveItem):
         return record
-    return L1MemoryArchiveItem.model_validate(record)
+    return WorkingObservationArchiveItem.model_validate(record)
 
 
 def _coerce_product_memory_item(record: V17MemoryItem | Dict[str, Any]) -> V17MemoryItem:
@@ -171,7 +169,7 @@ def query_archive_product_memory_items(
 
 
 def query_l1_archive(
-    query: str, records: Iterable[L1MemoryArchiveItem | Dict[str, Any]], *, include_sensitive: bool = False
+    query: str, records: Iterable[WorkingObservationArchiveItem | Dict[str, Any]], *, include_sensitive: bool = False
 ) -> List[Dict[str, Any]]:
     archive_items = [_coerce_archive_item(record) for record in records]
     if include_sensitive:
@@ -240,9 +238,9 @@ def query_durable_memory(
 def query_memory_context(
     query: str,
     *,
-    working_records: Iterable[WorkingMemoryObservation | Dict[str, Any]],
+    working_records: Iterable[WorkingObservation | Dict[str, Any]],
     durable_records: Iterable[Dict[str, Any]],
-    l1_archive_records: Iterable[L1MemoryArchiveItem | Dict[str, Any]] = (),
+    l1_archive_records: Iterable[WorkingObservationArchiveItem | Dict[str, Any]] = (),
     include_superseded: bool = False,
     include_l1_archive: bool = False,
 ) -> List[Dict[str, Any]]:

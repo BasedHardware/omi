@@ -13,6 +13,7 @@ from models.v17_product_memory import (
     ProcessingState,
     V17MemoryItem,
     V17MemoryItemAlias,
+    is_archive_access_eligible,
     new_memory_id,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "ProcessingState",
     "V17MemoryItem",
     "V17MemoryItemAlias",
+    "is_archive_access_eligible",
     "new_memory_id",
 ]

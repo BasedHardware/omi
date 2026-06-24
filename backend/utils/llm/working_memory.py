@@ -5,12 +5,12 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
-from database.v17_non_active_memory_routes import (
+from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
     persist_non_active_route_outcome,
 )
-from models.v17_memory_contracts import L1MemoryArchiveItem, deterministic_contract_id
+from models.memory_contracts import WorkingObservationArchiveItem, deterministic_contract_id
 
 try:
     from .clients import get_llm
@@ -23,8 +23,12 @@ except Exception as exc:
 logger = logging.getLogger(__name__)
 
 
-class L1MemoryArchiveItems(BaseModel):
-    items: List[L1MemoryArchiveItem] = Field(default_factory=list)
+class WorkingObservationBatch(BaseModel):
+    items: List[WorkingObservationArchiveItem] = Field(default_factory=list)
+
+
+# Backward-compatible alias for callers/tests that still use the L1 name.
+L1MemoryArchiveItems = WorkingObservationBatch
 
 
 def _source_type_instructions(source_type: str, user_name: str) -> str:
@@ -125,8 +129,8 @@ def _content_from_response(response) -> str:
 
 
 def _with_deterministic_archive_ids(
-    items: List[L1MemoryArchiveItem], uid: str, source_id: str, source_type: str
-) -> List[L1MemoryArchiveItem]:
+    items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
+) -> List[WorkingObservationArchiveItem]:
     normalized = []
     for index, item in enumerate(items):
         updates = {
@@ -160,14 +164,14 @@ def extract_l1_memory_archive_items_from_text(
     persist_route_outcomes: bool = True,
     db_client=None,
     llm=None,
-) -> List[L1MemoryArchiveItem]:
+) -> List[WorkingObservationArchiveItem]:
     stripped_text = text.strip() if text else ""
     low_text_is_security_relevant = source_type in {"screenshot_ocr", "ocr_screenshot_text", "desktop_rewind"}
     if not stripped_text or (len(stripped_text) < 25 and not low_text_is_security_relevant):
         return []
 
     name = user_name or "the user"
-    parser = PydanticOutputParser(pydantic_object=L1MemoryArchiveItems)
+    parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
     messages = _build_l1_messages(
         name,
         source_type,
@@ -210,7 +214,7 @@ def _persist_l1_archive_route_outcomes(
     source_id: str,
     source_type: str,
     run_id: Optional[str],
-    items: List[L1MemoryArchiveItem],
+    items: List[WorkingObservationArchiveItem],
     db_client=None,
 ) -> None:
     for item in items:
