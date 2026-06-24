@@ -187,6 +187,7 @@ pytest tests/unit/test_thread_join_elimination.py -v
 pytest tests/unit/test_async_http_infrastructure.py -v
 pytest tests/unit/test_clean_sweep_migrations.py -v
 pytest tests/unit/test_omi_qos_tiers.py -v
+pytest tests/unit/test_action_items_search_malformed.py -v
 pytest tests/unit/test_byok_security.py -v
 pytest tests/unit/test_paywall_reconnect_gate.py -v
 pytest tests/unit/test_trial_metadata.py -v
