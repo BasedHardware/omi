@@ -36,7 +36,7 @@ from jobs.short_term_lifecycle_worker import (
     process_short_term_lifecycle_item,
 )
 from models.memory_domain import (
-    MemoryLayer,
+    MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
     assert_legal_state,
     physical_status_to_record_status,
@@ -45,7 +45,7 @@ from models.memory_evidence import SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle
@@ -76,7 +76,7 @@ def _coerce_aware_utc(value: datetime) -> datetime:
 def is_promotable_short_term_item(item: V17MemoryItem, *, now: datetime) -> bool:
     """Conservative promotability: active, processed, unexpired short_term."""
     current_time = _coerce_aware_utc(now)
-    if item.tier != MemoryTier.short_term:
+    if item.tier != MemoryLayer.short_term:
         return False
     if item.status != MemoryItemStatus.active:
         return False
@@ -181,7 +181,7 @@ def promote_short_term_item_via_apply(
     db_client=None,
 ) -> V17MemoryItem:
     """Promote one short_term item to long_term through the authoritative apply path."""
-    if item.tier == MemoryTier.long_term:
+    if item.tier == MemoryLayer.long_term:
         return item
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
@@ -191,11 +191,11 @@ def promote_short_term_item_via_apply(
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(
         "canonical-short-term-promotion",
-        {"uid": uid, "memory_id": item.memory_id, "from_layer": MemoryTier.short_term.value},
+        {"uid": uid, "memory_id": item.memory_id, "from_layer": MemoryLayer.short_term.value},
     )
     promotion_audit = {
-        "from_layer": MemoryTier.short_term.value,
-        "to_layer": MemoryTier.long_term.value,
+        "from_layer": MemoryLayer.short_term.value,
+        "to_layer": MemoryLayer.long_term.value,
         "reason": trigger_reason,
         "at": current_time.isoformat(),
         "by": PROMOTION_BY,
@@ -210,7 +210,7 @@ def promote_short_term_item_via_apply(
         "result_status": LifecycleState.active.value,
         "target_memory_id": item.memory_id,
         "memory_text": item.content,
-        "target_tier": MemoryTier.long_term.value,
+        "target_tier": MemoryLayer.long_term.value,
         "evidence_ids": [evidence.evidence_id for evidence in item.evidence],
         "promotion_audit": promotion_audit,
     }
@@ -231,11 +231,11 @@ def promote_short_term_item_via_apply(
             promoted = V17MemoryItem(**(snapshot.to_dict() or {}))
 
     assert_legal_state(
-        MemoryLayer(promoted.tier.value),
+        DomainMemoryLayer(promoted.tier.value),
         physical_status_to_record_status(promoted.status.value),
         MemoryProcessingState(promoted.processing_state.value),
     )
-    if promoted.tier != MemoryTier.long_term:
+    if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
     sync_atom_keyword_index_for_item(promoted, db_client=client)
     return promoted
@@ -373,7 +373,7 @@ def run_canonical_short_term_ttl_lifecycle(
     existing = 0
     for item in items:
         disposition = None
-        if item.expires_at and item.expires_at <= current_time and item.tier == MemoryTier.short_term:
+        if item.expires_at and item.expires_at <= current_time and item.tier == MemoryLayer.short_term:
             disposition = ShortTermDisposition.reject_or_hide
         record, was_created = process_short_term_lifecycle_item(
             item,

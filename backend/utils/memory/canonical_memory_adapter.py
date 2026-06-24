@@ -19,7 +19,7 @@ from database.memory_collections import V17Collections
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
 from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
 from models.memory_domain import (
-    MemoryLayer,
+    MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
     assert_legal_state,
     physical_status_to_record_status,
@@ -36,7 +36,7 @@ from models.memories import MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
@@ -86,8 +86,8 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
         updated_at = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
     if not isinstance(updated_at, datetime):
         updated_at = datetime.now(timezone.utc)
-    tier_value = item.get("tier") or MemoryTier.short_term.value
-    tier = tier_value if isinstance(tier_value, MemoryTier) else MemoryTier(tier_value)
+    tier_value = item.get("tier") or MemoryLayer.short_term.value
+    tier = tier_value if isinstance(tier_value, MemoryLayer) else MemoryLayer(tier_value)
     return MemoryDB(
         id=item["memory_id"],
         uid=uid,
@@ -210,7 +210,7 @@ def search_canonical_memories(
         item = items_by_id.get(memory_id)
         if item is None:
             continue
-        if item.tier != MemoryTier.long_term or item.status != MemoryItemStatus.active:
+        if item.tier != MemoryLayer.long_term or item.status != MemoryItemStatus.active:
             continue
         candidates.append(
             {
@@ -366,7 +366,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "memory_text": content,
         "confidence": "medium",
         "relationship_to_user": "self",
-        "initial_tier": MemoryTier.short_term.value,
+        "initial_tier": MemoryLayer.short_term.value,
     }
 
     result = apply_long_term_patch_firestore(
@@ -387,7 +387,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     item = result.memory_items[0] if result.memory_items else None
     if item is not None:
         assert_legal_state(
-            MemoryLayer(item.tier.value),
+            DomainMemoryLayer(item.tier.value),
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )

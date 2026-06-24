@@ -11,7 +11,7 @@ from models.memory_contracts import (
     derive_allowed_use,
     filter_l1_archive_for_normal_search,
 )
-from models.product_memory import MemoryAccessPolicy, MemoryTier, V17MemoryItem, is_archive_access_eligible
+from models.product_memory import MemoryAccessPolicy, MemoryLayer, V17MemoryItem, is_archive_access_eligible
 
 
 def _tokens(query: str) -> set[str]:
@@ -92,7 +92,7 @@ def _coerce_product_memory_item(record: V17MemoryItem | Dict[str, Any]) -> V17Me
 
 
 def _tier_value(item: V17MemoryItem) -> str:
-    return item.tier.value if isinstance(item.tier, MemoryTier) else str(item.tier)
+    return item.tier.value if isinstance(item.tier, MemoryLayer) else str(item.tier)
 
 
 def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
@@ -156,7 +156,7 @@ def query_archive_product_memory_items(
 
     results = []
     for item in [_coerce_product_memory_item(record) for record in records]:
-        if item.tier != MemoryTier.archive:
+        if item.tier != MemoryLayer.archive:
             continue
         content = item.content or ""
         if not _matches(query, content):

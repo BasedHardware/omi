@@ -115,8 +115,9 @@ def assert_legal_state(
         )
 
 
-# alias: V17 ``MemoryTier`` uses the same string values as ``MemoryLayer``.
-# WS-G will rename ``tier`` → ``layer`` at API boundaries; until then, map here.
+# Product storage/API field remains ``tier`` on ``V17MemoryItem`` (bucket D — out of scope).
+# ``models.product_memory.MemoryLayer`` is a type alias for ``MemoryTier`` (WS-G Wave 34).
+# This module's ``MemoryLayer`` is the canonical validation enum (UPPER_CASE members).
 
 
 def tier_to_layer(tier: MemoryTier) -> MemoryLayer:

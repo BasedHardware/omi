@@ -17,6 +17,8 @@ def test_product_memory_alias_reexports_match_v17():
 
     assert product_memory.MemoryItemStatus is v17_product_memory.MemoryItemStatus
     assert product_memory.MemoryTier is v17_product_memory.MemoryTier
+    assert product_memory.MemoryLayer is v17_product_memory.MemoryLayer
+    assert product_memory.MemoryLayer is product_memory.MemoryTier
     assert product_memory.V17MemoryItem is v17_product_memory.V17MemoryItem
 
 

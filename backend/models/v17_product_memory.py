@@ -15,6 +15,10 @@ class MemoryTier(str, Enum):
     archive = "archive"
 
 
+# Neutral type alias (WS-G Wave 34) — same enum, canonical import path for new code.
+MemoryLayer = MemoryTier
+
+
 class MemoryItemStatus(str, Enum):
     active = "active"
     superseded = "superseded"

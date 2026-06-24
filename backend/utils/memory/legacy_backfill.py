@@ -25,7 +25,7 @@ from database.memories import get_non_filtered_memories
 from database.memory_collections import V17Collections
 from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_domain import (
-    MemoryLayer,
+    MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
     assert_legal_state,
     physical_status_to_record_status,
@@ -34,7 +34,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_memory_adapter import neutral_vector_id_for_memory
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
@@ -248,7 +248,7 @@ def _apply_one_legacy_row(
     if getattr(existing_snapshot, "exists", False):
         existing = V17MemoryItem.model_validate(existing_snapshot.to_dict() or {})
         if (
-            existing.tier == MemoryTier.long_term
+            existing.tier == MemoryLayer.long_term
             and existing.status == MemoryItemStatus.active
             and existing.processing_state == ProcessingState.processed
         ):
@@ -281,7 +281,7 @@ def _apply_one_legacy_row(
         "memory_text": content,
         "confidence": "medium",
         "relationship_to_user": "self",
-        "initial_tier": MemoryTier.long_term.value,
+        "initial_tier": MemoryLayer.long_term.value,
     }
 
     result = apply_long_term_patch_firestore(
@@ -296,7 +296,7 @@ def _apply_one_legacy_row(
     item = result.memory_items[0] if result.memory_items else None
     if item is not None:
         assert_legal_state(
-            MemoryLayer(item.tier.value),
+            DomainMemoryLayer(item.tier.value),
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
@@ -331,7 +331,7 @@ def _count_destination_backfill_items(
     for item in items:
         if item.memory_id not in expected:
             continue
-        if item.tier != MemoryTier.long_term:
+        if item.tier != MemoryLayer.long_term:
             continue
         if item.status != MemoryItemStatus.active:
             continue

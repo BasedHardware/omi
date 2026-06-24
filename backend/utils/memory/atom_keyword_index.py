@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
@@ -42,7 +42,7 @@ class AtomKeywordRebuildReport:
 def is_indexable_long_term_atom(item: V17MemoryItem) -> bool:
     """Return True when the atom belongs in the durable keyword index."""
     return (
-        item.tier == MemoryTier.long_term
+        item.tier == MemoryLayer.long_term
         and item.status == MemoryItemStatus.active
         and item.processing_state == ProcessingState.processed
         and bool((item.content or "").strip())
@@ -93,7 +93,7 @@ def build_atom_keyword_document(item: V17MemoryItem) -> Dict[str, Any]:
         "userId": item.uid,
         "content": item.content or "",
         "category": _DEFAULT_CATEGORY,
-        "layer": MemoryTier.long_term.value,
+        "layer": MemoryLayer.long_term.value,
         "status": MemoryItemStatus.active.value,
         "entity_terms": _entity_terms_for_item(item),
         "predicate": _predicate_for_item(item),
@@ -204,7 +204,7 @@ def keyword_search_memory_ids(
     if not (query or "").strip():
         return []
     try:
-        filter_by = f"userId:={uid} && layer:={MemoryTier.long_term.value} && status:={MemoryItemStatus.active.value}"
+        filter_by = f"userId:={uid} && layer:={MemoryLayer.long_term.value} && status:={MemoryItemStatus.active.value}"
         if start_date is not None:
             filter_by = filter_by + f" && created_at:>={start_date}"
         if end_date is not None:
