@@ -3,6 +3,15 @@ import os
 import sys
 import types
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
 
 from database.memory_vector_metadata import (
     MEMORY_VECTOR_SCHEMA_VERSION,
@@ -13,6 +22,7 @@ from database.memory_vector_metadata import (
 )
 from database.v17_vector_metadata import build_v17_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.v17_memory_apply import ApplyStatus, MemoryControlState
 from models.v17_memory_search_gateway import SearchDecision, SearchMode
 from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
@@ -68,37 +78,63 @@ class _FakeEmbeddings:
         return [[0.1, 0.2, 0.3] for _ in texts]
 
 
+def _metadata_matches_clause(metadata, clause):
+    for field, condition in clause.items():
+        value = metadata.get(field)
+        if "$eq" in condition:
+            if value != condition["$eq"]:
+                return False
+        elif "$in" in condition:
+            if value not in condition["$in"]:
+                return False
+        else:
+            return False
+    return True
+
+
+def _metadata_matches_filter(metadata, pinecone_filter):
+    and_clauses = pinecone_filter.get("$and") or []
+    return all(_metadata_matches_clause(metadata, clause) for clause in and_clauses)
+
+
 class _RecordingIndex:
     def __init__(self):
         self.upserts = []
         self.queries = []
+        self._vectors = {}
 
     def upsert(self, *, vectors, namespace):
         self.upserts.append({"vectors": vectors, "namespace": namespace})
+        for vector in vectors:
+            self._vectors[vector["id"]] = {
+                "id": vector["id"],
+                "values": vector.get("values"),
+                "metadata": dict(vector.get("metadata") or {}),
+            }
         return {"upserted_count": len(vectors)}
 
     def query(self, **kwargs):
         self.queries.append(kwargs)
-        layer_value = "archive" if "archive" in str(kwargs.get("filter")) else "long_term"
-        return {
-            "matches": [
-                {
-                    "id": "mem_abc123",
-                    "score": 0.92,
-                    "metadata": {
-                        "memory_schema_version": MEMORY_VECTOR_SCHEMA_VERSION,
-                        "uid": "uid-canonical",
-                        "memory_id": "mem_abc123",
-                        "memory_layer": layer_value,
-                        "status": "active",
-                        "source_state": "active",
-                        "restricted_sensitivity": False,
-                        "projection_commit_id": "commit-ledger",
-                        "vector_updated_at": "2026-06-24T12:05:00+00:00",
-                    },
-                }
-            ]
-        }
+        pinecone_filter = kwargs.get("filter") or {}
+        top_k = kwargs.get("top_k", 10)
+        matches = []
+        for vector_id, stored in self._vectors.items():
+            metadata = stored["metadata"]
+            if _metadata_matches_filter(metadata, pinecone_filter):
+                matches.append(
+                    {
+                        "id": vector_id,
+                        "score": 0.92,
+                        "metadata": metadata,
+                    }
+                )
+        matches.sort(key=lambda match: match["id"])
+        return {"matches": matches[:top_k]}
+
+
+class _FailingIndex:
+    def upsert(self, **kwargs):
+        raise RuntimeError("pinecone unavailable")
 
 
 def _load_vector_db_with_stubs():
@@ -117,6 +153,15 @@ def _load_vector_db_with_stubs():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _install_recording_vector_db(monkeypatch):
+    vector_db = _load_vector_db_with_stubs()
+    fake_index = _RecordingIndex()
+    monkeypatch.setattr(vector_db, "index", fake_index)
+    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    sys.modules["database.vector_db"] = vector_db
+    return vector_db, fake_index
 
 
 def test_build_memory_vector_metadata_uses_neutral_keys_not_v17():
@@ -158,10 +203,7 @@ def test_parse_memory_search_vector_hit_rejects_v17_metadata():
 
 
 def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
     item = _item(memory_id="mem_hash001", tier=MemoryTier.short_term)
     vector_db.upsert_canonical_memory_vector(item)
@@ -176,11 +218,9 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
 
 
 def test_query_memory_vector_candidates_matches_neutral_metadata(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
+    vector_db.upsert_canonical_memory_vector(_item(memory_id="mem_abc123", tier=MemoryTier.long_term))
     result = vector_db.query_memory_vector_candidates("uid-canonical", "find content", limit=5)
 
     assert [hit.memory_id for hit in result.hits] == ["mem_abc123"]
@@ -190,10 +230,7 @@ def test_query_memory_vector_candidates_matches_neutral_metadata(monkeypatch):
 
 
 def test_query_memory_vector_candidates_archive_mode(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
     vector_db.query_memory_vector_candidates("uid-canonical", "archive query", mode=SearchMode.archive_explicit)
 
@@ -201,10 +238,7 @@ def test_query_memory_vector_candidates_archive_mode(monkeypatch):
 
 
 def test_legacy_upsert_memory_vector_unchanged(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
     vector_db.upsert_memory_vector("legacy-uid", "legacy-mem-1", "hello legacy", "system")
 
@@ -217,35 +251,292 @@ def test_legacy_upsert_memory_vector_unchanged(monkeypatch):
 
 
 def test_canonical_write_search_round_trip_short_term_and_long_term(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
     short_item = _item(memory_id="mem_short", tier=MemoryTier.short_term)
     long_item = _item(memory_id="mem_long", tier=MemoryTier.long_term)
+    archive_item = _item(memory_id="mem_archive", tier=MemoryTier.archive)
 
     vector_db.upsert_canonical_memory_vector(short_item)
     vector_db.upsert_canonical_memory_vector(long_item)
+    vector_db.upsert_canonical_memory_vector(archive_item)
 
-    layers_written = {u["vectors"][0]["metadata"]["memory_layer"] for u in fake_index.upserts}
-    assert layers_written == {"short_term", "long_term"}
+    layers_written = {upsert["vectors"][0]["metadata"]["memory_layer"] for upsert in fake_index.upserts}
+    assert layers_written == {"short_term", "long_term", "archive"}
 
     default_result = vector_db.query_memory_vector_candidates("uid-canonical", "content")
-    assert default_result.hits
+    default_ids = {hit.memory_id for hit in default_result.hits}
+    assert default_ids == {"mem_short", "mem_long"}
+    assert "mem_archive" not in default_ids
 
 
 def test_canonical_archive_layer_round_trip(monkeypatch):
-    vector_db = _load_vector_db_with_stubs()
-    fake_index = _RecordingIndex()
-    monkeypatch.setattr(vector_db, "index", fake_index)
-    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
 
+    short_item = _item(memory_id="mem_short", tier=MemoryTier.short_term)
     archive_item = _item(memory_id="mem_archive", tier=MemoryTier.archive)
+    vector_db.upsert_canonical_memory_vector(short_item)
     vector_db.upsert_canonical_memory_vector(archive_item)
 
-    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "archive"
     archive_result = vector_db.query_memory_vector_candidates(
         "uid-canonical", "archive", mode=SearchMode.archive_explicit
     )
-    assert archive_result.hits[0].memory_id == "mem_abc123"
+    archive_ids = {hit.memory_id for hit in archive_result.hits}
+    assert archive_ids == {"mem_archive"}
+    assert fake_index.upserts[1]["vectors"][0]["metadata"]["memory_layer"] == "archive"
+
+
+def test_sync_canonical_memory_vector_swallows_pinecone_failure(monkeypatch):
+    vector_db = _load_vector_db_with_stubs()
+    monkeypatch.setattr(vector_db, "index", _FailingIndex())
+    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    sys.modules["database.vector_db"] = vector_db
+
+    from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
+
+    hard_failures = []
+    synced = sync_canonical_memory_vector(_item(), on_hard_failure=lambda: hard_failures.append(1))
+    assert synced is False
+    assert hard_failures == [1]
+
+
+def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
+    from tests.unit.test_ws_i_write_convergence import (
+        _FakeDb,
+        _fresh_short_term_item,
+        _sample_memory_payload,
+        _stored_item,
+        _trusted_account_generation,
+        extraction_memory_id,
+        write_canonical_extraction_memory,
+    )
+
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    uid = "uid-canonical"
+    conversation_id = "conv-1"
+    content = "User enjoys hiking"
+    memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
+    committed_item = _fresh_short_term_item(
+        uid=uid,
+        memory_id=memory_id,
+        conversation_id=conversation_id,
+        content=content,
+    )
+    db = _FakeDb(
+        {
+            f"users/{uid}/memory_control/state": MemoryControlState(
+                uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
+            ).model_dump(mode="json"),
+            f"users/{uid}/memory_evidence/ev_ws_i_1": MemoryEvidence(
+                evidence_id="ev_ws_i_1",
+                source_type="conversation",
+                source_id=conversation_id,
+                source_version="v1",
+                artifact_preservation=ArtifactPreservationState.preserved,
+            ).model_dump(mode="json"),
+            f"users/{uid}/memory_items/{memory_id}": _stored_item(committed_item),
+        }
+    )
+    apply_result = SimpleNamespace(
+        status=ApplyStatus.idempotent_skip,
+        memory_items=[],
+        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
+        reason=None,
+        control_state=MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1),
+    )
+
+    with patch(
+        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
+        return_value=apply_result,
+    ), patch(
+        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        return_value=_trusted_account_generation(),
+    ), patch(
+        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
+        return_value=None,
+    ):
+        returned_id = write_canonical_extraction_memory(
+            uid, _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content), db_client=db
+        )
+
+    assert returned_id == memory_id
+    assert len(fake_index.upserts) == 1
+    assert fake_index.upserts[0]["vectors"][0]["id"] == memory_id
+    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "short_term"
+
+
+def test_backfill_path_syncs_vector_on_idempotent_skip(monkeypatch):
+    from tests.unit.test_ws_i_write_convergence import _install_heavy_import_stubs
+
+    _install_heavy_import_stubs()
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    from utils.memory.legacy_backfill import _apply_one_legacy_row
+
+    uid = "uid-canonical"
+    legacy_id = "leg-1"
+    content = "legacy memory content"
+    canonical_memory_id = "mem_backfill_test"
+    committed_item = _item(memory_id=canonical_memory_id, tier=MemoryTier.long_term)
+    committed_item = committed_item.model_copy(update={"content": content, "uid": uid})
+
+    class _BackfillDb:
+        def __init__(self):
+            self._get_calls_by_path = {}
+
+        def document(self, path):
+            return _BackfillDocRef(self, path)
+
+    class _BackfillDocRef:
+        def __init__(self, db, path):
+            self._db = db
+            self.path = path
+
+        def get(self):
+            calls = self._db._get_calls_by_path.get(self.path, 0) + 1
+            self._db._get_calls_by_path[self.path] = calls
+            if self.path.endswith(canonical_memory_id) and calls == 1:
+                return SimpleNamespace(exists=False, to_dict=lambda: {})
+            if self.path.endswith(canonical_memory_id):
+                return SimpleNamespace(
+                    exists=True,
+                    to_dict=lambda: committed_item.model_dump(mode="json"),
+                )
+            return SimpleNamespace(exists=False, to_dict=lambda: {})
+
+        def set(self, *args, **kwargs):
+            return None
+
+    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
+    apply_result = SimpleNamespace(
+        status=ApplyStatus.idempotent_skip,
+        memory_items=[],
+        operation=SimpleNamespace(committed_memory_item_ids=[canonical_memory_id]),
+        control_state=control,
+    )
+
+    with patch(
+        "utils.memory.legacy_backfill.apply_long_term_patch_firestore",
+        return_value=apply_result,
+    ), patch(
+        "utils.memory.legacy_backfill._ensure_backfill_operation",
+        return_value=SimpleNamespace(operation_id="op-1"),
+    ), patch(
+        "utils.memory.legacy_backfill._persist_evidence",
+        return_value=None,
+    ), patch(
+        "utils.memory.legacy_backfill._build_backfill_evidence",
+        return_value=committed_item.evidence[0],
+    ), patch(
+        "utils.memory.legacy_backfill.legacy_backfill_memory_id",
+        return_value=canonical_memory_id,
+    ), patch(
+        "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
+        return_value=None,
+    ):
+        _, written, skip_reason, vector_sync_failed = _apply_one_legacy_row(
+            uid=uid,
+            legacy_row={"id": legacy_id, "content": content},
+            index=0,
+            control=control,
+            run_id="run-1",
+            db_client=_BackfillDb(),
+        )
+
+    assert written is False
+    assert skip_reason == "idempotent_skip"
+    assert vector_sync_failed is False
+    assert len(fake_index.upserts) == 1
+    assert fake_index.upserts[0]["vectors"][0]["id"] == canonical_memory_id
+    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
+
+
+def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
+    from utils.memory.short_term_promotion import promote_short_term_item_via_apply
+
+    vector_db, fake_index = _install_recording_vector_db(monkeypatch)
+    uid = "uid-canonical"
+    memory_id = "mem_promote"
+    short_item = _item(memory_id=memory_id, tier=MemoryTier.short_term).model_copy(update={"uid": uid})
+    long_item = short_item.model_copy(update={"tier": MemoryTier.long_term})
+
+    vector_db.upsert_canonical_memory_vector(short_item)
+
+    class _PromotionDb:
+        def document(self, path):
+            return SimpleNamespace(
+                get=lambda: SimpleNamespace(exists=False),
+                set=lambda *args, **kwargs: None,
+            )
+
+    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
+    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+
+    committed_apply = SimpleNamespace(
+        status=ApplyStatus.committed,
+        memory_items=[long_item],
+        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
+    )
+    with patch(
+        "utils.memory.short_term_promotion.apply_long_term_patch_firestore",
+        return_value=committed_apply,
+    ), patch(
+        "utils.memory.short_term_promotion._ensure_promotion_operation",
+        return_value=SimpleNamespace(operation_id="op-promo"),
+    ), patch(
+        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+        return_value=None,
+    ):
+        promote_short_term_item_via_apply(
+            uid,
+            short_item,
+            control=control,
+            run_id="promo-run",
+            trigger_reason="batch_threshold",
+            now=now,
+            db_client=_PromotionDb(),
+        )
+
+    idempotent_apply = SimpleNamespace(
+        status=ApplyStatus.idempotent_skip,
+        memory_items=[],
+        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
+    )
+
+    class _PromotionDbWithItem:
+        def document(self, path):
+            if path.endswith(memory_id):
+                return SimpleNamespace(
+                    get=lambda: SimpleNamespace(
+                        exists=True,
+                        to_dict=lambda: long_item.model_dump(mode="json"),
+                    ),
+                )
+            return SimpleNamespace(get=lambda: SimpleNamespace(exists=False), set=lambda *a, **k: None)
+
+    with patch(
+        "utils.memory.short_term_promotion.apply_long_term_patch_firestore",
+        return_value=idempotent_apply,
+    ), patch(
+        "utils.memory.short_term_promotion._ensure_promotion_operation",
+        return_value=SimpleNamespace(operation_id="op-promo-2"),
+    ), patch(
+        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+        return_value=None,
+    ):
+        promote_short_term_item_via_apply(
+            uid,
+            short_item,
+            control=control,
+            run_id="promo-run-2",
+            trigger_reason="batch_threshold",
+            now=now,
+            db_client=_PromotionDbWithItem(),
+        )
+
+    vector_ids = [upsert["vectors"][0]["id"] for upsert in fake_index.upserts]
+    assert vector_ids == [memory_id, memory_id, memory_id]
+    assert fake_index.upserts[0]["vectors"][0]["metadata"]["memory_layer"] == "short_term"
+    assert fake_index.upserts[1]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
+    assert fake_index.upserts[2]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
+    assert len(fake_index._vectors) == 1
+    assert fake_index._vectors[memory_id]["metadata"]["memory_layer"] == "long_term"
