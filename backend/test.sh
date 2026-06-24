@@ -62,6 +62,7 @@ pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_integration_notification_validation.py -v
 pytest tests/unit/test_conversations_to_string.py -v
+pytest tests/unit/test_mcp_sse_posts_clamp.py -v
 pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
