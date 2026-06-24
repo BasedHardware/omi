@@ -95,6 +95,7 @@ pytest tests/unit/test_storage_upload_audio_chunk_data_protection.py -v
 pytest tests/unit/test_optional_audio_codecs.py -v
 pytest tests/unit/test_storage_opus_encoding.py -v
 pytest tests/unit/test_speech_profile_existence.py -v
+pytest tests/unit/test_speech_profile_wav_decode.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
 pytest tests/unit/test_deferred_blob_janitor.py -v
 pytest tests/unit/test_audio_merge_tasks.py -v
