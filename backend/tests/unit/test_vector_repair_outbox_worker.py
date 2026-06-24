@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from database.memory_vector_repair_pinecone_adapter import (
-    V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+    MEMORY_VECTOR_REPAIR_PINECONE_NAMESPACE,
     V17VectorRepairNotReady,
     make_v17_pinecone_vector_deleter,
     make_v17_pinecone_vector_repairer,
@@ -587,7 +587,7 @@ def test_pinecone_adapter_delete_passes_vector_id_and_ns2_namespace_to_injected_
 
     result = deleter(_record(vector_id="v17mem:stale"))
 
-    assert V17_VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
+    assert MEMORY_VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
     assert calls == [{"ids": ["v17mem:stale"], "namespace": "ns2"}]
     assert result["action"] == "delete"
     assert result["vector_ids"] == ["v17mem:stale"]
