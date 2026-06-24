@@ -1,30 +1,309 @@
-"""Canonical alias module for ``config.v17_memory`` (WS-G).
+"""Canonical rollout configuration (WS-G5).
 
-New canonical-path code may import from here; the V17 module name remains valid
-until a later rename wave. No behavior change — re-exports only.
+Neutral ``MemoryRollout*`` symbols are the source of truth. Legacy ``V17*`` names
+remain importable aliases until later rename waves. Env vars dual-read neutral keys
+with ``V17_*`` fallback; cohort membership stays on ``MEMORY_CANONICAL_USERS`` only.
 """
 
-from config.v17_memory import (
-    MEMORY_ENABLED_USERS_ENV,
-    MEMORY_MODE_ENV,
-    PASSED,
-    V17Capabilities,
-    V17Mode,
-    V17RolloutConfig,
-    V17RolloutState,
-    V17StageGate,
-    V17_MEMORY_ENABLED_USERS_ENV,
-    V17_MODE_ENV,
-    decide_v17_capabilities,
-    parse_enabled_users,
-    rollout_enabled_users_env_raw,
-    rollout_mode_env_value,
-)
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
+from enum import Enum
+from typing import Iterable, Optional, Set
+
+MEMORY_MODE_ENV = "MEMORY_MODE"
+V17_MODE_ENV = "V17_MODE"
+MEMORY_ENABLED_USERS_ENV = "MEMORY_ENABLED_USERS"
+V17_MEMORY_ENABLED_USERS_ENV = "V17_MEMORY_ENABLED_USERS"
+
+MEMORY_BACKFILL_ENABLED_ENV = "MEMORY_BACKFILL_ENABLED"
+V17_BACKFILL_ENABLED_ENV = "V17_BACKFILL_ENABLED"
+MEMORY_BACKFILL_DAILY_LIMIT_ENV = "MEMORY_BACKFILL_DAILY_LIMIT"
+V17_BACKFILL_DAILY_LIMIT_ENV = "V17_BACKFILL_DAILY_LIMIT"
+MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV = "MEMORY_ARCHIVE_OPT_IN_ENABLED"
+V17_ARCHIVE_OPT_IN_ENABLED_ENV = "V17_ARCHIVE_OPT_IN_ENABLED"
+MEMORY_V3_GET_ENABLED_ENV = "MEMORY_V3_GET_ENABLED"
+V17_V3_GET_ENABLED_ENV = "V17_V3_GET_ENABLED"
+
+
+class MemoryRolloutMode(str, Enum):
+    off = "off"
+    shadow = "shadow"
+    write = "write"
+    read = "read"
+
+
+class MemoryRolloutStageGate(str, Enum):
+    shadow = "shadow"
+    write = "write"
+    read = "read"
+
+
+V17Mode = MemoryRolloutMode
+V17StageGate = MemoryRolloutStageGate
+
+PASSED = "passed"
+
+
+@dataclass(frozen=True)
+class MemoryRolloutCapabilities:
+    uid: str
+    mode: MemoryRolloutMode
+    legacy_only: bool
+    shadow_artifacts_enabled: bool
+    v17_writes_enabled: bool
+    v17_reads_enabled: bool
+    legacy_reads_authoritative: bool
+    account_generation: int = 0
+
+
+V17Capabilities = MemoryRolloutCapabilities
+
+
+@dataclass
+class MemoryRolloutState:
+    uid: str
+    mode: MemoryRolloutMode = MemoryRolloutMode.off
+    mode_epoch: int = 0
+    cutover_epoch: int = 0
+    account_generation: int = 0
+    last_reconciled_legacy_revision: Optional[str] = None
+    fallback_projection_ready: bool = False
+    persistent_v17_writes_started: bool = False
+    decommission_reconciled: bool = False
+    writes_blocked: bool = False
+    stage_gates: dict[MemoryRolloutStageGate, str] = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.mode_epoch < 0:
+            raise ValueError("mode_epoch must be nonnegative")
+        if self.cutover_epoch < 0:
+            raise ValueError("cutover_epoch must be nonnegative")
+        if self.account_generation < 0:
+            raise ValueError("account_generation must be nonnegative")
+        self.stage_gates = {
+            key if isinstance(key, MemoryRolloutStageGate) else MemoryRolloutStageGate(key): value
+            for key, value in self.stage_gates.items()
+        }
+
+    def gate_passed(self, gate: MemoryRolloutStageGate) -> bool:
+        return self.stage_gates.get(gate) == PASSED
+
+    def can_transition_to(self, target: MemoryRolloutMode) -> bool:
+        if target == self.mode:
+            return True
+        if target == MemoryRolloutMode.off and self.persistent_v17_writes_started:
+            return self.decommission_reconciled
+        if self.mode == MemoryRolloutMode.read and target in {
+            MemoryRolloutMode.write,
+            MemoryRolloutMode.shadow,
+            MemoryRolloutMode.off,
+        }:
+            if target == MemoryRolloutMode.off and self.decommission_reconciled:
+                return True
+            return self.fallback_projection_ready
+        if target == MemoryRolloutMode.read:
+            return self.fallback_projection_ready and self.gate_passed(MemoryRolloutStageGate.read)
+        return True
+
+    def transition_to(self, target: MemoryRolloutMode) -> "MemoryRolloutState":
+        if not self.can_transition_to(target):
+            raise ValueError(f"Cannot transition from {self.mode.value} to {target.value}")
+        next_epoch = self.mode_epoch + (0 if target == self.mode else 1)
+        cutover_epoch = self.cutover_epoch
+        if target == MemoryRolloutMode.read and self.mode != MemoryRolloutMode.read:
+            cutover_epoch = next_epoch
+        return replace(self, mode=target, mode_epoch=next_epoch, cutover_epoch=cutover_epoch)
+
+
+V17RolloutState = MemoryRolloutState
+
+
+@dataclass
+class MemoryRolloutConfig:
+    enabled_users: Set[str] = field(default_factory=set)
+    mode: MemoryRolloutMode = MemoryRolloutMode.off
+    backfill_enabled: bool = False
+    backfill_daily_limit: int = 0
+    archive_opt_in_enabled: bool = False
+
+    @classmethod
+    def from_env(cls) -> "MemoryRolloutConfig":
+        mode = MemoryRolloutMode(rollout_mode_env_value())
+        limit = rollout_backfill_daily_limit_env_value()
+        return cls(
+            enabled_users=parse_enabled_users(rollout_enabled_users_env_raw()),
+            mode=mode,
+            backfill_enabled=rollout_backfill_enabled_env_value(),
+            backfill_daily_limit=limit,
+            archive_opt_in_enabled=rollout_archive_opt_in_enabled_env_value(),
+        )
+
+    def for_user(self, uid: str, state: Optional[MemoryRolloutState] = None) -> MemoryRolloutCapabilities:
+        if self.mode == MemoryRolloutMode.off or uid not in self.enabled_users:
+            return _legacy_capabilities(uid)
+        if state is None:
+            state = MemoryRolloutState(
+                uid=uid,
+                mode=self.mode,
+                stage_gates={MemoryRolloutStageGate.shadow: PASSED},
+            )
+        if state.uid != uid:
+            return _legacy_capabilities(uid)
+        return decide_v17_capabilities(uid, self.mode, state)
+
+
+V17RolloutConfig = MemoryRolloutConfig
+
+
+def _legacy_capabilities(uid: str) -> MemoryRolloutCapabilities:
+    return MemoryRolloutCapabilities(
+        uid=uid,
+        mode=MemoryRolloutMode.off,
+        legacy_only=True,
+        shadow_artifacts_enabled=False,
+        v17_writes_enabled=False,
+        v17_reads_enabled=False,
+        legacy_reads_authoritative=True,
+    )
+
+
+def decide_v17_capabilities(
+    uid: str,
+    mode: MemoryRolloutMode | str,
+    state: MemoryRolloutState,
+) -> MemoryRolloutCapabilities:
+    resolved = mode if isinstance(mode, MemoryRolloutMode) else MemoryRolloutMode(mode)
+    if resolved == MemoryRolloutMode.off:
+        return _legacy_capabilities(uid)
+
+    shadow_enabled = state.gate_passed(MemoryRolloutStageGate.shadow)
+    write_enabled = (
+        resolved in {MemoryRolloutMode.write, MemoryRolloutMode.read}
+        and shadow_enabled
+        and state.gate_passed(MemoryRolloutStageGate.write)
+        and not state.writes_blocked
+    )
+    read_enabled = (
+        resolved == MemoryRolloutMode.read
+        and write_enabled
+        and state.gate_passed(MemoryRolloutStageGate.read)
+        and state.fallback_projection_ready
+    )
+    return MemoryRolloutCapabilities(
+        uid=uid,
+        mode=resolved,
+        legacy_only=False,
+        shadow_artifacts_enabled=shadow_enabled,
+        v17_writes_enabled=write_enabled,
+        v17_reads_enabled=read_enabled,
+        legacy_reads_authoritative=not read_enabled,
+        account_generation=state.account_generation,
+    )
+
+
+def parse_enabled_users(raw: str | Iterable[str]) -> Set[str]:
+    if isinstance(raw, str):
+        return {uid.strip() for uid in raw.split(",") if uid.strip()}
+    return {uid.strip() for uid in raw if uid and uid.strip()}
+
+
+def _env_raw_value(
+    env: Mapping[str, str] | None,
+    *,
+    neutral_key: str,
+    legacy_key: str,
+    default: str,
+) -> str:
+    source = env if env is not None else os.environ
+    if neutral_key in source:
+        return source.get(neutral_key, default) or default
+    return source.get(legacy_key, default) or default
+
+
+def rollout_mode_env_value(env: Mapping[str, str] | None = None) -> str:
+    """Read rollout mode from ``MEMORY_MODE`` with fallback to ``V17_MODE``.
+
+    Neutral key wins when present in the environment mapping (even if empty).
+    Does **not** read ``MEMORY_CANONICAL_USERS`` — cohort membership is separate (WS-E).
+    """
+    raw = _env_raw_value(env, neutral_key=MEMORY_MODE_ENV, legacy_key=V17_MODE_ENV, default="")
+    return (raw or MemoryRolloutMode.off.value).strip() or MemoryRolloutMode.off.value
+
+
+def rollout_enabled_users_env_raw(env: Mapping[str, str] | None = None) -> str:
+    """Read enabled-user list from ``MEMORY_ENABLED_USERS`` with fallback to ``V17_MEMORY_ENABLED_USERS``."""
+    return _env_raw_value(
+        env,
+        neutral_key=MEMORY_ENABLED_USERS_ENV,
+        legacy_key=V17_MEMORY_ENABLED_USERS_ENV,
+        default="",
+    )
+
+
+def rollout_backfill_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
+    """Read backfill toggle from ``MEMORY_BACKFILL_ENABLED`` with fallback to ``V17_BACKFILL_ENABLED``."""
+    raw = _env_raw_value(
+        env,
+        neutral_key=MEMORY_BACKFILL_ENABLED_ENV,
+        legacy_key=V17_BACKFILL_ENABLED_ENV,
+        default="false",
+    )
+    return str(raw).lower() == "true"
+
+
+def rollout_backfill_daily_limit_env_value(env: Mapping[str, str] | None = None) -> int:
+    """Read backfill daily limit from neutral env with ``V17_BACKFILL_DAILY_LIMIT`` fallback."""
+    raw = _env_raw_value(
+        env,
+        neutral_key=MEMORY_BACKFILL_DAILY_LIMIT_ENV,
+        legacy_key=V17_BACKFILL_DAILY_LIMIT_ENV,
+        default="0",
+    )
+    limit = int(raw or 0)
+    if limit < 0:
+        raise ValueError(f"{MEMORY_BACKFILL_DAILY_LIMIT_ENV} must be nonnegative")
+    return limit
+
+
+def rollout_archive_opt_in_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
+    """Read archive opt-in from ``MEMORY_ARCHIVE_OPT_IN_ENABLED`` with ``V17_*`` fallback."""
+    raw = _env_raw_value(
+        env,
+        neutral_key=MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV,
+        legacy_key=V17_ARCHIVE_OPT_IN_ENABLED_ENV,
+        default="false",
+    )
+    return str(raw).lower() == "true"
+
+
+def rollout_v3_get_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
+    """Read v3 GET route toggle from ``MEMORY_V3_GET_ENABLED`` with ``V17_V3_GET_ENABLED`` fallback."""
+    raw = _env_raw_value(
+        env,
+        neutral_key=MEMORY_V3_GET_ENABLED_ENV,
+        legacy_key=V17_V3_GET_ENABLED_ENV,
+        default="",
+    )
+    return str(raw).strip().lower() == "true"
+
 
 __all__ = [
+    "MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV",
+    "MEMORY_BACKFILL_DAILY_LIMIT_ENV",
+    "MEMORY_BACKFILL_ENABLED_ENV",
     "MEMORY_ENABLED_USERS_ENV",
     "MEMORY_MODE_ENV",
+    "MEMORY_V3_GET_ENABLED_ENV",
+    "MemoryRolloutCapabilities",
+    "MemoryRolloutConfig",
+    "MemoryRolloutMode",
+    "MemoryRolloutStageGate",
+    "MemoryRolloutState",
     "PASSED",
+    "V17_ARCHIVE_OPT_IN_ENABLED_ENV",
+    "V17_BACKFILL_DAILY_LIMIT_ENV",
+    "V17_BACKFILL_ENABLED_ENV",
     "V17Capabilities",
     "V17Mode",
     "V17RolloutConfig",
@@ -32,8 +311,13 @@ __all__ = [
     "V17StageGate",
     "V17_MEMORY_ENABLED_USERS_ENV",
     "V17_MODE_ENV",
+    "V17_V3_GET_ENABLED_ENV",
     "decide_v17_capabilities",
     "parse_enabled_users",
+    "rollout_archive_opt_in_enabled_env_value",
+    "rollout_backfill_daily_limit_env_value",
+    "rollout_backfill_enabled_env_value",
     "rollout_enabled_users_env_raw",
     "rollout_mode_env_value",
+    "rollout_v3_get_enabled_env_value",
 ]
