@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import json
 import os
 import re
@@ -257,6 +258,13 @@ def assert_ax(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bo
     return True, None
 
 
+def export_visual(ctx: HarnessContext, path: Path, target: str | None = None) -> dict[str, Any]:
+    payload = {"path": str(path)}
+    if target:
+        payload["target"] = target
+    return request_json(ctx.base_url, "POST", "/visual/export", payload)
+
+
 def apply_wait(ctx: HarnessContext, step: dict[str, Any], prefix: str, result: dict[str, Any]) -> None:
     wait_spec = step.get("wait") or {}
     if not result["ok"] or not isinstance(wait_spec, dict) or not wait_spec:
@@ -320,16 +328,79 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, Any]) -> dict[
                 options = dict(step["visual.export"] or {})
                 name = slug(str(options.get("name") or step.get("id") or f"step-{index}"))
                 png_path = ctx.steps_dir / f"{prefix}-{name}.png"
-                payload = {"path": str(png_path)}
-                if "target" in options:
-                    payload["target"] = str(options["target"])
-                response = request_json(ctx.base_url, "POST", "/visual/export", payload)
+                response = export_visual(ctx, png_path, str(options["target"]) if "target" in options else None)
                 response_path = ctx.steps_dir / f"{prefix}-visual.json"
                 write_json(response_path, response)
                 result.update(operation="visual.export", response_path=str(response_path), ok=bool(response.get("ok")))
                 result["artifacts"]["screenshot"] = str(png_path)
                 if not result["ok"]:
                     result["error"] = response.get("error")
+
+        elif "visual.action_sequence" in step:
+            if ctx.lane not in {"visual", "ui"}:
+                result["operation"] = "visual.action_sequence"
+                result["warnings"].append(f"skipped in {ctx.lane} lane")
+            else:
+                options = dict(step["visual.action_sequence"] or {})
+                action_name = str(options.get("action") or "")
+                if not action_name:
+                    result.update(operation="visual.action_sequence", ok=False, error="visual.action_sequence requires action")
+                else:
+                    frames = max(1, int(options.get("frames", 8)))
+                    interval_ms = max(1, int(options.get("interval_ms", 16)))
+                    target = str(options.get("target") or "floating")
+                    params = dict(options.get("params") or {})
+                    action_path = ctx.steps_dir / f"{prefix}-action.json"
+                    frame_records = []
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        action_future = executor.submit(
+                            request_json,
+                            ctx.base_url,
+                            "POST",
+                            "/action",
+                            {"name": action_name, "params": params},
+                        )
+                        ok = True
+                        for frame_index in range(frames):
+                            frame_path = ctx.steps_dir / f"{prefix}-frame-{frame_index:02d}.png"
+                            captured_at = now_iso()
+                            response = export_visual(ctx, frame_path, target)
+                            frame_records.append(
+                                {
+                                    "index": frame_index,
+                                    "captured_at": captured_at,
+                                    "path": str(frame_path),
+                                    "ok": bool(response.get("ok")),
+                                    "response": response,
+                                }
+                            )
+                            ok = ok and bool(response.get("ok"))
+                            if frame_index < frames - 1:
+                                time.sleep(interval_ms / 1000)
+                        try:
+                            action_response = action_future.result(timeout=25)
+                        except FutureTimeoutError:
+                            action_response = {"ok": False, "error": "action request timed out after capture"}
+                    write_json(action_path, action_response)
+                    ok = ok and bool(action_response.get("ok"))
+                    manifest_path = ctx.steps_dir / f"{prefix}-sequence.json"
+                    write_json(
+                        manifest_path,
+                        {
+                            "action": action_name,
+                            "capture_mode": "concurrent",
+                            "params": params,
+                            "target": target,
+                            "frames": frame_records,
+                            "interval_ms": interval_ms,
+                            "action_response": str(action_path),
+                        },
+                    )
+                    result.update(operation="visual.action_sequence", ok=ok, response_path=str(action_path))
+                    result["artifacts"]["sequence"] = str(manifest_path)
+                    result["artifacts"]["frames"] = [record["path"] for record in frame_records]
+                    if not ok:
+                        result["error"] = "action sequence capture failed"
 
         elif "state.expect" in step:
             path = ctx.steps_dir / f"{prefix}-state.json"
@@ -476,6 +547,14 @@ def write_summary(run_dir: Path, metrics: dict[str, Any]) -> None:
     if screenshots:
         lines.extend(["", "## Visual Evidence"])
         lines.extend(f"- {path}" for path in screenshots)
+    sequences = [
+        step["artifacts"]["sequence"]
+        for step in metrics["steps"]
+        if isinstance(step.get("artifacts"), dict) and step["artifacts"].get("sequence")
+    ]
+    if sequences:
+        lines.extend(["", "## Animation Evidence"])
+        lines.extend(f"- {path}" for path in sequences)
     (run_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

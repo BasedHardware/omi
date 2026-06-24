@@ -24,7 +24,7 @@ chat content. Do not attach or publish a run directory unless you have reviewed 
 
 ```bash
 cd desktop/macos
-OMI_APP_NAME=omi-harness-test OMI_AUTOMATION_PORT=47888 ./run.sh --yolo
+OMI_SKIP_STALE_BUNDLE_SCAN=1 OMI_APP_NAME=omi-harness-test OMI_AUTOMATION_PORT=47888 ./run.sh --yolo
 ```
 
 In another shell:
@@ -51,6 +51,7 @@ Supported step types:
 - `bridge.navigate`
 - `bridge.action`
 - `visual.export`
+- `visual.action_sequence`
 - `state.expect`
 - `trace.expect`
 - `log.expect`
@@ -61,3 +62,18 @@ step. Keep automated checks to facts the harness can measure directly: state,
 traces, logs, timing, and AX text. The harness does not score screenshot quality;
 the agent should open the PNGs listed in `summary.md` and judge layout, polish,
 clipping, empty states, and visual regressions directly.
+
+Use `visual.action_sequence` for fast animations. It posts the bridge action and
+captures frames concurrently, which avoids missing transitions that finish before
+a normal action response returns:
+
+```yaml
+- name: Capture Ask Omi Open Animation
+  visual.action_sequence:
+    action: open_ask_omi
+    params:
+      wait: false
+    target: floating
+    frames: 8
+    interval_ms: 16
+```

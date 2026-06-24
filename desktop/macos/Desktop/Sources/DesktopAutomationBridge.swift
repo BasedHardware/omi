@@ -331,17 +331,21 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "open_ask_omi",
       summary: "Open the Ask Omi input panel and return app-side open/focus timing",
-      params: ["reset"]
+      params: ["reset", "wait"]
     ) { params in
       let reset = boolParam(params["reset"], default: false)
-      return await FloatingControlBarManager.shared.openAskOmiForAutomation(reset: reset)
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.openAskOmiForAutomation(
+        reset: reset, wait: wait)
     }
 
     register(
       name: "close_ask_omi",
-      summary: "Close the Ask Omi input panel if it is open"
-    ) { _ in
-      return await FloatingControlBarManager.shared.closeAskOmiForAutomation()
+      summary: "Close the Ask Omi input panel if it is open",
+      params: ["wait"]
+    ) { params in
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
     register(
@@ -626,7 +630,9 @@ final class DesktopAutomationBridge {
       do {
         let detail = try await DesktopAutomationActionRegistry.shared.perform(
           parsed.name, params: parsed.params)
-        try await Task.sleep(for: .milliseconds(150))
+        if boolParam(parsed.params["wait"], default: true) {
+          try await Task.sleep(for: .milliseconds(150))
+        }
         let snapshot = await liveAutomationSnapshot()
         let result = DesktopAutomationActionResult(
           action: parsed.name, detail: detail, state: snapshot)
