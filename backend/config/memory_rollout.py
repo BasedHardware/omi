@@ -1,6 +1,6 @@
 """Canonical rollout configuration (WS-G5).
 
-Neutral ``MemoryRollout*`` symbols are the source of truth. Legacy ``V17*`` names
+Neutral ``MemoryRollout*`` symbols are the source of truth. Legacy ``memory*`` names
 remain importable aliases until later rename waves. Env vars read neutral ``MEMORY_*``
 keys only; cohort membership stays on ``MEMORY_CANONICAL_USERS`` only.
 """
@@ -33,8 +33,8 @@ class MemoryRolloutStageGate(str, Enum):
     read = "read"
 
 
-V17Mode = MemoryRolloutMode
-V17StageGate = MemoryRolloutStageGate
+MemoryRolloutMode = MemoryRolloutMode
+MemoryRolloutStageGate = MemoryRolloutStageGate
 
 PASSED = "passed"
 
@@ -45,13 +45,13 @@ class MemoryRolloutCapabilities:
     mode: MemoryRolloutMode
     legacy_only: bool
     shadow_artifacts_enabled: bool
-    v17_writes_enabled: bool
-    v17_reads_enabled: bool
+    memory_writes_enabled: bool
+    memory_reads_enabled: bool
     legacy_reads_authoritative: bool
     account_generation: int = 0
 
 
-V17Capabilities = MemoryRolloutCapabilities
+MemoryRolloutCapabilities = MemoryRolloutCapabilities
 
 
 @dataclass
@@ -63,7 +63,7 @@ class MemoryRolloutState:
     account_generation: int = 0
     last_reconciled_legacy_revision: Optional[str] = None
     fallback_projection_ready: bool = False
-    persistent_v17_writes_started: bool = False
+    persistent_memory_writes_started: bool = False
     decommission_reconciled: bool = False
     writes_blocked: bool = False
     stage_gates: dict[MemoryRolloutStageGate, str] = field(default_factory=dict)
@@ -86,7 +86,7 @@ class MemoryRolloutState:
     def can_transition_to(self, target: MemoryRolloutMode) -> bool:
         if target == self.mode:
             return True
-        if target == MemoryRolloutMode.off and self.persistent_v17_writes_started:
+        if target == MemoryRolloutMode.off and self.persistent_memory_writes_started:
             return self.decommission_reconciled
         if self.mode == MemoryRolloutMode.read and target in {
             MemoryRolloutMode.write,
@@ -110,7 +110,7 @@ class MemoryRolloutState:
         return replace(self, mode=target, mode_epoch=next_epoch, cutover_epoch=cutover_epoch)
 
 
-V17RolloutState = MemoryRolloutState
+MemoryRolloutState = MemoryRolloutState
 
 
 @dataclass
@@ -144,10 +144,10 @@ class MemoryRolloutConfig:
             )
         if state.uid != uid:
             return _legacy_capabilities(uid)
-        return decide_v17_capabilities(uid, self.mode, state)
+        return decide_memory_rollout_capabilities(uid, self.mode, state)
 
 
-V17RolloutConfig = MemoryRolloutConfig
+MemoryRolloutConfig = MemoryRolloutConfig
 
 
 def _legacy_capabilities(uid: str) -> MemoryRolloutCapabilities:
@@ -156,13 +156,13 @@ def _legacy_capabilities(uid: str) -> MemoryRolloutCapabilities:
         mode=MemoryRolloutMode.off,
         legacy_only=True,
         shadow_artifacts_enabled=False,
-        v17_writes_enabled=False,
-        v17_reads_enabled=False,
+        memory_writes_enabled=False,
+        memory_reads_enabled=False,
         legacy_reads_authoritative=True,
     )
 
 
-def decide_v17_capabilities(
+def decide_memory_rollout_capabilities(
     uid: str,
     mode: MemoryRolloutMode | str,
     state: MemoryRolloutState,
@@ -189,8 +189,8 @@ def decide_v17_capabilities(
         mode=resolved,
         legacy_only=False,
         shadow_artifacts_enabled=shadow_enabled,
-        v17_writes_enabled=write_enabled,
-        v17_reads_enabled=read_enabled,
+        memory_writes_enabled=write_enabled,
+        memory_reads_enabled=read_enabled,
         legacy_reads_authoritative=not read_enabled,
         account_generation=state.account_generation,
     )
@@ -268,12 +268,12 @@ __all__ = [
     "MemoryRolloutStageGate",
     "MemoryRolloutState",
     "PASSED",
-    "V17Capabilities",
-    "V17Mode",
-    "V17RolloutConfig",
-    "V17RolloutState",
-    "V17StageGate",
-    "decide_v17_capabilities",
+    "MemoryRolloutCapabilities",
+    "MemoryRolloutMode",
+    "MemoryRolloutConfig",
+    "MemoryRolloutState",
+    "MemoryRolloutStageGate",
+    "decide_memory_rollout_capabilities",
     "parse_enabled_users",
     "rollout_archive_opt_in_enabled_env_value",
     "rollout_backfill_daily_limit_env_value",

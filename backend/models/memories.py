@@ -21,7 +21,7 @@ from models.product_memory import MemoryTier
 def decide_initial_memory_tier(manually_added: bool, durability: Optional[str]) -> MemoryTier:
     """Tier a memory at birth.
 
-    Faithful to the V17 design (memories are born short-term and promoted on
+    Faithful to the memory design (memories are born short-term and promoted on
     corroboration): user-asserted facts and explicitly long-horizon facts are
     durable from the start; everything else starts short-term and can be
     promoted later (see the corroboration path in process_conversation).
@@ -533,7 +533,7 @@ class MemoryDB(Memory):
     kg_extracted: bool = False
     evidence: List[Evidence] = Field(default_factory=list)
 
-    # V17 tiering. Pre-V17 docs lack this field and read back as long_term, so
+    # memory tiering. Pre-memory docs lack this field and read back as long_term, so
     # the existing UI is unchanged; newly produced memories are tiered at birth
     # (decide_initial_memory_tier) and may be promoted on corroboration.
     memory_tier: MemoryTier = MemoryTier.long_term

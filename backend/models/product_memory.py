@@ -15,7 +15,7 @@ class MemoryLayer(str, Enum):
     archive = "archive"
 
 
-# Legacy V17 name — same enum, kept for backward-compatible imports.
+# Legacy memory name — same enum, kept for backward-compatible imports.
 MemoryTier = MemoryLayer
 
 
@@ -87,7 +87,7 @@ class MemoryItemAlias(BaseModel):
         return self
 
 
-V17MemoryItemAlias = MemoryItemAlias
+MemoryItemAlias = MemoryItemAlias
 
 
 class MemoryItem(BaseModel):
@@ -168,7 +168,7 @@ class MemoryItem(BaseModel):
         return self
 
 
-V17MemoryItem = MemoryItem
+MemoryItem = MemoryItem
 
 
 def new_memory_id() -> str:
@@ -257,8 +257,8 @@ __all__ = [
     "MemoryLayer",
     "MemoryTier",
     "ProcessingState",
-    "V17MemoryItem",
-    "V17MemoryItemAlias",
+    "MemoryItem",
+    "MemoryItemAlias",
     "derived_default_access_allowed",
     "is_archive_access_eligible",
     "is_default_access_eligible",

@@ -2,7 +2,7 @@
 
 This module defines the normative product-layer enums and the legal state-combination
 validator. It introduces **no runtime behavior** — existing code continues to use
-legacy types (e.g. ``MemoryTier`` in ``v17_product_memory``) until later workstreams
+legacy types (e.g. ``MemoryTier`` in ``product_memory``) until later workstreams
 rename call sites.
 
 Terminology
@@ -51,7 +51,7 @@ class MemoryRecordStatus(str, Enum):
     TOMBSTONED = "tombstoned"
 
 
-# Physical ``MemoryItemStatus.hidden`` is a V17 storage value with no §1.3 axis counterpart.
+# Physical ``MemoryItemStatus.hidden`` is a memory storage value with no §1.3 axis counterpart.
 # Boundary-map to ``tombstoned`` (hard-excluded from default reads) for validation/materialization.
 _PHYSICAL_TO_CANONICAL_STATUS: dict[str, MemoryRecordStatus] = {
     MemoryRecordStatus.ACTIVE.value: MemoryRecordStatus.ACTIVE,
@@ -115,16 +115,16 @@ def assert_legal_state(
         )
 
 
-# Product storage/API field remains ``tier`` on ``V17MemoryItem`` (bucket D — out of scope).
+# Product storage/API field remains ``tier`` on ``MemoryItem`` (bucket D — out of scope).
 # ``models.product_memory.MemoryLayer`` is a type alias for ``MemoryTier`` (WS-G Wave 34).
 # This module's ``MemoryLayer`` is the canonical validation enum (UPPER_CASE members).
 
 
 def tier_to_layer(tier: MemoryTier) -> MemoryLayer:
-    """Map legacy V17 ``MemoryTier`` to canonical ``MemoryLayer`` (same semantics)."""
+    """Map legacy memory ``MemoryTier`` to canonical ``MemoryLayer`` (same semantics)."""
     return MemoryLayer(tier.value)
 
 
 def layer_to_tier(layer: MemoryLayer) -> MemoryTier:
-    """Map canonical ``MemoryLayer`` to legacy V17 ``MemoryTier`` (same semantics)."""
+    """Map canonical ``MemoryLayer`` to legacy memory ``MemoryTier`` (same semantics)."""
     return MemoryTier(layer.value)

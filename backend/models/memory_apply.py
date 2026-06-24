@@ -103,7 +103,7 @@ class MemoryControlState(BaseModel):
         return (
             "commit_"
             + deterministic_contract_id(
-                "v17-memory-commit",
+                "memory-commit",
                 {
                     "uid": self.uid,
                     "head_commit_id": self.head_commit_id,
@@ -170,7 +170,7 @@ def _event_id(event_type: MemoryOutboxEventType, commit_id: str, memory_id: Opti
     return (
         "evt_"
         + deterministic_contract_id(
-            "v17-memory-outbox",
+            "memory-outbox",
             {
                 "event_type": event_type.value,
                 "commit_id": commit_id,
@@ -198,7 +198,7 @@ def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch
     return (
         "mem_"
         + deterministic_contract_id(
-            "v17-memory-materialized-item",
+            "memory-materialized-item",
             {
                 "uid": uid,
                 "commit_id": commit_id,
@@ -250,7 +250,7 @@ def _materialize_memory_item(
         source_commit_id=commit_id,
         source_commit_sequence=sequence,
         content_hash=deterministic_contract_id(
-            "v17-memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
+            "memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
         ),
         account_generation=account_generation,
     )

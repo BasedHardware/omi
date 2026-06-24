@@ -92,11 +92,11 @@ def build_operation_id(
         "account_generation": account_generation,
         "source_generation": source_generation,
     }
-    return "op_" + deterministic_contract_id("v17-memory-operation", payload)[:32]
+    return "op_" + deterministic_contract_id("memory-operation", payload)[:32]
 
 
 def logical_payload_digest(value: OperationLogicalPayload | Dict[str, Any]) -> str:
-    return deterministic_contract_id("v17-operation-logical-payload", _coerce_logical_payload(value).canonical())
+    return deterministic_contract_id("memory-operation-logical-payload", _coerce_logical_payload(value).canonical())
 
 
 class MemoryOperation(BaseModel):

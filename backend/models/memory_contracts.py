@@ -10,7 +10,7 @@ from models.product_memory import MemoryTier
 
 # Neutral fact-source string for new durable-memory patch ledger writes (schema literal unchanged).
 DURABLE_MEMORY_PATCH_FACT_SOURCE = "durable_memory_patch"
-V17_DURABLE_MEMORY_PATCH_FACT_SOURCE = DURABLE_MEMORY_PATCH_FACT_SOURCE
+DURABLE_MEMORY_PATCH_FACT_SOURCE = DURABLE_MEMORY_PATCH_FACT_SOURCE
 
 
 class LifecycleState(str, Enum):
@@ -103,7 +103,7 @@ class L1MemoryArchiveItem(BaseModel):
     normal_search_allowed: bool = True
     is_stable_profile_fact: bool = False
     search_result_label: str = "archived_evidence_not_stable_memory"
-    extractor_version: str = "v17_l1_archive_llm_v1"
+    extractor_version: str = "short_term_archive_llm_v1"
 
     @field_validator("confidence")
     @classmethod
@@ -187,7 +187,7 @@ class WorkingMemoryObservation(BaseModel):
     predicate: Optional[str] = None
     arguments: Dict[str, Any] = Field(default_factory=dict)
     qualifiers: Dict[str, Any] = Field(default_factory=dict)
-    extractor_version: str = "v17_l1_llm_observation_extractor_v1"
+    extractor_version: str = "short_term_llm_observation_extractor_v1"
 
     @field_validator("confidence")
     @classmethod
@@ -317,7 +317,7 @@ class SourceBackedMemoryCandidate(BaseModel):
     archive_id: Optional[str] = None
     default_access_candidate: bool = True
     risk_flags: List[str] = Field(default_factory=list)
-    extractor_version: str = "v17_source_backed_candidate_v1"
+    extractor_version: str = "source_backed_candidate_v1"
 
     @field_validator("candidate_id", "user_id", "source_id", "source_type", "source_version", "text")
     @classmethod
@@ -511,7 +511,7 @@ __all__ = [
     "LifecycleState",
     "PromotionRoute",
     "SourceBackedMemoryCandidate",
-    "V17_DURABLE_MEMORY_PATCH_FACT_SOURCE",
+    "DURABLE_MEMORY_PATCH_FACT_SOURCE",
     "WorkingMemoryObservation",
     "WorkingObservation",
     "WorkingObservationArchiveItem",
