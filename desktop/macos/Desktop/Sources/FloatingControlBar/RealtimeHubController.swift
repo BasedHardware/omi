@@ -452,7 +452,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let query = arg("query")
       let context = (arguments["context"] as? String) ?? ""
       log(
-        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\""
+        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (\(ModelQoS.Claude.defaultSelection)) query=\"\(query.prefix(80))\""
       )
       Task { [weak self] in
         guard let self else { return }
@@ -611,7 +611,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let model = ShortcutSettings.shared.selectedModel.isEmpty
-        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
       // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
@@ -771,7 +771,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
       guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-        log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 HTTP \(code) in \(ms)ms (FAILED)")
+        log("RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) HTTP \(code) in \(ms)ms (FAILED)")
         return "The model is unavailable right now."
       }
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -783,7 +783,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return "I didn't get a usable answer."
       }
       let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 OK in \(ms)ms (\(answer.count) chars)")
+      log("RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) OK in \(ms)ms (\(answer.count) chars)")
       return answer
     } catch {
       log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")

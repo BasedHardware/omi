@@ -918,7 +918,21 @@ class FloatingControlBarManager {
 
     private struct PendingFollowUpQuery {
         let text: String
-        let fromVoice: Bool
+        let presentation: QueryPresentation
+    }
+
+    private enum QueryPresentation {
+        case visible(fromVoice: Bool)
+        case voiceOnly
+
+        var fromVoice: Bool {
+            switch self {
+            case .visible(let fromVoice):
+                return fromVoice
+            case .voiceOnly:
+                return true
+            }
+        }
     }
 
     private struct StoredNotificationMessage {
@@ -952,6 +966,11 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
+
+    private var selectedFloatingModel: String {
+        let selected = ShortcutSettings.shared.selectedModel
+        return selected.isEmpty ? ModelQoS.Claude.defaultSelection : selected
+    }
     private var pendingFollowUpQuery: PendingFollowUpQuery?
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
@@ -1468,7 +1487,7 @@ class FloatingControlBarManager {
             }
             Task { @MainActor in
                 await self.withQueryTracer(query: query, fromVoice: true) {
-                    await self.routeVoiceOnlyQuery(query, barWindow: window, provider: provider)
+                    await self.routeQuery(query, barWindow: window, provider: provider, presentation: .voiceOnly)
                 }
             }
             return
@@ -1555,10 +1574,30 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         fromVoice: Bool
     ) async {
+        await routeQuery(message, barWindow: barWindow, provider: provider, presentation: .visible(fromVoice: fromVoice))
+    }
+
+    private func routeQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation
+    ) async {
+        if provider.isSending {
+            pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
+            if case .visible(let fromVoice) = presentation {
+                prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+            }
+            provider.stopAgent()
+            return
+        }
+
         // Show the thinking state immediately so there's no perceptible lag
         // while the router thinks. If the router decides "agent" we'll tear
         // this down before the chat actually streams anything.
-        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        if case .visible(let fromVoice) = presentation {
+            prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        }
 
         // Skip the Haiku router for obviously-conversational queries (short, no
         // task/agent signal): they're the common case, almost always route to "chat"
@@ -1569,7 +1608,7 @@ class FloatingControlBarManager {
         let routerTracer = QueryTracerContext.current
         if Self.routerCanSkipToChat(message) {
             routerTracer?.mark("router_classify", metadata: ["route": "chat"])
-            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+            await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
             return
         }
 
@@ -1579,60 +1618,52 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
-                : ShortcutSettings.shared.selectedModel
             _ = AgentPillsManager.shared.spawnFromUserQuery(
                 message,
-                model: model,
-                fromVoice: fromVoice,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
                 preFetchedTitle: decision.title,
                 preFetchedAck: decision.ack
             )
-            // Tear down the inline state we set up for the thinking spinner.
-            barWindow.state.aiInputText = ""
-            barWindow.closeAIConversation()
+            switch presentation {
+            case .visible:
+                // Tear down the inline state we set up for the thinking spinner.
+                barWindow.state.aiInputText = ""
+                barWindow.closeAIConversation()
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
             return
         }
-        // Chat route: continue with the normal inline flow. sendAIQuery will
-        // re-prepare the visible state, which is idempotent.
-        await sendAIQuery(message, barWindow: barWindow, provider: provider)
+
+        // Chat route: continue with the requested delivery surface.
+        await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
     }
 
-    /// Voice fallback keeps the tiny voice UX, but still respects the same
-    /// chat-vs-agent routing contract as the visible floating-bar path.
-    private func routeVoiceOnlyQuery(
+    private func dispatchChatQuery(
         _ message: String,
         barWindow: FloatingControlBarWindow,
-        provider: ChatProvider
+        provider: ChatProvider,
+        presentation: QueryPresentation
     ) async {
-        let routerTracer = QueryTracerContext.current
-        if Self.routerCanSkipToChat(message) {
-            routerTracer?.mark("router_classify", metadata: ["route": "chat"])
+        switch presentation {
+        case .visible:
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+        case .voiceOnly:
             await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
-            return
         }
+    }
 
-        routerTracer?.begin("router_classify")
-        let decision = await AgentPillsManager.classify(message)
-        routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
-        if decision.route == .agent {
-            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
-                : ShortcutSettings.shared.selectedModel
-            _ = AgentPillsManager.shared.spawnFromUserQuery(
-                message,
-                model: model,
-                fromVoice: true,
-                preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
-            )
-            barWindow.state.currentQueryFromVoice = false
-            barWindow.state.isVoiceResponseActive = false
-            return
-        }
-
-        await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
+    private func dispatchPendingQueryIfNeeded(
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider
+    ) async -> Bool {
+        guard let pending = pendingFollowUpQuery else { return false }
+        pendingFollowUpQuery = nil
+        barWindow.state.currentQueryFromVoice = pending.presentation.fromVoice
+        await routeQuery(pending.text, barWindow: barWindow, provider: provider, presentation: pending.presentation)
+        return true
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
@@ -1658,7 +1689,7 @@ class FloatingControlBarManager {
         }
 
         if provider.isSending {
-            pendingFollowUpQuery = PendingFollowUpQuery(text: query, fromVoice: fromVoice)
+            pendingFollowUpQuery = PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice))
             prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
             provider.stopAgent()
             return
@@ -2094,24 +2125,18 @@ class FloatingControlBarManager {
                 }
             }
 
-        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? ModelQoS.Claude.defaultSelection
-            : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         currentTracer?.end("pre_llm")
         await provider.sendMessage(
             message,
-            model: floatingModel,
+            model: selectedFloatingModel,
             systemPromptSuffix: notificationContextSuffix,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
 
-        if let followUp = pendingFollowUpQuery {
-            pendingFollowUpQuery = nil
-            barWindow.state.currentQueryFromVoice = followUp.fromVoice
-            await sendAIQuery(followUp.text, barWindow: barWindow, provider: provider)
+        if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
             return
         }
 
@@ -2224,17 +2249,18 @@ class FloatingControlBarManager {
                 )
             }
 
-        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? ModelQoS.Claude.defaultSelection
-            : ShortcutSettings.shared.selectedModel
         currentTracer?.end("pre_llm")
         await provider.sendMessage(
             message,
-            model: floatingModel,
+            model: selectedFloatingModel,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
+
+        if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
+            return
+        }
 
         guard isActiveQueryGeneration(generation) else { return }
         let newMessages = Array(provider.messages.dropFirst(messageCountBefore))

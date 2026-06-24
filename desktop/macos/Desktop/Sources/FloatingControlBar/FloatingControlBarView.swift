@@ -220,7 +220,7 @@ struct FloatingControlBarView: View {
                 if notification.assistantId == "task" {
                     Button {
                         let model = ShortcutSettings.shared.selectedModel.isEmpty
-                            ? "claude-sonnet-4-6"
+                            ? ModelQoS.Claude.defaultSelection
                             : ShortcutSettings.shared.selectedModel
                         let query = ProactiveTaskExecute.buildQuery(
                             title: notification.title,

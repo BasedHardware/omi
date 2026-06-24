@@ -516,16 +516,19 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
 
     ctx = create_context(args, flow_path, run_dir, args.lane)
     started = time.perf_counter()
+    setup_errors: list[str] = []
     initial_state = request_json(ctx.base_url, "GET", "/state")
     capabilities = request_json(ctx.base_url, "GET", "/capabilities")
     if initial_state.get("ok") and capabilities.get("ok"):
         clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
         if not clear_response.get("ok"):
-            raise SystemExit(f"omi-harness: failed to clear traces: {clear_response.get('error')}")
+            setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
     write_json(run_dir / "initial-state.json", initial_state)
     write_json(run_dir / "capabilities.json", capabilities)
 
-    step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
+    step_results = []
+    if not setup_errors:
+        step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
     logs = collect_logs(ctx)
     final_state = request_json(ctx.base_url, "GET", "/state")
     traces = recent_traces(ctx)
@@ -554,8 +557,9 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
             "bridge_trace_ms": [trace.get("durationMs") for trace in traces],
         },
         "steps": step_results,
+        "setup_errors": setup_errors,
         "logs": logs,
-        "ok": bridge_ready and all(step["ok"] for step in step_results),
+        "ok": bridge_ready and not setup_errors and all(step["ok"] for step in step_results),
         "bridge_ready": bridge_ready,
         "started_at": now_iso(),
     }
@@ -582,6 +586,8 @@ def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
         "",
         "## Steps",
     ]
+    for error in metrics.get("setup_errors", []):
+        lines.append(f"- FAIL setup {error}")
     for step in metrics["steps"]:
         status = "PASS" if step["ok"] else "FAIL"
         lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")
