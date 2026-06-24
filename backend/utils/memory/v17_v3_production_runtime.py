@@ -17,8 +17,12 @@ from config.v17_memory import (
     V17Mode,
     V17RolloutConfig,
     parse_enabled_users,
+    rollout_archive_opt_in_enabled_env_value,
+    rollout_backfill_daily_limit_env_value,
+    rollout_backfill_enabled_env_value,
     rollout_enabled_users_env_raw,
     rollout_mode_env_value,
+    rollout_v3_get_enabled_env_value,
 )
 from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
 from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
@@ -354,7 +358,7 @@ def _cursor_ttl_from_env(env) -> int:
 
 
 def _v3_get_route_enabled(env) -> bool:
-    return str(env.get('V17_V3_GET_ENABLED', '')).strip().lower() == 'true'
+    return rollout_v3_get_enabled_env_value(env)
 
 
 def _runtime_enabled(rollout_config: V17RolloutConfig) -> bool:
@@ -364,15 +368,15 @@ def _runtime_enabled(rollout_config: V17RolloutConfig) -> bool:
 def _rollout_config_from_env(env) -> V17RolloutConfig:
     try:
         mode = V17Mode(rollout_mode_env_value(env))
-        backfill_daily_limit = int(env.get('V17_BACKFILL_DAILY_LIMIT', '0') or 0)
+        backfill_daily_limit = rollout_backfill_daily_limit_env_value(env)
     except (TypeError, ValueError):
         return V17RolloutConfig()
     return V17RolloutConfig(
         enabled_users=parse_enabled_users(rollout_enabled_users_env_raw(env)),
         mode=mode,
-        backfill_enabled=str(env.get('V17_BACKFILL_ENABLED', 'false')).lower() == 'true',
-        backfill_daily_limit=max(0, backfill_daily_limit),
-        archive_opt_in_enabled=str(env.get('V17_ARCHIVE_OPT_IN_ENABLED', 'false')).lower() == 'true',
+        backfill_enabled=rollout_backfill_enabled_env_value(env),
+        backfill_daily_limit=backfill_daily_limit,
+        archive_opt_in_enabled=rollout_archive_opt_in_enabled_env_value(env),
     )
 
 
