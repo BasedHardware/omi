@@ -1060,6 +1060,14 @@ def retrieve_metadata_fields_from_transcript(
 
     full_context = "\n\n".join(context_parts)
 
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
+        user_tz = timezone.utc
+    tz = tz or 'UTC'
+    today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
+
     # TODO: ask it to use max 2 words? to have more standardization possibilities
     prompt = f'''
     You will be given content which could be a raw transcript of a conversation, a series of photo descriptions from a wearable camera, or both. The transcript has about 20% word error rate, and diarization is also made very poorly.
@@ -1068,7 +1076,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
+    For context when extracting dates, today is {today_local} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
@@ -1142,6 +1150,14 @@ def retrieve_metadata_from_message(
     """Extract metadata from messaging app content"""
     source_context = f"from {source_spec}" if source_spec else "from a messaging application"
 
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
+        user_tz = timezone.utc
+    tz = tz or 'UTC'
+    today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
+
     prompt = f'''
     You will be given the content of a message or conversation {source_context}.
 
@@ -1153,7 +1169,7 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today_local} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
@@ -1176,6 +1192,14 @@ def retrieve_metadata_from_text(
     """Extract metadata from generic text content"""
     source_context = f"from {source_spec}" if source_spec else "from a text document"
 
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
+        user_tz = timezone.utc
+    tz = tz or 'UTC'
+    today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
+
     prompt = f'''
     You will be given the content of a text {source_context}.
 
@@ -1187,7 +1211,7 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    For context when extracting dates, today is {today_local} in {tz} (user's local timezone).
     {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
