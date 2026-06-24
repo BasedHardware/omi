@@ -69,14 +69,17 @@ def _v17_product_router_import_isolation():
     if existing_fastapi is not None and getattr(existing_fastapi, "APIRouter", None) is not fastapi_stub.APIRouter:
         sys.modules.pop("fastapi", None)
     install_v17_product_router_stubs(fastapi_stub, auth_stub)
+    import routers.memory_product as memory_product
     import routers.v17_memory_product as v17_memory_product
 
+    globals()["memory_product"] = memory_product
     globals()["v17_memory_product"] = v17_memory_product
     yield
     restore_sys_modules(saved)
     for name in ("routers.v17_memory_product", "routers.memory_product"):
         sys.modules.pop(name, None)
     globals()["v17_memory_product"] = None
+    globals()["memory_product"] = None
 
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
@@ -84,6 +87,7 @@ from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingSt
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 v17_memory_product = None  # populated by _v17_product_router_import_isolation
+memory_product = None  # canonical implementation module for monkeypatch targets
 
 
 class _Snapshot:
@@ -235,13 +239,14 @@ def test_parallel_neutral_routes_delegate_to_same_handlers_as_v17():
         assert v17_handlers[0] is neutral_handlers[0], f"handler mismatch for {neutral_path}"
 
 
-def test_main_registers_v17_product_memory_router():
+def test_main_registers_neutral_product_memory_router():
     main_py = os.path.join(os.path.dirname(__file__), "..", "..", "main.py")
     with open(main_py, encoding="utf-8") as handle:
         contents = handle.read()
 
-    assert "v17_memory_product" in contents
-    assert "app.include_router(v17_memory_product.router)" in contents
+    assert "memory_product" in contents
+    assert "app.include_router(memory_product.router)" in contents
+    assert "v17_memory_product" not in contents
 
 
 def _global_read_gate_doc(enabled=True, kill_switch=False):
@@ -279,8 +284,8 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
             },
         }
     )
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
-    monkeypatch.setattr(v17_memory_product, "_current_time", lambda: now)
+    monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     response = v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
 
@@ -302,9 +307,9 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
 def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(enabled=True, kill_switch=True)})
     vector_query = MagicMock()
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
-    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
-    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     route_calls = [
         lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
@@ -329,16 +334,16 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
     assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
     assert db_client.collection_paths == []
     vector_query.assert_not_called()
-    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
-    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+    memory_product.fetch_default_product_memory_search.assert_not_called()
+    memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
 def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vector_or_memory_reads(monkeypatch):
     db_client = _FirestoreFake({'users/u1/memory_control/state': {'uid': 'u1', 'mode': 'read'}})
     vector_query = MagicMock()
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
-    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
-    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     route_calls = [
         lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
@@ -363,8 +368,8 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
     assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
     assert db_client.collection_paths == []
     vector_query.assert_not_called()
-    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
-    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+    memory_product.fetch_default_product_memory_search.assert_not_called()
+    memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
 def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant_before_memory_items(monkeypatch):
@@ -399,11 +404,11 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
             'missing_chat_default_memory_grant',
         ),
     ]
-    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(v17_memory_product, "db", db_client)
+        monkeypatch.setattr(memory_product, "db", db_client)
         try:
             v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
         except _HTTPException as exc:
@@ -416,11 +421,11 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
         assert db_client.collection_paths == []
 
-    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
+    memory_product.fetch_default_product_memory_search.assert_not_called()
 
 
 def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
-    monkeypatch.setattr(v17_memory_product, "fetch_default_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_default_product_memory_search", MagicMock())
 
     for kwargs in ({"limit": 0, "offset": 0}, {"limit": 501, "offset": 0}, {"limit": 25, "offset": -1}):
         try:
@@ -430,11 +435,11 @@ def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
         else:
             raise AssertionError(f"expected invalid pagination failure for {kwargs}")
 
-    v17_memory_product.fetch_default_product_memory_search.assert_not_called()
+    memory_product.fetch_default_product_memory_search.assert_not_called()
 
 
 def test_archive_search_endpoint_rejects_missing_archive_intent_before_firestore(monkeypatch):
-    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     try:
         v17_memory_product.search_v17_archive_memory(
@@ -446,7 +451,7 @@ def test_archive_search_endpoint_rejects_missing_archive_intent_before_firestore
     else:
         raise AssertionError('expected archive route to reject missing capability')
 
-    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+    memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
 def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_server_archive_grant_before_memory_items(
@@ -505,11 +510,11 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
             'missing_chat_default_memory_grant',
         ),
     ]
-    monkeypatch.setattr(v17_memory_product, "fetch_archive_product_memory_search", MagicMock())
+    monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     for docs, expected_reason in cases:
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
-        monkeypatch.setattr(v17_memory_product, "db", db_client)
+        monkeypatch.setattr(memory_product, "db", db_client)
         try:
             v17_memory_product.search_v17_archive_memory(
                 query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
@@ -525,7 +530,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
         assert db_client.collection_paths == []
 
-    v17_memory_product.fetch_archive_product_memory_search.assert_not_called()
+    memory_product.fetch_archive_product_memory_search.assert_not_called()
 
 
 def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_and_only_returns_archive(monkeypatch):
@@ -550,8 +555,8 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
             },
         }
     )
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
-    monkeypatch.setattr(v17_memory_product, "_current_time", lambda: now)
+    monkeypatch.setattr(memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
     response = v17_memory_product.search_v17_archive_memory(
         query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
@@ -571,7 +576,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
 def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memory_item_reads(monkeypatch):
     db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc()})
     vector_query = MagicMock()
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     try:
         v17_memory_product.search_v17_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
@@ -615,7 +620,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             },
         }
     )
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     def hit(item, score):
         return SearchVectorHit(
@@ -685,7 +690,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default
@@ -738,7 +743,7 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
             f'users/u1/memory_items/{stale_projection.memory_id}': _stored_item(stale_projection),
         }
     )
-    monkeypatch.setattr(v17_memory_product, "db", db_client)
+    monkeypatch.setattr(memory_product, "db", db_client)
 
     def fake_vector_query(uid, query, *, mode, limit):
         assert mode == SearchMode.default

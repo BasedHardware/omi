@@ -8,12 +8,14 @@ os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
 
 import pytest
 
 from tests.unit.memory_import_isolation import (
     ensure_utils_memory_packages_importable,
     install_database_client_stub,
+    install_v17_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
@@ -963,37 +965,120 @@ def test_v3_cluster_shim_namespace_parity():
             assert getattr(neutral, export) is getattr(legacy, export), f"{legacy_name}.{export}"
 
 
-def test_short_term_lifecycle_worker_alias_reexports_match_v17():
+def _router_method_path_pairs(router):
+    pairs = set()
+    for route in router.routes:
+        if isinstance(route, tuple):
+            pairs.add((route[0], route[1]))
+            continue
+        for method in route.methods:
+            if method != "HEAD":
+                pairs.add((method, route.path))
+    return pairs
+
+
+def _import_g9_router_modules_under_stubs():
+    import types
+
+    class _APIRouter:
+        def __init__(self):
+            self.routes = []
+
+        def get(self, path, **kwargs):
+            def decorator(func):
+                self.routes.append(("GET", path, kwargs, func))
+                return func
+
+            return decorator
+
+        def post(self, path, **kwargs):
+            def decorator(func):
+                self.routes.append(("POST", path, kwargs, func))
+                return func
+
+            return decorator
+
+    def _identity(default=None, **_kwargs):
+        return default
+
+    fastapi_stub = types.ModuleType("fastapi")
+    fastapi_stub.APIRouter = _APIRouter
+    fastapi_stub.Depends = _identity
+    fastapi_stub.Header = _identity
+    fastapi_stub.HTTPException = Exception
+    fastapi_stub.Query = _identity
+
+    auth_stub = types.ModuleType("utils.other.endpoints")
+    auth_stub.get_current_user_uid = lambda: "u1"
+
+    router_module_names = (
+        "routers.memory_product",
+        "routers.v17_memory_product",
+        "routers.memory_admin",
+        "routers.v17_memory_admin",
+    )
+    saved = snapshot_sys_modules(["fastapi", "database._client", "utils.other.endpoints", *router_module_names])
+    for name in router_module_names:
+        sys.modules.pop(name, None)
+    install_v17_product_router_stubs(fastapi_stub, auth_stub)
+    from routers import memory_admin, memory_product, v17_memory_admin, v17_memory_product
+
+    return saved, memory_product, v17_memory_product, memory_admin, v17_memory_admin
+
+
+def test_short_term_lifecycle_worker_v17_shim_reexports_match_canonical():
     from jobs import short_term_lifecycle_worker, v17_short_term_lifecycle_worker
 
-    assert (
-        short_term_lifecycle_worker.run_short_term_lifecycle_firestore
-        is v17_short_term_lifecycle_worker.run_short_term_lifecycle_firestore
+    for export in short_term_lifecycle_worker.__all__:
+        assert getattr(v17_short_term_lifecycle_worker, export) is getattr(
+            short_term_lifecycle_worker, export
+        ), f"v17_short_term_lifecycle_worker.{export}"
+
+
+def test_memory_product_v17_shim_reexports_match_canonical():
+    saved, memory_product, v17_memory_product, _memory_admin, _v17_memory_admin = (
+        _import_g9_router_modules_under_stubs()
     )
+    try:
+        for export in v17_memory_product.__all__:
+            assert getattr(v17_memory_product, export) is getattr(
+                memory_product, export
+            ), f"v17_memory_product.{export}"
+        for export in memory_product.__all__:
+            assert getattr(memory_product, export) is getattr(v17_memory_product, export), f"memory_product.{export}"
+    finally:
+        restore_sys_modules(saved)
 
 
-def test_memory_product_alias_reexports_match_v17():
-    import types
+def test_memory_admin_v17_shim_reexports_match_canonical():
+    saved, _memory_product, _v17_memory_product, memory_admin, v17_memory_admin = (
+        _import_g9_router_modules_under_stubs()
+    )
+    try:
+        for export in v17_memory_admin.__all__:
+            assert getattr(v17_memory_admin, export) is getattr(memory_admin, export), f"v17_memory_admin.{export}"
+        for export in memory_admin.__all__:
+            assert getattr(memory_admin, export) is getattr(v17_memory_admin, export), f"memory_admin.{export}"
+    finally:
+        restore_sys_modules(saved)
 
-    sys.modules.setdefault("firebase_admin", types.ModuleType("firebase_admin"))
-    auth_stub = types.ModuleType("utils.other.endpoints")
-    auth_stub.get_current_user_uid = lambda: "u1"
-    sys.modules.setdefault("utils.other.endpoints", auth_stub)
 
-    from routers import memory_product, v17_memory_product
+def test_main_registers_both_memory_and_v17_product_routes():
+    saved, memory_product, _v17_memory_product, memory_admin, _v17_memory_admin = (
+        _import_g9_router_modules_under_stubs()
+    )
+    try:
+        product_routes = _router_method_path_pairs(memory_product.router)
+        admin_routes = _router_method_path_pairs(memory_admin.router)
 
-    assert memory_product.router is v17_memory_product.router
-    assert memory_product.search_v17_product_memory is v17_memory_product.search_v17_product_memory
-
-
-def test_memory_admin_alias_reexports_match_v17():
-    import types
-
-    sys.modules.setdefault("firebase_admin", types.ModuleType("firebase_admin"))
-    auth_stub = types.ModuleType("utils.other.endpoints")
-    auth_stub.get_current_user_uid = lambda: "u1"
-    sys.modules.setdefault("utils.other.endpoints", auth_stub)
-
-    from routers import memory_admin, v17_memory_admin
-
-    assert memory_admin.router is v17_memory_admin.router
+        assert ("GET", "/memory/search") in product_routes
+        assert ("GET", "/v17/memory/search") in product_routes
+        assert ("GET", "/memory/vector/search") in product_routes
+        assert ("GET", "/v17/memory/vector/search") in product_routes
+        assert ("GET", "/memory/archive/search") in product_routes
+        assert ("GET", "/v17/memory/archive/search") in product_routes
+        assert ("GET", "/v17/admin/users/{uid}/read-rollout-decision") in admin_routes
+        assert ("GET", "/v17/admin/users/{uid}/non-active-route-report") in admin_routes
+        assert ("POST", "/v17/admin/users/{uid}/short-term-lifecycle/run") in admin_routes
+    finally:
+        restore_sys_modules(saved)

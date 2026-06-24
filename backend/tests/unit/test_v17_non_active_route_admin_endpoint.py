@@ -4,7 +4,14 @@ import types
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import pytest
+
 from config.v17_memory import PASSED, V17Mode, V17StageGate
+from tests.unit.memory_import_isolation import (
+    install_v17_product_router_stubs,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -48,13 +55,44 @@ fastapi_stub.Header = _identity
 fastapi_stub.HTTPException = _HTTPException
 fastapi_stub.Query = _identity
 fastapi_stub.Request = type("Request", (), {})
-sys.modules["fastapi"] = fastapi_stub
-sys.modules["database._client"] = MagicMock()
 
-from database.v17_non_active_memory_routes import NonActiveRoute
-from utils.memory.v17_non_active_route_audit import NonActiveRouteAuditReport
+_ADMIN_ROUTER_STUB_NAMES = (
+    "fastapi",
+    "database._client",
+    "utils.other.endpoints",
+    "routers.memory_admin",
+    "routers.v17_memory_admin",
+)
 
-import routers.v17_memory_admin as v17_memory_admin
+
+@pytest.fixture(scope="module", autouse=True)
+def _v17_admin_router_import_isolation():
+    saved = snapshot_sys_modules(_ADMIN_ROUTER_STUB_NAMES)
+    for name in ("routers.memory_admin", "routers.v17_memory_admin"):
+        sys.modules.pop(name, None)
+    install_v17_product_router_stubs(fastapi_stub, types.ModuleType("utils.other.endpoints"))
+    from database.v17_non_active_memory_routes import NonActiveRoute
+    from utils.memory.v17_non_active_route_audit import NonActiveRouteAuditReport
+
+    import routers.memory_admin as memory_admin
+    import routers.v17_memory_admin as v17_memory_admin
+
+    globals()["NonActiveRoute"] = NonActiveRoute
+    globals()["NonActiveRouteAuditReport"] = NonActiveRouteAuditReport
+    globals()["memory_admin"] = memory_admin
+    globals()["v17_memory_admin"] = v17_memory_admin
+    yield
+    restore_sys_modules(saved)
+    for name in ("routers.memory_admin", "routers.v17_memory_admin"):
+        sys.modules.pop(name, None)
+    globals()["memory_admin"] = None
+    globals()["v17_memory_admin"] = None
+
+
+NonActiveRoute = None
+NonActiveRouteAuditReport = None
+memory_admin = None
+v17_memory_admin = None
 
 
 def _report(uid="u1"):
@@ -150,7 +188,7 @@ def test_admin_router_registers_concrete_v17_admin_report_route():
 def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_without_memory_item_reads(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
-    monkeypatch.setattr(v17_memory_admin, "db", db_client)
+    monkeypatch.setattr(memory_admin, "db", db_client)
 
     response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
 
@@ -274,7 +312,7 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
 
     for docs, expected_reasons in cases:
         db_client = _FirestoreFake(docs)
-        monkeypatch.setattr(v17_memory_admin, "db", db_client)
+        monkeypatch.setattr(memory_admin, "db", db_client)
 
         response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
 
@@ -295,7 +333,7 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
 def test_admin_read_rollout_decision_endpoint_rejects_invalid_admin_key(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
-    monkeypatch.setattr(v17_memory_admin, "db", db_client)
+    monkeypatch.setattr(memory_admin, "db", db_client)
 
     try:
         v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="wrong")
@@ -316,7 +354,7 @@ def test_admin_endpoint_surfaces_non_active_route_report_counts_without_memory_i
         calls.append((uid, run_id, expected_source_ids))
         return _report(uid)
 
-    monkeypatch.setattr(v17_memory_admin, "fetch_non_active_route_audit_report", fake_fetch)
+    monkeypatch.setattr(memory_admin, "fetch_non_active_route_audit_report", fake_fetch)
 
     response = v17_memory_admin.get_v17_non_active_route_report(
         "u1",
@@ -340,7 +378,7 @@ def test_admin_endpoint_surfaces_non_active_route_report_counts_without_memory_i
 
 def test_admin_endpoint_rejects_missing_or_invalid_admin_key(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
-    monkeypatch.setattr(v17_memory_admin, "fetch_non_active_route_audit_report", MagicMock(return_value=_report()))
+    monkeypatch.setattr(memory_admin, "fetch_non_active_route_audit_report", MagicMock(return_value=_report()))
 
     try:
         v17_memory_admin.get_v17_non_active_route_report("u1", secret_key="wrong")
@@ -350,7 +388,7 @@ def test_admin_endpoint_rejects_missing_or_invalid_admin_key(monkeypatch):
     else:
         raise AssertionError("expected admin auth failure")
 
-    v17_memory_admin.fetch_non_active_route_audit_report.assert_not_called()
+    memory_admin.fetch_non_active_route_audit_report.assert_not_called()
 
 
 def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatch):
@@ -369,7 +407,7 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
         calls.append((uid, db_client, run_id, now, limit, dispositions))
         return _Report()
 
-    monkeypatch.setattr(v17_memory_admin, "run_short_term_lifecycle_firestore", fake_run)
+    monkeypatch.setattr(memory_admin, "run_short_term_lifecycle_firestore", fake_run)
 
     response = v17_memory_admin.post_v17_short_term_lifecycle_run(
         "u1",
@@ -407,7 +445,7 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
 def test_admin_endpoint_rejects_invalid_short_term_lifecycle_inputs(monkeypatch):
     os.environ["ADMIN_KEY"] = "secret"
     fake_run = MagicMock()
-    monkeypatch.setattr(v17_memory_admin, "run_short_term_lifecycle_firestore", fake_run)
+    monkeypatch.setattr(memory_admin, "run_short_term_lifecycle_firestore", fake_run)
 
     for kwargs in (
         {"run_id": "", "limit": 25, "evaluated_at": None},
