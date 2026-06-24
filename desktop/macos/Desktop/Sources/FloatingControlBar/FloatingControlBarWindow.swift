@@ -1461,7 +1461,7 @@ class FloatingControlBarManager {
             }
             Task { @MainActor in
                 await self.withQueryTracer(query: query, fromVoice: true) {
-                    await self.sendVoiceOnlyQuery(query, barWindow: window, provider: provider)
+                    await self.routeVoiceOnlyQuery(query, barWindow: window, provider: provider)
                 }
             }
             return
@@ -1590,6 +1590,42 @@ class FloatingControlBarManager {
         // Chat route: continue with the normal inline flow. sendAIQuery will
         // re-prepare the visible state, which is idempotent.
         await sendAIQuery(message, barWindow: barWindow, provider: provider)
+    }
+
+    /// Voice fallback keeps the tiny voice UX, but still respects the same
+    /// chat-vs-agent routing contract as the visible floating-bar path.
+    private func routeVoiceOnlyQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider
+    ) async {
+        let routerTracer = QueryTracerContext.current
+        if Self.routerCanSkipToChat(message) {
+            routerTracer?.mark("router_classify", metadata: ["route": "chat"])
+            await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
+            return
+        }
+
+        routerTracer?.begin("router_classify")
+        let decision = await AgentPillsManager.classify(message)
+        routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
+        if decision.route == .agent {
+            let model = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6"
+                : ShortcutSettings.shared.selectedModel
+            _ = AgentPillsManager.shared.spawnFromUserQuery(
+                message,
+                model: model,
+                fromVoice: true,
+                preFetchedTitle: decision.title,
+                preFetchedAck: decision.ack
+            )
+            barWindow.state.currentQueryFromVoice = false
+            barWindow.state.isVoiceResponseActive = false
+            return
+        }
+
+        await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).

@@ -278,14 +278,15 @@ struct FloatingControlBarView: View {
     }
 
     private var controlBarView: some View {
-        Group {
+        let allowsHoverExpansion = isHovering && !state.isVoiceResponseActive
+        return Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .frame(height: 42)
                     .transition(.opacity)
-            } else if isHovering || state.showingAIConversation {
+            } else if allowsHoverExpansion || state.showingAIConversation {
                 VStack(spacing: 1) {
                     compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
                         onAskAI()
