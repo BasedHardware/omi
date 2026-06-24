@@ -357,15 +357,8 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
     }
 
-    /// When true, floating-bar replies are spoken aloud.
-    @Published var floatingBarVoiceAnswersEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(floatingBarVoiceAnswersEnabled, forKey: "shortcut_floatingBarVoiceAnswersEnabled")
-            if !hasAnyFloatingBarVoiceAnswersEnabled {
-                FloatingBarVoicePlaybackService.shared.stop()
-            }
-        }
-    }
+    /// Push-to-talk replies are always spoken aloud.
+    let floatingBarVoiceAnswersEnabled: Bool = true
 
     /// When true, typed floating-bar questions receive spoken replies.
     @Published var floatingBarTypedQuestionVoiceAnswersEnabled: Bool {
@@ -503,11 +496,11 @@ class ShortcutSettings: ObservableObject {
     }
 
     var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
-        floatingBarVoiceAnswersEnabled || floatingBarTypedQuestionVoiceAnswersEnabled
+        true
     }
 
     func shouldSpeakFloatingBarResponse(forVoiceQuery: Bool) -> Bool {
-        forVoiceQuery ? floatingBarVoiceAnswersEnabled : floatingBarTypedQuestionVoiceAnswersEnabled
+        forVoiceQuery || floatingBarTypedQuestionVoiceAnswersEnabled
     }
 
     var askOmiUsesCustomShortcut: Bool {
@@ -548,7 +541,6 @@ class ShortcutSettings: ObservableObject {
             self.pttTranscriptionMode = .batch
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
-        self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? true
         self.floatingBarTypedQuestionVoiceAnswersEnabled =
             UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
         self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4

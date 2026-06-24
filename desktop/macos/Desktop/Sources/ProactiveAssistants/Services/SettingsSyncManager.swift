@@ -92,11 +92,8 @@ class SettingsSyncManager {
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
 
-        if let floatingBar = remote.floatingBar {
-            if let v = floatingBar.voiceAnswersEnabled {
-                ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = v
-            }
-        }
+        // Push-to-talk voice replies are no longer configurable. Ignore the legacy
+        // server field so old synced `false` values cannot suppress spoken answers.
 
         // Update channel (server-authoritative override)
         // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
