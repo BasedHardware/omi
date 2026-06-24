@@ -102,6 +102,7 @@ pytest tests/unit/test_speech_profile_wav_decode.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
 pytest tests/unit/test_deferred_blob_janitor.py -v
 pytest tests/unit/test_audio_merge_tasks.py -v
+pytest tests/unit/test_notification_send_validation.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_import_jobs_malformed.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v

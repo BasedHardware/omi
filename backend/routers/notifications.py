@@ -87,6 +87,8 @@ def send_notification_to_user(data: dict, secret_key: str = Header(...)):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')
+    if not data.get('title') or not data.get('body'):
+        raise HTTPException(status_code=400, detail='title and body are required')
     uid = data['uid']
     send_notification(uid, data['title'], data['body'], data.get('data', {}))
     return {'status': 'Ok'}
