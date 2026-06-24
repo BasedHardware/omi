@@ -117,6 +117,7 @@ pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
 pytest tests/unit/test_action_item_idempotency.py -v
 pytest tests/unit/test_goals_id_fallback.py -v
 pytest tests/unit/test_tools_router.py -v
+pytest tests/unit/test_focus_sessions_date_validation.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
 pytest tests/unit/test_goal_extraction_batch.py -v
