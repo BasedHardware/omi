@@ -191,8 +191,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         copyText: nil,
         steps: [
           "Open claude.ai → Settings → Connectors → Add custom connector",
-          "Name it “Omi Memory” and paste the server URL below",
-          "Under Advanced settings set OAuth Client ID to “omi” and Client Secret to your key below",
+          "Copy Name and Remote MCP server URL into the first two Claude fields",
+          "Open Advanced settings and copy OAuth Client ID and OAuth Client Secret into the matching fields",
           "Click Add, then Connect. Syncs to Claude desktop + mobile automatically.",
         ],
         openURL: URL(string: "https://claude.ai/settings/connectors"),
@@ -256,11 +256,24 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     var lines = [
       "Set up the Omi memory MCP connector in \(clientName) end-to-end for me so it can read my Omi memories. Use the browser/terminal as needed and confirm when it's connected.",
       "",
-      "MCP server URL: \(setup.serverURL)",
-      "My Omi MCP key: \(key)",
-      "",
-      "Steps:",
     ]
+    if self == .claude {
+      lines.append(contentsOf: [
+        "Claude custom connector fields:",
+        "Name: Omi Memory",
+        "Remote MCP server URL: \(setup.serverURL)",
+        "OAuth Client ID: omi",
+        "OAuth Client Secret: \(key)",
+        "",
+      ])
+    } else {
+      lines.append(contentsOf: [
+        "MCP server URL: \(setup.serverURL)",
+        "My Omi MCP key: \(key)",
+        "",
+      ])
+    }
+    lines.append("Steps:")
     for (index, step) in setup.steps.enumerated() {
       lines.append("\(index + 1). \(step)")
     }
