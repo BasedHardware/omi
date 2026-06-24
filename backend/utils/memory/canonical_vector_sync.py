@@ -24,9 +24,9 @@ def sync_canonical_memory_vector(
     if not content:
         return False
 
-    from database.vector_db import upsert_canonical_memory_vector
-
     try:
+        from database.vector_db import upsert_canonical_memory_vector
+
         result = upsert_canonical_memory_vector(item, projection_commit_id=projection_commit_id)
     except Exception:
         logger.exception(
