@@ -17,7 +17,12 @@ class HumePredictionEmotionResponseModel:
 
     @classmethod
     def from_dict(cls, data: dict) -> "HumePredictionEmotionResponseModel":
-        model = cls(data.get("name"), data.get("score"))
+        # Default to safe values for a malformed entry: a missing/invalid score must stay numeric so
+        # downstream math in get_top_emotion_names (sum and threshold comparison) does not hit None.
+        score = data.get("score")
+        if not isinstance(score, (int, float)) or isinstance(score, bool):
+            score = 0.0
+        model = cls(data.get("name") or "", score)
         return model
 
     def to_dict(self):
@@ -66,7 +71,14 @@ class HumeJobModelPredictionResponseModel:
     def from_dict(cls, data: dict) -> "HumeJobModelPredictionResponseModel":
         grouped_prediction_prediction = data
         time_data = data.get("time") or {}
-        model = cls((time_data.get("begin"), time_data.get("end")))
+        # Keep the interval numeric so downstream consumers comparing begin/end never hit None.
+        begin = time_data.get("begin")
+        end = time_data.get("end")
+        if not isinstance(begin, (int, float)) or isinstance(begin, bool):
+            begin = 0.0
+        if not isinstance(end, (int, float)) or isinstance(end, bool):
+            end = 0.0
+        model = cls((begin, end))
         for emotion in grouped_prediction_prediction.get('emotions') or []:
             emo = HumePredictionEmotionResponseModel.from_dict(emotion)
             model.emotions.append(emo)
