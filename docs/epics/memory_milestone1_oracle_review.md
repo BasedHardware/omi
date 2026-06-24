@@ -1,5 +1,7 @@
 # memory Milestone 1 Oracle Review — Foundations
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Date:** 2026-06-19  
 **Milestone:** P0 foundations: rollout state, canonical product-memory/evidence models, unified collection constants, Firestore indexes.
 **Initial verdict:** BLOCKED.
