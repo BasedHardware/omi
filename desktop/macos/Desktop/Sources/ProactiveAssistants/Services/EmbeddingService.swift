@@ -350,7 +350,7 @@ actor EmbeddingService {
       }
     }
 
-    var isExpectedProductState: Bool { reasonCode == "missing_api_key" || reasonCode == "product_gate" }
+    var isExpectedProductState: Bool { reasonCode == "product_gate" }
     var isTransient: Bool { reasonCode == "rate_limited" || reasonCode == "temporarily_unavailable" }
     var isNonActionableForSentry: Bool { isExpectedProductState || isTransient }
 

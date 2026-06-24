@@ -266,7 +266,7 @@ actor GeminiClient {
       if lower.contains("trial_expired") || lower.contains("trial expired")
         || lower.contains("payment required") || lower.contains("byok")
         || lower.contains("bring your own key") || lower.contains("usage limit")
-        || lower.contains("http 402")
+        || lower.contains("http 402") || lower.contains("quota exceeded")
       {
         return "AI features require an active plan or BYOK keys."
       }

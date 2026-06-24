@@ -39,8 +39,24 @@ final class AIBackendErrorNormalizationTests: XCTestCase {
     XCTAssertFalse(error.isNonActionableForSentry)
   }
 
+  func testEmbeddingMissingConfigurationRemainsActionable() {
+    let error = EmbeddingService.EmbeddingError.missingAPIKey
+
+    XCTAssertEqual(error.reasonCode, "missing_api_key")
+    XCTAssertFalse(error.isExpectedProductState)
+    XCTAssertFalse(error.isNonActionableForSentry)
+  }
+
   func testGeminiTrialExpiredIsExpectedProductState() {
     let error = GeminiClient.GeminiClientError.apiError("HTTP 402: trial_expired")
+
+    XCTAssertTrue(error.isExpectedProductState)
+    XCTAssertFalse(error.isTransient)
+    XCTAssertEqual(error.localizedDescription, "AI features require an active plan or BYOK keys.")
+  }
+
+  func testGeminiQuotaExceededUsesProductGateMessage() {
+    let error = GeminiClient.GeminiClientError.apiError("quota exceeded")
 
     XCTAssertTrue(error.isExpectedProductState)
     XCTAssertFalse(error.isTransient)
