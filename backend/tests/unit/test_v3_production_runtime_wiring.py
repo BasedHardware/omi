@@ -229,9 +229,9 @@ def _route_client(monkeypatch, db, legacy_calls):
 
 
 def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_off(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-    monkeypatch.delenv('V17_V3_GET_ENABLED', raising=False)
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
     legacy_calls = []
     client = _route_client(monkeypatch, db, legacy_calls)
@@ -246,9 +246,9 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
 
 
 def test_real_router_uses_actual_builder_for_enrolled_v17_read_and_never_calls_legacy(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     db = _ready_db()
     legacy_calls = []
     client = _route_client(monkeypatch, db, legacy_calls)
@@ -264,9 +264,9 @@ def test_real_router_uses_actual_builder_for_enrolled_v17_read_and_never_calls_l
 
 
 def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
     db = _ready_db()
     del db.docs['memory_control/v17_global_read_gate']
     legacy_calls = []
@@ -282,9 +282,9 @@ def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch
 
 
 def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
-    monkeypatch.delenv('V17_MODE', raising=False)
-    monkeypatch.delenv('V17_MEMORY_ENABLED_USERS', raising=False)
-    monkeypatch.delenv('V17_V3_GET_ENABLED', raising=False)
+    monkeypatch.delenv('MEMORY_MODE', raising=False)
+    monkeypatch.delenv('MEMORY_ENABLED_USERS', raising=False)
+    monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -295,9 +295,9 @@ def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
 
 
 def test_route_specific_gate_is_default_false_even_when_global_v17_env_is_read(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-    monkeypatch.delenv('V17_V3_GET_ENABLED', raising=False)
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.delenv('MEMORY_V3_GET_ENABLED', raising=False)
     db = _ready_db()
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -308,9 +308,9 @@ def test_route_specific_gate_is_default_false_even_when_global_v17_env_is_read(m
 
 
 def test_route_specific_gate_requires_exact_true(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', '1')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', '1')
     db = _ready_db()
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -322,9 +322,9 @@ def test_route_specific_gate_requires_exact_true(monkeypatch):
 
 def test_non_read_modes_and_malformed_mode_do_not_enable_runtime(monkeypatch):
     for mode in ('shadow', 'write', 'unknown'):
-        monkeypatch.setenv('V17_MODE', mode)
-        monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
-        monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
+        monkeypatch.setenv('MEMORY_MODE', mode)
+        monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+        monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
         db = _ready_db()
 
         runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -335,9 +335,9 @@ def test_non_read_modes_and_malformed_mode_do_not_enable_runtime(monkeypatch):
 
 
 def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'other-user')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'other-user')
     db = _ready_db()
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -348,9 +348,9 @@ def test_non_enrolled_runtime_is_legacy_primary_without_firestore_read(monkeypat
 
 
 def test_whitelisted_ready_user_uses_real_v17_projection_and_never_writes(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=db)
@@ -370,9 +370,9 @@ def test_whitelisted_ready_user_uses_real_v17_projection_and_never_writes(monkey
 
 
 def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
     db.docs['users/uid-a/memory_state/head'] = _state_head(account_generation=8)
 
@@ -386,9 +386,9 @@ def test_trusted_state_head_mismatch_fails_before_projection_item_query(monkeypa
 
 
 def test_enrolled_unavailable_db_fails_closed_without_legacy_fallback(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
 
     runtime = build_v17_v3_production_runtime(uid='uid-a', db_client=None)
     response = compose_v17_v3_get(V17V3ComposedRequestParams(limit=1), runtime.adapters)
@@ -400,9 +400,9 @@ def test_enrolled_unavailable_db_fails_closed_without_legacy_fallback(monkeypatc
 
 
 def test_missing_global_gate_for_whitelisted_read_mode_fails_closed_no_legacy_fallback(monkeypatch):
-    monkeypatch.setenv('V17_MODE', 'read')
-    monkeypatch.setenv('V17_V3_GET_ENABLED', 'true')
-    monkeypatch.setenv('V17_MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
     db = _ready_db()
     del db.docs['memory_control/v17_global_read_gate']
 
