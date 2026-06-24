@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from google.cloud import firestore
 
-from ._client import db
+from ._client import db, document_id_from_seed
 
 
 def _get_meetings_collection(uid: str):
@@ -19,13 +19,28 @@ def create_meeting(uid: str, meeting_data: Dict) -> str:
     NOTE: Times should already be in UTC before calling this function.
     """
     # Add timestamps (always in UTC for consistent querying)
-    from datetime import timezone
-
     now = datetime.now(timezone.utc)
-    meeting_data['created_at'] = now
     meeting_data['synced_at'] = now
 
-    # Create document
+    event_id = meeting_data.get('calendar_event_id')
+    source = meeting_data.get('calendar_source')
+    if event_id and source:
+        # Derive a deterministic document id from the natural key so concurrent
+        # creates for the same calendar event collide on one document (last write
+        # wins) instead of producing duplicate docs (TOCTOU on the router's
+        # get_meeting_id_by_calendar_event check-then-create).
+        doc_id = document_id_from_seed(f'{uid}:{source}:{event_id}')
+        doc_ref = _get_meetings_collection(uid).document(doc_id)
+        # Only set created_at when the doc doesn't already exist so a racing
+        # write doesn't reset it; merge=True makes concurrent creates idempotent.
+        snapshot = doc_ref.get()
+        if not snapshot.exists:
+            meeting_data['created_at'] = now
+        doc_ref.set(meeting_data, merge=True)
+        return doc_ref.id
+
+    # Fallback: no natural key -> preserve old random-id behavior.
+    meeting_data['created_at'] = now
     doc_ref = _get_meetings_collection(uid).document()
     doc_ref.set(meeting_data)
 
