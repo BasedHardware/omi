@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from database.memory_collections import V17Collections
-from models.v17_product_memory import MemoryAccessPolicy, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, V17MemoryItem
 from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100

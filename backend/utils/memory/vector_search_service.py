@@ -15,8 +15,8 @@ except ModuleNotFoundError:
     query_v17_memory_vector_candidates = None
 
 from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
-from models.v17_memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
-from models.v17_product_memory import MemoryAccessPolicy, V17MemoryItem
+from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
+from models.product_memory import MemoryAccessPolicy, V17MemoryItem
 from utils.memory.vector_search_telemetry import (
     V17VectorSearchTelemetryConfig,
     emit_v17_vector_search_telemetry,

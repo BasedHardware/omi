@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Callable, Optional
 
 from database.memory_app_key_grants import read_v17_app_key_memory_grants_state
-from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
+from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17GlobalReadGateDecision,

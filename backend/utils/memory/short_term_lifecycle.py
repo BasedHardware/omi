@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from models.memory_evidence import SourceState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 DEFAULT_SHORT_TERM_TTL_DAYS = 30
 SHORT_TERM_LIFECYCLE_POLICY_VERSION = 'short_term_lifecycle.v1'

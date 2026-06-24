@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Optional
 
-from config.v17_memory import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
+from config.memory_rollout import V17Capabilities, V17Mode, V17RolloutState, decide_v17_capabilities
 from database.memory_collections import V17Collections
 
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}

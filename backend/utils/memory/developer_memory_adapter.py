@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from config.v17_memory import V17Capabilities
-from models.v17_product_memory import MemoryAccessPolicy, MemoryConsumer
+from config.memory_rollout import V17Capabilities
+from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17ReadDecision,
