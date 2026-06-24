@@ -306,7 +306,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    url = data['url']
+    url = data.get('url')
+    if url is None:
+        raise HTTPException(status_code=400, detail='url is required')
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     set_user_webhook_db(uid, wtype, url)
