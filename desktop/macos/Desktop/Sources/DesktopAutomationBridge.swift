@@ -56,6 +56,10 @@ struct DesktopAutomationSnapshot: Codable {
   var isRestoringAuth: Bool
   var isAppActive: Bool
   var mainWindowTitle: String?
+  var floatingBarVisible: Bool
+  var askOmiOpen: Bool
+  var askOmiFocused: Bool
+  var floatingBarFrame: String?
   var updatedAt: String
 }
 
@@ -74,6 +78,7 @@ struct DesktopAutomationOpenConversationRequest: Codable {
 
 struct DesktopAutomationVisualExportRequest: Codable {
   let path: String
+  let target: String?
 }
 
 struct DesktopAutomationVisualExportResult: Codable {
@@ -158,6 +163,10 @@ actor DesktopAutomationStateStore {
     isRestoringAuth: true,
     isAppActive: false,
     mainWindowTitle: nil,
+    floatingBarVisible: false,
+    askOmiOpen: false,
+    askOmiFocused: false,
+    floatingBarFrame: nil,
     updatedAt: ISO8601DateFormatter().string(from: Date())
   )
 
@@ -168,6 +177,27 @@ actor DesktopAutomationStateStore {
   func current() -> DesktopAutomationSnapshot {
     snapshot
   }
+}
+
+private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  var snapshot = await DesktopAutomationStateStore.shared.current()
+  let floating = await MainActor.run {
+    let floating = FloatingControlBarManager.shared.automationState
+    return (
+      isVisible: floating.isVisible,
+      isAskOmiOpen: floating.isAskOmiOpen,
+      isAskOmiFocused: floating.isAskOmiFocused,
+      frame: floating.frame,
+      isAppActive: NSApp.isActive
+    )
+  }
+  snapshot.floatingBarVisible = floating.isVisible
+  snapshot.askOmiOpen = floating.isAskOmiOpen
+  snapshot.askOmiFocused = floating.isAskOmiFocused
+  snapshot.floatingBarFrame = floating.frame
+  snapshot.isAppActive = floating.isAppActive
+  snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+  return snapshot
 }
 
 actor DesktopAutomationTraceStore {
@@ -298,6 +328,22 @@ final class DesktopAutomationActionRegistry {
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
+    register(
+      name: "open_ask_omi",
+      summary: "Open the Ask Omi input panel and return app-side open/focus timing",
+      params: ["reset"]
+    ) { params in
+      let reset = boolParam(params["reset"], default: false)
+      return await FloatingControlBarManager.shared.openAskOmiForAutomation(reset: reset)
+    }
+
+    register(
+      name: "close_ask_omi",
+      summary: "Close the Ask Omi input panel if it is open"
+    ) { _ in
+      return FloatingControlBarManager.shared.closeAskOmiForAutomation()
+    }
+
     register(
       name: "ask",
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
@@ -479,10 +525,10 @@ final class DesktopAutomationBridge {
   private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
     switch (request.method, request.path) {
     case ("GET", "/health"):
-      let snapshot = await DesktopAutomationStateStore.shared.current()
+      let snapshot = await liveAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/state"):
-      let snapshot = await DesktopAutomationStateStore.shared.current()
+      let snapshot = await liveAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/traces/recent"):
       let traces = await DesktopAutomationTraceStore.shared.recent()
@@ -493,7 +539,7 @@ final class DesktopAutomationBridge {
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
         try await Task.sleep(for: .milliseconds(150))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        let snapshot = await liveAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -511,7 +557,7 @@ final class DesktopAutomationBridge {
           DesktopAutomationOpenConversationRequest.self, from: request.body)
         try await dispatchOpenConversation(payload)
         try await Task.sleep(for: .milliseconds(350))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        let snapshot = await liveAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -581,7 +627,7 @@ final class DesktopAutomationBridge {
         let detail = try await DesktopAutomationActionRegistry.shared.perform(
           parsed.name, params: parsed.params)
         try await Task.sleep(for: .milliseconds(150))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        let snapshot = await liveAutomationSnapshot()
         let result = DesktopAutomationActionResult(
           action: parsed.name, detail: detail, state: snapshot)
         return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
@@ -596,7 +642,7 @@ final class DesktopAutomationBridge {
       do {
         let payload = try JSONDecoder().decode(
           DesktopAutomationVisualExportRequest.self, from: request.body)
-        let result = try await exportMainWindow(payload)
+        let result = try await exportWindow(payload)
         return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
       } catch {
         return jsonResponse(
@@ -723,7 +769,7 @@ final class DesktopAutomationBridge {
     }
   }
 
-  private func exportMainWindow(
+  private func exportWindow(
     _ payload: DesktopAutomationVisualExportRequest
   ) async throws -> DesktopAutomationVisualExportResult {
     try await MainActor.run {
@@ -731,13 +777,20 @@ final class DesktopAutomationBridge {
       try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-      guard
-        let window = NSApp.windows.first(where: { window in
+      let window: NSWindow?
+      if payload.target == "floating" {
+        window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
+      } else {
+        window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow
-        }),
+        })
+      }
+
+      guard
+        let window,
         let contentView = window.contentView
       else {
-        throw DesktopAutomationActionError.invalidParams("main window not available")
+        throw DesktopAutomationActionError.invalidParams("\(payload.target ?? "main") window not available")
       }
 
       contentView.needsLayout = true
@@ -747,7 +800,7 @@ final class DesktopAutomationBridge {
       guard !bounds.isEmpty,
         let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds)
       else {
-        throw DesktopAutomationActionError.invalidParams("main window has no renderable content")
+        throw DesktopAutomationActionError.invalidParams("\(payload.target ?? "main") window has no renderable content")
       }
 
       contentView.cacheDisplay(in: bounds, to: bitmap)

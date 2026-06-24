@@ -8,6 +8,15 @@ private final class FloatingBarHostingView<Content: View>: NSHostingView<Content
     }
 }
 
+private extension Duration {
+    var millisecondsString: String {
+        let components = self.components
+        let milliseconds = Double(components.seconds) * 1000
+            + Double(components.attoseconds) / 1_000_000_000_000_000
+        return String(format: "%.1f", milliseconds)
+    }
+}
+
 /// NSPanel subclass for the floating control bar.
 ///
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
@@ -424,6 +433,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func showAIConversation() {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
+        makeKeyAndOrderFront(nil)
 
         let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
         if !shouldRestoreVisibleConversation && state.hasVisibleConversation {
@@ -437,7 +447,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = true
                 state.isAILoading = false
@@ -447,9 +457,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-            resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(to: inputSize, makeResizable: false, animated: false, anchorTop: true)
 
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = false
                 state.isAILoading = false
@@ -461,16 +471,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             setupInputHeightObserver()
         }
 
-        // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
-        // The text editor itself handles focusing via updateNSView once it's in the window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.makeKeyAndOrderFront(nil)
-        }
-
         // Fallback: explicitly focus the input after SwiftUI layout settles.
         // The AutoFocusScrollView.viewDidMoveToWindow() fires once and can miss
         // if the window isn't yet key at that moment.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             self?.focusInputField()
         }
 
@@ -1135,6 +1139,77 @@ class FloatingControlBarManager {
     /// Whether the floating bar window is currently visible.
     var isVisible: Bool {
         window?.isVisible ?? false
+    }
+
+    struct AutomationState {
+        let isVisible: Bool
+        let isAskOmiOpen: Bool
+        let isAskOmiFocused: Bool
+        let frame: String?
+    }
+
+    var automationState: AutomationState {
+        guard let window else {
+            return AutomationState(isVisible: false, isAskOmiOpen: false, isAskOmiFocused: false, frame: nil)
+        }
+        let focused = window.firstResponder is NSTextView
+        return AutomationState(
+            isVisible: window.isVisible,
+            isAskOmiOpen: window.state.showingAIConversation && !window.state.showingAIResponse,
+            isAskOmiFocused: focused,
+            frame: NSStringFromRect(window.frame)
+        )
+    }
+
+    func openAskOmiForAutomation(reset: Bool) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        if reset, window.state.showingAIConversation {
+            window.closeAIConversation()
+            try? await Task.sleep(for: .milliseconds(360))
+        }
+
+        let start = ContinuousClock.now
+        openAIInput()
+        let openMs = await waitForAutomationCondition {
+            window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
+        }
+        let focusMs = await waitForAutomationCondition {
+            window.firstResponder is NSTextView
+        }
+        let elapsedMs = start.duration(to: .now).millisecondsString
+        return [
+            "openMs": openMs ?? "timeout",
+            "focusMs": focusMs ?? "timeout",
+            "elapsedMs": elapsedMs,
+            "frame": NSStringFromRect(window.frame),
+            "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+        ]
+    }
+
+    func closeAskOmiForAutomation() -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        if window.state.showingAIConversation {
+            window.closeAIConversation()
+        }
+        return [
+            "visible": window.isVisible ? "true" : "false",
+            "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+        ]
+    }
+
+    private func waitForAutomationCondition(_ condition: @MainActor @escaping () -> Bool) async -> String? {
+        let start = ContinuousClock.now
+        while start.duration(to: .now) < .milliseconds(500) {
+            if condition() {
+                return start.duration(to: .now).millisecondsString
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return nil
     }
 
     /// Show the floating bar and persist the preference.

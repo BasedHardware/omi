@@ -320,7 +320,10 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, Any]) -> dict[
                 options = dict(step["visual.export"] or {})
                 name = slug(str(options.get("name") or step.get("id") or f"step-{index}"))
                 png_path = ctx.steps_dir / f"{prefix}-{name}.png"
-                response = request_json(ctx.base_url, "POST", "/visual/export", {"path": str(png_path)})
+                payload = {"path": str(png_path)}
+                if "target" in options:
+                    payload["target"] = str(options["target"])
+                response = request_json(ctx.base_url, "POST", "/visual/export", payload)
                 response_path = ctx.steps_dir / f"{prefix}-visual.json"
                 write_json(response_path, response)
                 result.update(operation="visual.export", response_path=str(response_path), ok=bool(response.get("ok")))

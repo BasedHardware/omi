@@ -562,6 +562,10 @@ struct DesktopHomeView: View {
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,
+      floatingBarVisible: FloatingControlBarManager.shared.automationState.isVisible,
+      askOmiOpen: FloatingControlBarManager.shared.automationState.isAskOmiOpen,
+      askOmiFocused: FloatingControlBarManager.shared.automationState.isAskOmiFocused,
+      floatingBarFrame: FloatingControlBarManager.shared.automationState.frame,
       updatedAt: ISO8601DateFormatter().string(from: Date())
     )
 
