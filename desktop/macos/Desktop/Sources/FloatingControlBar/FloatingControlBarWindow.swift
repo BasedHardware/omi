@@ -343,7 +343,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             PushToTalkManager.shared.cancelListening()
         }
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        withAnimation(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
@@ -380,20 +380,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Record the animation target so savePreChatCenterIfNeeded() can snap to it
         // if a new PTT query fires while this restore animation is still running.
         pendingRestoreOrigin = restoreOrigin
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.3
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
-        NSAnimationContext.endGrouping()
+        self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: false)
         let targetFrame = NSRect(origin: restoreOrigin, size: size)
         preChatCenter = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             guard let self = self else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
-            // Safety net: only snap if no new AI session was opened while the animation ran.
-            // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
+            // Safety net: only snap if no new AI session was opened while the close settled.
+            // Without this guard, a rapid PTT query that fires while close settles gets collapsed
             // back to the pill position by this stale completion block.
             guard !self.state.showingAIConversation else { return }
             if self.frame != targetFrame {
@@ -402,7 +397,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
 
         // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
             self?.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
@@ -1167,7 +1162,7 @@ class FloatingControlBarManager {
         }
         if reset, window.state.showingAIConversation {
             window.closeAIConversation()
-            try? await Task.sleep(for: .milliseconds(360))
+            _ = await waitForAskOmiClosed(in: window)
         }
 
         let start = ContinuousClock.now
@@ -1188,16 +1183,22 @@ class FloatingControlBarManager {
         ]
     }
 
-    func closeAskOmiForAutomation() -> [String: String] {
+    func closeAskOmiForAutomation() async -> [String: String] {
         guard let window else {
             return ["error": "floating_bar_window_unavailable"]
         }
+        let start = ContinuousClock.now
         if window.state.showingAIConversation {
             window.closeAIConversation()
         }
+        let closeMs = await waitForAskOmiClosed(in: window)
+        let elapsedMs = start.duration(to: .now).millisecondsString
         return [
+            "closeMs": closeMs ?? "timeout",
+            "elapsedMs": elapsedMs,
             "visible": window.isVisible ? "true" : "false",
             "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+            "frame": NSStringFromRect(window.frame),
         ]
     }
 
@@ -1210,6 +1211,12 @@ class FloatingControlBarManager {
             try? await Task.sleep(for: .milliseconds(5))
         }
         return nil
+    }
+
+    private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
+        await waitForAutomationCondition {
+            !window.state.showingAIConversation && window.frame.size == NSSize(width: 40, height: 14)
+        }
     }
 
     /// Show the floating bar and persist the preference.

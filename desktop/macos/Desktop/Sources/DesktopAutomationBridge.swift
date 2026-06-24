@@ -341,7 +341,7 @@ final class DesktopAutomationActionRegistry {
       name: "close_ask_omi",
       summary: "Close the Ask Omi input panel if it is open"
     ) { _ in
-      return FloatingControlBarManager.shared.closeAskOmiForAutomation()
+      return await FloatingControlBarManager.shared.closeAskOmiForAutomation()
     }
 
     register(
