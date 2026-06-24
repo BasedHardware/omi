@@ -88,6 +88,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       throw new Error("Failed to create ACP subprocess pipes");
     }
 
+    this.process.on("error", (err) => {
+      this.log(`ACP process error: ${err.message}`);
+      this.process = null;
+      this.stdinWriter = null;
+      this.readline = null;
+      for (const [, handler] of this.responseHandlers) {
+        handler.reject(new Error(`ACP process error: ${err.message}`));
+      }
+      this.responseHandlers.clear();
+      this.onProcessExit?.();
+    });
+
     this.stdinWriter = (line: string) => {
       try {
         this.process?.stdin?.write(line + "\n");

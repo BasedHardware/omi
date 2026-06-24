@@ -356,6 +356,15 @@ export class AgentRuntimeKernel {
       });
       lastAttempt = attempt;
 
+      if (!this.registry.has(adapterId)) {
+        this.failAttemptBeforeExecution(
+          attempt,
+          "adapter_not_registered",
+          `Adapter not registered: ${adapterId}`,
+          false
+        );
+        break;
+      }
       const pool = this.registry.get(adapterId);
 
       let binding: AdapterBinding;
@@ -609,6 +618,22 @@ export class AgentRuntimeKernel {
     return this.readArtifacts(input);
   }
 
+  hasActiveExecutionForAdapter(adapterId: string): boolean {
+    for (const active of this.activeExecutions.values()) {
+      if (active.adapter.adapterId === adapterId) return true;
+    }
+    return false;
+  }
+
+  defaultAdapterIdForSession(sessionId: string): string {
+    return this.readSession(sessionId).defaultAdapterId;
+  }
+
+  defaultAdapterIdForRun(runId: string): string {
+    const run = this.readRun(runId);
+    return this.readSession(run.sessionId).defaultAdapterId;
+  }
+
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {
     const session = this.findExistingSession(input);
     const sessionIds = session ? [session.sessionId] : this.findInvalidationSessionIds(input);
@@ -819,13 +844,14 @@ export class AgentRuntimeKernel {
   private resolveSession(input: KernelSessionResolutionInput): AgentSession {
     const existing = this.findExistingSession(input);
     if (existing) return existing;
+    const shouldStoreLegacyAlias = !(input.externalRefKind && input.externalRefId);
     return this.store.insertSession({
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind,
       externalRefKind: input.externalRefKind ?? null,
       externalRefId: input.externalRefId ?? null,
-      legacyClientScope: input.legacyClientScope ?? null,
-      legacySessionKey: input.legacySessionKey ?? null,
+      legacyClientScope: shouldStoreLegacyAlias ? input.legacyClientScope ?? null : null,
+      legacySessionKey: shouldStoreLegacyAlias ? input.legacySessionKey ?? null : null,
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
     });
@@ -845,6 +871,7 @@ export class AgentRuntimeKernel {
         [input.ownerId, input.externalRefKind, input.externalRefId],
       );
       if (row) return sessionFromRow(row);
+      return undefined;
     }
     if (input.legacyClientScope && input.legacySessionKey) {
       const row = this.store.getOptionalRow(
@@ -1313,7 +1340,12 @@ export class AgentRuntimeKernel {
       payloadJson: JSON.stringify(input.payload ?? {}),
     });
     for (const subscriber of this.subscribers) {
-      subscriber(event);
+      try {
+        subscriber(event);
+      } catch {
+        // Subscribers are observers; event persistence must not be rolled back
+        // by UI/projection listener failures.
+      }
     }
     return event;
   }

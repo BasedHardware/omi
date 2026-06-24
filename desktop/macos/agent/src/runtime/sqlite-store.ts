@@ -21,7 +21,7 @@ import type {
 const DATABASE_FILENAME = "omi-agentd.sqlite3";
 const PHASE_1_MIGRATION_VERSION = 1;
 
-const ACTIVE_ATTEMPT_STATUSES = ["starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
+const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
 
 type DatabaseFactory = new (path: string) => Pick<DatabaseSync, "exec" | "prepare" | "close" | "isTransaction">;

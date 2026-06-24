@@ -3105,12 +3105,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let resolvedLegacyClientScope =
                 legacyClientScope
-                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat" : nil)
+                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(sessionId)" : nil)
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
+                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? sessionId),
                 omiSessionId: resolvedOmiSessionId,
                 surfaceKind: resolvedSurface?.surfaceKind,
                 externalRefKind: resolvedSurface?.externalRefKind,

@@ -152,6 +152,65 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("rejects synchronous nested ACP control runs while the single ACP worker is busy", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp", 1);
+    adapter.deferResult();
+    const running = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "acp",
+      defaultAdapterId: "acp",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    const blocked = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "send_agent_message", {
+        ownerId: "owner",
+        sessionId: adapter.executed[0].sessionId,
+        prompt: "nested follow up",
+        requestId: "nested-send",
+      }),
+    );
+
+    expect(blocked).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+      },
+    });
+    expect(blocked.error.message).toContain("Synchronous ACP control-tool runs are unavailable");
+
+    adapter.resolveDeferred({
+      text: "done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+    store.close();
+  });
+
+  it("validates childSessionId before delegate_agent continue mode dispatch", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
+        mode: "continue",
+        parentRunId: parent.run.runId,
+        objective: "continue without a child id",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_tool_input",
+      },
+    });
+    expect(invalid.error.message).toContain("childSessionId");
+    store.close();
+  });
+
   it("delegates call mode with distinct parent and child sessions linked by a delegation row", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);

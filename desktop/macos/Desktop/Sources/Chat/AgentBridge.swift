@@ -57,14 +57,12 @@ actor AgentBridge {
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?
-  ) {
-    Task {
-      await runtime.setGlobalAuthHandlers(
-        clientId: clientId,
-        onAuthRequired: onAuthRequired,
-        onAuthSuccess: onAuthSuccess
-      )
-    }
+  ) async {
+    await runtime.setGlobalAuthHandlers(
+      clientId: clientId,
+      onAuthRequired: onAuthRequired,
+      onAuthSuccess: onAuthSuccess
+    )
   }
 
   func start() async throws {
@@ -163,6 +161,7 @@ actor AgentBridge {
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
     onAuthSuccess: @escaping AuthSuccessHandler = {}
   ) async throws -> QueryResult {
+    await setGlobalAuthHandlers(onAuthRequired: onAuthRequired, onAuthSuccess: onAuthSuccess)
     try await start()
 
     guard activeRequestId == nil else {

@@ -50,28 +50,38 @@ const sendAgentMessageSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
-const delegateAgentSchema = z.object({
-  mode: delegationModeSchema,
-  parentRunId: z.string().min(1),
-  objective: z.string().min(1),
-  context: z.string().max(4000).optional(),
-  ownerId: z.string().min(1).optional(),
-  childSessionId: z.string().min(1).optional(),
-  childSurfaceKind: z.string().min(1).default("delegated_agent"),
-  childExternalRefKind: z.string().min(1).optional(),
-  childExternalRefId: z.string().min(1).optional(),
-  childTitle: z.string().min(1).optional(),
-  adapterId: z.string().min(1).optional(),
-  defaultAdapterId: z.string().min(1).optional(),
-  cwd: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
-  runMode: runModeSchema.default("ask"),
-  requestId: z.string().min(1).optional(),
-  clientId: z.string().min(1).default("omi-control-tools"),
-  maxDepth: z.coerce.number().int().min(1).max(5).default(3),
-  maxBudgetUsd: z.coerce.number().positive().max(10).default(5),
-  metadata: z.record(z.string(), z.unknown()).default({}),
-});
+const delegateAgentSchema = z
+  .object({
+    mode: delegationModeSchema,
+    parentRunId: z.string().min(1),
+    objective: z.string().min(1),
+    context: z.string().max(4000).optional(),
+    ownerId: z.string().min(1).optional(),
+    childSessionId: z.string().min(1).optional(),
+    childSurfaceKind: z.string().min(1).default("delegated_agent"),
+    childExternalRefKind: z.string().min(1).optional(),
+    childExternalRefId: z.string().min(1).optional(),
+    childTitle: z.string().min(1).optional(),
+    adapterId: z.string().min(1).optional(),
+    defaultAdapterId: z.string().min(1).optional(),
+    cwd: z.string().min(1).optional(),
+    model: z.string().min(1).optional(),
+    runMode: runModeSchema.default("ask"),
+    requestId: z.string().min(1).optional(),
+    clientId: z.string().min(1).default("omi-control-tools"),
+    maxDepth: z.coerce.number().int().min(1).max(5).default(3),
+    maxBudgetUsd: z.coerce.number().positive().max(10).default(5),
+    metadata: z.record(z.string(), z.unknown()).default({}),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode === "continue" && !value.childSessionId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["childSessionId"],
+        message: "childSessionId is required for continue mode",
+      });
+    }
+  });
 
 export const agentControlToolSchemas = {
   list_agent_sessions: listAgentSessionsSchema,
@@ -260,6 +270,7 @@ export async function handleAgentControlToolCall(
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
+        rejectSynchronousNestedRun(context, parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId));
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
           requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -275,6 +286,12 @@ export async function handleAgentControlToolCall(
       }
       case "delegate_agent": {
         const parsed = agentControlToolSchemas.delegate_agent.parse(input);
+        if (parsed.mode !== "spawn") {
+          rejectSynchronousNestedRun(
+            context,
+            parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
+          );
+        }
         const result = await context.kernel.delegateAgent({
           ...parsed,
           requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -303,6 +320,14 @@ export async function handleAgentControlToolCall(
         message: error instanceof Error ? error.message : String(error),
       },
     });
+  }
+}
+
+function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string): void {
+  if (adapterId === "acp" && context.kernel.hasActiveExecutionForAdapter("acp")) {
+    throw new Error(
+      "Synchronous ACP control-tool runs are unavailable while the ACP adapter is already executing; use spawn mode or retry after the current run finishes."
+    );
   }
 }
 

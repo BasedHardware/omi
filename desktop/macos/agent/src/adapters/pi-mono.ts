@@ -380,6 +380,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     onToolCall: ToolExecutor,
     signal?: AbortSignal
   ): Promise<PromptResult> {
+    if (!this.sessions.has(sessionId)) {
+      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
+    }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
     // Any stray in-flight request here indicates a caller contract violation
     // or a missed abort — drop it so a late turn_end can't leak into this one.
@@ -496,6 +499,10 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   invalidateSession(sessionKey: string): void {
     this.sessions.delete(sessionKey);
+  }
+
+  hasSession(sessionId: string): boolean {
+    return this.sessions.has(sessionId);
   }
 
   /** Update the system prompt baked into the pi subprocess.
@@ -854,6 +861,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   };
 
   private readonly harness: PiMonoAdapter;
+  private readonly cancelledAttempts = new Set<string>();
 
   constructor(harness: PiMonoAdapter) {
     this.harness = harness;
@@ -881,6 +889,9 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
     // pi-mono has no native resume after daemon/process loss, but while this
     // RuntimeAdapter instance is alive the opaque session id is still usable as
     // process-local state. Startup reconciliation marks these bindings stale.
+    if (!this.harness.hasSession(input.adapterNativeSessionId)) {
+      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+    }
     return this.binding(input, input.adapterNativeSessionId);
   }
 
@@ -903,9 +914,10 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
       return {
         ...result,
         adapterSessionId: result.sessionId,
-        terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+        terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };
     } finally {
+      this.cancelledAttempts.delete(context.attemptId);
       if (this.harness.hasPendingRestart) {
         await this.harness.executePendingRestart();
       }
@@ -914,6 +926,9 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
 
   async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
     const sessionId = context.binding?.adapterNativeSessionId ?? context.sessionId;
+    if (context.attemptId) {
+      this.cancelledAttempts.add(context.attemptId);
+    }
     this.harness.abort(sessionId);
     return {
       accepted: true,

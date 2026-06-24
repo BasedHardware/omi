@@ -94,6 +94,7 @@ final class TaskAgentStatusRegistry {
 
   func markStopped(taskId: String) {
     update(taskId: taskId, statusText: nil, lastError: "Stopped by user")
+    AgentRuntimeStatusStore.shared.recordLocalCancellation(surface: .taskChat(taskId: taskId), message: "Stopped by user")
   }
 
   func reset() {

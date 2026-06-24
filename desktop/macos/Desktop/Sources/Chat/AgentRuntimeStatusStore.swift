@@ -136,6 +136,10 @@ final class AgentRuntimeStatusStore: ObservableObject {
     update(surface: surface, status: .failed, statusText: nil, errorMessage: error, terminal: true)
   }
 
+  func recordLocalCancellation(surface: AgentSurfaceReference, message: String? = nil) {
+    update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
+  }
+
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
     switch message.kind {
     case .textDelta, .thinkingDelta:
@@ -209,11 +213,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       ?? (payload["legacyAdapterSessionId"] as? String)
       ?? projection.adapterSessionId
     projection.status = status
-    if let statusText {
-      projection.statusText = statusText
-    } else if terminal {
-      projection.statusText = nil
-    }
+    projection.statusText = statusText
     projection.errorMessage = errorMessage ?? (terminal ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil

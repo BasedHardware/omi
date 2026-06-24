@@ -48,17 +48,28 @@ export class AdapterWorker {
   }
 
   async runExclusive<T>(attemptId: string, work: () => Promise<T>): Promise<T> {
+    if (this.activeAttemptId && this.activeAttemptId !== attemptId) {
+      throw new Error(
+        `Worker ${this.workerId} already has active attempt ${this.activeAttemptId}`
+      );
+    }
+    if (!this.activeAttemptId) {
+      this.activeAttemptId = attemptId;
+    }
+    try {
+      return await work();
+    } finally {
+      this.activeAttemptId = null;
+    }
+  }
+
+  reserve(attemptId: string): void {
     if (this.activeAttemptId) {
       throw new Error(
         `Worker ${this.workerId} already has active attempt ${this.activeAttemptId}`
       );
     }
     this.activeAttemptId = attemptId;
-    try {
-      return await work();
-    } finally {
-      this.activeAttemptId = null;
-    }
   }
 }
 
@@ -67,6 +78,7 @@ type WorkerLeaseResolver = (worker: AdapterWorker) => void;
 
 interface PendingWorkerLease {
   binding?: AdapterBindingHandle;
+  attemptId: string;
   resolve: WorkerLeaseResolver;
 }
 
@@ -120,7 +132,7 @@ export class AdapterWorkerPool {
     attemptId: string,
     work: (worker: AdapterWorker) => Promise<T>
   ): Promise<T> {
-    const worker = await this.acquireQueued(binding);
+    const worker = await this.acquireQueued(binding, attemptId);
     try {
       return await worker.runExclusive(attemptId, () => work(worker));
     } finally {
@@ -128,13 +140,13 @@ export class AdapterWorkerPool {
     }
   }
 
-  private acquireQueued(binding?: AdapterBindingHandle): Promise<AdapterWorker> {
+  private acquireQueued(binding: AdapterBindingHandle | undefined, attemptId: string): Promise<AdapterWorker> {
     const worker = this.acquire(binding);
     if (worker) {
       return Promise.resolve(worker);
     }
     return new Promise((resolve) => {
-      this.waiters.push({ binding, resolve });
+      this.waiters.push({ binding, attemptId, resolve });
     });
   }
 
@@ -147,6 +159,7 @@ export class AdapterWorkerPool {
         continue;
       }
       this.waiters.splice(i, 1);
+      worker.reserve(waiter.attemptId);
       waiter.resolve(worker);
     }
   }
