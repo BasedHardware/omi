@@ -138,9 +138,19 @@ def get_pending_sync_items(
     result = action_items_db.get_pending_apple_reminders_sync(uid)
     pending_export = [item for item in result["pending_export"] if not item.get('is_locked', False)]
     synced_items = [item for item in result["synced_items"] if not item.get('is_locked', False)]
+
+    def _safe(items):
+        out = []
+        for item in items:
+            try:
+                out.append(ActionItemResponse(**item))
+            except ValidationError:
+                logger.warning(f"Skipping malformed action item {item.get('id')} in pending-sync for uid {uid}")
+        return out
+
     return {
-        "pending_export": [ActionItemResponse(**item) for item in pending_export],
-        "synced_items": [ActionItemResponse(**item) for item in synced_items],
+        "pending_export": _safe(pending_export),
+        "synced_items": _safe(synced_items),
     }
 
 
