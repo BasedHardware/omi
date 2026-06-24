@@ -126,6 +126,11 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
     If last_checked_at is provided, only returns announcements created after that time.
     """
     now = datetime.now(timezone.utc)
+    # A client-supplied last_checked_at may be tz-naive (ISO string without an
+    # offset); Firestore created_at is always tz-aware. Coerce to UTC so the
+    # comparison below cannot raise TypeError.
+    if last_checked_at is not None and last_checked_at.tzinfo is None:
+        last_checked_at = last_checked_at.replace(tzinfo=timezone.utc)
     announcements_ref = db.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.ANNOUNCEMENT.value)).where(
         filter=FieldFilter("active", "==", True)
