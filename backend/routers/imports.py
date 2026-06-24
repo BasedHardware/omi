@@ -152,9 +152,15 @@ def get_import_job_status(
     if job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this import job")
 
+    # Coerce an out-of-enum/missing stored status to failed instead of 500ing the request
+    try:
+        status_val = ImportJobStatus(job.get('status'))
+    except (ValueError, TypeError):
+        status_val = ImportJobStatus.failed
+
     return ImportJobResponse(
         job_id=job['id'],
-        status=ImportJobStatus(job['status']),
+        status=status_val,
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
