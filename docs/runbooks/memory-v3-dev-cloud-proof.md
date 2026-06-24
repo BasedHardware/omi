@@ -1,7 +1,7 @@
-# V17 /v3 dev-cloud proof runbook
+# Memory `/v3` dev-cloud proof runbook
 
-**Purpose:** Prove enabled V17 `GET /v3/memories` behavior in a dedicated non-production Firebase/GCP project before any production activation.  
-**Policy:** See `docs/rollout/v17-v3-proof-order.md`.
+**Purpose:** Prove enabled canonical `GET /v3/memories` behavior in a dedicated non-production Firebase/GCP project before any production activation.  
+**Policy:** See `docs/rollout/memory-v3-proof-order.md`.
 
 ## Non-negotiable boundary
 
@@ -13,13 +13,13 @@ Do not use production with a synthetic UID and call it dev-cloud.
 
 ## Checked-in preparation tooling
 
-Use `backend/scripts/v17_v3_dev_cloud_readiness.py` to prepare and validate the local artifact contract before a real dev-cloud run. The script is safe by default: it performs no network calls, no Firestore reads, and no Firestore writes.
+Use `backend/scripts/v3_dev_cloud_readiness.py` to prepare and validate the local artifact contract before a real dev-cloud run. The script is safe by default: it performs no network calls, no Firestore reads, and no Firestore writes.
 
 Default preflight:
 
 ```bash
 cd backend
-python3 scripts/v17_v3_dev_cloud_readiness.py
+python3 scripts/v3_dev_cloud_readiness.py
 ```
 
 Expected status without a fully specified dev target is `BLOCKED` with missing-env blockers. This is correct and is not a failure.
@@ -28,14 +28,14 @@ Prepare a local evidence-bundle skeleton for the deployed dev-cloud CI/proof job
 
 ```bash
 cd backend
-python3 scripts/v17_v3_dev_cloud_readiness.py \
+python3 scripts/v3_dev_cloud_readiness.py \
   --run-id <run-id> \
   --uid-a <synthetic-dev-uid-a> \
   --uid-b <synthetic-dev-uid-b> \
-  --write-bundle-dir /tmp/v17-v3-dev-cloud-<git-sha>-<run-id>
+  --write-bundle-dir /tmp/memory-v3-dev-cloud-<git-sha>-<run-id>
 ```
 
-Required env for `READY_TO_EXECUTE_DEV_CLOUD_PROOF` preflight:
+Required env for `READY_TO_EXECUTE_DEV_CLOUD_PROOF` preflight (`V17_DEV_CLOUD_*` names retained as compatibility fallbacks):
 
 ```text
 V17_DEV_CLOUD_PROJECT_ID=<non-prod project id>
@@ -59,7 +59,7 @@ V17_PRODUCTION_PROJECT_NUMBERS=<comma-separated prod project numbers to reject>
 
 | Identity | Purpose | Required constraints |
 |---|---|---|
-| Runtime service account | Deployed backend revision serving `/v3/memories` | Read-only Firestore access required for V17 GET; no Firestore data create/update/delete permissions. No human ADC. No Owner/Editor. |
+| Runtime service account | Deployed backend revision serving `/v3/memories` | Read-only Firestore access required for canonical-memory GET; no Firestore data create/update/delete permissions. No human ADC. No Owner/Editor. |
 | Fixture writer identity | Creates synthetic control/head/projection docs | Separate from runtime identity. Dev project only. Hard-stops on production project ID/number. |
 | Test caller identity | Obtains synthetic Firebase auth tokens | Synthetic users only. No real user data. |
 
@@ -68,8 +68,10 @@ V17_PRODUCTION_PROJECT_NUMBERS=<comma-separated prod project numbers to reject>
 Produce one immutable bundle named like:
 
 ```text
-v17-v3-dev-cloud-<git-sha>-<run-id>.tar.gz
+memory-v3-dev-cloud-<git-sha>-<run-id>.tar.gz
 ```
+
+(Legacy bundles may use the `v17-v3-dev-cloud-…` prefix; tooling accepts both during transition.)
 
 The bundle must exclude credentials, bearer tokens, private keys, raw memory text from real users, and production identifiers beyond allowed project metadata.
 
@@ -85,10 +87,10 @@ Required files:
 | `iam-effective.json` | Effective permissions for runtime and fixture-writer identities, including inherited grants. Runtime must not have Firestore data-write permissions. |
 | `auth-evidence.json` | Synthetic Firebase users, token issuer/audience validation, server-observed authenticated UID, and proof client fields do not select UID. Use at least two synthetic users. |
 | `fixtures.redacted.json` | Run-scoped document paths and schema-valid synthetic values for global read gate, kill switch clear, convergence satisfied, user grant, authoritative head generation, projection state/items. Include setup/cleanup manifests and before/after hashes. |
-| `proof-results.json` | One result per mandatory proof case, no skips. Include test ID, trace ID, authenticated UID, route decision, legacy invocation count, V17 Firestore adapter read count, V17 Firestore write/attempt count, HTTP result, stable reason/error code, assertion outcome. |
+| `proof-results.json` | One result per mandatory proof case, no skips. Include test ID, trace ID, authenticated UID, route decision, legacy invocation count, canonical-memory Firestore adapter read count, canonical-memory Firestore write/attempt count, HTTP result, stable reason/error code, assertion outcome. |
 | `junit.xml` | CI/JUnit output for the proof suite. |
 | `http-transcripts.redacted.ndjson` | Requests/responses for proof cases with tokens removed. Include route-selection diagnostics and allowed headers. |
-| `v17-operations.ndjson` | V17 Firestore adapter operation records correlated by trace ID. Primary evidence for zero V17 off-path operations and zero GET writes. |
+| `v17-operations.ndjson` | Canonical-memory Firestore adapter operation records correlated by trace ID (legacy filename retained). Primary evidence for zero off-path operations and zero GET writes. |
 | `audit-extract.ndjson` | Supporting Firestore Data Access audit records where enabled, filtered to runtime principal and test interval. Supporting only, not the sole proof. |
 | `telemetry-redaction-report.json` | Required fields present; auth tokens, raw cursors, memory text, and sensitive payloads absent. No production sink claim. |
 | `rollback-report.json` | Positive request before rollback, kill-switch change, first observed fail-closed request, propagation time, warm-instance repeated requests, restoration, positive request after restoration. |
@@ -102,13 +104,13 @@ Use one valid baseline and mutate one prerequisite at a time.
 
 | Case | Required result |
 |---|---|
-| Feature variable absent, false, or non-exact | V17 not selected; zero V17 adapter calls; existing legacy/off contract unchanged. |
-| `V17_MODE` not exactly `read` | V17 not selected; zero V17 adapter calls. |
-| Authenticated UID not allowlisted | V17 not selected; no V17 Firestore calls. |
+| Feature variable absent, false, or non-exact | Canonical memory path not selected; zero canonical-memory adapter calls; existing legacy/off contract unchanged. |
+| `V17_MODE` not exactly `read` | Canonical memory path not selected; zero canonical-memory adapter calls. |
+| Authenticated UID not allowlisted | Canonical memory path not selected; no canonical-memory Firestore calls. |
 | Valid allowlisted user | Exact synthetic memories, ordering, pagination, generation, and headers expected by API contract. |
 | Client UID/query/body/mode/header spoof | No effect on authenticated UID or route selection. |
 | User A attempts to reference user B | No B data returned through query, header, path, or cursor. |
-| Global gate absent/disabled | V17 selected, then fail closed; legacy invocation count zero. |
+| Global gate absent/disabled | Canonical memory path selected, then fail closed; legacy invocation count zero. |
 | Kill switch active | Fail closed; legacy invocation count zero. |
 | Grant missing | Fail closed; legacy invocation count zero. |
 | Write convergence absent/false | Fail closed; legacy invocation count zero. |
@@ -118,7 +120,7 @@ Use one valid baseline and mutate one prerequisite at a time.
 | Cursor malformed/tampered/stale-generation/from another user | Stable error/client result; no legacy fallback; no cross-user disclosure. |
 | Runtime Firestore read permission denied | Fail closed; no legacy fallback. |
 | Firestore timeout/unavailable | Fail closed through existing dependency-injection tests; no public bypass endpoint. |
-| Every GET case | Zero successful or attempted V17 writes. |
+| Every GET case | Zero successful or attempted canonical-memory writes. |
 | Real projection query | Succeeds against dev Firestore with checked-in index set deployed and READY. |
 | Telemetry | Route/reason/trace fields present; memory content, tokens, and cursor payload absent. |
 | Kill-switch rollback | Blocks within documented maximum propagation interval without redeployment. |
@@ -127,9 +129,9 @@ Use one valid baseline and mutate one prerequisite at a time.
 
 If legacy/off paths read Firestore, do not claim zero total Firestore reads. The enforceable assertion is:
 
-> Zero V17 Firestore adapter calls and no additional reads relative to the captured legacy baseline.
+> Zero canonical-memory Firestore adapter calls and no additional reads relative to the captured legacy baseline.
 
-For every GET case, require zero V17 Firestore writes and zero attempted writes.
+For every GET case, require zero canonical-memory Firestore writes and zero attempted writes.
 
 ## Dev-cloud blockers
 
@@ -142,7 +144,7 @@ These block dev-cloud GO:
 - no separate safe synthetic fixture writer;
 - missing authoritative head/projection/convergence synthetic fixtures;
 - ambiguous route-selection/failure boundary;
-- weak evidence for zero V17 writes/off-path operations;
+- weak evidence for zero canonical-memory writes/off-path operations;
 - unproven auth spoofing, cross-user isolation, or cursor isolation;
 - kill switch cannot be exercised or has unbounded propagation;
 - logs leak memory content, tokens, cursors, or sensitive values;
@@ -181,7 +183,7 @@ Rule of thumb:
 - Enabling wildcard allowlists, default-memory grants, or broad cohorts for testing.
 - Combining multiple missing prerequisites in one negative proof case.
 - Inferring zero reads/writes from successful responses or absence of errors.
-- Restoring legacy fallback after V17 has been selected.
+- Restoring legacy fallback after canonical memory has been selected.
 - Copying production memory docs, tokens, UIDs, logs, or cursors into dev.
 - Sharing mutable fixtures between concurrent runs without a run namespace.
 - Reusing a GO bundle after runtime code, dependencies, image digest, index definitions, auth, IAM, schema, query, or gate semantics change.

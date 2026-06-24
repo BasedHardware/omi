@@ -1,10 +1,10 @@
-# V17 /v3 proof-order policy
+# Memory `/v3` proof-order policy
 
-**Status:** Normative rollout gate for V17 `GET /v3/memories` activation.  
+**Status:** Normative rollout gate for canonical `GET /v3/memories` activation.  
 **Current candidate:** `1294773c8 feat(v17): wire default-off v3 rollout runtime`  
 **Oracle review:** Strategy change reviewed; decision was **GO to adopt non-production-first strategy**, **GO to begin dev-cloud environment/tooling work**, **NO-GO for dev-cloud functional proof until P0 artifacts pass**, and **NO-GO for production activation**.
 
-Production **must not** be the first environment in which the enabled V17 `GET /v3/memories` path is exercised against a real cloud Firestore database.
+Production **must not** be the first environment in which the enabled `GET /v3/memories` path is exercised against a real cloud Firestore database.
 
 ## Gate 1 — Local/emulator proof
 
@@ -14,9 +14,9 @@ Gate 1 may prove:
 
 - default-off behavior;
 - exact server-side route-selection conditions;
-- fail-closed behavior after V17 selection;
-- no legacy fallback after V17 selection;
-- absence of V17 writes in tested GET paths;
+- fail-closed behavior after canonical memory selection;
+- no legacy fallback after canonical memory selection;
+- absence of canonical-memory writes in tested GET paths;
 - local query/index contract shape.
 
 Gate 1 must not claim:
@@ -50,8 +50,8 @@ Gate 2 is GO only when:
 - the mandatory proof matrix passes without skips;
 - required dev Firestore indexes are READY;
 - the real projection query succeeds in dev Firestore;
-- off/pre-selection requests perform zero V17 Firestore adapter operations;
-- all GET cases perform zero V17 writes or attempted writes;
+- off/pre-selection requests perform zero canonical-memory Firestore adapter operations;
+- all GET cases perform zero canonical-memory writes or attempted writes;
 - post-selection prerequisite failures fail closed and do not invoke legacy behavior;
 - authorization and cross-user isolation are demonstrated with at least two synthetic users;
 - telemetry/headers/logs are traceable and redacted;
@@ -60,17 +60,19 @@ Gate 2 is GO only when:
 
 Gate 2 GO means **dev-cloud functional proof passed**. It does not approve production activation.
 
-## V17 selection and fallback boundary
+## Canonical memory selection and fallback boundary
 
-V17 is selected only when the server observes all of:
+The canonical memory path is selected only when the server observes all of:
 
 1. `V17_V3_GET_ENABLED=true` exactly;
 2. `V17_MODE=read` exactly;
 3. a valid authenticated UID present in the server-side allowlist.
 
-Failures before V17 selection retain the documented legacy/off behavior and must not invoke the V17 Firestore adapter.
+(`V17_*` env names are retained as compatibility fallbacks; neutral rollout config is primary in code.)
 
-After V17 selection, failure of any global gate, kill switch, user grant, write-convergence prerequisite, authoritative head, generation check, projection read, cursor validation, IAM read, or other V17 prerequisite must fail closed and must not invoke the legacy path.
+Failures before canonical memory selection retain the documented legacy/off behavior and must not invoke the canonical-memory Firestore adapter.
+
+After canonical memory selection, failure of any global gate, kill switch, user grant, write-convergence prerequisite, authoritative head, generation check, projection read, cursor validation, IAM read, or other rollout prerequisite must fail closed and must not invoke the legacy path.
 
 Client-supplied UID, mode, headers, body fields, or query parameters must not change authentication, allowlist membership, or route selection.
 

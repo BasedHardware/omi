@@ -1,7 +1,7 @@
-# V17 /v3 production activation runbook
+# Memory `/v3` production activation runbook
 
 **Purpose:** Define the production-only gate after dev-cloud functional proof passes.  
-**Policy:** Production activation is **NO-GO** until `docs/rollout/v17-v3-proof-order.md` Gate 2 is GO for the exact candidate artifact and independently reviewed.
+**Policy:** Production activation is **NO-GO** until `docs/rollout/memory-v3-proof-order.md` Gate 2 is GO for the exact candidate artifact and independently reviewed.
 
 ## Current state
 
@@ -72,7 +72,7 @@ Stop and roll back if any occurs:
 - request hits unexpected revision/image;
 - unexpected project ID/number/database ID;
 - runtime identity mismatch;
-- V17 selected for non-allowlisted UID;
+- canonical memory path selected for non-allowlisted UID;
 - client-supplied UID/mode/header affects route selection;
 - post-selection failure invokes legacy;
 - any GET writes or attempts writes;

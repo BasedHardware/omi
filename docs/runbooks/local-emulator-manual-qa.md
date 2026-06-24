@@ -1,4 +1,4 @@
-# V17 local emulator manual QA runbook
+# Local emulator manual QA runbook
 
 ## Daily dev (30 seconds)
 
@@ -52,7 +52,7 @@ For perf testing with a release Rust binary: `OMI_DESKTOP_BACKEND_RELEASE=1 make
 <details>
 <summary>Evidence class / activation framing (QA agents)</summary>
 
-This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_DEV` metadata and is not V17 dev-cloud proof, production proof, IAM proof, deployed-index proof, telemetry proof, rollback proof, or activation evidence.
+This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_DEV` metadata and is not dev-cloud proof, production proof, IAM proof, deployed-index proof, telemetry proof, rollback proof, or activation evidence.
 
 ### Happy path (explicit steps)
 
