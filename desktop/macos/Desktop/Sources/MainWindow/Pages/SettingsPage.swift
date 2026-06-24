@@ -231,6 +231,7 @@ struct SettingsContentView: View {
   @State private var isLoadingChatUsage: Bool = false
   @State private var overageInfo: OverageInfoResponse?
   @State private var isLoadingOverage: Bool = false
+  @State private var planUsageDetailsRequestID: Int = 0
   @State private var showOverageExplainer: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
@@ -7242,6 +7243,7 @@ struct SettingsContentView: View {
             log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
           isLoadingSubscription = false
+          refreshPlanUsageDetails()
         }
       } catch {
         logError("Failed to load subscription", error: error)
@@ -7251,38 +7253,86 @@ struct SettingsContentView: View {
         }
       }
     }
-    loadChatUsageQuota()
-    loadOverageInfo()
   }
 
-  private func loadChatUsageQuota() {
-    guard !isLoadingChatUsage else { return }
+  private func refreshPlanUsageDetails() {
+    planUsageDetailsRequestID += 1
+    let requestID = planUsageDetailsRequestID
     isLoadingChatUsage = true
+    isLoadingOverage = true
+    chatUsageQuota = nil
+    overageInfo = nil
+
     Task {
-      let quota = await APIClient.shared.fetchChatUsageQuota()
-      await MainActor.run {
-        chatUsageQuota = quota
-        isLoadingChatUsage = false
-      }
+      async let quota = APIClient.shared.fetchChatUsageQuota()
+      async let overageInfo = fetchOverageInfoForPlanUsage()
+      let (quotaValue, overageInfoValue) = await (quota, overageInfo)
+      applyPlanUsageDetails(
+        requestID: requestID,
+        quota: quotaValue,
+        overageInfo: overageInfoValue
+      )
     }
   }
 
+  private func fetchOverageInfoForPlanUsage() async -> OverageInfoResponse? {
+    do {
+      return try await APIClient.shared.getOverageInfo()
+    } catch {
+      logError("Failed to load overage info", error: error)
+      return nil
+    }
+  }
+
+  @MainActor
+  private func applyPlanUsageDetails(
+    requestID: Int,
+    quota: APIClient.ChatUsageQuota?,
+    overageInfo: OverageInfoResponse?
+  ) {
+    guard requestID == planUsageDetailsRequestID else { return }
+    chatUsageQuota = quota
+    if let quota {
+      FloatingBarUsageLimiter.shared.applyQuota(quota)
+    }
+    self.overageInfo = overageInfo
+    isLoadingChatUsage = false
+    isLoadingOverage = false
+  }
+
+  private func loadChatUsageQuota() {
+    refreshPlanUsageDetails()
+  }
+
   private func loadOverageInfo() {
-    guard !isLoadingOverage else { return }
-    isLoadingOverage = true
+    refreshPlanUsageDetails()
+  }
+
+  private func applySuccessfulSubscriptionRefresh(_ subscription: UserSubscriptionResponse) {
+    userSubscription = subscription
+    subscriptionError = nil
+    pendingSubscriptionPriceId = nil
+    pendingCheckoutSessionId = nil
+    selectedPlanIdForCheckout = nil
+
+    FloatingBarUsageLimiter.shared.applyPlan(
+      plan: subscription.subscription.plan,
+      status: subscription.subscription.status
+    )
+
+    if subscription.subscription.plan != .basic,
+       subscription.subscription.status == .active,
+       AppState.current?.isPaywalled == true {
+      AppState.current?.isPaywalled = false
+      log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+    }
+
+    refreshPlanUsageDetails()
+  }
+
+  private func syncSharedPlanStateAfterSubscriptionMutation() {
     Task {
-      do {
-        let info = try await APIClient.shared.getOverageInfo()
-        await MainActor.run {
-          overageInfo = info
-          isLoadingOverage = false
-        }
-      } catch {
-        logError("Failed to load overage info", error: error)
-        await MainActor.run {
-          isLoadingOverage = false
-        }
-      }
+      await FloatingBarUsageLimiter.shared.fetchPlan()
     }
   }
 
@@ -7445,13 +7495,10 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
-            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              userSubscription = subscription
-              subscriptionError = nil
-              pendingSubscriptionPriceId = nil
-              pendingCheckoutSessionId = nil
+              applySuccessfulSubscriptionRefresh(subscription)
             }
+            syncSharedPlanStateAfterSubscriptionMutation()
             return
           }
 
