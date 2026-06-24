@@ -285,7 +285,7 @@ This directory contains modules where the power of OpenAI's LLMs is harnessed fo
 
 **OpenAI Integration:**
 
-- The LLM modules leverage OpenAI's models (GPT-4o and others) for language understanding, generation, and reasoning.
+- The LLM modules use a provider-agnostic model system (see `utils/llm/model_config.py`) with models from OpenAI (`gpt-5.4`, `gpt-5.4-mini`, `gpt-4.1-mini`), Anthropic (`claude-sonnet-4-6`), and others, selected per task via QoS profiles (`premium`, `max`, `fair_use`).
 - `text-embedding-3-large` is used to generate vector embeddings for conversations and user queries.
 
 **Why this is Essential:**
