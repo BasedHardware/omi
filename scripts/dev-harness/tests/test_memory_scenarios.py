@@ -142,6 +142,18 @@ def test_happy_path_has_rich_default_memory_fixture_set() -> None:
     assert ctx.ids["alice_archive"] not in default_ids
 
 
+def test_happy_path_short_term_seeds_include_authoritative_evidence() -> None:
+    happy = memory_scenarios.get_scenario("happy_path")
+    short_active_path = f"users/{memory_scenarios.ALICE_USER_ID}/memory_items/mem_alice_short_active_030"
+    evidence_path = f"users/{memory_scenarios.ALICE_USER_ID}/memory_evidence/ev_local_alice_short_active_030"
+    memory_seed = next(seed for seed in happy.firestore_seed if seed.path == short_active_path)
+    evidence_seed = next(seed for seed in happy.firestore_seed if seed.path == evidence_path)
+    assert memory_seed.data["evidence"]
+    assert memory_seed.data["evidence"][0]["evidence_id"] == "ev_local_alice_short_active_030"
+    assert memory_seed.data["evidence"][0]["source_id"] == "conv_local_alice_short_active_030"
+    assert evidence_seed.data["quote_refs"][0]["quote"] == memory_seed.data["content"]
+
+
 def test_remap_firestore_seed_to_auth_uid() -> None:
     seed = memory_scenarios.FirestoreSeed(
         path="users/alice/memory_items/mem_alice_long_030",
