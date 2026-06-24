@@ -220,7 +220,9 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertTrue(source.contains("id: .initialFileIndexing"))
         XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
         XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
-        XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: true)"))
+        XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: true)"))
+        XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
+        XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
         XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
     }
 

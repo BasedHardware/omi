@@ -271,7 +271,7 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
-              resetSessionScopedStartupWarmups()
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.conversations = []
               appState.folders = []
               appState.selectedFolderId = nil
@@ -288,7 +288,7 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
               )
-              resetSessionScopedStartupWarmups()
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.hasCompletedOnboarding = false
               onboardingStep = 0
               onboardingJustCompleted = false
@@ -296,7 +296,7 @@ struct DesktopHomeView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
               log("DesktopHomeView: app terminating — cancelling startup warmups")
-              resetSessionScopedStartupWarmups()
+              resetSessionScopedStartupWarmups(preserveCrispReadState: true)
             }
             // Handle transcription toggle from menu bar
             .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
@@ -650,13 +650,13 @@ struct DesktopHomeView: View {
     }
   }
 
-  private func resetSessionScopedStartupWarmups() {
+  private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
     viewModelContainer.resetStartupState()
     didScheduleConversationWarmup = false
     didScheduleAgentVMProvisioning = false
     proactiveMonitoringStartGate.finishAttempt()
     initialFileIndexingBackfill.releaseReservation()
-    CrispManager.shared.stop(preserveReadState: true)
+    CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
   }
 
   private func scheduleAgentVMProvisioning() {
