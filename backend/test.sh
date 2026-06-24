@@ -157,6 +157,7 @@ pytest tests/unit/test_memories_create.py -v
 pytest tests/unit/test_memories_pagination_clamp.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_file_paths_filename_none.py -v
+pytest tests/unit/test_apps_update_persona_json.py -v
 pytest tests/unit/test_sync_cloud_tasks.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
 pytest tests/unit/test_sync_record_usage.py -v

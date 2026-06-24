@@ -603,7 +603,10 @@ async def update_persona(
     file: UploadFile = File(None),
     uid=Depends(auth.get_current_user_uid),
 ):
-    data = json.loads(persona_data)
+    try:
+        data = json.loads(persona_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid persona_data: must be valid JSON')
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
