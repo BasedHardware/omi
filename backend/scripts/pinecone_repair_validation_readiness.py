@@ -74,10 +74,10 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Required before any future throwaway Pinecone mutation can run.",
     )
-    parser.add_argument("--test-namespace", default=os.getenv("V17_PINECONE_VALIDATION_TEST_NAMESPACE", ""))
-    parser.add_argument("--throwaway-prefix", default=os.getenv("V17_PINECONE_VALIDATION_THROWAWAY_PREFIX", ""))
+    parser.add_argument("--test-namespace", default=os.getenv("MEMORY_PINECONE_VALIDATION_TEST_NAMESPACE", ""))
+    parser.add_argument("--throwaway-prefix", default=os.getenv("MEMORY_PINECONE_VALIDATION_THROWAWAY_PREFIX", ""))
     parser.add_argument(
-        "--confirm-throwaway-prefix", default=os.getenv("V17_PINECONE_VALIDATION_CONFIRM_THROWAWAY_PREFIX", "")
+        "--confirm-throwaway-prefix", default=os.getenv("MEMORY_PINECONE_VALIDATION_CONFIRM_THROWAWAY_PREFIX", "")
     )
     parser.add_argument(
         "--shared-ns2-readonly",
