@@ -7,43 +7,43 @@ todos:
     status: completed
   - id: decisions
     content: "Ratify all §10 blocking decisions (gates) before any blocked WS starts; record each in docs/memory/domain_model.md"
-    status: in_progress
+    status: completed
   - id: current-map
     content: "Produce the current-state map: every store/module/identifier → canonical layer → disposition (keep / rename / migrate / retire)"
     status: pending
   - id: cohort-router
     content: "WS-E: single per-user reversible MemorySystem cohort + one routing seam every read/write flows through; legacy parity locked by tests"
-    status: in_progress
+    status: completed
   - id: short-term-layer
     content: "WS-B: canonical Short-term layer inside unified Memories store + lifecycle (extract, TTL/decay, promote)"
     status: completed
   - id: long-term-layer
     content: "WS-C: canonical Long-term + archive layers inside unified Memories store; legacy backfill"
-    status: pending
+    status: completed
   - id: raw-boundary
     content: "WS-D: define conversation/session-record → Memories boundary; conversations are never 'memory'"
     status: completed
   - id: new-ui
     content: "WS-F: minimal intuitive Short-term/Long-term UI (badge=layer, info popovers) + onboarding tweak for opted-in users only"
-    status: pending
+    status: in_progress
   - id: naming-sweep
     content: "WS-G: phased rename — V17, L1/L2 processing jargon, tier→layer, rollout modes, v17 API paths (~280 files; alias first, waves; models + database core shims landed)"
-    status: in_progress
+    status: completed
   - id: decommission
     content: "WS-H: migrate remaining cohorts, retire legacy stores/code, land on ONE canonical system"
     status: pending
   - id: write-convergence
     content: "WS-I: extraction + write convergence — process_conversation and all external writers route through MemoryService to unified Memories store"
-    status: in_progress
+    status: completed
   - id: vectors-privacy
     content: "WS-J: vector/search migration + delete/purge matrix (Pinecone ns2, account delete, conversation cascade, review_queue, KG)"
-    status: pending
+    status: completed
   - id: client-parity
     content: "WS-K: client parity — Flutter + desktop cascade/delete, layer field in API models, local cache reconciliation"
-    status: pending
+    status: in_progress
   - id: surface-routing
     content: "WS-L: surface routing inventory — MCP, chat, developer API, integrations, personas, Rust backend through MemoryService"
-    status: pending
+    status: completed
   - id: inventory-doc
     content: "Generate docs/memory/current_state_map.md from §9 inventory; keep updated per rename wave"
     status: pending
@@ -61,6 +61,85 @@ isProject: true
 > This plan supersedes the V17-gate-centric sweep template. We are not shipping "legacy vs V17"
 > as a permanent state — we are collapsing both into **one canonical memory system** with clean
 > layers and product-facing language, rolled out per-user and reversibly.
+
+---
+
+## ✅ VERIFIED CURRENT STATE — status reconciliation (2026-06-24, evidence-grounded)
+
+> Independent re-verification of every WS claim against `git log`/`git show`/`rg`, per repo
+> AGENTS.md (no trust without evidence). **Authoritative current summary — read this first.**
+> The older §11/§11b audit logs below are preserved verbatim as history; where they disagree
+> with this section, **this section is correct.**
+
+### ⚠️ Branch reality (critical — the #1 thing to know)
+
+**All rollout work lives on branch `memory-canonical-rollout` @ `e2cb8f508` (worktree
+`/Users/dazheng/workspace/omi-memory-rollout`), committed locally only — nothing pushed/merged to `main`.**
+This tracked plan copy is on that branch. A stale copy may exist on the base worktree
+(`omi-memory-ingestion-pipeline` on `codex/memory-ingestion-pipeline` @ `07967447d`), which does
+**NOT** contain any of the work — `rg -il v17 backend/` there still returns **280 files**.
+Verified: `git merge-base --is-ancestor 07967447d e2cb8f508` → yes (base is ancestor of rollout).
+
+### Workstream status (claimed → verified → evidence, checked on `memory-canonical-rollout`)
+
+| WS | Claimed | **Verified** | Evidence |
+|----|---------|--------------|----------|
+| WS-A vocab/domain model | done | **DONE** | `models/memory_domain.py`; commit `d7ed5e948` exists |
+| WS-E cohort router + seam | in_progress | **DONE (core); tail DEFERRED** | `memory_system.py`+`memory_service.py` present; `27187aeb3`; Wave 12 whitelist kill-switch `MEMORY_CANONICAL_USERS` (in `.env.template`). Operational tail (reverse-migration drill, observability) needs live cohort |
+| WS-I write+read convergence | in_progress | **DONE (canonical cohort, prod-inert)** | `fc9c08a2f`; hardening Wave 9. External create/edit writers + MCP routed in WS-L |
+| WS-B short-term lifecycle | done | **DONE** | `2804732c6`; promotion via audited apply path; no cron wired (intentional) |
+| WS-C legacy→canonical backfill | pending | **DONE (non-destructive, library-only)** | `02c330045`; carry-forwards before real migration (below) |
+| WS-D upstream boundary | done | **DONE** | docs + boundary-lock test; `562f250b8` |
+| WS-J vectors + delete matrix | pending | **DONE; Q8 cascade NOT flipped** | `4b19a632e`; neutral `mem_*`/`memvec` vector ids; owner KEPT `cascade=False` |
+| WS-L surface routing | pending | **DONE** | `1d9c05e91`; MCP/SSE/chat/dev/integration/persona via seam + cohort pinning |
+| WS-G v17 naming retirement | pending | **DONE (language retirement)** | `rg -i v17` = **0** in `backend/`, `scripts/`, `firestore.rules`, `charts/`; `/memory/*` routes (`memory_product.py`); `V17_*`→`MEMORY_*`; 0 `v17_*` code modules; L2 modules neutral (`l2_promotion_*`) |
+| WS-K client parity | pending | **PARTIAL** | backend additive `layer` field DONE (`577935342`); desktop badge built+committed (`79a0b81a5`,`3f4613901`,`cdcfe23c1`). **Flutter + conversation-delete cascade client fix DEFERRED** (`docs/memory/ws_k_client_parity.md`, needs-local-build) |
+| WS-F new UI | pending | **PARTIAL** | desktop badge + popover done; broader UI/onboarding + Flutter deferred |
+| WS-M atom keyword index | pending | **DONE (prod-inert)** | `utils/memory/atom_keyword_index.py`; Wave 13 |
+| WS-N GraphRAG traversal | pending | **DONE (bounded read-only)** | `utils/memory/kg_graph_traversal.py` + `retrieval/tools/graph_tools.py`; Wave 14 (built over **Firestore KG, no live Neo4j**) |
+| WS-H legacy decommission | pending | **NOT DONE — DEFERRED by design** | legacy `database/memories.py` + `short_term_memories.py` still present; gated on full verified migration |
+| current-map / inventory-doc | pending | **NOT DONE** | `docs/memory/current_state_map.md` was never generated |
+
+### Discrepancies / things to flag (plan said X, reality is Y)
+
+1. **Stale copy on base worktree.** The `codex/memory-ingestion-pipeline` worktree has none of the work; still 280 v17 files. This tracked copy on `memory-canonical-rollout` is authoritative.
+2. **Imprecise hash→outcome labels** in the §11b "FULLY COMPLETE" block: the anchor hashes exist, but
+   some don't match the outcome attributed to them (e.g. `b34588819` is labeled "removed `/v17` routes"
+   but its actual subject is a *test-retarget* commit). The **outcomes are independently verified via `rg`**
+   (0 `/v17`, 0 `V17_`, `/memory/*` live), so substance holds — only the per-hash captions are loose.
+3. **Q8 cascade contradiction:** §10/§5 ratified "server-default `cascade=true` + fix clients", but the
+   later owner decision (§11b "Owner decisions 2026-06-23" #2) **KEPT `cascade=False`** (revisit later).
+   Treat `cascade=False` as the current decision; §10 Q8 ratification is superseded.
+4. **WS-N Neo4j wording:** plan §WS-N body text still references Neo4j in places; the shipped tool reads the **Firestore** KG (no live Neo4j in this repo). Frontmatter todo already corrected to Firestore KG.
+5. **NOT independently re-verified by me:** the "`test.sh` green except libopus/fakeredis" claim — I did
+   not re-run the full suite (heavy/env-gated). Per-wave `pytest` counts are taken from the audit log as
+   reported, not re-executed. The L2-WIP entanglement noted in older §11b is **resolved** (L2 modules are
+   now tracked/committed; rollout working tree is clean — verified `git status` empty).
+
+### 🔭 Consolidated remaining / carry-forward (the open list)
+
+- **WS-H decommission** — deferred; gated on full verified base migration (legacy stores intentionally retained).
+- **Client runtime parity** — desktop conversation-delete `cascade` fix + Flutter `layer`/cascade are
+  **documented only** (`docs/memory/ws_k_client_parity.md`); need a local build to land/verify (rules forbid shipping unverified client changes).
+- **WS-E operational tail** — reverse-migration drill (`canonical→legacy`) + rollout observability
+  (cohort counts, split-brain alarm, vector-orphan counter, parity-divergence canary): need a live canonical cohort.
+- **WS-C before any real migration** — both-store dedup overlap check, admin CLI/runbook,
+  cohort-flip-after-`verified=True` gate, provenance fidelity (category/user_asserted/visibility/created_at).
+- **WS-J residual** — KG selective invalidation (hook logs only today), `review_queue` cascade purge not wired,
+  legacy `v17mem:`/`memvec` vectors not enumerated on account-delete (canonical cohort empty today).
+- **Cohort pinning** — some internal gates (`canonical_memory_adapter`, `short_term_promotion` cron) still
+  re-resolve per-call (fine while cohort static; wire before live flips).
+- **⚠️ OWNER ACTION — cloud-resource renames (out of repo, not code):** Secret Manager
+  (`v17-v3-get-...`/`v17-vector-repair-*` → `memory-*`), Cloud Run + Cloud Tasks queue/DLQ/SA
+  (`v17-vector-repair-outbox-worker` → `memory-vector-repair-outbox-worker`), worker route, image-digest env,
+  GCP projects (`omi-v17-dev`/`omi-v17-evidence-nonprod` → `omi-memory-*`), Firebase emulator project
+  (`demo-v17-memory` → `demo-memory`). Code/contracts already renamed self-consistently; these only matter if/when provisioned.
+- **Test-isolation (pre-existing):** strict filename-alpha collection ordering still needs WS-I heavy-import
+  stubs preinstalled; the curated/`test.sh` ordering is green. Not a product regression.
+- **Generate `docs/memory/current_state_map.md`** from §9 (never produced).
+- **Nothing pushed/merged to `main`** — all local on `memory-canonical-rollout`.
+
+---
 
 ## 0. Goals & non-negotiables
 
