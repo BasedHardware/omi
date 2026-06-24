@@ -32,7 +32,7 @@ Non-layer concepts (see §1.1 / §1.3 in ``docs/memory/domain_model.md``):
 
 from enum import Enum
 
-from models.v17_product_memory import MemoryTier
+from models.product_memory import MemoryTier
 
 
 class MemoryLayer(str, Enum):
