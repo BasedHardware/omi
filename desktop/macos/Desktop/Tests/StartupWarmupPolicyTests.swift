@@ -135,6 +135,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertFalse(state.reserveDatabaseWarmup(dbAvailable: true))
     }
 
+    func testWarmupScheduleStateCanRetryServiceWarmupAfterRelease() {
+        var state = StartupWarmupScheduleState()
+
+        XCTAssertTrue(state.reserveServiceWarmup())
+        XCTAssertFalse(state.reserveServiceWarmup())
+
+        state.releaseServiceWarmup()
+
+        XCTAssertTrue(state.reserveServiceWarmup())
+    }
+
     func testWarmupScheduleStateCanRetryDatabaseWarmupAfterRelease() {
         var state = StartupWarmupScheduleState()
 
@@ -191,6 +202,47 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
         XCTAssertFalse(backfill.shouldMarkComplete)
         XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+    }
+
+    func testSessionScopeRejectsSignedOutAndMismatchedUsers() {
+        let scope = StartupWarmupSessionScope(userId: "user-a")
+
+        XCTAssertTrue(scope.matches(currentUserId: "user-a", isSignedIn: true))
+        XCTAssertFalse(scope.matches(currentUserId: "user-b", isSignedIn: true))
+        XCTAssertFalse(scope.matches(currentUserId: "user-a", isSignedIn: false))
+        XCTAssertFalse(StartupWarmupSessionScope(userId: nil).matches(currentUserId: "user-a", isSignedIn: true))
+    }
+
+    func testStartupWarmupCoordinatorUsesSessionScopedTasks() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/StartupWarmupCoordinator.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>]"))
+        XCTAssertTrue(source.contains("guard await self.isCurrentSession(scope) else"))
+        XCTAssertTrue(source.contains("guard isCurrentSession(scope) else { return }"))
+        XCTAssertTrue(source.contains("sessionTasks.values.forEach { $0.cancel() }"))
+        XCTAssertTrue(source.contains("sessionTasks.removeAll()"))
+    }
+
+    func testDelayedDesktopHomeWarmupsUseSessionScopedCoordinator() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("id: .agentVMProvisioning"))
+        XCTAssertTrue(source.contains("id: .conversationWarmup"))
+        XCTAssertTrue(source.contains("id: .initialFileIndexing"))
+        XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
+        XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
+        XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: true)"))
+        XCTAssertTrue(source.contains("resetSessionScopedStartupWarmups(preserveCrispReadState: false)"))
+        XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: preserveCrispReadState)"))
+        XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
     }
 
     @MainActor

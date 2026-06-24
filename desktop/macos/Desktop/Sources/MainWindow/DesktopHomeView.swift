@@ -199,8 +199,11 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
               }
 
-              // Start Crisp chat in background for notifications
-              CrispManager.shared.start(initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay)
+              // Start Crisp chat in background for notifications, scoped to the signed-in user
+              CrispManager.shared.start(
+                initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
+                sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
+              )
 
               // Set up floating control bar (only show if user hasn't disabled it)
               FloatingControlBarManager.shared.setup(
@@ -269,9 +272,7 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
-              viewModelContainer.resetStartupState()
-              didScheduleConversationWarmup = false
-              didScheduleAgentVMProvisioning = false
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.conversations = []
               appState.folders = []
               appState.selectedFolderId = nil
@@ -288,10 +289,15 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
               )
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.hasCompletedOnboarding = false
               onboardingStep = 0
               onboardingJustCompleted = false
               appState.stopTranscription()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+              log("DesktopHomeView: app terminating — cancelling startup warmups")
+              resetSessionScopedStartupWarmups(preserveCrispReadState: true)
             }
             // Handle transcription toggle from menu bar
             .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
@@ -645,47 +651,43 @@ struct DesktopHomeView: View {
     }
   }
 
+  private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
+    viewModelContainer.resetStartupState()
+    didScheduleConversationWarmup = false
+    didScheduleAgentVMProvisioning = false
+    proactiveMonitoringStartGate.finishAttempt()
+    initialFileIndexingBackfill.releaseReservation()
+    CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
+  }
+
   private func scheduleAgentVMProvisioning() {
     guard !didScheduleAgentVMProvisioning else { return }
     didScheduleAgentVMProvisioning = true
 
-    Task { @MainActor in
-      try? await Task.sleep(
-        nanoseconds: UInt64(StartupWarmupPolicy.agentVMProvisioningDelay * 1_000_000_000)
-      )
-      guard !Task.isCancelled else {
-        didScheduleAgentVMProvisioning = false
-        return
-      }
-      guard await AuthState.shared.isSignedIn else {
-        didScheduleAgentVMProvisioning = false
-        return
-      }
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .agentVMProvisioning,
+      delay: StartupWarmupPolicy.agentVMProvisioningDelay,
+      onCancel: { didScheduleAgentVMProvisioning = false }
+    ) {
       await AgentVMService.shared.ensureProvisioned()
     }
+    if !scheduled { didScheduleAgentVMProvisioning = false }
   }
 
   private func scheduleConversationWarmup() {
     guard !didScheduleConversationWarmup else { return }
     didScheduleConversationWarmup = true
 
-    Task { @MainActor in
-      try? await Task.sleep(
-        nanoseconds: UInt64(StartupWarmupPolicy.conversationWarmupDelay * 1_000_000_000)
-      )
-      guard !Task.isCancelled else {
-        didScheduleConversationWarmup = false
-        return
-      }
-      guard await AuthState.shared.isSignedIn else {
-        didScheduleConversationWarmup = false
-        return
-      }
-
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .conversationWarmup,
+      delay: StartupWarmupPolicy.conversationWarmupDelay,
+      onCancel: { didScheduleConversationWarmup = false }
+    ) {
       async let conversations: Void = loadConversationsIfNeeded()
       async let folders: Void = loadFoldersIfNeeded()
       _ = await (conversations, folders)
     }
+    if !scheduled { didScheduleConversationWarmup = false }
   }
 
   private func loadConversationsIfNeeded() async {
@@ -704,25 +706,20 @@ struct DesktopHomeView: View {
         hasCompletedBackfill: UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing"))
     else { return }
 
-    Task { @MainActor in
-      try? await Task.sleep(
-        nanoseconds: UInt64(StartupWarmupPolicy.initialFileIndexingDelay * 1_000_000_000)
-      )
-      guard !Task.isCancelled else {
-        initialFileIndexingBackfill.releaseReservation()
-        return
-      }
-      guard await AuthState.shared.isSignedIn else {
-        initialFileIndexingBackfill.releaseReservation()
-        return
-      }
+    let sessionScope = StartupWarmupSessionScope(
+      userId: UserDefaults.standard.string(forKey: "auth_userId"))
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .initialFileIndexing,
+      delay: StartupWarmupPolicy.initialFileIndexingDelay,
+      onCancel: { initialFileIndexingBackfill.releaseReservation() }
+    ) {
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
-      guard !Task.isCancelled else {
-        initialFileIndexingBackfill.releaseReservation()
-        return
-      }
-      guard await AuthState.shared.isSignedIn else {
+      guard !Task.isCancelled,
+            sessionScope.matches(
+              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+              isSignedIn: AuthState.shared.isSignedIn)
+      else {
         initialFileIndexingBackfill.releaseReservation()
         return
       }
@@ -734,24 +731,17 @@ struct DesktopHomeView: View {
         )
       }
     }
+    if !scheduled { initialFileIndexingBackfill.releaseReservation() }
   }
 
   private func scheduleProactiveMonitoringStart(reason: String) {
     guard proactiveMonitoringStartGate.reserve() else { return }
 
-    Task { @MainActor in
-      try? await Task.sleep(
-        nanoseconds: UInt64(StartupWarmupPolicy.proactiveAssistantsStartDelay * 1_000_000_000)
-      )
-      guard !Task.isCancelled else {
-        proactiveMonitoringStartGate.finishAttempt()
-        return
-      }
-      guard await AuthState.shared.isSignedIn else {
-        proactiveMonitoringStartGate.finishAttempt()
-        return
-      }
-
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .proactiveAssistantsStart,
+      delay: StartupWarmupPolicy.proactiveAssistantsStartDelay,
+      onCancel: { proactiveMonitoringStartGate.finishAttempt() }
+    ) {
       let plugin = ProactiveAssistantsPlugin.shared
       guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else {
         proactiveMonitoringStartGate.finishAttempt()
@@ -776,6 +766,7 @@ struct DesktopHomeView: View {
         }
       }
     }
+    if !scheduled { proactiveMonitoringStartGate.finishAttempt() }
   }
 
   private func updateStoreActivity(for index: Int) {

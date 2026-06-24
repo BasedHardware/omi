@@ -72,7 +72,7 @@ class CrispManager: ObservableObject {
     ///     without touching the network, auth state, or firing real notifications.
     ///   - initialPollDelay: Optional delay before the initial poll. Activation and
     ///     Cmd+R events still poll immediately.
-    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0) {
+    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0, sessionUserId: String? = nil) {
         guard !isStarted else { return }
         isStarted = true
 
@@ -90,6 +90,10 @@ class CrispManager: ObservableObject {
                     try? await Task.sleep(nanoseconds: UInt64(initialPollDelay * 1_000_000_000))
                     guard !Task.isCancelled else { return }
                     guard let self, self.isStarted else { return }
+                    guard StartupWarmupSessionScope(userId: sessionUserId).matches(
+                        currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+                        isSignedIn: AuthState.shared.isSignedIn
+                    ) else { return }
                     self.pollForMessages()
                 }
             } else {
@@ -116,7 +120,7 @@ class CrispManager: ObservableObject {
     }
 
     /// Stop observing (called on sign-out)
-    func stop() {
+    func stop(preserveReadState: Bool = false) {
         initialPollTask?.cancel()
         initialPollTask = nil
         if let obs = activationObserver { NotificationCenter.default.removeObserver(obs) }
@@ -125,10 +129,12 @@ class CrispManager: ObservableObject {
         refreshAllObserver = nil
         isStarted = false
         unreadCount = 0
-        // Clear persisted timestamps so next sign-in starts fresh
-        UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
-        UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
-        notifiedMessages.removeAll()
+        if !preserveReadState {
+            // Clear persisted timestamps so next sign-in starts fresh.
+            UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
+            UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
+            notifiedMessages.removeAll()
+        }
     }
 
     // MARK: - Private

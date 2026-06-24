@@ -10,6 +10,10 @@ struct StartupWarmupScheduleState {
         return true
     }
 
+    mutating func releaseServiceWarmup() {
+        didScheduleServiceWarmup = false
+    }
+
     mutating func reserveDatabaseWarmup(dbAvailable: Bool) -> Bool {
         guard dbAvailable, !didScheduleDatabaseWarmup else { return false }
         didScheduleDatabaseWarmup = true
@@ -32,6 +36,27 @@ struct RetryableDelayedStartGate {
 
     mutating func finishAttempt() {
         isAttemptReserved = false
+    }
+}
+
+enum StartupWarmupTaskID: Hashable {
+    case serviceWarmup
+    case databaseWarmup
+    case dashboardNetworkRefresh
+    case chatPromptContextWarmup
+    case databaseRetry
+    case crispInitialPoll
+    case agentVMProvisioning
+    case conversationWarmup
+    case initialFileIndexing
+    case proactiveAssistantsStart
+}
+
+struct StartupWarmupSessionScope: Equatable {
+    let userId: String?
+
+    func matches(currentUserId: String?, isSignedIn: Bool) -> Bool {
+        isSignedIn && userId != nil && currentUserId == userId
     }
 }
 

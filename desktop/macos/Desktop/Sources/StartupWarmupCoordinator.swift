@@ -9,11 +9,8 @@ final class StartupWarmupCoordinator {
     private let retryDatabaseInit: () async -> Bool
 
     private var scheduleState = StartupWarmupScheduleState()
-    private var serviceWarmupTask: Task<Void, Never>?
-    private var databaseWarmupTask: Task<Void, Never>?
-    private var dashboardNetworkRefreshTask: Task<Void, Never>?
-    private var chatPromptContextWarmupTask: Task<Void, Never>?
-    private var databaseRetryTask: Task<Void, Never>?
+    private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>] = [:]
+    private var sessionTaskTokens: [StartupWarmupTaskID: UUID] = [:]
 
     init(
         tasksStore: TasksStore,
@@ -30,28 +27,55 @@ final class StartupWarmupCoordinator {
     }
 
     func cancel() {
-        serviceWarmupTask?.cancel()
-        databaseWarmupTask?.cancel()
-        dashboardNetworkRefreshTask?.cancel()
-        chatPromptContextWarmupTask?.cancel()
-        databaseRetryTask?.cancel()
+        sessionTasks.values.forEach { $0.cancel() }
+        sessionTasks.removeAll()
+        sessionTaskTokens.removeAll()
     }
 
     func reset() {
         cancel()
-        serviceWarmupTask = nil
-        databaseWarmupTask = nil
-        dashboardNetworkRefreshTask = nil
-        chatPromptContextWarmupTask = nil
-        databaseRetryTask = nil
         scheduleState = StartupWarmupScheduleState()
+    }
+
+    @discardableResult
+    func scheduleSessionWarmup(
+        id: StartupWarmupTaskID,
+        delay: TimeInterval,
+        onCancel: (@MainActor () -> Void)? = nil,
+        operation: @MainActor @escaping () async -> Void
+    ) -> Bool {
+        let scope = currentSessionScope()
+        guard isCurrentSession(scope) else { return false }
+
+        sessionTasks[id]?.cancel()
+        let token = UUID()
+        sessionTaskTokens[id] = token
+        sessionTasks[id] = Task { [weak self] in
+            guard let self else { return }
+            guard await self.sleepForStartupDelay(delay) else {
+                await MainActor.run { onCancel?() }
+                return
+            }
+            guard await self.isCurrentSession(scope) else {
+                await MainActor.run { onCancel?() }
+                return
+            }
+            await operation()
+            await MainActor.run {
+                guard self.sessionTaskTokens[id] == token else { return }
+                self.sessionTasks[id] = nil
+                self.sessionTaskTokens[id] = nil
+            }
+        }
+        return true
     }
 
     func schedulePostInteractiveWarmup(dbAvailable: Bool) {
         if scheduleState.reserveServiceWarmup() {
-            serviceWarmupTask = Task { [weak self] in
+            let scheduled = scheduleSessionWarmup(id: .serviceWarmup, delay: 0) { [weak self] in
                 await self?.runServiceWarmup()
             }
+            if !scheduled { scheduleState.releaseServiceWarmup() }
         }
 
         scheduleDatabaseWarmup(dbAvailable: dbAvailable)
@@ -66,8 +90,12 @@ final class StartupWarmupCoordinator {
             return
         }
 
-        databaseWarmupTask = Task { [weak self] in
+        let scheduled = scheduleSessionWarmup(id: .databaseWarmup, delay: 0) { [weak self] in
             await self?.runDatabaseWarmup()
+        }
+        guard scheduled else {
+            scheduleState.releaseDatabaseWarmup()
+            return
         }
         scheduleDashboardNetworkRefresh(dbAvailable: true)
         scheduleChatPromptContextWarmup()
@@ -134,10 +162,8 @@ final class StartupWarmupCoordinator {
             return
         }
 
-        dashboardNetworkRefreshTask = Task { [weak self] in
+        scheduleSessionWarmup(id: .dashboardNetworkRefresh, delay: StartupWarmupPolicy.dashboardNetworkRefreshDelay) { [weak self] in
             guard let self else { return }
-            guard await sleepForStartupDelay(StartupWarmupPolicy.dashboardNetworkRefreshDelay) else { return }
-
             await measurePerfAsync("DATA LOAD: Dashboard network refresh") {
                 await self.dashboardViewModel.loadDashboardData()
             }
@@ -145,10 +171,8 @@ final class StartupWarmupCoordinator {
     }
 
     private func scheduleChatPromptContextWarmup() {
-        chatPromptContextWarmupTask = Task { [weak self] in
+        scheduleSessionWarmup(id: .chatPromptContextWarmup, delay: StartupWarmupPolicy.chatPromptContextWarmupDelay) { [weak self] in
             guard let self else { return }
-            guard await sleepForStartupDelay(StartupWarmupPolicy.chatPromptContextWarmupDelay) else { return }
-
             await measurePerfAsync("DATA LOAD: Chat prompt context") {
                 await self.chatProvider.warmupPromptContext()
             }
@@ -157,17 +181,28 @@ final class StartupWarmupCoordinator {
 
     private func scheduleDatabaseRetryIfNeeded(dbAvailable: Bool) {
         guard !dbAvailable else { return }
-        guard databaseRetryTask == nil else { return }
+        guard sessionTasks[.databaseRetry] == nil else { return }
 
-        databaseRetryTask = Task { [weak self] in
+        let scope = currentSessionScope()
+        guard isCurrentSession(scope) else { return }
+
+        sessionTasks[.databaseRetry] = Task { [weak self] in
             guard let self else { return }
             var delay = StartupWarmupPolicy.databaseRetryInitialDelay
 
             while !Task.isCancelled {
                 guard await self.sleepForStartupDelay(delay) else { return }
+                guard await self.isCurrentSession(scope) else {
+                    await MainActor.run { self.sessionTasks[.databaseRetry] = nil }
+                    return
+                }
                 let didRecover = await self.retryDatabaseInit()
+                guard await self.isCurrentSession(scope) else {
+                    await MainActor.run { self.sessionTasks[.databaseRetry] = nil }
+                    return
+                }
                 if didRecover {
-                    self.databaseRetryTask = nil
+                    self.sessionTasks[.databaseRetry] = nil
                     return
                 }
 
@@ -177,7 +212,18 @@ final class StartupWarmupCoordinator {
     }
 
     func markDatabaseRetryComplete() {
-        databaseRetryTask = nil
+        sessionTasks[.databaseRetry] = nil
+    }
+
+    private func currentSessionScope() -> StartupWarmupSessionScope {
+        StartupWarmupSessionScope(userId: UserDefaults.standard.string(forKey: "auth_userId"))
+    }
+
+    private func isCurrentSession(_ scope: StartupWarmupSessionScope) -> Bool {
+        scope.matches(
+            currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+            isSignedIn: AuthState.shared.isSignedIn
+        )
     }
 
     private func sleepForStartupDelay(_ seconds: TimeInterval) async -> Bool {
