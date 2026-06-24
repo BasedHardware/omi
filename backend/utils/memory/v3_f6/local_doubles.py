@@ -1,4 +1,4 @@
-"""Local test doubles for V17-V3-F6 read-only evidence contracts."""
+"""Local test doubles for memory-V3-F6 read-only evidence contracts."""
 
 from __future__ import annotations
 

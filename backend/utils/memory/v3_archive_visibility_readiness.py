@@ -196,7 +196,7 @@ def evaluate_archive_short_term_visibility_readiness(
     opt_in_visible_count = sum(1 for decision in sanitized_decisions if decision['opt_in_visible'])
 
     return {
-        'script': 'v17_p1_3_v3_archive_short_term_visibility_readiness',
+        'script': 'p1_3_v3_archive_short_term_visibility_readiness',
         'status': BLOCKED,
         'proof_status': BLOCKED,
         'approval': False,
@@ -224,7 +224,7 @@ def evaluate_archive_short_term_visibility_readiness(
             'fresh_short_term_source_backed_projection_default_visible': True,
             'long_term_active_stable_synthesis_allowed': True,
             'unknown_visibility_lifecycle_or_freshness_fail_closed': True,
-            'v17_failure_legacy_fallback_or_merge_allowed': False,
+            'memory_failure_legacy_fallback_or_merge_allowed': False,
         },
         'summary': {
             'status': BLOCKED,
@@ -238,4 +238,4 @@ def evaluate_archive_short_term_visibility_readiness(
     }
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

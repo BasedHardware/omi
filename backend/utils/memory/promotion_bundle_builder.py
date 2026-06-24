@@ -9,14 +9,14 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from database import memory_ledger
 from models.product_memory import MemoryAccessPolicy
-from utils.memory.projections import rebuild_v17_memory_projections
+from utils.memory.projections import rebuild_memory_memory_projections
 
 try:
-    from utils.memory.vector_search_service import fetch_default_v17_vector_memory_search
+    from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
     _VECTOR_SEARCH_IMPORT_ERROR = None
 except Exception as exc:
-    fetch_default_v17_vector_memory_search = None
+    fetch_default_vector_memory_search = None
     _VECTOR_SEARCH_IMPORT_ERROR = exc
 
 _TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
@@ -190,7 +190,7 @@ def build_l2_packets(
             evidence_ids.extend(row.get('evidence_ids') or [])
             source_refs.extend(row.get('source_refs') or [])
         packet_id = 'pkt_' + stable_id(
-            'v17-l2-packet',
+            'memory-l2-packet',
             {
                 'source_id': source_id,
                 'theme': theme,
@@ -240,7 +240,7 @@ def vector_seed_from_durable_facts(
     return retrieve_existing_memories(query, durable_facts, limit=limit)
 
 
-def make_v17_vector_seed_fetcher(
+def make_vector_seed_fetcher(
     *,
     db_client=None,
     policy: Optional[MemoryAccessPolicy] = None,
@@ -249,13 +249,13 @@ def make_v17_vector_seed_fetcher(
 ) -> VectorSeedFetcher:
     def fetch(uid: str, query: str, limit: int) -> List[Dict[str, Any]]:
         if (
-            fetch_default_v17_vector_memory_search is None
+            fetch_default_vector_memory_search is None
             or db_client is None
             or policy is None
             or not required_projection_commit_id
         ):
             return vector_seed_from_durable_facts(query, fetch_durable_facts_from_ledger(uid), limit)
-        response = fetch_default_v17_vector_memory_search(
+        response = fetch_default_vector_memory_search(
             uid,
             query,
             db_client=db_client,
@@ -286,7 +286,7 @@ def build_bounded_graph_snapshot(
     durable_facts: Optional[Iterable[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     subjects = _subject_keys(l1_items)
-    projections = rebuild_v17_memory_projections(list(durable_facts or []))
+    projections = rebuild_memory_memory_projections(list(durable_facts or []))
     projected_graph = projections.get('graph') or {}
     nodes: Dict[str, Dict[str, Any]] = {}
     edges: List[Dict[str, Any]] = []

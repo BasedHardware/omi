@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 DEFAULT_SHORT_TERM_TTL_DAYS = 30
 SHORT_TERM_LIFECYCLE_POLICY_VERSION = 'short_term_lifecycle.v1'
@@ -49,7 +49,7 @@ def _coerce_disposition(disposition: Optional[ShortTermDisposition | str]) -> Op
 
 
 def _audit_metadata(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     now: datetime,
     decision_reason: str,
@@ -73,7 +73,7 @@ def _audit_metadata(
 
 
 def _decision(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     now: datetime,
     expiry_at: datetime,
@@ -98,7 +98,7 @@ def _decision(
 
 
 def evaluate_short_term_lifecycle(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     now: Optional[datetime] = None,
     disposition: Optional[ShortTermDisposition | str] = None,

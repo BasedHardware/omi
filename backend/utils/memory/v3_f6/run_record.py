@@ -1,4 +1,4 @@
-"""Canonical local-only V17-V3-F6 evidence approval/run-record validation."""
+"""Canonical local-only memory-V3-F6 evidence approval/run-record validation."""
 
 from __future__ import annotations
 
@@ -69,8 +69,8 @@ def validate_run_record(
     if not isinstance(raw, dict):
         raise RunRecordValidationError("run record must be a mapping")
     _require_exact_fields(raw, RUN_RECORD_FIELDS, "run record")
-    if raw["artifact_version"] != "V17-V3-F6B":
-        raise RunRecordValidationError("artifact_version must be V17-V3-F6B")
+    if raw["artifact_version"] != "memory-V3-F6B":
+        raise RunRecordValidationError("artifact_version must be memory-V3-F6B")
     if raw["one_run_scope"] is not True:
         raise RunRecordValidationError("one_run_scope must be true")
 

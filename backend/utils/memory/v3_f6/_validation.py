@@ -1,4 +1,4 @@
-"""Shared validation helpers for V17-V3-F6 local contracts.
+"""Shared validation helpers for memory-V3-F6 local contracts.
 
 The helpers in this module intentionally preserve the existing fail-closed
 exception classes, message text, and missing/unknown check order at call sites.

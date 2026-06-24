@@ -1,4 +1,4 @@
-"""Canonical V17-V3-F6 pre-GCP aggregate exports."""
+"""Canonical memory-V3-F6 pre-GCP aggregate exports."""
 
 from __future__ import annotations
 

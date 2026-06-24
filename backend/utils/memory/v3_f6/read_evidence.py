@@ -1,4 +1,4 @@
-"""Read-only evidence client contracts for V17-V3-F6."""
+"""Read-only evidence client contracts for memory-V3-F6."""
 
 from __future__ import annotations
 

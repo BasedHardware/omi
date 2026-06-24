@@ -1,4 +1,4 @@
-"""Deterministic local-only smoke checks for V17-V3-F6H aggregation.
+"""Deterministic local-only smoke checks for memory-V3-F6H aggregation.
 
 This module composes the F6A-F6G proof rows without constructing GCP clients,
 reading credentials, or performing network/cloud/provider calls.
@@ -31,10 +31,10 @@ def _hash64(ch: str) -> str:
 def _concrete_registry() -> EvidenceTargetRegistry:
     raw = {name: dict(config) for name, config in DEFAULT_EVIDENCE_TARGETS.items()}
     for name, config in raw.items():
-        project = f"omi-v17-{name}-readonly-evidence"
+        project = f"omi-memory-{name}-readonly-evidence"
         config["project_id"] = project
         config["project_number"] = "123456789012" if name == "dev" else "210987654321"
-        config["evidence_principal"] = f"serviceAccount:v17-evidence@{project}.iam.gserviceaccount.com"
+        config["evidence_principal"] = f"serviceAccount:memory-evidence@{project}.iam.gserviceaccount.com"
         config["limits"] = dict(config["limits"])
         config["limits"]["overall_deadline_seconds"] = 30
     return EvidenceTargetRegistry.from_dict(raw)
@@ -53,7 +53,7 @@ def _sample_run_record(target_name: str, registry: EvidenceTargetRegistry) -> di
         "approved_metadata_paths": list(target.approved_metadata_paths),
         "commit": "a" * 40,
         "runner_hashes": {"backend/scripts/v3_f5_real_service_evidence_readiness.py": f"sha256:{_hash64('b')}"},
-        "helper_hashes": {"backend/utils/memory/v17_v3_f5_evidence.py": f"sha256:{_hash64('c')}"},
+        "helper_hashes": {"backend/utils/memory/v3_f5_evidence.py": f"sha256:{_hash64('c')}"},
         "execution_window": {
             "started_at": "2026-06-20T00:00:00Z",
             "ended_at": "2026-06-20T00:00:30Z",
@@ -86,7 +86,7 @@ def _smoke_current_local_contracts() -> dict[str, dict[str, Any]]:
             project_id=target.project_id,
             principal=target.evidence_principal,
             permissions=REQUIRED_READ_PERMISSIONS,
-            roles={"roles/omi.v17EvidenceReader"},
+            roles={"roles/omi.MemoryEvidenceReader"},
         ),
     )
 

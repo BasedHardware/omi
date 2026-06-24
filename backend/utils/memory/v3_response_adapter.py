@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_response_adapter`` (WS-G8b).
 
-Neutral ``v3_response_adapter`` is the source of truth. Legacy ``v17_v3_response_adapter`` remains an importable alias.
+Neutral ``v3_response_adapter`` is the source of truth. Legacy ``v3_response_adapter`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -8,8 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from utils.memory.v3_compatibility import V17V3CompatibilityReadPath
-from utils.memory.v3_memory_read_service import V17V3MemoryReadServiceResult
+from utils.memory.v3_compatibility import V3CompatibilityReadPath
+from utils.memory.v3_memory_read_service import V3MemoryReadServiceResult
 
 _ALLOWED_HEADER_NAMES = {
     'X-Omi-Memory-Read-Source',
@@ -24,19 +24,19 @@ _FORBIDDEN_BODY_FIELDS = {
     'cursor',
     'read_source',
     'read_decision',
-    'v17_source',
-    'v17_policy',
+    'memory_source',
+    'memory_policy',
     'source_policy',
     'archive_default_available',
     'stale_short_term_default_visible',
 }
 
-_BODY_ALLOWED_READ_PATHS = {V17V3CompatibilityReadPath.V17_COMPATIBILITY_PROJECTION}
-_NO_DATA_READ_PATHS = {V17V3CompatibilityReadPath.FAIL_CLOSED, V17V3CompatibilityReadPath.DENY}
+_BODY_ALLOWED_READ_PATHS = {V3CompatibilityReadPath.MEMORY_COMPATIBILITY_PROJECTION}
+_NO_DATA_READ_PATHS = {V3CompatibilityReadPath.FAIL_CLOSED, V3CompatibilityReadPath.DENY}
 
 
 @dataclass(frozen=True)
-class V17V3MemoryResponse:
+class V3MemoryResponse:
     http_status: int
     body: list[Any] | None
     headers: dict[str, str]
@@ -46,7 +46,7 @@ class V17V3MemoryResponse:
     proof_fields: dict[str, bool] = field(default_factory=dict)
 
 
-class V17V3ResponseShapeError(ValueError):
+class V3ResponseShapeError(ValueError):
     def __init__(self, reason: str, detail: str):
         super().__init__(detail)
         self.reason = reason
@@ -71,28 +71,28 @@ def _assert_memorydb_body_shape(items: list[Any]) -> None:
             continue
         leaked_fields = _FORBIDDEN_BODY_FIELDS.intersection(item)
         if leaked_fields:
-            raise V17V3ResponseShapeError(
-                'v17_only_body_field_forbidden',
-                f'V17-only fields must not be exposed in List[MemoryDB] body at index {index}: '
+            raise V3ResponseShapeError(
+                'memory_only_body_field_forbidden',
+                f'memory-only fields must not be exposed in List[MemoryDB] body at index {index}: '
                 f'{sorted(leaked_fields)}',
             )
 
 
-def _body_for_success(envelope: V17V3MemoryReadServiceResult, memorydb_items: list[Any]) -> list[Any]:
+def _body_for_success(envelope: V3MemoryReadServiceResult, memorydb_items: list[Any]) -> list[Any]:
     body = [] if envelope.body == [] else memorydb_items
     _assert_memorydb_body_shape(body)
     return body
 
 
-def adapt_v17_v3_memory_response(
-    envelope: V17V3MemoryReadServiceResult,
+def adapt_v3_memory_response(
+    envelope: V3MemoryReadServiceResult,
     *,
     memorydb_items: list[Any],
-) -> V17V3MemoryResponse:
+) -> V3MemoryResponse:
     """Adapt a local read envelope into a legacy-compatible `/v3` response.
 
     The JSON body remains exactly a `List[MemoryDB]` (or no body for denial /
-    fail-closed states). V17 diagnostics are exposed only through the allowed
+    fail-closed states). memory diagnostics are exposed only through the allowed
     additive headers.
     """
 
@@ -103,7 +103,7 @@ def adapt_v17_v3_memory_response(
     }
 
     if envelope.read_path in _NO_DATA_READ_PATHS or envelope.http_status >= 400:
-        return V17V3MemoryResponse(
+        return V3MemoryResponse(
             http_status=envelope.http_status,
             body=None,
             headers=headers,
@@ -111,7 +111,7 @@ def adapt_v17_v3_memory_response(
         )
 
     if envelope.read_path not in _BODY_ALLOWED_READ_PATHS:
-        return V17V3MemoryResponse(
+        return V3MemoryResponse(
             http_status=envelope.http_status,
             body=None,
             headers=headers,
@@ -119,7 +119,7 @@ def adapt_v17_v3_memory_response(
         )
 
     body = _body_for_success(envelope, memorydb_items)
-    return V17V3MemoryResponse(
+    return V3MemoryResponse(
         http_status=envelope.http_status,
         body=body,
         headers=headers,
@@ -127,6 +127,6 @@ def adapt_v17_v3_memory_response(
     )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3MemoryResponse = V17V3MemoryResponse
-V3ResponseShapeError = V17V3ResponseShapeError
+# Neutral symbol aliases (memory names remain valid via shim)
+V3MemoryResponse = V3MemoryResponse
+V3ResponseShapeError = V3ResponseShapeError

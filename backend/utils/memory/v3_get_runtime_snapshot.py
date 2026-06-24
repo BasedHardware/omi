@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_get_runtime_snapshot`` (WS-G8b).
 
-Neutral ``v3_get_runtime_snapshot`` is the source of truth. Legacy ``v17_v3_get_runtime_snapshot`` remains an importable alias.
+Neutral ``v3_get_runtime_snapshot`` is the source of truth. Legacy ``v3_get_runtime_snapshot`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ def _bool_text(value: bool) -> str:
 
 
 @dataclass(frozen=True)
-class V17V3GetRuntimeSnapshotInput:
+class V3GetRuntimeSnapshotInput:
     """Server-supplied components required to build a coherent GET runtime snapshot.
 
     Subject-like fields intentionally accept raw strings here so the pure builder
@@ -98,8 +98,8 @@ class V17V3GetRuntimeSnapshotInput:
 
 
 @dataclass(frozen=True)
-class V17V3GetRuntimeSnapshot:
-    """Coherent, request-scoped runtime snapshot for a future V17 projection read."""
+class V3GetRuntimeSnapshot:
+    """Coherent, request-scoped runtime snapshot for a future memory projection read."""
 
     subject_uid: str
     cohort: str
@@ -122,11 +122,11 @@ class V17V3GetRuntimeSnapshot:
 
 
 @dataclass(frozen=True)
-class V17V3GetRuntimeSnapshotResult:
+class V3GetRuntimeSnapshotResult:
     status: SnapshotStatus
     reason: str
     http_status: int
-    snapshot: V17V3GetRuntimeSnapshot | None = None
+    snapshot: V3GetRuntimeSnapshot | None = None
     log_fields: Mapping[str, str] = field(default_factory=dict)
     route_wired: bool = False
     runtime_behavior_changed: bool = False
@@ -137,7 +137,7 @@ class V17V3GetRuntimeSnapshotResult:
     provider_or_vector_call_count: int = 0
 
 
-def _log_fields(source: V17V3GetRuntimeSnapshotInput, *, status: SnapshotStatus, reason: str) -> dict[str, str]:
+def _log_fields(source: V3GetRuntimeSnapshotInput, *, status: SnapshotStatus, reason: str) -> dict[str, str]:
     return {
         'route': source.route,
         'status': status,
@@ -149,16 +149,16 @@ def _log_fields(source: V17V3GetRuntimeSnapshotInput, *, status: SnapshotStatus,
 
 
 def _result(
-    source: V17V3GetRuntimeSnapshotInput,
+    source: V3GetRuntimeSnapshotInput,
     *,
     status: SnapshotStatus,
     reason: str,
     http_status: int,
-    snapshot: V17V3GetRuntimeSnapshot | None = None,
-) -> V17V3GetRuntimeSnapshotResult:
+    snapshot: V3GetRuntimeSnapshot | None = None,
+) -> V3GetRuntimeSnapshotResult:
     if reason not in LOW_CARDINALITY_RUNTIME_SNAPSHOT_REASONS:
-        raise ValueError('unsupported_v17_v3_runtime_snapshot_reason')
-    return V17V3GetRuntimeSnapshotResult(
+        raise ValueError('unsupported_memory_v3_runtime_snapshot_reason')
+    return V3GetRuntimeSnapshotResult(
         status=status,
         reason=reason,
         http_status=http_status,
@@ -179,7 +179,7 @@ def _valid_non_negative_int(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _malformed(source: V17V3GetRuntimeSnapshotInput) -> bool:
+def _malformed(source: V3GetRuntimeSnapshotInput) -> bool:
     if any(getattr(source, flag) is not True for flag in _SERVER_OWNED_FLAGS):
         return True
     if not all(
@@ -236,13 +236,13 @@ def _malformed(source: V17V3GetRuntimeSnapshotInput) -> bool:
     return False
 
 
-def build_v17_v3_get_runtime_snapshot(
-    source: V17V3GetRuntimeSnapshotInput,
-) -> V17V3GetRuntimeSnapshotResult:
+def build_v3_get_runtime_snapshot(
+    source: V3GetRuntimeSnapshotInput,
+) -> V3GetRuntimeSnapshotResult:
     """Build a coherent snapshot or return a bounded fail-closed reason."""
 
-    if not isinstance(source, V17V3GetRuntimeSnapshotInput):
-        raise TypeError('source must be V17V3GetRuntimeSnapshotInput')
+    if not isinstance(source, V3GetRuntimeSnapshotInput):
+        raise TypeError('source must be V3GetRuntimeSnapshotInput')
 
     if _malformed(source):
         return _result(source, status='BLOCKED', reason='malformed_source_output', http_status=503)
@@ -292,7 +292,7 @@ def build_v17_v3_get_runtime_snapshot(
     if source.read_timestamp_ms > source.server_now_ms + source.read_timestamp_max_future_skew_ms:
         return _result(source, status='BLOCKED', reason='future_read_timestamp', http_status=503)
 
-    snapshot = V17V3GetRuntimeSnapshot(
+    snapshot = V3GetRuntimeSnapshot(
         subject_uid=source.authenticated_subject_uid,
         cohort=source.cohort,
         default_memory_grant=True,
@@ -315,7 +315,7 @@ def build_v17_v3_get_runtime_snapshot(
     return _result(source, status='READY', reason='snapshot_coherent', http_status=200, snapshot=snapshot)
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3GetRuntimeSnapshotInput = V17V3GetRuntimeSnapshotInput
-V3GetRuntimeSnapshot = V17V3GetRuntimeSnapshot
-V3GetRuntimeSnapshotResult = V17V3GetRuntimeSnapshotResult
+# Neutral symbol aliases (memory names remain valid via shim)
+V3GetRuntimeSnapshotInput = V3GetRuntimeSnapshotInput
+V3GetRuntimeSnapshot = V3GetRuntimeSnapshot
+V3GetRuntimeSnapshotResult = V3GetRuntimeSnapshotResult

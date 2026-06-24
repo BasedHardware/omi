@@ -51,7 +51,7 @@ def _fact_from_patch(patch: DurableMemoryPatch) -> Dict[str, Any]:
         "predicate": patch.predicate,
         "arguments": dict(patch.arguments or {}),
         "qualifiers": {},
-        "source": "v17_durable_memory_patch",
+        "source": "durable_memory_patch",
         "source_patch_id": patch.patch_id,
         "packet_id": patch.packet_id,
         "idempotency_key": patch.idempotency_key,
@@ -127,14 +127,14 @@ def persist_non_active_route_for_patch(
     outcome = NonActiveRouteOutcome(
         uid=uid,
         route=route,
-        idempotency_key=f"v17_patch:{patch.idempotency_key}",
+        idempotency_key=f"memory_patch:{patch.idempotency_key}",
         source_ids=_source_ids_for_patch_route(patch),
         reason=reason or patch.rationale or f"{patch.decision.value} decision",
         run_id=patch.run_id,
         patch_id=patch.patch_id,
         audit_metadata={
             **(audit_metadata or {}),
-            "route_store_source": "v17_patch_adapter",
+            "route_store_source": "memory_patch_adapter",
             "decision": patch.decision.value,
             "result_status": patch.result_status.value,
             "confidence": patch.confidence,
@@ -162,7 +162,7 @@ def _source_ids_for_patch_route(patch: DurableMemoryPatch) -> List[str]:
     return sorted({source_id for source_id in source_ids if source_id})
 
 
-def apply_v17_patch_to_ledger_state(
+def apply_memory_patch_to_ledger_state(
     state: Dict[str, Any], commits: Dict[str, Dict[str, Any]], patch: DurableMemoryPatch
 ) -> Dict[str, Any]:
     mutations = patch_to_ledger_mutations(patch)
@@ -177,7 +177,7 @@ def apply_v17_patch_to_ledger_state(
 
 
 __all__ = [
-    "apply_v17_patch_to_ledger_state",
+    "apply_memory_patch_to_ledger_state",
     "patch_to_ledger_mutations",
     "persist_non_active_route_for_patch",
 ]

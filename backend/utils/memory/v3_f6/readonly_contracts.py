@@ -1,4 +1,4 @@
-"""Canonical V17-V3-F6 read-only contract exports."""
+"""Canonical memory-V3-F6 read-only contract exports."""
 
 from __future__ import annotations
 

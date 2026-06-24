@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_compatibility`` (WS-G8b).
 
-Neutral ``v3_compatibility`` is the source of truth. Legacy ``v17_v3_compatibility`` remains an importable alias.
+Neutral ``v3_compatibility`` is the source of truth. Legacy ``v3_compatibility`` remains an importable alias.
 """
 
 from dataclasses import dataclass, field
@@ -17,15 +17,15 @@ ENROLLED_FAIL_CLOSED_CONTROL_STATES = {
 }
 
 
-class V17V3CompatibilityReadPath(str, Enum):
+class V3CompatibilityReadPath(str, Enum):
     LEGACY_PRIMARY = 'LEGACY_PRIMARY'
-    V17_COMPATIBILITY_PROJECTION = 'V17_COMPATIBILITY_PROJECTION'
+    MEMORY_COMPATIBILITY_PROJECTION = 'MEMORY_COMPATIBILITY_PROJECTION'
     FAIL_CLOSED = 'FAIL_CLOSED'
     DENY = 'DENY'
 
 
 @dataclass(frozen=True)
-class V17V3CompatibilityContext:
+class V3CompatibilityContext:
     uid: str
     enrolled: bool
     control_state: str = 'missing'
@@ -37,8 +37,8 @@ class V17V3CompatibilityContext:
 
 
 @dataclass(frozen=True)
-class V17V3CursorMode:
-    enabled_mode: str = 'additive_v17_cursor'
+class V3CursorMode:
+    enabled_mode: str = 'additive_memory_cursor'
     opaque: bool = True
     signed: bool = True
     keyset_fields: tuple[str, str] = ('created_at_desc', 'memory_id_desc')
@@ -49,8 +49,8 @@ class V17V3CursorMode:
 
 
 @dataclass(frozen=True)
-class V17V3CompatibilityDecision:
-    read_path: V17V3CompatibilityReadPath
+class V3CompatibilityDecision:
+    read_path: V3CompatibilityReadPath
     http_status: int
     reason: str
     headers: dict[str, str]
@@ -68,17 +68,17 @@ def _headers(*, source: str, reason: str) -> dict[str, str]:
     return {'X-Omi-Memory-Read-Source': source, 'X-Omi-Memory-Read-Decision': reason}
 
 
-def _fail_closed(reason: str) -> V17V3CompatibilityDecision:
-    return V17V3CompatibilityDecision(
-        read_path=V17V3CompatibilityReadPath.FAIL_CLOSED,
+def _fail_closed(reason: str) -> V3CompatibilityDecision:
+    return V3CompatibilityDecision(
+        read_path=V3CompatibilityReadPath.FAIL_CLOSED,
         http_status=503,
         reason=reason,
         headers=_headers(source='none', reason=reason),
     )
 
 
-def decide_v17_v3_compatibility(context: V17V3CompatibilityContext) -> V17V3CompatibilityDecision:
-    """Pure Oracle-prescribed `/v3` V17 compatibility decision seam.
+def decide_v3_compatibility(context: V3CompatibilityContext) -> V3CompatibilityDecision:
+    """Pure Oracle-prescribed `/v3` memory compatibility decision seam.
 
     This function is intentionally local and side-effect free. It performs no
     Firestore, Pinecone, provider, network, routing, or mutation work. Runtime
@@ -88,8 +88,8 @@ def decide_v17_v3_compatibility(context: V17V3CompatibilityContext) -> V17V3Comp
 
     if not context.enrolled:
         reason = 'non_enrolled_legacy_primary'
-        return V17V3CompatibilityDecision(
-            read_path=V17V3CompatibilityReadPath.LEGACY_PRIMARY,
+        return V3CompatibilityDecision(
+            read_path=V3CompatibilityReadPath.LEGACY_PRIMARY,
             http_status=200,
             reason=reason,
             headers=_headers(source='legacy_primary', reason=reason),
@@ -104,8 +104,8 @@ def decide_v17_v3_compatibility(context: V17V3CompatibilityContext) -> V17V3Comp
 
     if context.default_memory_grant is not True:
         reason = 'no_default_memory_grant_privacy_consent_deny'
-        return V17V3CompatibilityDecision(
-            read_path=V17V3CompatibilityReadPath.DENY,
+        return V3CompatibilityDecision(
+            read_path=V3CompatibilityReadPath.DENY,
             http_status=403,
             reason=reason,
             headers=_headers(source='none', reason=reason),
@@ -114,8 +114,8 @@ def decide_v17_v3_compatibility(context: V17V3CompatibilityContext) -> V17V3Comp
 
     if context.requested_archive:
         reason = 'archive_default_unavailable'
-        return V17V3CompatibilityDecision(
-            read_path=V17V3CompatibilityReadPath.DENY,
+        return V3CompatibilityDecision(
+            read_path=V3CompatibilityReadPath.DENY,
             http_status=404,
             reason=reason,
             headers=_headers(source='none', reason=reason),
@@ -126,35 +126,35 @@ def decide_v17_v3_compatibility(context: V17V3CompatibilityContext) -> V17V3Comp
         return _fail_closed('write_convergence_not_ready')
 
     if not context.projection_ready:
-        return _fail_closed('v17_projection_not_ready')
+        return _fail_closed('memory_projection_not_ready')
 
     if context.projection_empty:
-        reason = 'v17_projection_empty_no_legacy_fallback'
-        return V17V3CompatibilityDecision(
-            read_path=V17V3CompatibilityReadPath.V17_COMPATIBILITY_PROJECTION,
+        reason = 'memory_projection_empty_no_legacy_fallback'
+        return V3CompatibilityDecision(
+            read_path=V3CompatibilityReadPath.MEMORY_COMPATIBILITY_PROJECTION,
             http_status=200,
             reason=reason,
-            headers=_headers(source='v17_compatibility_projection', reason=reason),
+            headers=_headers(source='memory_compatibility_projection', reason=reason),
             response_body_override=[],
         )
 
-    reason = 'v17_compatibility_projection_primary'
-    return V17V3CompatibilityDecision(
-        read_path=V17V3CompatibilityReadPath.V17_COMPATIBILITY_PROJECTION,
+    reason = 'memory_compatibility_projection_primary'
+    return V3CompatibilityDecision(
+        read_path=V3CompatibilityReadPath.MEMORY_COMPATIBILITY_PROJECTION,
         http_status=200,
         reason=reason,
-        headers=_headers(source='v17_compatibility_projection', reason=reason),
+        headers=_headers(source='memory_compatibility_projection', reason=reason),
     )
 
 
-def describe_v17_cursor_mode() -> V17V3CursorMode:
-    """Return the allowed V17 `/v3` cursor contract without parsing live cursors."""
+def describe_v3_cursor_mode() -> V3CursorMode:
+    """Return the allowed memory `/v3` cursor contract without parsing live cursors."""
 
-    return V17V3CursorMode()
+    return V3CursorMode()
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3CompatibilityReadPath = V17V3CompatibilityReadPath
-V3CompatibilityContext = V17V3CompatibilityContext
-V3CursorMode = V17V3CursorMode
-V3CompatibilityDecision = V17V3CompatibilityDecision
+# Neutral symbol aliases (memory names remain valid via shim)
+V3CompatibilityReadPath = V3CompatibilityReadPath
+V3CompatibilityContext = V3CompatibilityContext
+V3CursorMode = V3CursorMode
+V3CompatibilityDecision = V3CompatibilityDecision

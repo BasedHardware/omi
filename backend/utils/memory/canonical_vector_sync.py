@@ -6,13 +6,13 @@ import logging
 from typing import Callable, Optional
 
 from models.memory_evidence import SourceState
-from models.product_memory import MemoryItemStatus, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryItem
 
 logger = logging.getLogger(__name__)
 
 
 def sync_canonical_memory_vector(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     projection_commit_id: Optional[str] = None,
     on_hard_failure: Optional[Callable[[], None]] = None,

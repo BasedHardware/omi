@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_projection_readiness`` (WS-G8b).
 
-Neutral ``v3_projection_readiness`` is the source of truth. Legacy ``v17_v3_projection_readiness`` remains an importable alias.
+Neutral ``v3_projection_readiness`` is the source of truth. Legacy ``v3_projection_readiness`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -8,17 +8,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE = 'v17_derived_compatibility_projection'
+DERIVED_COMPATIBILITY_PROJECTION_SOURCE = 'memory_derived_compatibility_projection'
 
 
-class V17V3ProjectionReadinessState(str, Enum):
+class V3ProjectionReadinessState(str, Enum):
     READY = 'READY'
     READY_EMPTY = 'READY_EMPTY'
     BLOCKED = 'BLOCKED'
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionReadinessContext:
+class V3ProjectionReadinessContext:
     uid: str
     expected_account_generation: int | None = None
     account_generation: int | None = None
@@ -39,8 +39,8 @@ class V17V3ProjectionReadinessContext:
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionReadinessDecision:
-    state: V17V3ProjectionReadinessState
+class V3ProjectionReadinessDecision:
+    state: V3ProjectionReadinessState
     read_cutover_allowed: bool
     http_status: int
     reason: str
@@ -63,9 +63,9 @@ class _Blocker:
     projection_generation: int | None
 
 
-def _blocked(context: V17V3ProjectionReadinessContext, reason: str) -> V17V3ProjectionReadinessDecision:
-    return V17V3ProjectionReadinessDecision(
-        state=V17V3ProjectionReadinessState.BLOCKED,
+def _blocked(context: V3ProjectionReadinessContext, reason: str) -> V3ProjectionReadinessDecision:
+    return V3ProjectionReadinessDecision(
+        state=V3ProjectionReadinessState.BLOCKED,
         read_cutover_allowed=False,
         http_status=503,
         reason=reason,
@@ -81,7 +81,7 @@ def _blocked(context: V17V3ProjectionReadinessContext, reason: str) -> V17V3Proj
     )
 
 
-def _first_blocker(context: V17V3ProjectionReadinessContext) -> _Blocker | None:
+def _first_blocker(context: V3ProjectionReadinessContext) -> _Blocker | None:
     if context.expected_account_generation is None:
         return _Blocker(
             'expected_account_generation_missing',
@@ -138,9 +138,9 @@ def _first_blocker(context: V17V3ProjectionReadinessContext) -> _Blocker | None:
             context.expected_account_generation,
             context.projection_generation,
         )
-    if context.projection_source != V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE:
+    if context.projection_source != DERIVED_COMPATIBILITY_PROJECTION_SOURCE:
         return _Blocker(
-            'projection_source_not_v17_derived',
+            'projection_source_not_memory_derived',
             context.projection_source,
             context.expected_account_generation,
             context.projection_generation,
@@ -204,19 +204,19 @@ def _first_blocker(context: V17V3ProjectionReadinessContext) -> _Blocker | None:
     return None
 
 
-def decide_v17_v3_projection_readiness(
-    context: V17V3ProjectionReadinessContext,
-) -> V17V3ProjectionReadinessDecision:
+def decide_v3_projection_readiness(
+    context: V3ProjectionReadinessContext,
+) -> V3ProjectionReadinessDecision:
     blocker = _first_blocker(context)
     if blocker is not None:
         return _blocked(context, blocker.reason)
 
     if context.projection_empty:
-        return V17V3ProjectionReadinessDecision(
-            state=V17V3ProjectionReadinessState.READY_EMPTY,
+        return V3ProjectionReadinessDecision(
+            state=V3ProjectionReadinessState.READY_EMPTY,
             read_cutover_allowed=True,
             http_status=200,
-            reason='v17_derived_projection_ready_empty',
+            reason='memory_derived_projection_ready_empty',
             source=context.projection_source,
             required_account_generation=context.expected_account_generation,
             projection_generation=context.projection_generation,
@@ -224,27 +224,27 @@ def decide_v17_v3_projection_readiness(
             response_body_override=[],
             headers={
                 'X-Omi-Memory-Projection-Readiness': 'ready_empty',
-                'X-Omi-Memory-Projection-Source': V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+                'X-Omi-Memory-Projection-Source': DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
             },
         )
 
-    return V17V3ProjectionReadinessDecision(
-        state=V17V3ProjectionReadinessState.READY,
+    return V3ProjectionReadinessDecision(
+        state=V3ProjectionReadinessState.READY,
         read_cutover_allowed=True,
         http_status=200,
-        reason='v17_derived_projection_ready',
+        reason='memory_derived_projection_ready',
         source=context.projection_source,
         required_account_generation=context.expected_account_generation,
         projection_generation=context.projection_generation,
         headers={
             'X-Omi-Memory-Projection-Readiness': 'ready',
-            'X-Omi-Memory-Projection-Source': V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+            'X-Omi-Memory-Projection-Source': DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
         },
     )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3_DERIVED_COMPATIBILITY_PROJECTION_SOURCE = V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE
-V3ProjectionReadinessState = V17V3ProjectionReadinessState
-V3ProjectionReadinessContext = V17V3ProjectionReadinessContext
-V3ProjectionReadinessDecision = V17V3ProjectionReadinessDecision
+# Neutral symbol aliases (memory names remain valid via shim)
+V3_DERIVED_COMPATIBILITY_PROJECTION_SOURCE = DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+V3ProjectionReadinessState = V3ProjectionReadinessState
+V3ProjectionReadinessContext = V3ProjectionReadinessContext
+V3ProjectionReadinessDecision = V3ProjectionReadinessDecision

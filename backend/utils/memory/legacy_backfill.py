@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from database._client import db as default_db_client
 from database.memories import get_non_filtered_memories
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
@@ -34,7 +34,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
@@ -126,7 +126,7 @@ def _fetch_active_legacy_memories(
 
 
 def _read_control_state(uid: str, *, db_client, create_if_missing: bool = True) -> MemoryControlState:
-    collections = V17Collections(uid=uid)
+    collections = MemoryCollections(uid=uid)
     ref = db_client.document(collections.memory_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
@@ -138,7 +138,7 @@ def _read_control_state(uid: str, *, db_client, create_if_missing: bool = True) 
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
-    db_client.document(V17Collections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
+    db_client.document(MemoryCollections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
 
 
 def _legacy_evidence_id(*, uid: str, legacy_memory_id: str, index: int) -> str:
@@ -186,7 +186,7 @@ def _build_backfill_evidence(
 
 
 def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client) -> None:
-    collections = V17Collections(uid=uid)
+    collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
     ref = db_client.document(path)
     if not ref.get().exists:
@@ -221,7 +221,7 @@ def _ensure_backfill_operation(
         source_generation=control.source_generation,
         observed_head_commit_id=control.head_commit_id,
     )
-    op_path = f"{V17Collections(uid=uid).memory_operations}/{operation.operation_id}"
+    op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
     op_ref = db_client.document(op_path)
     if not op_ref.get().exists:
         op_ref.set(operation.model_dump(mode="json"))
@@ -244,10 +244,10 @@ def _apply_one_legacy_row(
         return control, False, "empty_content", False
 
     canonical_memory_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
-    existing_path = f"{V17Collections(uid=uid).memory_items}/{canonical_memory_id}"
+    existing_path = f"{MemoryCollections(uid=uid).memory_items}/{canonical_memory_id}"
     existing_snapshot = db_client.document(existing_path).get()
     if getattr(existing_snapshot, "exists", False):
-        existing = V17MemoryItem.model_validate(existing_snapshot.to_dict() or {})
+        existing = MemoryItem.model_validate(existing_snapshot.to_dict() or {})
         if (
             existing.tier == MemoryLayer.long_term
             and existing.status == MemoryItemStatus.active
@@ -296,9 +296,9 @@ def _apply_one_legacy_row(
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None and result.status == ApplyStatus.idempotent_skip:
-        snapshot = db_client.document(f"{V17Collections(uid=uid).memory_items}/{canonical_memory_id}").get()
+        snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{canonical_memory_id}").get()
         if getattr(snapshot, "exists", False):
-            item = V17MemoryItem(**(snapshot.to_dict() or {}))
+            item = MemoryItem(**(snapshot.to_dict() or {}))
 
     vector_sync_failed = False
 

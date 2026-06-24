@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_projection_reader_contract`` (WS-G8b).
 
-Neutral ``v3_projection_reader_contract`` is the source of truth. Legacy ``v17_v3_projection_reader_contract`` remains an importable alias.
+Neutral ``v3_projection_reader_contract`` is the source of truth. Legacy ``v3_projection_reader_contract`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -10,12 +10,12 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION = 1
-V17_V3_COMPATIBILITY_PROJECTION_SOURCE = 'v17_memory_items_projection'
-V17_V3_COMPATIBILITY_PROJECTION_VERSION = 'v3_memorydb_compatibility'
+V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION = 1
+V3_COMPATIBILITY_PROJECTION_SOURCE = 'memory_items_projection'
+V3_COMPATIBILITY_PROJECTION_VERSION = 'v3_memorydb_compatibility'
 
 
-class V17V3ProjectionFailureReason(str, Enum):
+class V3ProjectionFailureReason(str, Enum):
     MISSING_PROJECTION_STATE = 'missing_projection_state'
     MALFORMED_PROJECTION_STATE = 'malformed_projection_state'
     UNSUPPORTED_PROJECTION_SCHEMA = 'unsupported_projection_schema'
@@ -32,14 +32,14 @@ class V17V3ProjectionFailureReason(str, Enum):
     CURSOR_MISMATCH = 'cursor_mismatch'
 
 
-class V17V3ProjectionReadError(RuntimeError):
-    def __init__(self, reason: V17V3ProjectionFailureReason, message: str | None = None):
+class V3ProjectionReadError(RuntimeError):
+    def __init__(self, reason: V3ProjectionFailureReason, message: str | None = None):
         super().__init__(message or reason.value)
         self.reason = reason
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionCursor:
+class V3ProjectionCursor:
     created_at: datetime
     memory_id: str
     account_generation: int
@@ -48,17 +48,17 @@ class V17V3ProjectionCursor:
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionReadRequest:
+class V3ProjectionReadRequest:
     uid: str
     limit: int
     expected_account_generation: int
-    cursor: V17V3ProjectionCursor | None = None
+    cursor: V3ProjectionCursor | None = None
     offset: int | None = None
     include_archive: bool = False
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionState:
+class V3ProjectionState:
     uid: str
     account_generation: int
     projection_generation: int
@@ -75,9 +75,9 @@ class V17V3ProjectionState:
 
 
 @dataclass(frozen=True)
-class V17V3ProjectionPage:
+class V3ProjectionPage:
     items: list[dict[str, Any]]
-    next_cursor: V17V3ProjectionCursor | None
+    next_cursor: V3ProjectionCursor | None
     account_generation: int
     projection_generation: int
     source_commit_id: str
@@ -87,13 +87,13 @@ class V17V3ProjectionPage:
     empty_projection: bool
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION = V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION
-V3_COMPATIBILITY_PROJECTION_SOURCE = V17_V3_COMPATIBILITY_PROJECTION_SOURCE
-V3_COMPATIBILITY_PROJECTION_VERSION = V17_V3_COMPATIBILITY_PROJECTION_VERSION
-V3ProjectionFailureReason = V17V3ProjectionFailureReason
-V3ProjectionReadError = V17V3ProjectionReadError
-V3ProjectionCursor = V17V3ProjectionCursor
-V3ProjectionReadRequest = V17V3ProjectionReadRequest
-V3ProjectionState = V17V3ProjectionState
-V3ProjectionPage = V17V3ProjectionPage
+# Neutral symbol aliases (memory names remain valid via shim)
+V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION = V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION
+V3_COMPATIBILITY_PROJECTION_SOURCE = V3_COMPATIBILITY_PROJECTION_SOURCE
+V3_COMPATIBILITY_PROJECTION_VERSION = V3_COMPATIBILITY_PROJECTION_VERSION
+V3ProjectionFailureReason = V3ProjectionFailureReason
+V3ProjectionReadError = V3ProjectionReadError
+V3ProjectionCursor = V3ProjectionCursor
+V3ProjectionReadRequest = V3ProjectionReadRequest
+V3ProjectionState = V3ProjectionState
+V3ProjectionPage = V3ProjectionPage

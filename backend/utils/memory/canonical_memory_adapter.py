@@ -1,4 +1,4 @@
-"""Thin adapter over existing V17 apply/read services for canonical-cohort MemoryService."""
+"""Thin adapter over existing memory apply/read services for canonical-cohort MemoryService."""
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ from utils.memory.atom_keyword_index import (
     sync_atom_keyword_index_for_item,
 )
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
-from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
+from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_domain import (
     MemoryLayer as DomainMemoryLayer,
     MemoryProcessingState,
@@ -36,16 +36,16 @@ from models.memories import MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
-from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
+from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
 logger = logging.getLogger(__name__)
 
-# Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``v17mem:`` or ``{uid}-{id}``).
+# Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``memvec:`` or ``{uid}-{id}``).
 # Canonical writes upsert neutral-metadata vectors directly; purge paths use neutral ids only.
 
 
@@ -104,8 +104,8 @@ def search_result_to_memorydb(uid: str, item: Dict[str, Any]) -> MemoryDB:
     )
 
 
-def v17_memory_item_to_memorydb(item: V17MemoryItem) -> MemoryDB:
-    """Map authoritative V17 memory_items row to legacy MemoryDB response shape."""
+def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
+    """Map authoritative memory memory_items row to legacy MemoryDB response shape."""
     conversation_id = None
     evidence_payload = []
     for evidence in item.evidence:
@@ -159,7 +159,7 @@ def read_canonical_memories(
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
     paged = visible[offset : offset + limit]
-    return [v17_memory_item_to_memorydb(item) for item in paged]
+    return [memory_item_to_memorydb(item) for item in paged]
 
 
 def search_canonical_memories(
@@ -239,7 +239,7 @@ def search_canonical_memories(
 
 
 def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
-    collections = V17Collections(uid=uid)
+    collections = MemoryCollections(uid=uid)
     ref = db_client.document(collections.memory_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
@@ -250,7 +250,7 @@ def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
     return control
 
 
-def _legacy_evidence_to_v17(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
+def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
     source_id = evidence_data.get("source_id") or conversation_id
     return MemoryEvidence(
         evidence_id=evidence_data["evidence_id"],
@@ -288,7 +288,7 @@ def _preserved_evidence_security_fields(existing_data: Dict[str, Any]) -> Dict[s
 
 
 def _persist_evidence(uid: str, evidence: MemoryEvidence, *, db_client) -> None:
-    collections = V17Collections(uid=uid)
+    collections = MemoryCollections(uid=uid)
     path = f"{collections.memory_evidence}/{evidence.evidence_id}"
     ref = db_client.document(path)
     snapshot = ref.get()
@@ -325,7 +325,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     evidence_items: List[MemoryEvidence] = []
     for raw in data.get("evidence") or []:
         if isinstance(raw, dict) and raw.get("evidence_id"):
-            evidence_items.append(_legacy_evidence_to_v17(raw, conversation_id=conversation_id))
+            evidence_items.append(_legacy_evidence_to_memory(raw, conversation_id=conversation_id))
     if not evidence_items:
         raise ValueError("canonical write requires at least one evidence record")
 
@@ -349,7 +349,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         source_generation=control.source_generation,
         observed_head_commit_id=control.head_commit_id,
     )
-    op_ref = client.document(f"{V17Collections(uid=uid).memory_operations}/{operation.operation_id}")
+    op_ref = client.document(f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}")
     if not op_ref.get().exists:
         op_ref.set(operation.model_dump(mode="json"))
 
@@ -386,9 +386,9 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None and result.status == ApplyStatus.idempotent_skip:
-        snapshot = client.document(f"{V17Collections(uid=uid).memory_items}/{committed_id}").get()
+        snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{committed_id}").get()
         if getattr(snapshot, "exists", False):
-            item = V17MemoryItem(**(snapshot.to_dict() or {}))
+            item = MemoryItem(**(snapshot.to_dict() or {}))
 
     if item is not None:
         assert_legal_state(
@@ -402,7 +402,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
     return committed_id
 
 
-def _item_sourced_from_conversation(item: V17MemoryItem, conversation_id: str) -> bool:
+def _item_sourced_from_conversation(item: MemoryItem, conversation_id: str) -> bool:
     for evidence in item.evidence:
         if evidence.source_id == conversation_id:
             return True
@@ -411,10 +411,10 @@ def _item_sourced_from_conversation(item: V17MemoryItem, conversation_id: str) -
     return False
 
 
-def _tombstone_memory_item(uid: str, item: V17MemoryItem, *, db_client, reason: str) -> None:
-    collections = V17Collections(uid=uid)
+def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str) -> None:
+    collections = MemoryCollections(uid=uid)
     now = datetime.now(timezone.utc)
-    trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
 
@@ -452,7 +452,7 @@ def _tombstone_memory_item(uid: str, item: V17MemoryItem, *, db_client, reason: 
             "authoritative_account_generation": account_generation,
         }
     ]
-    for record in build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
+    for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
         db_client.document(record["outbox_path"]).set(record)
 
     delete_atom_keyword_doc(uid, item.memory_id)
@@ -485,11 +485,11 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
 
 def delete_canonical_memory(uid: str, memory_id: str, *, db_client=None) -> None:
     client = db_client if db_client is not None else default_db_client
-    path = f"{V17Collections(uid=uid).memory_items}/{memory_id}"
+    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     snapshot = client.document(path).get()
     if not getattr(snapshot, "exists", False):
         return
-    item = V17MemoryItem.model_validate(snapshot.to_dict() or {})
+    item = MemoryItem.model_validate(snapshot.to_dict() or {})
     if item.status == MemoryItemStatus.active:
         _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete")
 
@@ -523,7 +523,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
 
     keyword_deleted = purge_user_atom_keyword_index(uid)
 
-    trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
     projection_commit_id = trusted.head_commit_id or "head0"
     for item in items:
@@ -537,7 +537,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
                 "authoritative_account_generation": account_generation,
             }
         ]
-        for record in build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
+        for record in build_vector_repair_purge_outbox_records(uid=uid, candidates=purge_candidates):
             client.document(record["outbox_path"]).set(record)
 
     return {

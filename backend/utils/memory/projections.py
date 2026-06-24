@@ -1,6 +1,6 @@
 """Canonical projections module (WS-G8a).
 
-Neutral ``projections`` is the source of truth. Legacy ``v17_projections`` remains an importable alias.
+Neutral ``projections`` is the source of truth. Canonical projections module.
 """
 
 import copy
@@ -45,7 +45,7 @@ def _graph_projection(active_facts: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"nodes": nodes, "edges": edges}
 
 
-def rebuild_v17_memory_projections(facts: Dict[str, Dict[str, Any]] | List[Dict[str, Any]]) -> Dict[str, Any]:
+def rebuild_memory_memory_projections(facts: Dict[str, Dict[str, Any]] | List[Dict[str, Any]]) -> Dict[str, Any]:
     if isinstance(facts, dict):
         fact_rows = [copy.deepcopy(value) for _, value in sorted(facts.items(), key=lambda item: item[0])]
     else:
@@ -87,7 +87,7 @@ def rebuild_v17_memory_projections(facts: Dict[str, Dict[str, Any]] | List[Dict[
     ]
 
     return {
-        "schema_version": "v17_memory_projections.v1",
+        "schema_version": "memory_projections.v1",
         "vector_index": vector_index,
         "graph": _graph_projection(active_facts),
         "review_queue": review_queue,
@@ -96,5 +96,5 @@ def rebuild_v17_memory_projections(facts: Dict[str, Dict[str, Any]] | List[Dict[
     }
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-rebuild_memory_projections = rebuild_v17_memory_projections
+# Neutral symbol aliases (memory names remain valid via shim)
+rebuild_memory_projections = rebuild_memory_memory_projections

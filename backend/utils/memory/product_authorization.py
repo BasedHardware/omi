@@ -1,28 +1,28 @@
 """Canonical product authorization module (WS-G8a).
 
-Neutral ``product_authorization`` is the source of truth. Legacy ``v17_product_authorization`` remains an importable alias.
+Neutral ``product_authorization`` is the source of truth. Canonical product authorization.
 """
 
 from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
-from database.memory_app_key_grants import read_v17_app_key_memory_grants_state
+from database.memory_app_key_grants import read_app_key_memory_grants_state
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
-    V17DefaultReadRolloutDecision,
-    V17GlobalReadGateDecision,
-    V17ReadDecision,
-    build_v17_default_read_rollout_observability,
-    read_v17_archive_read_rollout,
-    read_v17_default_read_rollout,
-    read_v17_global_read_gate,
+    DefaultReadRolloutDecision,
+    GlobalReadGateDecision,
+    MemoryReadDecision,
+    build_default_read_rollout_observability,
+    read_archive_read_rollout,
+    read_default_read_rollout,
+    read_global_read_gate,
 )
 
 
 @dataclass(frozen=True)
-class V17ProductAuthorizationContext:
-    """Server-side context for V17 product memory route authorization.
+class ProductAuthorizationContext:
+    """Server-side context for memory product memory route authorization.
 
     This is intentionally route-owned and fake-injectable. Request flags can
     express intent (for example, explicit Archive search), but authorization is
@@ -40,30 +40,30 @@ class V17ProductAuthorizationContext:
 
 
 @dataclass(frozen=True)
-class V17ProductAuthorizationDecision:
+class ProductAuthorizationDecision:
     allowed: bool
-    context: V17ProductAuthorizationContext
+    context: ProductAuthorizationContext
     db_client: object
-    read_decision: V17ReadDecision
+    read_decision: MemoryReadDecision
     reason: str
     observability: dict
     policy: Optional[MemoryAccessPolicy] = None
-    global_gate: Optional[V17GlobalReadGateDecision] = None
-    rollout: Optional[V17DefaultReadRolloutDecision] = None
+    global_gate: Optional[GlobalReadGateDecision] = None
+    rollout: Optional[DefaultReadRolloutDecision] = None
     status_code: int = 403
 
 
-class V17MemoryGrantOperation(str, Enum):
+class MemoryGrantOperation(str, Enum):
     DEFAULT_READ = 'default_read'
     ARCHIVE_READ = 'archive_read'
     WRITE = 'write'
 
 
 @dataclass(frozen=True)
-class V17AppKeyScopeGrantDecision:
+class AppKeyScopeGrantDecision:
     allowed: bool
-    context: V17ProductAuthorizationContext
-    operation: V17MemoryGrantOperation
+    context: ProductAuthorizationContext
+    operation: MemoryGrantOperation
     reason: str
     required_scope: str
     observability: dict
@@ -72,19 +72,19 @@ class V17AppKeyScopeGrantDecision:
     status_code: int = 403
 
 
-ReadGlobalGate = Callable[..., V17GlobalReadGateDecision]
-ReadRollout = Callable[..., V17DefaultReadRolloutDecision]
+ReadGlobalGate = Callable[..., GlobalReadGateDecision]
+ReadRollout = Callable[..., DefaultReadRolloutDecision]
 ReadAppKeyGrantsState = Callable[..., object]
 
-EXTERNAL_V17_MEMORY_CONSUMERS = {'third_party', 'developer_api', 'mcp'}
-V17_MEMORY_OPERATION_REQUIRED_SCOPES = {
-    V17MemoryGrantOperation.DEFAULT_READ: 'memories.read',
-    V17MemoryGrantOperation.ARCHIVE_READ: 'memories.archive.read',
-    V17MemoryGrantOperation.WRITE: 'memories.write',
+EXTERNAL_MEMORY_CONSUMERS = {'third_party', 'developer_api', 'mcp'}
+MEMORY_OPERATION_REQUIRED_SCOPES = {
+    MemoryGrantOperation.DEFAULT_READ: 'memories.read',
+    MemoryGrantOperation.ARCHIVE_READ: 'memories.archive.read',
+    MemoryGrantOperation.WRITE: 'memories.write',
 }
 
 
-def _app_context_payload(context: V17ProductAuthorizationContext) -> dict:
+def _app_context_payload(context: ProductAuthorizationContext) -> dict:
     return {
         'app_id': context.app_id,
         'key_id': context.key_id,
@@ -92,7 +92,7 @@ def _app_context_payload(context: V17ProductAuthorizationContext) -> dict:
     }
 
 
-def _global_read_gate_observability(gate: V17GlobalReadGateDecision, context: V17ProductAuthorizationContext) -> dict:
+def _global_read_gate_observability(gate: GlobalReadGateDecision, context: ProductAuthorizationContext) -> dict:
     return {
         'consumer': context.consumer,
         'surface': context.surface,
@@ -107,8 +107,8 @@ def _global_read_gate_observability(gate: V17GlobalReadGateDecision, context: V1
     }
 
 
-def _rollout_observability(rollout: V17DefaultReadRolloutDecision, context: V17ProductAuthorizationContext) -> dict:
-    observability = build_v17_default_read_rollout_observability(rollout)
+def _rollout_observability(rollout: DefaultReadRolloutDecision, context: ProductAuthorizationContext) -> dict:
+    observability = build_default_read_rollout_observability(rollout)
     observability.update(
         {
             'surface': context.surface,
@@ -124,18 +124,18 @@ def _rollout_observability(rollout: V17DefaultReadRolloutDecision, context: V17P
 
 def _deny(
     *,
-    context: V17ProductAuthorizationContext,
+    context: ProductAuthorizationContext,
     db_client,
-    read_decision: V17ReadDecision,
+    read_decision: MemoryReadDecision,
     reason: str,
     observability: dict,
-    global_gate: V17GlobalReadGateDecision | None = None,
-    rollout: V17DefaultReadRolloutDecision | None = None,
-) -> V17ProductAuthorizationDecision:
+    global_gate: GlobalReadGateDecision | None = None,
+    rollout: DefaultReadRolloutDecision | None = None,
+) -> ProductAuthorizationDecision:
     observability['reason'] = reason
-    if read_decision != V17ReadDecision.USE_V17:
+    if read_decision != MemoryReadDecision.USE_MEMORY:
         observability['fallback_reason'] = reason
-    return V17ProductAuthorizationDecision(
+    return ProductAuthorizationDecision(
         allowed=False,
         context=context,
         db_client=db_client,
@@ -151,18 +151,18 @@ def _deny(
 
 def _allow(
     *,
-    context: V17ProductAuthorizationContext,
+    context: ProductAuthorizationContext,
     db_client,
-    global_gate: V17GlobalReadGateDecision,
-    rollout: V17DefaultReadRolloutDecision,
+    global_gate: GlobalReadGateDecision,
+    rollout: DefaultReadRolloutDecision,
     policy: MemoryAccessPolicy,
     observability: dict,
-) -> V17ProductAuthorizationDecision:
-    return V17ProductAuthorizationDecision(
+) -> ProductAuthorizationDecision:
+    return ProductAuthorizationDecision(
         allowed=True,
         context=context,
         db_client=db_client,
-        read_decision=V17ReadDecision.USE_V17,
+        read_decision=MemoryReadDecision.USE_MEMORY,
         reason='ok',
         observability=observability,
         policy=policy,
@@ -173,8 +173,8 @@ def _allow(
 
 
 def _grant_observability(
-    context: V17ProductAuthorizationContext,
-    operation: V17MemoryGrantOperation,
+    context: ProductAuthorizationContext,
+    operation: MemoryGrantOperation,
     required_scope: str,
     reason: str,
     grant_path: str | None = None,
@@ -195,16 +195,16 @@ def _grant_observability(
 
 def _grant_decision(
     *,
-    context: V17ProductAuthorizationContext,
-    operation: V17MemoryGrantOperation,
+    context: ProductAuthorizationContext,
+    operation: MemoryGrantOperation,
     required_scope: str,
     reason: str,
     allowed: bool = False,
     policy: MemoryAccessPolicy | None = None,
     grant_path: str | None = None,
     status_code: int = 403,
-) -> V17AppKeyScopeGrantDecision:
-    return V17AppKeyScopeGrantDecision(
+) -> AppKeyScopeGrantDecision:
+    return AppKeyScopeGrantDecision(
         allowed=allowed or policy is not None,
         context=context,
         operation=operation,
@@ -218,7 +218,7 @@ def _grant_decision(
 
 
 def _lookup_app_key_grant(
-    context: V17ProductAuthorizationContext, persisted_grant_state
+    context: ProductAuthorizationContext, persisted_grant_state
 ) -> tuple[dict | None, str | None, bool]:
     if not isinstance(persisted_grant_state, dict):
         return None, None, False
@@ -245,29 +245,29 @@ def _lookup_app_key_grant(
     return key_grant, f'grants.{context.consumer}.apps.{context.app_id}.keys.{context.key_id}', True
 
 
-def _memory_consumer_for_context(context: V17ProductAuthorizationContext) -> MemoryConsumer:
+def _memory_consumer_for_context(context: ProductAuthorizationContext) -> MemoryConsumer:
     try:
         return MemoryConsumer(context.consumer)
     except ValueError:
         return MemoryConsumer.unknown
 
 
-def authorize_v17_app_key_scope_memory_grant(
-    context: V17ProductAuthorizationContext,
+def authorize_app_key_scope_memory_grant(
+    context: ProductAuthorizationContext,
     *,
     persisted_grant_state,
-    operation: V17MemoryGrantOperation,
-) -> V17AppKeyScopeGrantDecision:
-    """Authorize V17 memory access for external app/key/scope consumers.
+    operation: MemoryGrantOperation,
+) -> AppKeyScopeGrantDecision:
+    """Authorize memory memory access for external app/key/scope consumers.
 
     First-party Omi chat continues to be governed by the rollout/default-grant
-    path in `authorize_v17_product_memory_route`. External consumers must present
+    path in `authorize_memory_product_memory_route`. External consumers must present
     a server-authenticated app id, key id, verified scope, and matching persisted
     app/key grant. Request-provided scopes alone never grant access.
     """
 
-    required_scope = V17_MEMORY_OPERATION_REQUIRED_SCOPES[operation]
-    if context.consumer not in EXTERNAL_V17_MEMORY_CONSUMERS:
+    required_scope = MEMORY_OPERATION_REQUIRED_SCOPES[operation]
+    if context.consumer not in EXTERNAL_MEMORY_CONSUMERS:
         return _grant_decision(
             context=context,
             operation=operation,
@@ -365,8 +365,8 @@ def authorize_v17_app_key_scope_memory_grant(
     policy = MemoryAccessPolicy(
         consumer=_memory_consumer_for_context(context),
         app_has_default_memory_grant=operation
-        in {V17MemoryGrantOperation.DEFAULT_READ, V17MemoryGrantOperation.ARCHIVE_READ},
-        archive_capability=operation == V17MemoryGrantOperation.ARCHIVE_READ,
+        in {MemoryGrantOperation.DEFAULT_READ, MemoryGrantOperation.ARCHIVE_READ},
+        archive_capability=operation == MemoryGrantOperation.ARCHIVE_READ,
         raw_provenance_capability=False,
     )
     return _grant_decision(
@@ -380,13 +380,13 @@ def authorize_v17_app_key_scope_memory_grant(
     )
 
 
-def authorize_v17_external_default_memory_read(
-    context: V17ProductAuthorizationContext,
+def authorize_memory_external_default_memory_read(
+    context: ProductAuthorizationContext,
     *,
     db_client,
-    read_app_key_grants_state: ReadAppKeyGrantsState = read_v17_app_key_memory_grants_state,
-) -> V17AppKeyScopeGrantDecision:
-    """Compose authenticated external context with stored V17 app/key grants.
+    read_app_key_grants_state: ReadAppKeyGrantsState = read_app_key_memory_grants_state,
+) -> AppKeyScopeGrantDecision:
+    """Compose authenticated external context with stored memory app/key grants.
 
     This is the narrow route-ready seam for developer/MCP/third-party default
     reads. It requires the caller to supply server-authenticated uid/app/key/scope
@@ -397,25 +397,25 @@ def authorize_v17_external_default_memory_read(
     """
 
     grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
-    decision = authorize_v17_app_key_scope_memory_grant(
+    decision = authorize_app_key_scope_memory_grant(
         context,
         persisted_grant_state=getattr(grant_state_read, 'state', {}),
-        operation=V17MemoryGrantOperation.DEFAULT_READ,
+        operation=MemoryGrantOperation.DEFAULT_READ,
     )
     decision.observability['grant_state_reason'] = getattr(grant_state_read, 'reason', 'unknown_grant_state')
     decision.observability['grant_state_source_path'] = getattr(grant_state_read, 'source_path', None)
     return decision
 
 
-def authorize_v17_product_memory_route(
-    context: V17ProductAuthorizationContext,
+def authorize_memory_product_memory_route(
+    context: ProductAuthorizationContext,
     *,
     db_client,
-    read_global_gate: ReadGlobalGate = read_v17_global_read_gate,
-    read_default_rollout: ReadRollout = read_v17_default_read_rollout,
-    read_archive_rollout: ReadRollout = read_v17_archive_read_rollout,
-) -> V17ProductAuthorizationDecision:
-    """Authorize a V17 product memory route before any `memory_items` access.
+    read_global_gate: ReadGlobalGate = read_global_read_gate,
+    read_default_rollout: ReadRollout = read_default_read_rollout,
+    read_archive_rollout: ReadRollout = read_archive_read_rollout,
+) -> ProductAuthorizationDecision:
+    """Authorize a memory product memory route before any `memory_items` access.
 
     The shared seam performs the server-side decision in one place:
     global read gate/kill switch first, then persisted per-user rollout/grant
@@ -425,7 +425,7 @@ def authorize_v17_product_memory_route(
 
     global_gate = read_global_gate(db_client=db_client)
     global_observability = _global_read_gate_observability(global_gate, context)
-    if global_gate.read_decision != V17ReadDecision.USE_V17:
+    if global_gate.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,
             db_client=db_client,
@@ -439,7 +439,7 @@ def authorize_v17_product_memory_route(
         return _deny(
             context=context,
             db_client=db_client,
-            read_decision=V17ReadDecision.DENY_MEMORY,
+            read_decision=MemoryReadDecision.DENY_MEMORY,
             reason='missing_explicit_archive_request',
             observability=global_observability,
             global_gate=global_gate,
@@ -448,7 +448,7 @@ def authorize_v17_product_memory_route(
     rollout_reader = read_archive_rollout if context.requires_archive_capability else read_default_rollout
     rollout = rollout_reader(uid=context.uid, db_client=db_client, consumer=context.consumer)
     rollout_observability = _rollout_observability(rollout, context)
-    if rollout.read_decision != V17ReadDecision.USE_V17:
+    if rollout.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,
             db_client=db_client,
@@ -464,7 +464,7 @@ def authorize_v17_product_memory_route(
             return _deny(
                 context=context,
                 db_client=db_client,
-                read_decision=V17ReadDecision.DENY_MEMORY,
+                read_decision=MemoryReadDecision.DENY_MEMORY,
                 reason=rollout.fallback_reason or f'missing_{rollout.grant_reason_key}_archive_capability',
                 observability=rollout_observability,
                 global_gate=global_gate,
@@ -485,10 +485,10 @@ def authorize_v17_product_memory_route(
     )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-ProductAuthorizationContext = V17ProductAuthorizationContext
-ProductAuthorizationDecision = V17ProductAuthorizationDecision
-AppKeyScopeGrantDecision = V17AppKeyScopeGrantDecision
-MemoryGrantOperation = V17MemoryGrantOperation
-MEMORY_OPERATION_REQUIRED_SCOPES = V17_MEMORY_OPERATION_REQUIRED_SCOPES
-EXTERNAL_MEMORY_CONSUMERS = EXTERNAL_V17_MEMORY_CONSUMERS
+# Neutral symbol aliases (memory names remain valid via shim)
+ProductAuthorizationContext = ProductAuthorizationContext
+ProductAuthorizationDecision = ProductAuthorizationDecision
+AppKeyScopeGrantDecision = AppKeyScopeGrantDecision
+MemoryGrantOperation = MemoryGrantOperation
+MEMORY_OPERATION_REQUIRED_SCOPES = MEMORY_OPERATION_REQUIRED_SCOPES
+EXTERNAL_MEMORY_CONSUMERS = EXTERNAL_MEMORY_CONSUMERS

@@ -1,39 +1,39 @@
 """Canonical developer memory adapter module (WS-G8a).
 
-Neutral ``developer_memory_adapter`` is the source of truth. Legacy ``v17_developer_memory_adapter`` remains an importable alias.
+Neutral ``developer_memory_adapter`` is the source of truth. Canonical developer memory adapter.
 """
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from config.memory_rollout import V17Capabilities
+from config.memory_rollout import MemoryRolloutCapabilities
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
-    V17DefaultReadRolloutDecision,
-    V17ReadDecision,
-    disabled_v17_default_read_rollout_decision,
-    read_v17_default_read_rollout,
+    DefaultReadRolloutDecision,
+    MemoryReadDecision,
+    disabled_default_read_rollout_decision,
+    read_default_read_rollout,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_v17_vector_memory_search
+from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
-V17DeveloperDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
+DeveloperDefaultMemoryRolloutDecision = DefaultReadRolloutDecision
 
 
 @dataclass(frozen=True)
-class V17DeveloperMemorySearchResult:
+class DeveloperMemorySearchResult:
     memories: list[dict]
-    read_decision: V17ReadDecision
+    read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
 
 
-def read_v17_developer_default_memory_rollout(*, uid: str, db_client) -> V17DeveloperDefaultMemoryRolloutDecision:
-    """Read server-owned V17 developer default-memory rollout state.
+def read_developer_default_memory_rollout(*, uid: str, db_client) -> DeveloperDefaultMemoryRolloutDecision:
+    """Read server-owned memory developer default-memory rollout state.
 
     The authoritative per-user document is `users/{uid}/memory_control/state`.
     Missing, malformed, uid-mismatched, or developer-grant-less docs fail closed
@@ -41,7 +41,7 @@ def read_v17_developer_default_memory_rollout(*, uid: str, db_client) -> V17Deve
     this developer default-memory path regardless of persisted Archive fields.
     """
 
-    return read_v17_default_read_rollout(uid=uid, db_client=db_client, consumer='developer_api')
+    return read_default_read_rollout(uid=uid, db_client=db_client, consumer='developer_api')
 
 
 def _parse_datetime(value) -> datetime:
@@ -49,7 +49,7 @@ def _parse_datetime(value) -> datetime:
         return value
     if isinstance(value, str):
         return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    raise ValueError('missing V17 memory timestamp')
+    raise ValueError('missing memory memory timestamp')
 
 
 def _developer_category(item: dict) -> str:
@@ -63,11 +63,11 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
     updated_at = _parse_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
     raw_category = item.get('category')
     category_source = (
-        'v17_memory_item.category'
+        'memory_item.category'
         if isinstance(raw_category, str) and raw_category.strip()
-        else 'developer_v17_compatibility_default_no_source_category'
+        else 'developer_memory_compatibility_default_no_source_category'
     )
-    visibility_source = item.get('visibility_source') or 'v17_memory_item.visibility'
+    visibility_source = item.get('visibility_source') or 'memory_item.visibility'
     return {
         'id': item['memory_id'],
         'content': item.get('content') or '',
@@ -75,18 +75,20 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
         'category_source': category_source,
         'visibility': item.get('visibility') or 'private',
         'visibility_source': visibility_source,
-        'tags': ['v17_default_memory', f"tier:{item.get('tier')}"] if item.get('tier') else ['v17_default_memory'],
+        'tags': (
+            ['memory_default_memory', f"tier:{item.get('tier')}"] if item.get('tier') else ['memory_default_memory']
+        ),
         'created_at': updated_at,
         'updated_at': updated_at,
         'manually_added': False,
-        'manually_added_source': 'developer_v17_compatibility_default_no_manual_state',
+        'manually_added_source': 'developer_memory_compatibility_default_no_manual_state',
         'scoring': None,
         'reviewed': False,
-        'reviewed_source': 'developer_v17_compatibility_default_no_review_state',
+        'reviewed_source': 'developer_memory_compatibility_default_no_review_state',
         'user_review': None,
         'edited': False,
-        'edited_source': 'developer_v17_compatibility_default_no_edit_state',
-        'v17_default_memory': True,
+        'edited_source': 'developer_memory_compatibility_default_no_edit_state',
+        'memory_default_memory': True,
         'archive_default_visible': False,
         'policy': {
             'consumer': policy.consumer.value,
@@ -100,20 +102,20 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
 def _rollout_decision_from_legacy_args(
     *,
     uid: str,
-    rollout_decision: Optional[V17DeveloperDefaultMemoryRolloutDecision],
-    rollout_capabilities: Optional[V17Capabilities],
+    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision],
+    rollout_capabilities: Optional[MemoryRolloutCapabilities],
     app_has_default_memory_grant: bool,
-) -> V17DeveloperDefaultMemoryRolloutDecision:
+) -> DeveloperDefaultMemoryRolloutDecision:
     if rollout_decision is not None:
         return rollout_decision
     if rollout_capabilities is None:
-        return disabled_v17_default_read_rollout_decision(
+        return disabled_default_read_rollout_decision(
             uid=uid,
             source_path=f'users/{uid}/memory_control/state',
             consumer='developer_api',
             reason='missing_rollout_state',
         )
-    return V17DefaultReadRolloutDecision(
+    return DefaultReadRolloutDecision(
         uid=uid,
         source_path=f'users/{uid}/memory_control/state',
         consumer='developer_api',
@@ -123,26 +125,26 @@ def _rollout_decision_from_legacy_args(
     )
 
 
-def search_v17_default_developer_memories(
+def search_memory_default_developer_memories(
     *,
     uid: str,
     query: str = '',
     limit: int,
     offset: int,
     db_client,
-    rollout_capabilities: Optional[V17Capabilities] = None,
+    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[V17DeveloperDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision] = None,
     now: Optional[datetime] = None,
     categories: Optional[list[str]] = None,
-) -> V17DeveloperMemorySearchResult:
+) -> DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer list caller.
 
     Missing/malformed/no-grant/disabled rollout states are DENY_MEMORY or
     SHADOW_ONLY, not an implicit `None` downgrade to the legacy
     `users/{uid}/memories` path. Legacy fallback is only valid when callers pass
     an explicit USE_LEGACY_SAFE decision. Firestore `memory_items` are touched
-    only after USE_V17.
+    only after USE_MEMORY.
     """
 
     decision = _rollout_decision_from_legacy_args(
@@ -151,8 +153,8 @@ def search_v17_default_developer_memories(
         rollout_capabilities=rollout_capabilities,
         app_has_default_memory_grant=app_has_default_memory_grant,
     )
-    if decision.read_decision != V17ReadDecision.USE_V17:
-        return V17DeveloperMemorySearchResult(
+    if decision.read_decision != MemoryReadDecision.USE_MEMORY:
+        return DeveloperMemorySearchResult(
             memories=[], read_decision=decision.read_decision, fallback_reason=decision.fallback_reason
         )
 
@@ -177,24 +179,24 @@ def search_v17_default_developer_memories(
     if categories:
         allowed_categories = {category for category in categories if category}
         formatted = [memory for memory in formatted if memory.get('category') in allowed_categories]
-    return V17DeveloperMemorySearchResult(
+    return DeveloperMemorySearchResult(
         memories=formatted,
-        read_decision=V17ReadDecision.USE_V17,
+        read_decision=MemoryReadDecision.USE_MEMORY,
     )
 
 
-def search_v17_default_developer_memories_vector(
+def search_memory_default_developer_memories_vector(
     *,
     uid: str,
     query: str,
     limit: int,
     db_client,
-    rollout_capabilities: Optional[V17Capabilities] = None,
+    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[V17DeveloperDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
-) -> V17DeveloperMemorySearchResult:
+) -> DeveloperMemorySearchResult:
     """Return explicit read-decision semantics for the developer vector caller.
 
     Missing/malformed/no-grant/disabled rollout states are DENY_MEMORY or
@@ -210,17 +212,17 @@ def search_v17_default_developer_memories_vector(
         rollout_capabilities=rollout_capabilities,
         app_has_default_memory_grant=app_has_default_memory_grant,
     )
-    if decision.read_decision != V17ReadDecision.USE_V17:
-        return V17DeveloperMemorySearchResult(
+    if decision.read_decision != MemoryReadDecision.USE_MEMORY:
+        return DeveloperMemorySearchResult(
             memories=[], read_decision=decision.read_decision, fallback_reason=decision.fallback_reason
         )
 
     bounded_limit = max(1, min(limit, 100))
     projection_commit_id = required_projection_commit_id or decision.vector_projection_commit_id
     if not projection_commit_id:
-        return V17DeveloperMemorySearchResult(
+        return DeveloperMemorySearchResult(
             memories=[],
-            read_decision=V17ReadDecision.DENY_MEMORY,
+            read_decision=MemoryReadDecision.DENY_MEMORY,
             fallback_reason='missing_vector_projection_commit_id',
         )
     policy = MemoryAccessPolicy(
@@ -229,7 +231,7 @@ def search_v17_default_developer_memories_vector(
         archive_capability=False,
         raw_provenance_capability=False,
     )
-    response = fetch_default_v17_vector_memory_search(
+    response = fetch_default_vector_memory_search(
         uid=uid,
         query=query,
         db_client=db_client,
@@ -248,9 +250,9 @@ def search_v17_default_developer_memories_vector(
         memory['relevance_score'] = round(float(scores_by_memory_id.get(memory_id, 0)), 4)
         memory['vector_search'] = True
         formatted.append(memory)
-    return V17DeveloperMemorySearchResult(memories=formatted, read_decision=V17ReadDecision.USE_V17)
+    return DeveloperMemorySearchResult(memories=formatted, read_decision=MemoryReadDecision.USE_MEMORY)
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-DeveloperDefaultMemoryRolloutDecision = V17DeveloperDefaultMemoryRolloutDecision
-DeveloperMemorySearchResult = V17DeveloperMemorySearchResult
+# Neutral symbol aliases (memory names remain valid via shim)
+DeveloperDefaultMemoryRolloutDecision = DeveloperDefaultMemoryRolloutDecision
+DeveloperMemorySearchResult = DeveloperMemorySearchResult

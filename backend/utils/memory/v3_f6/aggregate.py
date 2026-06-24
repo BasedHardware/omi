@@ -1,4 +1,4 @@
-"""Pure V17-V3-F6H pre-GCP aggregate report builder."""
+"""Pure memory-V3-F6H pre-GCP aggregate report builder."""
 
 from __future__ import annotations
 

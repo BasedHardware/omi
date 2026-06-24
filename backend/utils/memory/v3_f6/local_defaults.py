@@ -1,4 +1,4 @@
-"""Canonical local placeholder defaults for V17-V3-F6 evidence targets."""
+"""Canonical local placeholder defaults for memory-V3-F6 evidence targets."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ DEFAULT_EVIDENCE_TARGETS: dict[str, dict[str, Any]] = {
         "project_id": "PLACEHOLDER-dev-project-id",
         "project_number": "000000000000",
         "env_label": "dev",
-        "evidence_principal": "serviceAccount:PLACEHOLDER-v17-evidence@PLACEHOLDER-dev-project-id.iam.gserviceaccount.com",
+        "evidence_principal": "serviceAccount:PLACEHOLDER-memory-evidence@PLACEHOLDER-dev-project-id.iam.gserviceaccount.com",
         "approved_metadata_paths": list(DEFAULT_APPROVED_METADATA_PATHS),
         "index_expectations": DEFAULT_INDEX_EXPECTATIONS,
         "audit_settings": {
@@ -46,7 +46,7 @@ DEFAULT_EVIDENCE_TARGETS: dict[str, dict[str, Any]] = {
         "project_id": "PLACEHOLDER-prod-project-id",
         "project_number": "000000000000",
         "env_label": "prod",
-        "evidence_principal": "serviceAccount:PLACEHOLDER-v17-evidence@PLACEHOLDER-prod-project-id.iam.gserviceaccount.com",
+        "evidence_principal": "serviceAccount:PLACEHOLDER-memory-evidence@PLACEHOLDER-prod-project-id.iam.gserviceaccount.com",
         "approved_metadata_paths": list(DEFAULT_APPROVED_METADATA_PATHS),
         "index_expectations": DEFAULT_INDEX_EXPECTATIONS,
         "audit_settings": {

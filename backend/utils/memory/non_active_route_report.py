@@ -20,7 +20,7 @@ def fetch_non_active_route_audit_report(
     expected_source_ids: Optional[Iterable[str]] = None,
     db_client=db,
 ) -> NonActiveRouteAuditReport:
-    """Fetch route-store docs and build the V17 non-active no-silent-loss audit report.
+    """Fetch route-store docs and build the memory non-active no-silent-loss audit report.
 
     This is the narrow admin/benchmark caller seam for T17-R: it reads only the
     durable `non_active_memory_routes` collection for a user (optionally scoped to

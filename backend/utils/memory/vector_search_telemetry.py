@@ -1,7 +1,7 @@
 """Canonical vector search telemetry module (WS-G8a).
 
 Neutral ``vector_search_telemetry`` is the source of truth. Legacy
-``v17_vector_search_telemetry`` remains an importable alias.
+Canonical vector search telemetry.
 """
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
-V17_VECTOR_SEARCH_COMPONENT = 'v17_vector_search'
+VECTOR_SEARCH_COMPONENT = 'vector_search'
 _ALLOWED_LABEL_KEYS = {'component', 'consumer', 'surface', 'mode', 'status', 'reason', 'event_type'}
 
 
 @dataclass(frozen=True)
-class V17VectorSearchTelemetryConfig:
-    """Fake-injectable low-cardinality telemetry config for hydrated V17 vector search.
+class VectorSearchTelemetryConfig:
+    """Fake-injectable low-cardinality telemetry config for hydrated memory vector search.
 
     This seam deliberately builds deterministic payloads and accepts an injected
     emitter instead of importing a production metrics client. Payload labels are
@@ -24,30 +24,30 @@ class V17VectorSearchTelemetryConfig:
     """
 
     enabled: bool = False
-    component: str = V17_VECTOR_SEARCH_COMPONENT
+    component: str = VECTOR_SEARCH_COMPONENT
     consumer: str = 'unknown'
     surface: str = 'default_vector_search'
     mode: str = 'default'
 
 
-def emit_v17_vector_search_telemetry(
+def emit_memory_vector_search_telemetry(
     *,
     search_summary: Mapping[str, Any],
     emitter: Callable[[Dict[str, Any]], Any],
-    config: V17VectorSearchTelemetryConfig,
+    config: VectorSearchTelemetryConfig,
 ) -> Dict[str, Any]:
-    """Emit low-cardinality metrics/events for one hydrated V17 vector search.
+    """Emit low-cardinality metrics/events for one hydrated memory vector search.
 
     Emitter failures are returned in a deterministic summary and never raised, so
     telemetry outages do not mask a successfully fail-closed/filtered search result.
     """
-    if not isinstance(config, V17VectorSearchTelemetryConfig):
+    if not isinstance(config, VectorSearchTelemetryConfig):
         raise ValueError('telemetry config is required')
     if not config.enabled:
         return _telemetry_result(enabled=False)
 
     result = _telemetry_result(enabled=True)
-    for payload in _build_v17_vector_search_telemetry_payloads(search_summary=search_summary, config=config):
+    for payload in _build_memory_vector_search_telemetry_payloads(search_summary=search_summary, config=config):
         try:
             emitter(payload)
             result['emitted_count'] += 1
@@ -57,8 +57,8 @@ def emit_v17_vector_search_telemetry(
     return result
 
 
-def _build_v17_vector_search_telemetry_payloads(
-    *, search_summary: Mapping[str, Any], config: V17VectorSearchTelemetryConfig
+def _build_memory_vector_search_telemetry_payloads(
+    *, search_summary: Mapping[str, Any], config: VectorSearchTelemetryConfig
 ) -> List[Dict[str, Any]]:
     labels_base = {
         'component': _bounded_label(config.component),
@@ -68,52 +68,52 @@ def _build_v17_vector_search_telemetry_payloads(
     }
     payloads = [
         _metric(
-            'v17_vector_search_candidates_total',
+            'vector_search_candidates_total',
             _safe_int(search_summary.get('queried_candidate_count')),
             {**labels_base, 'status': 'queried'},
         ),
         _metric(
-            'v17_vector_search_candidates_total',
+            'vector_search_candidates_total',
             _safe_int(search_summary.get('hydrated_candidate_count')),
             {**labels_base, 'status': 'hydrated'},
         ),
         _metric(
-            'v17_vector_search_candidates_total',
+            'vector_search_candidates_total',
             _safe_int(search_summary.get('vector_rejected_count')),
             {**labels_base, 'status': 'vector_rejected'},
         ),
         _metric(
-            'v17_vector_search_result_count',
+            'vector_search_result_count',
             _safe_int(search_summary.get('returned_count')),
             {**labels_base, 'status': 'returned'},
         ),
         _metric(
-            'v17_vector_search_queries_total',
+            'vector_search_queries_total',
             _safe_int(search_summary.get('vector_query_count')),
             {**labels_base, 'status': 'attempted'},
         ),
         _metric(
-            'v17_vector_search_candidate_request_limit',
+            'vector_search_candidate_request_limit',
             _safe_int(search_summary.get('candidate_request_limit')),
             {**labels_base, 'status': 'bounded'},
         ),
         _metric(
-            'v17_vector_search_candidate_budget',
+            'vector_search_candidate_budget',
             _safe_int(search_summary.get('candidate_budget')),
             {**labels_base, 'status': 'bounded'},
         ),
         _metric(
-            'v17_vector_search_control_exhausted_total',
+            'vector_search_control_exhausted_total',
             int(bool(search_summary.get('vector_query_budget_exhausted'))),
             {**labels_base, 'reason': 'vector_query_budget_exhausted'},
         ),
         _metric(
-            'v17_vector_search_control_exhausted_total',
+            'vector_search_control_exhausted_total',
             int(bool(search_summary.get('hydration_read_budget_exhausted'))),
             {**labels_base, 'reason': 'hydration_read_budget_exhausted'},
         ),
         _metric(
-            'v17_vector_search_timeout_exhausted_total',
+            'vector_search_timeout_exhausted_total',
             int(bool(search_summary.get('timeout_exhausted'))),
             {**labels_base, 'status': 'exhausted'},
         ),
@@ -127,7 +127,7 @@ def _build_v17_vector_search_telemetry_payloads(
     ):
         payloads.append(
             _metric(
-                'v17_vector_search_hydration_rejects_total',
+                'vector_search_hydration_rejects_total',
                 _safe_int(search_summary.get(key)),
                 {**labels_base, 'reason': reason},
             )
@@ -139,7 +139,7 @@ def _build_v17_vector_search_telemetry_payloads(
     )
     payloads.append(
         _metric(
-            'v17_vector_search_empty_after_hydration_total',
+            'vector_search_empty_after_hydration_total',
             empty_after_hydration,
             {**labels_base, 'status': 'empty_after_hydration'},
         )
@@ -147,7 +147,7 @@ def _build_v17_vector_search_telemetry_payloads(
     if empty_after_hydration:
         payloads.append(
             _event(
-                'v17_vector_search_empty_after_hydration',
+                'vector_search_empty_after_hydration',
                 {**labels_base, 'event_type': 'threshold_signal'},
                 {
                     'queried_candidate_count': _safe_int(search_summary.get('queried_candidate_count')),
@@ -160,7 +160,7 @@ def _build_v17_vector_search_telemetry_payloads(
     budget_exhausted = int(bool(search_summary.get('candidate_budget_exhausted')))
     payloads.append(
         _metric(
-            'v17_vector_search_budget_exhausted_total',
+            'vector_search_budget_exhausted_total',
             budget_exhausted,
             {**labels_base, 'status': 'exhausted'},
         )
@@ -168,7 +168,7 @@ def _build_v17_vector_search_telemetry_payloads(
     if budget_exhausted:
         payloads.append(
             _event(
-                'v17_vector_search_budget_exhausted',
+                'vector_search_budget_exhausted',
                 {**labels_base, 'event_type': 'threshold_signal'},
                 {
                     'candidate_budget': _safe_int(search_summary.get('candidate_budget')),
@@ -182,7 +182,7 @@ def _build_v17_vector_search_telemetry_payloads(
         if bool(search_summary.get(reason)):
             payloads.append(
                 _event(
-                    'v17_vector_search_control_exhausted',
+                    'vector_search_control_exhausted',
                     {**labels_base, 'event_type': 'threshold_signal', 'reason': reason},
                     {
                         'vector_query_count': _safe_int(search_summary.get('vector_query_count')),
@@ -197,7 +197,7 @@ def _build_v17_vector_search_telemetry_payloads(
     if bool(search_summary.get('timeout_exhausted')):
         payloads.append(
             _event(
-                'v17_vector_search_timeout_exhausted',
+                'vector_search_timeout_exhausted',
                 {**labels_base, 'event_type': 'threshold_signal'},
                 {
                     'vector_query_count': _safe_int(search_summary.get('vector_query_count')),
@@ -242,7 +242,7 @@ def _telemetry_result(*, enabled: bool) -> Dict[str, Any]:
 
 
 __all__ = [
-    "V17VectorSearchTelemetryConfig",
-    "V17_VECTOR_SEARCH_COMPONENT",
-    "emit_v17_vector_search_telemetry",
+    "VectorSearchTelemetryConfig",
+    "VECTOR_SEARCH_COMPONENT",
+    "emit_memory_vector_search_telemetry",
 ]

@@ -1,4 +1,4 @@
-"""Canonical V17-V3-F6 keyed fingerprint helpers."""
+"""Canonical memory-V3-F6 keyed fingerprint helpers."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ class RedactionContractError(ValueError):
 FingerprintContractError = RedactionContractError
 
 
-HMAC_KEY = b"v17-v3-f6f-local-redaction-contract"
+HMAC_KEY = b"memory-v3-f6f-local-redaction-contract"
 FINGERPRINT_RE = re.compile(r"^hmac:[a-z0-9_-]+:[0-9a-f]{32}$")
 
 

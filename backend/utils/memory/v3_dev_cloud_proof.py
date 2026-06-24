@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_dev_cloud_proof`` (WS-G8b).
 
-Neutral ``v3_dev_cloud_proof`` is the source of truth. Legacy ``v17_v3_dev_cloud_proof`` remains an importable alias.
+Neutral ``v3_dev_cloud_proof`` is the source of truth. Legacy ``v3_dev_cloud_proof`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -12,16 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from config.memory_rollout import V17Mode
-from database.memory_collections import V17Collections
-from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from config.memory_rollout import MemoryRolloutMode
+from database.memory_collections import MemoryCollections
+from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 from utils.memory.v3_limited_rollout_config import GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH
 
 GATE_STATUS_BLOCKED = 'BLOCKED'
 GATE_STATUS_READY_TO_EXECUTE = 'READY_TO_EXECUTE_DEV_CLOUD_PROOF'
 GATE_STATUS_NOT_RUN = 'NOT_RUN'
 ROUTE_SCOPE = 'get_v3_memories'
-DEV_FIXTURE_SOURCE = 'v17_v3_dev_cloud_synthetic_fixture'
+DEV_FIXTURE_SOURCE = 'v3_dev_cloud_synthetic_fixture'
 
 REQUIRED_ARTIFACTS = (
     'candidate-manifest.json',
@@ -35,7 +35,7 @@ REQUIRED_ARTIFACTS = (
     'proof-results.json',
     'junit.xml',
     'http-transcripts.redacted.ndjson',
-    'v17-operations.ndjson',
+    'memory-operations.ndjson',
     'audit-extract.ndjson',
     'telemetry-redaction-report.json',
     'rollback-report.json',
@@ -47,10 +47,10 @@ REQUIRED_ARTIFACTS = (
 PROOF_MATRIX = (
     {
         'id': 'feature_variable_absent_false_or_non_exact',
-        'required_result': 'V17 not selected; zero V17 adapter calls; existing legacy/off contract unchanged.',
+        'required_result': 'memory not selected; zero memory adapter calls; existing legacy/off contract unchanged.',
     },
-    {'id': 'v17_mode_not_exact_read', 'required_result': 'V17 not selected; zero V17 adapter calls.'},
-    {'id': 'authenticated_uid_not_allowlisted', 'required_result': 'V17 not selected; no V17 Firestore calls.'},
+    {'id': 'memory_mode_not_exact_read', 'required_result': 'memory not selected; zero memory adapter calls.'},
+    {'id': 'authenticated_uid_not_allowlisted', 'required_result': 'memory not selected; no memory Firestore calls.'},
     {
         'id': 'valid_allowlisted_user',
         'required_result': 'Exact synthetic memories, ordering, pagination, generation, and headers match API contract.',
@@ -63,16 +63,22 @@ PROOF_MATRIX = (
         'id': 'user_a_references_user_b',
         'required_result': 'No B data returned through query, header, path, or cursor.',
     },
-    {'id': 'global_gate_absent_or_disabled', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
-    {'id': 'kill_switch_active', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
-    {'id': 'grant_missing', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
-    {'id': 'write_convergence_absent_or_false', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
-    {'id': 'head_missing_or_malformed', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
+    {'id': 'global_gate_absent_or_disabled', 'required_result': 'memory selected then fail closed; legacy count zero.'},
+    {'id': 'kill_switch_active', 'required_result': 'memory selected then fail closed; legacy count zero.'},
+    {'id': 'grant_missing', 'required_result': 'memory selected then fail closed; legacy count zero.'},
+    {
+        'id': 'write_convergence_absent_or_false',
+        'required_result': 'memory selected then fail closed; legacy count zero.',
+    },
+    {'id': 'head_missing_or_malformed', 'required_result': 'memory selected then fail closed; legacy count zero.'},
     {
         'id': 'head_projection_generation_mismatch',
-        'required_result': 'V17 selected then fail closed; legacy count zero.',
+        'required_result': 'memory selected then fail closed; legacy count zero.',
     },
-    {'id': 'projection_missing_or_malformed', 'required_result': 'V17 selected then fail closed; legacy count zero.'},
+    {
+        'id': 'projection_missing_or_malformed',
+        'required_result': 'memory selected then fail closed; legacy count zero.',
+    },
     {
         'id': 'cursor_malformed_tampered_stale_or_cross_user',
         'required_result': 'Stable error/client result; no legacy fallback; no cross-user disclosure.',
@@ -82,7 +88,7 @@ PROOF_MATRIX = (
         'id': 'firestore_timeout_or_unavailable',
         'required_result': 'Fail closed via dependency-injection tests; no public bypass endpoint.',
     },
-    {'id': 'every_get_case_zero_v17_writes', 'required_result': 'Zero successful or attempted V17 writes.'},
+    {'id': 'every_get_case_zero_memory_writes', 'required_result': 'Zero successful or attempted memory writes.'},
     {'id': 'real_projection_query', 'required_result': 'Succeeds against dev Firestore with checked-in indexes READY.'},
     {
         'id': 'telemetry_redaction',
@@ -222,7 +228,7 @@ def build_target_preflight_report(env: dict[str, str] | None = None) -> dict:
     return {
         'artifact': 'target-preflight.json',
         'status': preflight.status,
-        'gate': 'v17_v3_dev_cloud',
+        'gate': 'v3_dev_cloud',
         'mutation_allowed': False,
         'target': {
             'expected_project_id': target.expected_project_id,
@@ -298,17 +304,17 @@ def build_dev_cloud_fixture_bundle(*, uid_a: str, uid_b: str, run_id: str, accou
     documents.update(_baseline_docs_for_uid(uid_b, account_generation, memory_id=f'{run_id}-b-memory'))
     documents[GLOBAL_READ_GATE_PATH] = {
         'route_scope': ROUTE_SCOPE,
-        'purpose': 'v17_v3_dev_cloud_fixture_global_gate',
+        'purpose': 'v3_dev_cloud_fixture_global_gate',
         'owner': 'memory_platform_dev_cloud_proof',
         'config_schema_version': 1,
-        'v17_reads_enabled': True,
+        'memory_reads_enabled': True,
         'kill_switch_active': False,
         'fixture_source': DEV_FIXTURE_SOURCE,
         'run_id': run_id,
     }
     documents[WRITE_CONVERGENCE_GATE_PATH] = {
         'route_scope': ROUTE_SCOPE,
-        'purpose': 'v17_v3_dev_cloud_fixture_write_convergence',
+        'purpose': 'v3_dev_cloud_fixture_write_convergence',
         'owner': 'memory_platform_dev_cloud_proof',
         'config_schema_version': 1,
         'durable_outbox_enabled': True,
@@ -346,7 +352,7 @@ def build_review_template(preflight_report: dict) -> str:
     status = preflight_report['status']
     blockers = preflight_report['blockers']
     lines = [
-        '# V17 /v3 dev-cloud proof review',
+        '# memory /v3 dev-cloud proof review',
         '',
         f'Preflight status: `{status}`',
         '',
@@ -458,7 +464,7 @@ def sha256_file(path: Path) -> str:
 
 
 def _baseline_docs_for_uid(uid: str, account_generation: int, memory_id: str) -> dict:
-    paths = V17Collections(uid=uid)
+    paths = MemoryCollections(uid=uid)
     return {
         paths.memory_control_state: _control_state(uid, account_generation),
         paths.memory_state_head: _state_head(uid, account_generation),
@@ -470,13 +476,13 @@ def _baseline_docs_for_uid(uid: str, account_generation: int, memory_id: str) ->
 def _control_state(uid: str, account_generation: int) -> dict:
     return {
         'uid': uid,
-        'schema_version': V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
-        'mode': V17Mode.read.value,
+        'schema_version': DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+        'mode': MemoryRolloutMode.read.value,
         'mode_epoch': 1,
         'cutover_epoch': 1,
         'account_generation': account_generation,
         'fallback_projection_ready': True,
-        'persistent_v17_writes_started': True,
+        'persistent_memory_writes_started': True,
         'decommission_reconciled': False,
         'writes_blocked': False,
         'stage_gates': {'shadow': 'passed', 'write': 'passed', 'read': 'passed'},
@@ -489,7 +495,7 @@ def _state_head(uid: str, account_generation: int) -> dict:
     return {
         'uid': uid,
         'schema_version': 1,
-        'source': 'v17_memory_state_head',
+        'source': 'memory_state_head',
         'account_generation': account_generation,
         'head_commit_id': f'dev-cloud-head-{uid}-{account_generation}',
         'commit_sequence': account_generation,
@@ -501,7 +507,7 @@ def _projection_state(uid: str, account_generation: int) -> dict:
     return {
         'uid': uid,
         'schema_version': 1,
-        'source': 'v17_memory_items_projection',
+        'source': 'memory_items_projection',
         'ready': True,
         'account_generation': account_generation,
         'projection_generation': account_generation,
@@ -528,7 +534,7 @@ def _projection_item(uid: str, account_generation: int, memory_id: str) -> dict:
         'uid': uid,
         'memory_id': memory_id,
         'schema_version': 1,
-        'source': 'v17_memory_items_projection',
+        'source': 'memory_items_projection',
         'account_generation': account_generation,
         'projection_generation': account_generation,
         'source_commit_id': f'dev-cloud-source-{uid}-{account_generation}',
@@ -587,4 +593,4 @@ def _blocker(blocker_id: str, message: str) -> dict:
     return {'blocker_id': blocker_id, 'message': message, 'required_before_gate2_go': True}
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

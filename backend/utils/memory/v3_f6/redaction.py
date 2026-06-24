@@ -1,4 +1,4 @@
-"""Canonical local-only V17-V3-F6 strict evidence redaction/output contract."""
+"""Canonical local-only memory-V3-F6 strict evidence redaction/output contract."""
 
 from __future__ import annotations
 
@@ -73,8 +73,8 @@ def validate_redacted_evidence(report: dict[str, Any]) -> None:
     if not isinstance(report, dict):
         raise RedactionContractError("report must be a mapping")
     _require_exact_top_level(report)
-    if report["artifact_version"] != "V17-V3-F6F":
-        raise RedactionContractError("artifact_version must be V17-V3-F6F")
+    if report["artifact_version"] != "memory-V3-F6F":
+        raise RedactionContractError("artifact_version must be memory-V3-F6F")
     for field in ("project_fingerprint", "principal_fingerprint", "run_fingerprint"):
         if not isinstance(report[field], str) or not FINGERPRINT_RE.fullmatch(report[field]):
             raise RedactionContractError(f"{field} must be a keyed HMAC fingerprint")

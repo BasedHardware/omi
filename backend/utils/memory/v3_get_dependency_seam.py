@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_get_dependency_seam`` (WS-G8b).
 
-Neutral ``v3_get_dependency_seam`` is the source of truth. Legacy ``v17_v3_get_dependency_seam`` remains an importable alias.
+Neutral ``v3_get_dependency_seam`` is the source of truth. Legacy ``v3_get_dependency_seam`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ _NON_ENROLLED_LEGACY_BOUNDARY = 'load_enrollment_control'
 
 
 @dataclass(frozen=True)
-class V17V3GetDependencyContext:
+class V3GetDependencyContext:
     route: str
     client_uid_override_present: bool
     enrolled: bool
@@ -53,30 +53,30 @@ class V17V3GetDependencyContext:
 
 
 @dataclass(frozen=True)
-class V17V3GetDependencyDecision:
+class V3GetDependencyDecision:
     kind: DecisionKind
     decision_code: str
     http_status: int = 200
     subject_uid: str | None = None
 
     @staticmethod
-    def allowed(decision_code: str, *, subject_uid: str | None = None) -> 'V17V3GetDependencyDecision':
-        return V17V3GetDependencyDecision(kind='allow', decision_code=decision_code, subject_uid=subject_uid)
+    def allowed(decision_code: str, *, subject_uid: str | None = None) -> 'V3GetDependencyDecision':
+        return V3GetDependencyDecision(kind='allow', decision_code=decision_code, subject_uid=subject_uid)
 
     @staticmethod
-    def fail_closed(decision_code: str, *, http_status: int) -> 'V17V3GetDependencyDecision':
-        return V17V3GetDependencyDecision(kind='fail_closed', decision_code=decision_code, http_status=http_status)
+    def fail_closed(decision_code: str, *, http_status: int) -> 'V3GetDependencyDecision':
+        return V3GetDependencyDecision(kind='fail_closed', decision_code=decision_code, http_status=http_status)
 
     @staticmethod
-    def legacy(decision_code: str) -> 'V17V3GetDependencyDecision':
-        return V17V3GetDependencyDecision(kind='legacy_primary_only', decision_code=decision_code)
+    def legacy(decision_code: str) -> 'V3GetDependencyDecision':
+        return V3GetDependencyDecision(kind='legacy_primary_only', decision_code=decision_code)
 
 
-DependencyAdapter = Callable[[V17V3GetDependencyContext], V17V3GetDependencyDecision]
+DependencyAdapter = Callable[[V3GetDependencyContext], V3GetDependencyDecision]
 
 
 @dataclass(frozen=True)
-class V17V3GetDependencyAdapters:
+class V3GetDependencyAdapters:
     authenticate_subject: DependencyAdapter
     reject_client_uid_override: DependencyAdapter
     load_enrollment_control: DependencyAdapter
@@ -87,7 +87,7 @@ class V17V3GetDependencyAdapters:
 
 
 @dataclass(frozen=True)
-class V17V3GetDependencyChainResult:
+class V3GetDependencyChainResult:
     status: DependencyStatus
     http_status: int
     decision_code: str
@@ -95,9 +95,9 @@ class V17V3GetDependencyChainResult:
     executed_steps: tuple[str, ...]
     subject_uid: str | None = None
     should_fetch_legacy: bool = False
-    should_fetch_v17_projection: bool = False
+    should_fetch_memory_projection: bool = False
     legacy_fallback_allowed: bool = False
-    v17_legacy_merge_allowed: bool = False
+    memory_legacy_merge_allowed: bool = False
     projection_reads_allowed_after_step: str | None = None
     route_wired: bool = False
     runtime_wiring_changed: bool = False
@@ -122,11 +122,11 @@ _ORDER: tuple[tuple[str, str], ...] = (
 
 def _assert_low_cardinality(decision_code: str) -> None:
     if decision_code not in LOW_CARDINALITY_DECISION_CODES:
-        raise ValueError('unsupported_v17_v3_get_dependency_decision_code')
+        raise ValueError('unsupported_v3_get_dependency_decision_code')
 
 
 def _logged_fields(
-    context: V17V3GetDependencyContext, *, decision_code: str, dependency_step: str, status: DependencyStatus
+    context: V3GetDependencyContext, *, decision_code: str, dependency_step: str, status: DependencyStatus
 ) -> dict[str, str]:
     return {
         'route': context.route,
@@ -137,7 +137,7 @@ def _logged_fields(
 
 
 def _result(
-    context: V17V3GetDependencyContext,
+    context: V3GetDependencyContext,
     *,
     status: DependencyStatus,
     http_status: int,
@@ -146,11 +146,11 @@ def _result(
     executed_steps: tuple[str, ...],
     subject_uid: str | None = None,
     should_fetch_legacy: bool = False,
-    should_fetch_v17_projection: bool = False,
+    should_fetch_memory_projection: bool = False,
     projection_reads_allowed_after_step: str | None = None,
-) -> V17V3GetDependencyChainResult:
+) -> V3GetDependencyChainResult:
     _assert_low_cardinality(decision_code)
-    return V17V3GetDependencyChainResult(
+    return V3GetDependencyChainResult(
         status=status,
         http_status=http_status,
         decision_code=decision_code,
@@ -158,7 +158,7 @@ def _result(
         executed_steps=executed_steps,
         subject_uid=subject_uid,
         should_fetch_legacy=should_fetch_legacy,
-        should_fetch_v17_projection=should_fetch_v17_projection,
+        should_fetch_memory_projection=should_fetch_memory_projection,
         projection_reads_allowed_after_step=projection_reads_allowed_after_step,
         logged_fields=_logged_fields(
             context, decision_code=decision_code, dependency_step=dependency_step, status=status
@@ -167,12 +167,12 @@ def _result(
 
 
 def _contract_violation_result(
-    context: V17V3GetDependencyContext,
+    context: V3GetDependencyContext,
     *,
     public_step: str,
     executed_steps: tuple[str, ...],
     subject_uid: str | None,
-) -> V17V3GetDependencyChainResult:
+) -> V3GetDependencyChainResult:
     return _result(
         context,
         status='BLOCKED',
@@ -185,13 +185,13 @@ def _contract_violation_result(
 
 
 def _normalize_adapter_decision(
-    context: V17V3GetDependencyContext,
+    context: V3GetDependencyContext,
     adapter: DependencyAdapter,
     *,
     public_step: str,
     executed_steps: tuple[str, ...],
     subject_uid: str | None,
-) -> V17V3GetDependencyDecision | V17V3GetDependencyChainResult:
+) -> V3GetDependencyDecision | V3GetDependencyChainResult:
     try:
         decision = adapter(context)
     except TimeoutError:
@@ -215,7 +215,7 @@ def _normalize_adapter_decision(
             subject_uid=subject_uid,
         )
 
-    if not isinstance(decision, V17V3GetDependencyDecision):
+    if not isinstance(decision, V3GetDependencyDecision):
         return _result(
             context,
             status='BLOCKED',
@@ -228,9 +228,7 @@ def _normalize_adapter_decision(
     return decision
 
 
-def _decision_contract_valid(
-    decision: V17V3GetDependencyDecision, *, adapter_attr: str, subject_uid: str | None
-) -> bool:
+def _decision_contract_valid(decision: V3GetDependencyDecision, *, adapter_attr: str, subject_uid: str | None) -> bool:
     if decision.kind not in _VALID_DECISION_KINDS:
         return False
     try:
@@ -258,15 +256,15 @@ def _decision_contract_valid(
     return False
 
 
-def plan_v17_v3_get_dependency_chain(
-    context: V17V3GetDependencyContext,
-    adapters: V17V3GetDependencyAdapters,
-) -> V17V3GetDependencyChainResult:
+def plan_v3_get_dependency_chain(
+    context: V3GetDependencyContext,
+    adapters: V3GetDependencyAdapters,
+) -> V3GetDependencyChainResult:
     """Run the future GET dependency adapter seam in deterministic order.
 
     Authenticated subject binding is first. Client uid override rejection runs
     before enrollment/control. Non-enrolled callers exit as legacy-primary-only
-    without V17/legacy merge. Enrolled callers must pass control, config, cursor,
+    without memory/legacy merge. Enrolled callers must pass control, config, cursor,
     projection-source, and rate-limit/backpressure before projection reads are
     allowed. Any missing/invalid gate fails closed with no reads.
     """
@@ -283,7 +281,7 @@ def plan_v17_v3_get_dependency_chain(
             executed_steps=tuple(executed_steps),
             subject_uid=subject_uid,
         )
-        if isinstance(decision_or_result, V17V3GetDependencyChainResult):
+        if isinstance(decision_or_result, V3GetDependencyChainResult):
             return decision_or_result
         decision = decision_or_result
 
@@ -335,13 +333,13 @@ def plan_v17_v3_get_dependency_chain(
         dependency_step='rate_limit_backpressure',
         executed_steps=tuple(executed_steps),
         subject_uid=subject_uid,
-        should_fetch_v17_projection=True,
+        should_fetch_memory_projection=True,
         projection_reads_allowed_after_step='rate_limit_backpressure',
     )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3GetDependencyContext = V17V3GetDependencyContext
-V3GetDependencyDecision = V17V3GetDependencyDecision
-V3GetDependencyAdapters = V17V3GetDependencyAdapters
-V3GetDependencyChainResult = V17V3GetDependencyChainResult
+# Neutral symbol aliases (memory names remain valid via shim)
+V3GetDependencyContext = V3GetDependencyContext
+V3GetDependencyDecision = V3GetDependencyDecision
+V3GetDependencyAdapters = V3GetDependencyAdapters
+V3GetDependencyChainResult = V3GetDependencyChainResult

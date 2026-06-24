@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Canonical vector search service module (WS-G8a).
 
-Neutral ``vector_search_service`` is the source of truth. Legacy ``v17_vector_search_service`` remains an importable alias.
+Neutral ``vector_search_service`` is the source of truth. Canonical vector search service.
 """
 
 
@@ -10,28 +10,28 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Set
 
 try:
-    from database.vector_db import query_v17_memory_vector_candidates
+    from database.vector_db import query_memory_vector_candidates
 except ModuleNotFoundError:
-    query_v17_memory_vector_candidates = None
+    query_memory_vector_candidates = None
 
-from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
+from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
 from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
-from models.product_memory import MemoryAccessPolicy, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItem
 from utils.memory.vector_search_telemetry import (
-    V17VectorSearchTelemetryConfig,
-    emit_v17_vector_search_telemetry,
+    VectorSearchTelemetryConfig,
+    emit_memory_vector_search_telemetry,
 )
 
-DEFAULT_V17_VECTOR_SEARCH_LIMIT = 10
-MAX_V17_VECTOR_SEARCH_LIMIT = 100
-DEFAULT_V17_VECTOR_OVERFETCH_FACTOR = 3
-DEFAULT_V17_VECTOR_MAX_CANDIDATES = 50
-MAX_V17_VECTOR_OVERFETCH_FACTOR = 10
-DEFAULT_V17_VECTOR_MAX_QUERIES = 3
-MAX_V17_VECTOR_MAX_QUERIES = 10
+DEFAULT_MEMORY_VECTOR_SEARCH_LIMIT = 10
+MAX_MEMORY_VECTOR_SEARCH_LIMIT = 100
+DEFAULT_MEMORY_VECTOR_OVERFETCH_FACTOR = 3
+DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES = 50
+MAX_MEMORY_VECTOR_OVERFETCH_FACTOR = 10
+DEFAULT_MEMORY_VECTOR_MAX_QUERIES = 3
+MAX_MEMORY_VECTOR_MAX_QUERIES = 10
 
 
-def fetch_default_v17_vector_memory_search(
+def fetch_default_vector_memory_search(
     uid: str,
     query: str,
     *,
@@ -41,18 +41,18 @@ def fetch_default_v17_vector_memory_search(
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     repair_purge_outbox_writer: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
     telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]] = None,
-    telemetry_config: Optional[V17VectorSearchTelemetryConfig] = None,
-    limit: int = DEFAULT_V17_VECTOR_SEARCH_LIMIT,
-    overfetch_factor: int = DEFAULT_V17_VECTOR_OVERFETCH_FACTOR,
-    max_candidates: int = DEFAULT_V17_VECTOR_MAX_CANDIDATES,
-    max_vector_queries: int = DEFAULT_V17_VECTOR_MAX_QUERIES,
+    telemetry_config: Optional[VectorSearchTelemetryConfig] = None,
+    limit: int = DEFAULT_MEMORY_VECTOR_SEARCH_LIMIT,
+    overfetch_factor: int = DEFAULT_MEMORY_VECTOR_OVERFETCH_FACTOR,
+    max_candidates: int = DEFAULT_MEMORY_VECTOR_MAX_CANDIDATES,
+    max_vector_queries: int = DEFAULT_MEMORY_VECTOR_MAX_QUERIES,
     max_candidate_hydration_reads: Optional[int] = None,
     timeout_seconds: Optional[float] = None,
     clock: Optional[Callable[[], float]] = None,
     required_projection_commit_id: str,
     required_account_generation: int,
 ) -> Dict[str, Any]:
-    """Hydrate V17 vector candidates through authoritative `memory_items` before returning results.
+    """Hydrate memory vector candidates through authoritative `memory_items` before returning results.
 
     Vector DB is only a candidate source. This service asks for a bounded overfetch
     window, hydrates candidates by ID from `users/{uid}/memory_items`, and refills
@@ -74,15 +74,15 @@ def fetch_default_v17_vector_memory_search(
         required_projection_commit_id=required_projection_commit_id,
         required_account_generation=required_account_generation,
     )
-    candidate_query = vector_query or query_v17_memory_vector_candidates
+    candidate_query = vector_query or query_memory_vector_candidates
     if candidate_query is None:
-        raise RuntimeError('query_v17_memory_vector_candidates is unavailable')
+        raise RuntimeError('query_memory_vector_candidates is unavailable')
 
     candidate_request_limit = min(max(bounded_limit * bounded_overfetch_factor, bounded_limit), candidate_budget)
     vector_query_count = 0
     vector_rejected_count = 0
     all_hits: List[SearchVectorHit] = []
-    hydrated_items: Dict[str, V17MemoryItem] = {}
+    hydrated_items: Dict[str, MemoryItem] = {}
     missing_authoritative_memory_ids: Set[str] = set()
     hydration_read_count = 0
     timeout_exhausted = False
@@ -153,9 +153,7 @@ def fetch_default_v17_vector_memory_search(
 
     returned_results = list(gateway_result.results)[:bounded_limit]
     repair_purge_candidates = list(gateway_result.repair_purge_candidates)
-    repair_purge_outbox_records = build_v17_vector_repair_purge_outbox_records(
-        uid=uid, candidates=repair_purge_candidates
-    )
+    repair_purge_outbox_records = build_vector_repair_purge_outbox_records(uid=uid, candidates=repair_purge_candidates)
     if repair_purge_candidates and repair_purge_callback is not None:
         repair_purge_callback(repair_purge_candidates)
     if repair_purge_outbox_records and repair_purge_outbox_writer is not None:
@@ -226,11 +224,11 @@ def _emit_vector_search_telemetry(
     *,
     response: Dict[str, Any],
     telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]],
-    telemetry_config: Optional[V17VectorSearchTelemetryConfig],
+    telemetry_config: Optional[VectorSearchTelemetryConfig],
 ) -> Dict[str, Any]:
     if telemetry_emitter is None or telemetry_config is None:
         return {'enabled': False, 'emitted_count': 0, 'failed_count': 0, 'errors': []}
-    return emit_v17_vector_search_telemetry(
+    return emit_memory_vector_search_telemetry(
         search_summary=response,
         emitter=telemetry_emitter,
         config=telemetry_config,
@@ -238,8 +236,8 @@ def _emit_vector_search_telemetry(
 
 
 def _validate_limit(limit: int) -> int:
-    if limit < 1 or limit > MAX_V17_VECTOR_SEARCH_LIMIT:
-        raise ValueError(f'limit must be between 1 and {MAX_V17_VECTOR_SEARCH_LIMIT}')
+    if limit < 1 or limit > MAX_MEMORY_VECTOR_SEARCH_LIMIT:
+        raise ValueError(f'limit must be between 1 and {MAX_MEMORY_VECTOR_SEARCH_LIMIT}')
     return limit
 
 
@@ -247,9 +245,9 @@ def _validate_overfetch_factor(overfetch_factor: int) -> int:
     if (
         not isinstance(overfetch_factor, int)
         or overfetch_factor < 1
-        or overfetch_factor > MAX_V17_VECTOR_OVERFETCH_FACTOR
+        or overfetch_factor > MAX_MEMORY_VECTOR_OVERFETCH_FACTOR
     ):
-        raise ValueError(f'overfetch_factor must be between 1 and {MAX_V17_VECTOR_OVERFETCH_FACTOR}')
+        raise ValueError(f'overfetch_factor must be between 1 and {MAX_MEMORY_VECTOR_OVERFETCH_FACTOR}')
     return overfetch_factor
 
 
@@ -257,9 +255,9 @@ def _validate_max_candidates(*, max_candidates: int, bounded_limit: int) -> int:
     if (
         not isinstance(max_candidates, int)
         or max_candidates < bounded_limit
-        or max_candidates > MAX_V17_VECTOR_SEARCH_LIMIT
+        or max_candidates > MAX_MEMORY_VECTOR_SEARCH_LIMIT
     ):
-        raise ValueError(f'max_candidates must be between limit and {MAX_V17_VECTOR_SEARCH_LIMIT}')
+        raise ValueError(f'max_candidates must be between limit and {MAX_MEMORY_VECTOR_SEARCH_LIMIT}')
     return max_candidates
 
 
@@ -267,9 +265,9 @@ def _validate_max_vector_queries(max_vector_queries: int) -> int:
     if (
         not isinstance(max_vector_queries, int)
         or max_vector_queries < 1
-        or max_vector_queries > MAX_V17_VECTOR_MAX_QUERIES
+        or max_vector_queries > MAX_MEMORY_VECTOR_MAX_QUERIES
     ):
-        raise ValueError(f'max_vector_queries must be between 1 and {MAX_V17_VECTOR_MAX_QUERIES}')
+        raise ValueError(f'max_vector_queries must be between 1 and {MAX_MEMORY_VECTOR_MAX_QUERIES}')
     return max_vector_queries
 
 
@@ -307,7 +305,7 @@ def _hydrate_vector_candidate_items_by_id(
     uid: str,
     db_client,
     hits: List[SearchVectorHit],
-    hydrated_items: Dict[str, V17MemoryItem],
+    hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
     max_candidate_hydration_reads: int,
     candidate_hydration_read_count: int,
@@ -331,7 +329,7 @@ def _hydrate_vector_candidate_items_by_id(
         if not payload:
             missing_authoritative_memory_ids.add(hit.memory_id)
             continue
-        item = V17MemoryItem.model_validate(payload)
+        item = MemoryItem.model_validate(payload)
         if item.uid != uid:
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
         hydrated_items[item.memory_id] = item
@@ -345,7 +343,7 @@ def _hydrate_vector_candidate_items_by_id(
 def _filter_read_candidate_hits(
     *,
     hits: List[SearchVectorHit],
-    hydrated_items: Dict[str, V17MemoryItem],
+    hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
 ) -> List[SearchVectorHit]:
     read_memory_ids = set(hydrated_items) | set(missing_authoritative_memory_ids)
@@ -378,7 +376,7 @@ def _count_decisions(decisions: Dict[str, SearchDecision], decision: SearchDecis
     return sum(1 for observed in decisions.values() if observed == decision)
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-DEFAULT_VECTOR_SEARCH_LIMIT = DEFAULT_V17_VECTOR_SEARCH_LIMIT
-MAX_VECTOR_SEARCH_LIMIT = MAX_V17_VECTOR_SEARCH_LIMIT
-fetch_default_vector_memory_search = fetch_default_v17_vector_memory_search
+# Neutral symbol aliases (memory names remain valid via shim)
+DEFAULT_VECTOR_SEARCH_LIMIT = DEFAULT_MEMORY_VECTOR_SEARCH_LIMIT
+MAX_VECTOR_SEARCH_LIMIT = MAX_MEMORY_VECTOR_SEARCH_LIMIT
+fetch_default_vector_memory_search = fetch_default_vector_memory_search

@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_canary_approval`` (WS-G8b).
 
-Neutral ``v3_canary_approval`` is the source of truth. Legacy ``v17_v3_canary_approval`` remains an importable alias.
+Neutral ``v3_canary_approval`` is the source of truth. Legacy ``v3_canary_approval`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ _APPROVAL_OWNERS = {'product_privacy_ops'}
 _ROLLBACK_OWNERS = {'memory_platform_oncall', 'product_privacy_ops'}
 _MONITORING_GATE_IDS = {'fail_closed_rate', 'p95_latency_ms', 'error_rate', 'projection_freshness_seconds'}
 _MONITORING_METRICS = {
-    'v17_v3_fail_closed_rate',
-    'v17_v3_get_p95_latency_ms',
-    'v17_v3_error_rate',
-    'v17_v3_projection_freshness_seconds',
+    'v3_fail_closed_rate',
+    'v3_get_p95_latency_ms',
+    'v3_error_rate',
+    'v3_projection_freshness_seconds',
 }
 _SENSITIVE_OR_HIGH_CARDINALITY_KEYS = {
     'uid',
@@ -59,7 +59,7 @@ _SENSITIVE_OR_HIGH_CARDINALITY_VALUE_MARKERS = (
 
 
 @dataclass(frozen=True)
-class V17V3CanaryApprovalArtifact:
+class V3CanaryApprovalArtifact:
     schema_version: int
     artifact_id: str
     route_scope: str
@@ -77,7 +77,7 @@ class V17V3CanaryApprovalArtifact:
     monitoring_gate_ids: tuple[str, ...]
 
     @classmethod
-    def from_dict(cls, artifact: dict[str, Any]) -> 'V17V3CanaryApprovalArtifact':
+    def from_dict(cls, artifact: dict[str, Any]) -> 'V3CanaryApprovalArtifact':
         if not isinstance(artifact, dict):
             raise ValueError('artifact_malformed')
         required_top_level = {
@@ -127,7 +127,7 @@ class V17V3CanaryApprovalArtifact:
 
 
 @dataclass(frozen=True)
-class V17V3CanaryApprovalDecision:
+class V3CanaryApprovalDecision:
     approved: bool
     fail_closed: bool
     reason: str
@@ -142,7 +142,7 @@ class V17V3CanaryApprovalDecision:
     approval_claimed: bool = False
 
 
-class V17V3CanaryApprovalArtifactReader(Protocol):
+class V3CanaryApprovalArtifactReader(Protocol):
     """Fake-injectable future server-owned artifact reader shape."""
 
     production_reader_call: bool
@@ -153,13 +153,13 @@ class V17V3CanaryApprovalArtifactReader(Protocol):
         ...
 
 
-def read_v17_v3_canary_approval_artifact_decision(
+def read_memory_v3_canary_approval_artifact_decision(
     *,
-    reader: V17V3CanaryApprovalArtifactReader | None,
+    reader: V3CanaryApprovalArtifactReader | None,
     requested_route_scope: str,
     requested_cohort: str,
     now: datetime,
-) -> V17V3CanaryApprovalDecision:
+) -> V3CanaryApprovalDecision:
     """Read an injected canary/approval artifact and validate it fail-closed.
 
     This is a readiness seam only. The reader is supplied by tests or future
@@ -181,7 +181,7 @@ def read_v17_v3_canary_approval_artifact_decision(
         )
     except Exception:
         return _blocked('artifact_reader_failed', requested_cohort=requested_cohort)
-    return validate_v17_v3_canary_approval_artifact(
+    return validate_memory_v3_canary_approval_artifact(
         artifact,
         requested_route_scope=requested_route_scope,
         requested_cohort=requested_cohort,
@@ -189,13 +189,13 @@ def read_v17_v3_canary_approval_artifact_decision(
     )
 
 
-def validate_v17_v3_canary_approval_artifact(
+def validate_memory_v3_canary_approval_artifact(
     artifact: dict[str, Any] | None,
     *,
     requested_route_scope: str,
     requested_cohort: str,
     now: datetime,
-) -> V17V3CanaryApprovalDecision:
+) -> V3CanaryApprovalDecision:
     """Validate a future server-owned canary approval artifact, failing closed.
 
     Approval timestamps/ids are validated only as metadata. This local seam never
@@ -207,7 +207,7 @@ def validate_v17_v3_canary_approval_artifact(
     if artifact is None:
         return _blocked('artifact_missing', requested_cohort=requested_cohort)
     try:
-        parsed = V17V3CanaryApprovalArtifact.from_dict(artifact)
+        parsed = V3CanaryApprovalArtifact.from_dict(artifact)
     except ValueError as exc:
         return _blocked(str(exc), requested_cohort=requested_cohort)
 
@@ -254,7 +254,7 @@ def validate_v17_v3_canary_approval_artifact(
         now
     ):
         return _blocked('artifact_malformed', parsed)
-    return V17V3CanaryApprovalDecision(
+    return V3CanaryApprovalDecision(
         approved=True,
         fail_closed=False,
         reason='approved',
@@ -267,7 +267,7 @@ def validate_v17_v3_canary_approval_artifact(
     )
 
 
-def build_v17_v3_canary_approval_telemetry_labels(decision: V17V3CanaryApprovalDecision) -> dict[str, str]:
+def build_v3_canary_approval_telemetry_labels(decision: V3CanaryApprovalDecision) -> dict[str, str]:
     """Return only bounded labels suitable for future local telemetry builders."""
 
     labels = {
@@ -285,11 +285,11 @@ def build_v17_v3_canary_approval_telemetry_labels(decision: V17V3CanaryApprovalD
 
 def _blocked(
     reason: str,
-    parsed: V17V3CanaryApprovalArtifact | None = None,
+    parsed: V3CanaryApprovalArtifact | None = None,
     *,
     requested_cohort: str | None = None,
-) -> V17V3CanaryApprovalDecision:
-    return V17V3CanaryApprovalDecision(
+) -> V3CanaryApprovalDecision:
+    return V3CanaryApprovalDecision(
         approved=False,
         fail_closed=True,
         reason=reason,
@@ -354,7 +354,7 @@ def _find_high_cardinality_or_sensitive_misuse(value: Any) -> str | None:
     return None
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3CanaryApprovalArtifact = V17V3CanaryApprovalArtifact
-V3CanaryApprovalDecision = V17V3CanaryApprovalDecision
-V3CanaryApprovalArtifactReader = V17V3CanaryApprovalArtifactReader
+# Neutral symbol aliases (memory names remain valid via shim)
+V3CanaryApprovalArtifact = V3CanaryApprovalArtifact
+V3CanaryApprovalDecision = V3CanaryApprovalDecision
+V3CanaryApprovalArtifactReader = V3CanaryApprovalArtifactReader

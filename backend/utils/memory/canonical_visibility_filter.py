@@ -15,7 +15,7 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    V17MemoryItem,
+    MemoryItem,
     is_default_access_eligible,
 )
 
@@ -23,11 +23,11 @@ _L2_PROCESSED_REQUIRES_DISPOSITION = "short_term_l2_processed_requires_explicit_
 
 
 def filter_canonical_default_visible_items(
-    items: List[V17MemoryItem],
+    items: List[MemoryItem],
     *,
     policy: MemoryAccessPolicy,
     now: datetime,
-) -> List[V17MemoryItem]:
+) -> List[MemoryItem]:
     """Return default-visible canonical items, including §1.3 processed short_term."""
     report = filter_default_product_memory_items(items, policy=policy, now=now)
     visible_by_id = {item.memory_id: item for item in report.visible_items}

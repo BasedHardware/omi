@@ -1,4 +1,4 @@
-"""Identity/IAM contracts for V17-V3-F6 read-only evidence."""
+"""Identity/IAM contracts for memory-V3-F6 read-only evidence."""
 
 from __future__ import annotations
 

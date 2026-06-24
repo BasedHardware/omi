@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_request_adapter`` (WS-G8b).
 
-Neutral ``v3_request_adapter`` is the source of truth. Legacy ``v17_v3_request_adapter`` remains an importable alias.
+Neutral ``v3_request_adapter`` is the source of truth. Legacy ``v3_request_adapter`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -10,14 +10,14 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
-from utils.memory.v3_cursor import validate_v17_v3_cursor_request
-from utils.memory.v3_memory_read_service import V17_V3_READ_MODE, V17_V3_READ_SOURCE
+from utils.memory.v3_cursor import validate_v3_cursor_request
+from utils.memory.v3_memory_read_service import V3_READ_MODE, V3_READ_SOURCE
 
 LEGACY_V3_READ_SOURCE = 'legacy_users_uid_memories'
 LEGACY_V3_READ_MODE = 'legacy_primary'
 LEGACY_FIRST_PAGE_LIMIT_OVERRIDE = 5000
-V17_V3_DEFAULT_LIMIT = 100
-V17_V3_MAX_LIMIT = 500
+V3_DEFAULT_LIMIT = 100
+V3_MAX_LIMIT = 500
 LEGACY_V3_MAX_LIMIT = 5000
 _SUPPORTED_FILTER_KEYS = {'category', 'visibility', 'reviewed'}
 _SUPPORTED_QUERY_KEYS = {'limit', 'offset', 'cursor', 'include_archive'} | _SUPPORTED_FILTER_KEYS
@@ -26,14 +26,14 @@ _TRUE_VALUES = {'true', '1', 'yes'}
 _FALSE_VALUES = {'false', '0', 'no'}
 
 
-class V17V3RequestAdapterError(ValueError):
+class V3RequestAdapterError(ValueError):
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
 
 
 @dataclass(frozen=True)
-class V17V3AdaptedRequest:
+class V3AdaptedRequest:
     valid: bool
     limit: int
     offset: int | None
@@ -41,7 +41,7 @@ class V17V3AdaptedRequest:
     read_mode: str
     source: str
     legacy_primary: bool
-    v17_cursor_mode: bool
+    v3_cursor_mode: bool
     filter_hash: str
     filters: dict[str, Any] = field(default_factory=dict)
     cursor_binding: dict[str, str] = field(default_factory=dict)
@@ -52,14 +52,14 @@ class V17V3AdaptedRequest:
     applies_first_page_5000_override: bool = False
     fail_closed_reason: str | None = None
     should_fetch_legacy: bool = False
-    should_fetch_v17_projection: bool = False
+    should_fetch_memory_projection: bool = False
     stale_short_term_default_visible: bool = False
 
 
 @dataclass(frozen=True)
 class _Invalid:
     reason: str
-    limit: int = V17_V3_DEFAULT_LIMIT
+    limit: int = V3_DEFAULT_LIMIT
     offset: int | None = None
     cursor: str | None = None
     include_archive: bool = False
@@ -76,11 +76,11 @@ def _parse_int(value: Any, *, default: int, reason: str) -> int:
     if value is None or value == '':
         return default
     if isinstance(value, bool):
-        raise V17V3RequestAdapterError(reason)
+        raise V3RequestAdapterError(reason)
     try:
         return int(value)
     except (TypeError, ValueError):
-        raise V17V3RequestAdapterError(reason)
+        raise V3RequestAdapterError(reason)
 
 
 def _parse_bool(value: Any, *, default: bool, reason: str) -> bool:
@@ -92,7 +92,7 @@ def _parse_bool(value: Any, *, default: bool, reason: str) -> bool:
         return True
     if normalized in _FALSE_VALUES:
         return False
-    raise V17V3RequestAdapterError(reason)
+    raise V3RequestAdapterError(reason)
 
 
 def _normalize_cursor(value: Any) -> str | None:
@@ -101,14 +101,14 @@ def _normalize_cursor(value: Any) -> str | None:
         return None
     cursor = str(value).strip()
     if not cursor:
-        raise V17V3RequestAdapterError('malformed_cursor_parameter')
+        raise V3RequestAdapterError('malformed_cursor_parameter')
     return cursor
 
 
 def _normalize_filters(query_params: Mapping[str, Any]) -> tuple[dict[str, Any], str | None]:
     unsupported = sorted(set(query_params) - _SUPPORTED_QUERY_KEYS)
     if unsupported:
-        raise V17V3RequestAdapterError('unsupported_filter')
+        raise V3RequestAdapterError('unsupported_filter')
 
     filters: dict[str, Any] = {}
     category = _first_value(query_params.get('category'))
@@ -119,7 +119,7 @@ def _normalize_filters(query_params: Mapping[str, Any]) -> tuple[dict[str, Any],
     if visibility is not None and str(visibility).strip():
         normalized_visibility = str(visibility).strip().lower()
         if normalized_visibility not in _ALLOWED_VISIBILITY_FILTERS:
-            raise V17V3RequestAdapterError('unsupported_filter_value')
+            raise V3RequestAdapterError('unsupported_filter_value')
         filters['visibility'] = normalized_visibility
 
     reviewed = _first_value(query_params.get('reviewed'))
@@ -131,15 +131,15 @@ def _normalize_filters(query_params: Mapping[str, Any]) -> tuple[dict[str, Any],
 
 def _filter_hash(filters: Mapping[str, Any]) -> str:
     payload = json.dumps(dict(sorted(filters.items())), sort_keys=True, separators=(',', ':'))
-    return 'v17v3fh_' + hashlib.sha256(payload.encode('utf-8')).hexdigest()[:32]
+    return 'v3fh_' + hashlib.sha256(payload.encode('utf-8')).hexdigest()[:32]
 
 
-def _invalid_result(invalid: _Invalid, *, enrolled: bool, raise_on_invalid: bool) -> V17V3AdaptedRequest:
+def _invalid_result(invalid: _Invalid, *, enrolled: bool, raise_on_invalid: bool) -> V3AdaptedRequest:
     if raise_on_invalid:
-        raise V17V3RequestAdapterError(invalid.reason)
-    source = V17_V3_READ_SOURCE if enrolled else LEGACY_V3_READ_SOURCE
-    read_mode = V17_V3_READ_MODE if enrolled else LEGACY_V3_READ_MODE
-    return V17V3AdaptedRequest(
+        raise V3RequestAdapterError(invalid.reason)
+    source = V3_READ_SOURCE if enrolled else LEGACY_V3_READ_SOURCE
+    read_mode = V3_READ_MODE if enrolled else LEGACY_V3_READ_MODE
+    return V3AdaptedRequest(
         valid=False,
         limit=invalid.limit,
         offset=invalid.offset,
@@ -147,30 +147,30 @@ def _invalid_result(invalid: _Invalid, *, enrolled: bool, raise_on_invalid: bool
         read_mode=read_mode,
         source=source,
         legacy_primary=False,
-        v17_cursor_mode=enrolled,
+        v3_cursor_mode=enrolled,
         filter_hash=_filter_hash({}),
         fail_closed_reason=invalid.reason,
         include_archive=invalid.include_archive,
     )
 
 
-def adapt_v17_v3_request_parameters(
+def adapt_v3_request_parameters(
     query_params: Mapping[str, Any] | None,
     *,
     enrolled: bool,
     raise_on_invalid: bool = False,
-) -> V17V3AdaptedRequest:
+) -> V3AdaptedRequest:
     """Normalize `/v3` query parameters into a pure read-service request contract.
 
     Non-enrolled callers retain legacy-primary limit/offset semantics, including
-    the historical first-page `limit=5000` override marker. Enrolled V17 callers
+    the historical first-page `limit=5000` override marker. Enrolled memory callers
     use the bounded cursor-mode contract and fail closed for offsets, unsupported
     filters, explicit Archive requests, and invalid bounds.
     """
 
     params = dict(query_params or {})
     try:
-        limit = _parse_int(params.get('limit'), default=V17_V3_DEFAULT_LIMIT, reason='invalid_limit')
+        limit = _parse_int(params.get('limit'), default=V3_DEFAULT_LIMIT, reason='invalid_limit')
         offset_present = 'offset' in params
         offset = _parse_int(params.get('offset'), default=0, reason='invalid_offset') if offset_present else None
         cursor = _normalize_cursor(params.get('cursor'))
@@ -178,21 +178,21 @@ def adapt_v17_v3_request_parameters(
         filters, category = _normalize_filters(params)
 
         if offset is not None and offset < 0:
-            raise V17V3RequestAdapterError('invalid_offset')
+            raise V3RequestAdapterError('invalid_offset')
 
         if include_archive:
-            raise V17V3RequestAdapterError('archive_not_launched_on_v3_default')
+            raise V3RequestAdapterError('archive_not_launched_on_v3_default')
 
         if not enrolled:
             if limit < 1 or limit > LEGACY_V3_MAX_LIMIT:
-                raise V17V3RequestAdapterError('limit_out_of_range')
+                raise V3RequestAdapterError('limit_out_of_range')
             legacy_offset = 0 if offset is None else offset
             if legacy_offset < 0:
-                raise V17V3RequestAdapterError('invalid_offset')
+                raise V3RequestAdapterError('invalid_offset')
             applies_override = legacy_offset == 0 and cursor is None
             effective_limit = LEGACY_FIRST_PAGE_LIMIT_OVERRIDE if applies_override else limit
             filters_hash = _filter_hash(filters)
-            return V17V3AdaptedRequest(
+            return V3AdaptedRequest(
                 valid=True,
                 limit=effective_limit,
                 offset=legacy_offset,
@@ -200,7 +200,7 @@ def adapt_v17_v3_request_parameters(
                 read_mode=LEGACY_V3_READ_MODE,
                 source=LEGACY_V3_READ_SOURCE,
                 legacy_primary=True,
-                v17_cursor_mode=False,
+                v3_cursor_mode=False,
                 filter_hash=filters_hash,
                 filters=filters,
                 cursor_binding={
@@ -213,32 +213,32 @@ def adapt_v17_v3_request_parameters(
                 should_fetch_legacy=True,
             )
 
-        validate_v17_v3_cursor_request(limit=limit, cursor=cursor, offset=offset)
+        validate_v3_cursor_request(limit=limit, cursor=cursor, offset=offset)
         filters_hash = _filter_hash(filters)
-        return V17V3AdaptedRequest(
+        return V3AdaptedRequest(
             valid=True,
             limit=limit,
             offset=None,
             cursor=cursor,
-            read_mode=V17_V3_READ_MODE,
-            source=V17_V3_READ_SOURCE,
+            read_mode=V3_READ_MODE,
+            source=V3_READ_SOURCE,
             legacy_primary=False,
-            v17_cursor_mode=True,
+            v3_cursor_mode=True,
             filter_hash=filters_hash,
             filters=filters,
             cursor_binding={
                 'filter_hash': filters_hash,
-                'source': V17_V3_READ_SOURCE,
-                'read_mode': V17_V3_READ_MODE,
+                'source': V3_READ_SOURCE,
+                'read_mode': V3_READ_MODE,
             },
             category=category,
-            should_fetch_v17_projection=True,
+            should_fetch_memory_projection=True,
         )
-    except V17V3RequestAdapterError as exc:
+    except V3RequestAdapterError as exc:
         return _invalid_result(
             _Invalid(
                 reason=exc.reason,
-                limit=locals().get('limit', V17_V3_DEFAULT_LIMIT),
+                limit=locals().get('limit', V3_DEFAULT_LIMIT),
                 offset=locals().get('offset'),
                 cursor=locals().get('cursor'),
                 include_archive=locals().get('include_archive', False),
@@ -251,7 +251,7 @@ def adapt_v17_v3_request_parameters(
         return _invalid_result(
             _Invalid(
                 reason=reason,
-                limit=locals().get('limit', V17_V3_DEFAULT_LIMIT),
+                limit=locals().get('limit', V3_DEFAULT_LIMIT),
                 offset=locals().get('offset'),
                 cursor=locals().get('cursor'),
                 include_archive=locals().get('include_archive', False),
@@ -261,8 +261,8 @@ def adapt_v17_v3_request_parameters(
         )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3_DEFAULT_LIMIT = V17_V3_DEFAULT_LIMIT
-V3_MAX_LIMIT = V17_V3_MAX_LIMIT
-V3RequestAdapterError = V17V3RequestAdapterError
-V3AdaptedRequest = V17V3AdaptedRequest
+# Neutral symbol aliases (memory names remain valid via shim)
+V3_DEFAULT_LIMIT = V3_DEFAULT_LIMIT
+V3_MAX_LIMIT = V3_MAX_LIMIT
+V3RequestAdapterError = V3RequestAdapterError
+V3AdaptedRequest = V3AdaptedRequest

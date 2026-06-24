@@ -1,4 +1,4 @@
-"""Canonical local-only V17-V3-F6 GCP evidence target registry/schema.
+"""Canonical local-only memory-V3-F6 GCP evidence target registry/schema.
 
 No cloud SDKs, clients, credentials, or network calls are imported or constructed
 here. This module owns the schema and validation logic; local placeholder

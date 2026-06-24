@@ -24,4 +24,4 @@ __all__ = [
     "validate_run_record",
 ]
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

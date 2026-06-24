@@ -2,15 +2,15 @@ from __future__ import annotations
 
 """Canonical product memory read service module (WS-G8a).
 
-Neutral ``product_memory_read_service`` is the source of truth. Legacy ``v17_product_memory_read_service`` remains an importable alias.
+Neutral ``product_memory_read_service`` is the source of truth. Legacy ``product_memory_read_service`` remains an importable alias.
 """
 
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from database.memory_collections import V17Collections
-from models.product_memory import MemoryAccessPolicy, V17MemoryItem
+from database.memory_collections import MemoryCollections
+from models.product_memory import MemoryAccessPolicy, MemoryItem
 from utils.memory.memory_read_api import query_archive_product_memory_items, query_default_product_memory_items
 
 DEFAULT_PRODUCT_MEMORY_READ_LIMIT = 100
@@ -27,10 +27,10 @@ def fetch_default_product_memory_search(
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
     offset: int = 0,
 ) -> Dict[str, Any]:
-    """Fetch authoritative V17 `memory_items` and return default-visible product search results.
+    """Fetch authoritative memory `memory_items` and return default-visible product search results.
 
     This is the concrete T19/T21 read-service seam for product callers: it reads
-    `users/{uid}/memory_items`, coerces documents to `V17MemoryItem`, delegates
+    `users/{uid}/memory_items`, coerces documents to `MemoryItem`, delegates
     default visibility to `query_default_product_memory_items(...)`, then paginates
     the filtered/matched results. Archive remains unavailable here by design; use
     the explicit archive query seam for archive-capable product surfaces.
@@ -64,7 +64,7 @@ def fetch_archive_product_memory_search(
     limit: int = DEFAULT_PRODUCT_MEMORY_READ_LIMIT,
     offset: int = 0,
 ) -> Dict[str, Any]:
-    """Fetch authoritative V17 `memory_items` and return explicit archive search results.
+    """Fetch authoritative memory `memory_items` and return explicit archive search results.
 
     Archive search is intentionally separate from default product reads. Callers
     must pass a policy with `archive_capability=True`; without it, the underlying
@@ -91,21 +91,21 @@ def fetch_archive_product_memory_search(
     }
 
 
-def fetch_authoritative_product_memory_items(uid: str, *, db_client) -> List[V17MemoryItem]:
-    """Load and coerce all authoritative V17 product memory item docs for one user."""
+def fetch_authoritative_product_memory_items(uid: str, *, db_client) -> List[MemoryItem]:
+    """Load and coerce all authoritative memory product memory item docs for one user."""
 
-    collection_path = V17Collections(uid=uid).memory_items
+    collection_path = MemoryCollections(uid=uid).memory_items
     items = []
     for snapshot in db_client.collection(collection_path).stream():
         payload = snapshot.to_dict() or {}
-        item = V17MemoryItem.model_validate(payload)
+        item = MemoryItem.model_validate(payload)
         if item.uid != uid:
             raise ValueError(f'memory item uid mismatch: expected {uid}, got {item.uid}')
         items.append(item)
     return sorted(items, key=_memory_item_sort_key)
 
 
-def _memory_item_sort_key(item: V17MemoryItem):
+def _memory_item_sort_key(item: MemoryItem):
     return (-item.updated_at.timestamp(), item.memory_id)
 
 

@@ -1,4 +1,4 @@
-"""Audit correlation contracts for V17-V3-F6 read-only evidence."""
+"""Audit correlation contracts for memory-V3-F6 read-only evidence."""
 
 from __future__ import annotations
 

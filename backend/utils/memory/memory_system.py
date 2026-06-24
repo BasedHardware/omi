@@ -1,6 +1,6 @@
 """Per-user MemorySystem cohort selector (WS-E).
 
-Replaces fragmented V17 rollout flags with one explicit server-owned selector.
+Replaces fragmented memory rollout flags with one explicit server-owned selector.
 ``MemorySystem.LEGACY`` is the documented default — not an implicit None fallback.
 """
 
@@ -32,8 +32,8 @@ def resolve_memory_system(uid: str, *, db_client=None) -> MemorySystem:
     A stale persisted ``memory_control/state.memory_system=canonical`` does **not** override
     whitelist removal — emptying the whitelist is the global kill-switch (everyone legacy).
 
-    Transitional V17 rollout controls (``V17_MODE``, ``V17_MEMORY_ENABLED_USERS``, stage gates,
-    global read gates) select V17 read/write adapters — they do **not** imply ``MemorySystem.CANONICAL``.
+    Transitional memory rollout controls (``MEMORY_MODE``, ``MEMORY_ENABLED_USERS``, stage gates,
+    global read gates) select memory read/write adapters — they do **not** imply ``MemorySystem.CANONICAL``.
     """
     del db_client  # reserved for callers/tests; cohort is env-only today
 

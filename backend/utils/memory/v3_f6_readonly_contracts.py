@@ -66,4 +66,4 @@ __all__ = [
     "verify_identity_iam",
 ]
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_f5_evidence`` (WS-G8b).
 
-Neutral ``v3_f5_evidence`` is the source of truth. Legacy ``v17_v3_f5_evidence`` remains an importable alias.
+Neutral ``v3_f5_evidence`` is the source of truth. Legacy ``v3_f5_evidence`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 EXPECTED_ENVIRONMENT = "shared-nonprod"
-EXPECTED_PROJECT_ID = "omi-v17-evidence-nonprod"
+EXPECTED_PROJECT_ID = "omi-memory-evidence-nonprod"
 EXPECTED_PROJECT_NUMBER = "123456789012"
-EXPECTED_PRINCIPAL = "serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com"
-EXPECTED_APPROVAL_SUBJECT = "V17-V3-F5 real-service read-only evidence shared-nonprod 2026-06-20"
-EXPECTED_APPROVAL_ARTIFACT_PATH = "docs/approvals/v17-v3-f5-shared-nonprod-oracle-review.md"
-EXPECTED_ORACLE_REVIEW_ARTIFACT = "docs/epics/v17_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20"
+EXPECTED_PRINCIPAL = "serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com"
+EXPECTED_APPROVAL_SUBJECT = "memory-V3-F5 real-service read-only evidence shared-nonprod 2026-06-20"
+EXPECTED_APPROVAL_ARTIFACT_PATH = "docs/approvals/memory-v3-f5-shared-nonprod-oracle-review.md"
+EXPECTED_ORACLE_REVIEW_ARTIFACT = "docs/epics/memory_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20"
 APPROVED_PATHS = (
     "control/config metadata",
     "cursor secret metadata",
@@ -109,7 +109,7 @@ TOP_LEVEL_ALLOWLIST = frozenset(
     }
 )
 SENSITIVE_KEYS = ("token", "secret", "authorization", "header", "url", "exception", "content", "cursor")
-HMAC_KEY = b"v17-v3-f5-preparation-redaction-only"
+HMAC_KEY = b"memory-v3-f5-preparation-redaction-only"
 
 
 @dataclass(frozen=True)
@@ -133,7 +133,7 @@ class EvidenceRunConfig:
 class FakeEvidenceClient:
     principal: str
     permissions: frozenset[str]
-    roles: set[str] = field(default_factory=lambda: {"roles/omi.v17EvidenceReader"})
+    roles: set[str] = field(default_factory=lambda: {"roles/omi.MemoryEvidenceReader"})
     audit_zero_write_methods: list[str] | None = field(default_factory=list)
     indexes: list[dict[str, Any]] = field(
         default_factory=lambda: [
@@ -222,8 +222,8 @@ def fingerprint(value: str | None) -> str | None:
 def _base_report(status: str, mode: str = "preparation/default-NOT_RUN") -> dict[str, Any]:
     blocked = {"status": "BLOCKED", "decision": "NO_GO"}
     return {
-        "artifact": "v17_v3_f5_real_service_evidence_readiness",
-        "version": "V17-V3-F5",
+        "artifact": "v3_f5_real_service_evidence_readiness",
+        "version": "memory-V3-F5",
         "mode": mode,
         "status": status,
         "decision": "NO_GO",
@@ -454,4 +454,4 @@ def render_redacted_json(report: dict[str, Any]) -> str:
     return rendered
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

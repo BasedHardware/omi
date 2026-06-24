@@ -36,4 +36,4 @@ __all__ = [
     "ValidationError",
 ]
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

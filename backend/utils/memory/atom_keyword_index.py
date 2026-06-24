@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
@@ -39,7 +39,7 @@ class AtomKeywordRebuildReport:
     verified: bool = False
 
 
-def is_indexable_long_term_atom(item: V17MemoryItem) -> bool:
+def is_indexable_long_term_atom(item: MemoryItem) -> bool:
     """Return True when the atom belongs in the durable keyword index."""
     return (
         item.tier == MemoryLayer.long_term
@@ -58,14 +58,14 @@ def user_allows_atom_keyword_index(uid: str, *, db_client=None) -> bool:
     return get_data_protection_level(uid) != "e2ee"
 
 
-def _created_at_epoch(item: V17MemoryItem) -> int:
+def _created_at_epoch(item: MemoryItem) -> int:
     captured = item.captured_at
     if captured.tzinfo is None:
         captured = captured.replace(tzinfo=timezone.utc)
     return int(captured.timestamp())
 
 
-def _entity_terms_for_item(item: V17MemoryItem) -> str:
+def _entity_terms_for_item(item: MemoryItem) -> str:
     """Flatten any structured hints on the item into searchable tokens."""
     terms: List[str] = []
     promotion = item.promotion or {}
@@ -79,13 +79,13 @@ def _entity_terms_for_item(item: V17MemoryItem) -> str:
     return " ".join(terms)
 
 
-def _predicate_for_item(item: V17MemoryItem) -> str:
+def _predicate_for_item(item: MemoryItem) -> str:
     promotion = item.promotion or {}
     predicate = promotion.get("predicate")
     return predicate.strip() if isinstance(predicate, str) else ""
 
 
-def build_atom_keyword_document(item: V17MemoryItem) -> Dict[str, Any]:
+def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
     """Build a Typesense document for one indexable long-term atom."""
     return {
         "id": item.memory_id,
@@ -132,7 +132,7 @@ def ensure_memories_collection() -> None:
     _typesense_client().collections.create(schema)
 
 
-def upsert_atom_keyword_doc(item: V17MemoryItem) -> bool:
+def upsert_atom_keyword_doc(item: MemoryItem) -> bool:
     """Upsert one long-term atom when indexable; no-op otherwise."""
     if not user_allows_atom_keyword_index(item.uid):
         return False
@@ -177,7 +177,7 @@ def purge_user_atom_keyword_index(uid: str) -> int:
         return 0
 
 
-def sync_atom_keyword_index_for_item(item: V17MemoryItem, *, db_client=None) -> None:
+def sync_atom_keyword_index_for_item(item: MemoryItem, *, db_client=None) -> None:
     """Index or purge one atom based on its current authoritative state."""
     if not user_allows_atom_keyword_index(item.uid, db_client=db_client):
         return

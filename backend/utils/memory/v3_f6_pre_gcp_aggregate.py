@@ -28,4 +28,4 @@ __all__ = [
     "_smoke_current_local_contracts",
 ]
 
-# Neutral symbol aliases (V17 names remain valid via shim)
+# Neutral symbol aliases (memory names remain valid via shim)

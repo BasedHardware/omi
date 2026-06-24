@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_memory_read_service`` (WS-G8b).
 
-Neutral ``v3_memory_read_service`` is the source of truth. Legacy ``v17_v3_memory_read_service`` remains an importable alias.
+Neutral ``v3_memory_read_service`` is the source of truth. Legacy ``v3_memory_read_service`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -9,87 +9,87 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from utils.memory.v3_compatibility import (
-    V17V3CompatibilityContext,
-    V17V3CompatibilityReadPath,
-    decide_v17_v3_compatibility,
+    V3CompatibilityContext,
+    V3CompatibilityReadPath,
+    decide_v3_compatibility,
 )
 from utils.memory.v3_cursor import (
-    V17V3CursorContext,
-    V17V3CursorError,
-    V17V3Keyset,
-    create_v17_v3_cursor,
-    parse_v17_v3_cursor,
-    validate_v17_v3_cursor_request,
+    V3CursorContext,
+    V3CursorError,
+    V3Keyset,
+    create_v3_cursor,
+    parse_v3_cursor,
+    validate_v3_cursor_request,
 )
 from utils.memory.v3_projection_readiness import (
-    V17V3ProjectionReadinessContext,
-    V17V3ProjectionReadinessState,
-    decide_v17_v3_projection_readiness,
+    V3ProjectionReadinessContext,
+    V3ProjectionReadinessState,
+    decide_v3_projection_readiness,
 )
 
-V17_V3_READ_SOURCE = 'v17_compatibility_projection'
-V17_V3_READ_MODE = 'default_memory'
+V3_READ_SOURCE = 'memory_compatibility_projection'
+V3_READ_MODE = 'default_memory'
 _DEFAULT_CURSOR_TTL_SECONDS = 300
 
 
 @dataclass(frozen=True)
-class V17V3MemoryReadRequest:
+class V3MemoryReadRequest:
     limit: int
     offset: int | None = None
     cursor: str | None = None
-    v17_cursor_mode: bool = True
+    v3_cursor_mode: bool = True
 
 
 @dataclass(frozen=True)
-class V17V3MemoryReadServiceInput:
+class V3MemoryReadServiceInput:
     uid: str
     enrolled: bool
     control_state: str
     default_memory_grant: bool | None
-    request: V17V3MemoryReadRequest
-    projection_readiness_context: V17V3ProjectionReadinessContext | dict[str, Any] | None = None
+    request: V3MemoryReadRequest
+    projection_readiness_context: V3ProjectionReadinessContext | dict[str, Any] | None = None
     page_body: list[Any] = field(default_factory=list)
-    cursor_context: V17V3CursorContext | None = None
+    cursor_context: V3CursorContext | None = None
     cursor_secret: bytes | None = None
-    next_keyset: V17V3Keyset | None = None
+    next_keyset: V3Keyset | None = None
     requested_archive: bool = False
     cursor_ttl_seconds: int = _DEFAULT_CURSOR_TTL_SECONDS
 
 
 @dataclass(frozen=True)
-class V17V3MemoryReadServiceResult:
+class V3MemoryReadServiceResult:
     http_status: int
     read_plan: str
-    read_path: V17V3CompatibilityReadPath
+    read_path: V3CompatibilityReadPath
     read_decision: str
     headers: dict[str, str]
     body: list[Any] | None = None
     should_fetch_legacy: bool = False
-    should_fetch_v17_projection: bool = False
+    should_fetch_memory_projection: bool = False
     legacy_fallback_allowed: bool = False
     archive_default_available: bool = False
     stale_short_term_default_visible: bool = False
 
 
 def _projection_context(
-    value: V17V3ProjectionReadinessContext | dict[str, Any] | None,
-) -> V17V3ProjectionReadinessContext | None:
+    value: V3ProjectionReadinessContext | dict[str, Any] | None,
+) -> V3ProjectionReadinessContext | None:
     if value is None:
         return None
-    if isinstance(value, V17V3ProjectionReadinessContext):
+    if isinstance(value, V3ProjectionReadinessContext):
         return value
-    return V17V3ProjectionReadinessContext(**value)
+    return V3ProjectionReadinessContext(**value)
 
 
 def _headers(*, source: str, decision: str) -> dict[str, str]:
     return {'X-Omi-Memory-Read-Source': source, 'X-Omi-Memory-Read-Decision': decision}
 
 
-def _fail_closed_cursor(reason: str) -> V17V3MemoryReadServiceResult:
-    return V17V3MemoryReadServiceResult(
+def _fail_closed_cursor(reason: str) -> V3MemoryReadServiceResult:
+    return V3MemoryReadServiceResult(
         http_status=400,
         read_plan='fail_closed',
-        read_path=V17V3CompatibilityReadPath.FAIL_CLOSED,
+        read_path=V3CompatibilityReadPath.FAIL_CLOSED,
         read_decision=reason,
         headers=_headers(source='none', decision=reason),
     )
@@ -103,31 +103,31 @@ def _classify_write_convergence_ready(reason: str) -> bool:
     }
 
 
-def _validate_v17_cursor_request(service_input: V17V3MemoryReadServiceInput) -> V17V3MemoryReadServiceResult | None:
+def _validate_memory_cursor_request(service_input: V3MemoryReadServiceInput) -> V3MemoryReadServiceResult | None:
     request = service_input.request
-    if not request.v17_cursor_mode:
+    if not request.v3_cursor_mode:
         return None
 
     try:
-        validate_v17_v3_cursor_request(limit=request.limit, cursor=request.cursor, offset=request.offset)
+        validate_v3_cursor_request(limit=request.limit, cursor=request.cursor, offset=request.offset)
         if request.cursor is not None:
             if service_input.cursor_context is None or service_input.cursor_secret is None:
-                raise V17V3CursorError('cursor_validation_context_missing')
-            parse_v17_v3_cursor(request.cursor, service_input.cursor_context, service_input.cursor_secret)
-    except V17V3CursorError as exc:
+                raise V3CursorError('cursor_validation_context_missing')
+            parse_v3_cursor(request.cursor, service_input.cursor_context, service_input.cursor_secret)
+    except V3CursorError as exc:
         return _fail_closed_cursor(exc.reason)
     return None
 
 
 def _add_next_cursor_headers(
-    headers: dict[str, str], service_input: V17V3MemoryReadServiceInput
-) -> dict[str, str] | V17V3MemoryReadServiceResult:
+    headers: dict[str, str], service_input: V3MemoryReadServiceInput
+) -> dict[str, str] | V3MemoryReadServiceResult:
     if service_input.next_keyset is None:
         return headers
     if service_input.cursor_context is None or service_input.cursor_secret is None:
         return _fail_closed_cursor('next_cursor_context_missing')
 
-    cursor = create_v17_v3_cursor(
+    cursor = create_v3_cursor(
         service_input.next_keyset,
         service_input.cursor_context,
         service_input.cursor_secret,
@@ -139,23 +139,23 @@ def _add_next_cursor_headers(
     return result
 
 
-def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3MemoryReadServiceResult:
+def plan_v3_memory_read(service_input: V3MemoryReadServiceInput) -> V3MemoryReadServiceResult:
     """Return a local `/v3` compatibility read envelope/plan.
 
     Non-enrolled callers receive only a legacy-primary marker; this function never
-    fetches legacy rows itself. Enrolled V17 cursor-mode callers fail closed on
+    fetches legacy rows itself. Enrolled memory cursor-mode callers fail closed on
     invalid cursor/offset semantics and never downgrade to offset or legacy.
     """
 
     if not service_input.enrolled:
-        decision = decide_v17_v3_compatibility(
-            V17V3CompatibilityContext(
+        decision = decide_v3_compatibility(
+            V3CompatibilityContext(
                 uid=service_input.uid,
                 enrolled=False,
                 control_state=service_input.control_state,
             )
         )
-        return V17V3MemoryReadServiceResult(
+        return V3MemoryReadServiceResult(
             http_status=decision.http_status,
             read_plan='legacy_primary_plan_only',
             read_path=decision.read_path,
@@ -164,7 +164,7 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
             legacy_fallback_allowed=decision.legacy_fallback_allowed,
         )
 
-    cursor_failure = _validate_v17_cursor_request(service_input)
+    cursor_failure = _validate_memory_cursor_request(service_input)
     if cursor_failure is not None:
         return cursor_failure
 
@@ -173,13 +173,13 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
     projection_empty = False
     write_convergence_ready = False
     if projection_context is not None:
-        projection_decision = decide_v17_v3_projection_readiness(projection_context)
+        projection_decision = decide_v3_projection_readiness(projection_context)
         projection_ready = projection_decision.read_cutover_allowed
-        projection_empty = projection_decision.state == V17V3ProjectionReadinessState.READY_EMPTY
+        projection_empty = projection_decision.state == V3ProjectionReadinessState.READY_EMPTY
         write_convergence_ready = projection_ready or _classify_write_convergence_ready(projection_decision.reason)
 
-    decision = decide_v17_v3_compatibility(
-        V17V3CompatibilityContext(
+    decision = decide_v3_compatibility(
+        V3CompatibilityContext(
             uid=service_input.uid,
             enrolled=True,
             control_state=service_input.control_state,
@@ -191,10 +191,10 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
         )
     )
 
-    if decision.read_path != V17V3CompatibilityReadPath.V17_COMPATIBILITY_PROJECTION:
-        return V17V3MemoryReadServiceResult(
+    if decision.read_path != V3CompatibilityReadPath.MEMORY_COMPATIBILITY_PROJECTION:
+        return V3MemoryReadServiceResult(
             http_status=decision.http_status,
-            read_plan='fail_closed' if decision.read_path == V17V3CompatibilityReadPath.FAIL_CLOSED else 'deny',
+            read_plan='fail_closed' if decision.read_path == V3CompatibilityReadPath.FAIL_CLOSED else 'deny',
             read_path=decision.read_path,
             read_decision=decision.reason,
             headers=decision.headers,
@@ -203,9 +203,9 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
         )
 
     if decision.response_body_override is not None:
-        return V17V3MemoryReadServiceResult(
+        return V3MemoryReadServiceResult(
             http_status=decision.http_status,
-            read_plan='v17_compatibility_projection',
+            read_plan='memory_compatibility_projection',
             read_path=decision.read_path,
             read_decision=decision.reason,
             headers=decision.headers,
@@ -214,12 +214,12 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
         )
 
     headers_or_failure = _add_next_cursor_headers(decision.headers, service_input)
-    if isinstance(headers_or_failure, V17V3MemoryReadServiceResult):
+    if isinstance(headers_or_failure, V3MemoryReadServiceResult):
         return headers_or_failure
 
-    return V17V3MemoryReadServiceResult(
+    return V3MemoryReadServiceResult(
         http_status=decision.http_status,
-        read_plan='v17_compatibility_projection',
+        read_plan='memory_compatibility_projection',
         read_path=decision.read_path,
         read_decision=decision.reason,
         headers=headers_or_failure,
@@ -228,9 +228,9 @@ def plan_v17_v3_memory_read(service_input: V17V3MemoryReadServiceInput) -> V17V3
     )
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3_READ_SOURCE = V17_V3_READ_SOURCE
-V3_READ_MODE = V17_V3_READ_MODE
-V3MemoryReadRequest = V17V3MemoryReadRequest
-V3MemoryReadServiceInput = V17V3MemoryReadServiceInput
-V3MemoryReadServiceResult = V17V3MemoryReadServiceResult
+# Neutral symbol aliases (memory names remain valid via shim)
+V3_READ_SOURCE = V3_READ_SOURCE
+V3_READ_MODE = V3_READ_MODE
+V3MemoryReadRequest = V3MemoryReadRequest
+V3MemoryReadServiceInput = V3MemoryReadServiceInput
+V3MemoryReadServiceResult = V3MemoryReadServiceResult

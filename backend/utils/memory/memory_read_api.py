@@ -1,6 +1,6 @@
 """Canonical memory read api module (WS-G8a).
 
-Neutral ``memory_read_api`` is the source of truth. Legacy ``v17_read_api`` remains an importable alias.
+Neutral ``memory_read_api`` is the source of truth. Legacy ``memory_read_api`` remains an importable alias.
 """
 
 from datetime import datetime
@@ -16,7 +16,7 @@ from models.memory_contracts import (
     derive_allowed_use,
     filter_l1_archive_for_normal_search,
 )
-from models.product_memory import MemoryAccessPolicy, MemoryLayer, V17MemoryItem, is_archive_access_eligible
+from models.product_memory import MemoryAccessPolicy, MemoryLayer, MemoryItem, is_archive_access_eligible
 
 
 def _tokens(query: str) -> set[str]:
@@ -90,17 +90,17 @@ def _coerce_archive_item(record: WorkingObservationArchiveItem | Dict[str, Any])
     return WorkingObservationArchiveItem.model_validate(record)
 
 
-def _coerce_product_memory_item(record: V17MemoryItem | Dict[str, Any]) -> V17MemoryItem:
-    if isinstance(record, V17MemoryItem):
+def _coerce_product_memory_item(record: MemoryItem | Dict[str, Any]) -> MemoryItem:
+    if isinstance(record, MemoryItem):
         return record
-    return V17MemoryItem.model_validate(record)
+    return MemoryItem.model_validate(record)
 
 
-def _tier_value(item: V17MemoryItem) -> str:
+def _tier_value(item: MemoryItem) -> str:
     return item.tier.value if isinstance(item.tier, MemoryLayer) else str(item.tier)
 
 
-def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
+def _product_memory_result(item: MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
     return {
         "memory_id": item.memory_id,
         "memory_layer": "product_memory",
@@ -112,7 +112,7 @@ def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason
         ),
         "confidence": None,
         "visibility": item.visibility,
-        "visibility_source": "v17_memory_item.visibility",
+        "visibility_source": "memory_item.visibility",
         "source": item.evidence[0].source_id if item.evidence else None,
         "date": item.updated_at.isoformat(),
         "evidence": [evidence.model_dump(mode="json") for evidence in item.evidence],
@@ -124,12 +124,12 @@ def _product_memory_result(item: V17MemoryItem, *, agent_use: str, access_reason
 
 def query_default_product_memory_items(
     query: str,
-    records: Iterable[V17MemoryItem | Dict[str, Any]],
+    records: Iterable[MemoryItem | Dict[str, Any]],
     *,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    """Search V17 product memory items for default-visible product output.
+    """Search memory product memory items for default-visible product output.
 
     Callers pass authoritative `memory_items`; this seam applies the product default
     memory filter before query matching, so stale Short-term and Archive records are
@@ -152,7 +152,7 @@ def query_default_product_memory_items(
 
 def query_archive_product_memory_items(
     query: str,
-    records: Iterable[V17MemoryItem | Dict[str, Any]],
+    records: Iterable[MemoryItem | Dict[str, Any]],
     *,
     policy: MemoryAccessPolicy,
     now: Optional[datetime] = None,

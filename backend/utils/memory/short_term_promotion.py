@@ -14,7 +14,7 @@ Promotion applies a layer transition ``short_term → long_term`` on the **same*
 
 TTL: expired short-term items are hidden from default reads by the existing access policy;
 the lifecycle worker records audit transitions (reused semantics from
-``jobs/v17_short_term_lifecycle_worker.py``).
+``jobs/short_term_lifecycle_worker.py``).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from database._client import db as default_db_client
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore
 from jobs.short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
@@ -45,7 +45,7 @@ from models.memory_evidence import SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -74,7 +74,7 @@ def _coerce_aware_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def is_promotable_short_term_item(item: V17MemoryItem, *, now: datetime) -> bool:
+def is_promotable_short_term_item(item: MemoryItem, *, now: datetime) -> bool:
     """Conservative promotability: active, processed, unexpired short_term."""
     current_time = _coerce_aware_utc(now)
     if item.tier != MemoryLayer.short_term:
@@ -95,7 +95,7 @@ def list_promotable_short_term_items(
     *,
     db_client=None,
     now: Optional[datetime] = None,
-) -> List[V17MemoryItem]:
+) -> List[MemoryItem]:
     client = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
@@ -125,7 +125,7 @@ def promotion_trigger_reason(
 
 
 def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
-    collections = V17Collections(uid=uid)
+    collections = MemoryCollections(uid=uid)
     ref = db_client.document(collections.memory_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
@@ -136,13 +136,13 @@ def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
-    db_client.document(V17Collections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
+    db_client.document(MemoryCollections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
 
 
 def _ensure_promotion_operation(
     *,
     uid: str,
-    item: V17MemoryItem,
+    item: MemoryItem,
     control: MemoryControlState,
     run_id: str,
     db_client,
@@ -164,7 +164,7 @@ def _ensure_promotion_operation(
         source_generation=control.source_generation,
         observed_head_commit_id=control.head_commit_id,
     )
-    op_path = f"{V17Collections(uid=uid).memory_operations}/{operation.operation_id}"
+    op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
     op_ref = db_client.document(op_path)
     if not op_ref.get().exists:
         op_ref.set(operation.model_dump(mode="json"))
@@ -173,14 +173,14 @@ def _ensure_promotion_operation(
 
 def promote_short_term_item_via_apply(
     uid: str,
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     control: MemoryControlState,
     run_id: str,
     trigger_reason: str,
     now: datetime,
     db_client=None,
-) -> V17MemoryItem:
+) -> MemoryItem:
     """Promote one short_term item to long_term through the authoritative apply path."""
     if item.tier == MemoryLayer.long_term:
         return item
@@ -227,9 +227,9 @@ def promote_short_term_item_via_apply(
 
     promoted = result.memory_items[0] if result.memory_items else item
     if result.status == ApplyStatus.idempotent_skip:
-        snapshot = client.document(f"{V17Collections(uid=uid).memory_items}/{item.memory_id}").get()
+        snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}").get()
         if getattr(snapshot, "exists", False):
-            promoted = V17MemoryItem(**(snapshot.to_dict() or {}))
+            promoted = MemoryItem(**(snapshot.to_dict() or {}))
 
     assert_legal_state(
         DomainMemoryLayer(promoted.tier.value),
@@ -244,7 +244,7 @@ def promote_short_term_item_via_apply(
 
 
 def _audit_promotion_transition(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     store: FirestoreShortTermLifecycleTransitionStore,
     run_id: str,

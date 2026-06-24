@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_composed_get_service`` (WS-G8b).
 
-Neutral ``v3_composed_get_service`` is the source of truth. Legacy ``v17_v3_composed_get_service`` remains an importable alias.
+Neutral ``v3_composed_get_service`` is the source of truth. Legacy ``v3_composed_get_service`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _public_error(reason: str) -> str:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedRequestParams:
+class V3ComposedRequestParams:
     limit: int | None = None
     offset: int | None = None
     cursor: str | None = None
@@ -55,7 +55,7 @@ class V17V3ComposedRequestParams:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedRequest:
+class V3ComposedRequest:
     limit: int
     offset: int | None = None
     cursor: str | None = None
@@ -64,19 +64,19 @@ class V17V3ComposedRequest:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedCursor:
+class V3ComposedCursor:
     created_at_ms: int
     memory_id: str
 
 
 @dataclass(frozen=True)
-class V17V3ComposedGrant:
+class V3ComposedGrant:
     revoked: bool
     epoch: str
 
 
 @dataclass(frozen=True)
-class V17V3ComposedExecutionContext:
+class V3ComposedExecutionContext:
     subject_uid: str
     grant_epoch: str
     config_epoch: str
@@ -94,7 +94,7 @@ class V17V3ComposedExecutionContext:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedDependencyDecision:
+class V3ComposedDependencyDecision:
     status: DependencyStatus
     subject_uid: str | None = None
     reason: str = 'ok'
@@ -103,40 +103,40 @@ class V17V3ComposedDependencyDecision:
     should_read_projection: bool = False
 
     @staticmethod
-    def enrolled_ready(subject_uid: str) -> 'V17V3ComposedDependencyDecision':
-        return V17V3ComposedDependencyDecision(
+    def enrolled_ready(subject_uid: str) -> 'V3ComposedDependencyDecision':
+        return V3ComposedDependencyDecision(
             status='enrolled_ready', subject_uid=subject_uid, should_read_projection=True
         )
 
     @staticmethod
-    def legacy(subject_uid: str) -> 'V17V3ComposedDependencyDecision':
-        return V17V3ComposedDependencyDecision(status='legacy', subject_uid=subject_uid, should_read_legacy=True)
+    def legacy(subject_uid: str) -> 'V3ComposedDependencyDecision':
+        return V3ComposedDependencyDecision(status='legacy', subject_uid=subject_uid, should_read_legacy=True)
 
     @staticmethod
-    def fail(reason: str, http_status: int) -> 'V17V3ComposedDependencyDecision':
-        return V17V3ComposedDependencyDecision(status='fail', reason=reason, http_status=http_status)
+    def fail(reason: str, http_status: int) -> 'V3ComposedDependencyDecision':
+        return V3ComposedDependencyDecision(status='fail', reason=reason, http_status=http_status)
 
 
 @dataclass(frozen=True)
-class V17V3ComposedSnapshotDecision:
+class V3ComposedSnapshotDecision:
     status: SnapshotStatus
-    context: V17V3ComposedExecutionContext | None = None
+    context: V3ComposedExecutionContext | None = None
     reason: str = 'ok'
     http_status: int = 200
-    grant: V17V3ComposedGrant | None = None
+    grant: V3ComposedGrant | None = None
 
     @staticmethod
-    def ready(context: V17V3ComposedExecutionContext) -> 'V17V3ComposedSnapshotDecision':
-        return V17V3ComposedSnapshotDecision(status='ready', context=context)
+    def ready(context: V3ComposedExecutionContext) -> 'V3ComposedSnapshotDecision':
+        return V3ComposedSnapshotDecision(status='ready', context=context)
 
     @staticmethod
-    def fail(reason: str, http_status: int, *, grant: object = None) -> 'V17V3ComposedSnapshotDecision':
-        typed_grant = grant if isinstance(grant, V17V3ComposedGrant) else None
-        return V17V3ComposedSnapshotDecision(status='fail', reason=reason, http_status=http_status, grant=typed_grant)
+    def fail(reason: str, http_status: int, *, grant: object = None) -> 'V3ComposedSnapshotDecision':
+        typed_grant = grant if isinstance(grant, V3ComposedGrant) else None
+        return V3ComposedSnapshotDecision(status='fail', reason=reason, http_status=http_status, grant=typed_grant)
 
 
 @dataclass(frozen=True)
-class V17V3ComposedRow:
+class V3ComposedRow:
     memory_id: str
     created_at_ms: int
     subject_uid: str
@@ -157,9 +157,9 @@ class V17V3ComposedRow:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedProjectionPage:
-    rows: tuple[V17V3ComposedRow, ...]
-    next_cursor: V17V3ComposedCursor | None
+class V3ComposedProjectionPage:
+    rows: tuple[V3ComposedRow, ...]
+    next_cursor: V3ComposedCursor | None
     subject_uid: str
     grant_epoch: str
     config_epoch: str
@@ -175,12 +175,12 @@ class V17V3ComposedProjectionPage:
 
 
 @dataclass(frozen=True)
-class V17V3ComposedResponse:
+class V3ComposedResponse:
     http_status: int
     body: list[dict] | None
     public_error: str | None = None
     next_cursor: str | None = None
-    source: str = 'v17_compatibility_projection'
+    source: str = 'memory_compatibility_projection'
     decision: str = 'ok'
     read_count: int = 0
     scanned_count: int = 0
@@ -196,12 +196,12 @@ class V17V3ComposedResponse:
         read_count: int = 0,
         scanned_count: int = 0,
         verified_empty: bool = False,
-    ) -> 'V17V3ComposedResponse':
+    ) -> 'V3ComposedResponse':
         headers = {'X-Omi-Memory-Read-Source': source, 'X-Omi-Memory-Read-Decision': 'ok'}
         if next_cursor:
             headers['X-Omi-Memory-Next-Cursor'] = next_cursor
             headers['Link'] = f'<{next_cursor}>; rel="next"'
-        return V17V3ComposedResponse(
+        return V3ComposedResponse(
             http_status=200,
             body=body,
             next_cursor=next_cursor,
@@ -213,8 +213,8 @@ class V17V3ComposedResponse:
         )
 
     @staticmethod
-    def error(http_status: int, reason: str) -> 'V17V3ComposedResponse':
-        return V17V3ComposedResponse(
+    def error(http_status: int, reason: str) -> 'V3ComposedResponse':
+        return V3ComposedResponse(
             http_status=http_status,
             body=None,
             public_error=_public_error(reason),
@@ -224,21 +224,21 @@ class V17V3ComposedResponse:
         )
 
 
-NormalizeRequest = Callable[[V17V3ComposedRequestParams], V17V3ComposedRequest]
-DecideDependency = Callable[[V17V3ComposedRequest, int], V17V3ComposedDependencyDecision]
-BuildSnapshot = Callable[[str, V17V3ComposedRequest, int], V17V3ComposedSnapshotDecision]
-DecodeCursor = Callable[[str | None, V17V3ComposedExecutionContext, int], V17V3ComposedCursor | None]
+NormalizeRequest = Callable[[V3ComposedRequestParams], V3ComposedRequest]
+DecideDependency = Callable[[V3ComposedRequest, int], V3ComposedDependencyDecision]
+BuildSnapshot = Callable[[str, V3ComposedRequest, int], V3ComposedSnapshotDecision]
+DecodeCursor = Callable[[str | None, V3ComposedExecutionContext, int], V3ComposedCursor | None]
 ReadProjection = Callable[
-    [V17V3ComposedRequest, V17V3ComposedExecutionContext, V17V3ComposedCursor | None, int, int],
-    V17V3ComposedProjectionPage,
+    [V3ComposedRequest, V3ComposedExecutionContext, V3ComposedCursor | None, int, int],
+    V3ComposedProjectionPage,
 ]
-EncodeCursor = Callable[[V17V3ComposedCursor, V17V3ComposedExecutionContext, int], str]
-ReadLegacy = Callable[[V17V3ComposedRequest, int], V17V3ComposedResponse]
+EncodeCursor = Callable[[V3ComposedCursor, V3ComposedExecutionContext, int], str]
+ReadLegacy = Callable[[V3ComposedRequest, int], V3ComposedResponse]
 NowMs = Callable[[], int]
 
 
 @dataclass(frozen=True)
-class V17V3ComposedAdapters:
+class V3ComposedAdapters:
     normalize_request: NormalizeRequest
     decide_dependency: DecideDependency
     build_snapshot: BuildSnapshot
@@ -249,27 +249,27 @@ class V17V3ComposedAdapters:
     now_ms: NowMs
 
 
-def _budget(params: V17V3ComposedRequestParams, adapters: V17V3ComposedAdapters) -> int:
+def _budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> int:
     deadline = params.deadline_ms if params.deadline_ms is not None else adapters.now_ms() + _DEFAULT_DEADLINE_MS
     return max(0, deadline - adapters.now_ms())
 
 
-def _ensure_budget(params: V17V3ComposedRequestParams, adapters: V17V3ComposedAdapters) -> int | V17V3ComposedResponse:
+def _ensure_budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> int | V3ComposedResponse:
     remaining = _budget(params, adapters)
     if remaining < _MIN_STAGE_BUDGET_MS:
-        return V17V3ComposedResponse.error(504, 'deadline_exhausted')
+        return V3ComposedResponse.error(504, 'deadline_exhausted')
     return remaining
 
 
-def _valid_request(request: object) -> V17V3ComposedRequest | V17V3ComposedResponse:
-    if not isinstance(request, V17V3ComposedRequest):
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+def _valid_request(request: object) -> V3ComposedRequest | V3ComposedResponse:
+    if not isinstance(request, V3ComposedRequest):
+        return V3ComposedResponse.error(503, 'adapter_contract')
     if request.limit < 1 or request.limit > _MAX_LIMIT:
-        return V17V3ComposedResponse.error(400, 'bad_request')
+        return V3ComposedResponse.error(400, 'bad_request')
     if request.offset not in (None, 0):
-        return V17V3ComposedResponse.error(400, 'offset_invalid')
+        return V3ComposedResponse.error(400, 'offset_invalid')
     if request.offset == 0:
-        return V17V3ComposedRequest(
+        return V3ComposedRequest(
             limit=request.limit,
             cursor=request.cursor,
             include_archive=request.include_archive,
@@ -278,33 +278,33 @@ def _valid_request(request: object) -> V17V3ComposedRequest | V17V3ComposedRespo
     return request
 
 
-def _valid_dependency(decision: object) -> V17V3ComposedDependencyDecision | V17V3ComposedResponse:
-    if not isinstance(decision, V17V3ComposedDependencyDecision):
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+def _valid_dependency(decision: object) -> V3ComposedDependencyDecision | V3ComposedResponse:
+    if not isinstance(decision, V3ComposedDependencyDecision):
+        return V3ComposedResponse.error(503, 'adapter_contract')
     if decision.status not in {'enrolled_ready', 'legacy', 'fail'}:
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+        return V3ComposedResponse.error(503, 'adapter_contract')
     if decision.status == 'enrolled_ready':
         if not decision.subject_uid or not decision.should_read_projection or decision.should_read_legacy:
-            return V17V3ComposedResponse.error(503, 'adapter_contract')
+            return V3ComposedResponse.error(503, 'adapter_contract')
     if decision.status == 'legacy':
         if not decision.subject_uid or not decision.should_read_legacy or decision.should_read_projection:
-            return V17V3ComposedResponse.error(503, 'adapter_contract')
+            return V3ComposedResponse.error(503, 'adapter_contract')
     if decision.status == 'fail' and not (400 <= decision.http_status <= 599):
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+        return V3ComposedResponse.error(503, 'adapter_contract')
     return decision
 
 
-def _valid_snapshot(snapshot: object) -> V17V3ComposedSnapshotDecision | V17V3ComposedResponse:
-    if not isinstance(snapshot, V17V3ComposedSnapshotDecision):
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+def _valid_snapshot(snapshot: object) -> V3ComposedSnapshotDecision | V3ComposedResponse:
+    if not isinstance(snapshot, V3ComposedSnapshotDecision):
+        return V3ComposedResponse.error(503, 'adapter_contract')
     if snapshot.status not in {'ready', 'fail'}:
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
-    if snapshot.status == 'ready' and not isinstance(snapshot.context, V17V3ComposedExecutionContext):
-        return V17V3ComposedResponse.error(503, 'adapter_contract')
+        return V3ComposedResponse.error(503, 'adapter_contract')
+    if snapshot.status == 'ready' and not isinstance(snapshot.context, V3ComposedExecutionContext):
+        return V3ComposedResponse.error(503, 'adapter_contract')
     return snapshot
 
 
-def _page_matches_context(page: V17V3ComposedProjectionPage, context: V17V3ComposedExecutionContext) -> bool:
+def _page_matches_context(page: V3ComposedProjectionPage, context: V3ComposedExecutionContext) -> bool:
     return (
         page.subject_uid == context.subject_uid
         and page.grant_epoch == context.grant_epoch
@@ -318,7 +318,7 @@ def _page_matches_context(page: V17V3ComposedProjectionPage, context: V17V3Compo
     )
 
 
-def _row_fence_valid(row: V17V3ComposedRow, context: V17V3ComposedExecutionContext) -> bool:
+def _row_fence_valid(row: V3ComposedRow, context: V3ComposedExecutionContext) -> bool:
     return (
         row.subject_uid == context.subject_uid
         and row.account_generation == context.account_generation
@@ -333,7 +333,7 @@ def _row_fence_valid(row: V17V3ComposedRow, context: V17V3ComposedExecutionConte
     )
 
 
-def _row_visible(row: V17V3ComposedRow, request: V17V3ComposedRequest) -> bool:
+def _row_visible(row: V3ComposedRow, request: V3ComposedRequest) -> bool:
     decision = decide_default_visibility(
         {
             'visibility': row.visibility,
@@ -350,10 +350,10 @@ def _row_visible(row: V17V3ComposedRow, request: V17V3ComposedRequest) -> bool:
     return bool(decision.get('default_visible') or decision.get('opt_in_visible'))
 
 
-def _normalize_or_default(params: V17V3ComposedRequestParams, adapters: V17V3ComposedAdapters) -> V17V3ComposedRequest:
+def _normalize_or_default(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> V3ComposedRequest:
     normalized = adapters.normalize_request(params)
     if normalized.limit is None:  # pragma: no cover - dataclass type guard for future adapters
-        return V17V3ComposedRequest(
+        return V3ComposedRequest(
             limit=_DEFAULT_LIMIT,
             offset=normalized.offset,
             cursor=normalized.cursor,
@@ -363,46 +363,46 @@ def _normalize_or_default(params: V17V3ComposedRequestParams, adapters: V17V3Com
     return normalized
 
 
-def compose_v17_v3_get(
-    params: V17V3ComposedRequestParams,
-    adapters: V17V3ComposedAdapters,
-) -> V17V3ComposedResponse:
+def compose_v3_get(
+    params: V3ComposedRequestParams,
+    adapters: V3ComposedAdapters,
+) -> V3ComposedResponse:
     """Compose future GET stages with fail-closed typed adapter boundaries."""
 
     try:
         budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V17V3ComposedResponse):
+        if isinstance(budget, V3ComposedResponse):
             return budget
         raw_request = _normalize_or_default(params, adapters)
-        if not isinstance(raw_request, V17V3ComposedRequest):
-            return V17V3ComposedResponse.error(503, 'adapter_contract')
+        if not isinstance(raw_request, V3ComposedRequest):
+            return V3ComposedResponse.error(503, 'adapter_contract')
         if raw_request.limit < 1 or raw_request.limit > _MAX_LIMIT:
-            return V17V3ComposedResponse.error(400, 'bad_request')
+            return V3ComposedResponse.error(400, 'bad_request')
         request = raw_request
 
         budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V17V3ComposedResponse):
+        if isinstance(budget, V3ComposedResponse):
             return budget
         dependency_or_response = _valid_dependency(adapters.decide_dependency(request, budget))
-        if isinstance(dependency_or_response, V17V3ComposedResponse):
+        if isinstance(dependency_or_response, V3ComposedResponse):
             return dependency_or_response
         dependency = dependency_or_response
 
         if dependency.status == 'fail':
-            return V17V3ComposedResponse.error(dependency.http_status, dependency.reason)
+            return V3ComposedResponse.error(dependency.http_status, dependency.reason)
         if dependency.status == 'legacy':
             budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V17V3ComposedResponse):
+            if isinstance(budget, V3ComposedResponse):
                 return budget
             legacy = adapters.read_legacy(request, budget)
-            if not isinstance(legacy, V17V3ComposedResponse):
-                return V17V3ComposedResponse.error(503, 'adapter_contract')
+            if not isinstance(legacy, V3ComposedResponse):
+                return V3ComposedResponse.error(503, 'adapter_contract')
             return legacy
 
         if request.offset not in (None, 0):
-            return V17V3ComposedResponse.error(400, 'offset_invalid')
+            return V3ComposedResponse.error(400, 'offset_invalid')
         if request.offset == 0:
-            request = V17V3ComposedRequest(
+            request = V3ComposedRequest(
                 limit=request.limit,
                 cursor=request.cursor,
                 include_archive=request.include_archive,
@@ -410,74 +410,74 @@ def compose_v17_v3_get(
             )
 
         budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V17V3ComposedResponse):
+        if isinstance(budget, V3ComposedResponse):
             return budget
         snapshot_or_response = _valid_snapshot(adapters.build_snapshot(dependency.subject_uid or '', request, budget))
-        if isinstance(snapshot_or_response, V17V3ComposedResponse):
+        if isinstance(snapshot_or_response, V3ComposedResponse):
             return snapshot_or_response
         snapshot = snapshot_or_response
         if snapshot.status == 'fail':
             if snapshot.reason == 'grant_denied' or (snapshot.grant is not None and snapshot.grant.revoked):
-                return V17V3ComposedResponse.error(403, 'grant_denied')
-            return V17V3ComposedResponse.error(snapshot.http_status, snapshot.reason)
+                return V3ComposedResponse.error(403, 'grant_denied')
+            return V3ComposedResponse.error(snapshot.http_status, snapshot.reason)
         context = snapshot.context
         assert context is not None
 
         budget = _ensure_budget(params, adapters)
-        if isinstance(budget, V17V3ComposedResponse):
+        if isinstance(budget, V3ComposedResponse):
             return budget
         if request.cursor is not None:
             try:
                 after = adapters.decode_cursor(request.cursor, context, budget)
             except Exception:
-                return V17V3ComposedResponse.error(400, 'cursor_invalid')
-            if after is not None and not isinstance(after, V17V3ComposedCursor):
-                return V17V3ComposedResponse.error(400, 'cursor_invalid')
+                return V3ComposedResponse.error(400, 'cursor_invalid')
+            if after is not None and not isinstance(after, V3ComposedCursor):
+                return V3ComposedResponse.error(400, 'cursor_invalid')
         else:
             after = None
 
         body: list[dict] = []
         scans = 0
         read_count = 0
-        last_scanned_cursor: V17V3ComposedCursor | None = after
-        next_page_cursor: V17V3ComposedCursor | None = after
+        last_scanned_cursor: V3ComposedCursor | None = after
+        next_page_cursor: V3ComposedCursor | None = after
         response_bytes = 0
         verified_projection_empty = False
 
         while len(body) < request.limit and read_count < params.max_projection_reads and scans < params.scan_budget:
             budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V17V3ComposedResponse):
+            if isinstance(budget, V3ComposedResponse):
                 return budget
             remaining_items = request.limit - len(body)
             read_limit = min(max(remaining_items, 1) + 10, params.scan_budget - scans, _MAX_LIMIT)
             try:
                 page = adapters.read_projection(request, context, next_page_cursor, read_limit, budget)
             except Exception:
-                return V17V3ComposedResponse.error(503, 'adapter_exception')
+                return V3ComposedResponse.error(503, 'adapter_exception')
             read_count += 1
-            if not isinstance(page, V17V3ComposedProjectionPage):
-                return V17V3ComposedResponse.error(503, 'adapter_contract')
+            if not isinstance(page, V3ComposedProjectionPage):
+                return V3ComposedResponse.error(503, 'adapter_contract')
             if page.partial:
-                return V17V3ComposedResponse.error(503, 'partial_projection')
+                return V3ComposedResponse.error(503, 'partial_projection')
             if not _page_matches_context(page, context):
-                return V17V3ComposedResponse.error(409, 'projection_attestation_mismatch')
+                return V3ComposedResponse.error(409, 'projection_attestation_mismatch')
             scans += page.scanned_count
             if not page.rows and page.next_cursor is None:
                 verified_projection_empty = read_count == 1 and len(body) == 0 and scans == 0
                 last_scanned_cursor = None
                 break
             for candidate in page.rows:
-                if not isinstance(candidate, V17V3ComposedRow):
-                    return V17V3ComposedResponse.error(503, 'adapter_contract')
+                if not isinstance(candidate, V3ComposedRow):
+                    return V3ComposedResponse.error(503, 'adapter_contract')
                 if not _row_fence_valid(candidate, context):
-                    return V17V3ComposedResponse.error(409, 'row_fence_mismatch')
-                last_scanned_cursor = V17V3ComposedCursor(candidate.created_at_ms, candidate.memory_id)
+                    return V3ComposedResponse.error(409, 'row_fence_mismatch')
+                last_scanned_cursor = V3ComposedCursor(candidate.created_at_ms, candidate.memory_id)
                 if candidate.deleted or candidate.tombstoned:
                     continue
                 if _row_visible(candidate, request) and len(body) < request.limit:
                     response_bytes += candidate.estimated_response_bytes
                     if response_bytes > params.response_byte_cap:
-                        return V17V3ComposedResponse.error(413, 'response_too_large')
+                        return V3ComposedResponse.error(413, 'response_too_large')
                     body.append(candidate.memorydb_item)
             next_page_cursor = page.next_cursor
             if page.next_cursor is None:
@@ -486,36 +486,36 @@ def compose_v17_v3_get(
         next_cursor_token = None
         if next_page_cursor is not None and last_scanned_cursor is not None:
             budget = _ensure_budget(params, adapters)
-            if isinstance(budget, V17V3ComposedResponse):
+            if isinstance(budget, V3ComposedResponse):
                 return budget
             try:
                 next_cursor_token = adapters.encode_cursor(last_scanned_cursor, context, budget)
             except Exception:
-                return V17V3ComposedResponse.error(503, 'adapter_exception')
+                return V3ComposedResponse.error(503, 'adapter_exception')
             if not isinstance(next_cursor_token, str) or not next_cursor_token:
-                return V17V3ComposedResponse.error(503, 'adapter_contract')
+                return V3ComposedResponse.error(503, 'adapter_contract')
 
-        return V17V3ComposedResponse.success(
+        return V3ComposedResponse.success(
             body=body,
             next_cursor=next_cursor_token,
-            source='v17_compatibility_projection',
+            source='memory_compatibility_projection',
             read_count=read_count,
             scanned_count=scans,
             verified_empty=verified_projection_empty,
         )
     except Exception:
-        return V17V3ComposedResponse.error(503, 'adapter_exception')
+        return V3ComposedResponse.error(503, 'adapter_exception')
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3ComposedRequestParams = V17V3ComposedRequestParams
-V3ComposedRequest = V17V3ComposedRequest
-V3ComposedCursor = V17V3ComposedCursor
-V3ComposedGrant = V17V3ComposedGrant
-V3ComposedExecutionContext = V17V3ComposedExecutionContext
-V3ComposedDependencyDecision = V17V3ComposedDependencyDecision
-V3ComposedSnapshotDecision = V17V3ComposedSnapshotDecision
-V3ComposedRow = V17V3ComposedRow
-V3ComposedProjectionPage = V17V3ComposedProjectionPage
-V3ComposedResponse = V17V3ComposedResponse
-V3ComposedAdapters = V17V3ComposedAdapters
+# Neutral symbol aliases (memory names remain valid via shim)
+V3ComposedRequestParams = V3ComposedRequestParams
+V3ComposedRequest = V3ComposedRequest
+V3ComposedCursor = V3ComposedCursor
+V3ComposedGrant = V3ComposedGrant
+V3ComposedExecutionContext = V3ComposedExecutionContext
+V3ComposedDependencyDecision = V3ComposedDependencyDecision
+V3ComposedSnapshotDecision = V3ComposedSnapshotDecision
+V3ComposedRow = V3ComposedRow
+V3ComposedProjectionPage = V3ComposedProjectionPage
+V3ComposedResponse = V3ComposedResponse
+V3ComposedAdapters = V3ComposedAdapters

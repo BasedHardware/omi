@@ -1,6 +1,6 @@
 """Canonical module for ``utils.memory.v3_local_telemetry`` (WS-G8b).
 
-Neutral ``v3_local_telemetry`` is the source of truth. Legacy ``v17_v3_local_telemetry`` remains an importable alias.
+Neutral ``v3_local_telemetry`` is the source of truth. Legacy ``v3_local_telemetry`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -8,12 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-EVENT_NAME = 'v17_v3_get_memory_read_decision'
+EVENT_NAME = 'v3_get_memory_read_decision'
 EVENT_ROUTE = 'GET /v3/memories'
 SCHEMA_VERSION = 1
 
-READ_SOURCES = {'legacy_primary', 'v17_compatibility_projection', 'fail_closed'}
-ROUTE_DECISIONS = {'use_legacy_safe', 'use_v17', 'deny_memory', 'fail_closed'}
+READ_SOURCES = {'legacy_primary', 'memory_compatibility_projection', 'fail_closed'}
+ROUTE_DECISIONS = {'use_legacy_safe', 'use_memory', 'deny_memory', 'fail_closed'}
 FAILURE_REASONS = {
     'none',
     'control_missing',
@@ -44,7 +44,7 @@ CURSOR_VALIDATION_REASONS = {
 }
 CANARY_COHORTS = {'none', 'shadow', 'canary_1', 'canary_5', 'canary_25', 'general_availability'}
 CANARY_ENROLLMENTS = {'not_enrolled', 'enrolled', 'unknown_fail_closed'}
-PROJECTION_SOURCES = {'none', 'v17_derived_compatibility_projection'}
+PROJECTION_SOURCES = {'none', 'memory_derived_compatibility_projection'}
 ARCHIVE_DEFAULT_VISIBILITY_DECISIONS = {'default_unavailable', 'explicitly_authorized', 'denied'}
 SHORT_TERM_DEFAULT_VISIBILITY_DECISIONS = {'fresh_visible', 'stale_hidden', 'not_applicable'}
 ROLLBACK_READ_DISABLE_GATES = {'not_wired', 'disabled', 'enabled'}
@@ -75,7 +75,7 @@ FORBIDDEN_EXTRA_LABEL_KEYS = {
 
 
 @dataclass(frozen=True)
-class V17V3LocalTelemetryInput:
+class V3LocalTelemetryInput:
     read_source: str
     route_decision: str
     failure_reason: str
@@ -90,7 +90,7 @@ class V17V3LocalTelemetryInput:
     projection_source: str
     request_limit: int
     request_cursor_present: bool
-    request_offset_disallowed_in_v17: bool
+    request_offset_disallowed_in_v3: bool
     archive_default_visibility_decision: str
     short_term_default_visibility_decision: str
     rollback_read_disable_gate: str
@@ -100,15 +100,15 @@ class V17V3LocalTelemetryInput:
 
 
 @dataclass(frozen=True)
-class V17V3ReadDisableConfig:
+class V3ReadDisableConfig:
     schema_version: int
-    v17_reads_enabled: bool
+    memory_reads_enabled: bool
     emergency_read_disable: bool
 
 
 @dataclass(frozen=True)
-class V17V3ReadDisableDecision:
-    v17_reads_enabled: bool
+class V3ReadDisableDecision:
+    memory_reads_enabled: bool
     rollback_read_disable_gate: str
     failure_reason: str
     fail_closed: bool
@@ -116,13 +116,13 @@ class V17V3ReadDisableDecision:
 
 
 @dataclass(frozen=True)
-class V17V3TelemetryEmitResult:
+class V3TelemetryEmitResult:
     emitted: bool
     production_sink_call: bool
     event: dict[str, Any]
 
 
-class V17V3TelemetrySink(Protocol):
+class V3TelemetrySink(Protocol):
     production_sink_call: bool
     sink_name: str
 
@@ -130,7 +130,7 @@ class V17V3TelemetrySink(Protocol):
         """Emit a pre-built sanitized event."""
 
 
-class NullV17V3TelemetrySink:
+class NullV3TelemetrySink:
     sink_name = 'null_noop_sink'
     production_sink_call = False
 
@@ -142,7 +142,7 @@ class NullV17V3TelemetrySink:
         return None
 
 
-class FakeV17V3TelemetrySink:
+class FakeV3TelemetrySink:
     sink_name = 'fake_local_test_sink'
     production_sink_call = False
 
@@ -153,19 +153,19 @@ class FakeV17V3TelemetrySink:
         self.events.append(dict(event))
 
 
-def decide_v17_v3_read_disable(
-    *, config: V17V3ReadDisableConfig | dict[str, Any] | None, enrolled_v17_user: bool
-) -> V17V3ReadDisableDecision:
-    """Pure server-owned read-disable decision seam for future V17 `/v3` GET.
+def decide_v3_read_disable(
+    *, config: V3ReadDisableConfig | dict[str, Any] | None, enrolled_memory_user: bool
+) -> V3ReadDisableDecision:
+    """Pure server-owned read-disable decision seam for future memory `/v3` GET.
 
-    Missing/malformed config fails closed for enrolled V17 users. Non-enrolled
-    callers are outside this V17 seam and retain the legacy-primary planner path
+    Missing/malformed config fails closed for enrolled memory users. Non-enrolled
+    callers are outside this memory seam and retain the legacy-primary planner path
     once real route wiring exists.
     """
 
-    if not enrolled_v17_user:
-        return V17V3ReadDisableDecision(
-            v17_reads_enabled=False,
+    if not enrolled_memory_user:
+        return V3ReadDisableDecision(
+            memory_reads_enabled=False,
             rollback_read_disable_gate='not_wired',
             failure_reason='none',
             fail_closed=False,
@@ -175,25 +175,25 @@ def decide_v17_v3_read_disable(
         return _disabled_decision('control_missing')
     if isinstance(config, dict):
         try:
-            config = V17V3ReadDisableConfig(
+            config = V3ReadDisableConfig(
                 schema_version=config['schema_version'],
-                v17_reads_enabled=config['v17_reads_enabled'],
+                memory_reads_enabled=config['memory_reads_enabled'],
                 emergency_read_disable=config['emergency_read_disable'],
             )
         except (KeyError, TypeError):
             return _disabled_decision('control_malformed')
-    if not isinstance(config, V17V3ReadDisableConfig):
+    if not isinstance(config, V3ReadDisableConfig):
         return _disabled_decision('control_malformed')
     if config.schema_version != SCHEMA_VERSION:
         return _disabled_decision('control_malformed')
-    if not isinstance(config.v17_reads_enabled, bool) or not isinstance(config.emergency_read_disable, bool):
+    if not isinstance(config.memory_reads_enabled, bool) or not isinstance(config.emergency_read_disable, bool):
         return _disabled_decision('control_malformed')
     if config.emergency_read_disable:
         return _disabled_decision('rollback_read_disabled')
-    if not config.v17_reads_enabled:
+    if not config.memory_reads_enabled:
         return _disabled_decision('rollback_read_disabled')
-    return V17V3ReadDisableDecision(
-        v17_reads_enabled=True,
+    return V3ReadDisableDecision(
+        memory_reads_enabled=True,
         rollback_read_disable_gate='enabled',
         failure_reason='none',
         fail_closed=False,
@@ -201,7 +201,7 @@ def decide_v17_v3_read_disable(
     )
 
 
-def build_v17_v3_get_telemetry_event(telemetry_input: V17V3LocalTelemetryInput) -> dict[str, Any]:
+def build_v3_get_telemetry_event(telemetry_input: V3LocalTelemetryInput) -> dict[str, Any]:
     """Build a sanitized low-cardinality local event for future GET decisions."""
 
     _validate_input(telemetry_input)
@@ -223,7 +223,7 @@ def build_v17_v3_get_telemetry_event(telemetry_input: V17V3LocalTelemetryInput) 
         'projection_source': telemetry_input.projection_source,
         'request_limit': _bucket_request_limit(telemetry_input.request_limit),
         'request_cursor_present': telemetry_input.request_cursor_present,
-        'request_offset_disallowed_in_v17': telemetry_input.request_offset_disallowed_in_v17,
+        'request_offset_disallowed_in_v3': telemetry_input.request_offset_disallowed_in_v3,
         'archive_default_visibility_decision': telemetry_input.archive_default_visibility_decision,
         'short_term_default_visibility_decision': telemetry_input.short_term_default_visibility_decision,
         'rollback_read_disable_gate': telemetry_input.rollback_read_disable_gate,
@@ -235,27 +235,27 @@ def build_v17_v3_get_telemetry_event(telemetry_input: V17V3LocalTelemetryInput) 
     return event
 
 
-def emit_v17_v3_get_telemetry(
-    telemetry_input: V17V3LocalTelemetryInput, *, sink: V17V3TelemetrySink | None = None
-) -> V17V3TelemetryEmitResult:
+def emit_v3_get_telemetry(
+    telemetry_input: V3LocalTelemetryInput, *, sink: V3TelemetrySink | None = None
+) -> V3TelemetryEmitResult:
     """Build and optionally emit to an injected local/fake sink.
 
     The default sink is no-op, proving no production telemetry calls occur unless
     future approved route wiring injects a real sink.
     """
 
-    active_sink = sink or NullV17V3TelemetrySink()
-    event = build_v17_v3_get_telemetry_event(telemetry_input)
+    active_sink = sink or NullV3TelemetrySink()
+    event = build_v3_get_telemetry_event(telemetry_input)
     event['telemetry_sink'] = active_sink.sink_name
-    if isinstance(active_sink, NullV17V3TelemetrySink):
-        return V17V3TelemetryEmitResult(emitted=False, production_sink_call=False, event=event)
+    if isinstance(active_sink, NullV3TelemetrySink):
+        return V3TelemetryEmitResult(emitted=False, production_sink_call=False, event=event)
     active_sink.emit(event)
-    return V17V3TelemetryEmitResult(emitted=True, production_sink_call=active_sink.production_sink_call, event=event)
+    return V3TelemetryEmitResult(emitted=True, production_sink_call=active_sink.production_sink_call, event=event)
 
 
-def _disabled_decision(failure_reason: str) -> V17V3ReadDisableDecision:
-    return V17V3ReadDisableDecision(
-        v17_reads_enabled=False,
+def _disabled_decision(failure_reason: str) -> V3ReadDisableDecision:
+    return V3ReadDisableDecision(
+        memory_reads_enabled=False,
         rollback_read_disable_gate='disabled',
         failure_reason=failure_reason,
         fail_closed=True,
@@ -263,7 +263,7 @@ def _disabled_decision(failure_reason: str) -> V17V3ReadDisableDecision:
     )
 
 
-def _validate_input(telemetry_input: V17V3LocalTelemetryInput) -> None:
+def _validate_input(telemetry_input: V3LocalTelemetryInput) -> None:
     _require_enum('read_source', telemetry_input.read_source, READ_SOURCES)
     _require_enum('route_decision', telemetry_input.route_decision, ROUTE_DECISIONS)
     _require_enum('failure_reason', telemetry_input.failure_reason, FAILURE_REASONS)
@@ -287,7 +287,7 @@ def _validate_input(telemetry_input: V17V3LocalTelemetryInput) -> None:
     _require_enum('approval_status', telemetry_input.approval_status, APPROVAL_STATUSES)
     _require_bool('no_legacy_fallback', telemetry_input.no_legacy_fallback)
     _require_bool('request_cursor_present', telemetry_input.request_cursor_present)
-    _require_bool('request_offset_disallowed_in_v17', telemetry_input.request_offset_disallowed_in_v17)
+    _require_bool('request_offset_disallowed_in_v3', telemetry_input.request_offset_disallowed_in_v3)
     _validate_extra_labels(telemetry_input.extra_labels)
 
 
@@ -330,9 +330,9 @@ def _validate_extra_labels(extra_labels: dict[str, str]) -> None:
         raise ValueError('extra_labels are not accepted by this local low-cardinality event')
 
 
-# Neutral symbol aliases (V17 names remain valid via shim)
-V3LocalTelemetryInput = V17V3LocalTelemetryInput
-V3ReadDisableConfig = V17V3ReadDisableConfig
-V3ReadDisableDecision = V17V3ReadDisableDecision
-V3TelemetryEmitResult = V17V3TelemetryEmitResult
-V3TelemetrySink = V17V3TelemetrySink
+# Neutral symbol aliases (memory names remain valid via shim)
+V3LocalTelemetryInput = V3LocalTelemetryInput
+V3ReadDisableConfig = V3ReadDisableConfig
+V3ReadDisableDecision = V3ReadDisableDecision
+V3TelemetryEmitResult = V3TelemetryEmitResult
+V3TelemetrySink = V3TelemetrySink
