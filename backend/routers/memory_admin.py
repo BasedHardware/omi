@@ -1,7 +1,7 @@
 """Canonical memory admin router (WS-G9).
 
 Neutral ``memory_admin`` is the source of truth. Legacy ``v17_memory_admin``
-remains an importable alias. Registers ``/v17/admin/*`` paths.
+remains an importable alias. Registers ``/memory/admin/*`` paths.
 """
 
 import os
@@ -71,7 +71,7 @@ def _short_term_lifecycle_response(
     }
 
 
-@router.get('/v17/admin/users/{uid}/read-rollout-decision', tags=['admin', 'v17'])
+@router.get('/memory/admin/users/{uid}/read-rollout-decision', tags=['admin', 'memory'])
 def get_v17_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     """Inspect the server-owned V17 default read rollout decision for one user.
 
@@ -85,7 +85,7 @@ def get_v17_read_rollout_decision(uid: str, secret_key: str = Header(...)):
     return build_v17_default_read_rollout_observability_report(decisions)
 
 
-@router.get('/v17/admin/users/{uid}/non-active-route-report', tags=['admin', 'v17'])
+@router.get('/memory/admin/users/{uid}/non-active-route-report', tags=['admin', 'memory'])
 def get_v17_non_active_route_report(
     uid: str,
     run_id: Optional[str] = Query(None),
@@ -108,7 +108,7 @@ def get_v17_non_active_route_report(
     return report.model_dump(mode='json')
 
 
-@router.post('/v17/admin/users/{uid}/short-term-lifecycle/run', tags=['admin', 'v17'])
+@router.post('/memory/admin/users/{uid}/short-term-lifecycle/run', tags=['admin', 'memory'])
 def post_v17_short_term_lifecycle_run(
     uid: str,
     run_id: str = Query(...),
