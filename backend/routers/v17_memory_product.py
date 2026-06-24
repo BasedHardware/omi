@@ -3,19 +3,19 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database._client import db
-from database.v17_vector_repair_outbox import write_v17_vector_repair_purge_outbox_records
-from models.v17_product_memory import MemoryAccessPolicy
-from utils.memory.v17_default_read_rollout import V17_GLOBAL_READ_GATE_PATH
-from utils.memory.v17_product_authorization import (
+from database.memory_vector_repair_outbox import write_v17_vector_repair_purge_outbox_records
+from models.product_memory import MemoryAccessPolicy
+from utils.memory.default_read_rollout import V17_GLOBAL_READ_GATE_PATH
+from utils.memory.product_authorization import (
     V17ProductAuthorizationContext,
     authorize_v17_product_memory_route,
 )
-from utils.memory.v17_product_memory_read_service import (
+from utils.memory.product_memory_read_service import (
     MAX_PRODUCT_MEMORY_READ_LIMIT,
     fetch_archive_product_memory_search,
     fetch_default_product_memory_search,
 )
-from utils.memory.v17_vector_search_service import (
+from utils.memory.vector_search_service import (
     MAX_V17_VECTOR_SEARCH_LIMIT,
     fetch_default_v17_vector_memory_search,
 )
