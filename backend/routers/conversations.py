@@ -181,6 +181,10 @@ def get_conversations(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
+    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
+    # on a negative argument and would otherwise return a 500 for the whole request.
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
         statuses = "processing,completed"
