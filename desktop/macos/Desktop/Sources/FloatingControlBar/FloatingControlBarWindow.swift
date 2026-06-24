@@ -1919,6 +1919,17 @@ class FloatingControlBarManager {
     }
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Defensive cancellation guard. `sendAIQuery` is a long async function
+        // (screenshot capture, limiter check, provider.sendMessage). If a parent
+        // task cancels us (e.g. closeAIConversation racing, the user firing a
+        // second query, a future refactor that runs the router in parallel),
+        // we should bail before doing setup work — especially before
+        // `limiter.recordQuery()` (which would consume a local quota slot)
+        // and before the screenshot capture. This matches the pattern used
+        // elsewhere in the codebase (OnboardingChatView, FileIndexingView,
+        // DesktopHomeView) and is cheap insurance against future refactors.
+        guard !Task.isCancelled else { return }
+
         // QueryTracer: `pre_llm` brackets everything between query submission and
         // the ChatProvider call (screenshot capture, usage checks, filler audio).
         let currentTracer = QueryTracerContext.current
@@ -1926,6 +1937,9 @@ class FloatingControlBarManager {
         let queryFromVoice = barWindow.state.currentQueryFromVoice
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
+
+        // Re-check after the await-free setup work above.
+        guard !Task.isCancelled else { return }
 
         // Check monthly usage limit for free users (shared with main chat page).
         //
