@@ -1928,7 +1928,33 @@ class FloatingControlBarManager {
         let generation = activeQueryGeneration
 
         // Check monthly usage limit for free users (shared with main chat page).
+        //
+        // `FloatingBarUsageLimiter.isLimitReached` returns `false` (fail-open)
+        // when `serverQuota == nil`. The optimistic check is fast and doesn't
+        // need a network round trip, but it relies on having a snapshot to
+        // check against. If app-launch `fetchPlan()` failed (network blip,
+        // first-run offline, etc.) and the user has been signing queries
+        // without ever refreshing the quota, a free user past their limit
+        // can keep chatting — the local limiter has no data to enforce.
+        //
+        // Fix: at the start of every floating-bar query, if `serverQuota`
+        // is nil, force a fresh `syncQuota()` before the limit check. This
+        // is one network round trip on cold start, zero on every subsequent
+        // query (serverQuota is populated for the session lifetime).
         let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
+            await limiter.syncQuota()
+            // (cubic P2 on PR #8141, fixed)
+        // Race: the user may have cancelled or fired a new query while
+            // we were awaiting the network call. Re-check the query
+            // generation; if this query was superseded, bail before
+            // doing any more work (limiter.recordQuery() below would
+            // consume a local quota slot for a cancelled query; the
+            // screenshot + provider.sendMessage would spend CPU/tokens
+            // on a response the user no longer wants). Bug identified
+            // by cubic-dev-ai on PR #8141 — P2.
+            guard isActiveQueryGeneration(generation) else { return }
+        }
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
                 guard isActiveQueryGeneration(generation) else { return }
@@ -2187,3 +2213,4 @@ extension FloatingControlBarWindow {
         resignKeyAnimationToken += 1
     }
 }
+
