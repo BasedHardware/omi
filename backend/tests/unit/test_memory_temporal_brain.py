@@ -5,28 +5,52 @@ Covers the deterministic pieces that don't need Firestore/Pinecone/LLM:
   - MemoryDB temporal lifecycle fields (valid_at / invalid_at / is_active, point #3)
 """
 
+import importlib
 import os
 import sys
 from types import ModuleType
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
+
+import pytest
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_test_secret_key_for_unit_tests_only_000000000000000000')
 
-# Stub database._client so importing models.memories doesn't spin up Firestore.
+# Stub database._client only while this module's tests run (see fixture below).
 _BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
+_ISOLATED_MODULE_NAMES = (
+    'database',
+    'database._client',
+    'utils.retrieval.hybrid',
+    'models.memories',
+)
 
-def _ensure_package_path(name, path):
-    module = sys.modules.get(name)
-    if not isinstance(module, ModuleType):
-        module = ModuleType(name)
-        sys.modules[name] = module
-    module.__path__ = [path]
-    if '.' in name:
-        parent_name, child_name = name.rsplit('.', 1)
-        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
-        setattr(parent, child_name, module)
-    return module
+_TEMPORAL_BRAIN_EXPORTS = (
+    'bm25_scores',
+    'rrf_rerank',
+    'Evidence',
+    'Memory',
+    'MemoryDB',
+    'MemoryCategory',
+    'SubjectAttribution',
+    'confidence_band',
+    'compute_veracity',
+    'merge_evidence_sets',
+    'render_memory',
+    'structurally_conflicts',
+)
+
+
+class _AutoMockModule(ModuleType):
+    """Import-complete stub: missing attributes resolve to MagicMock (no cross-test leak)."""
+
+    def __getattr__(self, name):
+        if name.startswith('__') and name.endswith('__'):
+            raise AttributeError(name)
+        mock = MagicMock()
+        setattr(self, name, mock)
+        return mock
 
 
 def _drop_stale_module(module_name, expected_file):
@@ -43,35 +67,60 @@ def _drop_stale_module(module_name, expected_file):
         delattr(parent, child_name)
 
 
-_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
-_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
-_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
-_drop_stale_module(
-    'utils.retrieval.hybrid',
-    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
-)
-_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+@pytest.fixture(scope='module', autouse=True)
+def _temporal_brain_import_isolation():
+    """Install import stubs only for this file's tests; restore before other modules run."""
+    original_modules = {name: sys.modules.get(name) for name in _ISOLATED_MODULE_NAMES}
 
-database_pkg = sys.modules.setdefault('database', ModuleType('database'))
-database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
+    _drop_stale_module(
+        'utils.retrieval.hybrid',
+        os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+    )
+    _drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
 
-_client_stub = ModuleType('database._client')
-_client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
-sys.modules['database._client'] = _client_stub
+    client_stub = _AutoMockModule('database._client')
+    client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
+    sys.modules['database._client'] = client_stub
+    database_pkg = sys.modules.get('database')
+    if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, '_client', client_stub)
 
-from utils.retrieval.hybrid import bm25_scores, rrf_rerank  # noqa: E402
-from models.memories import (  # noqa: E402
-    Evidence,
-    Memory,
-    MemoryDB,
-    MemoryCategory,
-    SubjectAttribution,
-    confidence_band,
-    compute_veracity,
-    merge_evidence_sets,
-    render_memory,
-    structurally_conflicts,
-)
+    hybrid_mod = importlib.import_module('utils.retrieval.hybrid')
+    memories_mod = importlib.import_module('models.memories')
+    module_globals = globals()
+    module_globals['bm25_scores'] = hybrid_mod.bm25_scores
+    module_globals['rrf_rerank'] = hybrid_mod.rrf_rerank
+    module_globals['Evidence'] = memories_mod.Evidence
+    module_globals['Memory'] = memories_mod.Memory
+    module_globals['MemoryDB'] = memories_mod.MemoryDB
+    module_globals['MemoryCategory'] = memories_mod.MemoryCategory
+    module_globals['SubjectAttribution'] = memories_mod.SubjectAttribution
+    module_globals['confidence_band'] = memories_mod.confidence_band
+    module_globals['compute_veracity'] = memories_mod.compute_veracity
+    module_globals['merge_evidence_sets'] = memories_mod.merge_evidence_sets
+    module_globals['render_memory'] = memories_mod.render_memory
+    module_globals['structurally_conflicts'] = memories_mod.structurally_conflicts
+
+    yield
+
+    for name, original in original_modules.items():
+        if original is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+    database_pkg_after = sys.modules.get('database')
+    if (
+        isinstance(database_pkg_after, ModuleType)
+        and original_modules.get('database._client') is not client_stub
+        and getattr(database_pkg_after, '_client', None) is client_stub
+    ):
+        if original_modules.get('database._client') is None:
+            delattr(database_pkg_after, '_client')
+        else:
+            setattr(database_pkg_after, '_client', original_modules['database._client'])
+
+    for export_name in _TEMPORAL_BRAIN_EXPORTS:
+        module_globals.pop(export_name, None)
 
 
 class TestBM25:
