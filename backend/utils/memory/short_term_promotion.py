@@ -47,6 +47,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
+from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle
 
@@ -238,6 +239,7 @@ def promote_short_term_item_via_apply(
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
     sync_atom_keyword_index_for_item(promoted, db_client=client)
+    sync_canonical_memory_vector(promoted)
     return promoted
 
 

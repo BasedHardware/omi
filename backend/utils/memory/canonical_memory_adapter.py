@@ -39,14 +39,14 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, V17MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
+from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
 
 logger = logging.getLogger(__name__)
 
 # Q5: canonical Pinecone ids are neutral ``mem_…`` memory ids (not ``v17mem:`` or ``{uid}-{id}``).
-# V17 apply ``vector_sync`` outbox still emits ``v17mem:`` via ``deterministic_v17_memory_vector_id``
-# — carry-forward until WS-G migrates shared vector writes; purge paths here use neutral ids only.
+# Canonical writes upsert neutral-metadata vectors directly; purge paths use neutral ids only.
 
 
 def neutral_vector_id_for_memory(memory_id: str) -> str:
@@ -191,9 +191,9 @@ def search_canonical_memories(
 
     keyword_ids = keyword_search_memory_ids(uid, normalized_query, limit=fetch_limit)
     if vector_query is None:
-        from database.vector_db import query_v17_memory_vector_candidates
+        from database.vector_db import query_memory_vector_candidates
 
-        vector_query_fn = query_v17_memory_vector_candidates
+        vector_query_fn = query_memory_vector_candidates
     else:
         vector_query_fn = vector_query
     vector_result = vector_query_fn(uid, normalized_query, limit=fetch_limit)
@@ -392,6 +392,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             MemoryProcessingState(item.processing_state.value),
         )
         sync_atom_keyword_index_for_item(item, db_client=client)
+        sync_canonical_memory_vector(item)
 
     return committed_id
 
