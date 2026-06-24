@@ -433,6 +433,9 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
+      if destination == .claude && model.mcpKey == nil {
+        await model.generateMCPKey()
+      }
     }
   }
 
@@ -641,10 +644,14 @@ struct MemoryExportDestinationSheet: View {
   private var mcpSection: some View {
     let setup = destination.mcpSetup(key: model.mcpKey ?? "YOUR_OMI_KEY")
     VStack(alignment: .leading, spacing: 12) {
-      mcpCodeRow(
-        label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
+      if destination == .claude {
+        claudeConnectorFields
+      } else {
+        mcpCodeRow(
+          label: "Server URL", value: MemoryExportDestination.mcpServerURL, copyLabel: "Server URL")
 
-      mcpKeyRow
+        mcpKeyRow
+      }
 
       if let setup, let copyText = setup.copyText, let copyTitle = setup.copyTitle {
         mcpSnippet(copyText, title: copyTitle, enabled: model.mcpKey != nil)
@@ -673,6 +680,73 @@ struct MemoryExportDestinationSheet: View {
             .foregroundColor(OmiColors.textSecondary)
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private var claudeConnectorFields: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Copy these fields into Claude's Add custom connector form.")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .fixedSize(horizontal: false, vertical: true)
+
+      mcpCodeRow(label: "Name", value: "Omi Memory", copyLabel: "Name")
+
+      mcpCodeRow(
+        label: "Remote MCP server URL",
+        value: MemoryExportDestination.mcpServerURL,
+        copyLabel: "Remote MCP server URL"
+      )
+
+      Text("Advanced settings")
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+        .padding(.top, 2)
+
+      mcpCodeRow(label: "OAuth Client ID", value: "omi", copyLabel: "OAuth Client ID")
+
+      if let key = model.mcpKey {
+        mcpCodeRow(
+          label: "OAuth Client Secret",
+          value: key,
+          copyLabel: "OAuth Client Secret",
+          secure: true
+        )
+      } else {
+        claudeConnectorPendingSecretRow
+      }
+    }
+  }
+
+  private var claudeConnectorPendingSecretRow: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text("OAuth Client Secret")
+        .scaledFont(size: 12, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+      HStack(spacing: 8) {
+        Text(model.isLoadingMCPKey ? "Generating connection key..." : "Connection key unavailable")
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        Button("Retry") {
+          Task { await model.generateMCPKey() }
+        }
+        .buttonStyle(.plain)
+        .scaledFont(size: 11, weight: .medium)
+        .foregroundColor(OmiColors.textSecondary)
+        .disabled(model.isLoadingMCPKey)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 10)
+      .background(
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+              .stroke(Color.white.opacity(0.08), lineWidth: 1))
+      )
     }
   }
 

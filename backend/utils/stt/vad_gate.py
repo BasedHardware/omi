@@ -344,7 +344,7 @@ class VADStreamingGate:
         output = self._update_state(pcm_data, is_speech, wall_time)
 
         if prev_state != self._state:
-            logger.info(
+            logger.debug(
                 'VADGate state %s->%s uid=%s session=%s speech=%s cursor=%.1fms',
                 prev_state.value,
                 self._state.value,

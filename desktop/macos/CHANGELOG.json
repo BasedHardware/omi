@@ -1,9 +1,22 @@
 {
   "unreleased": [
-    "Changed the default Ask Omi keyboard shortcut to Command-O",
-    "Onboarding: the keys step is now optional with a primary \"Skip for now\" action (bring-your-own-keys demoted to a secondary \"Save keys\"); tasks step button now says \"Take me to Omi\"; dev builds get a \"Skip onboarding\" shortcut on the first screen"
+    "Changed the default Ask Omi keyboard shortcut to Command-O"
   ],
   "releases": [
+    {
+      "version": "0.11.512",
+      "date": "2026-06-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.510",
+      "date": "2026-06-24",
+      "changes": [
+        "Onboarding: the keys step is now optional with a primary \"Skip for now\" action (bring-your-own-keys demoted to a secondary \"Save keys\"); tasks step button now says \"Take me to Omi\"; dev builds get a \"Skip onboarding\" shortcut on the first screen"
+      ]
+    },
     {
       "version": "0.11.508",
       "date": "2026-06-24",
