@@ -127,6 +127,7 @@ pytest tests/unit/test_fair_use_flagged_limit_clamp.py -v
 pytest tests/unit/test_fair_use_engine.py -v
 pytest tests/unit/test_fair_use_classifier.py -v
 pytest tests/unit/test_fair_use_async.py -v
+pytest tests/unit/test_conversations_pagination_clamp.py -v
 pytest tests/unit/test_dg_usage_batch.py -v
 pytest tests/unit/test_billable_transcription_seconds.py -v
 pytest tests/unit/test_sync_fair_use_gate.py -v
