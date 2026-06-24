@@ -1,5 +1,7 @@
 # memory Memory Product Integration — Oracle Decision Prescription
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Date:** 2026-06-18  
 **Reviewer:** Oracle (`oracle` CLI, browser-backed `gemini-3.5-flash`; same prior browser session could not be followed up because Oracle had no recoverable ChatGPT conversation URL, so this was a new Oracle run using the prior review plus the Epic/tickets/code context)  
 **Purpose:** Convert Oracle's critique into concrete architecture/product/implementation decisions and identify which remaining choices need David's input.
