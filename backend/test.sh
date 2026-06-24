@@ -82,6 +82,7 @@ pytest tests/unit/test_hume_callback_malformed.py -v
 pytest tests/unit/test_file_upload_security.py -v
 pytest tests/unit/test_file_upload_endpoint_security.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
+pytest tests/unit/test_apps_add_mcp_server_user_none.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
