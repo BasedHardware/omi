@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Callable, TypeVar, List, Optional, Tuple
 
+from fastapi import HTTPException
 from pydantic import BaseModel
 from ulid import ULID
 
@@ -236,6 +237,9 @@ def _create_or_update_persona(profile: TwitterProfile, username: str, uid: str, 
 async def add_twitter_to_persona(handle: str, persona_id) -> Dict[str, Any]:
     """Add Twitter account to an existing persona"""
     persona = get_persona_by_id_db(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail='Persona not found')
+
     profile = await get_twitter_profile(handle)
 
     if 'twitter' not in persona['connected_accounts']:
