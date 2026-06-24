@@ -2848,6 +2848,11 @@ class AppState: ObservableObject {
     withAnimation {
       conversations.removeAll { $0.id == conversationId }
     }
+    NotificationCenter.default.post(
+      name: .conversationDeleted,
+      object: nil,
+      userInfo: ["conversationId": conversationId]
+    )
   }
 
   /// Update a conversation title locally (after successful API call)
@@ -3740,6 +3745,8 @@ extension Notification.Name {
   static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
   /// Posted by Cmd+R to refresh all data (conversations, chat, tasks, memories)
   static let refreshAllData = Notification.Name("refreshAllData")
+  /// Posted after a conversation is deleted so memory views can cascade-retract locally.
+  static let conversationDeleted = Notification.Name("conversationDeleted")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")
