@@ -81,7 +81,7 @@ def test_atomic_bump_uses_firestore_transaction_primitive():
     source = inspect.getsource(atomic_bump_source_generation)
     assert "transaction()" in source
     assert "_atomic_bump_source_generation_transaction" in source
-    apply_store_source = (Path(__file__).resolve().parents[2] / "database" / "v17_memory_apply_store.py").read_text(
+    apply_store_source = (Path(__file__).resolve().parents[2] / "database" / "memory_apply_store.py").read_text(
         encoding="utf-8"
     )
     assert "def _atomic_bump_source_generation_transaction" in apply_store_source
