@@ -788,6 +788,162 @@ def test_v3_projection_readiness_frozen_source_tags_unchanged():
     assert v3_projection_readiness.V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE == "v17_derived_compatibility_projection"
 
 
+def test_v3_f6_sub_shim_namespace_parity():
+    import importlib
+
+    base_exports = {
+        "_validation": ["require_exact_fields"],
+        "aggregate": [
+            "F6_LOCAL_GATE_IDS",
+            "GCP_ACCESS_GATE_IDS",
+            "NON_CLAIMS",
+            "build_pre_gcp_aggregate_report",
+        ],
+        "audit": [
+            "AuditCorrelationResult",
+            "AuditLogClient",
+            "AuditLogEvent",
+            "AuditQuery",
+            "WRITE_METHOD_MARKERS",
+            "assess_audit_correlation",
+        ],
+        "config": [
+            "AUDIT_FIELDS",
+            "AuditSettings",
+            "EvidenceLimits",
+            "EvidenceTarget",
+            "EvidenceTargetRegistry",
+            "INDEX_FIELDS",
+            "LIMIT_FIELDS",
+            "PLACEHOLDER_MARKERS",
+            "TARGET_FIELDS",
+            "ValidationError",
+        ],
+        "fingerprints": [
+            "FINGERPRINT_RE",
+            "HMAC_KEY",
+            "FingerprintContractError",
+            "RedactionContractError",
+            "fingerprint",
+        ],
+        "identity_iam": [
+            "FORBIDDEN_BROAD_ROLES",
+            "FORBIDDEN_WRITE_PERMISSIONS",
+            "IdentityIamSource",
+            "IdentityIamTarget",
+            "IdentityIamVerificationResult",
+            "REQUIRED_READ_PERMISSIONS",
+            "verify_identity_iam",
+        ],
+        "local_defaults": [
+            "DEFAULT_APPROVED_METADATA_PATHS",
+            "DEFAULT_EVIDENCE_TARGETS",
+            "DEFAULT_INDEX_EXPECTATIONS",
+        ],
+        "local_doubles": [
+            "FakeAuditLogClient",
+            "FakeIdentityIamSource",
+            "FakeReadEvidenceTransport",
+        ],
+        "local_smoke": ["build_report_from_current_local_contracts"],
+        "pre_gcp_aggregate": [
+            "F6_LOCAL_GATE_IDS",
+            "GCP_ACCESS_GATE_IDS",
+            "NON_CLAIMS",
+            "build_pre_gcp_aggregate_report",
+            "build_report_from_current_local_contracts",
+        ],
+        "protocol": [
+            "ARTIFACT_VERSION_F6B",
+            "ARTIFACT_VERSION_F6F",
+            "ARTIFACT_VERSION_F6H",
+            "AggregateDecision",
+            "ArtifactVersion",
+            "DECISION_BLOCKED_ON_GCP_ACCESS",
+            "DECISION_NO_GO",
+            "EvidenceTargetName",
+            "GateStatus",
+            "STATUS_BLOCKED",
+            "STATUS_BLOCKED_ON_GCP_ACCESS",
+            "STATUS_MISSING",
+            "STATUS_PASS",
+            "STATUS_PRE_GCP_READY",
+            "TARGET_DEV",
+            "TARGET_PROD",
+        ],
+        "read_evidence": [
+            "EvidenceClientConfig",
+            "GENERIC_OR_RAW_METHODS",
+            "MUTATOR_TOKENS",
+            "ReadEvidenceRequest",
+            "ReadEvidenceTransport",
+            "ReadOnlyEvidenceClient",
+        ],
+        "readonly_contracts": [
+            "AuditCorrelationResult",
+            "AuditLogClient",
+            "AuditLogEvent",
+            "AuditQuery",
+            "EvidenceClientConfig",
+            "FORBIDDEN_BROAD_ROLES",
+            "FORBIDDEN_WRITE_PERMISSIONS",
+            "FakeAuditLogClient",
+            "FakeIdentityIamSource",
+            "FakeReadEvidenceTransport",
+            "GENERIC_OR_RAW_METHODS",
+            "IdentityIamSource",
+            "IdentityIamTarget",
+            "IdentityIamVerificationResult",
+            "MUTATOR_TOKENS",
+            "REQUIRED_READ_PERMISSIONS",
+            "ReadEvidenceRequest",
+            "ReadEvidenceTransport",
+            "ReadOnlyEvidenceClient",
+            "RunRecord",
+            "WRITE_METHOD_MARKERS",
+            "_audit_method_is_write",
+            "_method_family",
+            "_method_is_forbidden",
+            "assess_audit_correlation",
+            "verify_identity_iam",
+        ],
+        "redaction": [
+            "AUDIT_FIELDS",
+            "FINGERPRINT_RE",
+            "FORBIDDEN_FIELD_FRAGMENTS",
+            "FORBIDDEN_VALUE_PATTERNS",
+            "FingerprintContractError",
+            "HMAC_KEY",
+            "OBSERVATION_FIELDS",
+            "READ_BOUNDS_FIELDS",
+            "RedactionContractError",
+            "TOP_LEVEL_FIELDS",
+            "fingerprint",
+            "render_redacted_evidence_json",
+            "validate_redacted_evidence",
+        ],
+        "run_context": ["RunRecord"],
+        "run_record": [
+            "APPROVAL_FIELDS",
+            "ExecutionWindow",
+            "READ_BOUNDS_FIELDS",
+            "RUN_RECORD_FIELDS",
+            "RunRecordValidationError",
+            "ValidatedRunRecord",
+            "WINDOW_FIELDS",
+            "validate_run_record",
+        ],
+    }
+    for submodule, exports in base_exports.items():
+        canonical = importlib.import_module(f"utils.memory.v3_f6.{submodule}")
+        legacy = importlib.import_module(f"utils.memory.v17_v3_f6.{submodule}")
+        for export in exports:
+            assert getattr(canonical, export) is getattr(legacy, export), f"v17_v3_f6.{submodule}.{export}"
+        if hasattr(legacy, "__all__"):
+            for export in legacy.__all__:
+                assert getattr(canonical, export) is getattr(legacy, export), f"v17_v3_f6.{submodule}.{export}"
+
+
 def test_v3_cluster_shim_namespace_parity():
     import importlib
 
