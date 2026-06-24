@@ -151,6 +151,7 @@ pytest tests/unit/test_dev_api_conversations_poison.py -v
 pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_dev_api_action_items_poison.py -v
 pytest tests/unit/test_rate_limiting.py -v
+pytest tests/unit/test_trends_malformed_topic_skip.py -v
 pytest tests/unit/test_rate_limit_json_failopen.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
