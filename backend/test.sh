@@ -19,6 +19,7 @@ pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
 pytest tests/unit/test_user_speaker_embedding.py -v
+pytest tests/unit/test_chat_metadata_tz_guard.py -v
 pytest tests/unit/test_parakeet_diarization.py -v
 pytest tests/unit/test_diarizer_embedding_decoder_bypass.py -v
 pytest tests/unit/test_parakeet_prerecorded.py -v
