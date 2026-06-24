@@ -355,7 +355,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def apply_env_defaults(args: argparse.Namespace, env: Mapping[str, str]) -> argparse.Namespace:
     if not args.project:
-        args.project = env.get("V17_FIRESTORE_PROOF_PROJECT", "")
+        args.project = env.get("MEMORY_FIRESTORE_PROOF_PROJECT", "")
     return args
 
 
