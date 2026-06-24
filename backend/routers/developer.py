@@ -1459,6 +1459,8 @@ def get_goal_history(
     - **goal_id**: The ID of the goal
     - **days**: Number of days of history to return (max 365, default 30)
     """
+    # Clamp days to a safe range so a negative value cannot reach the Firestore .limit() call and 500.
+    days = max(1, min(days, 365))
     history = goals_db.get_goal_history(uid, goal_id, days)
 
     for entry in history:
