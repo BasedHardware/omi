@@ -107,6 +107,7 @@ pytest tests/unit/test_import_jobs_malformed.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
+pytest tests/unit/test_messages_list_malformed.py -v
 pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
