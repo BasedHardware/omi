@@ -34,7 +34,7 @@ from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
@@ -198,7 +198,17 @@ def get_conversations(
     )
 
     redact_conversations_for_list(conversations)
-    return conversations
+    # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
+    # with a 500.
+    valid_conversations = []
+    for conv in conversations:
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid conversation for uid {uid}: {invalid_fields}")
+            continue
+    return valid_conversations
 
 
 @router.get('/v1/conversations/count', tags=['conversations'])
