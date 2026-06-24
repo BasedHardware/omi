@@ -230,6 +230,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func startSession(provider: RealtimeHubProvider, auth: HubAuth) {
     let instructions = RealtimeHubTools.systemInstruction(aboutUser: aboutUserCard)
     let s = RealtimeHubSession(provider: provider, auth: auth, instructions: instructions, delegate: self)
+    lastWarmAt = nil
+    hubConnected = false
     session = s
     sessionProvider = provider
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
@@ -624,14 +626,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // land here.
     let hasActiveTurn = responding || (barState?.isVoiceListening == true)
     responding = false
-    let aliveFor = lastWarmAt.map { Date().timeIntervalSince($0) } ?? 0
+    let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     let closeCategory = RealtimeHubCloseClassifier.category(
       message: message,
       aliveFor: aliveFor,
       hasActiveTurn: hasActiveTurn)
     let categoryText = closeCategory.map { " category=\($0.rawValue)" } ?? ""
+    let safeMessage = closeCategory == .providerPolicyCloseFast ? "" : " \(message)"
     if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
-      logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag) \(message)")
+      logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag)\(safeMessage)")
     } else {
       log("RealtimeHub: session closed —\(categoryText) provider=\(providerTag) aliveFor=\(Int(aliveFor))s \(message)")
     }
