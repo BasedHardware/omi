@@ -81,6 +81,28 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("defaults owner-scoped tools to the active control context owner", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });
+    await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "other-owner",
+      externalRefId: "task-other",
+      requestId: "request-other",
+    });
+
+    const context: AgentControlToolContext = {
+      kernel,
+      getOwnerId: () => "owner-from-context",
+    };
+    const listed = parseToolResult(await handleAgentControlToolCall(context, "list_agent_sessions", {}));
+
+    expect(listed.ok).toBe(true);
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0].session.ownerId).toBe("owner-from-context");
+    store.close();
+  });
+
   it("returns canonical artifact references without reading artifact contents", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = await kernel.executeRun(baseRunInput);
@@ -149,6 +171,28 @@ describe("agent control tools", () => {
     const listed = parseToolResult(await handleAgentControlToolCall({ kernel }, "list_agent_sessions", { ownerId: "owner" }));
     expect(listed.sessions).toHaveLength(1);
     expect(listed.sessions[0].latestRun.runId).toBe(sent.run.runId);
+    store.close();
+  });
+
+  it("defaults send_agent_message to the active control context owner", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const first = await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall(
+        { kernel, getOwnerId: () => "owner-from-context" },
+        "send_agent_message",
+        {
+          sessionId: first.session.sessionId,
+          prompt: "follow up",
+          requestId: "request-context-owner",
+        },
+      ),
+    );
+
+    expect(sent.ok).toBe(true);
+    expect(adapter.executed).toHaveLength(2);
+    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
     store.close();
   });
 

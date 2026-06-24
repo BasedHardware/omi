@@ -574,10 +574,10 @@ async function main(): Promise<void> {
   const kernel = new AgentRuntimeKernel({ store, registry });
   let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
   let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
-  let piMonoOwnerId = "desktop-local-user";
+  let currentOwnerId = "desktop-local-user";
   const invalidatePiMonoBindings = (reason: string) => {
     kernel.invalidateBindings({
-      ownerId: piMonoOwnerId,
+      ownerId: currentOwnerId,
       surfaceKind: "legacy_jsonl",
       defaultAdapterId: "pi-mono",
       adapterId: "pi-mono",
@@ -608,7 +608,7 @@ async function main(): Promise<void> {
     send({ type: "error", message: msg });
     process.exit(1);
   }
-  agentControlToolContext = { kernel };
+  agentControlToolContext = { kernel, getOwnerId: () => currentOwnerId };
   const facade = new JsonlCompatibilityFacade({
     kernel,
     send,
@@ -647,8 +647,8 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
-          if (adapterId === "pi-mono" && query.ownerId) {
-            piMonoOwnerId = query.ownerId;
+          if (query.ownerId) {
+            currentOwnerId = query.ownerId;
           }
           if (adapterId === "acp") {
             await initializeAcp();
@@ -691,7 +691,7 @@ async function main(): Promise<void> {
       case "refresh_token": {
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
-        piMonoOwnerId = rtm.ownerId ?? piMonoOwnerId;
+        currentOwnerId = rtm.ownerId ?? currentOwnerId;
         try {
           if (!piMonoAdapter) {
             await ensurePiMonoAdapter(rtm.token);

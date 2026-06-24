@@ -159,6 +159,57 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const ownerA = facade.handleQuery({
+      ...v1Query({ prompt: "owner a" }),
+      protocolVersion: 2,
+      requestId: "request-owner-a",
+      clientId: "shared-client",
+      ownerId: "owner-a",
+      legacySessionKey: "owner-a-key",
+    });
+    const ownerB = facade.handleQuery({
+      ...v1Query({ prompt: "owner b" }),
+      protocolVersion: 2,
+      requestId: "request-owner-b",
+      clientId: "shared-client",
+      ownerId: "owner-b",
+      legacySessionKey: "owner-b-key",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      clientId: "shared-client",
+      ownerId: "owner-a",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck?.runId).toBe(adapter.executed[0].runId);
+
+    adapter.resolveDeferred({
+      text: "cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await Promise.all([ownerA, ownerB]);
+    store.close();
+  });
+
   it("queues overlapping v2 requests on one worker without mixing request-scoped results", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
     adapter.deferResult();

@@ -466,15 +466,15 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
+function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
   if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
-      resolve(`Error: tool '${name}' timed out after ${OMI_TOOL_TIMEOUT_MS / 1000}s`);
-    }, OMI_TOOL_TIMEOUT_MS);
+      resolve(`Error: tool '${name}' timed out after ${timeoutMs / 1000}s`);
+    }, timeoutMs);
     const cleanup = () => {
       clearTimeout(timer);
       omiPendingCalls.delete(callId);
@@ -493,6 +493,11 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
 }
 
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
+export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
+
+export function isSafeSkillName(name: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(name) && name !== "." && name !== ".." && !name.includes("..");
+}
 
 // ---------------------------------------------------------------------------
 // Omi tool definitions — pi-mono defineTool() with TypeBox schemas
@@ -508,6 +513,7 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   properties: T;
   required: (keyof T)[];
   schemaOptions?: Record<string, unknown>;
+  timeoutMs?: number;
 }) {
   const parameters = Type.Object(
     spec.properties,
@@ -522,7 +528,7 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
     promptGuidelines: spec.promptGuidelines,
     parameters,
     async execute(_toolCallId, params, signal) {
-      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal);
+      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal, spec.timeoutMs);
       return { content: [{ type: "text" as const, text: result }], details: undefined };
     },
   });
@@ -587,7 +593,7 @@ export const OMI_TOOLS = [
     description: "List canonical Omi-managed agent sessions, recent runs, active runs, and adapter bindings.",
     promptSnippet: "list_agent_sessions - List Omi-managed agent sessions and active runs",
     properties: {
-      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the local desktop user." })),
+      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the active signed-in owner." })),
       status: Type.Optional(Type.String({ enum: ["open", "archived", "closed"] })),
       surfaceKind: Type.Optional(Type.String({ description: "Filter by surface kind such as main_chat, task_chat, or floating_pill." })),
       limit: Type.Optional(Type.Number({ description: "Maximum sessions to return. Default 50, max 200." })),
@@ -645,7 +651,7 @@ export const OMI_TOOLS = [
     promptSnippet: "send_agent_message - Continue an Omi-managed agent session",
     properties: {
       sessionId: Type.String({ description: "Canonical Omi session_id to continue." }),
-      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the local desktop user." })),
+      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the active signed-in owner." })),
       prompt: Type.String({ description: "The follow-up message." }),
       mode: Type.Optional(Type.String({ enum: ["ask", "act"] })),
       adapterId: Type.Optional(Type.String({ description: "Optional adapter override." })),
@@ -656,6 +662,7 @@ export const OMI_TOOLS = [
       metadata: Type.Optional(Type.Object({}, { additionalProperties: true })),
     },
     required: ["sessionId", "prompt"],
+    timeoutMs: OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
   }),
   omiTool({
     name: "delegate_agent",
@@ -685,6 +692,7 @@ export const OMI_TOOLS = [
       metadata: Type.Optional(Type.Object({}, { additionalProperties: true })),
     },
     required: ["mode", "parentRunId", "objective"],
+    timeoutMs: OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
     schemaOptions: {
       allOf: [
         {
@@ -765,14 +773,27 @@ export const OMI_TOOLS = [
     }, { additionalProperties: false }),
     async execute(_toolCallId, params) {
       const name = String((params as { name?: unknown }).name ?? "").trim();
+      if (!isSafeSkillName(name)) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+          }],
+          details: undefined,
+        };
+      }
       const workspace = process.env.OMI_WORKSPACE || "";
-      const candidates = [
-        workspace ? join(workspace, ".claude", "skills", name, "SKILL.md") : "",
-        join(homedir(), ".claude", "skills", name, "SKILL.md"),
+      const roots = [
+        workspace ? resolve(workspace, ".claude", "skills") : "",
+        resolve(homedir(), ".claude", "skills"),
       ].filter(Boolean);
 
       let content: string | null = null;
-      for (const filePath of candidates) {
+      for (const root of roots) {
+        const filePath = resolve(root, name, "SKILL.md");
+        if (!filePath.startsWith(`${root}/`)) {
+          continue;
+        }
         try {
           content = await readFile(filePath, "utf8");
           break;

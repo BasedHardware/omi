@@ -24,6 +24,8 @@ import {
   __resetAuditWarnedForTest,
   OMI_TOOLS,
   OMI_TOOL_TIMEOUT_MS,
+  OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
+  isSafeSkillName,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
   __omiPendingCallsForTest,
@@ -1080,6 +1082,19 @@ test("OMI_TOOLS: semantic_search has promptGuidelines", () => {
 
 test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {
   assert.equal(OMI_TOOL_TIMEOUT_MS, 30_000);
+});
+
+test("OMI_LONG_CONTROL_TOOL_TIMEOUT_MS: gives agent control runs a longer window", () => {
+  assert.equal(OMI_LONG_CONTROL_TOOL_TIMEOUT_MS, 600_000);
+});
+
+test("load_skill: rejects traversal and path-like names", () => {
+  assert.equal(isSafeSkillName("dev-mode"), true);
+  assert.equal(isSafeSkillName("product_design.v1"), true);
+  assert.equal(isSafeSkillName("../secrets"), false);
+  assert.equal(isSafeSkillName("nested/skill"), false);
+  assert.equal(isSafeSkillName(".."), false);
+  assert.equal(isSafeSkillName("safe..looking"), false);
 });
 
 test("callSwiftTool: returns error when not connected", async () => {

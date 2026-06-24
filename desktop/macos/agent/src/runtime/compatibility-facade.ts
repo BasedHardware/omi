@@ -73,8 +73,8 @@ export class JsonlCompatibilityFacade {
   private readonly activeByRequest = new Map<string, ActiveRequestContext>();
   private readonly activeByRun = new Map<string, ActiveRequestContext>();
   private readonly latestRunByClient = new Map<string, string>();
+  private readonly latestRunByOwner = new Map<string, string>();
   private readonly warmupHints = new Map<string, WarmupHint>();
-  private latestRunId: string | undefined;
 
   constructor(options: CompatibilityFacadeOptions) {
     this.kernel = options.kernel;
@@ -143,11 +143,12 @@ export class JsonlCompatibilityFacade {
       this.activeByRequest.delete(context.requestId);
       if (context.runId) {
         this.activeByRun.delete(context.runId);
-        if (this.latestRunByClient.get(context.clientId) === context.runId) {
-          this.latestRunByClient.delete(context.clientId);
+        const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
+        if (this.latestRunByClient.get(clientKey) === context.runId) {
+          this.latestRunByClient.delete(clientKey);
         }
-        if (this.latestRunId === context.runId) {
-          this.latestRunId = undefined;
+        if (this.latestRunByOwner.get(context.ownerId) === context.runId) {
+          this.latestRunByOwner.delete(context.ownerId);
         }
       }
     }
@@ -156,18 +157,19 @@ export class JsonlCompatibilityFacade {
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
+    const ownerId = message.ownerId ?? this.ownerId;
     const runId =
       message.runId ??
       (requestId ? this.activeByRequest.get(requestId)?.runId : undefined) ??
-      this.latestRunByClient.get(clientId) ??
-      this.latestRunId;
+      this.latestRunByClient.get(this.latestRunByClientKey(ownerId, clientId)) ??
+      this.latestRunByOwner.get(ownerId);
     const context =
       (requestId ? this.activeByRequest.get(requestId) : undefined) ??
       (runId ? this.activeByRun.get(runId) : undefined) ?? {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
         clientId,
-        ownerId: message.ownerId ?? this.ownerId,
+        ownerId,
         adapterId: this.defaultAdapterId,
         sessionId: message.sessionId,
         runId,
@@ -308,8 +310,8 @@ export class JsonlCompatibilityFacade {
         context.sessionId = event.sessionId;
         context.runId = event.runId;
         this.activeByRun.set(event.runId, context);
-        this.latestRunByClient.set(context.clientId, event.runId);
-        this.latestRunId = event.runId;
+        this.latestRunByClient.set(this.latestRunByClientKey(context.ownerId, context.clientId), event.runId);
+        this.latestRunByOwner.set(context.ownerId, event.runId);
       }
       return;
     }
@@ -387,6 +389,10 @@ export class JsonlCompatibilityFacade {
       return canonicalSessionId;
     }
     return context.adapterSessionId ?? context.legacyAdapterSessionId ?? canonicalSessionId;
+  }
+
+  private latestRunByClientKey(ownerId: string, clientId: string): string {
+    return `${ownerId}:${clientId}`;
   }
 
   private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {

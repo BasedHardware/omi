@@ -8,7 +8,7 @@ const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 
 const listAgentSessionsSchema = z.object({
-  ownerId: z.string().min(1).default("desktop-local-user"),
+  ownerId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
   surfaceKind: z.string().min(1).optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
@@ -39,7 +39,7 @@ const inspectAgentArtifactsSchema = z
 
 const sendAgentMessageSchema = z.object({
   sessionId: z.string().min(1),
-  ownerId: z.string().min(1).default("desktop-local-user"),
+  ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   mode: runModeSchema.default("ask"),
   adapterId: z.string().min(1).optional(),
@@ -114,7 +114,7 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
     inputSchema: {
       type: "object",
       properties: {
-        ownerId: { type: "string", description: "Owner id to list. Defaults to the local desktop user." },
+        ownerId: { type: "string", description: "Owner id to list. Defaults to the active signed-in owner." },
         status: { type: "string", enum: ["open", "archived", "closed"] },
         surfaceKind: { type: "string", description: "Filter to a surface kind such as main_chat, task_chat, or floating_pill." },
         limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
@@ -177,7 +177,7 @@ Creates a new run in that session through the runtime kernel. Use this for multi
       type: "object",
       properties: {
         sessionId: { type: "string", description: "Canonical Omi session_id to continue." },
-        ownerId: { type: "string", description: "Owner id. Defaults to the local desktop user." },
+        ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
         prompt: { type: "string", description: "The follow-up message." },
         mode: { type: "string", enum: ["ask", "act"], description: "Run mode. Default ask." },
         adapterId: { type: "string", description: "Optional adapter override." },
@@ -226,6 +226,7 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
+  getOwnerId?: () => string;
 }
 
 export function isAgentControlToolName(name: string): name is AgentControlToolName {
@@ -245,7 +246,10 @@ export async function handleAgentControlToolCall(
     switch (name) {
       case "list_agent_sessions": {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
-        const sessions = context.kernel.listSessions(parsed);
+        const sessions = context.kernel.listSessions({
+          ...parsed,
+          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+        });
         return stringifyToolResult({ sessions: sessions.map(serializeSessionSummary) });
       }
       case "get_agent_run": {
@@ -273,6 +277,7 @@ export async function handleAgentControlToolCall(
         rejectSynchronousNestedRun(context, parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId));
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
+          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
           requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         });
         return stringifyToolResult({
@@ -294,6 +299,7 @@ export async function handleAgentControlToolCall(
         }
         const result = await context.kernel.delegateAgent({
           ...parsed,
+          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
           requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         });
         return stringifyToolResult({
@@ -321,6 +327,10 @@ export async function handleAgentControlToolCall(
       },
     });
   }
+}
+
+function controlToolOwnerId(context: AgentControlToolContext): string {
+  return context.getOwnerId?.() ?? "desktop-local-user";
 }
 
 function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string): void {
