@@ -117,11 +117,11 @@ def test_projection_write_convergence_missing_env_execute_is_blocked_without_rea
     assert report["firestore_reads_executed"] is False
     proof = report["production_write_convergence_proof"]
     assert proof["missing_prerequisites"] == [
-        "V17_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_ALLOW=1",
-        "V17_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
+        "MEMORY_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_ALLOW=1",
+        "MEMORY_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
         "GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_JSON",
-        "V17_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
-        "V17_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_ROUTE_SCOPE_LABEL",
+        "MEMORY_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
+        "MEMORY_V3_PROJECTION_WRITE_CONVERGENCE_PROD_READ_ROUTE_SCOPE_LABEL",
     ]
     assert proof["production_convergence_evidence_exists"] is False
     assert proof["production_convergence_evidence_valid"] is False
@@ -210,9 +210,7 @@ def test_projection_write_convergence_readiness_is_registered_in_test_runner_doc
     ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
     oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_projection_write_convergence_readiness.py" in test_sh
     assert "p1_3_v3_projection_write_convergence_readiness.py" in ticket_doc
