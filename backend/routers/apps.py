@@ -557,7 +557,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(persona_data)
+    try:
+        data = json.loads(persona_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid persona_data: must be valid JSON')
     data['approved'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'

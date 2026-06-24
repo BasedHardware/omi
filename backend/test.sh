@@ -167,6 +167,7 @@ pytest tests/unit/test_staged_tasks_batch_scores.py -v
 pytest tests/unit/test_staged_tasks_dedup.py -v
 pytest tests/unit/test_dg_start_guard.py -v
 pytest tests/unit/test_available_plans_resilience.py -v
+pytest tests/unit/test_apps_create_persona_json.py -v
 pytest tests/unit/test_subscription_restructure.py -v
 pytest tests/unit/test_chat_quota.py -v
 pytest tests/unit/test_voice_message_filename_none.py -v
