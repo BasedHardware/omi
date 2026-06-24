@@ -653,7 +653,20 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
     batch = db.batch()
     count = 0
 
+    # batch.update() on a missing doc raises google NotFound, which would
+    # 500 the whole sync batch on one stale/deleted reminder id. Pre-filter
+    # to existing docs (same pattern as folders.bulk_move_conversations_to_folder)
+    # and skip past missing ids.
+    requested_ids = [entry['id'] for entry in updates]
+    existing_ids = {
+        doc.id
+        for doc in db.get_all([action_items_ref.document(i) for i in requested_ids])
+        if doc is not None and doc.exists
+    }
+
     for entry in updates:
+        if entry['id'] not in existing_ids:
+            continue
         update_data = _prepare_action_item_for_write(entry['data'])
         update_data['updated_at'] = now
         # Clear sync_requested when item is successfully exported
