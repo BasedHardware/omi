@@ -340,12 +340,12 @@ def _projection_item_to_row(item: dict, context: V17V3ComposedExecutionContext, 
 
 
 def _cursor_secret_from_env(env) -> bytes | None:
-    raw = env.get('V17_V3_CURSOR_SECRET') or ''
+    raw = env.get('MEMORY_V3_CURSOR_SECRET') or ''
     return raw.encode('utf-8') if raw else None
 
 
 def _cursor_ttl_from_env(env) -> int:
-    raw = env.get('V17_V3_CURSOR_TTL_SECONDS') or ''
+    raw = env.get('MEMORY_V3_CURSOR_TTL_SECONDS') or ''
     if not raw:
         return _DEFAULT_CURSOR_TTL_SECONDS
     try:
@@ -407,8 +407,8 @@ def build_v17_v3_production_runtime(*, uid: str, db_client, env: dict[str, str] 
         db_client=db_client,
         rollout_config=rollout_config,
         cursor_secret=_cursor_secret_from_env(effective_env),
-        cursor_policy_version=effective_env.get('V17_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,
-        cursor_secret_version=effective_env.get('V17_V3_CURSOR_SECRET_VERSION') or _DEFAULT_CURSOR_SECRET_VERSION,
+        cursor_policy_version=effective_env.get('MEMORY_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,
+        cursor_secret_version=effective_env.get('MEMORY_V3_CURSOR_SECRET_VERSION') or _DEFAULT_CURSOR_SECRET_VERSION,
         cursor_ttl_seconds=_cursor_ttl_from_env(effective_env),
     )
     adapters = _ProductionV17V3Adapters(config)
