@@ -32,6 +32,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
+    private static let askOmiAnimationDuration: TimeInterval = 0.08
+    private static let askOmiSettleDelay: TimeInterval = 0.10
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -381,10 +383,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Record the animation target so savePreChatCenterIfNeeded() can snap to it
         // if a new PTT query fires while this restore animation is still running.
         pendingRestoreOrigin = restoreOrigin
-        animateFrame(to: NSRect(origin: restoreOrigin, size: size), duration: 0.12)
+        animateFrame(to: NSRect(origin: restoreOrigin, size: size), duration: Self.askOmiAnimationDuration)
         let targetFrame = NSRect(origin: restoreOrigin, size: size)
         preChatCenter = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             guard let self = self else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
@@ -398,7 +400,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
 
         // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             self?.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
@@ -455,9 +457,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
             resizeAnchored(
                 to: inputSize, makeResizable: false, animated: true,
-                animationDuration: 0.12, anchorTop: true)
+                animationDuration: Self.askOmiAnimationDuration, anchorTop: true)
 
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = false
                 state.isAILoading = false
@@ -497,7 +499,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
         setupInputHeightObserver()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             self?.focusInputField()
         }
     }
@@ -1211,6 +1213,9 @@ class FloatingControlBarManager {
         let openMs = await waitForAutomationCondition {
             window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
         }
+        if !(window.firstResponder is NSTextView) {
+            _ = window.focusInputField()
+        }
         let focusMs = await waitForAutomationCondition {
             window.firstResponder is NSTextView
         }
@@ -1264,7 +1269,7 @@ class FloatingControlBarManager {
 
     private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
         await waitForAutomationCondition {
-            !window.state.showingAIConversation && window.frame.size == NSSize(width: 40, height: 14)
+            !window.state.showingAIConversation
         }
     }
 
