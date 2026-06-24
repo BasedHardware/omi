@@ -39,7 +39,7 @@ PROHIBITED_ENDPOINT_PATTERNS = (
 )
 PROHIBITED_PROJECT_PATTERNS = (
     re.compile(r"based-hardware", re.IGNORECASE),
-    re.compile(r"demo-v17-memory", re.IGNORECASE),
+    re.compile(r"demo-memory", re.IGNORECASE),
 )
 PROVIDER_CREDENTIAL_PATTERNS = (
     re.compile(r"\b(?:sk|sk-proj)-[A-Za-z0-9_-]{12,}\b"),
@@ -101,7 +101,7 @@ def _is_loopback_url(raw: str) -> bool:
 
 
 def _user_payload_from_seed_manifest(cfg: config.HarnessConfig, user: str) -> dict[str, str]:
-    manifests = sorted((cfg.layout.state_root / "manifests").glob("v17-scenario-*-seed.json"))
+    manifests = sorted((cfg.layout.state_root / "manifests").glob("memory-scenario-*-seed.json"))
     if not manifests:
         return {}
     data = json.loads(max(manifests, key=lambda path: path.stat().st_mtime).read_text(encoding="utf-8"))
@@ -166,7 +166,7 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
         default_user="local_default_user",
         seeded_users=users,
         state_root=str(cfg.layout.state_root),
-        session_summary_path=str(cfg.layout.reports_dir / "local-emulator-v17-session-summary.json"),
+        session_summary_path=str(cfg.layout.reports_dir / "local-emulator-memory-session-summary.json"),
         env=env,
     )
 
@@ -177,8 +177,8 @@ def validate_profile(profile: DesktopLocalProfile) -> list[str]:
         errors.append("local profile app/bundle identity drifted")
     if profile.bundle_id == "com.omi.computer-macos":
         errors.append("local profile must not use production bundle")
-    if profile.bundle_id == "com.omi.omi-local-v17" or profile.app_name == "omi-local-v17":
-        errors.append("legacy omi-local-v17 bundle is disabled; use default Omi Dev")
+    if profile.bundle_id == "com.omi.omi-local-memory" or profile.app_name == "omi-local-memory":
+        errors.append("legacy omi-local-memory bundle is disabled; use default Omi Dev")
     if "OMI_APP_NAME" in profile.env:
         errors.append("OMI_APP_NAME must not be set for harness local profile (use default Omi Dev)")
     if profile.url_scheme != LOCAL_URL_SCHEME:
