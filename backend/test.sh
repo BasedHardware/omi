@@ -60,6 +60,7 @@ pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_conversations_count.py -v
+pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v

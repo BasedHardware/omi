@@ -347,11 +347,16 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     if not started_at:
         raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
 
-    # Parse datetimes if they're strings
-    if isinstance(started_at, str):
-        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
-    if isinstance(finished_at, str):
-        finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    # Parse datetimes if they're strings. A stored timestamp that is not valid ISO (legacy or imported
+    # data) would otherwise raise ValueError and surface as a 500; return a clear 400 instead, matching the
+    # missing-timestamp case handled just above.
+    try:
+        if isinstance(started_at, str):
+            started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+        if isinstance(finished_at, str):
+            finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Conversation has invalid timestamp information")
 
     # Ensure timezone-aware
     if started_at.tzinfo is None:
