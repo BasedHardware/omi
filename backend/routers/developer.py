@@ -1029,7 +1029,7 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
     )
     source: Optional[ConversationSource] = Field(
-        default=ConversationSource.external_integration,
+        default=ConversationSource.phone,
         description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
     )
     started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
@@ -1291,8 +1291,9 @@ def _create_conversation_from_segments(
     # Language defaults
     language_code = request.language or 'en'
 
-    # Source defaults
-    source = request.source or ConversationSource.external_integration
+    # Segment uploads are transcript-shaped; default to phone so process_conversation uses
+    # the transcript path (CreateConversation has no text_source field).
+    source = request.source or ConversationSource.phone
 
     # Create conversation object with transcript segments
     create_conversation_obj = CreateConversation(
