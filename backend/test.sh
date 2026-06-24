@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 
 pytest tests/unit/test_transcript_segment.py -v
+pytest tests/unit/test_omi_product_tool_failsoft.py -v
 pytest tests/unit/test_import_job_status_detail_enum.py -v
 pytest tests/unit/test_text_similarity.py -v
 pytest tests/unit/test_text_containment.py -v
