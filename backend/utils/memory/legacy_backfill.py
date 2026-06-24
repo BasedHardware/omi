@@ -59,6 +59,7 @@ class BackfillReport:
     resumed_from_index: int = 0
     completed: bool = False
     legacy_rows_touched: int = 0
+    vector_sync_failures: int = 0
     errors: List[str] = field(default_factory=list)
 
 
@@ -235,12 +236,12 @@ def _apply_one_legacy_row(
     control: MemoryControlState,
     run_id: str,
     db_client,
-) -> tuple[MemoryControlState, bool, Optional[str]]:
-    """Write one canonical long_term item. Returns (control, written, skip_reason)."""
+) -> tuple[MemoryControlState, bool, Optional[str], bool]:
+    """Write one canonical long_term item. Returns (control, written, skip_reason, vector_sync_failed)."""
     legacy_id = legacy_row.get("id") or f"legacy_{index}"
     content = (legacy_row.get("content") or "").strip()
     if not content:
-        return control, False, "empty_content"
+        return control, False, "empty_content", False
 
     canonical_memory_id = legacy_backfill_memory_id(uid=uid, legacy_memory_id=legacy_id)
     existing_path = f"{V17Collections(uid=uid).memory_items}/{canonical_memory_id}"
@@ -252,7 +253,7 @@ def _apply_one_legacy_row(
             and existing.status == MemoryItemStatus.active
             and existing.processing_state == ProcessingState.processed
         ):
-            return control, False, "already_present"
+            return control, False, "already_present", False
 
     evidence = _build_backfill_evidence(uid=uid, legacy_row=legacy_row, index=index)
     _persist_evidence(uid, evidence, db_client=db_client)
@@ -294,6 +295,17 @@ def _apply_one_legacy_row(
         raise RuntimeError(f"legacy backfill apply failed for {legacy_id}: {result.status} ({result.reason})")
 
     item = result.memory_items[0] if result.memory_items else None
+    if item is None and result.status == ApplyStatus.idempotent_skip:
+        snapshot = db_client.document(f"{V17Collections(uid=uid).memory_items}/{canonical_memory_id}").get()
+        if getattr(snapshot, "exists", False):
+            item = V17MemoryItem(**(snapshot.to_dict() or {}))
+
+    vector_sync_failed = False
+
+    def _record_vector_sync_failure() -> None:
+        nonlocal vector_sync_failed
+        vector_sync_failed = True
+
     if item is not None:
         assert_legal_state(
             DomainMemoryLayer(item.tier.value),
@@ -301,10 +313,10 @@ def _apply_one_legacy_row(
             MemoryProcessingState(item.processing_state.value),
         )
         sync_atom_keyword_index_for_item(item, db_client=db_client)
-        sync_canonical_memory_vector(item)
+        sync_canonical_memory_vector(item, on_hard_failure=_record_vector_sync_failure)
 
     written = result.status == ApplyStatus.committed
-    return result.control_state, written, None if written else "idempotent_skip"
+    return result.control_state, written, None if written else "idempotent_skip", vector_sync_failed
 
 
 def _expected_backfill_memory_ids(uid: str, legacy_rows: Sequence[dict]) -> List[str]:
@@ -420,13 +432,14 @@ def backfill_user(
     intended_count = max(0, source_count - start_index)
     written_count = 0
     skipped_already_present = 0
+    vector_sync_failures = 0
     errors: List[str] = []
 
     processed_index = start_index
     while processed_index < source_count:
         legacy_row = eligible_rows[processed_index]
         try:
-            control, written, skip_reason = _apply_one_legacy_row(
+            control, written, skip_reason, row_vector_sync_failed = _apply_one_legacy_row(
                 uid=uid,
                 legacy_row=legacy_row,
                 index=processed_index,
@@ -438,6 +451,8 @@ def backfill_user(
                 written_count += 1
             elif skip_reason in {"already_present", "idempotent_skip"}:
                 skipped_already_present += 1
+            if row_vector_sync_failed:
+                vector_sync_failures += 1
         except Exception as exc:
             logger.exception("legacy backfill failed for %s row %s", uid, legacy_row.get("id"))
             errors.append(f"{legacy_row.get('id')}: {exc}")
@@ -483,5 +498,6 @@ def backfill_user(
         resumed_from_index=start_index,
         completed=completed,
         legacy_rows_touched=0,
+        vector_sync_failures=vector_sync_failures,
         errors=errors,
     )
