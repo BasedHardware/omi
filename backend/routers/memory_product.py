@@ -1,7 +1,7 @@
 """Canonical product memory router (WS-G9).
 
 Neutral ``memory_product`` is the source of truth. Legacy ``v17_memory_product``
-remains an importable alias. Registers both ``/memory/*`` and ``/v17/memory/*`` paths.
+remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
 from datetime import datetime, timezone
@@ -84,7 +84,6 @@ def _require_v17_product_authorization(context: V17ProductAuthorizationContext):
 
 
 @router.get('/memory/search', tags=['memories', 'memory'])
-@router.get('/v17/memory/search', tags=['memories', 'v17'])
 def search_v17_product_memory(
     query: str = Query(''),
     limit: int = Query(100),
@@ -127,7 +126,6 @@ def search_v17_product_memory(
 
 
 @router.get('/memory/vector/search', tags=['memories', 'memory'])
-@router.get('/v17/memory/vector/search', tags=['memories', 'v17'])
 def search_v17_vector_memory(
     query: str = Query(...),
     limit: int = Query(10),
@@ -183,7 +181,6 @@ def search_v17_vector_memory(
 
 
 @router.get('/memory/archive/search', tags=['memories', 'memory'])
-@router.get('/v17/memory/archive/search', tags=['memories', 'v17'])
 def search_v17_archive_memory(
     query: str = Query(''),
     limit: int = Query(100),
@@ -193,7 +190,7 @@ def search_v17_archive_memory(
 ):
     """Search explicit V17 Archive memory for archive-capable product callers only.
 
-    This route is intentionally separate from `/v17/memory/search` and requires
+    This route is intentionally separate from `/memory/search` and requires
     both an explicit caller opt-in flag and a persisted server-owned Archive
     capability before it constructs a policy with Archive access. The default
     search route remains Archive-free.
@@ -238,7 +235,7 @@ def search_v17_archive_memory(
 
 
 __all__ = [
-    "V17_GLOBAL_READ_GATE_PATH",
+    "MEMORY_GLOBAL_READ_GATE_PATH",
     "db",
     "fetch_archive_product_memory_search",
     "fetch_default_product_memory_search",
