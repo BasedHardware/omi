@@ -31,12 +31,12 @@ from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_v17_default_memory_read_context
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
-from utils.memory.v17_default_read_rollout import (
+from utils.memory.default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
     read_v17_write_convergence_gate,
 )
-from utils.memory.v17_product_authorization import (
+from utils.memory.product_authorization import (
     V17ProductAuthorizationContext,
     authorize_v17_external_default_memory_read,
 )
