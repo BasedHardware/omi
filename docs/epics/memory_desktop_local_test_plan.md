@@ -1,5 +1,7 @@
 # memory memory desktop local test plan
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Status:** Ready to execute on a Mac runner/dev machine after commit `fcc20de16` plus acceptance-test additions.  
 **Scope:** Local macOS desktop validation only. This does **not** prove backend/dev-cloud/production readiness.
 
