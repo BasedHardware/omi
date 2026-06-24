@@ -1,5 +1,7 @@
 # memory Memory Product Integration Epic
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Created:** 2026-06-18T08:05:17Z  
 **Owner:** David / Omi memory system  
 **Status:** Draft after Wave 3 committee review + product terminology update  
