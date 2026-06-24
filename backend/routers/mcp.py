@@ -238,11 +238,16 @@ def get_memories(
         sort=sort,
     )
     memories = result["memories"]
+    valid = []
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    return memories
+        try:
+            valid.append(CleanerMemory.model_validate(memory))
+        except Exception as e:  # noqa: BLE001 - one bad category/record must not 500 the page
+            logger.warning(f"Skipping malformed MCP memory {memory.get('id', 'unknown')}: {e}")
+    return valid
 
 
 class SimpleStructured(BaseModel):
