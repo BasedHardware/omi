@@ -855,6 +855,22 @@ no agent may start a blocked WS against an unanswered question.
 > **Read this section first on waking.** Open issues/blockers requiring your judgment are listed here;
 > per-wave detail is in §11 below.
 
+### ⭐ v17-language-retirement run — END STATE (2026-06-24, ~06:30; pushed to `origin/memory-canonical-rollout` @ `6d3f54159`)
+
+**Done autonomously tonight (prod datastore confirmed EMPTY by owner → greenfield, no data migration):**
+- **Production code is 100% v17-free at the module/import/routing level.** Neutral modules are source-of-truth across config → models → database → utils → v3 cluster → routers/jobs → L1/L2 (promote chain G5–G11), then all production importers flipped (Wave 40), all test/script importers flipped (Wave 41).
+- **69 `v17_*` shim modules deleted** (51 in G13 + 18 in Wave 43; G13 gated by an independent review that caught 6 dynamic-`__import__` source-inspection tests → fixed).
+- **168 `test_v17_*`/`scripts/v17_*` FILES renamed** to neutral + `test.sh`/`package.json`/cross-refs updated (G14). **Canonical docs/runbooks neutralized/renamed** (G15).
+- **`main` imports clean (450–458 routes)**; neutral `/memory/*` + `/v1/mcp/memories/*` live, plus 6 **retained** `/v17/*` routes. Async scan exit 0.
+- **Suite is GREEN modulo environment.** `test.sh` runs ~205 files clean and stops only on **environment-only** failures unrelated to this effort: missing native **libopus** (`test_storage_*opus*`) and missing **`fakeredis`** (`test_webhook_auto_disable` FakeRedis classes). All rollout-caused (b) test breakages (16 stale readiness/MCP harnesses + 6 stale `MemoryService`-chain stubs) were fixed and verified against real production code (no reward-hacking — the 2 MCP assertions were confirmed against the intentional WS-L `memory_service.search_mcp` wiring before updating).
+
+**Three things await YOUR decision (I deliberately did NOT do these autonomously):**
+1. **[NEEDS DECISION] Deferred L2 / patch_adapter / non_active chain.** The only remaining `v17_*` *modules* (`v17_patch_adapter`, `models/v17_memory_contracts`, `database/v17_collections`, `database/v17_non_active_memory_routes`, `utils/memory/v17_non_active_route_audit|report`, `jobs/v17_l2_promotion_worker`) are entangled with the **untracked L2-promotion WIP** in the worktree (still `??`, never staged). I kept them untouched. **Decide:** does the L2-promotion feature land on this branch (then commit it as its own reviewed WS and I'll promote these last 6 modules), or is it a separate effort (move it to its own branch)? Everything else is blocked on this.
+2. **[NEEDS SIGN-OFF — breaking] G10 + G12.** Removing the 6 retained `/v17/*` HTTP routes (G10) and dropping the `V17_*` env-var fallbacks (G12) are wide-blast-radius breaking changes (external callers / deployment env). Left in place and working; flip on your go-ahead.
+3. **[NEEDS DECISION — recommend SKIP] 962 internal `v17` symbol references.** What's left of "v17" is now almost entirely *inside neutral modules*: a **mix** of (a) **frozen/load-bearing** literals that MUST NOT be blindly renamed — deterministic contract-id seeds (`"v17-memory-commit"` → `deterministic_contract_id`), Firestore control-plane doc paths (`memory_control/v17_global_read_gate`, `v17_app_key_memory_grants`), legacy/archive vector schema (`v17mem`, `v17_schema_version`), GCP secret IDs, `V17_*` env keys — and (b) **cosmetic internal identifiers** (`compose_v17_v3_get`, `build_v17_v3_production_runtime`, `adapt_v17_v3_*`, `V17V3Cursor*`). **My recommendation: do NOT mass-rename.** The frozen ones are Rule-#1 hazards (silent behavior change), and the cosmetic ones are ~hundreds of cross-file+test edits for zero runtime value. If you want them gone, it should be a scoped, per-symbol wave with an explicit frozen-list — not an overnight sweep. Full dump: verification subagent saved all 962 lines.
+
+> Net: the visible "v17 language" (modules, imports, routing, filenames, docs) is **gone and green**. The remainder is the deferred-L2 chain (your call), the sign-off-gated route/env removals (your call), and internal symbol cosmetics (recommend skip). Per-wave detail in §11; the rest of §11b below is the earlier (pre-retirement) overnight context.
+
 ### Decisions locked overnight (from your answers)
 - §10 Q1–Q8 ratified (see §10 + domain_model.md). Q1 cutover = routing only; legacy data preserved.
 - Backfill non-destructive; canonical↔legacy flip is pure routing; WS-H gated on full verified migration.
