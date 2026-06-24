@@ -737,7 +737,7 @@ PROJECTION_WRITE_CONVERGENCE_READINESS_PROOF = {
 
 ARCHIVE_SHORT_TERM_VISIBILITY_READINESS_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_archive_short_term_visibility_readiness.py",
-    "utility": "backend/utils/memory/v17_v3_archive_visibility_readiness.py",
+    "utility": "backend/utils/memory/v3_archive_visibility_readiness.py",
     "test": "backend/tests/unit/test_v17_v3_archive_visibility_readiness.py",
     "runtime_wired": False,
     "production_rollout_approved": False,

@@ -30,8 +30,8 @@ def _all_passed_local_proofs() -> dict[str, dict[str, Any]]:
 
 
 def test_canonical_config_run_record_redaction_and_fingerprint_exports_are_old_new_identity():
-    old_config = importlib.import_module("utils.memory.v17_v3_gcp_evidence_config")
-    new_config = importlib.import_module("utils.memory.v17_v3_f6.config")
+    old_config = importlib.import_module("utils.memory.v3_gcp_evidence_config")
+    new_config = importlib.import_module("utils.memory.v3_f6.config")
     for name in (
         "AuditSettings",
         "EvidenceLimits",
@@ -41,8 +41,8 @@ def test_canonical_config_run_record_redaction_and_fingerprint_exports_are_old_n
     ):
         assert getattr(new_config, name) is getattr(old_config, name)
 
-    old_run_record = importlib.import_module("utils.memory.v17_v3_gcp_evidence_run_record")
-    new_run_record = importlib.import_module("utils.memory.v17_v3_f6.run_record")
+    old_run_record = importlib.import_module("utils.memory.v3_gcp_evidence_run_record")
+    new_run_record = importlib.import_module("utils.memory.v3_f6.run_record")
     for name in (
         "ExecutionWindow",
         "RunRecordValidationError",
@@ -52,9 +52,9 @@ def test_canonical_config_run_record_redaction_and_fingerprint_exports_are_old_n
     ):
         assert getattr(new_run_record, name) is getattr(old_run_record, name)
 
-    old_redaction = importlib.import_module("utils.memory.v17_v3_gcp_evidence_redaction")
-    new_redaction = importlib.import_module("utils.memory.v17_v3_f6.redaction")
-    new_fingerprint = importlib.import_module("utils.memory.v17_v3_f6.fingerprints")
+    old_redaction = importlib.import_module("utils.memory.v3_gcp_evidence_redaction")
+    new_redaction = importlib.import_module("utils.memory.v3_f6.redaction")
+    new_fingerprint = importlib.import_module("utils.memory.v3_f6.fingerprints")
     for name in (
         "RedactionContractError",
         "render_redacted_evidence_json",
@@ -157,26 +157,26 @@ def test_canonical_config_run_record_redaction_and_fingerprint_import_without_ne
     monkeypatch.setattr(socket.socket, "connect", fail_socket)
 
     for module_name in (
-        "utils.memory.v17_v3_f6.config",
-        "utils.memory.v17_v3_f6.run_record",
-        "utils.memory.v17_v3_f6.redaction",
-        "utils.memory.v17_v3_f6.fingerprints",
-        "utils.memory.v17_v3_f6.aggregate",
-        "utils.memory.v17_v3_f6.pre_gcp_aggregate",
+        "utils.memory.v3_f6.config",
+        "utils.memory.v3_f6.run_record",
+        "utils.memory.v3_f6.redaction",
+        "utils.memory.v3_f6.fingerprints",
+        "utils.memory.v3_f6.aggregate",
+        "utils.memory.v3_f6.pre_gcp_aggregate",
     ):
         importlib.import_module(module_name)
 
 
 def test_canonical_config_run_record_redaction_fingerprint_and_aggregate_static_import_boundaries():
     modules = [
-        BACKEND_DIR / "utils/memory/v17_v3_f6/config.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/run_record.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/redaction.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/fingerprints.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/aggregate.py",
-        BACKEND_DIR / "utils/memory/v17_v3_gcp_evidence_config.py",
-        BACKEND_DIR / "utils/memory/v17_v3_gcp_evidence_run_record.py",
-        BACKEND_DIR / "utils/memory/v17_v3_gcp_evidence_redaction.py",
+        BACKEND_DIR / "utils/memory/v3_f6/config.py",
+        BACKEND_DIR / "utils/memory/v3_f6/run_record.py",
+        BACKEND_DIR / "utils/memory/v3_f6/redaction.py",
+        BACKEND_DIR / "utils/memory/v3_f6/fingerprints.py",
+        BACKEND_DIR / "utils/memory/v3_f6/aggregate.py",
+        BACKEND_DIR / "utils/memory/v3_gcp_evidence_config.py",
+        BACKEND_DIR / "utils/memory/v3_gcp_evidence_run_record.py",
+        BACKEND_DIR / "utils/memory/v3_gcp_evidence_redaction.py",
     ]
     forbidden_roots = {
         "aiohttp",

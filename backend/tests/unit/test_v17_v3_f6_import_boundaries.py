@@ -25,9 +25,9 @@ def _import_names(module: Path) -> set[str]:
 
 
 def test_old_f6_facade_exports_are_identical_to_canonical_exports():
-    old_contracts = importlib.import_module("utils.memory.v17_v3_f6_readonly_contracts")
-    canonical_contracts = importlib.import_module("utils.memory.v17_v3_f6.readonly_contracts")
-    canonical_run_context = importlib.import_module("utils.memory.v17_v3_f6.run_context")
+    old_contracts = importlib.import_module("utils.memory.v3_f6_readonly_contracts")
+    canonical_contracts = importlib.import_module("utils.memory.v3_f6.readonly_contracts")
+    canonical_run_context = importlib.import_module("utils.memory.v3_f6.run_context")
 
     for name in (
         "IdentityIamTarget",
@@ -49,8 +49,8 @@ def test_old_f6_facade_exports_are_identical_to_canonical_exports():
 
 
 def test_old_pre_gcp_aggregate_facade_exports_are_identical_to_canonical_exports():
-    old_aggregate = importlib.import_module("utils.memory.v17_v3_f6_pre_gcp_aggregate")
-    canonical_aggregate = importlib.import_module("utils.memory.v17_v3_f6.pre_gcp_aggregate")
+    old_aggregate = importlib.import_module("utils.memory.v3_f6_pre_gcp_aggregate")
+    canonical_aggregate = importlib.import_module("utils.memory.v3_f6.pre_gcp_aggregate")
 
     for name in (
         "F6_LOCAL_GATE_IDS",
@@ -63,7 +63,7 @@ def test_old_pre_gcp_aggregate_facade_exports_are_identical_to_canonical_exports
 
 
 def test_canonical_aggregate_module_does_not_import_local_smoke_doubles_config_or_redaction():
-    aggregate_path = BACKEND_DIR / "utils/memory/v17_v3_f6/aggregate.py"
+    aggregate_path = BACKEND_DIR / "utils/memory/v3_f6/aggregate.py"
     imported = _import_names(aggregate_path)
 
     forbidden_substrings = (
@@ -79,11 +79,11 @@ def test_canonical_aggregate_module_does_not_import_local_smoke_doubles_config_o
 
 def test_core_contract_modules_do_not_import_provider_sdks_network_or_local_doubles():
     core_modules = [
-        BACKEND_DIR / "utils/memory/v17_v3_f6/identity_iam.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/read_evidence.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/audit.py",
-        BACKEND_DIR / "utils/memory/v17_v3_f6/run_context.py",
-        BACKEND_DIR / "utils/memory/v17_v3_gcp_evidence_run_record.py",
+        BACKEND_DIR / "utils/memory/v3_f6/identity_iam.py",
+        BACKEND_DIR / "utils/memory/v3_f6/read_evidence.py",
+        BACKEND_DIR / "utils/memory/v3_f6/audit.py",
+        BACKEND_DIR / "utils/memory/v3_f6/run_context.py",
+        BACKEND_DIR / "utils/memory/v3_gcp_evidence_run_record.py",
     ]
     forbidden_roots = {
         "google",
@@ -133,9 +133,9 @@ def test_pre_gcp_cli_emits_parseable_ready_json_when_socket_connections_fail(mon
 @pytest.mark.parametrize(
     "module_name",
     [
-        "utils.memory.v17_v3_f6.readonly_contracts",
-        "utils.memory.v17_v3_f6.run_context",
-        "utils.memory.v17_v3_f6.pre_gcp_aggregate",
+        "utils.memory.v3_f6.readonly_contracts",
+        "utils.memory.v3_f6.run_context",
+        "utils.memory.v3_f6.pre_gcp_aggregate",
     ],
 )
 def test_canonical_f6_modules_import_without_network_or_provider_side_effects(monkeypatch, module_name):

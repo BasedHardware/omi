@@ -4,9 +4,9 @@ import importlib
 
 
 def test_old_config_facade_exports_are_identical_to_canonical_config_and_defaults():
-    old = importlib.import_module("utils.memory.v17_v3_gcp_evidence_config")
-    config = importlib.import_module("utils.memory.v17_v3_f6.config")
-    defaults = importlib.import_module("utils.memory.v17_v3_f6.local_defaults")
+    old = importlib.import_module("utils.memory.v3_gcp_evidence_config")
+    config = importlib.import_module("utils.memory.v3_f6.config")
+    defaults = importlib.import_module("utils.memory.v3_f6.local_defaults")
 
     for name in (
         "ValidationError",
@@ -31,8 +31,8 @@ def test_old_config_facade_exports_are_identical_to_canonical_config_and_default
 
 
 def test_old_run_record_facade_exports_are_identical_to_canonical_run_record():
-    old = importlib.import_module("utils.memory.v17_v3_gcp_evidence_run_record")
-    canonical = importlib.import_module("utils.memory.v17_v3_f6.run_record")
+    old = importlib.import_module("utils.memory.v3_gcp_evidence_run_record")
+    canonical = importlib.import_module("utils.memory.v3_f6.run_record")
 
     for name in (
         "RunRecordValidationError",
@@ -48,9 +48,9 @@ def test_old_run_record_facade_exports_are_identical_to_canonical_run_record():
 
 
 def test_old_redaction_facade_exports_are_identical_to_canonical_redaction_and_fingerprints():
-    old = importlib.import_module("utils.memory.v17_v3_gcp_evidence_redaction")
-    redaction = importlib.import_module("utils.memory.v17_v3_f6.redaction")
-    fingerprints = importlib.import_module("utils.memory.v17_v3_f6.fingerprints")
+    old = importlib.import_module("utils.memory.v3_gcp_evidence_redaction")
+    redaction = importlib.import_module("utils.memory.v3_f6.redaction")
+    fingerprints = importlib.import_module("utils.memory.v3_f6.fingerprints")
 
     for name in (
         "RedactionContractError",
