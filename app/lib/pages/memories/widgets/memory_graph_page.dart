@@ -265,7 +265,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
-  Set<String> _highlightedNodeIds = {};
+  final Set<String> _highlightedNodeIds = {};
   int _autoRebuildAttempts = 0;
 
   @override
