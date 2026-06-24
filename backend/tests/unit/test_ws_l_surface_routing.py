@@ -173,8 +173,8 @@ class TestSharedCanonicalVisibilityFilter:
 
 class TestResolveMemorySystemIgnoresV17Flags:
     def test_v17_read_dogfood_stays_legacy_cohort(self, monkeypatch):
-        monkeypatch.setenv("V17_MODE", "read")
-        monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "uid-v17")
+        monkeypatch.setenv("MEMORY_MODE", "read")
+        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-v17")
         db = _FirestoreFake(
             {
                 "users/uid-v17/memory_control/state": {
