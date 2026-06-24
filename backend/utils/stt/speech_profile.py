@@ -21,13 +21,16 @@ logger = logging.getLogger(__name__)
 
 def get_speech_profile_matching_predictions(uid: str, audio_file_path: str, segments: List) -> List[dict]:
     logger.info('get_speech_profile_matching_predictions')
-    files = [
-        ('audio_file', (os.path.basename(audio_file_path), open(audio_file_path, 'rb'), 'audio/wav')),
-    ]
-    response = httpx.post(
-        os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}', data={'segments': json.dumps(segments)}, files=files
-    )
     default = [{'is_user': False, 'person_id': None}] * len(segments)
+    with open(audio_file_path, 'rb') as audio_f:
+        files = [
+            ('audio_file', (os.path.basename(audio_file_path), audio_f, 'audio/wav')),
+        ]
+        response = httpx.post(
+            os.getenv('HOSTED_SPEECH_PROFILE_API_URL') + f'?uid={uid}',
+            data={'segments': json.dumps(segments)},
+            files=files,
+        )
 
     if response.status_code != 200:
         logger.info(f'get_speech_profile_matching_predictions {sanitize(response.text)}')
