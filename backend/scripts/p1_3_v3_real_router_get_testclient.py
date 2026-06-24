@@ -68,7 +68,8 @@ def _repo_backend_root() -> Path:
 
 
 def _probe_code() -> str:
-    return textwrap.dedent(r'''
+    return textwrap.dedent(
+        r'''
         import hashlib
         import importlib
         import json
@@ -141,6 +142,7 @@ def _probe_code() -> str:
         def document_id_from_seed(seed):
             return hashlib.sha1(str(seed).encode("utf-8")).hexdigest()[:20]
         client_module.document_id_from_seed = document_id_from_seed
+        client_module.db = object()
         sys.modules["database._client"] = client_module
         setattr(database_pkg, "_client", client_module)
 
@@ -222,6 +224,29 @@ def _probe_code() -> str:
         production_runtime.build_v17_v3_production_runtime = build_v17_v3_production_runtime
         sys.modules["utils.memory.v3_production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
+
+        memory_system_mod = types.ModuleType("utils.memory.memory_system")
+        class MemorySystem:
+            LEGACY = "legacy"
+            CANONICAL = "canonical"
+        memory_system_mod.MemorySystem = MemorySystem
+        sys.modules["utils.memory.memory_system"] = memory_system_mod
+        setattr(memory_pkg, "memory_system", memory_system_mod)
+
+        memory_service_mod = types.ModuleType("utils.memory.memory_service")
+        class MemoryService:
+            def __init__(self, *, db_client=None):
+                self.db_client = db_client
+        memory_service_mod.MemoryService = MemoryService
+        sys.modules["utils.memory.memory_service"] = memory_service_mod
+        setattr(memory_pkg, "memory_service", memory_service_mod)
+
+        surface_routing = types.ModuleType("utils.memory.surface_routing")
+        def pin_memory_system(uid, *, db_client=None):
+            return MemorySystem.LEGACY
+        surface_routing.pin_memory_system = pin_memory_system
+        sys.modules["utils.memory.surface_routing"] = surface_routing
+        setattr(memory_pkg, "surface_routing", surface_routing)
 
         executors = types.ModuleType("utils.executors")
         executors.db_executor = StubExecutor()
@@ -307,7 +332,8 @@ def _probe_code() -> str:
             "v17_adapter_modules_loaded": loaded_adapters,
             "runtime_cutover_claimed": False,
         }, sort_keys=True))
-        ''')
+        '''
+    )
 
 
 def probe_real_router_get_testclient_under_stubs() -> dict[str, Any]:
