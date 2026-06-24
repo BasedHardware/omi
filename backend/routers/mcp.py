@@ -343,7 +343,13 @@ def search_conversations(
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
     redact_conversations_for_list(conversations)
-    return conversations
+    valid = []
+    for conv in conversations:
+        try:
+            valid.append(SimpleConversation.model_validate(conv))
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            logger.warning(f"Skipping malformed conversation {conv.get('id', 'unknown')} in MCP search: {e}")
+    return valid
 
 
 @router.get(
