@@ -3,7 +3,7 @@ import os
 import sys
 import types
 
-from models.v17_memory_search_gateway import SearchMode
+from models.memory_search_gateway import SearchMode
 
 
 class _FakeEmbeddings:

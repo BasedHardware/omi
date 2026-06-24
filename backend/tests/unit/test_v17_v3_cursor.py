@@ -1,6 +1,6 @@
 import pytest
 
-from utils.memory.v17_v3_cursor import (
+from utils.memory.v3_cursor import (
     V17V3CursorContext,
     V17V3CursorError,
     V17V3Keyset,

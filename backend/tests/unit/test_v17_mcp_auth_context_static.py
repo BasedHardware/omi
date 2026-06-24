@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
-from utils.memory.v17_product_authorization import authorize_v17_external_default_memory_read
+from utils.memory.product_authorization import authorize_v17_external_default_memory_read
 
 ROOT = Path(__file__).resolve().parents[2]
 

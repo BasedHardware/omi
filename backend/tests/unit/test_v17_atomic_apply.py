@@ -3,15 +3,15 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.v17_memory_apply import (
+from models.memory_apply import (
     ApplyStatus,
     MemoryControlState,
     MemoryOutboxEventType,
     apply_long_term_patch_transaction,
 )
-from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
-from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem, new_memory_id
+from models.memory_contracts import DurablePatchDecision, LifecycleState
+from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem, new_memory_id
 
 
 def _evidence():

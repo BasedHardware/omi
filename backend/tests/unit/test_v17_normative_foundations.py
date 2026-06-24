@@ -3,16 +3,16 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from config.v17_memory import (
+from config.memory_rollout import (
     V17Mode,
     V17RolloutConfig,
     V17RolloutState,
     V17StageGate,
     decide_v17_capabilities,
 )
-from database.v17_collections import V17Collections
+from database.memory_collections import V17Collections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.v17_product_memory import (
+from models.product_memory import (
     MemoryAccessPolicy,
     MemoryConsumer,
     MemoryItemStatus,

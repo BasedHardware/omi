@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 
-from config.v17_memory import V17Mode, V17RolloutConfig
-from database.v17_collections import V17Collections
-from utils.memory.v17_default_read_rollout import V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS
-from utils.memory.v17_v3_control_reader_contract import (
+from config.memory_rollout import V17Mode, V17RolloutConfig
+from database.memory_collections import V17Collections
+from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS
+from utils.memory.v3_control_reader_contract import (
     V17V3ControlDecisionReason,
     V17V3ControlReaderRequest,
     V17V3ControlRouteFamily,
     decide_v17_v3_control_route,
 )
-from utils.memory.v17_v3_control_state_adapter import read_v17_v3_control, resolve_v17_v3_effective_mode
+from utils.memory.v3_control_state_adapter import read_v17_v3_control, resolve_v17_v3_effective_mode
 
 
 @dataclass

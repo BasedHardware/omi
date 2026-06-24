@@ -1,11 +1,11 @@
-from database.v17_app_key_memory_grants import (
+from database.memory_app_key_grants import (
     V17_APP_KEY_MEMORY_GRANT_DOC_ID,
     V17_APP_KEY_MEMORY_GRANT_SUBPATH,
     V17_APP_KEY_MEMORY_GRANTS_COLLECTION,
     build_v17_app_key_scope_grant_contract_state,
     read_v17_app_key_memory_grants_state,
 )
-from utils.memory.v17_product_authorization import (
+from utils.memory.product_authorization import (
     V17MemoryGrantOperation,
     V17ProductAuthorizationContext,
     authorize_v17_app_key_scope_memory_grant,

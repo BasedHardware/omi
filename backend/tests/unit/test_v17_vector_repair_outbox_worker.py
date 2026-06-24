@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 
-from database.v17_vector_repair_pinecone_adapter import (
+from database.memory_vector_repair_pinecone_adapter import (
     V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
     V17VectorRepairNotReady,
     make_v17_pinecone_vector_deleter,
     make_v17_pinecone_vector_repairer,
 )
-from database.v17_vector_repair_outbox_worker import (
+from database.memory_vector_repair_outbox_worker import (
     V17VectorRepairOutboxWorkerTickConfig,
     ack_v17_vector_repair_purge_outbox_record,
     lease_v17_vector_repair_purge_outbox_records,

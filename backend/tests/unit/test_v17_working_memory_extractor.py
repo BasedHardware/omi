@@ -5,7 +5,7 @@ os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test")
 
 from langchain_core.messages import AIMessage
 
-from models.v17_memory_contracts import L1MemoryArchiveItem
+from models.memory_contracts import L1MemoryArchiveItem
 from utils.llm import working_observations
 from utils.llm.working_observations import extract_l1_memory_archive_items_from_text
 

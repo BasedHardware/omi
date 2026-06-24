@@ -2,8 +2,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from config.v17_memory import PASSED, V17Mode, V17StageGate
-from utils.memory.v17_default_read_rollout import (
+from config.memory_rollout import PASSED, V17Mode, V17StageGate
+from utils.memory.default_read_rollout import (
     V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
     V17ReadDecision,
     normalize_v17_archive_read_rollout_decision,

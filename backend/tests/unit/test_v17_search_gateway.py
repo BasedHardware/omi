@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
-from models.v17_product_memory import (
+from models.memory_search_gateway import SearchDecision, SearchMode, SearchVectorHit, hydrate_and_filter_vector_hits
+from models.product_memory import (
     MemoryAccessPolicy,
     MemoryItemStatus,
     MemoryTier,

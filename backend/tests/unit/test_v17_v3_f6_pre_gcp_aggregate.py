@@ -1,13 +1,13 @@
 import ast
 from pathlib import Path
 
-from utils.memory.v17_v3_f6.aggregate import (
+from utils.memory.v3_f6.aggregate import (
     F6_LOCAL_GATE_IDS,
     GCP_ACCESS_GATE_IDS,
     build_pre_gcp_aggregate_report,
 )
-from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts
-from utils.memory import v17_v3_f6_pre_gcp_aggregate as compatibility_facade
+from utils.memory.v3_f6.local_smoke import build_report_from_current_local_contracts
+from utils.memory import v3_f6_pre_gcp_aggregate as compatibility_facade
 
 
 def _all_passed_local_proofs():

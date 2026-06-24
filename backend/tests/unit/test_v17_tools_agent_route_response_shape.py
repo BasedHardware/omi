@@ -164,7 +164,7 @@ def loaded_route_modules(monkeypatch):
 
 
 def _bounded_v17_text(source_marker='v17_default_memory'):
-    from utils.memory.v17_chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
+    from utils.memory.chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
 
     return '\n'.join(
         [

@@ -1,6 +1,6 @@
 import inspect
 
-from utils.memory.v17_v3_write_convergence import (
+from utils.memory.v3_write_convergence import (
     V17V3ExternalWriteOperation,
     V17V3WriteConvergenceContext,
     V17V3WriteConvergenceDecision,

@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 
-from database.v17_vector_repair_outbox_telemetry import (
+from database.memory_vector_repair_outbox_telemetry import (
     V17VectorRepairOutboxTelemetryConfig,
     emit_v17_vector_repair_outbox_worker_telemetry,
 )
-from database.v17_vector_repair_outbox_worker import (
+from database.memory_vector_repair_outbox_worker import (
     V17VectorRepairOutboxWorkerTickConfig,
     run_v17_vector_repair_outbox_worker_tick,
 )

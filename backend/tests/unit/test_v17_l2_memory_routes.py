@@ -4,7 +4,7 @@ from langchain_core.messages import AIMessage
 from pydantic import ValidationError
 import pytest
 
-from models.v17_memory_contracts import L2MemoryRoute
+from models.memory_contracts import L2MemoryRoute
 from utils.llm.promotion_routes import classify_l2_memory_route
 
 

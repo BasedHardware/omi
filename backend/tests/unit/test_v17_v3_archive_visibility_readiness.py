@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from utils.memory.v17_v3_archive_visibility_readiness import (
+from utils.memory.v3_archive_visibility_readiness import (
     decide_default_visibility,
     evaluate_archive_short_term_visibility_readiness,
 )

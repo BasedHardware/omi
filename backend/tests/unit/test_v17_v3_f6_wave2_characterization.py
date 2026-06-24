@@ -7,9 +7,9 @@ import socket
 from pathlib import Path
 from typing import Any
 
-from utils.memory.v17_v3_f6.aggregate import F6_LOCAL_GATE_IDS, build_pre_gcp_aggregate_report
-from utils.memory.v17_v3_f6.fingerprints import fingerprint
-from utils.memory.v17_v3_f6.redaction import render_redacted_evidence_json
+from utils.memory.v3_f6.aggregate import F6_LOCAL_GATE_IDS, build_pre_gcp_aggregate_report
+from utils.memory.v3_f6.fingerprints import fingerprint
+from utils.memory.v3_f6.redaction import render_redacted_evidence_json
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -202,7 +202,7 @@ def test_canonical_config_run_record_redaction_fingerprint_and_aggregate_static_
 
 
 def test_local_smoke_supplies_explicit_deterministic_run_record_clock(monkeypatch):
-    from utils.memory.v17_v3_f6 import local_smoke
+    from utils.memory.v3_f6 import local_smoke
     from utils.memory.v3_f6 import local_smoke as canonical_local_smoke
 
     observed: dict[str, object] = {}

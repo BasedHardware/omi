@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from utils.memory.v17_v3_composed_get_service import (
+from utils.memory.v3_composed_get_service import (
     V17V3ComposedAdapters,
     V17V3ComposedCursor,
     V17V3ComposedDependencyDecision,

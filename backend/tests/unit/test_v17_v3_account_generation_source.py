@@ -12,13 +12,13 @@ os.environ.setdefault(
 
 sys.modules["database._client"] = MagicMock()
 
-from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
-from utils.memory.v17_v3_account_generation_source import (
+from database.memory_compatibility_projection import read_v17_v3_compatibility_projection_page
+from utils.memory.v3_account_generation_source import (
     V17V3AccountGenerationFailureReason,
     V17V3TrustedAccountGenerationReadError,
     read_v17_v3_trusted_account_generation,
 )
-from utils.memory.v17_v3_projection_reader_contract import (
+from utils.memory.v3_projection_reader_contract import (
     V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V17_V3_COMPATIBILITY_PROJECTION_SOURCE,
     V17_V3_COMPATIBILITY_PROJECTION_VERSION,

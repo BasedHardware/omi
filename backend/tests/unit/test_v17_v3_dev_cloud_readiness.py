@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from utils.memory.v17_v3_dev_cloud_proof import (
+from utils.memory.v3_dev_cloud_proof import (
     GATE_STATUS_BLOCKED,
     GATE_STATUS_READY_TO_EXECUTE,
     REQUIRED_ARTIFACTS,

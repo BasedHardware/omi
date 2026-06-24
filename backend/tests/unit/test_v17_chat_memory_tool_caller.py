@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from utils.memory.v17_chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
+from utils.memory.chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 
 

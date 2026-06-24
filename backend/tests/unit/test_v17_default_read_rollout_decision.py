@@ -1,5 +1,5 @@
-from config.v17_memory import PASSED, V17Mode, V17StageGate
-from utils.memory.v17_default_read_rollout import (
+from config.memory_rollout import PASSED, V17Mode, V17StageGate
+from utils.memory.default_read_rollout import (
     V17ReadDecision,
     V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
     V17_DEFAULT_READ_ROLLOUT_TIMEOUT_SECONDS,

@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_product_memory import (
+from models.product_memory import (
     MemoryAccessPolicy,
     MemoryItemStatus,
     MemoryTier,
@@ -11,7 +11,7 @@ from models.v17_product_memory import (
     V17MemoryItem,
 )
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory.v17_product_memory_read_service import (
+from utils.memory.product_memory_read_service import (
     fetch_archive_product_memory_search,
     fetch_default_product_memory_search,
 )

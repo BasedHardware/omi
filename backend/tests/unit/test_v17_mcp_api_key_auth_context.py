@@ -41,7 +41,7 @@ sys.modules['database._client'] = _fake_client
 import database.mcp_api_key as mcp_api_key_db
 from dependencies import get_mcp_api_key_auth, get_mcp_v17_default_memory_read_context
 from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
-from utils.memory.v17_product_authorization import authorize_v17_external_default_memory_read
+from utils.memory.product_authorization import authorize_v17_external_default_memory_read
 
 
 class _FakeDoc:

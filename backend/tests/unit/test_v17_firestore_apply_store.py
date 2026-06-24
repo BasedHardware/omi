@@ -14,13 +14,13 @@ os.environ.setdefault(
 
 sys.modules["database._client"] = MagicMock()
 
-from database.v17_memory_apply_store import apply_long_term_patch_firestore
+from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_memory_contracts import DurablePatchDecision, LifecycleState
-from models.v17_memory_operations import MemoryOperation, MemoryOperationType
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_contracts import DurablePatchDecision, LifecycleState
+from models.memory_operations import MemoryOperation, MemoryOperationType
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 
 class _FakeSnapshot:

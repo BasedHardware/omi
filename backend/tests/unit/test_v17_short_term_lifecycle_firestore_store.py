@@ -2,14 +2,14 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from jobs.v17_short_term_lifecycle_worker import (
+from jobs.short_term_lifecycle_worker import (
     FirestoreShortTermLifecycleTransitionStore,
     ShortTermLifecycleTransitionRecord,
     fetch_short_term_memory_items_firestore,
     run_short_term_lifecycle_firestore,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 

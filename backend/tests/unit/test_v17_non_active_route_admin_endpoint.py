@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from config.v17_memory import PASSED, V17Mode, V17StageGate
+from config.memory_rollout import PASSED, V17Mode, V17StageGate
 from tests.unit.memory_import_isolation import (
     install_v17_product_router_stubs,
     restore_sys_modules,
@@ -75,7 +75,7 @@ def _v17_admin_router_import_isolation():
     from utils.memory.v17_non_active_route_audit import NonActiveRouteAuditReport
 
     import routers.memory_admin as memory_admin
-    import routers.v17_memory_admin as v17_memory_admin
+    import routers.memory_admin as v17_memory_admin
 
     globals()["NonActiveRoute"] = NonActiveRoute
     globals()["NonActiveRouteAuditReport"] = NonActiveRouteAuditReport

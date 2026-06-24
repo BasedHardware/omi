@@ -1,7 +1,7 @@
 import inspect
 
-from config.v17_memory import V17Mode
-from utils.memory.v17_v3_control_reader_contract import (
+from config.memory_rollout import V17Mode
+from utils.memory.v3_control_reader_contract import (
     V17V3ControlDecisionReason,
     V17V3ControlReadResult,
     V17V3ControlReaderRequest,

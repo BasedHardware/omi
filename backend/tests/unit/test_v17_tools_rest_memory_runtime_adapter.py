@@ -2,8 +2,8 @@ import importlib
 import sys
 import types
 
-from utils.memory.v17_chat_memory_adapter import V17ChatMemorySearchResult
-from utils.memory.v17_default_read_rollout import V17ReadDecision
+from utils.memory.chat_memory_adapter import V17ChatMemorySearchResult
+from utils.memory.default_read_rollout import V17ReadDecision
 
 
 def _identity_parse_iso_date(value, _field_name):

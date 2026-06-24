@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.v17_memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
-from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
-from utils.memory.v17_read_api import (
+from models.memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from utils.memory.memory_read_api import (
     query_archive_product_memory_items,
     query_default_product_memory_items,
     query_durable_memory,

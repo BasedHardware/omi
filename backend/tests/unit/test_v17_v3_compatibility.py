@@ -1,6 +1,6 @@
 import inspect
 
-from utils.memory.v17_v3_compatibility import (
+from utils.memory.v3_compatibility import (
     V17V3CompatibilityContext,
     V17V3CompatibilityDecision,
     V17V3CompatibilityReadPath,

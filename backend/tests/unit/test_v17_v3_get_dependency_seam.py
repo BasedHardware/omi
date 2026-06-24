@@ -1,4 +1,4 @@
-from utils.memory.v17_v3_get_dependency_seam import (
+from utils.memory.v3_get_dependency_seam import (
     LOW_CARDINALITY_DECISION_CODES,
     V17V3GetDependencyAdapters,
     V17V3GetDependencyContext,

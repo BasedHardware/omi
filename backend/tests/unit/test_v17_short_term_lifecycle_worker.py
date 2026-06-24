@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta, timezone
 
-from jobs.v17_short_term_lifecycle_worker import (
+from jobs.short_term_lifecycle_worker import (
     InMemoryShortTermLifecycleTransitionStore,
     process_short_term_lifecycle_items,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS, ShortTermDisposition
 
 NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)

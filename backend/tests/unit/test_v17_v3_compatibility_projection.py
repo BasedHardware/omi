@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from database.v17_collections import V17Collections
-from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
-from utils.memory.v17_v3_projection_reader_contract import (
+from database.memory_collections import V17Collections
+from database.memory_compatibility_projection import read_v17_v3_compatibility_projection_page
+from utils.memory.v3_projection_reader_contract import (
     V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V17V3ProjectionCursor,
     V17V3ProjectionFailureReason,

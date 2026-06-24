@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from database.v17_vector_metadata import (
+from database.memory_vector_metadata import (
     build_v17_archive_memory_vector_filter,
     build_v17_default_memory_vector_filter,
     build_v17_memory_vector_metadata,
@@ -8,8 +8,8 @@ from database.v17_vector_metadata import (
     parse_v17_search_vector_hit,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchDecision
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_search_gateway import SearchDecision
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 
 def _item(

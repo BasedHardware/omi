@@ -2,11 +2,11 @@ import inspect
 
 import pytest
 
-from utils.memory.v17_v3_memory_read_service import (
+from utils.memory.v3_memory_read_service import (
     V17V3CompatibilityReadPath,
     V17V3MemoryReadServiceResult,
 )
-from utils.memory.v17_v3_response_adapter import (
+from utils.memory.v3_response_adapter import (
     V17V3ResponseShapeError,
     adapt_v17_v3_memory_response,
 )

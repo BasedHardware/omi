@@ -1,10 +1,10 @@
-from config.v17_memory import V17Capabilities, V17Mode
-from utils.memory.v17_default_read_rollout import (
+from config.memory_rollout import V17Capabilities, V17Mode
+from utils.memory.default_read_rollout import (
     V17DefaultReadRolloutDecision,
     V17GlobalReadGateDecision,
     V17ReadDecision,
 )
-from utils.memory.v17_product_authorization import (
+from utils.memory.product_authorization import (
     V17MemoryGrantOperation,
     V17ProductAuthorizationContext,
     authorize_v17_app_key_scope_memory_grant,

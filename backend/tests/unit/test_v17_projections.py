@@ -1,4 +1,4 @@
-from utils.memory.v17_projections import rebuild_v17_memory_projections
+from utils.memory.projections import rebuild_v17_memory_projections
 
 
 def test_v17_projection_rebuilds_vector_and_graph_from_active_durable_facts_only():

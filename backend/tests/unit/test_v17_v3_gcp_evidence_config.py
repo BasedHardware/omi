@@ -1,6 +1,6 @@
 import pytest
 
-from utils.memory.v17_v3_gcp_evidence_config import (
+from utils.memory.v3_gcp_evidence_config import (
     DEFAULT_EVIDENCE_TARGETS,
     EvidenceTargetRegistry,
     ValidationError,

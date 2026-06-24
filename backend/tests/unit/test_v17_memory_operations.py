@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from models.v17_memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType, build_operation_id
+from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType, build_operation_id
 
 
 def test_operation_id_is_server_owned_and_independent_of_head_or_array_index():

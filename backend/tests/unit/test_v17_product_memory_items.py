@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from database.product_memory_items import filter_default_product_memory_items
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 

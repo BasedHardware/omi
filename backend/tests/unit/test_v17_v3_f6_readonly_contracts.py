@@ -3,7 +3,7 @@ import inspect
 
 import pytest
 
-from utils.memory.v17_v3_f6_readonly_contracts import (
+from utils.memory.v3_f6_readonly_contracts import (
     AuditLogEvent,
     AuditQuery,
     EvidenceClientConfig,
@@ -20,9 +20,9 @@ from utils.memory.v17_v3_f6_readonly_contracts import (
 
 
 def test_readonly_contracts_facade_re_exports_canonical_split_modules_without_core_local_doubles_imports():
-    from utils.memory import v17_v3_f6_readonly_contracts as facade
-    from utils.memory.v17_v3_f6 import audit, identity_iam, read_evidence, run_context
-    from utils.memory.v17_v3_f6.local_doubles import FakeIdentityIamSource as CanonicalFakeIdentityIamSource
+    from utils.memory import v3_f6_readonly_contracts as facade
+    from utils.memory.v3_f6 import audit, identity_iam, read_evidence, run_context
+    from utils.memory.v3_f6.local_doubles import FakeIdentityIamSource as CanonicalFakeIdentityIamSource
 
     assert facade.RunRecord is run_context.RunRecord
     assert facade.IdentityIamTarget is identity_iam.IdentityIamTarget

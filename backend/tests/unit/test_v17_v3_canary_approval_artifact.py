@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from utils.memory.v17_v3_canary_approval import (
+from utils.memory.v3_canary_approval import (
     ROUTE_SCOPE,
     APPROVAL_STATUSES,
     CANARY_COHORTS,

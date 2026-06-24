@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config.v17_memory import PASSED, V17Mode, V17StageGate
+from config.memory_rollout import PASSED, V17Mode, V17StageGate
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_search_gateway import SearchMode, SearchVectorHit
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory.v17_chat_memory_adapter import (
+from utils.memory.chat_memory_adapter import (
     V17ChatMemorySearchResult,
     V17_CHAT_MEMORY_BOUNDARY_NOTICE,
     V17_CHAT_MEMORY_POLICY_MARKER,
@@ -16,7 +16,7 @@ from utils.memory.v17_chat_memory_adapter import (
     search_v17_default_chat_memories_text,
     search_v17_default_chat_memories_vector_text,
 )
-from utils.memory.v17_default_read_rollout import V17ReadDecision
+from utils.memory.default_read_rollout import V17ReadDecision
 
 
 class _Snapshot:

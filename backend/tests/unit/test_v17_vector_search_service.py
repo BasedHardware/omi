@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
-from models.v17_product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
-from database.v17_vector_repair_outbox import (
+from models.memory_search_gateway import SearchMode, SearchVectorHit, VectorRepairPurgeReason
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from database.memory_vector_repair_outbox import (
     build_v17_vector_repair_purge_outbox_records,
     write_v17_vector_repair_purge_outbox_records,
 )
-from utils.memory.v17_vector_search_service import fetch_default_v17_vector_memory_search
-from utils.memory.v17_vector_search_telemetry import V17VectorSearchTelemetryConfig
+from utils.memory.vector_search_service import fetch_default_v17_vector_memory_search
+from utils.memory.vector_search_telemetry import V17VectorSearchTelemetryConfig
 
 
 class _Snapshot:

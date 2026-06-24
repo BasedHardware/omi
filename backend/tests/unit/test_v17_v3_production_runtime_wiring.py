@@ -9,15 +9,15 @@ try:
 except Exception as exc:  # pragma: no cover - system pytest env without backend deps
     pytest.skip(f'FastAPI/TestClient route proof requires backend venv dependencies: {exc}', allow_module_level=True)
 
-from config.v17_memory import V17Mode
-from database.v17_collections import V17Collections
-from utils.memory.v17_default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
-from utils.memory.v17_v3_composed_get_service import (
+from config.memory_rollout import V17Mode
+from database.memory_collections import V17Collections
+from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from utils.memory.v3_composed_get_service import (
     V17V3ComposedRequestParams,
     V17V3ComposedResponse,
     compose_v17_v3_get,
 )
-from utils.memory.v17_v3_production_runtime import build_v17_v3_production_runtime
+from utils.memory.v3_production_runtime import build_v17_v3_production_runtime
 
 
 @dataclass

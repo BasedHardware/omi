@@ -1,6 +1,6 @@
 from pydantic import ValidationError
 
-from models.v17_memory_contracts import (
+from models.memory_contracts import (
     DurableMemoryPatch,
     L1MemoryArchiveClass,
     L1MemoryArchiveItem,

@@ -1,12 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from config.v17_memory import PASSED, V17Capabilities, V17Mode, V17StageGate
+from config.memory_rollout import PASSED, V17Capabilities, V17Mode, V17StageGate
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_search_gateway import SearchMode, SearchVectorHit
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
-from utils.memory.v17_default_read_rollout import (
+from utils.memory.default_read_rollout import (
     V17ReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
     legacy_safe_v17_default_read_rollout_decision,

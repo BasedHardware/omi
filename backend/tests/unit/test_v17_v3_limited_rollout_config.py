@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from config.v17_memory import V17Mode
-from utils.memory.v17_v3_limited_rollout_config import (
+from config.memory_rollout import V17Mode
+from utils.memory.v3_limited_rollout_config import (
     GLOBAL_READ_GATE_PATH,
     WRITE_CONVERGENCE_GATE_PATH,
     build_limited_rollout_config_bundle,

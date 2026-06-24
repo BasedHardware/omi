@@ -70,7 +70,7 @@ def _v17_product_router_import_isolation():
         sys.modules.pop("fastapi", None)
     install_v17_product_router_stubs(fastapi_stub, auth_stub)
     import routers.memory_product as memory_product
-    import routers.v17_memory_product as v17_memory_product
+    import routers.memory_product as v17_memory_product
 
     globals()["memory_product"] = memory_product
     globals()["v17_memory_product"] = v17_memory_product
@@ -83,7 +83,7 @@ def _v17_product_router_import_isolation():
 
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 v17_memory_product = None  # populated by _v17_product_router_import_isolation
@@ -592,7 +592,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
 
 
 def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
-    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+    from models.memory_search_gateway import SearchMode, SearchVectorHit
 
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
@@ -670,7 +670,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
 
 
 def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_flag(monkeypatch):
-    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+    from models.memory_search_gateway import SearchMode, SearchVectorHit
 
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
@@ -722,7 +722,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
 
 
 def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(monkeypatch):
-    from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+    from models.memory_search_gateway import SearchMode, SearchVectorHit
 
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
     stale_projection = _memory_item('stale-projection', tier=MemoryTier.long_term, now=now)
