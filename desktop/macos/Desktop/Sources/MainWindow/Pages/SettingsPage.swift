@@ -7217,6 +7217,7 @@ struct SettingsContentView: View {
     guard !isLoadingSubscription else { return }
     isLoadingSubscription = true
     subscriptionError = nil
+    refreshPlanUsageDetails()
 
     Task {
       do {
@@ -7243,7 +7244,6 @@ struct SettingsContentView: View {
             log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
           }
           isLoadingSubscription = false
-          refreshPlanUsageDetails()
         }
       } catch {
         logError("Failed to load subscription", error: error)
@@ -7300,14 +7300,6 @@ struct SettingsContentView: View {
     isLoadingOverage = false
   }
 
-  private func loadChatUsageQuota() {
-    refreshPlanUsageDetails()
-  }
-
-  private func loadOverageInfo() {
-    refreshPlanUsageDetails()
-  }
-
   private func applySuccessfulSubscriptionRefresh(_ subscription: UserSubscriptionResponse) {
     userSubscription = subscription
     subscriptionError = nil
@@ -7328,12 +7320,6 @@ struct SettingsContentView: View {
     }
 
     refreshPlanUsageDetails()
-  }
-
-  private func syncSharedPlanStateAfterSubscriptionMutation() {
-    Task {
-      await FloatingBarUsageLimiter.shared.fetchPlan()
-    }
   }
 
   private func startCheckout(for priceId: String) {
@@ -7498,7 +7484,6 @@ struct SettingsContentView: View {
             await MainActor.run {
               applySuccessfulSubscriptionRefresh(subscription)
             }
-            syncSharedPlanStateAfterSubscriptionMutation()
             return
           }
 
