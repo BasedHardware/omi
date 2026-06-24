@@ -719,7 +719,10 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         if not query:
             raise ToolExecutionError("query is required")
 
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=500)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
 
@@ -769,7 +772,10 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         query = arguments.get("query")
         if not query:
             raise ToolExecutionError("query is required")
-        limit = arguments.get("limit", 10)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=10, minimum=1, maximum=500)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         matches = vector_db.find_similar_x_posts(user_id, query, limit=limit)
         if not matches:
@@ -792,7 +798,10 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         return {"posts": results}
 
     elif tool_name == "get_x_posts":
-        limit = arguments.get("limit", 50)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=500)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
         kind = arguments.get("kind")
         posts = x_posts_db.get_x_posts(user_id, limit=limit, kind=kind)
         results = [
