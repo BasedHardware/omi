@@ -17,7 +17,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+import typing
 
 
 SCHEMA_VERSION = 2
@@ -49,7 +49,7 @@ def slug(value: str) -> str:
     return cleaned or "flow"
 
 
-def read_yaml(path: Path) -> dict[str, Any]:
+def read_yaml(path: Path) -> dict[str, typing.Any]:
     try:
         import yaml
     except ImportError as exc:
@@ -63,11 +63,11 @@ def read_yaml(path: Path) -> dict[str, Any]:
         return yaml.safe_load(handle) or {}
 
 
-def write_json(path: Path, data: Any) -> None:
+def write_json(path: Path, data: typing.Any) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def request_json(base_url: str, method: str, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -120,8 +120,8 @@ def tool_version(command: list[str]) -> str | None:
     return result.stdout.strip().splitlines()[0] if result.stdout.strip() else None
 
 
-def nested_get(data: dict[str, Any], dotted: str) -> Any:
-    current: Any = data
+def nested_get(data: dict[str, typing.Any], dotted: str) -> typing.Any:
+    current: typing.Any = data
     for part in dotted.split("."):
         if isinstance(current, dict):
             current = current.get(part)
@@ -130,28 +130,28 @@ def nested_get(data: dict[str, Any], dotted: str) -> Any:
     return current
 
 
-def normalize_state_response(response: dict[str, Any]) -> dict[str, Any]:
+def normalize_state_response(response: dict[str, typing.Any]) -> dict[str, typing.Any]:
     result = response.get("result")
     return result if isinstance(result, dict) else {}
 
 
-def state_snapshot(ctx: HarnessContext) -> dict[str, Any]:
+def state_snapshot(ctx: HarnessContext) -> dict[str, typing.Any]:
     return normalize_state_response(request_json(ctx.base_url, "GET", "/state"))
 
 
-def recent_traces(ctx: HarnessContext) -> list[dict[str, Any]]:
+def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
     response = request_json(ctx.base_url, "GET", "/traces/recent")
     result = response.get("result")
     return result if isinstance(result, list) else []
 
 
-def expectation_matches(data: dict[str, Any], expectations: dict[str, Any]) -> bool:
+def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> bool:
     return all(nested_get(data, key) == value for key, value in expectations.items())
 
 
-def wait_for_state(ctx: HarnessContext, expectations: dict[str, Any], timeout: float = 5.0) -> tuple[bool, dict[str, Any]]:
+def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
     deadline = time.monotonic() + timeout
-    latest: dict[str, Any] = {}
+    latest: dict[str, typing.Any] = {}
     while time.monotonic() < deadline:
         latest = state_snapshot(ctx)
         if expectation_matches({"state": latest}, expectations):
@@ -160,9 +160,9 @@ def wait_for_state(ctx: HarnessContext, expectations: dict[str, Any], timeout: f
     return False, latest
 
 
-def wait_for_trace(ctx: HarnessContext, expectations: dict[str, Any], timeout: float = 5.0) -> tuple[bool, list[dict[str, Any]]]:
+def wait_for_trace(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, list[dict[str, typing.Any]]]:
     deadline = time.monotonic() + timeout
-    traces: list[dict[str, Any]] = []
+    traces: list[dict[str, typing.Any]] = []
     while time.monotonic() < deadline:
         traces = recent_traces(ctx)
         if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
@@ -187,7 +187,7 @@ def read_log_tail(ctx: HarnessContext) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
-def collect_logs(ctx: HarnessContext) -> dict[str, Any]:
+def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
     text = read_log_tail(ctx)
     out = ctx.run_dir / "logs.txt"
     out.write_text(text, encoding="utf-8")
@@ -195,7 +195,7 @@ def collect_logs(ctx: HarnessContext) -> dict[str, Any]:
     return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
 
 
-def step_prefix(index: int, step: dict[str, Any]) -> str:
+def step_prefix(index: int, step: dict[str, typing.Any]) -> str:
     return f"{index:03d}-{slug(str(step.get('id') or step.get('name') or 'step'))}"
 
 
@@ -215,7 +215,7 @@ def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.Complete
     return subprocess.run(["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
 
 
-def action_payload(spec: dict[str, Any]) -> dict[str, Any]:
+def action_payload(spec: dict[str, typing.Any]) -> dict[str, typing.Any]:
     payload = dict(spec)
     params = dict(payload.get("params") or {})
     for key in list(payload.keys()):
@@ -226,7 +226,7 @@ def action_payload(spec: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def assert_state(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bool, str | None]:
+def assert_state(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     state = state_snapshot(ctx)
     write_json(path, state)
     expectations = spec.get("equals") or spec
@@ -237,7 +237,7 @@ def assert_state(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple
     return False, f"state assertions failed: {expectations}"
 
 
-def assert_log(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bool, str | None]:
+def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     text = read_log_tail(ctx)
     path.write_text(text, encoding="utf-8")
     contains = spec.get("contains", [])
@@ -255,7 +255,7 @@ def assert_log(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[b
     return True, None
 
 
-def assert_trace(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bool, str | None]:
+def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     traces = recent_traces(ctx)
     write_json(path, traces)
     expectations = spec.get("equals") or spec
@@ -266,7 +266,7 @@ def assert_trace(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple
     return False, f"no trace matched: {expectations}"
 
 
-def assert_ax(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bool, str | None]:
+def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
     if ctx.lane != "ui":
         return True, "skipped outside ui lane"
     result = run_agent_swift(ctx, ["snapshot", "-i", "--json"])
@@ -283,14 +283,14 @@ def assert_ax(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bo
     return True, None
 
 
-def export_visual(ctx: HarnessContext, path: Path, target: str | None = None) -> dict[str, Any]:
+def export_visual(ctx: HarnessContext, path: Path, target: str | None = None) -> dict[str, typing.Any]:
     payload = {"path": str(path)}
     if target:
         payload["target"] = target
     return request_json(ctx.base_url, "POST", "/visual/export", payload)
 
 
-def apply_wait(ctx: HarnessContext, step: dict[str, Any], prefix: str, result: dict[str, Any]) -> None:
+def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, result: dict[str, typing.Any]) -> None:
     wait_spec = step.get("wait") or {}
     if not result["ok"] or not isinstance(wait_spec, dict) or not wait_spec:
         return
@@ -313,10 +313,10 @@ def apply_wait(ctx: HarnessContext, step: dict[str, Any], prefix: str, result: d
             result["error"] = f"state wait timed out after {timeout}s"
 
 
-def execute_step(ctx: HarnessContext, index: int, step: dict[str, Any]) -> dict[str, Any]:
+def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -> dict[str, typing.Any]:
     prefix = step_prefix(index, step)
     started = time.perf_counter()
-    result: dict[str, Any] = {
+    result: dict[str, typing.Any] = {
         "id": step.get("id", f"S{index}"),
         "name": step.get("name", f"Step {index}"),
         "started_at": now_iso(),
@@ -545,7 +545,7 @@ def run_flow(args: argparse.Namespace) -> int:
     return 0 if metrics["ok"] else 1
 
 
-def write_summary(run_dir: Path, metrics: dict[str, Any]) -> None:
+def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
     lines = [
         f"# {metrics['flow']['name']}",
         "",
