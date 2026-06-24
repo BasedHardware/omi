@@ -13,11 +13,11 @@ from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
-from utils.memory.v17_chat_memory_adapter import (
+from utils.memory.chat_memory_adapter import (
     list_v17_default_chat_memories_decision_text,
     search_v17_default_chat_memories_vector_decision_text,
 )
-from utils.memory.v17_default_read_rollout import V17ReadDecision
+from utils.memory.default_read_rollout import V17ReadDecision
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
 
