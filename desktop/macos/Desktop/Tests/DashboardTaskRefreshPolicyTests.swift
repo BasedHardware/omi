@@ -8,6 +8,28 @@ final class DashboardTaskRefreshPolicyTests: XCTestCase {
         XCTAssertFalse(DashboardTaskRefreshPolicy.shouldMarkIncompleteTasksLoaded)
         XCTAssertFalse(DashboardTaskRefreshPolicy.shouldAssignTasksPageList)
         XCTAssertGreaterThan(DashboardTaskRefreshPolicy.serverFetchLimit, 0)
+        XCTAssertGreaterThan(
+            DashboardTaskRefreshPolicy.maxServerFetchPages,
+            1,
+            "Dashboard freshness must not silently rely on only the first server page"
+        )
+    }
+
+    func testDashboardRefreshServiceSharesInflightRefreshAndReloadsLocalStateForWaiters() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Stores/DashboardTaskRefreshService.swift")
+        let source = try String(contentsOf: sourceURL)
+
+        XCTAssertTrue(
+            source.contains("private static var inFlightRefreshTask: Task<Void, Never>?"),
+            "Dashboard refresh must have an explicit shared in-flight task instead of a drop-on-floor boolean guard"
+        )
+        XCTAssertTrue(
+            source.contains("await inFlightRefreshTask.value\n            await store.loadDashboardTasks()"),
+            "Concurrent dashboard refresh callers should await the in-flight refresh and then reload local dashboard state before returning"
+        )
     }
 
     func testDashboardExactTaskFetchLimiterCapsConcurrentOperations() async {
