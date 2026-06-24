@@ -12,6 +12,7 @@ pytest tests/unit/test_text_similarity.py -v
 pytest tests/unit/test_text_containment.py -v
 pytest tests/unit/test_speaker_sample.py -v
 pytest tests/unit/test_speaker_sample_migration.py -v
+pytest tests/unit/test_update_app_auth_step_url_keyerror.py -v
 pytest tests/unit/test_short_audio_embedding.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_users_webhook_url_validation.py -v
