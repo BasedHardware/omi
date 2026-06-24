@@ -1,14 +1,14 @@
-"""Canonical V17-V3-F6 package exports."""
+"""Backward-compatible shim — implementation lives in ``utils.memory.v3_f6`` (WS-G8b)."""
 
 from __future__ import annotations
 
-from utils.memory.v17_v3_f6.aggregate import (
+from utils.memory.v3_f6.aggregate import (
     F6_LOCAL_GATE_IDS,
     GCP_ACCESS_GATE_IDS,
     NON_CLAIMS,
     build_pre_gcp_aggregate_report,
 )
-from utils.memory.v17_v3_f6.audit import (
+from utils.memory.v3_f6.audit import (
     WRITE_METHOD_MARKERS,
     AuditCorrelationResult,
     AuditLogClient,
@@ -18,7 +18,7 @@ from utils.memory.v17_v3_f6.audit import (
     _method_family,
     assess_audit_correlation,
 )
-from utils.memory.v17_v3_f6.identity_iam import (
+from utils.memory.v3_f6.identity_iam import (
     FORBIDDEN_BROAD_ROLES,
     FORBIDDEN_WRITE_PERMISSIONS,
     REQUIRED_READ_PERMISSIONS,
@@ -27,12 +27,12 @@ from utils.memory.v17_v3_f6.identity_iam import (
     IdentityIamVerificationResult,
     verify_identity_iam,
 )
-from utils.memory.v17_v3_f6.local_doubles import (
+from utils.memory.v3_f6.local_doubles import (
     FakeAuditLogClient,
     FakeIdentityIamSource,
     FakeReadEvidenceTransport,
 )
-from utils.memory.v17_v3_f6.read_evidence import (
+from utils.memory.v3_f6.read_evidence import (
     GENERIC_OR_RAW_METHODS,
     MUTATOR_TOKENS,
     EvidenceClientConfig,
@@ -41,7 +41,7 @@ from utils.memory.v17_v3_f6.read_evidence import (
     ReadOnlyEvidenceClient,
     _method_is_forbidden,
 )
-from utils.memory.v17_v3_f6.run_context import RunRecord
+from utils.memory.v3_f6.run_context import RunRecord
 
 __all__ = [
     "AuditCorrelationResult",
@@ -80,7 +80,7 @@ __all__ = [
 
 def __getattr__(name: str):
     if name == "build_report_from_current_local_contracts":
-        from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts
+        from utils.memory.v3_f6.local_smoke import build_report_from_current_local_contracts
 
         return build_report_from_current_local_contracts
     raise AttributeError(name)

@@ -1,67 +1,59 @@
-"""Canonical V17-V3-F6 read-only contract exports."""
+"""Backward-compatible shim — implementation in ``utils.memory.v3_f6.readonly_contracts`` (WS-G8b)."""
 
-from __future__ import annotations
-
-from utils.memory.v17_v3_f6.audit import (
-    WRITE_METHOD_MARKERS,
+from utils.memory.v3_f6.readonly_contracts import (
+    assess_audit_correlation,
     AuditCorrelationResult,
     AuditLogClient,
     AuditLogEvent,
     AuditQuery,
-    _audit_method_is_write,
-    _method_family,
-    assess_audit_correlation,
-)
-from utils.memory.v17_v3_f6.identity_iam import (
-    FORBIDDEN_BROAD_ROLES,
-    FORBIDDEN_WRITE_PERMISSIONS,
-    REQUIRED_READ_PERMISSIONS,
-    IdentityIamSource,
-    IdentityIamTarget,
-    IdentityIamVerificationResult,
-    verify_identity_iam,
-)
-from utils.memory.v17_v3_f6.local_doubles import (
+    EvidenceClientConfig,
     FakeAuditLogClient,
     FakeIdentityIamSource,
     FakeReadEvidenceTransport,
-)
-from utils.memory.v17_v3_f6.read_evidence import (
+    FORBIDDEN_BROAD_ROLES,
+    FORBIDDEN_WRITE_PERMISSIONS,
     GENERIC_OR_RAW_METHODS,
+    IdentityIamSource,
+    IdentityIamTarget,
+    IdentityIamVerificationResult,
     MUTATOR_TOKENS,
-    EvidenceClientConfig,
     ReadEvidenceRequest,
     ReadEvidenceTransport,
     ReadOnlyEvidenceClient,
+    REQUIRED_READ_PERMISSIONS,
+    RunRecord,
+    verify_identity_iam,
+    WRITE_METHOD_MARKERS,
+    _audit_method_is_write,
+    _method_family,
     _method_is_forbidden,
 )
-from utils.memory.v17_v3_f6.run_context import RunRecord
 
 __all__ = [
+    "assess_audit_correlation",
     "AuditCorrelationResult",
     "AuditLogClient",
     "AuditLogEvent",
     "AuditQuery",
     "EvidenceClientConfig",
-    "FORBIDDEN_BROAD_ROLES",
-    "FORBIDDEN_WRITE_PERMISSIONS",
     "FakeAuditLogClient",
     "FakeIdentityIamSource",
     "FakeReadEvidenceTransport",
+    "FORBIDDEN_BROAD_ROLES",
+    "FORBIDDEN_WRITE_PERMISSIONS",
     "GENERIC_OR_RAW_METHODS",
     "IdentityIamSource",
     "IdentityIamTarget",
     "IdentityIamVerificationResult",
     "MUTATOR_TOKENS",
-    "REQUIRED_READ_PERMISSIONS",
     "ReadEvidenceRequest",
     "ReadEvidenceTransport",
     "ReadOnlyEvidenceClient",
+    "REQUIRED_READ_PERMISSIONS",
     "RunRecord",
+    "verify_identity_iam",
     "WRITE_METHOD_MARKERS",
     "_audit_method_is_write",
     "_method_family",
     "_method_is_forbidden",
-    "assess_audit_correlation",
-    "verify_identity_iam",
 ]

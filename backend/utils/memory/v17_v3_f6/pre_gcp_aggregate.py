@@ -1,19 +1,17 @@
-"""Canonical V17-V3-F6 pre-GCP aggregate exports."""
+"""Backward-compatible shim — implementation in ``utils.memory.v3_f6.pre_gcp_aggregate`` (WS-G8b)."""
 
-from __future__ import annotations
-
-from utils.memory.v17_v3_f6.aggregate import (  # noqa: F401
+from utils.memory.v3_f6.pre_gcp_aggregate import (
+    build_pre_gcp_aggregate_report,
+    build_report_from_current_local_contracts,
     F6_LOCAL_GATE_IDS,
     GCP_ACCESS_GATE_IDS,
     NON_CLAIMS,
-    build_pre_gcp_aggregate_report,
 )
-from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts  # noqa: F401
 
 __all__ = [
+    "build_pre_gcp_aggregate_report",
+    "build_report_from_current_local_contracts",
     "F6_LOCAL_GATE_IDS",
     "GCP_ACCESS_GATE_IDS",
     "NON_CLAIMS",
-    "build_pre_gcp_aggregate_report",
-    "build_report_from_current_local_contracts",
 ]

@@ -1,12 +1,9 @@
-"""Run context contracts for V17-V3-F6 read-only evidence."""
+"""Backward-compatible shim — implementation in ``utils.memory.v3_f6.run_context`` (WS-G8b)."""
 
-from __future__ import annotations
+from utils.memory.v3_f6.run_context import (
+    RunRecord,
+)
 
-from dataclasses import dataclass
-
-
-@dataclass(frozen=True)
-class RunRecord:
-    run_id: str
-    project_id: str
-    principal: str
+__all__ = [
+    "RunRecord",
+]
