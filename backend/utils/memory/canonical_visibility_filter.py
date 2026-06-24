@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List
 
 from database.product_memory_items import filter_default_product_memory_items
-from models.v17_product_memory import (
+from models.product_memory import (
     MemoryAccessPolicy,
     MemoryItemStatus,
     MemoryTier,
