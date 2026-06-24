@@ -19,12 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError as exc:
-    print("omi-harness: PyYAML is required to read flow files", file=sys.stderr)
-    raise SystemExit(2) from exc
-
 
 SCHEMA_VERSION = 2
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -56,6 +50,15 @@ def slug(value: str) -> str:
 
 
 def read_yaml(path: Path) -> dict[str, Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        print(
+            "omi-harness: PyYAML is required to run flow files; install it with `python3 -m pip install PyYAML`",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from exc
+
     with path.open("r", encoding="utf-8") as handle:
         return yaml.safe_load(handle) or {}
 
