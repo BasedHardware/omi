@@ -1136,9 +1136,9 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/app/generate-description', tags=['v1'])
 def generate_description_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    if data['name'] == '':
+    if not data.get('name'):
         raise HTTPException(status_code=422, detail='App Name is required')
-    if data['description'] == '':
+    if not data.get('description'):
         raise HTTPException(status_code=422, detail='App Description is required')
     with track_usage(uid, Features.APP_GENERATOR):
         desc = generate_description(data['name'], data['description'])
