@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal
 
-from config.v17_memory import V17Mode, V17RolloutConfig, parse_enabled_users
+from config.v17_memory import (
+    V17Mode,
+    V17RolloutConfig,
+    parse_enabled_users,
+    rollout_enabled_users_env_raw,
+    rollout_mode_env_value,
+)
 from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
 from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
 from utils.memory.v17_v3_composed_get_service import (
@@ -357,12 +363,12 @@ def _runtime_enabled(rollout_config: V17RolloutConfig) -> bool:
 
 def _rollout_config_from_env(env) -> V17RolloutConfig:
     try:
-        mode = V17Mode((env.get('V17_MODE') or V17Mode.off.value).strip() or V17Mode.off.value)
+        mode = V17Mode(rollout_mode_env_value(env))
         backfill_daily_limit = int(env.get('V17_BACKFILL_DAILY_LIMIT', '0') or 0)
     except (TypeError, ValueError):
         return V17RolloutConfig()
     return V17RolloutConfig(
-        enabled_users=parse_enabled_users(env.get('V17_MEMORY_ENABLED_USERS', '')),
+        enabled_users=parse_enabled_users(rollout_enabled_users_env_raw(env)),
         mode=mode,
         backfill_enabled=str(env.get('V17_BACKFILL_ENABLED', 'false')).lower() == 'true',
         backfill_daily_limit=max(0, backfill_daily_limit),

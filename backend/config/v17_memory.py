@@ -1,7 +1,13 @@
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Iterable, Optional, Set
+
+MEMORY_MODE_ENV = "MEMORY_MODE"
+V17_MODE_ENV = "V17_MODE"
+MEMORY_ENABLED_USERS_ENV = "MEMORY_ENABLED_USERS"
+V17_MEMORY_ENABLED_USERS_ENV = "V17_MEMORY_ENABLED_USERS"
 
 
 class V17Mode(str, Enum):
@@ -94,12 +100,12 @@ class V17RolloutConfig:
 
     @classmethod
     def from_env(cls) -> "V17RolloutConfig":
-        mode = V17Mode(os.getenv("V17_MODE", V17Mode.off.value).strip() or V17Mode.off.value)
+        mode = V17Mode(rollout_mode_env_value())
         limit = int(os.getenv("V17_BACKFILL_DAILY_LIMIT", "0") or 0)
         if limit < 0:
             raise ValueError("V17_BACKFILL_DAILY_LIMIT must be nonnegative")
         return cls(
-            enabled_users=parse_enabled_users(os.getenv("V17_MEMORY_ENABLED_USERS", "")),
+            enabled_users=parse_enabled_users(rollout_enabled_users_env_raw()),
             mode=mode,
             backfill_enabled=os.getenv("V17_BACKFILL_ENABLED", "false").lower() == "true",
             backfill_daily_limit=limit,
@@ -162,3 +168,25 @@ def parse_enabled_users(raw: str | Iterable[str]) -> Set[str]:
     if isinstance(raw, str):
         return {uid.strip() for uid in raw.split(",") if uid.strip()}
     return {uid.strip() for uid in raw if uid and uid.strip()}
+
+
+def rollout_mode_env_value(env: Mapping[str, str] | None = None) -> str:
+    """Read rollout mode from ``MEMORY_MODE`` with fallback to ``V17_MODE``.
+
+    Neutral key wins when present in the environment mapping (even if empty).
+    Does **not** read ``MEMORY_CANONICAL_USERS`` — cohort membership is separate (WS-E).
+    """
+    source = env if env is not None else os.environ
+    if MEMORY_MODE_ENV in source:
+        raw = source.get(MEMORY_MODE_ENV, "")
+    else:
+        raw = source.get(V17_MODE_ENV, "")
+    return (raw or V17Mode.off.value).strip() or V17Mode.off.value
+
+
+def rollout_enabled_users_env_raw(env: Mapping[str, str] | None = None) -> str:
+    """Read enabled-user list from ``MEMORY_ENABLED_USERS`` with fallback to ``V17_MEMORY_ENABLED_USERS``."""
+    source = env if env is not None else os.environ
+    if MEMORY_ENABLED_USERS_ENV in source:
+        return source.get(MEMORY_ENABLED_USERS_ENV, "") or ""
+    return source.get(V17_MEMORY_ENABLED_USERS_ENV, "") or ""

@@ -97,6 +97,59 @@ def test_memory_rollout_alias_reexports_match_v17():
     assert memory_rollout.V17RolloutConfig is v17_memory.V17RolloutConfig
     assert memory_rollout.V17Capabilities is v17_memory.V17Capabilities
     assert memory_rollout.parse_enabled_users is v17_memory.parse_enabled_users
+    assert memory_rollout.rollout_mode_env_value is v17_memory.rollout_mode_env_value
+    assert memory_rollout.rollout_enabled_users_env_raw is v17_memory.rollout_enabled_users_env_raw
+
+
+def test_rollout_mode_env_dual_read_legacy_only():
+    from config.v17_memory import V17Mode, rollout_mode_env_value
+
+    assert rollout_mode_env_value({"V17_MODE": "read"}) == "read"
+    assert V17Mode(rollout_mode_env_value({"V17_MODE": "read"})) == V17Mode.read
+
+
+def test_rollout_mode_env_dual_read_neutral_precedence(monkeypatch):
+    from config.v17_memory import V17Mode, V17RolloutConfig, rollout_mode_env_value
+
+    monkeypatch.setenv("V17_MODE", "shadow")
+    monkeypatch.setenv("MEMORY_MODE", "read")
+    assert rollout_mode_env_value() == "read"
+    assert V17RolloutConfig.from_env().mode == V17Mode.read
+
+
+def test_rollout_enabled_users_env_dual_read_legacy_only(monkeypatch):
+    from config.v17_memory import V17RolloutConfig, rollout_enabled_users_env_raw
+
+    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
+    monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "uid-a,uid-b")
+    assert rollout_enabled_users_env_raw() == "uid-a,uid-b"
+    assert V17RolloutConfig.from_env().enabled_users == {"uid-a", "uid-b"}
+
+
+def test_rollout_enabled_users_env_dual_read_neutral_precedence(monkeypatch):
+    from config.v17_memory import V17RolloutConfig, rollout_enabled_users_env_raw
+
+    monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "legacy-only")
+    monkeypatch.setenv("MEMORY_ENABLED_USERS", "neutral-only")
+    assert rollout_enabled_users_env_raw() == "neutral-only"
+    assert V17RolloutConfig.from_env().enabled_users == {"neutral-only"}
+
+
+def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
+    from config.v17_memory import V17RolloutConfig
+    from utils.memory.memory_system import resolve_memory_system, MemorySystem
+
+    monkeypatch.delenv("V17_MODE", raising=False)
+    monkeypatch.delenv("V17_MEMORY_ENABLED_USERS", raising=False)
+    monkeypatch.delenv("MEMORY_MODE", raising=False)
+    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", "cohort-user")
+    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
+
+    assert V17RolloutConfig.from_env().enabled_users == {"rollout-user"}
+    assert resolve_memory_system("cohort-user") == MemorySystem.CANONICAL
+    assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
 
 
 def test_memory_non_active_routes_alias_reexports_match_v17():
