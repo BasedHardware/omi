@@ -148,10 +148,14 @@ async def create_memories_batch(
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
+    # on a negative argument and would otherwise 500 the request.
+    offset = max(0, offset)
     # Use high limits for the first page
     # Warn: should remove
     if offset == 0:
         limit = 5000
+    limit = max(1, min(limit, 5000))
     memories = memories_db.get_memories(uid, limit, offset)
 
     valid_memories = []

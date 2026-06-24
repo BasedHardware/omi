@@ -145,6 +145,7 @@ pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_rate_limit_json_failopen.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
+pytest tests/unit/test_memories_pagination_clamp.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_cloud_tasks.py -v
 pytest tests/unit/test_sync_transcription_prefs.py -v
