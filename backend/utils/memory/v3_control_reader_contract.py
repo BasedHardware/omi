@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
 
-from config.v17_memory import V17Mode
+from config.memory_rollout import V17Mode
 
 
 class V17V3ControlRouteFamily(str, Enum):

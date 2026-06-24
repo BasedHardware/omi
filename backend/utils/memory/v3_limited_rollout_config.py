@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config.v17_memory import V17Mode
-from database.v17_collections import V17Collections
-from utils.memory.v17_default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from config.memory_rollout import V17Mode
+from database.memory_collections import V17Collections
+from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 
 GLOBAL_READ_GATE_PATH = 'memory_control/v17_global_read_gate'
 WRITE_CONVERGENCE_GATE_PATH = 'memory_control/v17_write_convergence_gate'

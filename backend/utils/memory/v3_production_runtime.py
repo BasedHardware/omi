@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Literal
 
-from config.v17_memory import (
+from config.memory_rollout import (
     V17Mode,
     V17RolloutConfig,
     parse_enabled_users,
@@ -21,7 +21,7 @@ from config.v17_memory import (
     rollout_mode_env_value,
     rollout_v3_get_enabled_env_value,
 )
-from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
+from database.memory_compatibility_projection import read_v17_v3_compatibility_projection_page
 from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
 from utils.memory.v3_composed_get_service import (
     V17V3ComposedAdapters,

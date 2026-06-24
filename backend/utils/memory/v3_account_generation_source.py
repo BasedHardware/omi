@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from database.v17_collections import V17Collections
+from database.memory_collections import V17Collections
 
 V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION = 1
 V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE = 'v17_memory_state_head'

@@ -5,9 +5,9 @@ Neutral ``v3_control_state_adapter`` is the source of truth. Legacy ``v17_v3_con
 
 from __future__ import annotations
 
-from config.v17_memory import V17Mode, V17RolloutState, decide_v17_capabilities
-from database.v17_collections import V17Collections
-from utils.memory.v17_default_read_rollout import (
+from config.memory_rollout import V17Mode, V17RolloutState, decide_v17_capabilities
+from database.memory_collections import V17Collections
+from utils.memory.default_read_rollout import (
     V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
     V17ReadDecision,
     read_v17_global_read_gate,
