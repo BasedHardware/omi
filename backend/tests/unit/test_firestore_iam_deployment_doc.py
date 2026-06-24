@@ -1,6 +1,6 @@
 from pathlib import Path
 
-V17_PROTECTED_COLLECTIONS = [
+MEMORY_PROTECTED_COLLECTIONS = [
     "users/{uid}/memory_items/{memory_id}",
     "users/{uid}/memory_operations/{operation_id}",
     "users/{uid}/memory_outbox/{event_id}",
@@ -33,7 +33,7 @@ def test_v17_firestore_iam_deployment_doc_covers_service_account_boundary_and_ga
     assert doc_path.exists()
     doc = doc_path.read_text()
 
-    for collection_path in V17_PROTECTED_COLLECTIONS:
+    for collection_path in MEMORY_PROTECTED_COLLECTIONS:
         assert collection_path in doc
     for required_term in REQUIRED_TERMS:
         assert required_term in doc
