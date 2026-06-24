@@ -565,9 +565,9 @@ async def create_persona(
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
     data['author'] = user.get('display_name', '')
-    data['email'] = user['email']
+    data['email'] = user.get('email')
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '').lower()
