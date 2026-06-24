@@ -588,7 +588,6 @@ class PushToTalkManager: ObservableObject {
       // Real speech — commit. The hub speaks the reply and dispatches tools
       // itself; no transcript/router/LLM hop here.
       RealtimeHubController.shared.commitTurn()
-      barState?.isVoiceResponseActive = true
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
       // status UI), the same as the legacy voice path.
       updateBarState()
@@ -987,7 +986,6 @@ class PushToTalkManager: ObservableObject {
       return
     }
     RealtimeHubController.shared.commitTurn()
-    barState?.isVoiceResponseActive = true
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
