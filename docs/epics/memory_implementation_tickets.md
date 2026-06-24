@@ -1,5 +1,7 @@
 # memory Memory Product Integration — Implementation Tickets
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Created:** 2026-06-18T20:24Z  
 **Status:** Normative decisions baked in; GO for local/default-off implementation and dev-cloud preparation, BLOCKED for dev-cloud GO until the Gate 2 evidence bundle passes, and NO-GO for production writes/read switch/vector/API cutover until dev-cloud GO plus production-only gates pass
 **Normative Architecture:** `docs/epics/memory_normative_architecture.md`
