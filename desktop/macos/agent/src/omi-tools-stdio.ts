@@ -12,6 +12,7 @@ import { createConnection } from "net";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { agentControlToolDefinitions, isAgentControlToolName } from "./runtime/control-tools.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -100,7 +101,17 @@ async function requestSwiftTool(
 
   return new Promise<string>((resolve) => {
     pendingToolCalls.set(callId, { resolve });
-    const msg = JSON.stringify({ type: "tool_use", callId, name, input });
+    const msg = JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      protocolVersion: process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined,
+      requestId: process.env.OMI_REQUEST_ID,
+      clientId: process.env.OMI_CLIENT_ID,
+      sessionId: process.env.OMI_SESSION_ID,
+      adapterId: process.env.OMI_ADAPTER_ID,
+    });
     pipeConnection!.write(msg + "\n");
   });
 }
@@ -116,7 +127,6 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "set_user_preferences",
   "ask_followup",
   "complete_onboarding",
-  "save_knowledge_graph",
 ]);
 
 // Tool order: local tools first (always available), then backend RAG tools (require auth token).
@@ -234,6 +244,7 @@ Returns JSON with recent task_agents and floating_agent_pills. floating_agent_pi
       required: [],
     },
   },
+  ...agentControlToolDefinitions,
   {
     name: "spawn_agent",
     description: `Start a floating background agent pill.
@@ -886,6 +897,17 @@ async function handleJsonRpc(
                 text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
               }],
             },
+          });
+        }
+      } else if (isAgentControlToolName(toolName)) {
+        // Runtime control tools are handled by the Node parent/kernel. They
+        // still travel over the relay so MCP clients use the same tool path.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (

@@ -27,25 +27,32 @@
  * 6. On interrupt: cancel the session
  */
 
-import { spawn, type ChildProcess } from "child_process";
 import { createInterface } from "readline";
 import { dirname, join } from "path";
-import { resolveSession, needsModelUpdate, filterSessionsToWarm, getRetryDeleteKey, type SessionEntry } from "./session-manager.js";
 import { fileURLToPath } from "url";
 import { createServer as createNetServer, type Socket } from "net";
-import { tmpdir } from "os";
+import { homedir, tmpdir } from "os";
 import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
   OutboundMessage,
+  QueryScopedOutbound,
   QueryMessage,
+  ProtocolVersion,
   WarmupMessage,
   RefreshTokenMessage,
   AuthMethod,
 } from "./protocol.js";
+import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
+import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
+import { AdapterRegistry } from "./runtime/adapter-registry.js";
+import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
+import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { handleAgentControlToolCall, isAgentControlToolName, type AgentControlToolContext } from "./runtime/control-tools.js";
+import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -71,6 +78,26 @@ function send(msg: OutboundMessage): void {
   }
 }
 
+function withQueryCorrelation<T extends OutboundMessage>(
+  msg: T,
+  query: QueryMessage,
+  adapterSessionId?: string
+): T {
+  if (query.protocolVersion !== 2) return msg;
+  return {
+    ...msg,
+    protocolVersion: 2,
+    requestId: requestIdFor(query),
+    clientId: query.clientId,
+    sessionId: query.sessionId,
+    runId: query.runId,
+    attemptId: query.attemptId,
+    eventId: query.eventId,
+    adapterSessionId,
+    legacyAdapterSessionId: query.legacyAdapterSessionId ?? query.resume,
+  };
+}
+
 function logErr(msg: string): void {
   // Wrap to swallow EPIPE/ERR_STREAM_DESTROYED so a closed parent pipe
   // doesn't bubble out as an uncaughtException and re-enter our handlers.
@@ -81,18 +108,24 @@ function logErr(msg: string): void {
   }
 }
 
+function agentStateDir(): string {
+  return process.env.OMI_AGENT_STATE_DIR ?? join(homedir(), "Library", "Application Support", "Omi", "agent");
+}
+
 // --- OMI tools relay via Unix socket ---
 
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
+let agentControlToolContext: AgentControlToolContext | undefined;
+let toolCallCorrelation:
+  | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
+  | undefined;
 
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
   string,
   { resolve: (result: string) => void }
 >();
-
-let currentMode: "ask" | "act" = "act";
 
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: { callId: string; result: string }): void {
@@ -135,15 +168,66 @@ function startOmiToolsRelay(): Promise<string> {
               callId: string;
               name: string;
               input: Record<string, unknown>;
+              protocolVersion?: number;
+              requestId?: string;
+              clientId?: string;
+              sessionId?: string;
+              runId?: string;
+              attemptId?: string;
+              adapterSessionId?: string;
+              legacyAdapterSessionId?: string;
+              adapterId?: string;
             };
 
             if (msg.type === "tool_use") {
+              if (isAgentControlToolName(msg.name)) {
+                void (async () => {
+                  const result = agentControlToolContext
+                    ? await handleAgentControlToolCall(agentControlToolContext, msg.name, msg.input ?? {})
+                    : JSON.stringify({
+                        ok: false,
+                        error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+                      });
+                  try {
+                    client.write(
+                      JSON.stringify({
+                        type: "tool_result",
+                        callId: msg.callId,
+                        result,
+                      }) + "\n"
+                    );
+                  } catch (err) {
+                    logErr(`Failed to send control tool result to omi-tools: ${err}`);
+                  }
+                })();
+                continue;
+              }
+
               // Forward tool call to Swift via stdout
+              const protocolVersion: ProtocolVersion | undefined =
+                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
+              const resolvedCorrelation =
+                toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {};
+              const messageRequestIsActive = Boolean(
+                msg.requestId && resolvedCorrelation.requestId === msg.requestId
+              );
+              const correlation = {
+                ...resolvedCorrelation,
+                ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
+                ...(messageRequestIsActive && msg.clientId ? { clientId: msg.clientId } : {}),
+                ...(messageRequestIsActive && protocolVersion ? { protocolVersion } : {}),
+                ...(messageRequestIsActive && msg.sessionId ? { sessionId: msg.sessionId } : {}),
+                ...(messageRequestIsActive && msg.runId ? { runId: msg.runId } : {}),
+                ...(messageRequestIsActive && msg.attemptId ? { attemptId: msg.attemptId } : {}),
+                ...(messageRequestIsActive && msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
+                ...(messageRequestIsActive && msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
+              };
               send({
                 type: "tool_use",
                 callId: msg.callId,
                 name: msg.name,
                 input: msg.input,
+                ...correlation,
               });
 
               // Create a promise that will be resolved when Swift responds
@@ -201,32 +285,14 @@ function startOmiToolsRelay(): Promise<string> {
 
 // --- ACP subprocess management ---
 
-let acpProcess: ChildProcess | null = null;
-let acpStdinWriter: ((line: string) => void) | null = null;
-let acpResponseHandlers = new Map<
-  number,
-  { resolve: (result: unknown) => void; reject: (err: Error) => void }
->();
-let acpNotificationHandler: ((method: string, params: unknown) => void) | null =
-  null;
-let nextRpcId = 1;
+const acpAdapter = new AcpRuntimeAdapter({ log: logErr });
 
 /** Send a JSON-RPC request to the ACP subprocess and wait for the response */
 async function acpRequest(
   method: string,
   params: Record<string, unknown> = {}
 ): Promise<unknown> {
-  const id = nextRpcId++;
-  const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
-
-  return new Promise((resolve, reject) => {
-    acpResponseHandlers.set(id, { resolve, reject });
-    if (acpStdinWriter) {
-      acpStdinWriter(msg);
-    } else {
-      reject(new Error("ACP process stdin not available"));
-    }
-  });
+  return acpAdapter.request(method, params);
 }
 
 /** Send a JSON-RPC notification (no response expected) to ACP */
@@ -234,172 +300,23 @@ function acpNotify(
   method: string,
   params: Record<string, unknown> = {}
 ): void {
-  const msg = JSON.stringify({ jsonrpc: "2.0", method, params });
-  if (acpStdinWriter) {
-    acpStdinWriter(msg);
-  }
+  acpAdapter.notify(method, params);
 }
 
 /** Start the ACP subprocess */
-function startAcpProcess(): void {
-  // Build environment for ACP subprocess — user's own Claude OAuth only (issue #6594).
-  // ANTHROPIC_API_KEY is never passed to the ACP subprocess.
-  const env = { ...process.env };
-  delete env.ANTHROPIC_API_KEY;
-  delete env.CLAUDE_CODE_USE_VERTEX;
-  // Remove CLAUDECODE so the ACP subprocess (and the Claude Code it spawns) don't
-  // inherit the nested-session guard. Without this, `--resume` silently fails when
-  // Claude Code detects it's being launched from inside another Claude Code session.
-  delete env.CLAUDECODE;
-  env.NODE_NO_WARNINGS = "1";
-
-  // Use our patched ACP entry point (adds model selection support)
-  // Located in dist/ (same as __dirname) so it's included in the app bundle
-  const acpEntry = join(__dirname, "patched-acp-entry.mjs");
-  const nodeBin = process.execPath;
-
-  logErr(`Starting ACP subprocess [Claude OAuth]: ${nodeBin} ${acpEntry}`);
-
-  acpProcess = spawn(nodeBin, [acpEntry], {
-    env,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-
-  if (!acpProcess.stdin || !acpProcess.stdout || !acpProcess.stderr) {
-    throw new Error("Failed to create ACP subprocess pipes");
-  }
-
-  // Write to ACP stdin
-  acpStdinWriter = (line: string) => {
-    try {
-      acpProcess?.stdin?.write(line + "\n");
-    } catch (err) {
-      logErr(`Failed to write to ACP stdin: ${err}`);
-    }
-  };
-
-  // Read ACP stdout (JSON-RPC responses and notifications)
-  const rl = createInterface({
-    input: acpProcess.stdout,
-    terminal: false,
-  });
-
-  rl.on("line", (line: string) => {
-    if (!line.trim()) return;
-    try {
-      const msg = JSON.parse(line) as Record<string, unknown>;
-
-      if ("method" in msg && "id" in msg && msg.id !== null && msg.id !== undefined) {
-        // Server-initiated JSON-RPC request (has both method and id, expects a response)
-        const id = msg.id as number;
-        const method = msg.method as string;
-
-        if (method === "session/request_permission") {
-          // Auto-approve all tool permissions (matches agent-bridge's bypassPermissions behavior)
-          const params = msg.params as Record<string, unknown> | undefined;
-          const options = (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
-          const allowAlways = options.find((o) => o.kind === "allow_always");
-          const allowOnce = options.find((o) => o.kind === "allow_once");
-          const optionId = allowAlways?.optionId ?? allowOnce?.optionId ?? "allow";
-          logErr(`Auto-approving permission for tool (id=${id})`);
-          acpStdinWriter?.(JSON.stringify({
-            jsonrpc: "2.0",
-            id,
-            result: { outcome: { outcome: "selected", optionId } },
-          }));
-        } else if (method === "session/update") {
-          // session/update can also arrive as a request (with id) — handle and ack
-          if (acpNotificationHandler) {
-            acpNotificationHandler(method, msg.params as unknown);
-          }
-          acpStdinWriter?.(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
-        } else {
-          logErr(`Unhandled ACP request: ${method} (id=${id})`);
-          acpStdinWriter?.(JSON.stringify({
-            jsonrpc: "2.0",
-            id,
-            error: { code: -32601, message: `Method not handled: ${method}` },
-          }));
-        }
-      } else if ("id" in msg && msg.id !== null && msg.id !== undefined) {
-        // JSON-RPC response (has id but no method)
-        const id = msg.id as number;
-        const handler = acpResponseHandlers.get(id);
-        if (handler) {
-          acpResponseHandlers.delete(id);
-          if ("error" in msg) {
-            const err = msg.error as {
-              code: number;
-              message: string;
-              data?: unknown;
-            };
-            const error = new AcpError(err.message, err.code, err.data);
-            handler.reject(error);
-          } else {
-            handler.resolve(msg.result);
-          }
-        }
-      } else if ("method" in msg) {
-        // JSON-RPC notification (has method but no id)
-        if (acpNotificationHandler) {
-          acpNotificationHandler(
-            msg.method as string,
-            msg.params as unknown
-          );
-        }
-      }
-    } catch (err) {
-      logErr(`Failed to parse ACP message: ${line.slice(0, 200)}`);
-    }
-  });
-
-  // Read ACP stderr for logging
-  acpProcess.stderr.on("data", (data: Buffer) => {
-    const text = data.toString().trim();
-    if (text) {
-      logErr(`ACP stderr: ${text}`);
-    }
-  });
-
-  acpProcess.on("exit", (code) => {
-    logErr(`ACP process exited with code ${code}`);
-    acpProcess = null;
-    acpStdinWriter = null;
-    // All sessions are lost when ACP process dies
-    sessions.clear();
-    activeSessionId = "";
-    isInitialized = false;
-    for (const [, handler] of acpResponseHandlers) {
-      handler.reject(new Error(`ACP process exited (code ${code})`));
-    }
-    acpResponseHandlers.clear();
-  });
+async function startAcpProcess(): Promise<void> {
+  await acpAdapter.start();
 }
 
-class AcpError extends Error {
-  code: number;
-  data?: unknown;
-  constructor(message: string, code: number, data?: unknown) {
-    super(message);
-    this.code = code;
-    this.data = data;
-  }
-}
+acpAdapter.onProcessExit = () => {
+  isInitialized = false;
+};
 
 // --- State ---
 
-/** Pre-warmed sessions keyed by sessionKey (e.g. "main", "floating", or model name for backward compat) */
-const sessions = new Map<string, { sessionId: string; cwd: string; model?: string }>();
-/** The session currently being used by an active query (for interrupt) */
-let activeSessionId = "";
-let activeAbort: AbortController | null = null;
-let interruptRequested = false;
 let isInitialized = false;
 let authMethods: AuthMethod[] = [];
 let authResolve: (() => void) | null = null;
-let preWarmPromise: Promise<void> | null = null;
-let authRetryCount = 0;
-const MAX_AUTH_RETRIES = 2;
 let activeAuthPromise: Promise<void> | null = null;
 let activeOAuthFlow: OAuthFlowHandle | null = null;
 
@@ -408,15 +325,8 @@ let activeOAuthFlow: OAuthFlowHandle | null = null;
 /** Restart the ACP subprocess so it picks up freshly-stored credentials */
 async function restartAcpProcess(): Promise<void> {
   logErr("Restarting ACP subprocess to pick up new credentials...");
-  if (acpProcess) {
-    const exitPromise = new Promise<void>((resolve) => {
-      acpProcess!.once("exit", () => resolve());
-    });
-    acpProcess.kill();
-    await exitPromise;
-  }
   // State is cleaned up by the exit handler (sessions, handlers, etc.)
-  startAcpProcess();
+  await acpAdapter.restart();
 }
 
 /**
@@ -541,14 +451,32 @@ type McpServerConfig = {
   env: Array<{ name: string; value: string }>;
 };
 
-function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpServerConfig[] {
+function buildMcpServers(
+  mode: string,
+  cwd?: string,
+  sessionKey?: string,
+  context?: McpServerBuildContext
+): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
   // omi-tools (stdio, connects back via Unix socket)
   const omiToolsEnv: Array<{ name: string; value: string }> = [
     { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
     { name: "OMI_QUERY_MODE", value: mode },
+    { name: "OMI_ADAPTER_ID", value: "acp" },
   ];
+  if (context) {
+    omiToolsEnv.push(
+      { name: "OMI_REQUEST_ID", value: context.requestId },
+      { name: "OMI_CLIENT_ID", value: context.clientId }
+    );
+    if (context.protocolVersion) {
+      omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+    }
+    if (context.sessionId) {
+      omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+    }
+  }
   if (cwd) {
     omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
   }
@@ -582,492 +510,6 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
   });
 
   return servers;
-}
-
-// --- Session pre-warming ---
-
-const DEFAULT_MODEL = "claude-sonnet-4-6";
-// Previously had SONNET_MODEL as separate Opus fallback — removed after migration
-
-interface WarmupSessionConfig {
-  key: string;
-  model: string;
-  systemPrompt?: string;
-}
-
-async function preWarmSession(cwd?: string, sessionConfigs?: WarmupSessionConfig[], models?: string[]): Promise<void> {
-  const warmCwd = cwd || process.env.HOME || "/";
-
-  // Build the list of sessions to warm: new format (sessionConfigs) takes priority over legacy (models array)
-  const allConfigs: WarmupSessionConfig[] = sessionConfigs && sessionConfigs.length > 0
-    ? sessionConfigs
-    : (models && models.length > 0 ? models : [DEFAULT_MODEL])
-        .map((m) => ({ key: m, model: m }));
-  const toWarm = filterSessionsToWarm(sessions, allConfigs);
-
-  if (toWarm.length === 0) {
-    logErr("All requested sessions already pre-warmed");
-    return;
-  }
-
-  try {
-    await initializeAcp();
-
-    await Promise.all(
-      toWarm.map(async (cfg) => {
-        try {
-          const sessionParams: Record<string, unknown> = {
-            cwd: warmCwd,
-            mcpServers: buildMcpServers("act", warmCwd, cfg.key),
-            ...(cfg.systemPrompt ? { _meta: { systemPrompt: cfg.systemPrompt } } : {}),
-          };
-
-          // Retry once after a short delay if session/new fails
-          let result: { sessionId: string };
-          try {
-            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-          } catch (firstErr) {
-            logErr(`Pre-warm session/new failed for ${cfg.key}, retrying in 2s: ${firstErr}`);
-            await new Promise((r) => setTimeout(r, 2000));
-            result = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-          }
-
-          await acpRequest("session/set_model", { sessionId: result.sessionId, modelId: cfg.model });
-          // Only cache after set_model succeeds — if it fails, the session stays on the default
-          // model and the reuse logic should detect the mismatch and re-set it.
-          sessions.set(cfg.key, { sessionId: result.sessionId, cwd: warmCwd, model: cfg.model });
-          logErr(`Pre-warmed session: ${result.sessionId} (key=${cfg.key}, model=${cfg.model}, hasSystemPrompt=${!!cfg.systemPrompt})`);
-        } catch (err) {
-          if (err instanceof AcpError && err.code === -32000) {
-            logErr(`Pre-warm failed with auth error (code=${err.code}), starting OAuth flow`);
-            await startAuthFlow();
-            return;
-          }
-          logErr(`Pre-warm failed for ${cfg.key}: ${err}`);
-        }
-      })
-    );
-  } catch (err) {
-    logErr(`Pre-warm failed (will create on first query): ${err}`);
-  }
-}
-
-// --- Handle query from Swift ---
-
-async function handleQuery(msg: QueryMessage): Promise<void> {
-  if (activeAbort) {
-    activeAbort.abort();
-    activeAbort = null;
-  }
-
-  const abortController = new AbortController();
-  activeAbort = abortController;
-  interruptRequested = false;
-  authRetryCount = 0;
-
-  let fullText = "";
-  let fullPrompt = "";
-  let isNewSession = false;
-  const pendingTools: string[] = [];
-
-  try {
-    const mode = msg.mode ?? "act";
-    currentMode = mode;
-    logErr(`Query mode: ${mode}`);
-
-    // Wait for pre-warm to finish if in progress
-    if (preWarmPromise) {
-      logErr("Waiting for pre-warm to complete...");
-      await preWarmPromise;
-      preWarmPromise = null;
-    }
-
-    // Ensure ACP is initialized
-    await initializeAcp();
-
-    // Look up a pre-warmed session by sessionKey (falls back to model name for backward compat)
-    const requestedModel = msg.model || DEFAULT_MODEL;
-    const sessionKey = msg.sessionKey ?? requestedModel;
-    const requestedCwd = msg.cwd || process.env.HOME || "/";
-    let sessionId = "";
-
-    const resolved = resolveSession(sessions, sessionKey, requestedCwd);
-    if (resolved) {
-      sessionId = resolved.sessionId;
-    } else if (sessions.get(sessionKey)) {
-      // resolveSession deleted it due to cwd change
-      logErr(`Cwd changed for ${sessionKey}, creating new session`);
-    }
-
-    // Reuse existing session if alive, resume a persisted one, or create a new one
-    if (msg.resume && !sessionId) {
-      // Resume a persisted session by ID (survives process restarts via ~/.claude/projects/)
-      // Fall back to session/new if the session file is gone or resume fails
-      try {
-        await acpRequest("session/resume", {
-          sessionId: msg.resume,
-          cwd: requestedCwd,
-          mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
-        });
-        sessionId = msg.resume;
-        if (requestedModel) {
-          await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-        }
-        sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
-        isNewSession = false;
-        logErr(`ACP session resumed: ${sessionId} (key=${sessionKey})`);
-      } catch (resumeErr) {
-        logErr(`ACP session resume failed (will create new session): ${resumeErr}`);
-        // Fall through to session/new below
-      }
-    }
-    if (!sessionId) {
-      const sessionParams: Record<string, unknown> = {
-        cwd: requestedCwd,
-        mcpServers: buildMcpServers(mode, requestedCwd, sessionKey),
-        ...(msg.systemPrompt ? { _meta: { systemPrompt: msg.systemPrompt } } : {}),
-      };
-      const sessionResult = (await acpRequest("session/new", sessionParams)) as { sessionId: string };
-
-      sessionId = sessionResult.sessionId;
-      isNewSession = true;
-      if (requestedModel) {
-        await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-      }
-      sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
-      logErr(`ACP session created: ${sessionId} (key=${sessionKey}, model=${requestedModel || "default"}, cwd=${requestedCwd})`);
-    } else {
-      isNewSession = false;
-      // Update model on reuse if the requested model differs from the session's stored model.
-      // Wrap in try-catch: if the session is stale, delete it and fall through to session/new.
-      if (needsModelUpdate(resolved?.existing, requestedModel)) {
-        try {
-          await acpRequest("session/set_model", { sessionId, modelId: requestedModel });
-          sessions.set(sessionKey, { sessionId, cwd: requestedCwd, model: requestedModel });
-          logErr(`Updated model on reuse: ${sessionId} (key=${sessionKey}, ${resolved?.existing?.model} -> ${requestedModel})`);
-        } catch (setModelErr) {
-          logErr(`set_model failed on reuse (stale session?), recreating: ${setModelErr}`);
-          sessions.delete(getRetryDeleteKey(sessionKey));
-          activeSessionId = "";
-          return handleQuery(msg);
-        }
-      }
-      logErr(`Reusing existing ACP session: ${sessionId} (key=${sessionKey})`);
-    }
-    activeSessionId = sessionId;
-
-    fullPrompt = msg.prompt;
-
-    // Set up notification handler for this query
-    acpNotificationHandler = (method: string, params: unknown) => {
-      if (abortController.signal.aborted) return;
-
-      if (method === "session/update") {
-        const p = params as Record<string, unknown>;
-        handleSessionUpdate(p, pendingTools, (text) => {
-          fullText += text;
-        });
-      }
-    };
-
-    // Send the prompt — retry with fresh session if stale
-    const sendPrompt = async (): Promise<void> => {
-      const promptBlocks: Array<Record<string, unknown>> = [];
-      if (msg.imageBase64) {
-        const imgMime = detectImageMimeType(msg.imageBase64);
-        promptBlocks.push({ type: "image", data: msg.imageBase64, mimeType: imgMime });
-      }
-      promptBlocks.push({ type: "text", text: fullPrompt });
-
-      const sessionPromptPayload = {
-        sessionId,
-        prompt: promptBlocks,
-      };
-
-      const promptResult = (await acpRequest("session/prompt", sessionPromptPayload)) as {
-        stopReason: string;
-        // Populated by patched-acp-entry.mjs intercepting SDKResultSuccess
-        usage?: { inputTokens: number; outputTokens: number; cachedReadTokens?: number | null; cachedWriteTokens?: number | null; totalTokens: number };
-        _meta?: { costUsd?: number };
-      };
-
-      logErr(`Prompt completed: stopReason=${promptResult.stopReason}`);
-
-      // Mark any remaining pending tools as completed
-      for (const name of pendingTools) {
-        send({ type: "tool_activity", name, status: "completed" });
-      }
-      pendingTools.length = 0;
-
-      const inputTokens = promptResult.usage?.inputTokens ?? Math.ceil(fullPrompt.length / 4);
-      const outputTokens = promptResult.usage?.outputTokens ?? Math.ceil(fullText.length / 4);
-      const cacheReadTokens = promptResult.usage?.cachedReadTokens ?? 0;
-      const cacheWriteTokens = promptResult.usage?.cachedWriteTokens ?? 0;
-      const costUsd = promptResult._meta?.costUsd ?? 0;
-      send({ type: "result", text: fullText, sessionId, costUsd, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens });
-    };
-
-    try {
-      await sendPrompt();
-    } catch (err) {
-      if (abortController.signal.aborted) {
-        if (interruptRequested) {
-          for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
-          }
-          pendingTools.length = 0;
-          logErr(
-            `Query interrupted by user, sending partial result (${fullText.length} chars)`
-          );
-          const inputTokens = Math.ceil(fullPrompt.length / 4);
-          const outputTokens = Math.ceil(fullText.length / 4);
-          send({ type: "result", text: fullText, sessionId, costUsd: 0, inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0 });
-        } else {
-          logErr("Query aborted (superseded by new query)");
-        }
-        return;
-      }
-      // Only -32000 is AUTH_REQUIRED in the new ACP protocol.
-      // -32603 is a generic internal error (API error, rate limit, etc.) — do NOT start OAuth for it.
-      if (err instanceof AcpError && err.code === -32000) {
-        if (authRetryCount >= MAX_AUTH_RETRIES) {
-          logErr(`session/prompt auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-          send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
-          return;
-        }
-        authRetryCount++;
-        logErr(`session/prompt failed with auth error (code=${err.code}), starting OAuth flow (attempt ${authRetryCount})`);
-        sessions.delete(getRetryDeleteKey(sessionKey));
-        activeSessionId = "";
-        await startAuthFlow();
-        return handleQuery(msg);
-      }
-      // If session/prompt failed while reusing an existing session, retry once with a fresh one.
-      // Do NOT retry if we already started fresh (isNewSession) — that would infinite-loop.
-      if (!isNewSession && sessionId) {
-        logErr(`session/prompt failed with existing session, retrying with fresh session: ${err}`);
-        sessions.delete(getRetryDeleteKey(sessionKey));
-        activeSessionId = "";
-        return handleQuery(msg);
-      }
-      throw err;
-    }
-  } catch (err: unknown) {
-    if (abortController.signal.aborted) {
-      if (interruptRequested) {
-        for (const name of pendingTools) {
-          send({ type: "tool_activity", name, status: "completed" });
-        }
-        pendingTools.length = 0;
-        const inputTokens = Math.ceil(fullPrompt.length / 4);
-        const outputTokens = Math.ceil(fullText.length / 4);
-        send({ type: "result", text: fullText, sessionId: activeSessionId, costUsd: 0, inputTokens, outputTokens });
-      }
-      return;
-    }
-    // Only -32000 is AUTH_REQUIRED in the new ACP protocol.
-    // -32603 is a generic internal error — surface it as a real error, not auth.
-    if (err instanceof AcpError && err.code === -32000) {
-      if (authRetryCount >= MAX_AUTH_RETRIES) {
-        logErr(`Query auth error but max retries (${MAX_AUTH_RETRIES}) reached, giving up`);
-        send({ type: "error", message: "Authentication required. Please disconnect and reconnect your Claude account in Settings." });
-        return;
-      }
-      authRetryCount++;
-      logErr(`Query failed with auth error (code=${(err as AcpError).code}), starting OAuth flow (attempt ${authRetryCount})`);
-      await startAuthFlow();
-      return handleQuery(msg);
-    }
-    const errMsg = err instanceof Error ? err.message : String(err);
-    logErr(`Query error: ${errMsg}`);
-    send({ type: "error", message: errMsg });
-  } finally {
-    if (activeAbort === abortController) {
-      activeAbort = null;
-    }
-    acpNotificationHandler = null;
-  }
-}
-
-/** Translate ACP session/update notifications into our JSON-lines protocol.
- *
- * ACP uses `params.update.sessionUpdate` as the discriminator field:
- *   - "agent_message_chunk" → text delta (content.text)
- *   - "agent_thought_chunk" → thinking delta (content.text)
- *   - "tool_call" → tool started (title, toolCallId, kind, status)
- *   - "tool_call_update" → tool completed (toolCallId, status, content)
- *   - "plan" → plan entries (entries[].content)
- */
-function handleSessionUpdate(
-  params: Record<string, unknown>,
-  pendingTools: string[],
-  onText: (text: string) => void
-): void {
-  const update = params.update as Record<string, unknown> | undefined;
-  if (!update) {
-    logErr(`session/update missing 'update' field: ${JSON.stringify(params).slice(0, 200)}`);
-    return;
-  }
-
-  const sessionUpdate = update.sessionUpdate as string;
-
-  switch (sessionUpdate) {
-    case "agent_message_chunk": {
-      const content = update.content as { type: string; text?: string } | undefined;
-      const text = content?.text ?? "";
-      if (text) {
-        // If tools were pending, they're now complete
-        if (pendingTools.length > 0) {
-          for (const name of pendingTools) {
-            send({ type: "tool_activity", name, status: "completed" });
-          }
-          pendingTools.length = 0;
-        }
-        onText(text);
-        send({ type: "text_delta", text });
-      }
-      break;
-    }
-
-    case "agent_thought_chunk": {
-      const content = update.content as { type: string; text?: string } | undefined;
-      const text = content?.text ?? "";
-      if (text) {
-        send({ type: "thinking_delta", text });
-      }
-      break;
-    }
-
-    case "tool_call": {
-      const toolCallId = (update.toolCallId as string) ?? "";
-      let title = (update.title as string) ?? "unknown";
-      const kind = (update.kind as string) ?? "";
-      const status = (update.status as string) ?? "pending";
-
-      // Recover real tool name for server-side tools (e.g. WebSearch, WebFetch)
-      // where title may arrive as undefined/unknown
-      if (title === "unknown" || title.includes("undefined")) {
-        const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
-        const toolName = meta?.claudeCode?.toolName;
-        const rawInput = update.rawInput as Record<string, unknown> | undefined;
-        if (toolName === "WebSearch" && rawInput?.query) {
-          title = `WebSearch: "${rawInput.query}"`;
-        } else if (toolName === "WebFetch" && rawInput?.url) {
-          title = `WebFetch: ${rawInput.url}`;
-        } else if (toolName) {
-          title = toolName;
-        }
-      }
-
-      if (status === "pending" || status === "in_progress") {
-        pendingTools.push(title);
-        send({
-          type: "tool_activity",
-          name: title,
-          status: "started",
-          toolUseId: toolCallId,
-        });
-
-        // Extract input from rawInput if available
-        const rawInput = update.rawInput as Record<string, unknown> | undefined;
-        if (rawInput && Object.keys(rawInput).length > 0) {
-          send({
-            type: "tool_activity",
-            name: title,
-            status: "started",
-            toolUseId: toolCallId,
-            input: rawInput,
-          });
-        }
-
-        logErr(`Tool started: ${title} (id=${toolCallId}, kind=${kind})`);
-      }
-      break;
-    }
-
-    case "tool_call_update": {
-      const toolCallId = (update.toolCallId as string) ?? "";
-      const status = (update.status as string) ?? "";
-      let title = (update.title as string) ?? "unknown";
-
-      // Recover real tool name (same logic as tool_call)
-      if (title === "unknown" || title.includes("undefined")) {
-        const meta = update._meta as { claudeCode?: { toolName?: string } } | undefined;
-        const toolName = meta?.claudeCode?.toolName;
-        if (toolName) {
-          title = toolName;
-        }
-      }
-
-      if (status === "completed" || status === "failed" || status === "cancelled") {
-        // Remove from pending
-        const idx = pendingTools.indexOf(title);
-        if (idx >= 0) pendingTools.splice(idx, 1);
-
-        send({
-          type: "tool_activity",
-          name: title,
-          status: "completed",
-          toolUseId: toolCallId,
-        });
-
-        // Extract output from content array or rawOutput
-        let output = "";
-        const contentArr = update.content as
-          | Array<{ type: string; text?: string }>
-          | undefined;
-        if (contentArr && Array.isArray(contentArr)) {
-          output = contentArr
-            .filter((c) => c.type === "text" && c.text)
-            .map((c) => c.text)
-            .join("\n");
-        }
-        if (!output) {
-          const rawOutput = update.rawOutput as Record<string, unknown> | undefined;
-          if (rawOutput) {
-            output = JSON.stringify(rawOutput);
-          }
-        }
-
-        if (output) {
-          const truncated =
-            output.length > 2000
-              ? output.slice(0, 2000) + "\n... (truncated)"
-              : output;
-          send({
-            type: "tool_result_display",
-            toolUseId: toolCallId,
-            name: title,
-            output: truncated,
-          });
-        }
-
-        logErr(
-          `Tool completed: ${title} (id=${toolCallId}) output=${output ? output.length + " chars" : "none"}`
-        );
-      }
-      break;
-    }
-
-    case "plan": {
-      const entries = update.entries as
-        | Array<{ content: string; status: string }>
-        | undefined;
-      if (entries && Array.isArray(entries)) {
-        for (const entry of entries) {
-          if (entry.content) {
-            send({ type: "thinking_delta", text: entry.content + "\n" });
-          }
-        }
-      }
-      break;
-    }
-
-    default:
-      logErr(
-        `Unknown session update type: ${sessionUpdate} — ${JSON.stringify(update).slice(0, 200)}`
-      );
-  }
 }
 
 // --- Error handling ---
@@ -1155,78 +597,97 @@ process.stderr.on("error", (err) => {
   }
 });
 
-// --- Pi-mono mode ---
+// --- Main ---
 
-async function runPiMonoMode(): Promise<void> {
-  const { PiMonoAdapter } = await import("./adapters/pi-mono.js");
+async function main(): Promise<void> {
+  logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
-  // SECURITY: pi-mono mode authenticates to api.omi.me with a Firebase ID
-  // token. Never fall back to ANTHROPIC_API_KEY — that would leak the
-  // upstream Anthropic provider secret to the Omi backend. If the token is
-  // missing the bridge must fail loudly so Swift can prompt the user to
-  // re-auth.
-  const omiAuthToken = process.env.OMI_AUTH_TOKEN;
-  if (!omiAuthToken) {
+  const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
+  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  logErr(`Default harness mode: ${defaultHarnessMode}`);
+
+  // 1. Start Unix socket for omi-tools relay
+  omiToolsPipePath = await startOmiToolsRelay();
+  logErr("omi-tools relay started");
+  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
+
+  // 2. Start the ACP subprocess
+  await startAcpProcess();
+  logErr("ACP subprocess spawned");
+
+  const store = new SqliteAgentStore({ stateDir: agentStateDir() });
+  const registry = new AdapterRegistry();
+  registry.register("acp", () => acpAdapter, 1);
+  const kernel = new AgentRuntimeKernel({ store, registry });
+  let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
+  let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
+  let currentOwnerId = "desktop-local-user";
+  let piMonoOwnerId = "desktop-local-user";
+  const invalidatePiMonoBindings = (reason: string) => {
+    kernel.invalidateBindings({
+      ownerId: piMonoOwnerId,
+      surfaceKind: "legacy_jsonl",
+      defaultAdapterId: "pi-mono",
+      adapterId: "pi-mono",
+      reason,
+    });
+    logErr(`Pi-mono: subprocess restarted; active bindings invalidated (${reason})`);
+  };
+  const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
+    if (piMonoRuntimeAdapter) return true;
+    if (!authToken) return false;
+    const { PiMonoAdapter, PiMonoRuntimeAdapter } = await import("./adapters/pi-mono.js");
+    piMonoAdapter = new PiMonoAdapter({
+      omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+      authToken,
+      onRestart: (reason) => invalidatePiMonoBindings(`pi_mono_restart_${reason}`),
+    });
+    piMonoRuntimeAdapter = new PiMonoRuntimeAdapter(piMonoAdapter);
+    await piMonoRuntimeAdapter.start();
+    registry.register("pi-mono", () => piMonoRuntimeAdapter!, 1);
+    logErr("Pi-mono adapter started");
+    return true;
+  };
+
+  const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
   }
-
-  // Start the omi-tools relay so pi-mono extension can forward tool calls
-  // back to Swift (execute_sql, semantic_search, etc.)
-  omiToolsPipePath = await startOmiToolsRelay();
-  // Set in process.env so it flows to the pi subprocess (which spreads process.env)
-  process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
-  logErr("omi-tools relay started for pi-mono");
-
-  const config = {
-    omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-    authToken: omiAuthToken,
+  agentControlToolContext = { kernel, getOwnerId: () => currentOwnerId };
+  const facade = new JsonlCompatibilityFacade({
+    kernel,
+    send,
+    log: logErr,
+    defaultAdapterId,
+    buildMcpServers,
+    isRecoverableError: (error) => error instanceof AcpError && error.code === -32000,
+    onRecoverableError: async () => {
+      logErr("ACP auth required during query; starting OAuth flow before retry");
+      await startAuthFlow();
+    },
+    maxRecoverableRetries: 2,
+  });
+  toolCallCorrelation = ({ requestId, adapterId }) => {
+    if (requestId) {
+      const requestCorrelation = facade.toolCallCorrelationForRequest(requestId);
+      if (requestCorrelation.requestId) {
+        return requestCorrelation;
+      }
+    }
+    if (adapterId) {
+      return facade.toolCallCorrelationForAdapter(adapterId);
+    }
+    return facade.unscopedToolCallCorrelation();
   };
 
-  const adapter = new PiMonoAdapter(config);
-  await adapter.start();
-  logErr("Pi-mono adapter started");
-
-  // Signal readiness
+  // 3. Signal readiness
   send({ type: "init", sessionId: "" });
-  logErr("Pi-mono Bridge started, waiting for queries...");
+  logErr("Agent runtime bridge started, waiting for queries...");
 
-  // Multi-session support: keyed sessions matching ACP mode's contract.
-  //
-  // Pi-mono RPC is a single-process harness with global conversation state,
-  // so true isolation between concurrent session keys (main, floating, chat
-  // lab) requires restarting the subprocess when the active key changes.
-  // We serialize: one session key "owns" the subprocess at a time, and we
-  // recycle the process on context switches. This costs a subprocess restart
-  // (~300-600 ms) per switch but gives real isolation instead of leaking
-  // conversation history across chats.
-  const piSessions = new Map<string, { sessionId: string; cwd: string; model?: string; systemPrompt?: string }>();
-  let piActiveAbort: AbortController | null = null;
-  let piActiveSessionKey = "";
-
-  // Swap the subprocess to isolate a new session key. Stops the current
-  // pi-mono process (clearing conversation history), restarts it fresh, and
-  // re-applies model + system prompt for the target key.
-  async function switchActiveSession(
-    targetKey: string,
-    cwd: string,
-    model: string,
-    systemPrompt: string | undefined
-  ): Promise<string> {
-    logErr(`Pi-mono: switching session key ${piActiveSessionKey || "(none)"} -> ${targetKey}`);
-    // Bake the target system prompt before restart so pi spawns with the
-    // correct --system-prompt flag for this session key.
-    await adapter.setSystemPrompt(systemPrompt);
-    await adapter.stop();
-    await adapter.start();
-    const sessionId = await adapter.createSession({ cwd, model, systemPrompt });
-    piSessions.set(targetKey, { sessionId, cwd, model, systemPrompt });
-    piActiveSessionKey = targetKey;
-    return sessionId;
-  }
-
+  // 4. Read JSON lines from Swift
   const rl = createInterface({ input: process.stdin, terminal: false });
 
   rl.on("line", async (line: string) => {
@@ -1241,288 +702,36 @@ async function runPiMonoMode(): Promise<void> {
     }
 
     switch (msg.type) {
-      case "query": {
-        const qm = msg as QueryMessage;
-        const cwd = qm.cwd || process.env.HOME || "/";
-        const model = qm.model || "omi-sonnet";
-        const sessionKey = qm.sessionKey ?? model;
-
-        // Abort any previous query
-        if (piActiveAbort) {
-          piActiveAbort.abort();
-          piActiveAbort = null;
-        }
-
-        try {
-          // Resolve session by key. Pi-mono's single-process model means
-          // only one sessionKey can "own" the subprocess at a time — any
-          // switch to a different key forces a subprocess restart so
-          // conversation history from the previous key can't leak in.
-          let entry = piSessions.get(sessionKey);
-          let sessionId = entry?.sessionId ?? "";
-
-          const isContextSwitch =
-            piActiveSessionKey !== "" && piActiveSessionKey !== sessionKey;
-          const needsNewSession =
-            !sessionId || (entry && entry.cwd !== cwd);
-
-          if (isContextSwitch) {
-            // Hard isolation: recycle the subprocess between session keys.
-            const prompt = qm.systemPrompt || entry?.systemPrompt;
-            sessionId = await switchActiveSession(sessionKey, cwd, model, prompt);
-            logErr(
-              `Pi-mono session isolated via restart: ${sessionId} (key=${sessionKey}, model=${model})`
-            );
-          } else if (needsNewSession) {
-            if (entry) {
-              logErr(`Pi-mono cwd changed for ${sessionKey}, creating new session`);
-            }
-            const prompt = qm.systemPrompt || entry?.systemPrompt;
-            sessionId = await adapter.createSession({
-              cwd,
-              model,
-              systemPrompt: prompt,
-            });
-            piSessions.set(sessionKey, { sessionId, cwd, model, systemPrompt: prompt });
-            piActiveSessionKey = sessionKey;
-            logErr(`Pi-mono session created: ${sessionId} (key=${sessionKey}, model=${model})`);
-          } else {
-            // Same-key reuse — re-apply system prompt + update model if needed.
-            // setSystemPrompt is a no-op when the value hasn't changed; it
-            // triggers a subprocess restart only when the baked --system-prompt
-            // flag differs from what pi was spawned with.
-            if (entry?.systemPrompt) {
-              await adapter.setSystemPrompt(entry.systemPrompt);
-            }
-            if (model && entry?.model !== model) {
-              await adapter.setModel(sessionId, model);
-              piSessions.set(sessionKey, { ...entry!, sessionId, model });
-            }
-            piActiveSessionKey = sessionKey;
-            logErr(`Reusing pi-mono session: ${sessionId} (key=${sessionKey})`);
-          }
-
-          const abortController = new AbortController();
-          piActiveAbort = abortController;
-
-          // Build prompt blocks — include screenshot if available
-          const promptBlocks: PromptBlock[] = [];
-          if (qm.imageBase64) {
-            const mimeType = detectImageMimeType(qm.imageBase64);
-            promptBlocks.push({ type: "image" as const, data: qm.imageBase64, mimeType });
-            logErr(`Pi-mono: including screenshot image in prompt (${mimeType})`);
-          }
-          promptBlocks.push({ type: "text" as const, text: qm.prompt });
-
-          // sendPrompt's onEvent callback already emits "result" via handleTurnEnd,
-          // so we do NOT send a separate result here — that would duplicate it.
-          await adapter.sendPrompt(
-            sessionId,
-            promptBlocks,
-            [], // tools
-            qm.mode ?? "act",
-            (event) => {
-              // Forward adapter events to Swift via stdout, but skip tool_use
-              // events — pi-mono executes tools internally (built-in tools like
-              // bash/Read/Write) or via the OMI extension (which routes through
-              // the Unix socket relay). Forwarding tool_use here would cause
-              // Swift to double-execute the tool.
-              if ((event as any).type === "tool_use") return;
-              send(event as OutboundMessage);
-            },
-            async (_name, _input) => {
-              // Tool executor — pi-mono handles tools internally
-              return "";
-            },
-            abortController.signal
-          );
-
-          // After prompt completes, check for deferred token restart.
-          // After a restart the subprocess has no conversation state, so we
-          // only re-create the currently-active session key — others will be
-          // lazily re-created on their next use via switchActiveSession.
-          if (adapter.hasPendingRestart) {
-            logErr("Pi-mono: executing deferred token refresh after prompt completed");
-            await adapter.executePendingRestart();
-            const activeKey = piActiveSessionKey;
-            const activeEntry = activeKey ? piSessions.get(activeKey) : undefined;
-            piSessions.clear();
-            piActiveSessionKey = "";
-            if (activeKey && activeEntry) {
-              const newId = await adapter.createSession({
-                cwd: activeEntry.cwd,
-                model: activeEntry.model,
-                systemPrompt: activeEntry.systemPrompt,
-              });
-              piSessions.set(activeKey, { ...activeEntry, sessionId: newId });
-              piActiveSessionKey = activeKey;
-            }
-            logErr("Pi-mono: active session re-warmed after deferred token refresh");
-          }
-        } catch (err) {
-          logErr(`Pi-mono query error: ${err}`);
-          send({ type: "error", message: String(err) });
-        }
-        break;
-      }
-
-      case "warmup": {
-        // Pi-mono's single-process harness can only own one session key at a
-        // time, so we can't literally pre-create multiple isolated sessions.
-        // We just record the metadata so the first real query can create
-        // its session without a round-trip to Swift for config.
-        const wm = msg as WarmupMessage;
-        const cwd = wm.cwd || process.env.HOME || "/";
-        const warmupSessions = wm.sessions ?? [{ key: "main", model: wm.model || "omi-sonnet" }];
-        for (const s of warmupSessions) {
-          piSessions.set(s.key, {
-            sessionId: "",
-            cwd,
-            model: s.model,
-            systemPrompt: s.systemPrompt,
-          });
-          logErr(
-            `Pi-mono warmup recorded key=${s.key} (model=${s.model || "default"}); session created on first use`
-          );
-        }
-        break;
-      }
-
-      case "interrupt": {
-        logErr("Interrupt requested by user (pi-mono)");
-        if (piActiveAbort) piActiveAbort.abort();
-        const activeEntry = piActiveSessionKey
-          ? piSessions.get(piActiveSessionKey)
-          : undefined;
-        if (activeEntry?.sessionId) {
-          adapter.abort(activeEntry.sessionId);
-        } else {
-          adapter.abort("");
-        }
-        break;
-      }
-
-      case "invalidate_session":
-        piSessions.delete(msg.sessionKey);
-        adapter.invalidateSession(msg.sessionKey);
-        logErr(`Invalidated pi-mono session for key=${msg.sessionKey}`);
-        break;
-
-      case "refresh_token": {
-        // Swift pushes a refreshed Firebase ID token. Restart the subprocess
-        // (only when idle) so the extension picks up the fresh credential.
-        // If busy, deferred restart happens after the current prompt completes.
-        const rtm = msg as RefreshTokenMessage;
-        process.env.OMI_AUTH_TOKEN = rtm.token;
-        try {
-          const restarted = await adapter.updateAuthToken(rtm.token);
-          if (restarted) {
-            // Restart cleared subprocess state — only re-create the active
-            // session key. Other keys will be lazily isolated via
-            // switchActiveSession when they're next used.
-            const activeKey = piActiveSessionKey;
-            const activeEntry = activeKey ? piSessions.get(activeKey) : undefined;
-            piSessions.clear();
-            piActiveSessionKey = "";
-            if (activeKey && activeEntry) {
-              const newId = await adapter.createSession({
-                cwd: activeEntry.cwd,
-                model: activeEntry.model,
-                systemPrompt: activeEntry.systemPrompt,
-              });
-              piSessions.set(activeKey, { ...activeEntry, sessionId: newId });
-              piActiveSessionKey = activeKey;
-            }
-            logErr("Pi-mono: active session re-warmed after immediate token refresh");
-          }
-          // If not restarted (busy), the query handler will do it after prompt completes
-        } catch (err) {
-          logErr(`Pi-mono token refresh error: ${err}`);
-        }
-        break;
-      }
-
-      case "stop":
-        logErr("Received stop signal, exiting (pi-mono)");
-        await adapter.stop();
-        process.exit(0);
-        break;
-
-      case "tool_result":
-        resolveToolCall(msg as { callId: string; result: string });
-        break;
-
-      default:
-        logErr(`Unknown message type (pi-mono): ${(msg as any).type}`);
-    }
-  });
-
-  rl.on("close", async () => {
-    logErr("stdin closed, exiting (pi-mono)");
-    await adapter.stop();
-    process.exit(0);
-  });
-}
-
-// --- Main ---
-
-async function main(): Promise<void> {
-  logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
-
-  const harnessMode = process.env.HARNESS_MODE || "acp";
-  logErr(`Harness mode: ${harnessMode}`);
-
-  if (harnessMode === "piMono") {
-    // Pi-mono mode: use PiMonoAdapter instead of ACP subprocess
-    await runPiMonoMode();
-    return;
-  }
-
-  // 1. Start Unix socket for omi-tools relay
-  omiToolsPipePath = await startOmiToolsRelay();
-  logErr("omi-tools relay started");
-
-  // 2. Start the ACP subprocess
-  startAcpProcess();
-  logErr("ACP subprocess spawned");
-
-  // 3. Signal readiness
-  send({ type: "init", sessionId: "" });
-  logErr("ACP Bridge started, waiting for queries...");
-
-  // 4. Read JSON lines from Swift
-  const rl = createInterface({ input: process.stdin, terminal: false });
-
-  rl.on("line", (line: string) => {
-    if (!line.trim()) return;
-
-    let msg: InboundMessage;
-    try {
-      msg = JSON.parse(line) as InboundMessage;
-    } catch {
-      logErr(`Invalid JSON: ${line}`);
-      return;
-    }
-
-    switch (msg.type) {
       case "query":
-        handleQuery(msg).catch((err) => {
+        (async () => {
+          const query = msg as QueryMessage;
+          const adapterId = query.adapterId ?? defaultAdapterId;
+          if (query.ownerId) {
+            currentOwnerId = query.ownerId;
+            if (adapterId === "pi-mono") {
+              piMonoOwnerId = query.ownerId;
+            }
+          }
+          if (adapterId === "acp") {
+            await initializeAcp();
+          }
+          await facade.handleQuery(query);
+        })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
-          send({ type: "error", message: String(err) });
+          const query = msg as QueryMessage;
+          send({
+            type: "error",
+            message: String(err),
+            protocolVersion: query.protocolVersion,
+            requestId: requestIdFor(query),
+            clientId: query.clientId,
+          });
         });
         break;
 
       case "warmup": {
         const wm = msg as WarmupMessage;
-        if (wm.sessions && wm.sessions.length > 0) {
-          logErr(`Warmup requested (cwd=${wm.cwd || "default"}, sessions=${wm.sessions.map(s => s.key).join(", ")})`);
-          preWarmPromise = preWarmSession(wm.cwd, wm.sessions);
-        } else {
-          // Backward compat: models array or single model
-          const models = wm.models ?? (wm.model ? [wm.model] : undefined);
-          logErr(`Warmup requested (cwd=${wm.cwd || "default"}, models=${JSON.stringify(models) || "default"})`);
-          preWarmPromise = preWarmSession(wm.cwd, undefined, models);
-        }
+        facade.handleWarmup(wm);
         break;
       }
 
@@ -1532,17 +741,34 @@ async function main(): Promise<void> {
 
       case "interrupt":
         logErr("Interrupt requested by user");
-        interruptRequested = true;
-        if (activeAbort) activeAbort.abort();
-        if (activeSessionId) {
-          acpNotify("session/cancel", { sessionId: activeSessionId });
-        }
+        facade.handleInterrupt(msg).catch((err) => {
+          logErr(`Interrupt error: ${err}`);
+        });
         break;
 
       case "invalidate_session":
-        sessions.delete(msg.sessionKey);
-        logErr(`Invalidated cached ACP session for key=${msg.sessionKey}`);
+        facade.handleInvalidateSession(msg);
         break;
+
+      case "refresh_token": {
+        const rtm = msg as RefreshTokenMessage;
+        process.env.OMI_AUTH_TOKEN = rtm.token;
+        currentOwnerId = rtm.ownerId ?? currentOwnerId;
+        piMonoOwnerId = rtm.ownerId ?? piMonoOwnerId;
+        try {
+          if (!piMonoAdapter) {
+            await ensurePiMonoAdapter(rtm.token);
+            break;
+          }
+          const restarted = await piMonoAdapter.updateAuthToken(rtm.token);
+          if (restarted) {
+            logErr("Pi-mono: token refresh restarted subprocess");
+          }
+        } catch (err) {
+          logErr(`Pi-mono token refresh error: ${err}`);
+        }
+        break;
+      }
 
       case "authenticate": {
         // Legacy fallback: OAuth flow now handles auth internally.
@@ -1558,10 +784,9 @@ async function main(): Promise<void> {
 
       case "stop":
         logErr("Received stop signal, exiting");
-        if (activeAbort) activeAbort.abort();
-        if (acpProcess) {
-          acpProcess.kill();
-        }
+        store.close();
+        await acpAdapter.stop();
+        await piMonoRuntimeAdapter?.stop();
         process.exit(0);
         break;
 
@@ -1573,8 +798,9 @@ async function main(): Promise<void> {
   rl.on("close", () => {
     logErr("stdin closed, exiting");
     logCrash("stdin closed, exiting");
-    if (activeAbort) activeAbort.abort();
-    if (acpProcess) acpProcess.kill();
+    store.close();
+    void acpAdapter.stop();
+    void piMonoRuntimeAdapter?.stop();
     process.exit(0);
   });
 }

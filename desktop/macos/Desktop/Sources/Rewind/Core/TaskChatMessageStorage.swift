@@ -9,7 +9,7 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     var id: Int64?
 
     var taskId: String                    // action_items backendId
-    var acpSessionId: String?             // ACP session ID for conversation continuity
+    var acpSessionId: String?             // Legacy ACP adapter-native session ID for resume/adoption
     var messageId: String                 // UUID from ChatMessage.id
     var sender: String                    // "user" or "ai"
     var messageText: String
