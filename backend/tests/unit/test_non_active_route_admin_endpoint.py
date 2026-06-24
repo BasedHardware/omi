@@ -168,21 +168,12 @@ def _enabled_rollout_doc(uid="u1"):
     }
 
 
-def test_admin_router_registers_concrete_v17_admin_report_route():
-    assert any(
-        method == "GET" and path == "/v17/admin/users/{uid}/non-active-route-report"
-        for method, path, _kwargs, _func in v17_memory_admin.router.routes
-    )
-
-    assert any(
-        method == "GET" and path == "/v17/admin/users/{uid}/read-rollout-decision"
-        for method, path, _kwargs, _func in v17_memory_admin.router.routes
-    )
-
-    assert any(
-        method == "POST" and path == "/v17/admin/users/{uid}/short-term-lifecycle/run"
-        for method, path, _kwargs, _func in v17_memory_admin.router.routes
-    )
+def test_admin_router_registers_memory_admin_routes():
+    routes = {(method, path) for method, path, _kwargs, _func in v17_memory_admin.router.routes}
+    assert ("GET", "/memory/admin/users/{uid}/non-active-route-report") in routes
+    assert ("GET", "/memory/admin/users/{uid}/read-rollout-decision") in routes
+    assert ("POST", "/memory/admin/users/{uid}/short-term-lifecycle/run") in routes
+    assert not any(isinstance(path, str) and path.startswith("/v17/") for _method, path in routes)
 
 
 def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_without_memory_item_reads(monkeypatch):
