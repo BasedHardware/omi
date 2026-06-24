@@ -202,14 +202,14 @@ def test_memory_rollout_neutral_symbols_are_canonical():
 def test_rollout_mode_env_dual_read_legacy_only():
     from config.memory_rollout import V17Mode, rollout_mode_env_value
 
-    assert rollout_mode_env_value({"V17_MODE": "read"}) == "read"
-    assert V17Mode(rollout_mode_env_value({"V17_MODE": "read"})) == V17Mode.read
+    assert rollout_mode_env_value({"MEMORY_MODE": "read"}) == "read"
+    assert V17Mode(rollout_mode_env_value({"MEMORY_MODE": "read"})) == V17Mode.read
 
 
 def test_rollout_mode_env_dual_read_neutral_precedence(monkeypatch):
     from config.memory_rollout import V17Mode, V17RolloutConfig, rollout_mode_env_value
 
-    monkeypatch.setenv("V17_MODE", "shadow")
+    monkeypatch.setenv("MEMORY_MODE", "shadow")
     monkeypatch.setenv("MEMORY_MODE", "read")
     assert rollout_mode_env_value() == "read"
     assert V17RolloutConfig.from_env().mode == V17Mode.read
@@ -219,7 +219,7 @@ def test_rollout_enabled_users_env_dual_read_legacy_only(monkeypatch):
     from config.memory_rollout import V17RolloutConfig, rollout_enabled_users_env_raw
 
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "uid-a,uid-b")
+    monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-a,uid-b")
     assert rollout_enabled_users_env_raw() == "uid-a,uid-b"
     assert V17RolloutConfig.from_env().enabled_users == {"uid-a", "uid-b"}
 
@@ -227,7 +227,7 @@ def test_rollout_enabled_users_env_dual_read_legacy_only(monkeypatch):
 def test_rollout_enabled_users_env_dual_read_neutral_precedence(monkeypatch):
     from config.memory_rollout import V17RolloutConfig, rollout_enabled_users_env_raw
 
-    monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "legacy-only")
+    monkeypatch.setenv("MEMORY_ENABLED_USERS", "legacy-only")
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "neutral-only")
     assert rollout_enabled_users_env_raw() == "neutral-only"
     assert V17RolloutConfig.from_env().enabled_users == {"neutral-only"}
@@ -237,8 +237,8 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
     from config.memory_rollout import V17RolloutConfig
     from utils.memory.memory_system import resolve_memory_system, MemorySystem
 
-    monkeypatch.delenv("V17_MODE", raising=False)
-    monkeypatch.delenv("V17_MEMORY_ENABLED_USERS", raising=False)
+    monkeypatch.delenv("MEMORY_MODE", raising=False)
+    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
     monkeypatch.setenv("MEMORY_CANONICAL_USERS", "cohort-user")
@@ -266,7 +266,7 @@ def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
     ("legacy_key", "neutral_key", "legacy_value", "neutral_value", "reader", "expected"),
     [
         (
-            "V17_BACKFILL_ENABLED",
+            "MEMORY_BACKFILL_ENABLED",
             "MEMORY_BACKFILL_ENABLED",
             "true",
             "false",
@@ -274,7 +274,7 @@ def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
             False,
         ),
         (
-            "V17_BACKFILL_DAILY_LIMIT",
+            "MEMORY_BACKFILL_DAILY_LIMIT",
             "MEMORY_BACKFILL_DAILY_LIMIT",
             "5",
             "10",
@@ -282,14 +282,14 @@ def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
             10,
         ),
         (
-            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
             "MEMORY_ARCHIVE_OPT_IN_ENABLED",
             "false",
             "true",
             "rollout_archive_opt_in_enabled_env_value",
             True,
         ),
-        ("V17_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "false", "true", "rollout_v3_get_enabled_env_value", True),
+        ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "false", "true", "rollout_v3_get_enabled_env_value", True),
     ],
 )
 def test_rollout_extended_env_dual_read_neutral_precedence(
@@ -303,16 +303,22 @@ def test_rollout_extended_env_dual_read_neutral_precedence(
 @pytest.mark.parametrize(
     ("legacy_key", "neutral_key", "legacy_value", "reader", "expected"),
     [
-        ("V17_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "true", "rollout_backfill_enabled_env_value", True),
-        ("V17_BACKFILL_DAILY_LIMIT", "MEMORY_BACKFILL_DAILY_LIMIT", "7", "rollout_backfill_daily_limit_env_value", 7),
+        ("MEMORY_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "true", "rollout_backfill_enabled_env_value", True),
         (
-            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "MEMORY_BACKFILL_DAILY_LIMIT",
+            "MEMORY_BACKFILL_DAILY_LIMIT",
+            "7",
+            "rollout_backfill_daily_limit_env_value",
+            7,
+        ),
+        (
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
             "MEMORY_ARCHIVE_OPT_IN_ENABLED",
             "true",
             "rollout_archive_opt_in_enabled_env_value",
             True,
         ),
-        ("V17_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "true", "rollout_v3_get_enabled_env_value", True),
+        ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "true", "rollout_v3_get_enabled_env_value", True),
     ],
 )
 def test_rollout_extended_env_dual_read_legacy_fallback(legacy_key, neutral_key, legacy_value, reader, expected):
@@ -324,15 +330,15 @@ def test_rollout_extended_env_dual_read_legacy_fallback(legacy_key, neutral_key,
 @pytest.mark.parametrize(
     ("neutral_key", "legacy_key", "reader", "expected"),
     [
-        ("MEMORY_BACKFILL_ENABLED", "V17_BACKFILL_ENABLED", "rollout_backfill_enabled_env_value", False),
-        ("MEMORY_BACKFILL_DAILY_LIMIT", "V17_BACKFILL_DAILY_LIMIT", "rollout_backfill_daily_limit_env_value", 0),
+        ("MEMORY_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "rollout_backfill_enabled_env_value", False),
+        ("MEMORY_BACKFILL_DAILY_LIMIT", "MEMORY_BACKFILL_DAILY_LIMIT", "rollout_backfill_daily_limit_env_value", 0),
         (
             "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "V17_ARCHIVE_OPT_IN_ENABLED",
+            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
             "rollout_archive_opt_in_enabled_env_value",
             False,
         ),
-        ("MEMORY_V3_GET_ENABLED", "V17_V3_GET_ENABLED", "rollout_v3_get_enabled_env_value", False),
+        ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "rollout_v3_get_enabled_env_value", False),
     ],
 )
 def test_rollout_extended_env_dual_read_unset_defaults(neutral_key, legacy_key, reader, expected):
@@ -344,9 +350,9 @@ def test_rollout_extended_env_dual_read_unset_defaults(neutral_key, legacy_key, 
 def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
     from config.memory_rollout import V17RolloutConfig
 
-    monkeypatch.delenv("V17_BACKFILL_ENABLED", raising=False)
-    monkeypatch.delenv("V17_BACKFILL_DAILY_LIMIT", raising=False)
-    monkeypatch.delenv("V17_ARCHIVE_OPT_IN_ENABLED", raising=False)
+    monkeypatch.delenv("MEMORY_BACKFILL_ENABLED", raising=False)
+    monkeypatch.delenv("MEMORY_BACKFILL_DAILY_LIMIT", raising=False)
+    monkeypatch.delenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", raising=False)
     monkeypatch.setenv("MEMORY_BACKFILL_ENABLED", "true")
     monkeypatch.setenv("MEMORY_BACKFILL_DAILY_LIMIT", "12")
     monkeypatch.setenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", "true")
@@ -423,13 +429,12 @@ def test_main_registers_memory_product_and_admin_routes():
         admin_routes = _router_method_path_pairs(memory_admin.router)
 
         assert ("GET", "/memory/search") in product_routes
-        assert ("GET", "/v17/memory/search") in product_routes
         assert ("GET", "/memory/vector/search") in product_routes
-        assert ("GET", "/v17/memory/vector/search") in product_routes
         assert ("GET", "/memory/archive/search") in product_routes
-        assert ("GET", "/v17/memory/archive/search") in product_routes
-        assert ("GET", "/v17/admin/users/{uid}/read-rollout-decision") in admin_routes
-        assert ("GET", "/v17/admin/users/{uid}/non-active-route-report") in admin_routes
-        assert ("POST", "/v17/admin/users/{uid}/short-term-lifecycle/run") in admin_routes
+        assert ("GET", "/memory/admin/users/{uid}/read-rollout-decision") in admin_routes
+        assert ("GET", "/memory/admin/users/{uid}/non-active-route-report") in admin_routes
+        assert ("POST", "/memory/admin/users/{uid}/short-term-lifecycle/run") in admin_routes
+        assert not any(path.startswith("/v17/") for _method, path in product_routes)
+        assert not any(path.startswith("/v17/") for _method, path in admin_routes)
     finally:
         restore_sys_modules(saved)
