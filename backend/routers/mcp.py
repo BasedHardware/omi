@@ -309,7 +309,15 @@ def get_conversations(
     )
 
     redact_conversations_for_list(conversations)
-    return conversations
+    # Validate each record individually so one malformed conversation (e.g. a category
+    # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
+    valid_conversations = []
+    for conv in conversations:
+        try:
+            valid_conversations.append(SimpleConversation.model_validate(conv))
+        except Exception as e:  # noqa: BLE001 - one bad record must not 500 the page
+            logger.warning(f"Skipping malformed conversation {conv.get('id', 'unknown')} in MCP list: {e}")
+    return valid_conversations
 
 
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
