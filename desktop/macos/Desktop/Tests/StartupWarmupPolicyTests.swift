@@ -116,6 +116,17 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertFalse(state.reserveDatabaseWarmup(dbAvailable: true))
     }
 
+    func testWarmupScheduleStateCanRetryServiceWarmupAfterRelease() {
+        var state = StartupWarmupScheduleState()
+
+        XCTAssertTrue(state.reserveServiceWarmup())
+        XCTAssertFalse(state.reserveServiceWarmup())
+
+        state.releaseServiceWarmup()
+
+        XCTAssertTrue(state.reserveServiceWarmup())
+    }
+
     func testWarmupScheduleStateCanRetryDatabaseWarmupAfterRelease() {
         var state = StartupWarmupScheduleState()
 
@@ -209,7 +220,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertTrue(source.contains("id: .initialFileIndexing"))
         XCTAssertTrue(source.contains("id: .proactiveAssistantsStart"))
         XCTAssertTrue(source.contains("viewModelContainer.resetStartupState()"))
-        XCTAssertTrue(source.contains("CrispManager.shared.stop()"))
+        XCTAssertTrue(source.contains("CrispManager.shared.stop(preserveReadState: true)"))
         XCTAssertTrue(source.contains("NSApplication.willTerminateNotification"))
     }
 

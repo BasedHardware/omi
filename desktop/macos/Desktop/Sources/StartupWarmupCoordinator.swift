@@ -10,6 +10,7 @@ final class StartupWarmupCoordinator {
 
     private var scheduleState = StartupWarmupScheduleState()
     private var sessionTasks: [StartupWarmupTaskID: Task<Void, Never>] = [:]
+    private var sessionTaskTokens: [StartupWarmupTaskID: UUID] = [:]
 
     init(
         tasksStore: TasksStore,
@@ -28,6 +29,7 @@ final class StartupWarmupCoordinator {
     func cancel() {
         sessionTasks.values.forEach { $0.cancel() }
         sessionTasks.removeAll()
+        sessionTaskTokens.removeAll()
     }
 
     func reset() {
@@ -46,6 +48,8 @@ final class StartupWarmupCoordinator {
         guard isCurrentSession(scope) else { return false }
 
         sessionTasks[id]?.cancel()
+        let token = UUID()
+        sessionTaskTokens[id] = token
         sessionTasks[id] = Task { [weak self] in
             guard let self else { return }
             guard await self.sleepForStartupDelay(delay) else {
@@ -57,16 +61,21 @@ final class StartupWarmupCoordinator {
                 return
             }
             await operation()
-            await MainActor.run { self.sessionTasks[id] = nil }
+            await MainActor.run {
+                guard self.sessionTaskTokens[id] == token else { return }
+                self.sessionTasks[id] = nil
+                self.sessionTaskTokens[id] = nil
+            }
         }
         return true
     }
 
     func schedulePostInteractiveWarmup(dbAvailable: Bool) {
         if scheduleState.reserveServiceWarmup() {
-            scheduleSessionWarmup(id: .serviceWarmup, delay: 0) { [weak self] in
+            let scheduled = scheduleSessionWarmup(id: .serviceWarmup, delay: 0) { [weak self] in
                 await self?.runServiceWarmup()
             }
+            if !scheduled { scheduleState.releaseServiceWarmup() }
         }
 
         scheduleDatabaseWarmup(dbAvailable: dbAvailable)
@@ -81,8 +90,12 @@ final class StartupWarmupCoordinator {
             return
         }
 
-        scheduleSessionWarmup(id: .databaseWarmup, delay: 0) { [weak self] in
+        let scheduled = scheduleSessionWarmup(id: .databaseWarmup, delay: 0) { [weak self] in
             await self?.runDatabaseWarmup()
+        }
+        guard scheduled else {
+            scheduleState.releaseDatabaseWarmup()
+            return
         }
         scheduleDashboardNetworkRefresh(dbAvailable: true)
         scheduleChatPromptContextWarmup()

@@ -656,7 +656,7 @@ struct DesktopHomeView: View {
     didScheduleAgentVMProvisioning = false
     proactiveMonitoringStartGate.finishAttempt()
     initialFileIndexingBackfill.releaseReservation()
-    CrispManager.shared.stop()
+    CrispManager.shared.stop(preserveReadState: true)
   }
 
   private func scheduleAgentVMProvisioning() {
@@ -705,6 +705,8 @@ struct DesktopHomeView: View {
         hasCompletedBackfill: UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing"))
     else { return }
 
+    let sessionScope = StartupWarmupSessionScope(
+      userId: UserDefaults.standard.string(forKey: "auth_userId"))
     let scheduled = viewModelContainer.scheduleSessionWarmup(
       id: .initialFileIndexing,
       delay: StartupWarmupPolicy.initialFileIndexingDelay,
@@ -712,6 +714,14 @@ struct DesktopHomeView: View {
     ) {
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
+      guard !Task.isCancelled,
+            sessionScope.matches(
+              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+              isSignedIn: AuthState.shared.isSignedIn)
+      else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
       initialFileIndexingBackfill.markScanCompleted()
       if initialFileIndexingBackfill.shouldMarkComplete {
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")

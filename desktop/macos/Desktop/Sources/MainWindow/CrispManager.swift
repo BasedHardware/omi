@@ -120,7 +120,7 @@ class CrispManager: ObservableObject {
     }
 
     /// Stop observing (called on sign-out)
-    func stop() {
+    func stop(preserveReadState: Bool = false) {
         initialPollTask?.cancel()
         initialPollTask = nil
         if let obs = activationObserver { NotificationCenter.default.removeObserver(obs) }
@@ -129,10 +129,12 @@ class CrispManager: ObservableObject {
         refreshAllObserver = nil
         isStarted = false
         unreadCount = 0
-        // Clear persisted timestamps so next sign-in starts fresh
-        UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
-        UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
-        notifiedMessages.removeAll()
+        if !preserveReadState {
+            // Clear persisted timestamps so next sign-in starts fresh.
+            UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
+            UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
+            notifiedMessages.removeAll()
+        }
     }
 
     // MARK: - Private

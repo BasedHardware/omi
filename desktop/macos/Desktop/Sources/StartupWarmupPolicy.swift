@@ -10,6 +10,10 @@ struct StartupWarmupScheduleState {
         return true
     }
 
+    mutating func releaseServiceWarmup() {
+        didScheduleServiceWarmup = false
+    }
+
     mutating func reserveDatabaseWarmup(dbAvailable: Bool) -> Bool {
         guard dbAvailable, !didScheduleDatabaseWarmup else { return false }
         didScheduleDatabaseWarmup = true

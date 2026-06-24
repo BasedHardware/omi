@@ -86,6 +86,19 @@ final class CrispManagerLifecycleTests: XCTestCase {
         XCTAssertNil(manager.refreshAllObserver)
     }
 
+    func testStopCanPreserveReadStateForNormalTermination() {
+        let manager = CrispManager.shared
+        manager.lastSeenTimestamp = 111_111
+        manager.latestOperatorTimestamp = 222_222
+        manager.start(performInitialPoll: false)
+
+        manager.stop(preserveReadState: true)
+
+        XCTAssertFalse(manager.isStarted)
+        XCTAssertEqual(manager.lastSeenTimestamp, 111_111)
+        XCTAssertEqual(manager.latestOperatorTimestamp, 222_222)
+    }
+
     func testMarkAsReadAdvancesPersistedTimestamp() {
         let manager = CrispManager.shared
         manager.latestOperatorTimestamp = 999_999
