@@ -35,22 +35,22 @@ python3 scripts/v3_dev_cloud_readiness.py \
   --write-bundle-dir /tmp/memory-v3-dev-cloud-<git-sha>-<run-id>
 ```
 
-Required env for `READY_TO_EXECUTE_DEV_CLOUD_PROOF` preflight (`V17_DEV_CLOUD_*` names retained as compatibility fallbacks):
+Required env for `READY_TO_EXECUTE_DEV_CLOUD_PROOF` preflight:
 
 ```text
-V17_DEV_CLOUD_PROJECT_ID=<non-prod project id>
-V17_DEV_CLOUD_PROJECT_NUMBER=<non-prod project number>
+MEMORY_DEV_CLOUD_PROJECT_ID=<non-prod project id>
+MEMORY_DEV_CLOUD_PROJECT_NUMBER=<non-prod project number>
 GOOGLE_CLOUD_PROJECT=<same non-prod project id>
 GOOGLE_CLOUD_PROJECT_NUMBER=<same non-prod project number>
-V17_DEV_CLOUD_DATABASE_ID=<database id, often (default)>
-V17_DEV_CLOUD_REGION=<region>
-V17_DEV_CLOUD_BACKEND_URL=<deployed branch backend URL>
-V17_DEV_CLOUD_DEPLOYED_REVISION=<deployed revision>
-V17_DEV_CLOUD_IMAGE_DIGEST=<image digest>
-V17_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT=<runtime service account>
-V17_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL=<separate fixture writer identity>
-V17_PRODUCTION_PROJECT_IDS=<comma-separated prod project ids to reject>
-V17_PRODUCTION_PROJECT_NUMBERS=<comma-separated prod project numbers to reject>
+MEMORY_DEV_CLOUD_DATABASE_ID=<database id, often (default)>
+MEMORY_DEV_CLOUD_REGION=<region>
+MEMORY_DEV_CLOUD_BACKEND_URL=<deployed branch backend URL>
+MEMORY_DEV_CLOUD_DEPLOYED_REVISION=<deployed revision>
+MEMORY_DEV_CLOUD_IMAGE_DIGEST=<image digest>
+MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT=<runtime service account>
+MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL=<separate fixture writer identity>
+MEMORY_PRODUCTION_PROJECT_IDS=<comma-separated prod project ids to reject>
+MEMORY_PRODUCTION_PROJECT_NUMBERS=<comma-separated prod project numbers to reject>
 ```
 
 `READY_TO_EXECUTE_DEV_CLOUD_PROOF` means only that local target metadata is complete and not obviously production. It is **not** Gate 2 GO. Gate 2 GO requires the deployed backend proof suite to fill and pass the bundle described below.
