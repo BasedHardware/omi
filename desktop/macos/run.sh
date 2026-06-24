@@ -78,6 +78,8 @@ unset OPENAI_API_KEY
 # Use Xcode's default toolchain to match the SDK version
 unset TOOLCHAINS
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
 STEP_START_TIME=$SCRIPT_START_TIME
@@ -102,7 +104,7 @@ substep() {
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
 # OMI_DEV_DIR (explicit overrides always win; the primary checkout keeps "Omi Dev" + 10201).
-source "$(dirname "$0")/../../scripts/dev-instance.sh"
+source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
 BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
 
@@ -136,7 +138,7 @@ APP_PATH="/Applications/$APP_NAME.app"
 # Agent runtime source (staged into the app bundle at Resources/agent below).
 # Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
 # copy is silently skipped → app shows "AI components missing".
-AGENT_DIR="$(dirname "$0")/agent"
+AGENT_DIR="$SCRIPT_DIR/agent"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
@@ -152,7 +154,7 @@ if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
     exit 1
 fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
-AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$(pwd)/.harness/runs}"
+AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
     AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")

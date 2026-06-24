@@ -601,15 +601,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated {
-            animateFrame(to: targetFrame, duration: animationDuration)
+            animateFrame(to: targetFrame, duration: animationDuration) { [weak self] in
+                self?.isResizingProgrammatically = false
+            }
         } else {
             self.setFrame(targetFrame, display: true, animate: false)
+            self.isResizingProgrammatically = false
         }
-
-        self.isResizingProgrammatically = false
     }
 
-    private func animateFrame(to frame: NSRect, duration: TimeInterval) {
+    private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
         frameAnimationToken += 1
         let token = frameAnimationToken
         let startFrame = self.frame
@@ -629,6 +630,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 self.setFrame(interpolated, display: true, animate: false)
                 if step == steps {
                     self.setFrame(frame, display: true, animate: false)
+                    completion?()
                 }
             }
         }

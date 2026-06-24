@@ -27,9 +27,11 @@ except ImportError as exc:
 
 
 SCHEMA_VERSION = 2
+SCRIPT_DIR = Path(__file__).resolve().parent
+DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
 DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
-DEFAULT_RUN_ROOT = Path("desktop/macos/.harness/runs")
+DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
 
 
 @dataclass
@@ -197,8 +199,28 @@ def step_prefix(index: int, step: dict[str, Any]) -> str:
 def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.CompletedProcess[str]:
     if not ctx.bundle_id:
         raise RuntimeError("ax.expect requires --bundle-id")
-    subprocess.run(["agent-swift", "connect", "--bundle-id", ctx.bundle_id], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10)
+    connect = subprocess.run(
+        ["agent-swift", "connect", "--bundle-id", ctx.bundle_id],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=10,
+    )
+    if connect.returncode != 0:
+        return connect
     return subprocess.run(["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
+
+
+def action_payload(spec: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(spec)
+    params = dict(payload.get("params") or {})
+    for key in list(payload.keys()):
+        if key not in {"name", "params"}:
+            params[key] = payload.pop(key)
+    if params:
+        payload["params"] = params
+    return payload
 
 
 def assert_state(ctx: HarnessContext, spec: dict[str, Any], path: Path) -> tuple[bool, str | None]:
@@ -312,7 +334,7 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, Any]) -> dict[
                 result["error"] = response.get("error")
 
         elif "bridge.action" in step:
-            payload = dict(step["bridge.action"] or {})
+            payload = action_payload(dict(step["bridge.action"] or {}))
             response = request_json(ctx.base_url, "POST", "/action", payload)
             response_path = ctx.steps_dir / f"{prefix}-action.json"
             write_json(response_path, response)
@@ -605,7 +627,10 @@ def compare_runs(args: argparse.Namespace) -> int:
 
 
 def cleanup_runs(args: argparse.Namespace) -> int:
-    root = run_root(args.out)
+    root = run_root(args.out).resolve()
+    default_root = DEFAULT_RUN_ROOT.resolve()
+    if root != default_root and default_root not in root.parents:
+        raise SystemExit(f"omi-harness: refusing cleanup outside harness run storage: {root}")
     runs = sorted([path for path in root.glob("*") if path.is_dir()])
     keep = max(0, args.keep)
     remove = runs[:-keep] if keep else runs

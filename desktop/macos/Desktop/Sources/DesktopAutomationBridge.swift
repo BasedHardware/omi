@@ -806,14 +806,30 @@ final class DesktopAutomationBridge {
     _ payload: DesktopAutomationVisualExportRequest
   ) async throws -> DesktopAutomationVisualExportResult {
     try await MainActor.run {
+      let fileManager = FileManager.default
       let url = URL(fileURLWithPath: payload.path).standardizedFileURL
-      let captureRoot = DesktopAutomationLaunchOptions.captureRoot
-      guard url.path == captureRoot.path || url.path.hasPrefix(captureRoot.path + "/") else {
+      let captureRoot = DesktopAutomationLaunchOptions.captureRoot.resolvingSymlinksInPath()
+      try fileManager.createDirectory(at: captureRoot, withIntermediateDirectories: true)
+      let parent = url.deletingLastPathComponent()
+      let resolvedParent = parent.resolvingSymlinksInPath()
+      let resolvedURL = resolvedParent.appendingPathComponent(url.lastPathComponent)
+      guard resolvedURL.path == captureRoot.path || resolvedURL.path.hasPrefix(captureRoot.path + "/") else {
         throw DesktopAutomationActionError.invalidParams(
           "visual export path must be under \(captureRoot.path)")
       }
-      try FileManager.default.createDirectory(
-        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      if let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+        values.isSymbolicLink == true
+      {
+        throw DesktopAutomationActionError.invalidParams("visual export path must not be a symlink")
+      }
+      try fileManager.createDirectory(
+        at: parent, withIntermediateDirectories: true)
+      let postCreateParent = parent.resolvingSymlinksInPath()
+      let writeURL = postCreateParent.appendingPathComponent(url.lastPathComponent)
+      guard writeURL.path == captureRoot.path || writeURL.path.hasPrefix(captureRoot.path + "/") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "visual export path must be under \(captureRoot.path)")
+      }
 
       let window: NSWindow?
       if payload.target == "floating" {
@@ -846,9 +862,9 @@ final class DesktopAutomationBridge {
         throw DesktopAutomationActionError.invalidParams("failed to encode png")
       }
 
-      try pngData.write(to: url, options: [.atomic])
+      try pngData.write(to: writeURL, options: [.atomic])
       return DesktopAutomationVisualExportResult(
-        path: payload.path,
+        path: writeURL.path,
         width: bitmap.pixelsWide,
         height: bitmap.pixelsHigh
       )
