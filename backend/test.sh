@@ -54,6 +54,7 @@ pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_conversations_to_string.py -v
+pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
