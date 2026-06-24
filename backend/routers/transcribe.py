@@ -2431,7 +2431,7 @@ async def _stream_handler(
             image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
         chunks_data = image_chunks_cache[temp_id]['chunks']
-        if index < total and chunks_data[index] is None:
+        if 0 <= index < total and chunks_data[index] is None:
             chunks_data[index] = data
 
         if all(chunk is not None for chunk in chunks_data):
