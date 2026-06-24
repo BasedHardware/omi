@@ -2873,7 +2873,7 @@ actor RewindDatabase {
 
         do {
             // First get the image paths to delete (legacy JPEGs)
-            let imagePaths = try dbQueue.read { db -> [String] in
+            let imagePaths = try await dbQueue.read { db -> [String] in
                 try String.fetchAll(
                     db,
                     sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
@@ -2882,7 +2882,7 @@ actor RewindDatabase {
             }
 
             // Get video chunk paths that will have frames deleted
-            let videoChunksToCheck = try dbQueue.read { db -> [String] in
+            let videoChunksToCheck = try await dbQueue.read { db -> [String] in
                 try String.fetchAll(
                     db,
                     sql: "SELECT DISTINCT videoChunkPath FROM screenshots WHERE timestamp < ? AND videoChunkPath IS NOT NULL",
@@ -2891,7 +2891,7 @@ actor RewindDatabase {
             }
 
             // Delete the records
-            try dbQueue.write { db in
+            try await dbQueue.write { db in
                 try db.execute(
                     sql: "DELETE FROM screenshots WHERE timestamp < ?",
                     arguments: [date]
@@ -2899,7 +2899,7 @@ actor RewindDatabase {
             }
 
             // Check which video chunks are now orphaned (no remaining frames)
-            let orphanedChunks = try dbQueue.read { db -> [String] in
+            let orphanedChunks = try await dbQueue.read { db -> [String] in
                 var orphaned: [String] = []
                 for chunkPath in videoChunksToCheck {
                     let remainingCount = try Int.fetchOne(
