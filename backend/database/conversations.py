@@ -150,7 +150,16 @@ def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    photos = [doc.to_dict() for doc in photos_ref.stream()]
+    photos = []
+    for doc in photos_ref.stream():
+        data = doc.to_dict()
+        # ConversationPhoto.base64 is required; a legacy/partial photo missing it would
+        # otherwise raise ResponseValidationError and 500 the whole list (the data-protection
+        # migration skips the same case). Drop the bad record, keep the rest.
+        if not isinstance(data, dict) or not isinstance(data.get('base64'), str):
+            logger.warning('Skipping malformed photo (missing base64) for uid %s conversation %s', uid, conversation_id)
+            continue
+        photos.append(data)
     return photos
 
 
