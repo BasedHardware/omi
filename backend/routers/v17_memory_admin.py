@@ -5,9 +5,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from database._client import db
-from jobs.v17_short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
-from utils.memory.v17_non_active_route_report import fetch_non_active_route_audit_report
-from utils.memory.v17_default_read_rollout import (
+from jobs.short_term_lifecycle_worker import ShortTermLifecycleWorkerReport, run_short_term_lifecycle_firestore
+from utils.memory.non_active_route_report import fetch_non_active_route_audit_report
+from utils.memory.default_read_rollout import (
     build_v17_default_read_rollout_observability_report,
     read_v17_default_read_rollout_decisions,
 )
