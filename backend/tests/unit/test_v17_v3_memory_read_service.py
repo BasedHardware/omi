@@ -210,7 +210,7 @@ def test_read_service_is_pure_local_and_does_not_import_routers_database_or_netw
     assert 'include_archive_by_default' not in result_fields
     assert 'show_stale_short_term_by_default' not in result_fields
 
-    source = inspect.getsource(__import__('utils.memory.v17_v3_memory_read_service', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3_memory_read_service', fromlist=['']))
     forbidden = [
         'routers.memories',
         'database.',

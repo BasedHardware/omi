@@ -202,7 +202,7 @@ def test_control_reader_contract_is_pure_local_fake_injectable_and_has_stable_de
         'requires_legacy_reader',
     }.issubset(decision_fields)
 
-    source = inspect.getsource(__import__('utils.memory.v17_v3_control_reader_contract', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3_control_reader_contract', fromlist=['']))
     forbidden = [
         'routers.memories',
         'database.',

@@ -180,7 +180,7 @@ def test_non_enrolled_legacy_primary_plan_only_and_no_enrolled_legacy_direct_wri
     assert forbidden_fields.isdisjoint(decision_fields)
     assert forbidden_fields.isdisjoint(context_fields)
 
-    source = inspect.getsource(__import__('utils.memory.v17_v3_write_convergence', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3_write_convergence', fromlist=['']))
     forbidden_tokens = [
         'routers.memories',
         'database.',

@@ -196,7 +196,7 @@ def test_route_planner_preserves_archive_default_unavailable_and_no_stale_short_
 
 
 def test_route_planner_is_pure_local_and_does_not_import_route_or_external_clients():
-    source = inspect.getsource(__import__('utils.memory.v17_v3_route_planner', fromlist=['']))
+    source = inspect.getsource(__import__('utils.memory.v3_route_planner', fromlist=['']))
     forbidden = [
         'routers.memories',
         'FastAPI',
