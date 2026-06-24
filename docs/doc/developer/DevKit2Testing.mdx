@@ -54,7 +54,7 @@ If you don't receive code `100` or `200`, the command was not completed.
 ## Testing Process
 
 <Info>
-**Prerequisites:** Python packages from `requirements.txt`, plus `ffmpeg` and `opus` for audio decoding.
+**Prerequisites:** Python packages from `requirements.txt`, plus `ffmpeg` and `opus` for audio decoding. The test scripts live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit).
 </Info>
 
 Run these scripts in order:
@@ -73,7 +73,7 @@ Run these scripts in order:
     Run `decode_audio.py` to convert the downloaded data into a WAV file. If successful, you'll have a playable recording of what was spoken near the mic.
   </Step>
   <Step title="(Optional) Delete Audio" icon="trash">
-    Run `delete_audio_file.py` — replace line 6 with your device ID. This clears audio data from the specified file.
+    Run `delete_audio_files.py` — replace line 6 with your device ID. This clears audio data from the specified file.
   </Step>
 </Steps>
 
