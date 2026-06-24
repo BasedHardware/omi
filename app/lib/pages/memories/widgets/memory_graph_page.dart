@@ -327,6 +327,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
       final newEdges = data['edges'] as List<dynamic>? ?? [];
 
+      if (_error != null && mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
+
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
           setState(() {
@@ -338,11 +344,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       _populateGraph(data);
       _runLayoutSync();
-      if (_error != null && mounted) {
-        setState(() {
-          _error = null;
-        });
-      }
     } catch (e) {
       if (!mounted) return;
       if (!silent) {
