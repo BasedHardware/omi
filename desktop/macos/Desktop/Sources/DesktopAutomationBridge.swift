@@ -257,6 +257,89 @@ final class DesktopAutomationActionRegistry {
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
       return ["sent": query]
     }
+
+    register(
+      name: "memories_qa_export",
+      summary: "Export memory counts by tier from the live API (local QA automation)",
+      params: ["limit"]
+    ) { params in
+      let limit = Int(params["limit"] ?? "") ?? 50
+      let memories = try await APIClient.shared.getMemories(limit: limit, offset: 0)
+      let shortCount = memories.filter { $0.tier == .shortTerm }.count
+      let longCount = memories.filter { $0.tier == .longTerm }.count
+      let samples: [[String: String]] = memories.prefix(12).map { memory in
+        [
+          "id": memory.id,
+          "tier": memory.tier.rawValue,
+          "tierIsExplicit": memory.tierIsExplicit ? "true" : "false",
+          "content": String(memory.content.prefix(90)),
+          "conversationId": memory.conversationId ?? "",
+        ]
+      }
+      let samplesData = try JSONSerialization.data(withJSONObject: samples)
+      let samplesJson = String(data: samplesData, encoding: .utf8) ?? "[]"
+      return [
+        "total": "\(memories.count)",
+        "short_term": "\(shortCount)",
+        "long_term": "\(longCount)",
+        "samples_json": samplesJson,
+      ]
+    }
+
+    register(
+      name: "delete_conversation",
+      summary: "Delete conversation with cascade (API + conversationDeleted notification)",
+      params: ["id"]
+    ) { params in
+      guard let id = params["id"], !id.isEmpty else {
+        return ["error": "missing 'id'"]
+      }
+      try await APIClient.shared.deleteConversation(id: id)
+      await MainActor.run {
+        if let appState = AppState.current {
+          appState.deleteConversationLocally(id)
+        } else {
+          NotificationCenter.default.post(
+            name: .conversationDeleted,
+            object: nil,
+            userInfo: ["conversationId": id]
+          )
+        }
+      }
+      return ["deleted": id]
+    }
+
+    register(
+      name: "capture_main_window_png",
+      summary: "Write PNG of the frontmost Omi window (in-process capture)",
+      params: ["path"]
+    ) { params in
+      guard let path = params["path"], !path.isEmpty else {
+        return ["error": "missing 'path'"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.first(where: { $0.isVisible && $0.title.contains("Omi") }),
+          let contentView = window.contentView
+        else {
+          return ["error": "no_visible_window"]
+        }
+        let bounds = contentView.bounds
+        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+          return ["error": "bitmap_rep_failed"]
+        }
+        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+          return ["error": "png_encode_failed"]
+        }
+        do {
+          try data.write(to: URL(fileURLWithPath: path))
+          return ["path": path, "bytes": "\(data.count)"]
+        } catch {
+          return ["error": error.localizedDescription]
+        }
+      }
+    }
   }
 }
 
