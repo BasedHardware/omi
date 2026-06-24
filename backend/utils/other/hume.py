@@ -17,7 +17,7 @@ class HumePredictionEmotionResponseModel:
 
     @classmethod
     def from_dict(cls, data: dict) -> "HumePredictionEmotionResponseModel":
-        model = cls(data["name"], data["score"])
+        model = cls(data.get("name"), data.get("score"))
         return model
 
     def to_dict(self):
@@ -65,8 +65,9 @@ class HumeJobModelPredictionResponseModel:
     @classmethod
     def from_dict(cls, data: dict) -> "HumeJobModelPredictionResponseModel":
         grouped_prediction_prediction = data
-        model = cls((data["time"]["begin"], data["time"]["end"]))
-        for emotion in grouped_prediction_prediction['emotions']:
+        time_data = data.get("time") or {}
+        model = cls((time_data.get("begin"), time_data.get("end")))
+        for emotion in grouped_prediction_prediction.get('emotions') or []:
             emo = HumePredictionEmotionResponseModel.from_dict(emotion)
             model.emotions.append(emo)
 
@@ -104,7 +105,7 @@ class HumeJobCallbackModel:
         if "predictions" in data and len(data["predictions"]) > 0:
             predictions = HumeJobModelPredictionResponseModel.from_multi_dict(prediction_model, data["predictions"][0])
 
-        model = cls(data["job_id"], data["status"], predictions)
+        model = cls(data.get("job_id"), data.get("status"), predictions)
         return model
 
 
