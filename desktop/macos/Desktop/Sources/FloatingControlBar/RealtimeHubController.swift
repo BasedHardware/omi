@@ -385,6 +385,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     audioReceivedThisTurn = true
+    barState?.isVoiceResponseActive = true
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
@@ -395,7 +396,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
       // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
-      if !audioReceivedThisTurn, !reply.isEmpty { speak(reply) }
+      if !audioReceivedThisTurn, !reply.isEmpty {
+        barState?.isVoiceResponseActive = true
+        speak(reply)
+      }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
     }
   }
@@ -649,7 +653,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
-    let hasActiveTurn = responding || (barState?.isVoiceListening == true)
+    let hasActiveTurn = responding
+      || (barState?.isVoiceListening == true)
+      || (barState?.isVoiceResponseActive == true)
     responding = false
     let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
@@ -706,6 +712,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
+    barState.isVoiceResponseActive = false
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false

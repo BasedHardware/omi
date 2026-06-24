@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 @MainActor
-final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
+final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
 
   // First chunk stays small so playback starts fast.
@@ -53,7 +53,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   var tracer: QueryTracer?
   private let speechSynthesizer = AVSpeechSynthesizer()
 
-  private override init() {}
+  private override init() {
+    super.init()
+    speechSynthesizer.delegate = self
+  }
 
   var isSpeaking: Bool {
     if audioPlayer?.isPlaying == true { return true }
@@ -65,6 +68,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
   func playFillerIfEnabled() {
     guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
+    setFloatingPillResponseGlow(true)
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -109,6 +113,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
 
     let text = Self.cleanedPlaybackText(from: message)
     guard !text.isEmpty, Self.shouldSpeak(text) else { return }
+    setFloatingPillResponseGlow(true)
 
     if interruptedResponseID == message.id {
       streamedText = text
@@ -326,6 +331,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       shouldInterruptNextResponse = true
     }
     resetPlaybackPipeline(clearMode: false)
+    clearFloatingPillResponseGlowIfIdle()
   }
 
   private func startPlaybackIfNeeded() {
@@ -372,6 +378,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       guard let self else { return }
       self.audioPlayer = nil
       self.startPlaybackIfNeeded()
+      self.clearFloatingPillResponseGlowIfIdle()
+    }
+  }
+
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      self?.clearFloatingPillResponseGlowIfIdle()
     }
   }
 
@@ -397,6 +410,17 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     audioPlayer?.stop()
     audioPlayer = nil
     speechSynthesizer.stopSpeaking(at: .immediate)
+    setFloatingPillResponseGlow(false)
+  }
+
+  private func setFloatingPillResponseGlow(_ active: Bool) {
+    FloatingControlBarManager.shared.barState?.isVoiceResponseActive = active
+  }
+
+  private func clearFloatingPillResponseGlowIfIdle() {
+    if !isSpeaking {
+      setFloatingPillResponseGlow(false)
+    }
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {

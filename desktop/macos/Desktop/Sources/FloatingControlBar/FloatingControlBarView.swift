@@ -281,9 +281,9 @@ struct FloatingControlBarView: View {
         Group {
             if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .frame(height: 50)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
                     .transition(.opacity)
             } else if isHovering || state.showingAIConversation {
                 VStack(spacing: 1) {
@@ -309,8 +309,37 @@ struct FloatingControlBarView: View {
     /// Minimal thin bar shown when not hovering
     private var compactCircleView: some View {
         RoundedRectangle(cornerRadius: 3)
-            .fill(Color.white.opacity(0.5))
+            .fill(compactPillFill)
             .frame(width: 28, height: 6)
+            .shadow(
+                color: state.isVoiceResponseActive ? OmiColors.purpleAccent.opacity(0.75) : .clear,
+                radius: state.isVoiceResponseActive ? 10 : 0,
+                x: 0,
+                y: 0
+            )
+            .overlay {
+                if state.isVoiceResponseActive {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(OmiColors.purplePrimary.opacity(0.65), lineWidth: 0.8)
+                        .blur(radius: 0.2)
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
+    }
+
+    private var compactPillFill: LinearGradient {
+        if state.isVoiceResponseActive {
+            return LinearGradient(
+                colors: [OmiColors.purpleAccent, OmiColors.purplePrimary],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        return LinearGradient(
+            colors: [Color.white.opacity(0.5), Color.white.opacity(0.5)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 
     private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
@@ -359,12 +388,12 @@ struct FloatingControlBarView: View {
     }
 
     private var voiceListeningView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             // Playful realtime mic waveform (replaces the old pulsing red dot)
             VoiceWaveformBars(isActive: state.isVoiceListening)
 
             Image(systemName: "mic.fill")
-                .scaledFont(size: 14, weight: .semibold)
+                .scaledFont(size: 12, weight: .semibold)
                 .foregroundColor(.white)
 
             if state.isVoiceLocked {
@@ -377,21 +406,24 @@ struct FloatingControlBarView: View {
                     .cornerRadius(4)
             }
 
-            if !state.voiceTranscript.isEmpty {
-                Text(state.voiceTranscript)
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            } else {
-                Text(
-                    state.isVoiceLocked
-                        ? "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
-                        : "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
-                )
-                    .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.5))
-            }
+            Text(voiceStatusText)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white.opacity(0.78))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var voiceStatusText: String {
+        if !state.voiceTranscript.isEmpty {
+            return state.voiceTranscript
+        }
+
+        if state.isVoiceLocked {
+            return "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
+        } else {
+            return "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
         }
     }
 

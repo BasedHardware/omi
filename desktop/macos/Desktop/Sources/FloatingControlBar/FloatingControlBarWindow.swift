@@ -27,6 +27,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let defaultSize = NSSize(width: 40, height: 14)
     private static let minBarSize = NSSize(width: 40, height: 14)
     static let expandedBarSize = NSSize(width: 210, height: 50)
+    private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
     private static let notificationWidth: CGFloat = 430
@@ -654,7 +655,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -664,6 +665,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
                   !self.state.isVoiceListening,
+                  !self.state.isVoiceResponseActive,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
@@ -695,9 +697,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
-        let size = expanded
-            ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
-            : FloatingControlBarWindow.minBarSize
+        let size = expanded ? Self.voiceBarSize : Self.minBarSize
         resizeAnchored(to: size, makeResizable: false, animated: true)
     }
 
@@ -718,7 +718,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         let targetSize: NSSize
         if state.isVoiceListening {
-            targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
+            targetSize = Self.voiceBarSize
         } else {
             targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
         }
@@ -873,7 +873,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else if state.currentNotification != nil {
             minimumWidth = FloatingControlBarWindow.notificationWidth
         } else if state.isVoiceListening {
-            minimumWidth = FloatingControlBarWindow.expandedWidth
+            minimumWidth = FloatingControlBarWindow.voiceBarSize.width
         } else if state.isHoveringBar {
             minimumWidth = FloatingControlBarWindow.expandedBarSize.width
         } else {
