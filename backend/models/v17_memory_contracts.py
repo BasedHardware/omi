@@ -22,6 +22,7 @@ from models.memory_contracts import (
     deterministic_contract_id,
     filter_l1_archive_for_normal_search,
 )
+from models.product_memory import MemoryTier
 
 __all__ = [
     "DURABLE_MEMORY_PATCH_FACT_SOURCE",
@@ -35,6 +36,7 @@ __all__ = [
     "L2SearchRequest",
     "L2SearchResult",
     "LifecycleState",
+    "MemoryTier",
     "PromotionRoute",
     "SourceBackedMemoryCandidate",
     "V17_DURABLE_MEMORY_PATCH_FACT_SOURCE",
