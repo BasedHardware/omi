@@ -3,6 +3,7 @@ Import endpoints for importing data from external sources.
 """
 
 import asyncio
+import logging
 import os
 import uuid
 from typing import List, Optional
@@ -18,6 +19,8 @@ from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
@@ -100,18 +103,26 @@ def get_import_jobs(
     """
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
-    return [
-        ImportJobResponse(
-            job_id=job['id'],
-            status=ImportJobStatus(job['status']),
-            total_files=job.get('total_files'),
-            processed_files=job.get('processed_files'),
-            conversations_created=job.get('conversations_created'),
-            created_at=job.get('created_at'),
-            error=job.get('error'),
-        )
-        for job in jobs
-    ]
+    # Build each response individually so one malformed/legacy job (missing id, or a status value not in
+    # the ImportJobStatus enum) doesn't fail the whole list with a 500.
+    result = []
+    for job in jobs:
+        try:
+            result.append(
+                ImportJobResponse(
+                    job_id=job['id'],
+                    status=ImportJobStatus(job['status']),
+                    total_files=job.get('total_files'),
+                    processed_files=job.get('processed_files'),
+                    conversations_created=job.get('conversations_created'),
+                    created_at=job.get('created_at'),
+                    error=job.get('error'),
+                )
+            )
+        except (KeyError, ValueError) as e:
+            logger.warning(f"Skipping malformed import job for uid {uid}: {e}")
+            continue
+    return result
 
 
 @router.get(
