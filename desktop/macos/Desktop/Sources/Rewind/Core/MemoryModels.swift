@@ -56,7 +56,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         backendSynced: Bool = false,
         content: String,
         category: String = "system",
-        tier: String = MemoryTier.longTerm.rawValue,
+        tier: String = MemoryLayer.longTerm.rawValue,
         tierIsExplicit: Bool = false,
         tagsJson: String? = nil,
         visibility: String = "private",
@@ -284,7 +284,7 @@ extension MemoryRecord {
 
         // Parse category
         let memoryCategory = MemoryCategory(rawValue: category) ?? .system
-        guard let memoryTier = MemoryTier(rawValue: tier) else {
+        guard let memoryLayer = MemoryLayer(rawValue: tier) else {
             logError(
                 "MemoryRecord: excluding memory with malformed persisted tier '\(tier)'",
                 error: MemoryStorageError.syncFailed("Malformed persisted memory tier")
@@ -296,7 +296,7 @@ extension MemoryRecord {
             id: memoryId,
             content: content,
             category: memoryCategory,
-            tier: memoryTier,
+            tier: memoryLayer,
             tierIsExplicit: tierIsExplicit,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -330,7 +330,7 @@ extension ServerMemory {
         id: String,
         content: String,
         category: MemoryCategory,
-        tier: MemoryTier = .longTerm,
+        tier: MemoryLayer = .longTerm,
         tierIsExplicit: Bool = false,
         createdAt: Date,
         updatedAt: Date,

@@ -1,17 +1,17 @@
 import XCTest
 @testable import Omi_Computer
 
-final class MemoryTierFilterTests: XCTestCase {
+final class MemoryLayerFilterTests: XCTestCase {
     func testDefaultFilterIsDefaultAccessOnly() {
-        XCTAssertEqual(MemoryTierFilter.defaultAccess.allowedTiers, [.shortTerm, .longTerm])
-        XCTAssertFalse(MemoryTierFilter.defaultAccess.allowedTiers.contains(.archive))
+        XCTAssertEqual(MemoryLayerFilter.defaultAccess.allowedLayers, [.shortTerm, .longTerm])
+        XCTAssertFalse(MemoryLayerFilter.defaultAccess.allowedLayers.contains(.archive))
     }
 
     func testExplicitArchiveFilterOnlyAllowsArchive() {
-        XCTAssertEqual(MemoryTierFilter.archive.allowedTiers, [.archive])
+        XCTAssertEqual(MemoryLayerFilter.archive.allowedLayers, [.archive])
     }
 
-    func testRecordRoundTripsTierThroughServerMemory() {
+    func testRecordRoundTripsLayerThroughServerMemory() {
         let memory = ServerMemory(
             id: "mem-1",
             content: "A stable preference",
@@ -42,18 +42,18 @@ final class MemoryTierFilterTests: XCTestCase {
         let record = MemoryRecord.from(memory)
         let roundTripped = record.toServerMemory()
 
-        XCTAssertEqual(record.tier, MemoryTier.longTerm.rawValue)
+        XCTAssertEqual(record.tier, MemoryLayer.longTerm.rawValue)
         XCTAssertEqual(roundTripped?.tier, .longTerm)
     }
 
-    func testDefaultTierScopeExcludesArchive() {
-        XCTAssertEqual(MemoryTierScope.defaultAccess.tiers, [.shortTerm, .longTerm])
-        XCTAssertFalse(MemoryTierScope.defaultAccess.includesArchive)
+    func testDefaultLayerScopeExcludesArchive() {
+        XCTAssertEqual(MemoryLayerScope.defaultAccess.tiers, [.shortTerm, .longTerm])
+        XCTAssertFalse(MemoryLayerScope.defaultAccess.includesArchive)
     }
 
     func testArchiveScopeRequiresAcknowledgement() {
-        XCTAssertEqual(MemoryTierScope.archiveOnly.tiers, [.archive])
-        XCTAssertTrue(MemoryTierScope.archiveOnly.requiresArchiveAcknowledgement)
+        XCTAssertEqual(MemoryLayerScope.archiveOnly.tiers, [.archive])
+        XCTAssertTrue(MemoryLayerScope.archiveOnly.requiresArchiveAcknowledgement)
     }
 
     func testUnknownPersistedTierIsExcludedNotPromotedToLongTerm() {
@@ -68,3 +68,6 @@ final class MemoryTierFilterTests: XCTestCase {
         XCTAssertNil(record.toServerMemory())
     }
 }
+
+/// Reversible alias during WS-G client rename (Wave 36).
+typealias MemoryTierFilterTests = MemoryLayerFilterTests

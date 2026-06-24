@@ -1159,7 +1159,7 @@ enum MemoryCategory: String, Codable, CaseIterable {
   }
 }
 
-enum MemoryTier: String, Codable, CaseIterable, Identifiable {
+enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
   case shortTerm = "short_term"
   case longTerm = "long_term"
   case archive
@@ -1167,13 +1167,13 @@ enum MemoryTier: String, Codable, CaseIterable, Identifiable {
   init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     let rawValue = try container.decode(String.self)
-    guard let tier = MemoryTier(rawValue: rawValue) else {
+    guard let layer = MemoryLayer(rawValue: rawValue) else {
       throw DecodingError.dataCorruptedError(
         in: container,
-        debugDescription: "Unknown ServerMemory tier '\(rawValue)'"
+        debugDescription: "Unknown ServerMemory layer '\(rawValue)'"
       )
     }
-    self = tier
+    self = layer
   }
 
   func encode(to encoder: Encoder) throws {
@@ -1218,22 +1218,22 @@ enum MemoryTier: String, Codable, CaseIterable, Identifiable {
   }
 }
 
-/// Canonical product lifecycle layer (WS-K). Same string values as ``MemoryTier``.
-typealias MemoryLayer = MemoryTier
+/// Reversible alias during WS-G client rename (Wave 36).
+typealias MemoryTier = MemoryLayer
 
-struct MemoryTierScope: Equatable {
-  let tiers: [MemoryTier]
+struct MemoryLayerScope: Equatable {
+  let tiers: [MemoryLayer]
   let requiresArchiveAcknowledgement: Bool
 
-  static let defaultAccess = MemoryTierScope(
+  static let defaultAccess = MemoryLayerScope(
     tiers: [.shortTerm, .longTerm],
     requiresArchiveAcknowledgement: false
   )
-  static let archiveOnly = MemoryTierScope(
+  static let archiveOnly = MemoryLayerScope(
     tiers: [.archive],
     requiresArchiveAcknowledgement: true
   )
-  static let allIncludingArchive = MemoryTierScope(
+  static let allIncludingArchive = MemoryLayerScope(
     tiers: [.shortTerm, .longTerm, .archive],
     requiresArchiveAcknowledgement: true
   )
@@ -1241,6 +1241,9 @@ struct MemoryTierScope: Equatable {
   var includesArchive: Bool { tiers.contains(.archive) }
   var sqlTierRawValues: [String] { tiers.map { $0.rawValue } }
 }
+
+/// Reversible alias during WS-G client rename (Wave 36).
+typealias MemoryTierScope = MemoryLayerScope
 
 private enum ServerMemoryAliasDecodeError {
   static func conflict(
@@ -1267,7 +1270,7 @@ struct ServerMemory: Decodable, Identifiable {
   let updatedAt: Date
   let capturedAt: Date?
   let expiresAt: Date?
-  let tier: MemoryTier
+  let tier: MemoryLayer
   // True only when the backend actually sent a tier (`tier`/`memory_tier`). Legacy
   // records carry no tier, so `tier` falls back to `.longTerm` for filtering but we
   // suppress the tier badge for them (tierIsExplicit == false).
@@ -1348,12 +1351,12 @@ struct ServerMemory: Decodable, Identifiable {
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
 
-    let layerValue = try container.decodeIfPresent(MemoryTier.self, forKey: .layer)
-    let tierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .tier)
-    let memoryTierValue = try container.decodeIfPresent(MemoryTier.self, forKey: .memoryTier)
+    let layerValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
+    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+    let memoryTierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
     tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
 
-    let presentTierAliases: [(String, MemoryTier)] = [
+    let presentTierAliases: [(String, MemoryLayer)] = [
       layerValue.map { ("layer", $0) },
       tierValue.map { ("tier", $0) },
       memoryTierValue.map { ("memory_tier", $0) },
@@ -1687,7 +1690,7 @@ extension APIClient {
   }
 
   /// Marks memories as read for a tier scope. Disabled until backend exposes tier-scoped semantics.
-  func markAllMemoriesRead(scope: MemoryTierScope) async throws {
+  func markAllMemoriesRead(scope: MemoryLayerScope) async throws {
     throw APIError.unsupportedTierScopedBulkMutation("markAllMemoriesRead")
   }
 
@@ -1697,7 +1700,7 @@ extension APIClient {
   }
 
   /// Updates visibility for a tier scope. Disabled until backend exposes tier-scoped semantics.
-  func updateAllMemoriesVisibility(scope: MemoryTierScope, visibility: String) async throws {
+  func updateAllMemoriesVisibility(scope: MemoryLayerScope, visibility: String) async throws {
     throw APIError.unsupportedTierScopedBulkMutation("updateAllMemoriesVisibility")
   }
 
@@ -1707,7 +1710,7 @@ extension APIClient {
   }
 
   /// Deletes memories for a tier scope. Disabled until backend exposes tier-scoped semantics.
-  func deleteAllMemories(scope: MemoryTierScope) async throws {
+  func deleteAllMemories(scope: MemoryLayerScope) async throws {
     throw APIError.unsupportedTierScopedBulkMutation("deleteAllMemories")
   }
 

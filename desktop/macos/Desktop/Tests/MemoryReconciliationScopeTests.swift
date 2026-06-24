@@ -89,7 +89,7 @@ final class MemoryReconciliationScopeTests: XCTestCase {
         XCTAssertEqual(archiveKeptRecord?.deleted, false)
     }
 
-    private func makeMemory(id: String, tier: MemoryTier) -> ServerMemory {
+    private func makeMemory(id: String, tier: MemoryLayer) -> ServerMemory {
         ServerMemory(
             id: id,
             content: "Memory \(id)",

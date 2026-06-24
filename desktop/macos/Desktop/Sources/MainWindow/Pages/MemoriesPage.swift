@@ -49,7 +49,7 @@ enum MemoryTag: String, CaseIterable, Identifiable {
   }
 }
 
-enum MemoryTierFilter: String, CaseIterable, Identifiable {
+enum MemoryLayerFilter: String, CaseIterable, Identifiable {
   case defaultAccess
   case shortTerm
   case longTerm
@@ -75,19 +75,22 @@ enum MemoryTierFilter: String, CaseIterable, Identifiable {
     }
   }
 
-  var tierScope: MemoryTierScope {
+  var layerScope: MemoryLayerScope {
     switch self {
     case .defaultAccess: return .defaultAccess
     case .shortTerm:
-      return MemoryTierScope(tiers: [.shortTerm], requiresArchiveAcknowledgement: false)
+      return MemoryLayerScope(tiers: [.shortTerm], requiresArchiveAcknowledgement: false)
     case .longTerm:
-      return MemoryTierScope(tiers: [.longTerm], requiresArchiveAcknowledgement: false)
+      return MemoryLayerScope(tiers: [.longTerm], requiresArchiveAcknowledgement: false)
     case .archive: return .archiveOnly
     }
   }
 
-  var allowedTiers: [MemoryTier] { tierScope.tiers }
+  var allowedLayers: [MemoryLayer] { layerScope.tiers }
 }
+
+/// Reversible alias during WS-G client rename (Wave 36).
+typealias MemoryTierFilter = MemoryLayerFilter
 
 // MARK: - Memories View Model
 
@@ -111,12 +114,12 @@ class MemoriesViewModel: ObservableObject {
   }
   @Published private(set) var isSearching = false
   @Published private(set) var searchResults: [ServerMemory] = []
-  @Published var selectedTierFilter: MemoryTierFilter = .defaultAccess {
+  @Published var selectedLayerFilter: MemoryLayerFilter = .defaultAccess {
     didSet {
-      guard oldValue != selectedTierFilter else { return }
+      guard oldValue != selectedLayerFilter else { return }
       bumpScopeGeneration()
       displayLimit = pageSize
-      Task { await reloadForCurrentTierFilter() }
+      Task { await reloadForCurrentLayerFilter() }
     }
   }
 
@@ -217,20 +220,20 @@ class MemoriesViewModel: ObservableObject {
 
   private struct MemoryScopeToken: Equatable {
     let generation: Int
-    let tierFilter: MemoryTierFilter
+    let layerFilter: MemoryLayerFilter
     let searchText: String
     let selectedTags: Set<MemoryTag>
   }
 
   private var scopeGeneration = 0
 
-  private var activeTierFilter: [MemoryTier] { selectedTierFilter.allowedTiers }
-  private var activeTierScope: MemoryTierScope { selectedTierFilter.tierScope }
+  private var activeLayerFilter: [MemoryLayer] { selectedLayerFilter.allowedLayers }
+  private var activeLayerScope: MemoryLayerScope { selectedLayerFilter.layerScope }
 
   private var currentScopeToken: MemoryScopeToken {
     MemoryScopeToken(
       generation: scopeGeneration,
-      tierFilter: selectedTierFilter,
+      layerFilter: selectedLayerFilter,
       searchText: searchText.trimmingCharacters(in: .whitespacesAndNewlines),
       selectedTags: selectedTags
     )
@@ -244,11 +247,11 @@ class MemoriesViewModel: ObservableObject {
     token == currentScopeToken
   }
 
-  private func tiers(for token: MemoryScopeToken) -> [MemoryTier] {
-    token.tierFilter.allowedTiers
+  private func layers(for token: MemoryScopeToken) -> [MemoryLayer] {
+    token.layerFilter.allowedLayers
   }
 
-  private func reloadForCurrentTierFilter() async {
+  private func reloadForCurrentLayerFilter() async {
     let token = currentScopeToken
     if !token.searchText.isEmpty {
       await performSearch()
@@ -260,7 +263,7 @@ class MemoriesViewModel: ObservableObject {
     } else {
       do {
         let loaded = try await MemoryStorage.shared.getLocalMemories(
-          limit: pageSize, offset: 0, tiers: tiers(for: token))
+          limit: pageSize, offset: 0, tiers: layers(for: token))
         guard isCurrentScope(token) else { return }
         memories = loaded
         currentOffset = loaded.count
@@ -327,7 +330,7 @@ class MemoriesViewModel: ObservableObject {
       let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
         limit: reloadLimit,
         offset: 0,
-        tiers: tiers(for: token)
+        tiers: layers(for: token)
       )
       guard isCurrentScope(token) else { return }
       log(
@@ -363,12 +366,12 @@ class MemoriesViewModel: ObservableObject {
       var counts: [MemoryTag: Int] = [:]
 
       // Get total count (no filters) and store for "All" badge
-      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(tiers: activeTierFilter)
+      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(tiers: activeLayerFilter)
       totalMemoriesCount = totalCount
 
       // One count per backend category (mirrors mobile).
       for tag in MemoryTag.allCases {
-        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue, tiers: activeTierFilter)
+        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue, tiers: activeLayerFilter)
       }
 
       tagCounts = counts
@@ -404,7 +407,7 @@ class MemoriesViewModel: ObservableObject {
         limit: 10000,
         matchAnyTag: nil,
         matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory,
-        tiers: tiers(for: token)
+        tiers: layers(for: token)
       )
 
       guard isCurrentScope(token) else { return }
@@ -452,7 +455,7 @@ class MemoriesViewModel: ObservableObject {
     }
 
     // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
-    let allowedTiers = Set(activeTierFilter)
+    let allowedTiers = Set(activeLayerFilter)
     result = result.filter { allowedTiers.contains($0.tier) }
 
     // Sort by date (newest first)
@@ -497,7 +500,7 @@ class MemoriesViewModel: ObservableObject {
       let results = try await MemoryStorage.shared.searchLocalMemories(
         query: query,
         limit: 10000,
-        tiers: tiers(for: token)
+        tiers: layers(for: token)
       )
       guard isCurrentScope(token) else { return }
       searchResults = results
@@ -506,7 +509,7 @@ class MemoriesViewModel: ObservableObject {
       guard isCurrentScope(token) else { return }
       logError("MemoriesViewModel: Search failed", error: error)
       // Fall back to in-memory filtering within the captured tier scope.
-      let allowedTiers = Set(tiers(for: token))
+      let allowedTiers = Set(layers(for: token))
       searchResults = memories.filter {
         allowedTiers.contains($0.tier) && $0.content.localizedCaseInsensitiveContains(query)
       }
@@ -531,7 +534,7 @@ class MemoriesViewModel: ObservableObject {
     errorMessage = nil
     currentOffset = 0
     let token = currentScopeToken
-    let tokenTiers = tiers(for: token)
+    let tokenTiers = layers(for: token)
 
     // Step 1: Load from local cache first for instant display
     // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
@@ -583,7 +586,7 @@ class MemoriesViewModel: ObservableObject {
         let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
           limit: pageSize,
           offset: 0,
-          tiers: tiers(for: token)
+          tiers: layers(for: token)
         )
         guard isCurrentScope(token) else { return }
         memories = mergedMemories
@@ -593,7 +596,7 @@ class MemoriesViewModel: ObservableObject {
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to API data if sync fails, preserving the desktop default-access guardrail.
-        let allowedTiers = Set(tiers(for: token))
+        let allowedTiers = Set(layers(for: token))
         memories = fetchedMemories.filter { allowedTiers.contains($0.tier) }
         currentOffset = memories.count
         hasMoreMemories = fetchedMemories.count >= pageSize
@@ -709,7 +712,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether we're currently in a filtered/search mode
   var isInFilteredMode: Bool {
-    !searchText.isEmpty || !selectedTags.isEmpty || selectedTierFilter != .defaultAccess
+    !searchText.isEmpty || !selectedTags.isEmpty || selectedLayerFilter != .defaultAccess
   }
 
   /// Load more memories (pagination) - triggered by scrolling near end
@@ -749,7 +752,7 @@ class MemoriesViewModel: ObservableObject {
       let moreFromCache = try await MemoryStorage.shared.getLocalMemories(
         limit: pageSize,
         offset: requestedOffset,
-        tiers: tiers(for: token)
+        tiers: layers(for: token)
       )
 
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
@@ -776,7 +779,7 @@ class MemoriesViewModel: ObservableObject {
       // Sync to local cache first
       try await MemoryStorage.shared.syncServerMemories(newMemories)
 
-      let allowedTiers = Set(tiers(for: token))
+      let allowedTiers = Set(layers(for: token))
       let visibleNewMemories = newMemories.filter { allowedTiers.contains($0.tier) }
 
       // Then append to display
@@ -867,7 +870,7 @@ class MemoriesViewModel: ObservableObject {
       } catch {
         logError("Failed to restore memory locally", error: error)
       }
-      await reloadForCurrentTierFilter()
+      await reloadForCurrentLayerFilter()
     }
   }
 
@@ -899,7 +902,7 @@ class MemoriesViewModel: ObservableObject {
       } catch {
         logError("Failed to restore memory after delete failure", error: error)
       }
-      await reloadForCurrentTierFilter()
+      await reloadForCurrentLayerFilter()
     }
   }
 
@@ -947,37 +950,37 @@ class MemoriesViewModel: ObservableObject {
 
   // MARK: - Bulk Operations
 
-  private var currentBulkScope: MemoryTierScope { activeTierScope }
+  private var currentBulkScope: MemoryLayerScope { activeLayerScope }
 
-  func makeMemoriesPrivate(scope: MemoryTierScope? = nil) async {
+  func makeMemoriesPrivate(scope: MemoryLayerScope? = nil) async {
     let scope = scope ?? currentBulkScope
     isBulkOperationInProgress = true
     defer { isBulkOperationInProgress = false }
     do {
       try await APIClient.shared.updateAllMemoriesVisibility(scope: scope, visibility: "private")
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "private")
-      await reloadForCurrentTierFilter()
+      await reloadForCurrentLayerFilter()
     } catch {
       errorMessage = error.localizedDescription
       logError("Bulk make private disabled or failed", error: error)
     }
   }
 
-  func makeMemoriesPublic(scope: MemoryTierScope? = nil) async {
+  func makeMemoriesPublic(scope: MemoryLayerScope? = nil) async {
     let scope = scope ?? currentBulkScope
     isBulkOperationInProgress = true
     defer { isBulkOperationInProgress = false }
     do {
       try await APIClient.shared.updateAllMemoriesVisibility(scope: scope, visibility: "public")
       try await MemoryStorage.shared.updateVisibility(scope: scope, visibility: "public")
-      await reloadForCurrentTierFilter()
+      await reloadForCurrentLayerFilter()
     } catch {
       errorMessage = error.localizedDescription
       logError("Bulk make public disabled or failed", error: error)
     }
   }
 
-  func deleteMemories(scope: MemoryTierScope? = nil, archiveAcknowledged: Bool = false) async {
+  func deleteMemories(scope: MemoryLayerScope? = nil, archiveAcknowledged: Bool = false) async {
     let scope = scope ?? currentBulkScope
     if scope.includesArchive && !archiveAcknowledged {
       errorMessage = "Archive deletion requires explicit Archive confirmation."
@@ -994,7 +997,7 @@ class MemoriesViewModel: ObservableObject {
     do {
       try await APIClient.shared.deleteAllMemories(scope: scope)
       try await MemoryStorage.shared.deleteAllMemories(scope: scope)
-      await reloadForCurrentTierFilter()
+      await reloadForCurrentLayerFilter()
     } catch {
       errorMessage = error.localizedDescription
       logError("Bulk delete disabled or failed", error: error)
@@ -1189,15 +1192,15 @@ struct MemoriesPage: View {
       .frame(minHeight: 46)
       .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
 
-      // Tier filter dropdown. Default is product default access: Short-term + Long-term.
+      // Layer filter dropdown. Default is product default access: Short-term + Long-term.
       Menu {
-        ForEach(MemoryTierFilter.allCases) { filter in
+        ForEach(MemoryLayerFilter.allCases) { filter in
           Button {
-            viewModel.selectedTierFilter = filter
+            viewModel.selectedLayerFilter = filter
           } label: {
             HStack {
               Text(filter.displayName)
-              if viewModel.selectedTierFilter == filter {
+              if viewModel.selectedLayerFilter == filter {
                 Image(systemName: "checkmark")
               }
             }
@@ -1206,24 +1209,24 @@ struct MemoriesPage: View {
         }
       } label: {
         HStack(spacing: 6) {
-          Image(systemName: viewModel.selectedTierFilter == .archive ? "archivebox" : "clock.badge.checkmark")
+          Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
             .scaledFont(size: 12)
-          Text(viewModel.selectedTierFilter.displayName)
-            .scaledFont(size: 13, weight: viewModel.selectedTierFilter == .defaultAccess ? .regular : .medium)
+          Text(viewModel.selectedLayerFilter.displayName)
+            .scaledFont(size: 13, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
           Image(systemName: "chevron.down")
             .scaledFont(size: 10)
         }
         .foregroundColor(
-          viewModel.selectedTierFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
+          viewModel.selectedLayerFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
         )
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(minHeight: 46)
         .omiControlSurface(
-          fill: viewModel.selectedTierFilter == .defaultAccess
+          fill: viewModel.selectedLayerFilter == .defaultAccess
             ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
           radius: 18,
-          stroke: viewModel.selectedTierFilter == .defaultAccess ? nil : OmiColors.purplePrimary.opacity(0.28)
+          stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.purplePrimary.opacity(0.28)
         )
       }
       .menuStyle(.button)
@@ -1302,7 +1305,7 @@ struct MemoriesPage: View {
       }
     } message: {
       Text(
-        "This would delete Short-term and Long-term memories only. Archive is not included. Bulk deletion remains disabled until the backend supports tier-scoped mutation semantics."
+        "This would delete Short-term and Long-term memories only. Archive is not included. Bulk deletion remains disabled until the backend supports layer-scoped mutation semantics."
       )
     }
   }
@@ -1527,7 +1530,7 @@ struct MemoriesPage: View {
       .buttonStyle(.plain)
       .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
       .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
-      .help("Bulk memory mutations are disabled until the backend supports tier-scoped operations.")
+      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Button {
         showManagementMenu = false
@@ -1549,7 +1552,7 @@ struct MemoriesPage: View {
       .buttonStyle(.plain)
       .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
       .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
-      .help("Bulk memory mutations are disabled until the backend supports tier-scoped operations.")
+      .help("Bulk memory mutations are disabled until the backend supports layer-scoped operations.")
 
       Divider()
         .padding(.vertical, 8)
@@ -1576,7 +1579,7 @@ struct MemoriesPage: View {
       .buttonStyle(.plain)
       .disabled(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress)
       .opacity(!viewModel.areBulkServerMutationsAvailable || viewModel.memories.isEmpty || viewModel.isBulkOperationInProgress ? 0.5 : 1)
-      .help("Bulk memory deletion is disabled until the backend supports tier-scoped operations.")
+      .help("Bulk memory deletion is disabled until the backend supports layer-scoped operations.")
     }
     .padding(.vertical, 4)
     .frame(width: 200)
@@ -1819,8 +1822,8 @@ struct MemoriesPage: View {
 
 // MARK: - Memory Card View
 
-private struct MemoryTierBadge: View {
-  let tier: MemoryTier
+private struct MemoryLayerBadge: View {
+  let layer: MemoryLayer
   @State private var showLayerInfo = false
 
   var body: some View {
@@ -1828,25 +1831,25 @@ private struct MemoryTierBadge: View {
       showLayerInfo.toggle()
     } label: {
       HStack(spacing: 4) {
-        Image(systemName: tier.icon)
+        Image(systemName: layer.icon)
           .scaledFont(size: 9, weight: .medium)
-        Text(tier.displayName)
+        Text(layer.displayName)
           .scaledFont(size: 10, weight: .medium)
       }
-      .foregroundColor(tier == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .foregroundColor(layer == .archive ? OmiColors.textPrimary : OmiColors.textSecondary)
       .padding(.horizontal, 7)
       .padding(.vertical, 3)
-      .background(tier == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
+      .background(layer == .archive ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary)
       .clipShape(Capsule())
     }
     .buttonStyle(.plain)
-    .help(tier.layerInfoText)
+    .help(layer.layerInfoText)
     .popover(isPresented: $showLayerInfo, arrowEdge: .top) {
       VStack(alignment: .leading, spacing: 6) {
-        Text(tier.displayName)
+        Text(layer.displayName)
           .scaledFont(size: 12, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
-        Text(tier.layerInfoText)
+        Text(layer.layerInfoText)
           .scaledFont(size: 11)
           .foregroundColor(OmiColors.textSecondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -1856,6 +1859,9 @@ private struct MemoryTierBadge: View {
     }
   }
 }
+
+/// Reversible alias during WS-G client rename (Wave 36).
+fileprivate typealias MemoryTierBadge = MemoryLayerBadge
 
 private struct MemoryCardView: View {
   let memory: ServerMemory
@@ -1904,7 +1910,7 @@ private struct MemoryCardView: View {
           // Only badge memories the backend actually tiered; legacy/untiered
           // records carry no real tier, so we show no badge for them.
           if memory.tierIsExplicit {
-            MemoryTierBadge(tier: memory.tier)
+            MemoryLayerBadge(layer: memory.tier)
           }
 
           if let sourceName = memory.sourceName {

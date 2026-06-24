@@ -40,12 +40,12 @@ actor MemoryStorage {
         return db
     }
 
-    private static func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryTier]?) -> QueryInterfaceRequest<MemoryRecord> {
+    private static func applyTierFilter(_ query: QueryInterfaceRequest<MemoryRecord>, tiers: [MemoryLayer]?) -> QueryInterfaceRequest<MemoryRecord> {
         guard let tiers = tiers, !tiers.isEmpty else { return query }
         return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
     }
 
-    private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryTier]?) {
+    private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryLayer]?) {
         guard let tiers = tiers, !tiers.isEmpty else { return }
         let placeholders = tiers.map { _ in "?" }.joined(separator: ", ")
         conditions.append("tier IN (\(placeholders))")
@@ -65,7 +65,7 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
-        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -106,7 +106,7 @@ actor MemoryStorage {
     func getLocalMemoriesCount(
         category: String? = nil,
         tags: [String]? = nil,
-        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -144,7 +144,7 @@ actor MemoryStorage {
         matchAnyTag: [String]? = nil,     // OR logic: matches any of these tags
         matchAnyCategory: [String]? = nil, // OR logic: matches any of these categories
         excludeTags: [String]? = nil,      // Exclude memories containing these tags
-        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -218,7 +218,7 @@ actor MemoryStorage {
         offset: Int = 0,
         category: String? = nil,
         tags: [String]? = nil,
-        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -277,7 +277,7 @@ actor MemoryStorage {
         query searchText: String,
         category: String? = nil,
         tags: [String]? = nil,
-        tiers: [MemoryTier]? = [.shortTerm, .longTerm],
+        tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -523,7 +523,7 @@ actor MemoryStorage {
     }
 
     /// Mark memories as read within a tier scope.
-    func markAllAsRead(scope: MemoryTierScope) async throws {
+    func markAllAsRead(scope: MemoryLayerScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
@@ -595,7 +595,7 @@ actor MemoryStorage {
     @discardableResult
     func softDeleteSyncedOrphans(
         keepingBackendIds keep: Set<String>,
-        within scope: MemoryTierScope
+        within scope: MemoryLayerScope
     ) async throws -> Int {
         let db = try await ensureInitialized()
 
@@ -620,7 +620,7 @@ actor MemoryStorage {
     }
 
     /// Soft delete memories within a tier scope.
-    func deleteAllMemories(scope: MemoryTierScope) async throws {
+    func deleteAllMemories(scope: MemoryLayerScope) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
@@ -664,7 +664,7 @@ actor MemoryStorage {
     }
 
     /// Update visibility for memories within a tier scope.
-    func updateVisibility(scope: MemoryTierScope, visibility: String) async throws {
+    func updateVisibility(scope: MemoryLayerScope, visibility: String) async throws {
         let db = try await ensureInitialized()
 
         try await db.write { database in
