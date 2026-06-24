@@ -57,6 +57,7 @@ pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
+pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
