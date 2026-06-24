@@ -80,8 +80,8 @@ def _ws_c_import_isolation():
 ensure_utils_memory_packages_importable()
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import MemoryCategory
-from models.v17_memory_apply import MemoryControlState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import MemoryControlState
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.canonical_memory_adapter import read_canonical_memories
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from tests.unit.test_ws_b_short_term_lifecycle import (

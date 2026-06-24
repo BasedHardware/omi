@@ -202,10 +202,10 @@ def _install_legacy_safe_v17_defaults(monkeypatch):
     """Keep lock-bypass tests focused on legacy lock checks, not V17 rollout gating."""
     from types import SimpleNamespace
 
-    import utils.memory.v17_chat_memory_adapter as chat_adapter
+    import utils.memory.chat_memory_adapter as chat_adapter
     import utils.mcp_memories as default_mcp
-    import utils.memory.v17_default_read_rollout as rollout
-    import utils.memory.v17_product_authorization as product_auth
+    import utils.memory.default_read_rollout as rollout
+    import utils.memory.product_authorization as product_auth
 
     def _legacy_rollout(uid='test-uid', consumer='mcp', **_kwargs):
         return rollout.legacy_safe_v17_default_read_rollout_decision(

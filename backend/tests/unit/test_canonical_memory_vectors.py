@@ -20,11 +20,11 @@ from database.memory_vector_metadata import (
     build_memory_vector_metadata,
     parse_memory_search_vector_hit,
 )
-from database.v17_vector_metadata import build_v17_memory_vector_metadata
+from database.memory_vector_metadata import build_v17_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_memory_search_gateway import SearchDecision, SearchMode
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.memory_search_gateway import SearchDecision, SearchMode
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 
 
 def _item(

@@ -75,7 +75,7 @@ def _ws_m_import_isolation():
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,

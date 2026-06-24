@@ -10,7 +10,7 @@ from models.memory_domain import (
     physical_status_to_record_status,
     tier_to_layer,
 )
-from models.v17_product_memory import MemoryItemStatus, MemoryTier
+from models.product_memory import MemoryItemStatus, MemoryTier
 
 
 def _all_legal_combinations():

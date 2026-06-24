@@ -174,7 +174,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from dependencies import get_developer_v17_default_memory_read_context  # noqa: E402
-from utils.memory.v17_product_authorization import V17ProductAuthorizationDecision  # noqa: E402
+from utils.memory.product_authorization import V17ProductAuthorizationDecision  # noqa: E402
 
 _VALID_CATEGORY = next(iter(MemoryCategory)).value
 

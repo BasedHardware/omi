@@ -48,7 +48,7 @@ def _ws_i_hardening_import_isolation():
 
 
 ensure_utils_memory_packages_importable()
-from database.v17_memory_apply_store import atomic_bump_source_generation  # noqa: E402
+from database.memory_apply_store import atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
     ArtifactPreservationState,
     MemoryEvidence,
@@ -57,8 +57,8 @@ from models.memory_evidence import (  # noqa: E402
     SourceState,
     SourceStateReason,
 )
-from models.v17_memory_apply import ApplyStatus, MemoryControlState  # noqa: E402
-from models.v17_product_memory import MemoryItemStatus  # noqa: E402
+from models.memory_apply import ApplyStatus, MemoryControlState  # noqa: E402
+from models.product_memory import MemoryItemStatus  # noqa: E402
 from utils.memory.canonical_memory_adapter import (  # noqa: E402
     extraction_memory_id,
     read_canonical_memories,

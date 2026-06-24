@@ -87,8 +87,8 @@ sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError',
 
 def _install_legacy_safe_v17_developer_defaults(monkeypatch):
     """Keep dev API lock tests focused on lock checks rather than V17 write gating."""
-    import utils.memory.v17_default_read_rollout as rollout
-    import utils.memory.v17_developer_memory_adapter as developer_adapter
+    import utils.memory.default_read_rollout as rollout
+    import utils.memory.developer_memory_adapter as developer_adapter
 
     def _legacy_rollout(uid='test-uid', **_kwargs):
         return rollout.legacy_safe_v17_default_read_rollout_decision(

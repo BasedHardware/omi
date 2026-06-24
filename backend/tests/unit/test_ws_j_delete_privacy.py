@@ -63,8 +63,8 @@ def _install_heavy_import_stubs():
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memories import MemoryCategory
-from models.v17_memory_apply import MemoryControlState
-from models.v17_product_memory import MemoryItemStatus
+from models.memory_apply import MemoryControlState
+from models.product_memory import MemoryItemStatus
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
     neutral_vector_id_for_memory,
@@ -247,8 +247,8 @@ def canonical_db():
 
 
 def test_neutral_vector_id_is_deterministic_and_distinct_from_legacy_and_v17():
-    from database.v17_vector_metadata import deterministic_v17_memory_vector_id
-    from models.v17_product_memory import MemoryTier
+    from database.memory_vector_metadata import deterministic_v17_memory_vector_id
+    from models.product_memory import MemoryTier
 
     uid = "uid-1"
     conversation_id = "conv-1"

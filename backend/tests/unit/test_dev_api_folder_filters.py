@@ -370,7 +370,7 @@ def _build_memories_test_app():
     from routers.developer import router as developer_router
     import routers.developer as developer_module
     from dependencies import get_developer_v17_default_memory_read_context
-    from utils.memory.v17_product_authorization import V17ProductAuthorizationDecision
+    from utils.memory.product_authorization import V17ProductAuthorizationDecision
 
     auth_context = developer_module.V17ProductAuthorizationContext(
         uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'

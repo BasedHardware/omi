@@ -45,7 +45,7 @@ def _ws_k_import_isolation():
 
 from models.memory_domain import tier_to_layer
 from models.memories import MemoryDB
-from models.v17_product_memory import MemoryTier
+from models.product_memory import MemoryTier
 
 
 def _minimal_memorydb_payload(**overrides):

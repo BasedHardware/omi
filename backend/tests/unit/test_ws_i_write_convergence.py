@@ -81,8 +81,8 @@ ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import Memory, MemoryDB, MemoryCategory
-from models.v17_memory_apply import ApplyStatus, MemoryControlState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import ApplyStatus, MemoryControlState
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
     read_canonical_memories,

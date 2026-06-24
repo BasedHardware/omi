@@ -61,8 +61,8 @@ def _ws_b_import_isolation():
 ensure_utils_memory_packages_importable()
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_memory_apply import MemoryControlState
-from models.v17_product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.memory_apply import MemoryControlState
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
 from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_promotion import (

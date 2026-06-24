@@ -17,7 +17,7 @@ os.environ.setdefault(
 )
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.v17_product_memory import (
+from models.product_memory import (
     MemoryAccessPolicy,
     MemoryItemStatus,
     MemoryTier,
@@ -214,7 +214,7 @@ def _sse_full_memory_doc(*, memory_id: str, content: str) -> dict:
 class TestMcpSseLegacySearchParity:
     def test_legacy_sse_search_uses_vector_order_and_full_firestore_docs(self, monkeypatch):
         """SSE legacy search must NOT use REST MCP search_mcp (RRF + slim dict)."""
-        from utils.memory import v17_default_read_rollout as rollout
+        from utils.memory import default_read_rollout as rollout
 
         mcp_sse = _load_mcp_sse_module()
         firestore_fake = _FirestoreFake()
