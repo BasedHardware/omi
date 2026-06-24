@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Onboarding: \"Use Omi for free\" is now the primary action on the keys step (bring-your-own-keys is optional/secondary), and the tasks step button now says \"Take me to Omi\""
+  ],
   "releases": [
     {
       "version": "0.11.507",
