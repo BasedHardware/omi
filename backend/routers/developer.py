@@ -1338,7 +1338,23 @@ def get_goals(
     else:
         goals = goals_db.get_user_goals(uid, limit=limit)
 
-    return [_serialize_goal_datetimes(g) for g in goals]
+    # Validate each record individually so a single malformed/legacy goal doc doesn't fail the whole
+    # page with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
+    valid_goals = []
+    for goal in goals:
+        if not isinstance(goal, dict) or not goal.get('id'):
+            logger.warning('Skipping malformed goal in Developer API goal list')
+            continue
+        try:
+            valid_goals.append(GoalResponse.model_validate(_serialize_goal_datetimes(goal)))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid goal doc {goal.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_goals
 
 
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
