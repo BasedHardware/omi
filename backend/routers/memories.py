@@ -18,8 +18,8 @@ from database.vector_db import (
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
-from utils.memory.v17_v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
-from utils.memory.v17_v3_production_runtime import build_v17_v3_production_runtime
+from utils.memory.v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
+from utils.memory.v3_production_runtime import build_v17_v3_production_runtime
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
