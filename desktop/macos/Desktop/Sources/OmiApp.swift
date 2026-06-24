@@ -370,6 +370,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // raw-message checks above miss it. Same root cause (server-side key needs rotation),
             // same flood (one bad key emits one event per task-extraction frame for every user).
             || lower.contains("ai service authentication error")
+            // Backend rejects the auth header on batch (PTT) transcription with a 401
+            // INVALID_AUTH / "Invalid credentials." body — a transient stale-token or BYOK
+            // misconfig, not a per-client app bug. The 30s refresh timer recovers it; left
+            // unfiltered it floods Sentry (one event per failed batch). Same class as the
+            // AuthError.notSignedIn filter below.
+            || lower.contains("invalid_auth")
           {
             return nil
           }
