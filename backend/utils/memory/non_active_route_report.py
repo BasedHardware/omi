@@ -2,14 +2,14 @@ from __future__ import annotations
 
 """Canonical non active route report module (WS-G8a).
 
-Neutral ``non_active_route_report`` is the source of truth. Legacy ``v17_non_active_route_report`` remains an importable alias.
+Canonical admin/benchmark seam for non-active route audit reports.
 """
 
 
 from typing import Iterable, Optional
 
 from database._client import db
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from utils.memory.non_active_route_audit import NonActiveRouteAuditReport, build_non_active_route_audit_report
 
 
@@ -35,7 +35,7 @@ def fetch_non_active_route_audit_report(
 
 
 def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client=db):
-    collection_path = V17Collections(uid=uid).non_active_memory_routes
+    collection_path = MemoryCollections(uid=uid).non_active_memory_routes
     query = db_client.collection(collection_path)
     if run_id:
         query = query.where("run_id", "==", run_id)

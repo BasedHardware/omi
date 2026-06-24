@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """Canonical non active route audit module (WS-G8a).
 
-Neutral ``non_active_route_audit`` is the source of truth. Legacy ``v17_non_active_route_audit`` remains an importable alias.
+Canonical non-active route audit helpers for admin reports and benchmarks.
 """
 
 
