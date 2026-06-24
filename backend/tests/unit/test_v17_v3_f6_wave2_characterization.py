@@ -93,7 +93,9 @@ def test_redacted_evidence_json_rendering_is_byte_for_byte_stable():
         "non_claims": ["no raw memory content included"],
     }
 
-    assert render_redacted_evidence_json(report) == '''{
+    assert (
+        render_redacted_evidence_json(report)
+        == '''{
   "approved_metadata_paths": [
     "control/config metadata",
     "iam policy"
@@ -131,6 +133,7 @@ def test_redacted_evidence_json_rendering_is_byte_for_byte_stable():
   "status": "PASS",
   "target": "dev"
 }'''
+    )
 
 
 def test_pre_gcp_aggregate_report_does_not_mutate_local_proofs_input():
@@ -200,6 +203,7 @@ def test_canonical_config_run_record_redaction_fingerprint_and_aggregate_static_
 
 def test_local_smoke_supplies_explicit_deterministic_run_record_clock(monkeypatch):
     from utils.memory.v17_v3_f6 import local_smoke
+    from utils.memory.v3_f6 import local_smoke as canonical_local_smoke
 
     observed: dict[str, object] = {}
     real_validate = local_smoke.validate_run_record
@@ -208,7 +212,7 @@ def test_local_smoke_supplies_explicit_deterministic_run_record_clock(monkeypatc
         observed["now"] = now
         return real_validate(raw, registry, now=now)
 
-    monkeypatch.setattr(local_smoke, "validate_run_record", spy_validate_run_record)
+    monkeypatch.setattr(canonical_local_smoke, "validate_run_record", spy_validate_run_record)
 
     report = local_smoke.build_report_from_current_local_contracts()
 

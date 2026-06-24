@@ -755,6 +755,58 @@ def test_v3_gcp_evidence_config_alias_reexports_match_v17():
     assert v3_gcp_evidence_config.EvidenceTargetRegistry is v17_v3_gcp_evidence_config.EvidenceTargetRegistry
 
 
+def test_v3_memory_read_service_side_effect_reexports_match_v17():
+    from utils.memory import v17_v3_memory_read_service, v3_memory_read_service
+
+    assert v3_memory_read_service.V17V3CompatibilityReadPath is v17_v3_memory_read_service.V17V3CompatibilityReadPath
+    assert v3_memory_read_service.decide_v17_v3_compatibility is v17_v3_memory_read_service.decide_v17_v3_compatibility
+
+
+def test_v3_memory_read_service_neutral_symbols_are_canonical():
+    from utils.memory import v3_memory_read_service
+
+    assert v3_memory_read_service.V17V3MemoryReadRequest is v3_memory_read_service.V3MemoryReadRequest
+    assert v3_memory_read_service.V17_V3_READ_SOURCE is v3_memory_read_service.V3_READ_SOURCE
+
+
+def test_v3_composed_get_service_neutral_symbols_are_canonical():
+    from utils.memory import v3_composed_get_service
+
+    assert v3_composed_get_service.V17V3ComposedCursor is v3_composed_get_service.V3ComposedCursor
+
+
+def test_v3_projection_reader_contract_frozen_source_tags_unchanged():
+    from utils.memory import v3_projection_reader_contract
+
+    assert v3_projection_reader_contract.V17_V3_COMPATIBILITY_PROJECTION_SOURCE == "v17_memory_items_projection"
+    assert v3_projection_reader_contract.V17_V3_COMPATIBILITY_PROJECTION_VERSION == "v3_memorydb_compatibility"
+
+
+def test_v3_projection_readiness_frozen_source_tags_unchanged():
+    from utils.memory import v3_projection_readiness
+
+    assert v3_projection_readiness.V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE == "v17_derived_compatibility_projection"
+
+
+def test_v3_cluster_shim_namespace_parity():
+    import importlib
+
+    pairs = [
+        ("v3_compatibility", "v17_v3_compatibility"),
+        ("v3_cursor", "v17_v3_cursor"),
+        ("v3_memory_read_service", "v17_v3_memory_read_service"),
+        ("v3_composed_get_service", "v17_v3_composed_get_service"),
+        ("v3_production_runtime", "v17_v3_production_runtime"),
+        ("v3_route_planner", "v17_v3_route_planner"),
+        ("v3_f6_pre_gcp_aggregate", "v17_v3_f6_pre_gcp_aggregate"),
+    ]
+    for neutral_name, legacy_name in pairs:
+        neutral = importlib.import_module(f"utils.memory.{neutral_name}")
+        legacy = importlib.import_module(f"utils.memory.{legacy_name}")
+        for export in legacy.__all__:
+            assert getattr(neutral, export) is getattr(legacy, export), f"{legacy_name}.{export}"
+
+
 def test_short_term_lifecycle_worker_alias_reexports_match_v17():
     from jobs import short_term_lifecycle_worker, v17_short_term_lifecycle_worker
 
