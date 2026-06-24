@@ -458,11 +458,13 @@ def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(au
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    if len(data.events_idx) != len(data.values):
+        raise HTTPException(status_code=422, detail="events_idx and values must have the same length")
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     events = conversation.structured.events
     for i, event_idx in enumerate(data.events_idx):
-        if event_idx >= len(events):
+        if not (0 <= event_idx < len(events)):
             continue
         events[event_idx].created = data.values[i]
 
