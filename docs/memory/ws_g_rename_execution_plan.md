@@ -1,5 +1,7 @@
 # WS-G Rename Execution Plan
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 > **Branch:** `memory-canonical-rollout`  
 > **Worktree:** `/Users/dazheng/workspace/omi-memory-rollout`  
 > **Authoritative term map:** `.cursor/plans/canonical_memory_domain_rollout.plan.md` §1, §1.1  
