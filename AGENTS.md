@@ -127,6 +127,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
 - **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- `Omi Dev` is the canonical shared development profile: `/Applications/Omi Dev.app`, bundle id `com.omi.desktop-dev`, reusable permissions, and auth seed source. Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
@@ -143,6 +144,7 @@ This installs `/Applications/omi-fix-rewind.app` with bundle id `com.omi.omi-fix
 
 Rules:
 - **ALWAYS prefix the name with `omi-`** (e.g. `omi-fix-rewind`, `omi-vision-test`) so bundles group together in `/Applications/`.
+- NEVER use `Omi Dev` as a named bundle. If you need the shared permission/profile grant, launch from the primary checkout with no `OMI_APP_NAME`; otherwise use an `omi-*` named bundle and expect separate macOS permissions.
 - NEVER use bare `./run.sh` when testing a specific change — it overwrites "Omi Dev".
 - NEVER kill or interfere with "Omi", "Omi Beta" — those are production installs.
 - Keep app name and bundle suffix identical (e.g. `omi-search.app` → `com.omi.omi-search`).
