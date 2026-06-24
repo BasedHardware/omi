@@ -1206,8 +1206,10 @@ def get_shared_chat_messages(token: str):
     if not share_data:
         raise HTTPException(status_code=404, detail='Share link expired or not found')
 
-    sender_uid = share_data['uid']
-    message_ids = share_data['message_ids']
+    sender_uid = share_data.get('uid')
+    message_ids = share_data.get('message_ids')
+    if not sender_uid or message_ids is None:
+        raise HTTPException(status_code=404, detail='Share link expired or not found')
 
     messages = []
     for mid in message_ids:
@@ -1224,7 +1226,7 @@ def get_shared_chat_messages(token: str):
             )
 
     return {
-        "sender_name": share_data['display_name'],
+        "sender_name": share_data.get('display_name', ''),
         "messages": messages,
         "count": len(messages),
     }
