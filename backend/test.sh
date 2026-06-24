@@ -57,6 +57,7 @@ pytest tests/unit/test_daily_summary_regenerate.py -v
 pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_chat_tool_parameters_json.py -v
 pytest tests/unit/test_prompt_caching.py -v
+pytest tests/unit/test_get_or_create_user_persona_user_none.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
