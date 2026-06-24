@@ -62,15 +62,122 @@ def test_memory_contracts_l1_l2_symbol_aliases_are_identity():
 
 
 def test_working_memory_batch_alias_is_identity():
-    from utils.llm.working_memory import L1MemoryArchiveItems, WorkingObservationBatch
+    from utils.llm.working_observations import L1MemoryArchiveItems, WorkingObservationBatch
 
     assert L1MemoryArchiveItems is WorkingObservationBatch
 
 
 def test_l2_memory_route_response_alias_is_identity():
-    from utils.llm.l2_memory_routes import L2MemoryRouteResponse, PromotionRouteResponse
+    from utils.llm.promotion_routes import L2MemoryRouteResponse, PromotionRouteResponse
 
     assert L2MemoryRouteResponse is PromotionRouteResponse
+
+
+def test_working_observations_shim_namespace_parity():
+    import importlib
+
+    canonical = importlib.import_module("utils.llm.working_observations")
+    legacy = importlib.import_module("utils.llm.working_memory")
+    exports = [
+        "L1MemoryArchiveItems",
+        "WorkingObservationBatch",
+        "_CLIENT_IMPORT_ERROR",
+        "_build_l1_messages",
+        "_content_from_response",
+        "_persist_l1_archive_route_outcomes",
+        "_source_type_instructions",
+        "_with_deterministic_archive_ids",
+        "extract_l1_memory_archive_items_from_text",
+        "get_llm",
+        "logger",
+        "persist_non_active_route_outcome",
+    ]
+    for export in exports:
+        assert getattr(legacy, export) is getattr(canonical, export), f"working_memory.{export}"
+
+
+def test_promotion_routes_shim_namespace_parity():
+    import importlib
+
+    canonical = importlib.import_module("utils.llm.promotion_routes")
+    legacy = importlib.import_module("utils.llm.l2_memory_routes")
+    exports = [
+        "L2MemoryRouteResponse",
+        "PromotionRouteResponse",
+        "_CLIENT_IMPORT_ERROR",
+        "_QUOTE_WRAPPER_RE",
+        "_canonical_json",
+        "_content_from_response",
+        "_is_quote_wrapper",
+        "classify_l2_memory_route",
+        "get_llm",
+        "l2_memory_route_prompt",
+        "logger",
+        "promotion_route_prompt",
+    ]
+    for export in exports:
+        assert getattr(legacy, export) is getattr(canonical, export), f"l2_memory_routes.{export}"
+
+
+def test_promotion_proposals_shim_namespace_parity():
+    import importlib
+
+    canonical = importlib.import_module("utils.llm.promotion_proposals")
+    legacy = importlib.import_module("utils.llm.durable_memory_patches")
+    exports = [
+        "PROMOTION_RUBRIC",
+        "CandidateOutcome",
+        "CandidateOutcomeStatus",
+        "DurableMemoryPatchProposal",
+        "DurableMemoryPatchProposals",
+        "DurableMemorySynthesisResult",
+        "PromotionProposal",
+        "PromotionProposals",
+        "PromotionSynthesisResult",
+        "SynthesisStatus",
+        "_CLIENT_IMPORT_ERROR",
+        "_CONTROL_FIELDS",
+        "_QUOTE_WRAPPER_RE",
+        "_candidate_outcome_for_patch",
+        "_canonical_json",
+        "_content_from_response",
+        "_is_quote_wrapper",
+        "_logical_patch_payload",
+        "_packet_evidence_ids",
+        "_proposal_to_patch",
+        "_raw_payload_from_response_text",
+        "_retrieved_memory_ids",
+        "_valid_non_quote_wrapper_patches",
+        "_with_deterministic_patch_ids",
+        "_with_production_safety_guards",
+        "_with_server_control_ids",
+        "durable_memory_patch_prompt",
+        "get_llm",
+        "logger",
+        "promotion_proposal_prompt",
+        "synthesize_durable_memory_patch_result",
+        "synthesize_durable_memory_patches",
+    ]
+    for export in exports:
+        assert getattr(legacy, export) is getattr(canonical, export), f"durable_memory_patches.{export}"
+
+
+def test_promotion_proposal_symbol_aliases_are_identity():
+    from utils.llm.promotion_proposals import (
+        DurableMemoryPatchProposal,
+        DurableMemoryPatchProposals,
+        DurableMemorySynthesisResult,
+        PromotionProposal,
+        PromotionProposals,
+        PromotionSynthesisResult,
+        durable_memory_patch_prompt,
+        promotion_proposal_prompt,
+    )
+
+    assert PromotionProposal is DurableMemoryPatchProposal
+    assert PromotionProposals is DurableMemoryPatchProposals
+    assert PromotionSynthesisResult is DurableMemorySynthesisResult
+    assert promotion_proposal_prompt is durable_memory_patch_prompt
 
 
 def test_memory_contracts_durable_patch_fact_source_aliases():
