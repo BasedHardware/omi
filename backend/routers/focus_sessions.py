@@ -1,6 +1,8 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
-from fastapi import APIRouter, Depends, Query
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.focus_sessions as focus_sessions_db
@@ -49,6 +51,13 @@ def get_focus_sessions(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    # The Query regex only checks the YYYY-MM-DD shape, not validity, so a value like 2024-99-99 reaches
+    # datetime.strptime in the db layer and raises ValueError. Validate here and return 400 instead of 500.
+    if date is not None:
+        try:
+            datetime.strptime(date, '%Y-%m-%d')
+        except ValueError:
+            raise HTTPException(status_code=400, detail='Invalid date; expected a valid YYYY-MM-DD date')
     return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
 
 
