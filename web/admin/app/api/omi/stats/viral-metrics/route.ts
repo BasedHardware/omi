@@ -80,8 +80,7 @@ export async function GET(request: NextRequest) {
           toMonday(toDate(timestamp)) as week,
           count(DISTINCT distinct_id) as active_users
         FROM events
-        WHERE event = 'App Became Active'
-          AND properties.$os_name = 'macOS'
+        WHERE properties.$os_name = 'macOS'
           AND timestamp >= now() - interval ${days} day
         GROUP BY week
         ORDER BY week
@@ -96,16 +95,14 @@ export async function GET(request: NextRequest) {
         FROM (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE event = 'App Became Active'
-            AND properties.$os_name = 'macOS'
+          WHERE properties.$os_name = 'macOS'
             AND timestamp >= now() - interval ${days} day
           GROUP BY did, week
         ) curr
         INNER JOIN (
           SELECT distinct_id as did, toMonday(toDate(timestamp)) as week
           FROM events
-          WHERE event = 'App Became Active'
-            AND properties.$os_name = 'macOS'
+          WHERE properties.$os_name = 'macOS'
             AND timestamp >= now() - interval ${days + 7} day
           GROUP BY did, week
         ) prev ON curr.did = prev.did AND prev.week = curr.week - interval 7 day
@@ -119,8 +116,7 @@ export async function GET(request: NextRequest) {
           toDate(timestamp) as day,
           count(DISTINCT distinct_id) as dau
         FROM events
-        WHERE event = 'App Became Active'
-          AND properties.$os_name = 'macOS'
+        WHERE properties.$os_name = 'macOS'
           AND timestamp >= now() - interval ${days} day
         GROUP BY day
         ORDER BY day
@@ -136,8 +132,7 @@ export async function GET(request: NextRequest) {
             distinct_id,
             count(DISTINCT toDate(timestamp)) as days_active
           FROM events
-          WHERE event = 'App Became Active'
-            AND properties.$os_name = 'macOS'
+          WHERE properties.$os_name = 'macOS'
             AND timestamp >= now() - interval 30 day
           GROUP BY distinct_id
         )
@@ -188,8 +183,7 @@ export async function GET(request: NextRequest) {
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE event = 'App Became Active'
-          AND properties.$os_name = 'macOS'
+        WHERE properties.$os_name = 'macOS'
           AND timestamp >= now() - interval 7 day
       `),
 
@@ -197,8 +191,7 @@ export async function GET(request: NextRequest) {
       hogql(apiKey, projectId, host, `
         SELECT count(DISTINCT distinct_id)
         FROM events
-        WHERE event = 'App Became Active'
-          AND properties.$os_name = 'macOS'
+        WHERE properties.$os_name = 'macOS'
           AND timestamp >= now() - interval 30 day
       `),
     ]);
