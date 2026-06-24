@@ -559,6 +559,20 @@ actor MemoryStorage {
         log("MemoryStorage: Soft deleted memory \(id)")
     }
 
+    /// Soft-delete synced memories tied to a deleted conversation (local cache hygiene).
+    @discardableResult
+    func softDeleteMemoriesByConversationId(_ conversationId: String) async throws -> Int {
+        let db = try await ensureInitialized()
+
+        return try await db.write { database -> Int in
+            try database.execute(
+                sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0 AND conversationId = ?",
+                arguments: [Date(), conversationId]
+            )
+            return database.changesCount
+        }
+    }
+
     /// Soft delete a memory by backend ID
     func deleteMemoryByBackendId(_ backendId: String) async throws {
         let db = try await ensureInitialized()
