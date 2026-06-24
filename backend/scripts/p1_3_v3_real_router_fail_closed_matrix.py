@@ -66,7 +66,7 @@ def _current_real_router_baseline(*, execute: bool) -> dict[str, Any]:
             "runtime_fail_closed_matrix_wired": False,
             "testclient_ok": False,
         }
-    module = _load_script_module("v17_p1_3_v3_real_router_get_testclient")
+    module = _load_script_module("p1_3_v3_real_router_get_testclient")
     report = module.build_report(execute=True)
     probe = report.get("probe", {})
     return {
