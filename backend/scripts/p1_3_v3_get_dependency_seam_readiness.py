@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` GET dependency seam/adapter readiness artifact.
+"""Safe memory `/v3` GET dependency seam/adapter readiness artifact.
 
 This pre-runtime artifact exercises the pure dependency seam shape for future GET
 `/v3/memories` route wiring. It is read-only and local: it does not import
@@ -22,17 +22,17 @@ if str(_BACKEND_ROOT) not in sys.path:
 
 from utils.memory.v3_get_dependency_seam import (
     LOW_CARDINALITY_DECISION_CODES,
-    V17V3GetDependencyAdapters,
-    V17V3GetDependencyContext,
-    V17V3GetDependencyDecision,
-    V17V3GetDependencyChainResult,
-    plan_v17_v3_get_dependency_chain,
+    V3GetDependencyAdapters,
+    V3GetDependencyContext,
+    V3GetDependencyDecision,
+    V3GetDependencyChainResult,
+    plan_v3_get_dependency_chain,
 )
 
 GET_DEPENDENCY_SEAM_READINESS_PROOF = {
     "service": "backend/scripts/p1_3_v3_get_dependency_seam_readiness.py",
     "test": "backend/tests/unit/test_p1_3_v3_get_dependency_seam_readiness.py",
-    "utility": "backend/utils/memory/v17_v3_get_dependency_seam.py",
+    "utility": "backend/utils/memory/v3_get_dependency_seam.py",
     "utility_test": "backend/tests/unit/test_v3_get_dependency_seam.py",
     "runtime_wired": False,
     "production_rollout_approved": False,
@@ -43,7 +43,7 @@ GET_DEPENDENCY_SEAM_READINESS_PROOF = {
     "covered_defaults": [
         "authenticated_subject_first",
         "client_uid_override_rejected_before_control_or_reads",
-        "non_enrolled_legacy_primary_only_without_v17_legacy_merge",
+        "non_enrolled_legacy_primary_only_without_memory_legacy_merge",
         "control_config_cursor_projection_source_validated_before_reads",
         "rate_limit_backpressure_before_projection_read",
         "missing_invalid_auth_control_cursor_config_source_backpressure_fail_closed",
@@ -63,7 +63,7 @@ DEPENDENCY_ORDER = [
 ]
 
 
-def _context(**overrides: Any) -> V17V3GetDependencyContext:
+def _context(**overrides: Any) -> V3GetDependencyContext:
     values = {
         "route": "GET /v3/memories",
         "client_uid_override_present": False,
@@ -75,46 +75,46 @@ def _context(**overrides: Any) -> V17V3GetDependencyContext:
         "backpressure_ready": True,
     }
     values.update(overrides)
-    return V17V3GetDependencyContext(**values)
+    return V3GetDependencyContext(**values)
 
 
-def _adapters() -> V17V3GetDependencyAdapters:
-    def authenticate_subject(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
-        return V17V3GetDependencyDecision.allowed("auth_ok", subject_uid="server_verified_subject")
+def _adapters() -> V3GetDependencyAdapters:
+    def authenticate_subject(context: V3GetDependencyContext) -> V3GetDependencyDecision:
+        return V3GetDependencyDecision.allowed("auth_ok", subject_uid="server_verified_subject")
 
-    def reject_client_uid_override(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def reject_client_uid_override(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if context.client_uid_override_present:
-            return V17V3GetDependencyDecision.fail_closed("client_uid_override_rejected", http_status=403)
-        return V17V3GetDependencyDecision.allowed("no_client_uid_override")
+            return V3GetDependencyDecision.fail_closed("client_uid_override_rejected", http_status=403)
+        return V3GetDependencyDecision.allowed("no_client_uid_override")
 
-    def load_enrollment_control(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def load_enrollment_control(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if not context.enrolled:
-            return V17V3GetDependencyDecision.legacy("non_enrolled_legacy_primary")
+            return V3GetDependencyDecision.legacy("non_enrolled_legacy_primary")
         if not context.control_ready:
-            return V17V3GetDependencyDecision.fail_closed("control_unavailable", http_status=503)
-        return V17V3GetDependencyDecision.allowed("control_ok")
+            return V3GetDependencyDecision.fail_closed("control_unavailable", http_status=503)
+        return V3GetDependencyDecision.allowed("control_ok")
 
-    def validate_runtime_config(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def validate_runtime_config(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if not context.config_ready:
-            return V17V3GetDependencyDecision.fail_closed("config_unavailable", http_status=503)
-        return V17V3GetDependencyDecision.allowed("config_ok")
+            return V3GetDependencyDecision.fail_closed("config_unavailable", http_status=503)
+        return V3GetDependencyDecision.allowed("config_ok")
 
-    def validate_cursor(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def validate_cursor(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if not context.cursor_ready:
-            return V17V3GetDependencyDecision.fail_closed("cursor_invalid", http_status=400)
-        return V17V3GetDependencyDecision.allowed("cursor_ok")
+            return V3GetDependencyDecision.fail_closed("cursor_invalid", http_status=400)
+        return V3GetDependencyDecision.allowed("cursor_ok")
 
-    def select_projection_source(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def select_projection_source(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if not context.projection_source_ready:
-            return V17V3GetDependencyDecision.fail_closed("projection_source_unavailable", http_status=503)
-        return V17V3GetDependencyDecision.allowed("projection_source_ok")
+            return V3GetDependencyDecision.fail_closed("projection_source_unavailable", http_status=503)
+        return V3GetDependencyDecision.allowed("projection_source_ok")
 
-    def check_rate_limit_backpressure(context: V17V3GetDependencyContext) -> V17V3GetDependencyDecision:
+    def check_rate_limit_backpressure(context: V3GetDependencyContext) -> V3GetDependencyDecision:
         if not context.backpressure_ready:
-            return V17V3GetDependencyDecision.fail_closed("backpressure_denied", http_status=429)
-        return V17V3GetDependencyDecision.allowed("rate_limit_backpressure_ok")
+            return V3GetDependencyDecision.fail_closed("backpressure_denied", http_status=429)
+        return V3GetDependencyDecision.allowed("rate_limit_backpressure_ok")
 
-    return V17V3GetDependencyAdapters(
+    return V3GetDependencyAdapters(
         authenticate_subject=authenticate_subject,
         reject_client_uid_override=reject_client_uid_override,
         load_enrollment_control=load_enrollment_control,
@@ -125,7 +125,7 @@ def _adapters() -> V17V3GetDependencyAdapters:
     )
 
 
-def _case_result(case_id: str, result: V17V3GetDependencyChainResult) -> dict[str, Any]:
+def _case_result(case_id: str, result: V3GetDependencyChainResult) -> dict[str, Any]:
     return {
         "case_id": case_id,
         "status": result.status,
@@ -134,9 +134,9 @@ def _case_result(case_id: str, result: V17V3GetDependencyChainResult) -> dict[st
         "dependency_step": result.dependency_step,
         "executed_steps": list(result.executed_steps),
         "should_fetch_legacy": result.should_fetch_legacy,
-        "should_fetch_v17_projection": result.should_fetch_v17_projection,
+        "should_fetch_memory_projection": result.should_fetch_memory_projection,
         "legacy_fallback_allowed": result.legacy_fallback_allowed,
-        "v17_legacy_merge_allowed": result.v17_legacy_merge_allowed,
+        "memory_legacy_merge_allowed": result.memory_legacy_merge_allowed,
         "projection_reads_allowed_after_step": result.projection_reads_allowed_after_step,
         "route_wired": result.route_wired,
         "logs_secret_material": result.logs_secret_material,
@@ -159,7 +159,7 @@ def _seam_cases() -> list[dict[str, Any]]:
         ("projection_source_missing", _context(projection_source_ready=False)),
         ("backpressure_denied", _context(backpressure_ready=False)),
     ]
-    return [_case_result(case_id, plan_v17_v3_get_dependency_chain(context, adapters)) for case_id, context in inputs]
+    return [_case_result(case_id, plan_v3_get_dependency_chain(context, adapters)) for case_id, context in inputs]
 
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
@@ -167,7 +167,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_case_count = sum(1 for case in cases if case["status"] == "BLOCKED")
     legacy_case_count = sum(1 for case in cases if case["status"] == "LEGACY_PRIMARY_ONLY")
     return {
-        "artifact": "v17_p1_3_v3_get_dependency_seam_readiness",
+        "artifact": "p1_3_v3_get_dependency_seam_readiness",
         "route": "GET /v3/memories",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
@@ -204,7 +204,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No production rollout approval claimed.",
             "No Firestore reads/writes, provider/vector/cloud/network calls, mutating calls, or telemetry sink calls.",
             "No secret material, cursor token, client-supplied uid, or user memory content logging.",
-            "No legacy fallback/merge for enrolled V17 failures.",
+            "No legacy fallback/merge for enrolled memory failures.",
             "No Archive default visibility or stale Short-term default visibility claim.",
         ],
         "summary": {

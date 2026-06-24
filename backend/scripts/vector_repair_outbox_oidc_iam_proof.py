@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
 WORKER_ENABLED_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
-DEFAULT_SERVICE = "v17-vector-repair-outbox-worker"
-DEFAULT_SCHEDULER_JOB = "v17-vector-repair-outbox-worker-tick"
-DEFAULT_TASKS_QUEUE = "v17-vector-repair-outbox-worker"
-DEFAULT_WORKER_SA_NAME = "v17-vector-repair-outbox-worker"
-DEFAULT_SCHEDULER_SA_NAME = "v17-vector-repair-scheduler"
-TICK_PATH = "/v17-vector-repair-outbox-worker/tick"
+DEFAULT_SERVICE = "memory-vector-repair-outbox-worker"
+DEFAULT_SCHEDULER_JOB = "memory-vector-repair-outbox-worker-tick"
+DEFAULT_TASKS_QUEUE = "memory-vector-repair-outbox-worker"
+DEFAULT_WORKER_SA_NAME = "memory-vector-repair-outbox-worker"
+DEFAULT_SCHEDULER_SA_NAME = "memory-vector-repair-scheduler"
+TICK_PATH = "/memory-vector-repair-outbox-worker/tick"
 
 READ_ONLY_GCLOUD_VERBS = (
     "gcloud run services describe",
@@ -63,7 +63,7 @@ def build_read_only_gcloud_commands(config: ProofConfig) -> Dict[str, List[str]]
 
     The required proof targets are intentionally explicit:
     - gcloud run services describe checks serviceAccountName and
-      V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains false.
+      MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains false.
     - gcloud run services get-iam-policy checks roles/run.invoker and rejects
       allUsers/allAuthenticatedUsers.
     - gcloud scheduler jobs describe checks state == PAUSED plus
@@ -389,9 +389,9 @@ def build_config(args: argparse.Namespace) -> ProofConfig:
 def missing_prerequisites(config: ProofConfig, *, execute: bool) -> List[str]:
     missing: List[str] = []
     if not config.project:
-        missing.append("--project or V17_VECTOR_REPAIR_PROOF_PROJECT is required")
+        missing.append("--project or MEMORY_VECTOR_REPAIR_PROOF_PROJECT is required")
     if not config.region:
-        missing.append("--region or V17_VECTOR_REPAIR_PROOF_REGION is required")
+        missing.append("--region or MEMORY_VECTOR_REPAIR_PROOF_REGION is required")
     if execute and shutil.which("gcloud") is None:
         missing.append("gcloud CLI is not installed or not on PATH")
     return missing
@@ -399,7 +399,7 @@ def missing_prerequisites(config: ProofConfig, *, execute: bool) -> List[str]:
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Read-only OIDC/IAM proof runner for the disabled V17 vector repair outbox HTTP worker."
+        description="Read-only OIDC/IAM proof runner for the disabled memory vector repair outbox HTTP worker."
     )
     parser.add_argument("--project", default="")
     parser.add_argument("--region", default="")

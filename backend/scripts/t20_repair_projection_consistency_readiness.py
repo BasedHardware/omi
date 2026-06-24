@@ -13,11 +13,11 @@ LOCAL_SEAMS_AND_RUNNERS = {
     "provider_readiness": "backend/scripts/vector_search_provider_readiness.py",
     "shared_ns2_isolation_readiness": "backend/scripts/shared_ns2_legacy_isolation_readiness.py",
     "pinecone_repair_validation_readiness": "backend/scripts/pinecone_repair_validation_readiness.py",
-    "repair_outbox_telemetry": "backend/database/v17_vector_repair_outbox_telemetry.py",
-    "repair_outbox_worker": "backend/database/v17_vector_repair_outbox_worker.py",
-    "repair_outbox_records": "backend/database/v17_vector_repair_outbox.py",
-    "vector_metadata_gateway": "backend/database/v17_vector_metadata.py",
-    "vector_search_service": "backend/utils/memory/v17_vector_search_service.py",
+    "repair_outbox_telemetry": "backend/database/memory_vector_repair_outbox_telemetry.py",
+    "repair_outbox_worker": "backend/database/vector_repair_outbox_worker.py",
+    "repair_outbox_records": "backend/database/memory_vector_repair_outbox.py",
+    "vector_metadata_gateway": "backend/database/memory_vector_metadata.py",
+    "vector_search_service": "backend/utils/memory/vector_search_service.py",
 }
 
 PROOF_MATRIX: Dict[str, Dict[str, Any]] = {
@@ -36,7 +36,7 @@ PROOF_MATRIX: Dict[str, Dict[str, Any]] = {
         "status": "NOT_RUN",
         "scope": "Prove account_generation parity across control-plane generation, memory_items, vector metadata, outbox records, and repaired vectors.",
         "required_artifacts": [
-            "Read-only current account_generation source-of-truth artifact from V17 rollout/control state.",
+            "Read-only current account_generation source-of-truth artifact from memory rollout/control state.",
             "Candidate inventory proving vector metadata account_generation equals current required account_generation and authoritative memory_items account_generation.",
             "Purge/repair outbox evidence for stale-generation vectors after account purge or generation bump.",
         ],
@@ -93,7 +93,7 @@ PROOF_MATRIX: Dict[str, Dict[str, Any]] = {
         "required_artifacts": [
             "Firestore/outbox evidence for deterministic users/{uid}/memory_outbox/{record_id} enqueue with stable idempotency_key.",
             "Retry and dead-letter evidence from vector repair worker with sanitized errors and max_attempts behavior.",
-            "Backlog telemetry artifact from v17_vector_repair_outbox_telemetry.py including pending count, oldest age, retry/dead-letter totals, and no high-cardinality labels.",
+            "Backlog telemetry artifact from memory_vector_repair_outbox_telemetry.py including pending count, oldest age, retry/dead-letter totals, and no high-cardinality labels.",
         ],
         "pass_fail_criteria": "PASS only when enqueue is idempotent, retries/dead-letter are bounded and visible centrally, backlog alerts exist, and no repair event is silently dropped.",
         "evidence": [],
@@ -109,15 +109,15 @@ PROOF_MATRIX: Dict[str, Dict[str, Any]] = {
         "pass_fail_criteria": "PASS only when all eligible stale/deleted/duplicate candidates converge to completed or explicit dead_letter with alertable backlog, without unsafe broad provider mutation.",
         "evidence": [],
     },
-    "shared_ns2_legacy_v17_isolation_under_stale_candidates": {
+    "shared_ns2_legacy_memory_isolation_under_stale_candidates": {
         "status": "NOT_RUN",
-        "scope": "Prove shared ns2 legacy/V17 isolation under stale candidates, duplicate V17 candidates, and legacy fallback surfaces.",
+        "scope": "Prove shared ns2 legacy/memory isolation under stale candidates, duplicate memory candidates, and legacy fallback surfaces.",
         "required_artifacts": [
-            "shared_ns2_legacy_isolation_readiness.py read-only provider evidence showing legacy filters exclude v17_schema_version records before top-k.",
-            "vector_search_provider_readiness.py evidence for V17 overfetch/refill when stale V17 candidates appear in shared ns2.",
-            "Legacy baseline recall comparison proving V17 stale/deleted/duplicate physical IDs do not consume legacy result slots.",
+            "shared_ns2_legacy_isolation_readiness.py read-only provider evidence showing legacy filters exclude memory_schema_version records before top-k.",
+            "vector_search_provider_readiness.py evidence for memory overfetch/refill when stale memory candidates appear in shared ns2.",
+            "Legacy baseline recall comparison proving memory stale/deleted/duplicate physical IDs do not consume legacy result slots.",
         ],
-        "pass_fail_criteria": "PASS only when legacy ns2 paths exclude V17 records, V17 paths reject stale legacy/cross-schema records, and stale candidates do not cause unsafe fallback or silent recall loss.",
+        "pass_fail_criteria": "PASS only when legacy ns2 paths exclude memory records, memory paths reject stale legacy/cross-schema records, and stale candidates do not cause unsafe fallback or silent recall loss.",
         "evidence": [],
     },
     "no_silent_data_loss": {
@@ -125,7 +125,7 @@ PROOF_MATRIX: Dict[str, Dict[str, Any]] = {
         "scope": "Prove no silent data loss across stale Short-term, Archive default-unavailable, tombstones, malformed metadata, duplicates, partial outages, and repair convergence.",
         "required_artifacts": [
             "No-silent-data-loss matrix covering stale Short-term not default-visible, Archive default-unavailable, tombstones/deleted sources, stale physical vectors, duplicates, malformed metadata, and partial outages.",
-            "Recall/precision/latency benchmark output anchored to Base Omi and V17 default-read policy with no legacy unsafe fallback.",
+            "Recall/precision/latency benchmark output anchored to Base Omi and memory default-read policy with no legacy unsafe fallback.",
             "Repair convergence and backlog evidence proving rejected-but-repairable vectors either converge or are explicit dead_letter with central alerting.",
         ],
         "pass_fail_criteria": "PASS only when every excluded/failed candidate is explainable by policy, benchmarked recall stays within approved budget, no authoritative live memory disappears silently, and rollback/alerts are proven.",
@@ -195,7 +195,7 @@ def build_readiness_artifact(config: T20RepairProjectionConsistencyReadinessConf
             "python3 backend/scripts/shared_ns2_legacy_isolation_readiness.py --execute with approved read-only Pinecone credentials",
             "python3 backend/scripts/pinecone_repair_validation_readiness.py --execute --allow-throwaway-mutation only in a confirmed throwaway namespace, never shared ns2",
         ],
-        "required_summary": "projection_commit_id/account_generation/item_revision/source_commit_id/content_hash parity; repair outbox enqueue/dead-letter/backlog; shared ns2 legacy/V17 isolation under stale candidates",
+        "required_summary": "projection_commit_id/account_generation/item_revision/source_commit_id/content_hash parity; repair outbox enqueue/dead-letter/backlog; shared ns2 legacy/memory isolation under stale candidates",
         "non_claims": NON_CLAIMS,
     }
 

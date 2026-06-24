@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Safe `/v3` V17 control-reader Firestore-emulator/security readiness artifact.
+"""Safe `/v3` memory control-reader Firestore-emulator/security readiness artifact.
 
 This is a read-only local prerequisite inventory for a future Firestore-emulator
-or API-backed proof of the server-side V17 `/v3` control reader. It never starts
+or API-backed proof of the server-side memory `/v3` control reader. It never starts
 emulators, imports FastAPI routers, reads/writes Firestore cloud, mutates local
 emulator data, calls providers/cloud/network services, implements a production
 reader, wires runtime routes, or claims approval.
@@ -20,7 +20,7 @@ from typing import Any, Mapping
 
 def _load_external_readiness_module():
     spec = importlib.util.spec_from_file_location(
-        "v17_p1_3_v3_external_compatibility_readiness",
+        "p1_3_v3_external_compatibility_readiness",
         Path(__file__).with_name("p1_3_v3_external_compatibility_readiness.py"),
     )
     if spec is None or spec.loader is None:
@@ -51,9 +51,9 @@ CONTROL_READER_EMULATOR_READINESS_PROOF = {
         "canonical_server_control_source_path_api_resolved_to_users_uid_memory_control_state",
         "control_doc_fixture_schema_uid_generation_grant_projection_write_archive_fields",
         "security_rules_emulator_denies_direct_client_control_state_reads_writes",
-        "server_admin_emulator_fixture_read_maps_control_state_to_v17_projection",
+        "server_admin_emulator_fixture_read_maps_control_state_to_memory_projection",
         "rules_static_emulator_and_cloud_iam_proof_separation",
-        "contract_decision_case_inventory_matches_v17_v3_control_reader_contract",
+        "contract_decision_case_inventory_matches_v3_control_reader_contract",
         "non_enrolled_legacy_boundary_and_enrolled_no_legacy_fallback_constraints",
     ],
 }
@@ -66,7 +66,7 @@ CONTROL_FIXTURE_SCHEMA_FIELDS = [
     "cutover_epoch",
     "account_generation",
     "fallback_projection_ready",
-    "persistent_v17_writes_started",
+    "persistent_memory_writes_started",
     "writes_blocked",
     "stage_gates",
     "grants",
@@ -80,7 +80,7 @@ EMULATOR_API_PROOF_PREREQUISITES = [
         "required_before_emulator_or_api_proof": True,
         "canonical_path": "users/{uid}/memory_control/state",
         "candidate_paths": ["users/{uid}/memory_control/state"],
-        "must_match_contract": "utils/memory/v17_v3_control_reader_contract.py",
+        "must_match_contract": "utils/memory/v3_control_reader_contract.py",
         "runtime_wired": False,
         "approval_claimed": False,
     },
@@ -179,8 +179,8 @@ REQUIRED_CONTRACT_PROOF_CASES = [
         "required_fixture_overrides": {"cohort_enrolled": False, "firestore_read_expected": False},
     },
     {
-        "case_id": "v17_projection_allowed",
-        "expected_route_family": "v17_projection",
+        "case_id": "memory_projection_allowed",
+        "expected_route_family": "memory_projection",
         "legacy_fallback_allowed": False,
         "required_fixture_overrides": {
             "mode": "read",
@@ -225,7 +225,7 @@ REQUIRED_CONTRACT_PROOF_CASES = [
         "case_id": "invalid_or_missing_cursor_secret",
         "expected_route_family": "fail_closed",
         "legacy_fallback_allowed": False,
-        "required_request_overrides": {"cursor_v17_read_requested": True, "cursor_secret_config_present": False},
+        "required_request_overrides": {"cursor_memory_read_requested": True, "cursor_secret_config_present": False},
     },
     {
         "case_id": "archive_not_allowed",
@@ -240,7 +240,7 @@ LEGACY_BOUNDARY_CONTRACT = {
     "non_enrolled_legacy_primary_allowed_marker_only": True,
     "non_enrolled_offset_zero_limit_5000_preserved_outside_control_contract": True,
     "enrolled_no_legacy_fallback_on_gate_failure": True,
-    "legacy_v17_result_merge_allowed": False,
+    "legacy_memory_result_merge_allowed": False,
     "archive_default_available": False,
     "stale_short_term_control_state_absent": True,
 }
@@ -272,9 +272,9 @@ def local_emulator_harness_inventory(env: Mapping[str, str]) -> dict[str, Any]:
         "firestore_emulator_configured": bool(emulator_config),
         "firestore_emulator_port": emulator_config.get("port"),
         "rules_emulator_harness_present": rules_harness.exists(),
-        "rules_emulator_script_present": "test:v17-firestore-rules:emulator" in scripts,
+        "rules_emulator_script_present": "test:memory-firestore-rules:emulator" in scripts,
         "control_reader_emulator_harness_present": control_harness.exists(),
-        "control_reader_emulator_script_present": "test:v17-v3-control-reader:emulator" in scripts,
+        "control_reader_emulator_script_present": "test:memory-v3-control-reader:emulator" in scripts,
         "firestore_emulator_host_env_present": bool(env.get("FIRESTORE_EMULATOR_HOST")),
         "firestore_emulator_host_env_value_recorded": (
             env.get("FIRESTORE_EMULATOR_HOST") if env.get("FIRESTORE_EMULATOR_HOST") else None
@@ -289,7 +289,7 @@ def build_report(*, execute: bool = False, env: Mapping[str, str] | None = None)
     blocked_prerequisites = sum(1 for item in EMULATOR_API_PROOF_PREREQUISITES if item["status"] == "BLOCKED")
     proof_status = "BLOCKED" if execute else "NOT_RUN"
     return {
-        "artifact": "v17_p1_3_v3_control_reader_emulator_readiness",
+        "artifact": "p1_3_v3_control_reader_emulator_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -307,7 +307,7 @@ def build_report(*, execute: bool = False, env: Mapping[str, str] | None = None)
         "firestore_emulator_writes_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Readiness inventory for a future Firestore-emulator/API-backed server-side V17 `/v3` control-reader validation and security/IAM proof.",
+        "scope": "Readiness inventory for a future Firestore-emulator/API-backed server-side memory `/v3` control-reader validation and security/IAM proof.",
         "local_emulator_harness_inventory": inventory,
         "emulator_api_proof_prerequisites": EMULATOR_API_PROOF_PREREQUISITES,
         "control_fixture_schema_fields": CONTROL_FIXTURE_SCHEMA_FIELDS,

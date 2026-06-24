@@ -26,8 +26,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v3_projection_readiness import V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE
-from utils.memory.v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
+from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3_route_planner import V3RouteExecutionPlan, V3RoutePlanInput, plan_v3_memory_route
 
 REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {
     "service": "backend/scripts/p1_3_v3_real_router_fail_closed_matrix.py",
@@ -76,10 +76,10 @@ def _current_real_router_baseline(*, execute: bool) -> dict[str, Any]:
         "testclient_ok": bool(probe.get("testclient_ok")),
         "observed_get_memories_calls": probe.get("observed_get_memories_calls", []),
         "stubbed_legacy_get_memories_call_count": probe.get("stubbed_legacy_get_memories_call_count", 0),
-        "v17_adapters_invoked": bool(probe.get("v17_adapter_modules_loaded")),
+        "memory_adapters_invoked": bool(probe.get("memory_adapter_modules_loaded")),
         "mutation_flags_clear": report.get("summary", {}).get("mutation_flags_clear") is True,
         "runtime_cutover_claimed": False,
-        "non_claim": "Current real router has no fail-closed/V17 dispatcher branch wired; it still calls legacy get_memories.",
+        "non_claim": "Current real router has no fail-closed/memory dispatcher branch wired; it still calls legacy get_memories.",
     }
 
 
@@ -92,7 +92,7 @@ def _projection_context(**overrides: Any) -> dict[str, Any]:
         "create_converged": True,
         "update_converged": True,
         "delete_converged": True,
-        "projection_source": V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+        "projection_source": DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
         "tombstone_fence_present": True,
         "tombstone_fence_generation": 7,
         "source_commit_id": "source-commit-7",
@@ -119,10 +119,10 @@ def _projection_reader(uid: str, limit: int, cursor: str | None, calls: list[dic
     return [{"id": "projection-1", "content": "projection memory"}]
 
 
-def _dispatch_future_helper(route_input: V17V3RoutePlanInput) -> dict[str, Any]:
+def _dispatch_future_helper(route_input: V3RoutePlanInput) -> dict[str, Any]:
     legacy_calls: list[dict[str, Any]] = []
     projection_calls: list[dict[str, Any]] = []
-    pre_plan = plan_v17_v3_memory_route(route_input)
+    pre_plan = plan_v3_memory_route(route_input)
 
     if pre_plan.plan_kind == "legacy_primary_plan_only":
         body = _legacy_reader(
@@ -130,7 +130,7 @@ def _dispatch_future_helper(route_input: V17V3RoutePlanInput) -> dict[str, Any]:
         )
         return _case_result(pre_plan, legacy_calls=legacy_calls, projection_calls=projection_calls, body=body)
 
-    if pre_plan.plan_kind == "v17_response_envelope" and pre_plan.read_envelope is not None:
+    if pre_plan.plan_kind == "memory_response_envelope" and pre_plan.read_envelope is not None:
         if pre_plan.read_envelope.body == []:
             response_body = pre_plan.response.body if pre_plan.response is not None else []
             return _case_result(
@@ -139,8 +139,8 @@ def _dispatch_future_helper(route_input: V17V3RoutePlanInput) -> dict[str, Any]:
         body = _projection_reader(
             route_input.uid, pre_plan.adapted_request.limit, pre_plan.adapted_request.cursor, projection_calls
         )
-        final_plan = plan_v17_v3_memory_route(
-            V17V3RoutePlanInput(
+        final_plan = plan_v3_memory_route(
+            V3RoutePlanInput(
                 uid=route_input.uid,
                 query_params=route_input.query_params,
                 enrolled=route_input.enrolled,
@@ -165,7 +165,7 @@ def _dispatch_future_helper(route_input: V17V3RoutePlanInput) -> dict[str, Any]:
 
 
 def _case_result(
-    plan: V17V3RouteExecutionPlan,
+    plan: V3RouteExecutionPlan,
     *,
     legacy_calls: list[dict[str, Any]],
     projection_calls: list[dict[str, Any]],
@@ -192,7 +192,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
     definitions = [
         (
             "non_enrolled_offset_zero_legacy_primary",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={"offset": "0"},
                 enrolled=False,
@@ -202,7 +202,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "non_enrolled_explicit_limit_offset_legacy_primary",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={"limit": "17", "offset": "3"},
                 enrolled=False,
@@ -212,7 +212,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_projection_success_projection_only",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -225,7 +225,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_enabled_empty_no_legacy_fallback",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -236,7 +236,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_missing_control_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -247,7 +247,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_malformed_control_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -258,7 +258,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_projection_not_ready_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -269,7 +269,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_write_convergence_not_ready_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -280,7 +280,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_account_generation_mismatch_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -291,7 +291,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_cursor_mismatch_fail_closed",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={"cursor": "legacy-offset-25"},
                 enrolled=True,
@@ -302,7 +302,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_no_grant_denied",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={},
                 enrolled=True,
@@ -313,7 +313,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         ),
         (
             "enrolled_archive_denied",
-            V17V3RoutePlanInput(
+            V3RoutePlanInput(
                 uid=uid,
                 query_params={"include_archive": "true"},
                 enrolled=True,
@@ -365,7 +365,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     baseline = _current_real_router_baseline(execute=execute)
     matrix = _future_dispatcher_matrix_proof(execute=execute)
     return {
-        "artifact": "v17_p1_3_v3_real_router_fail_closed_matrix",
+        "artifact": "p1_3_v3_real_router_fail_closed_matrix",
         "status": "BLOCKED",
         "execute": execute,
         "read_only": True,
@@ -389,7 +389,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "Current real-router behavior remains legacy-only under stubs.",
             "Future fail-closed matrix is proven only through pure helper/route-planner seams with fake readers.",
             "No production Firestore, cloud, provider, vector, or network calls executed.",
-            "No legacy fallback/merge for V17 failures is claimed or permitted by the helper matrix.",
+            "No legacy fallback/merge for memory failures is claimed or permitted by the helper matrix.",
             "No production rollout approval claimed.",
         ],
         "summary": {

@@ -2,7 +2,7 @@
 """Safe `/v3` write-convergence/delete/tombstone pre-runtime matrix proof under stubs.
 
 This artifact proves only the future pure helper semantics that GET /v3 must
-require before returning V17 projection data after create/update/delete writes.
+require before returning memory projection data after create/update/delete writes.
 It does not import or wire ``backend/routers/memories.py``, read Firestore, call
 providers/vector services, mutate state, or claim production rollout approval.
 """
@@ -21,12 +21,12 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from utils.memory.v3_projection_readiness import (
-    V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
-    V17V3ProjectionReadinessContext,
-    decide_v17_v3_projection_readiness,
+    DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+    V3ProjectionReadinessContext,
+    decide_v3_projection_readiness,
 )
-from utils.memory.v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
-from utils.memory.v3_write_convergence import V17V3ExternalWriteOperation, V17V3WriteConvergenceStatus
+from utils.memory.v3_route_planner import V3RouteExecutionPlan, V3RoutePlanInput, plan_v3_memory_route
+from utils.memory.v3_write_convergence import V3ExternalWriteOperation, V3WriteConvergenceStatus
 
 WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
     "service": "backend/scripts/p1_3_v3_write_convergence_tombstone_matrix.py",
@@ -36,7 +36,7 @@ WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
     "external_calls": [],
     "future_dispatcher_matrix_proof_level": "pure_helper_route_planner_write_projection_seam_only",
     "covered_defaults": [
-        "create_update_delete_convergence_all_required_before_v17_projection_reads",
+        "create_update_delete_convergence_all_required_before_memory_projection_reads",
         "create_convergence_false_fails_closed_without_legacy_fallback",
         "update_convergence_false_fails_closed_without_legacy_fallback",
         "delete_convergence_false_fails_closed_without_legacy_fallback",
@@ -44,7 +44,7 @@ WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
         "account_projection_tombstone_freshness_generation_fences_must_match",
         "enabled_empty_allowed_only_when_all_write_projection_tombstone_fences_ready",
         "archive_default_unavailable_and_stale_short_term_default_hidden",
-        "failures_never_allow_legacy_fallback_or_v17_legacy_merge",
+        "failures_never_allow_legacy_fallback_or_memory_legacy_merge",
         "no_backend_routers_memories_runtime_wiring_or_production_rollout_claimed",
     ],
 }
@@ -59,7 +59,7 @@ def _projection_context(**overrides: Any) -> dict[str, Any]:
         "create_converged": True,
         "update_converged": True,
         "delete_converged": True,
-        "projection_source": V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+        "projection_source": DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
         "tombstone_fence_present": True,
         "tombstone_fence_generation": 11,
         "source_commit_id": "source-commit-11",
@@ -74,15 +74,15 @@ def _projection_context(**overrides: Any) -> dict[str, Any]:
     return values
 
 
-def _write_context(operation: V17V3ExternalWriteOperation, **overrides: Any) -> dict[str, Any]:
+def _write_context(operation: V3ExternalWriteOperation, **overrides: Any) -> dict[str, Any]:
     values = {
         "uid": "uid-write-tombstone",
         "enrolled": True,
         "operation": operation,
         "write_surface_active": True,
         "reads_blocked_for_cohort": False,
-        "v17_authoritative_write_path_available": True,
-        "status": V17V3WriteConvergenceStatus.CONVERGED,
+        "memory_authoritative_write_path_available": True,
+        "status": V3WriteConvergenceStatus.CONVERGED,
         "expected_account_generation": 11,
         "observed_account_generation": 11,
         "durable_outbox_fence": True,
@@ -91,9 +91,9 @@ def _write_context(operation: V17V3ExternalWriteOperation, **overrides: Any) -> 
         "projection_update_committed": True,
         "projection_commit_id": "projection-commit-11",
         "projection_generation": 11,
-        "tombstone_committed": operation != V17V3ExternalWriteOperation.DELETE or True,
-        "projection_removal_committed": operation != V17V3ExternalWriteOperation.DELETE or True,
-        "vector_cleanup_outbox_fence": operation != V17V3ExternalWriteOperation.DELETE or True,
+        "tombstone_committed": operation != V3ExternalWriteOperation.DELETE or True,
+        "projection_removal_committed": operation != V3ExternalWriteOperation.DELETE or True,
+        "vector_cleanup_outbox_fence": operation != V3ExternalWriteOperation.DELETE or True,
     }
     values.update(overrides)
     return values
@@ -101,9 +101,9 @@ def _write_context(operation: V17V3ExternalWriteOperation, **overrides: Any) -> 
 
 def _write_contexts(**overrides_by_operation: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        _write_context(V17V3ExternalWriteOperation.CREATE, **overrides_by_operation.get("create", {})),
-        _write_context(V17V3ExternalWriteOperation.UPDATE, **overrides_by_operation.get("update", {})),
-        _write_context(V17V3ExternalWriteOperation.DELETE, **overrides_by_operation.get("delete", {})),
+        _write_context(V3ExternalWriteOperation.CREATE, **overrides_by_operation.get("create", {})),
+        _write_context(V3ExternalWriteOperation.UPDATE, **overrides_by_operation.get("update", {})),
+        _write_context(V3ExternalWriteOperation.DELETE, **overrides_by_operation.get("delete", {})),
     ]
 
 
@@ -113,21 +113,22 @@ def _projection_reader(uid: str, limit: int, cursor: str | None, calls: list[dic
 
 
 def _case_result(
-    plan: V17V3RouteExecutionPlan,
+    plan: V3RouteExecutionPlan,
     *,
     legacy_calls: list[dict[str, Any]],
     projection_calls: list[dict[str, Any]],
     body: Any,
     projection_context: dict[str, Any],
 ) -> dict[str, Any]:
-    projection_decision = decide_v17_v3_projection_readiness(V17V3ProjectionReadinessContext(**projection_context))
+    projection_decision = decide_v3_projection_readiness(V3ProjectionReadinessContext(**projection_context))
     read_decision = plan.read_envelope.read_decision if plan.read_envelope is not None else plan.fail_closed_reason
-    if plan.plan_kind == "v17_response_envelope" and projection_decision.reason == "v17_derived_projection_ready":
-        read_decision = "v17_projection_ready"
+    if plan.plan_kind == "memory_response_envelope" and projection_decision.reason == "memory_derived_projection_ready":
+        read_decision = "memory_projection_ready"
     elif (
-        plan.plan_kind == "v17_response_envelope" and projection_decision.reason == "v17_derived_projection_ready_empty"
+        plan.plan_kind == "memory_response_envelope"
+        and projection_decision.reason == "memory_derived_projection_ready_empty"
     ):
-        read_decision = "v17_projection_ready_empty"
+        read_decision = "memory_projection_ready_empty"
     elif not projection_decision.read_cutover_allowed:
         read_decision = projection_decision.reason
     return {
@@ -138,12 +139,12 @@ def _case_result(
         "projection_calls": projection_calls,
         "body": body,
         "legacy_fallback_allowed": plan.legacy_fallback_allowed,
-        "v17_legacy_merge_allowed": False,
+        "memory_legacy_merge_allowed": False,
         "runtime_wired": plan.route_wired,
         "archive_default_available": plan.archive_default_available,
         "stale_short_term_default_visible": plan.stale_short_term_default_visible,
         "enabled_empty_allowed": bool(
-            plan.read_envelope is not None and projection_decision.reason == "v17_derived_projection_ready_empty"
+            plan.read_envelope is not None and projection_decision.reason == "memory_derived_projection_ready_empty"
         ),
         "write_decision_reasons": [decision.reason for decision in plan.write_convergence_decisions],
         "projection_fence_summary": {
@@ -158,12 +159,12 @@ def _case_result(
     }
 
 
-def _dispatch_future_helper(route_input: V17V3RoutePlanInput, projection_context: dict[str, Any]) -> dict[str, Any]:
+def _dispatch_future_helper(route_input: V3RoutePlanInput, projection_context: dict[str, Any]) -> dict[str, Any]:
     legacy_calls: list[dict[str, Any]] = []
     projection_calls: list[dict[str, Any]] = []
-    pre_plan = plan_v17_v3_memory_route(route_input)
+    pre_plan = plan_v3_memory_route(route_input)
 
-    if pre_plan.plan_kind == "v17_response_envelope" and pre_plan.read_envelope is not None:
+    if pre_plan.plan_kind == "memory_response_envelope" and pre_plan.read_envelope is not None:
         if pre_plan.read_envelope.body == []:
             response_body = pre_plan.response.body if pre_plan.response is not None else []
             return _case_result(
@@ -176,7 +177,7 @@ def _dispatch_future_helper(route_input: V17V3RoutePlanInput, projection_context
         body = _projection_reader(
             route_input.uid, pre_plan.adapted_request.limit, pre_plan.adapted_request.cursor, projection_calls
         )
-        final_plan = plan_v17_v3_memory_route(replace(route_input, page_body=body, memorydb_items=body))
+        final_plan = plan_v3_memory_route(replace(route_input, page_body=body, memorydb_items=body))
         response_body = final_plan.response.body if final_plan.response is not None else body
         return _case_result(
             final_plan,
@@ -195,7 +196,7 @@ def _dispatch_future_helper(route_input: V17V3RoutePlanInput, projection_context
     )
 
 
-def _route_input(projection_context: dict[str, Any], **overrides: Any) -> V17V3RoutePlanInput:
+def _route_input(projection_context: dict[str, Any], **overrides: Any) -> V3RoutePlanInput:
     values = {
         "uid": "uid-write-tombstone",
         "query_params": {},
@@ -206,7 +207,7 @@ def _route_input(projection_context: dict[str, Any], **overrides: Any) -> V17V3R
         "write_convergence_contexts": _write_contexts(),
     }
     values.update(overrides)
-    return V17V3RoutePlanInput(**values)
+    return V3RoutePlanInput(**values)
 
 
 def _future_matrix_cases() -> list[dict[str, Any]]:
@@ -222,17 +223,17 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
         (
             "create_convergence_false_fail_closed",
             _projection_context(create_converged=False),
-            {"write_convergence_contexts": _write_contexts(create={"status": V17V3WriteConvergenceStatus.STALE})},
+            {"write_convergence_contexts": _write_contexts(create={"status": V3WriteConvergenceStatus.STALE})},
         ),
         (
             "update_convergence_false_fail_closed",
             _projection_context(update_converged=False),
-            {"write_convergence_contexts": _write_contexts(update={"status": V17V3WriteConvergenceStatus.STALE})},
+            {"write_convergence_contexts": _write_contexts(update={"status": V3WriteConvergenceStatus.STALE})},
         ),
         (
             "delete_convergence_false_fail_closed",
             _projection_context(delete_converged=False),
-            {"write_convergence_contexts": _write_contexts(delete={"status": V17V3WriteConvergenceStatus.STALE})},
+            {"write_convergence_contexts": _write_contexts(delete={"status": V3WriteConvergenceStatus.STALE})},
         ),
         (
             "delete_tombstone_fence_missing_fail_closed",
@@ -281,7 +282,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
                     "legacy_calls": [],
                     "projection_calls": [],
                     "legacy_fallback_allowed": False,
-                    "v17_legacy_merge_allowed": False,
+                    "memory_legacy_merge_allowed": False,
                     "archive_default_available": False,
                     "stale_short_term_default_visible": False,
                 }
@@ -296,7 +297,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
                     "legacy_calls": [],
                     "projection_calls": [],
                     "legacy_fallback_allowed": False,
-                    "v17_legacy_merge_allowed": False,
+                    "memory_legacy_merge_allowed": False,
                     "archive_default_available": False,
                     "stale_short_term_default_visible": False,
                 }
@@ -308,7 +309,7 @@ def _future_matrix_cases() -> list[dict[str, Any]]:
 
 def _matrix_proof(*, execute: bool) -> dict[str, Any]:
     cases = _future_matrix_cases() if execute else []
-    ready = [case for case in cases if case["plan_kind"] == "v17_response_envelope"]
+    ready = [case for case in cases if case["plan_kind"] == "memory_response_envelope"]
     fail_or_denied = [case for case in cases if case["plan_kind"] in {"fail_closed", "deny"}]
     return {
         "proof_level": "pure_helper_route_planner_write_projection_seam_only",
@@ -327,7 +328,7 @@ def _matrix_proof(*, execute: bool) -> dict[str, Any]:
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     matrix = _matrix_proof(execute=execute)
     return {
-        "artifact": "v17_p1_3_v3_write_convergence_tombstone_matrix",
+        "artifact": "p1_3_v3_write_convergence_tombstone_matrix",
         "status": "BLOCKED",
         "execute": execute,
         "read_only": True,
@@ -349,7 +350,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No backend/routers/memories.py runtime wiring changed.",
             "Future write-convergence/delete/tombstone matrix is proven only through pure helper seams with fake contexts.",
             "No production Firestore, cloud, provider, vector, or network calls executed.",
-            "No legacy fallback/merge for V17 failures is claimed or permitted by the helper matrix.",
+            "No legacy fallback/merge for memory failures is claimed or permitted by the helper matrix.",
             "No Archive default visibility or stale Short-term default visibility is claimed.",
             "No production rollout approval claimed.",
         ],

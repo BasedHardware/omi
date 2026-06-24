@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Safe `/v3` V17 cohort/control reader readiness artifact.
+"""Safe `/v3` memory cohort/control reader readiness artifact.
 
-This is a read-only local contract inventory for the future server-side V17
+This is a read-only local contract inventory for the future server-side memory
 cohort/enrollment/control reader needed before `GET /v3/memories` can be cut
 over. It intentionally does not import FastAPI routers, read Firestore, call
 Pinecone/providers/cloud/network services, mutate state, implement a production
@@ -19,7 +19,7 @@ from typing import Any
 
 def _load_external_readiness_module():
     spec = importlib.util.spec_from_file_location(
-        "v17_p1_3_v3_external_compatibility_readiness",
+        "p1_3_v3_external_compatibility_readiness",
         Path(__file__).with_name("p1_3_v3_external_compatibility_readiness.py"),
     )
     if spec is None or spec.loader is None:
@@ -75,7 +75,7 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "canonical_control_source_path_api",
         "status": "READY_LOCAL_ADAPTER_PROVEN",
-        "required_contract": "Reuse the existing canonical server-side V17 rollout state path for `/v3` cohort enrollment and per-user read control.",
+        "required_contract": "Reuse the existing canonical server-side memory rollout state path for `/v3` cohort enrollment and per-user read control.",
         "canonical_path": "users/{uid}/memory_control/state",
         "explicit_blocker": None,
         "candidate_paths": ["users/{uid}/memory_control/state"],
@@ -92,7 +92,7 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "server_owned_control_reads_only",
         "status": "BLOCKED",
-        "required_contract": "V17 cohort/enrollment/control reads for `/v3` must be server-owned and must not require or permit direct client control-document reads.",
+        "required_contract": "memory cohort/enrollment/control reads for `/v3` must be server-owned and must not require or permit direct client control-document reads.",
         "server_owned_read_only": True,
         "direct_client_control_reads_allowed": False,
         "security_rules_and_iam_proof_required": True,
@@ -122,7 +122,7 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "fail_closed_decision_matrix",
         "status": "BLOCKED",
-        "required_contract": "Enrolled effective-read V17 users must fail closed or privacy-deny for control-read, schema, uid, global gate, stale-generation, no-grant, projection, write, cursor, or archive failures. Stale Short-term filtering is item/read-service state, not route-control state.",
+        "required_contract": "Enrolled effective-read memory users must fail closed or privacy-deny for control-read, schema, uid, global gate, stale-generation, no-grant, projection, write, cursor, or archive failures. Stale Short-term filtering is item/read-service state, not route-control state.",
         "fail_closed_reasons": FAIL_CLOSED_REASONS,
         "evidence_sources": [
             "decision_service_proof",
@@ -144,7 +144,7 @@ CONTROL_READER_REQUIREMENTS = [
         "required_contract": "Non-enrolled users preserve current legacy `/v3` GET behavior, including offset=0 -> limit=5000 only on the legacy-primary path.",
         "non_enrolled_read_path": "legacy_primary",
         "offset_zero_limit_5000_preserved_for_legacy_only": True,
-        "v17_cursor_required_for_enrolled": True,
+        "v3_cursor_required_for_enrolled": True,
         "evidence_sources": [
             "memory_read_service_proof",
             "request_adapter_proof",
@@ -158,9 +158,9 @@ CONTROL_READER_REQUIREMENTS = [
     {
         "requirement_id": "enrolled_no_legacy_fallback_on_gate_failure",
         "status": "BLOCKED",
-        "required_contract": "Enrolled effective-read users must not fall back to legacy reads on V17 control, grant, projection, write-convergence, cursor, or Archive failures. Effective off/shadow/write keeps legacy primary authoritative, not fallback.",
+        "required_contract": "Enrolled effective-read users must not fall back to legacy reads on memory control, grant, projection, write-convergence, cursor, or Archive failures. Effective off/shadow/write keeps legacy primary authoritative, not fallback.",
         "legacy_fallback_allowed_for_enrolled_gate_failures": False,
-        "legacy_v17_result_merge_allowed": False,
+        "legacy_memory_result_merge_allowed": False,
         "exception_downgrade_to_legacy_allowed": False,
         "evidence_sources": [
             "decision_service_proof",
@@ -204,8 +204,8 @@ CONTROL_READER_REQUIREMENTS = [
 ]
 
 FAKE_INJECTABLE_CONTROL_READER_INTERFACE = {
-    "interface_name": "V17V3ControlReader",
-    "method": "read_v17_v3_control",
+    "interface_name": "V3ControlReader",
+    "method": "read_v3_control",
     "input_fields": ["uid", "db_client", "rollout_config", "consumer"],
     "output_fields": [
         "cohort_enrolled",
@@ -324,15 +324,15 @@ FAIL_CLOSED_DECISION_MATRIX = [
 LEGACY_BOUNDARY_CONTRACT = {
     "non_enrolled_read_path": "legacy_primary",
     "non_enrolled_offset_zero_limit_5000_preserved": True,
-    "offset_zero_limit_5000_allowed_for_v17_cursor": False,
+    "offset_zero_limit_5000_allowed_for_memory_cursor": False,
     "enrolled_gate_failure_legacy_fallback_allowed": False,
-    "legacy_v17_result_merge_allowed": False,
+    "legacy_memory_result_merge_allowed": False,
 }
 
 PROPOSED_NEXT_SAFE_STEPS = [
     {
         "step_id": "choose_canonical_control_source_and_security_contract",
-        "description": "Choose and document the canonical server-side V17 `/v3` control source/path/API plus security rules/IAM contract.",
+        "description": "Choose and document the canonical server-side memory `/v3` control source/path/API plus security rules/IAM contract.",
         "implements_runtime_wiring_now": False,
     },
     {
@@ -364,7 +364,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         1 for item in CONTROL_READER_REQUIREMENTS if item["missing_real_firestore_api_emulator_rules_iam_evidence"]
     )
     return {
-        "artifact": "v17_p1_3_v3_control_reader_readiness",
+        "artifact": "p1_3_v3_control_reader_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -380,7 +380,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "pinecone_calls_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Readiness/local contract inventory for future server-side V17 `/v3` cohort/enrollment/control reader.",
+        "scope": "Readiness/local contract inventory for future server-side memory `/v3` cohort/enrollment/control reader.",
         "control_reader_requirements": CONTROL_READER_REQUIREMENTS,
         "fake_injectable_control_reader_interface": FAKE_INJECTABLE_CONTROL_READER_INTERFACE,
         "fail_closed_decision_matrix": FAIL_CLOSED_DECISION_MATRIX,

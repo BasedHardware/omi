@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { assertFails, initializeTestEnvironment } from '@firebase/rules-unit-testing';
 import { deleteDoc, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-const V17_PROTECTED_COLLECTIONS = [
+const MEMORY_PROTECTED_COLLECTIONS = [
   'memory_items',
   'memory_operations',
   'memory_outbox',
@@ -16,10 +16,10 @@ const V17_PROTECTED_COLLECTIONS = [
   'short_term_lifecycle_transitions',
 ];
 
-const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-v17-memory';
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-memory';
 
 async function assertClientDeniedForProtectedCollection(db, collection) {
-  const protectedDoc = doc(db, 'users', 'v17-emulator-user', collection, 'probe-doc');
+  const protectedDoc = doc(db, 'users', 'memory-emulator-user', collection, 'probe-doc');
 
   await assertFails(getDoc(protectedDoc));
   await assertFails(setDoc(protectedDoc, { collection, probe: true }));
@@ -28,16 +28,16 @@ async function assertClientDeniedForProtectedCollection(db, collection) {
 }
 
 async function assertClientDeniedForV3ControlReaderState(db) {
-  const controlStateDoc = doc(db, 'users/v17-emulator-user/memory_control/state');
+  const controlStateDoc = doc(db, 'users/memory-emulator-user/memory_control/state');
   const controlState = {
-    uid: 'v17-emulator-user',
+    uid: 'memory-emulator-user',
     schema_version: 1,
     mode: 'read',
     mode_epoch: 1,
     cutover_epoch: 1,
     account_generation: 50,
     fallback_projection_ready: true,
-    persistent_v17_writes_started: true,
+    persistent_memory_writes_started: true,
     writes_blocked: false,
     stage_gates: { shadow: 'passed', write: 'passed', read: 'passed' },
     grants: { omi_chat: { default_memory: true, archive: false } },
@@ -50,11 +50,11 @@ async function assertClientDeniedForV3ControlReaderState(db) {
 }
 
 async function assertClientDeniedForV3MemoryStateHead(db) {
-  const stateHeadDoc = doc(db, 'users/v17-emulator-user/memory_state/head');
+  const stateHeadDoc = doc(db, 'users/memory-emulator-user/memory_state/head');
   const stateHead = {
     schema_version: 1,
-    uid: 'v17-emulator-user',
-    source: 'v17_memory_state_head',
+    uid: 'memory-emulator-user',
+    source: 'memory_state_head',
     account_generation: 50,
     head_commit_id: 'commit-client-forbidden',
     commit_sequence: 50,
@@ -66,8 +66,8 @@ async function assertClientDeniedForV3MemoryStateHead(db) {
   await assertFails(deleteDoc(stateHeadDoc));
 }
 
-async function assertClientCannotSelfGrantV17AppKeyMemoryAccess(db) {
-  const grantDoc = doc(db, 'users/v17-emulator-user/memory_control/v17_app_key_memory_grants');
+async function assertClientCannotSelfGrantAppKeyMemoryAccess(db) {
+  const grantDoc = doc(db, 'users/memory-emulator-user/memory_control/app_key_memory_grants');
   const selfGrant = {
     grants: {
       developer_api: {
@@ -99,7 +99,7 @@ async function assertClientCannotSelfGrantV17AppKeyMemoryAccess(db) {
 }
 
 async function assertClientDeniedForV3CanaryApprovalSource(db) {
-  const approvalDoc = doc(db, 'system/v17_v3_canary_approvals/routes/get_v3_memories');
+  const approvalDoc = doc(db, 'system/v3_canary_approvals/routes/get_v3_memories');
   const approvalArtifact = {
     route_scope: 'GET /v3/memories',
     approval_claimed: false,
@@ -122,7 +122,7 @@ async function assertAdminCanReadV3CanaryApprovalSource(testEnv) {
   };
 
   await testEnv.withSecurityRulesDisabled(async (adminContext) => {
-    const approvalDoc = doc(adminContext.firestore(), 'system/v17_v3_canary_approvals/routes/get_v3_memories');
+    const approvalDoc = doc(adminContext.firestore(), 'system/v3_canary_approvals/routes/get_v3_memories');
     await setDoc(approvalDoc, approvalArtifact);
     const snapshot = await getDoc(approvalDoc);
     assert.equal(snapshot.exists(), true);
@@ -134,20 +134,20 @@ async function assertAdminCanReadV3CanaryApprovalSource(testEnv) {
 const testEnv = await initializeTestEnvironment({ projectId: PROJECT_ID });
 
 try {
-  const db = testEnv.authenticatedContext('v17-emulator-user').firestore();
+  const db = testEnv.authenticatedContext('memory-emulator-user').firestore();
 
-  for (const collection of V17_PROTECTED_COLLECTIONS) {
+  for (const collection of MEMORY_PROTECTED_COLLECTIONS) {
     await assertClientDeniedForProtectedCollection(db, collection);
   }
   await assertClientDeniedForV3ControlReaderState(db);
   await assertClientDeniedForV3MemoryStateHead(db);
-  await assertClientCannotSelfGrantV17AppKeyMemoryAccess(db);
+  await assertClientCannotSelfGrantAppKeyMemoryAccess(db);
   await assertClientDeniedForV3CanaryApprovalSource(db);
   await assertAdminCanReadV3CanaryApprovalSource(testEnv);
 
-  assert.equal(V17_PROTECTED_COLLECTIONS.length, 10);
+  assert.equal(MEMORY_PROTECTED_COLLECTIONS.length, 10);
   console.log(
-    `PASS: signed-in client read/write denial asserted for ${V17_PROTECTED_COLLECTIONS.length} V17 collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, V17 app/key memory grant self-grant path, and system/v17_v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
+    `PASS: signed-in client read/write denial asserted for ${MEMORY_PROTECTED_COLLECTIONS.length} memory collections, users/{uid}/memory_control/state, users/{uid}/memory_state/head, memory app/key memory grant self-grant path, and system/v3_canary_approvals/routes/get_v3_memories; Admin-context read fixture proved for canary approval source`,
   );
 } finally {
   await testEnv.cleanup();

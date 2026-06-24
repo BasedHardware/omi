@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Safe Oracle P1-3 `/v3` GET runtime-wiring remaining-gates readiness artifact.
 
-This is a read-only gate inventory for the `GET /v3/memories` V17 runtime
+This is a read-only gate inventory for the `GET /v3/memories` memory runtime
 cutover. F4 added a structurally default-off router seam, but this artifact
 intentionally does not import FastAPI routers, read Firestore, call providers,
 mutate state, or claim approval. It ties the current local proof chain to the
@@ -20,7 +20,7 @@ from typing import Any
 
 def _load_external_readiness_module():
     spec = importlib.util.spec_from_file_location(
-        "v17_p1_3_v3_external_compatibility_readiness",
+        "p1_3_v3_external_compatibility_readiness",
         Path(__file__).with_name("p1_3_v3_external_compatibility_readiness.py"),
     )
     if spec is None or spec.loader is None:
@@ -91,11 +91,11 @@ EXISTING_LOCAL_PROOF_ARTIFACTS = {
 
 REMAINING_GATES = [
     {
-        "gate_id": "real_v17_control_read_fail_closed",
+        "gate_id": "real_memory_control_read_fail_closed",
         "status": "BLOCKED",
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
-            "Real V17 cohort/enrollment/control read source must be server-side, bounded, schema/uid validated, "
+            "Real memory cohort/enrollment/control read source must be server-side, bounded, schema/uid validated, "
             "and fail-closed for enrolled missing/malformed/timeout states, without client-side direct control reads "
             "if that is unsafe."
         ),
@@ -120,7 +120,7 @@ REMAINING_GATES = [
             "Future GET must read expected_account_generation from the independent server-owned "
             "users/{uid}/memory_state/head source, then require trusted == control == projection == cursor generation; "
             "local writer/emulator evidence now exists, but real-service runtime gates are still required before "
-            "effective V17 read behavior."
+            "effective memory read behavior."
         ),
         "existing_local_proofs": [
             "account_generation_readiness_proof",
@@ -134,11 +134,11 @@ REMAINING_GATES = [
         "approval_claimed": False,
     },
     {
-        "gate_id": "real_v17_compatibility_projection_read_api_store",
+        "gate_id": "real_memory_compatibility_projection_read_api_store",
         "status": "BLOCKED",
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
-            "Real V17-derived compatibility projection read API/store must return MemoryDB-compatible items, prove "
+            "Real memory-derived compatibility projection read API/store must return MemoryDB-compatible items, prove "
             "ready empty projection state returns [], and expose generation/freshness fences without legacy fallback."
         ),
         "existing_local_proofs": [
@@ -158,9 +158,9 @@ REMAINING_GATES = [
         "status": "BLOCKED",
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
-            "Real external write-convergence/source-of-truth evidence for /v3 create/update/delete must prove V17 "
+            "Real external write-convergence/source-of-truth evidence for /v3 create/update/delete must prove memory "
             "authoritative writes, projection commits, tombstones, vector cleanup fences, and no direct legacy write "
-            "fallback before V17 read cutover."
+            "fallback before memory read cutover."
         ),
         "existing_local_proofs": [
             "write_convergence_proof",
@@ -179,7 +179,7 @@ REMAINING_GATES = [
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
             "Real cursor signing secret/config and route validation integration must reject tamper/expiry/filter or "
-            "generation mismatch and must not apply offset=0 -> limit=5000 behavior in V17 cursor mode."
+            "generation mismatch and must not apply offset=0 -> limit=5000 behavior in memory cursor mode."
         ),
         "existing_local_proofs": [
             "cursor_service_proof",
@@ -240,7 +240,7 @@ REMAINING_GATES = [
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
             "Enrolled fail-closed/no-grant/projection-not-ready/write-not-ready behavior must return the prescribed "
-            "deny/fail-closed response with no legacy fallback, no V17/legacy merge, and no exception downgrade."
+            "deny/fail-closed response with no legacy fallback, no memory/legacy merge, and no exception downgrade."
         ),
         "existing_local_proofs": ["decision_service_proof", "route_planner_proof", "memory_read_service_proof"],
         "missing_real_service_runtime_evidence": True,
@@ -254,7 +254,7 @@ REMAINING_GATES = [
         "route_refs": ["GET /v3/memories"],
         "required_evidence": (
             "Archive default-unavailable and stale Short-term not default-visible proof must be preserved in real route "
-            "fixtures, projection reads, cursor mode, and observability before exposing V17 GET reads."
+            "fixtures, projection reads, cursor mode, and observability before exposing memory GET reads."
         ),
         "existing_local_proofs": [
             "projection_readiness_proof",
@@ -302,22 +302,22 @@ REMAINING_GATES = [
 PROPOSED_SAFE_CUTOVER_SEQUENCE = [
     {
         "step_id": "wire_server_side_control_reader",
-        "description": "Add the real server-side V17 cohort/control/grant reader behind bounded fail-closed semantics.",
+        "description": "Add the real server-side memory cohort/control/grant reader behind bounded fail-closed semantics.",
         "implements_runtime_wiring_now": False,
     },
     {
         "step_id": "wire_projection_store_read_api",
-        "description": "Add the real V17-derived compatibility projection read API/store with generation/freshness checks.",
+        "description": "Add the real memory-derived compatibility projection read API/store with generation/freshness checks.",
         "implements_runtime_wiring_now": False,
     },
     {
         "step_id": "prove_write_convergence_source_of_truth",
-        "description": "Prove external /v3 create/update/delete converge to V17 authoritative state before reads use V17.",
+        "description": "Prove external /v3 create/update/delete converge to memory authoritative state before reads use memory.",
         "implements_runtime_wiring_now": False,
     },
     {
         "step_id": "configure_cursor_secret_and_validation",
-        "description": "Configure real cursor signing secret and integrate route validation for V17 cursor mode only.",
+        "description": "Configure real cursor signing secret and integrate route validation for memory cursor mode only.",
         "implements_runtime_wiring_now": False,
     },
     {
@@ -327,7 +327,7 @@ PROPOSED_SAFE_CUTOVER_SEQUENCE = [
     },
     {
         "step_id": "wire_get_route_behind_fail_closed_planner",
-        "description": "Only after gates pass, make the default-off GET seam effectively route real traffic through V17.",
+        "description": "Only after gates pass, make the default-off GET seam effectively route real traffic through memory.",
         "implements_runtime_wiring_now": False,
         "must_preserve": [
             "non_enrolled_legacy_primary_current_limit_offset_behavior",
@@ -354,7 +354,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_gate_count = sum(1 for gate in REMAINING_GATES if gate["status"] == "BLOCKED")
     missing_runtime_evidence_count = sum(1 for gate in REMAINING_GATES if gate["missing_real_service_runtime_evidence"])
     return {
-        "artifact": "v17_p1_3_v3_get_runtime_wiring_readiness",
+        "artifact": "p1_3_v3_get_runtime_wiring_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -378,7 +378,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "proven_behavior": (
                 "GET /v3/memories production/default runtime remains structurally disabled and invokes legacy "
                 "memories_db.get_memories(uid, limit, offset); offset=0 is coerced to limit=5000; nonzero "
-                "limit/offset are preserved; V17 is only exercisable through TestClient dependency overrides."
+                "limit/offset are preserved; memory is only exercisable through TestClient dependency overrides."
             ),
             "runtime_cutover_claimed": False,
         },

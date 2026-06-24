@@ -22,7 +22,7 @@ from typing import Any
 
 def _load_dependency_map_constants() -> tuple[list[str], list[str]]:
     spec = importlib.util.spec_from_file_location(
-        'v17_p1_3_v3_real_router_dependency_map',
+        'p1_3_v3_real_router_dependency_map',
         Path(__file__).with_name('p1_3_v3_real_router_dependency_map.py'),
     )
     if spec is None or spec.loader is None:
@@ -35,7 +35,7 @@ def _load_dependency_map_constants() -> tuple[list[str], list[str]]:
 FUTURE_GET_WIRING_SEAM, REQUIRED_IMPORT_STUBS = _load_dependency_map_constants()
 
 
-V17_ADAPTER_MODULES = [
+MEMORY_ADAPTER_MODULES = [
     "utils.memory.v3_request_adapter",
     "utils.memory.v3_route_planner",
     "utils.memory.v3_response_adapter",
@@ -57,7 +57,7 @@ REAL_ROUTER_GET_TESTCLIENT_PROOF = {
         "explicit_limit_offset_reach_stubbed_legacy_get_memories_when_offset_nonzero",
         "list_memorydb_response_model_serializes_legacy_compatible_items",
         "post_delete_unexecuted_and_mutation_flags_remain_false",
-        "v17_request_adapter_route_planner_response_adapter_not_invoked_yet",
+        "memory_request_adapter_route_planner_response_adapter_not_invoked_yet",
         "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
     ],
 }
@@ -189,14 +189,14 @@ def _probe_code() -> str:
         setattr(utils_pkg, "memory", memory_pkg)
 
         composed = types.ModuleType("utils.memory.v3_composed_get_service")
-        class V17V3ComposedRequestParams:
+        class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
                 self.offset = offset
                 self.cursor = cursor
                 self.include_archive = include_archive
                 self.include_historical = include_historical
-        class V17V3ComposedResponse:
+        class V3ComposedResponse:
             def __init__(self, http_status=200, body=None, public_error=None, headers=None, source="none", decision="ok"):
                 self.http_status = http_status
                 self.body = body
@@ -204,13 +204,13 @@ def _probe_code() -> str:
                 self.headers = headers or {}
                 self.source = source
                 self.decision = decision
-        composed.V17V3ComposedRequestParams = V17V3ComposedRequestParams
-        composed.V17V3ComposedResponse = V17V3ComposedResponse
+        composed.V3ComposedRequestParams = V3ComposedRequestParams
+        composed.V3ComposedResponse = V3ComposedResponse
         sys.modules["utils.memory.v3_composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
         production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
-        class ProductionV17V3GetRuntime:
+        class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
                 self.source_decision = source_decision
@@ -218,10 +218,10 @@ def _probe_code() -> str:
                 self.adapters = adapters
                 for key, value in kwargs.items():
                     setattr(self, key, value)
-        def build_v17_v3_production_runtime(*, uid, db_client, env=None):
-            return ProductionV17V3GetRuntime(enabled=False, source_decision="disabled")
-        production_runtime.V17V3GetRuntime = ProductionV17V3GetRuntime
-        production_runtime.build_v17_v3_production_runtime = build_v17_v3_production_runtime
+        def build_v3_production_runtime(*, uid, db_client, env=None):
+            return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
+        production_runtime.V3GetRuntime = ProductionV3GetRuntime
+        production_runtime.build_v3_production_runtime = build_v3_production_runtime
         sys.modules["utils.memory.v3_production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
@@ -298,12 +298,12 @@ def _probe_code() -> str:
             if method and path in {"/v3/memories", "/v3/memories/{memory_id}"}:
                 route_refs.append(f"{method} {path}")
 
-        v17_adapter_modules = [
+        memory_adapter_modules = [
             "utils.memory.v3_request_adapter",
             "utils.memory.v3_route_planner",
             "utils.memory.v3_response_adapter",
         ]
-        loaded_adapters = [name for name in v17_adapter_modules if name in sys.modules]
+        loaded_adapters = [name for name in memory_adapter_modules if name in sys.modules]
 
         print(json.dumps({
             "testclient_ok": default_response.status_code == 200 and explicit_response.status_code == 200,
@@ -329,7 +329,7 @@ def _probe_code() -> str:
             "current_first_page_limit_override": "offset=0 coerces limit to 5000 before legacy get_memories",
             "explicit_limit_offset_preserved_when_offset_nonzero": observed_get_calls[1] == {"uid": stubbed_uid, "limit": 17, "offset": 3},
             "mutation_flags": mutation_flags,
-            "v17_adapter_modules_loaded": loaded_adapters,
+            "memory_adapter_modules_loaded": loaded_adapters,
             "runtime_cutover_claimed": False,
         }, sort_keys=True))
         '''
@@ -371,7 +371,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     ]
     testclient_ok = bool(probe.get("testclient_ok"))
     return {
-        "artifact": "v17_p1_3_v3_real_router_get_testclient",
+        "artifact": "p1_3_v3_real_router_get_testclient",
         "status": "BLOCKED",
         "execute": execute,
         "read_only": True,
@@ -391,7 +391,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "pinecone_calls_executed": False,
         "production_rollout_approved": False,
         "runtime_cutover_claimed": False,
-        "v17_adapters_invoked": bool(probe.get("v17_adapter_modules_loaded")),
+        "memory_adapters_invoked": bool(probe.get("memory_adapter_modules_loaded")),
         "required_import_stubs": REQUIRED_IMPORT_STUBS,
         "dependency_overrides": ["routers.memories.auth.get_current_user_uid -> stubbed-test-uid"],
         "future_get_wiring_seam": FUTURE_GET_WIRING_SEAM,
@@ -400,7 +400,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No backend/main.py import or production app startup executed.",
             "Only GET /v3/memories was executed through TestClient; POST/DELETE remain unexecuted.",
             "No real Firestore, Pinecone, cloud, provider, or network calls executed.",
-            "Current runtime still calls stubbed legacy memories_db.get_memories; no V17 adapter/planner/response cutover is claimed.",
+            "Current runtime still calls stubbed legacy memories_db.get_memories; no memory adapter/planner/response cutover is claimed.",
             "No runtime /v3 wiring, benchmark, telemetry sink integration, or rollout approval claimed.",
         ],
         "summary": {
@@ -414,7 +414,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "stubbed_legacy_get_memories_call_count": probe.get("stubbed_legacy_get_memories_call_count", 0),
             "post_delete_unexecuted": post_delete_unexecuted,
             "mutation_flags_clear": mutation_flags_clear,
-            "v17_adapters_invoked": bool(probe.get("v17_adapter_modules_loaded")),
+            "memory_adapters_invoked": bool(probe.get("memory_adapter_modules_loaded")),
             "runtime_cutover_claimed": False,
         },
     }

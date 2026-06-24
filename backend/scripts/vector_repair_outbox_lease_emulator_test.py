@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Barrier
 
-PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-v17-memory"))
+PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -17,8 +17,8 @@ if str(BACKEND_DIR) not in sys.path:
 
 import google.cloud.firestore as firestore
 
-from database.memory_vector_repair_outbox import build_v17_vector_repair_purge_outbox_records
-from database.memory_vector_repair_outbox_worker import lease_v17_vector_repair_purge_outbox_records
+from database.memory_vector_repair_outbox import build_vector_repair_purge_outbox_records
+from database.memory_vector_repair_outbox_worker import lease_vector_repair_purge_outbox_records
 
 
 def _candidate() -> dict:
@@ -44,7 +44,7 @@ def _candidate() -> dict:
 def _claim_once(uid: str, worker_id: str, now: datetime, barrier: Barrier) -> list[dict]:
     db_client = firestore.Client(project=PROJECT_ID)
     barrier.wait(timeout=15)
-    return lease_v17_vector_repair_purge_outbox_records(
+    return lease_vector_repair_purge_outbox_records(
         db_client=db_client,
         uid=uid,
         worker_id=worker_id,
@@ -59,10 +59,10 @@ def main() -> int:
     if not emulator_host:
         raise RuntimeError("FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec")
 
-    uid = "v17-vector-repair-outbox-lease-emulator-user"
+    uid = "memory-vector-repair-outbox-lease-emulator-user"
     now = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
     db_client = firestore.Client(project=PROJECT_ID)
-    records = build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=now)
+    records = build_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=now)
     if len(records) != 1:
         raise AssertionError(f"expected one outbox record, got {len(records)}")
     record = records[0]
@@ -98,7 +98,7 @@ def main() -> int:
         raise AssertionError("stored leased record is missing lease timestamps")
 
     print(
-        "PASS: V17 vector repair/purge outbox transactional lease contention validated "
+        "PASS: memory vector repair/purge outbox transactional lease contention validated "
         f"(path={record['outbox_path']}, record_id={record['record_id']}, claimed={len(claimed_records)}, "
         f"lease_owner={lease_owner}); at most one worker claimed the pending record"
     )

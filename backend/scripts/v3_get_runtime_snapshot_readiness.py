@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17-V3-F2 request-scoped runtime snapshot readiness artifact.
+"""Safe memory-V3-F2 request-scoped runtime snapshot readiness artifact.
 
 This emits a local, read-only contract report for the framework-independent
 snapshot builder. It does not import FastAPI routers, read or write Firestore,
@@ -21,19 +21,19 @@ if str(_BACKEND_DIR) not in sys.path:
 
 from utils.memory.v3_get_runtime_snapshot import (  # noqa: E402
     LOW_CARDINALITY_RUNTIME_SNAPSHOT_REASONS,
-    V17V3GetRuntimeSnapshotInput,
-    build_v17_v3_get_runtime_snapshot,
+    V3GetRuntimeSnapshotInput,
+    build_v3_get_runtime_snapshot,
 )
 
 
-def _coherent_input(**overrides: Any) -> V17V3GetRuntimeSnapshotInput:
+def _coherent_input(**overrides: Any) -> V3GetRuntimeSnapshotInput:
     values: dict[str, Any] = {
         'authenticated_subject_uid': 'sample-subject',
         'control_subject_uid': 'sample-subject',
         'grant_subject_uid': 'sample-subject',
         'projection_subject_uid': 'sample-subject',
         'cursor_subject_uid': 'sample-subject',
-        'cohort': 'v17_enrolled',
+        'cohort': 'memory_enrolled',
         'control_generation': 3,
         'default_memory_grant': True,
         'runtime_config_version': 'present',
@@ -55,7 +55,7 @@ def _coherent_input(**overrides: Any) -> V17V3GetRuntimeSnapshotInput:
         'server_now_ms': 10_010,
     }
     values.update(overrides)
-    return V17V3GetRuntimeSnapshotInput(**values)
+    return V3GetRuntimeSnapshotInput(**values)
 
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
@@ -68,14 +68,14 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         'future_read_timestamp': _coherent_input(read_timestamp_ms=12_000),
         'malformed_source': _coherent_input(server_owned_projection=False),
     }
-    results = {case_id: build_v17_v3_get_runtime_snapshot(case).log_fields for case_id, case in cases.items()}
+    results = {case_id: build_v3_get_runtime_snapshot(case).log_fields for case_id, case in cases.items()}
     reason_counts: dict[str, int] = {}
     for fields in results.values():
         reason = fields['reason']
         reason_counts[reason] = reason_counts.get(reason, 0) + 1
 
     return {
-        'script': 'v17_v3_get_runtime_snapshot_readiness',
+        'script': 'v3_get_runtime_snapshot_readiness',
         'status': 'BLOCKED',
         'proof_status': 'BLOCKED' if execute else 'NOT_RUN',
         'approval': False,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` cursor secret/source integration readiness proof.
+"""Safe memory `/v3` cursor secret/source integration readiness proof.
 
 This proof is deliberately pre-runtime and read-only. It does not import FastAPI
 routers, read environment secret values, call Firestore/Pinecone/providers/cloud,
@@ -20,14 +20,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from utils.memory.v3_cursor import (
-    V17V3CursorContext,
-    V17V3CursorError,
-    V17V3Keyset,
-    create_v17_v3_cursor,
-    parse_v17_v3_cursor,
+    V3CursorContext,
+    V3CursorError,
+    V3Keyset,
+    create_v3_cursor,
+    parse_v3_cursor,
 )
 
-_FAKE_SERVER_OWNED_SECRET = b'fake-server-owned-v17-v3-cursor-secret-readiness-only'
+_FAKE_SERVER_OWNED_SECRET = b'fake-server-owned-memory-v3-cursor-secret-readiness-only'
 _FAKE_CLIENT_SUPPLIED_SECRET = b'fake-client-supplied-secret-must-never-be-trusted'
 
 CURSOR_SECRET_PRODUCTION_READINESS_PROOF = {
@@ -47,10 +47,10 @@ CURSOR_SECRET_PRODUCTION_READINESS_PROOF = {
 
 SERVER_OWNED_SECRET_SOURCE = {
     "status": "BLOCKED",
-    "required_source": "server-owned V17_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime",
+    "required_source": "server-owned MEMORY_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime",
     "candidate_env_var": "MEMORY_V3_CURSOR_SIGNING_SECRET",
     "candidate_production_metadata_runner": "backend/scripts/p1_3_v3_cursor_secret_production_readiness.py",
-    "blocker": "No existing runtime-owned V17 /v3 cursor signing secret/config source is wired.",
+    "blocker": "No existing runtime-owned memory /v3 cursor signing secret/config source is wired.",
     "required_before_runtime_change": True,
     "client_supplied_secret_trusted": False,
     "invented_secret_material": False,
@@ -100,22 +100,22 @@ TRUST_BOUNDARY_REQUIREMENTS = [
 ]
 
 
-def _context(**overrides: Any) -> V17V3CursorContext:
+def _context(**overrides: Any) -> V3CursorContext:
     values = {
         'uid': 'uid-a',
         'account_generation': 7,
         'projection_generation': 11,
         'filter_hash': 'filter-default-v1',
-        'source': 'v17_compatibility_projection',
+        'source': 'memory_compatibility_projection',
         'read_mode': 'default_memory',
         'now_epoch_seconds': 1_800_000_000,
     }
     values.update(overrides)
-    return V17V3CursorContext(**values)
+    return V3CursorContext(**values)
 
 
-def _keyset() -> V17V3Keyset:
-    return V17V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9')
+def _keyset() -> V3Keyset:
+    return V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9')
 
 
 def _fail_closed_case(case_id: str, reason: str) -> dict[str, Any]:
@@ -130,8 +130,8 @@ def _fail_closed_case(case_id: str, reason: str) -> dict[str, Any]:
 
 
 def _build_case_matrix() -> list[dict[str, Any]]:
-    cursor = create_v17_v3_cursor(_keyset(), _context(), _FAKE_SERVER_OWNED_SECRET, ttl_seconds=300)
-    parsed = parse_v17_v3_cursor(cursor, _context(), _FAKE_SERVER_OWNED_SECRET)
+    cursor = create_v3_cursor(_keyset(), _context(), _FAKE_SERVER_OWNED_SECRET, ttl_seconds=300)
+    parsed = parse_v3_cursor(cursor, _context(), _FAKE_SERVER_OWNED_SECRET)
     tampered = cursor[:-1] + ('A' if cursor[-1] != 'A' else 'B')
 
     cases: list[dict[str, Any]] = [
@@ -173,8 +173,8 @@ def _build_case_matrix() -> list[dict[str, Any]]:
     for case_id, token, context in invalid_inputs:
         try:
             secret = _FAKE_CLIENT_SUPPLIED_SECRET if case_id == "wrong_secret_rejected" else _FAKE_SERVER_OWNED_SECRET
-            parse_v17_v3_cursor(token, context, secret)
-        except V17V3CursorError as exc:
+            parse_v3_cursor(token, context, secret)
+        except V3CursorError as exc:
             cases.append(_fail_closed_case(case_id, exc.reason))
         else:  # pragma: no cover - defensive guard for a proof invariant
             cases.append(_fail_closed_case(case_id, "unexpected_success"))
@@ -193,7 +193,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     ready_case_count = sum(1 for case in case_matrix if case["status"] == "READY")
     fail_closed_case_count = sum(1 for case in case_matrix if case["status"] == "FAIL_CLOSED")
     return {
-        "artifact": "v17_p1_3_v3_cursor_secret_readiness",
+        "artifact": "p1_3_v3_cursor_secret_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -214,10 +214,10 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "trust_boundary_requirements": TRUST_BOUNDARY_REQUIREMENTS,
         "pure_fake_cursor_case_matrix": case_matrix,
         "required_future_integration": [
-            "Add a server-owned V17 /v3 cursor signing secret/config source before runtime route wiring.",
-            "Pass only server-owned secret bytes into backend/utils/memory/v17_v3_cursor.py; never accept client-supplied secret material.",
+            "Add a server-owned memory /v3 cursor signing secret/config source before runtime route wiring.",
+            "Pass only server-owned secret bytes into backend/utils/memory/v3_cursor.py; never accept client-supplied secret material.",
             "Validate non-empty cursors before projection reads and fail closed on tamper, expiry, generation/source/filter/read-mode mismatch.",
-            "Keep first-page no-cursor flow independent of client secret trust and keep offset/5000 legacy behavior out of V17 cursor mode.",
+            "Keep first-page no-cursor flow independent of client secret trust and keep offset/5000 legacy behavior out of memory cursor mode.",
         ],
         "non_claims": [
             "No backend/routers/memories.py runtime wiring changed.",

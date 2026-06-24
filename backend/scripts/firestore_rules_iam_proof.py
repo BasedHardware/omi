@@ -11,11 +11,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 DEFAULT_DATABASE = "(default)"
-DEFAULT_WORKER_SA_NAME = "v17-vector-repair-outbox-worker"
+DEFAULT_WORKER_SA_NAME = "memory-vector-repair-outbox-worker"
 DEFAULT_BACKEND_SA_NAME = "backend"
 OUTBOX_PATH = "users/{uid}/memory_outbox/{record_id}"
 MEMORY_CONTROL_PATH = "users/{uid}/memory_control/state"
-APP_KEY_GRANTS_PATH = "users/{uid}/memory_control/v17_app_key_memory_grants"
+APP_KEY_GRANTS_PATH = "users/{uid}/memory_control/app_key_memory_grants"
 MCP_API_KEY_PATH = "mcp_api_keys/{key_id}"
 VECTOR_REPAIR_GATE = "vector_repair_outbox_enabled"
 
@@ -64,7 +64,7 @@ def build_read_only_commands(config: FirestoreRulesIamProofConfig) -> Dict[str, 
     - memory_control.server_owned: deployed rules keep users/{uid}/memory_control/state
       server-owned, including the vector_repair_outbox_enabled rollout gate.
     - app_key_grants.server_owned: deployed rules keep
-      users/{uid}/memory_control/v17_app_key_memory_grants server-owned.
+      users/{uid}/memory_control/app_key_memory_grants server-owned.
     - mcp_api_key_inventory: deployed rules deny client access to mcp_api_keys/{key_id};
       MCP API-key inventory/migration must use Admin IAM context only.
     - no_client_vector_repair_enablement: clients cannot set vector_repair_outbox_enabled.
@@ -224,7 +224,7 @@ def evaluate_project_iam(config: FirestoreRulesIamProofConfig, policy: Mapping[s
         check(
             "backend_not_owner_editor",
             not backend_elevated,
-            "backend service account should not have roles/owner or roles/editor for V17 Firestore access",
+            "backend service account should not have roles/owner or roles/editor for memory Firestore access",
         ),
         check(
             "no_broad_public_access",
@@ -249,7 +249,7 @@ def evaluate_deployed_rules(rules_text: str) -> List[Dict[str, str]]:
     compact = " ".join(rules_text.split())
     has_outbox = "memory_outbox" in rules_text
     has_control = "memory_control" in rules_text
-    has_app_key_grants = "v17_app_key_memory_grants" in rules_text or has_control
+    has_app_key_grants = "app_key_memory_grants" in rules_text or has_control
     has_mcp_api_keys = "mcp_api_keys" in rules_text or "match /{document=**}" in rules_text
     denies_clients = (
         "allow read, create, update, delete: if false" in compact or "allow read, write: if false" in compact
@@ -273,14 +273,14 @@ def evaluate_deployed_rules(rules_text: str) -> List[Dict[str, str]]:
             "memory_control paths must remain server-owned/Admin SDK only",
         ),
         check(
-            "client_denial.v17_app_key_memory_grants",
+            "client_denial.app_key_memory_grants",
             has_app_key_grants and denies_clients,
             f"deployed rules must deny client read/write on {APP_KEY_GRANTS_PATH}",
         ),
         check(
             "app_key_grants.server_owned",
             has_app_key_grants and server_owned_comment and denies_clients,
-            "V17 app/key memory grants must remain server-owned/Admin SDK only",
+            "memory app/key memory grants must remain server-owned/Admin SDK only",
         ),
         check(
             "mcp_api_key_inventory",
@@ -329,7 +329,7 @@ def build_config(args: argparse.Namespace) -> FirestoreRulesIamProofConfig:
 def missing_prerequisites(config: FirestoreRulesIamProofConfig, *, execute: bool) -> List[str]:
     missing: List[str] = []
     if not config.project:
-        missing.append("--project or V17_FIRESTORE_PROOF_PROJECT is required")
+        missing.append("--project or MEMORY_FIRESTORE_PROOF_PROJECT is required")
     if execute and shutil.which("gcloud") is None:
         missing.append("gcloud CLI is not installed or not on PATH")
     if execute and shutil.which("firebase") is None:
@@ -339,7 +339,7 @@ def missing_prerequisites(config: FirestoreRulesIamProofConfig, *, execute: bool
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Read-only Firestore IAM and deployed Security Rules proof runner for V17 vector repair outbox paths."
+        description="Read-only Firestore IAM and deployed Security Rules proof runner for memory vector repair outbox paths."
     )
     parser.add_argument("--project", default="")
     parser.add_argument("--database", default=DEFAULT_DATABASE)
@@ -379,7 +379,7 @@ def main(argv: Optional[Sequence[str]] = None, env: Optional[Mapping[str, str]] 
         "checks": [],
         "pass_fail_criteria": [
             f"client_denial.memory_outbox: deployed Security Rules deny client read/create/update/delete on {OUTBOX_PATH}",
-            f"client_denial.v17_app_key_memory_grants: deployed Security Rules deny client read/create/update/delete on {APP_KEY_GRANTS_PATH}",
+            f"client_denial.app_key_memory_grants: deployed Security Rules deny client read/create/update/delete on {APP_KEY_GRANTS_PATH}",
             f"mcp_api_key_inventory: deployed Security Rules/IAM proof includes {MCP_API_KEY_PATH} inventory as Admin-only",
             "worker_firestore_iam: Admin worker service account has Firestore read/write IAM and no owner/editor",
             f"memory_control.server_owned: {MEMORY_CONTROL_PATH} remains Admin/server-owned",
@@ -390,7 +390,7 @@ def main(argv: Optional[Sequence[str]] = None, env: Optional[Mapping[str, str]] 
         "prerequisites": missing,
         "non_claims": [
             "production Firestore IAM/deployed rules validation is not claimed unless --execute runs and every check passes",
-            "MCP API-key scope inventory and V17 app/key memory grant assignment are not migrated by this runner",
+            "MCP API-key scope inventory and memory app/key memory grant assignment are not migrated by this runner",
             "this runner never deploys Security Rules, mutates Firestore databases, or changes IAM",
             "real Pinecone duplicate stale physical ID delete/repair validation remains open",
             "shared ns2 isolation evidence remains open",

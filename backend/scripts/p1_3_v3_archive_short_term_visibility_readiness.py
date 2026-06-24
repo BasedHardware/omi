@@ -15,7 +15,7 @@ from utils.memory.v3_archive_visibility_readiness import evaluate_archive_short_
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Read-only V17 /v3 archive unavailable + stale short-term not default-visible readiness proof.'
+        description='Read-only memory /v3 archive unavailable + stale short-term not default-visible readiness proof.'
     )
     parser.add_argument(
         '--execute',

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 
-const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-v17-memory';
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.FIREBASE_PROJECT || 'demo-memory';
 const EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080';
 const BASE_URL = `http://${EMULATOR_HOST}/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
-const UID = `v17-tx-user-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const UID = `memory-tx-user-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const ROOT = `users/${UID}`;
 const CONTROL_PATH = `${ROOT}/memory_control/state`;
 const OPERATION_ID = 'operation-concurrent-apply';
@@ -120,7 +120,7 @@ async function getDocument(path) {
   return fieldsToObject(document.fields || {});
 }
 
-async function seedInitialV17ApplyState() {
+async function seedInitialMemoryApplyState() {
   await commit([
     updateWrite(CONTROL_PATH, {
       uid: UID,
@@ -245,8 +245,8 @@ async function runContentionRound() {
   return { commitA, commitB };
 }
 
-async function assertConcurrentTransactionContentionSerializesV17Apply() {
-  await seedInitialV17ApplyState();
+async function assertConcurrentTransactionContentionSerializesMemoryApply() {
+  await seedInitialMemoryApplyState();
 
   let commitA;
   let commitB;
@@ -299,8 +299,8 @@ async function assertConcurrentTransactionContentionSerializesV17Apply() {
 }
 
 try {
-  await assertConcurrentTransactionContentionSerializesV17Apply();
-  console.log('PASS: Firestore emulator transaction contention serialized V17 apply layout');
+  await assertConcurrentTransactionContentionSerializesMemoryApply();
+  console.log('PASS: Firestore emulator transaction contention serialized memory apply layout');
 } finally {
   await commit([
     deleteWrite(`${ROOT}/memory_outbox/${WINNER_OUTBOX_ID}`),

@@ -35,8 +35,8 @@ sys.modules.setdefault('database._client', _database_client_stub)
 
 from models.memories import MemoryDB
 
-V17_ONLY_FIELDS = {
-    'v17_source': 'memory_items',
+MEMORY_ONLY_FIELDS = {
+    'memory_source': 'memory_items',
     'account_generation': 7,
     'projection_generation': 11,
     'archive_default_visible': False,
@@ -99,9 +99,9 @@ def _case_dependency(case_id: str):
         return [_memory_payload('mem-header-1', 'User prefers quiet rooms')]
     if case_id == 'enabled_empty':
         return []
-    if case_id == 'v17_only_fields_filtered_from_memorydb_body':
+    if case_id == 'memory_only_fields_filtered_from_memorydb_body':
         payload = _memory_payload('mem-filter-1', 'User works at Acme')
-        payload.update(V17_ONLY_FIELDS)
+        payload.update(MEMORY_ONLY_FIELDS)
         return [payload]
     raise AssertionError(f'unsupported success case: {case_id}')
 
@@ -115,7 +115,7 @@ def _build_controlled_app(case_id: str) -> FastAPI:
     @app.get('/v3/memories', response_model=List[MemoryDB])
     def list_memories(response: Response, memories: list[dict[str, Any]] = Depends(v3_memory_dependency)):
         if case_id == 'additive_headers_no_body_mutation':
-            response.headers['x-omi-memory-source'] = 'v17-default-projection'
+            response.headers['x-omi-memory-source'] = 'memory-default-projection'
             response.headers['x-omi-memory-policy'] = 'default_memory'
         return memories
 
@@ -178,7 +178,7 @@ def run_route_contract_proof() -> list[dict[str, Any]]:
         _run_success_case('additive_headers_no_body_mutation'),
         _run_success_case('enabled_empty'),
         _run_denied_case(),
-        _run_success_case('v17_only_fields_filtered_from_memorydb_body'),
+        _run_success_case('memory_only_fields_filtered_from_memorydb_body'),
     ]
 
 
@@ -213,7 +213,7 @@ def build_report(execute: bool = False) -> dict[str, Any]:
             'additive_headers_permitted_without_body_mutation',
             'enabled_empty_returns_empty_list_no_legacy_fallback_marker',
             'fail_closed_denied_returns_no_body_data_no_legacy_fallback_marker',
-            'v17_only_fields_filtered_from_list_memorydb_body',
+            'memory_only_fields_filtered_from_list_memorydb_body',
             'archive_default_unavailable_no_stale_short_term_default_visible',
         ],
         'non_claims': NON_CLAIMS,

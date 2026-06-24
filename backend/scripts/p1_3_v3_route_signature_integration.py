@@ -5,7 +5,7 @@ This runner statically inspects `backend/routers/memories.py` with Python AST an
 source text only. It intentionally does not import FastAPI, router modules,
 Firestore/Pinecone/cloud/provider clients, or application startup code. It makes
 no runtime cutover claim; current `/v3` behavior remains legacy-wired and
-BLOCKED/NO-GO for V17 rollout.
+BLOCKED/NO-GO for memory rollout.
 """
 
 from __future__ import annotations
@@ -23,20 +23,20 @@ TARGET_ROUTES = {
 }
 
 CURRENT_RUNTIME_SUMMARY = (
-    "GET /v3/memories now has a hard default-off V17 dependency branch: production/default and "
+    "GET /v3/memories now has a hard default-off memory dependency branch: production/default and "
     "non-enrolled legacy-primary reads preserve legacy memories_db semantics, while TestClient-only "
-    "V17 read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
+    "memory read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
 )
 
 FUTURE_WIRING_SEAM = [
-    "GET route query params -> adapt_v17_v3_request_parameters(...) without FastAPI-specific coupling",
-    "adapted request + server-owned control/grant/projection/write evidence -> plan_v17_v3_memory_route(...) pure planner",
-    "planner read envelope -> adapt_v17_v3_memory_response(...) List[MemoryDB] body plus additive headers",
+    "GET route query params -> adapt_v3_request_parameters(...) without FastAPI-specific coupling",
+    "adapted request + server-owned control/grant/projection/write evidence -> plan_v3_memory_route(...) pure planner",
+    "planner read envelope -> adapt_v3_memory_response(...) List[MemoryDB] body plus additive headers",
 ]
 
 RUNTIME_BLOCKERS = [
-    "Do not wire while GET still lacks route-local server-owned V17 control/grant/projection evidence inputs.",
-    "Do not wire while POST/DELETE still execute direct legacy DB/vector mutation paths for enrolled V17 accounts.",
+    "Do not wire while GET still lacks route-local server-owned memory control/grant/projection evidence inputs.",
+    "Do not wire while POST/DELETE still execute direct legacy DB/vector mutation paths for enrolled memory accounts.",
     "Do not wire until FastAPI dependency/response-model behavior is proven with controlled stubs or production deps.",
 ]
 
@@ -47,7 +47,7 @@ GET_PARAM_CONTRACT_MAPPING = [
         "request_adapter_field": "limit",
         "safe_to_map": True,
         "future_only": False,
-        "v17_constraint": "bounded V17 limit; never expanded to 5000 in V17 cursor mode",
+        "memory_constraint": "bounded memory limit; never expanded to 5000 in memory cursor mode",
         "blocked_reason": None,
     },
     {
@@ -56,8 +56,8 @@ GET_PARAM_CONTRACT_MAPPING = [
         "request_adapter_field": "offset",
         "safe_to_map": False,
         "future_only": False,
-        "v17_constraint": "legacy-primary compatibility only",
-        "blocked_reason": "offset is legacy-primary only; V17 cohort requires signed cursor mode",
+        "memory_constraint": "legacy-primary compatibility only",
+        "blocked_reason": "offset is legacy-primary only; memory cohort requires signed cursor mode",
     },
     {
         "route_param": "cursor",
@@ -65,7 +65,7 @@ GET_PARAM_CONTRACT_MAPPING = [
         "request_adapter_field": "cursor",
         "safe_to_map": True,
         "future_only": False,
-        "v17_constraint": "additive opaque HMAC keyset cursor bound to uid/account/projection/filter/source/read-mode",
+        "memory_constraint": "additive opaque HMAC keyset cursor bound to uid/account/projection/filter/source/read-mode",
         "blocked_reason": None,
     },
     {
@@ -74,7 +74,7 @@ GET_PARAM_CONTRACT_MAPPING = [
         "request_adapter_field": "filters.category",
         "safe_to_map": True,
         "future_only": True,
-        "v17_constraint": "filter hash must be cursor-bound; no silent legacy fallback for unsupported filters",
+        "memory_constraint": "filter hash must be cursor-bound; no silent legacy fallback for unsupported filters",
         "blocked_reason": None,
     },
     {
@@ -83,7 +83,7 @@ GET_PARAM_CONTRACT_MAPPING = [
         "request_adapter_field": "include_archive",
         "safe_to_map": False,
         "future_only": True,
-        "v17_constraint": "Archive default-unavailable unless a separate explicit persisted capability is launched",
+        "memory_constraint": "Archive default-unavailable unless a separate explicit persisted capability is launched",
         "blocked_reason": "Archive default-unavailable for /v3 default reads",
     },
 ]
@@ -98,7 +98,7 @@ ROUTE_SIGNATURE_INTEGRATION_PROOF = {
         "static_ast_source_inspection_of_memories_router_no_fastapi_import",
         "pins_get_post_delete_v3_route_signatures_and_body_models",
         "pins_current_legacy_get_post_delete_db_vector_paths_no_cutover_claim",
-        "maps_get_limit_offset_to_request_adapter_contract_with_offset_v17_blocked",
+        "maps_get_limit_offset_to_request_adapter_contract_with_offset_memory_blocked",
         "identifies_future_query_to_request_adapter_to_route_planner_to_response_adapter_seam",
         "archive_default_unavailable_no_stale_short_term_default_visible",
     ],
@@ -246,7 +246,7 @@ def inspect_route_signatures(router_source_path: Path | None = None) -> list[dic
                     "legacy_runtime_calls": _legacy_runtime_calls(route, source_segment),
                     "source_file": "backend/routers/memories.py",
                     "static_source_inspection": True,
-                    "runtime_wired_to_v17": route == 'GET /v3/memories',
+                    "runtime_wired_to_memory": route == 'GET /v3/memories',
                 }
             )
     return sorted(routes, key=lambda item: (item['method'], item['path']))
@@ -255,7 +255,7 @@ def inspect_route_signatures(router_source_path: Path | None = None) -> list[dic
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     route_signatures = inspect_route_signatures()
     return {
-        "artifact": "v17_p1_3_v3_route_signature_integration",
+        "artifact": "p1_3_v3_route_signature_integration",
         "status": "BLOCKED",
         "execute": execute,
         "read_only": True,

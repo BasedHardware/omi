@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Final local V17 `/v3` canary approval GO/NO-GO aggregate readiness report.
+"""Final local memory `/v3` canary approval GO/NO-GO aggregate readiness report.
 
 This runner is a local-only pre-runtime decision artifact. It consolidates the
 schema, source/IAM, production read, lifecycle/evidence, observability, runtime,
@@ -39,7 +39,7 @@ _RUNTIME = _load_script_module("p1_3_v3_get_runtime_wiring_readiness.py")
 _EXTERNAL = _load_script_module("p1_3_v3_external_compatibility_readiness.py")
 
 SCHEMA_VALIDATOR_PROOF = {
-    "source_artifact": "backend/utils/memory/v17_v3_canary_approval.py",
+    "source_artifact": "backend/utils/memory/v3_canary_approval.py",
     "test_artifact": "backend/tests/unit/test_v3_canary_approval_artifact.py",
     "status": "READY_LOCAL_CONTRACT",
     "route_scope": ROUTE_SCOPE,
@@ -68,7 +68,7 @@ NON_CLAIMS = [
     "No telemetry sink production call.",
     "No PII/raw memory content telemetry.",
     "No secret/cursor token logging.",
-    "No legacy fallback/merge for V17 failures.",
+    "No legacy fallback/merge for memory failures.",
     "No Archive default visibility or stale Short-term default visibility.",
 ]
 
@@ -225,7 +225,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     proof_status = "BLOCKED" if execute else "NOT_RUN"
     runtime_summary = reports["runtime"]["summary"]
     return {
-        "artifact": "v17_p1_3_v3_canary_approval_aggregate_readiness",
+        "artifact": "p1_3_v3_canary_approval_aggregate_readiness",
         "status": "BLOCKED",
         "decision": "NO_GO",
         "proof_status": proof_status,

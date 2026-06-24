@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare safe local artifacts for V17 `/v3` dev-cloud proof.
+"""Prepare safe local artifacts for memory `/v3` dev-cloud proof.
 
 Default mode prints a JSON preflight/readiness report and performs no network or
 Firestore writes. `--write-bundle-dir` writes placeholder evidence files locally
@@ -29,11 +29,11 @@ from utils.memory.v3_dev_cloud_proof import (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description='Prepare V17 /v3 dev-cloud proof artifacts safely.')
+    parser = argparse.ArgumentParser(description='Prepare memory /v3 dev-cloud proof artifacts safely.')
     parser.add_argument('--repo-root', default=str(Path(__file__).resolve().parents[2]))
     parser.add_argument('--run-id', default='not-run')
-    parser.add_argument('--uid-a', default='v17-dev-synthetic-user-a')
-    parser.add_argument('--uid-b', default='v17-dev-synthetic-user-b')
+    parser.add_argument('--uid-a', default='memory-dev-synthetic-user-a')
+    parser.add_argument('--uid-b', default='memory-dev-synthetic-user-b')
     parser.add_argument('--write-bundle-dir', default='')
     parser.add_argument('--fixture-only', action='store_true')
     parser.add_argument('--proof-matrix-only', action='store_true')

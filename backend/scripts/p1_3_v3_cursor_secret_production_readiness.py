@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Production-safe V17 `/v3` cursor secret/config metadata read-proof readiness contract.
+"""Production-safe memory `/v3` cursor secret/config metadata read-proof readiness contract.
 
 This runner is disabled by default. Without explicit environment gates it performs
 no production calls and reports NOT_RUN/BLOCKED. With gates present it may run one
-read-only Secret Manager metadata lookup for a route-scoped V17 `/v3` cursor
+read-only Secret Manager metadata lookup for a route-scoped memory `/v3` cursor
 signing secret/config source, validate only metadata/readiness properties, and
 still refuse to claim route wiring, secret-material proof, or production rollout
 approval. It never imports FastAPI routers, accesses secret bytes, writes
@@ -22,7 +22,7 @@ from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
 ROUTE_SCOPE_LABEL = "get_v3_memories"
-SECRET_ID = "v17-v3-get-memories-cursor-signing-secret"
+SECRET_ID = "memory-v3-get-cursor-signing-secret"
 SECRET_RESOURCE_TEMPLATE = "projects/{project_id}/secrets/{secret_id}"
 SOURCE_API_SHAPE = {
     "source_type": "secret_manager_metadata_or_equivalent_server_config_inventory",
@@ -31,7 +31,7 @@ SOURCE_API_SHAPE = {
     "secret_id": SECRET_ID,
     "allowed_metadata_labels": {
         "route_scope": ROUTE_SCOPE_LABEL,
-        "purpose": "v17_v3_cursor_signing",
+        "purpose": "v3_cursor_signing",
         "owner": "memory_platform",
     },
     "forbidden_dimensions": ["uid", "user_id", "session_id", "memory_id", "request_payload", "raw_cursor"],
@@ -150,7 +150,7 @@ def _evaluate_metadata(metadata: Mapping[str, Any] | None, *, expected_project_i
             "metadata_validation_reason": "metadata_wrong_project",
             "route_scoped_without_user_dimensions": False,
         }
-    if labels.get("route_scope") != ROUTE_SCOPE_LABEL or labels.get("purpose") != "v17_v3_cursor_signing":
+    if labels.get("route_scope") != ROUTE_SCOPE_LABEL or labels.get("purpose") != "v3_cursor_signing":
         return {
             "production_secret_config_source_exists": True,
             "production_secret_config_metadata_valid": False,
@@ -230,7 +230,7 @@ def build_report(
         "approval_claimed": False,
     }
     return {
-        "artifact": "v17_p1_3_v3_cursor_secret_production_readiness",
+        "artifact": "p1_3_v3_cursor_secret_production_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -256,7 +256,7 @@ def build_report(
             "No client-supplied cursor signing secret is trusted.",
             "No production rollout approval claimed, even when metadata reads and shape validate.",
             "No production Firestore write, vector/provider call, or telemetry sink call is allowed.",
-            "No legacy fallback/merge for V17 failures claimed.",
+            "No legacy fallback/merge for memory failures claimed.",
             "No Archive default visibility or stale Short-term default visibility claimed.",
         ],
         "summary": summary,

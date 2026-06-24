@@ -18,7 +18,7 @@ REQUIRED_ENVIRONMENT = {
 PROOF_CASES: Dict[str, Dict[str, Any]] = {
     "provider_pagination_refill_semantics": {
         "status": "NOT_RUN",
-        "goal": "Prove real Pinecone top-k windows/refill behavior preserves V17 recall after stale/malformed candidates.",
+        "goal": "Prove real Pinecone top-k windows/refill behavior preserves memory recall after stale/malformed candidates.",
         "planned_read_only_evidence": [
             "Run bounded read-only Pinecone candidate queries at increasing limits against an explicit proof uid.",
             "Compare candidate counts, duplicate vector ids, rejected metadata counts, and refill stop reasons.",
@@ -63,7 +63,7 @@ PROOF_CASES: Dict[str, Dict[str, Any]] = {
     },
     "expired_short_term": {
         "status": "NOT_RUN",
-        "goal": "Prove expired Short-term candidates do not return through default V17 vector search.",
+        "goal": "Prove expired Short-term candidates do not return through default memory vector search.",
         "planned_read_only_evidence": [
             "Inventory candidate memory_tier=short_term with expires_at/lifecycle state past active window.",
             "Confirm authoritative hydration rejects expired or non-active Short-term records.",
@@ -110,7 +110,7 @@ PROOF_CASES: Dict[str, Dict[str, Any]] = {
         "status": "NOT_RUN",
         "goal": "Prove high-volume accounts respect vector query, candidate, hydration-read, and deadline budgets.",
         "planned_read_only_evidence": [
-            "Run bounded read-only candidate-window inventory for a proof uid with many V17 memories.",
+            "Run bounded read-only candidate-window inventory for a proof uid with many memory memories.",
             "Record vector_query_count, candidate_request_limit, hydrated_candidate_count, and exhaustion flags.",
         ],
         "evidence": [],
@@ -157,7 +157,7 @@ class VectorSearchProviderReadinessConfig:
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Safe-by-default V17 vector search provider proof/readiness runner. Default mode is NOT_RUN."
+        description="Safe-by-default memory vector search provider proof/readiness runner. Default mode is NOT_RUN."
     )
     parser.add_argument("--execute", action="store_true", help="Gate future safe read-only readiness checks.")
     parser.add_argument("--pinecone-api-key", default=os.getenv("PINECONE_API_KEY", ""))

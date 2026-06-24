@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit the V17-V3-F6H pre-GCP aggregate readiness report.
+"""Emit the memory-V3-F6H pre-GCP aggregate readiness report.
 
 This runner performs only local contract smoke checks. It never constructs GCP
 clients, reads credentials, or performs network/cloud/provider calls. A

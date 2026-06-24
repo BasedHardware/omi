@@ -6,7 +6,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-v17-memory"))
+PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -16,8 +16,8 @@ if str(BACKEND_DIR) not in sys.path:
 import google.cloud.firestore as firestore
 
 from database.memory_vector_repair_outbox import (
-    build_v17_vector_repair_purge_outbox_records,
-    write_v17_vector_repair_purge_outbox_records,
+    build_vector_repair_purge_outbox_records,
+    write_vector_repair_purge_outbox_records,
 )
 
 
@@ -63,11 +63,11 @@ def main() -> int:
     if not emulator_host:
         raise RuntimeError("FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec")
 
-    uid = "v17-vector-repair-outbox-emulator-user"
+    uid = "memory-vector-repair-outbox-emulator-user"
     queued_at = datetime(2026, 6, 19, 12, 0, 0, tzinfo=timezone.utc)
     db_client = firestore.Client(project=PROJECT_ID)
 
-    records = build_v17_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=queued_at)
+    records = build_vector_repair_purge_outbox_records(uid=uid, candidates=[_candidate()], queued_at=queued_at)
     if len(records) != 1:
         raise AssertionError(f"expected one outbox record, got {len(records)}")
     record = records[0]
@@ -77,8 +77,8 @@ def main() -> int:
     if record["record_id"] != record["idempotency_key"]:
         raise AssertionError("record_id must equal idempotency_key for stable replay")
 
-    first = write_v17_vector_repair_purge_outbox_records(db_client=db_client, records=records)
-    second = write_v17_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    first = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
+    second = write_vector_repair_purge_outbox_records(db_client=db_client, records=records)
     if first != records or second != records:
         raise AssertionError("writer returned a mutated record payload")
 
@@ -100,7 +100,7 @@ def main() -> int:
         )
 
     try:
-        write_v17_vector_repair_purge_outbox_records(db_client=_FailingDb(), records=records)
+        write_vector_repair_purge_outbox_records(db_client=_FailingDb(), records=records)
     except RuntimeError as exc:
         if "intentional emulator validation write failure" not in str(exc):
             raise
@@ -108,7 +108,7 @@ def main() -> int:
         raise AssertionError("write failure propagated check failed: writer swallowed an exception")
 
     print(
-        "PASS: V17 vector repair/purge outbox idempotent Firestore emulator set validated "
+        "PASS: memory vector repair/purge outbox idempotent Firestore emulator set validated "
         f"(path={record['outbox_path']}, record_id={record['record_id']}); write failure propagated"
     )
     return 0

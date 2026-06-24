@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-v17-memory"))
+PROJECT_ID = os.environ.setdefault("GOOGLE_CLOUD_PROJECT", os.environ.get("GCLOUD_PROJECT", "demo-memory"))
 os.environ.setdefault("GCLOUD_PROJECT", PROJECT_ID)
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -14,13 +14,13 @@ if str(BACKEND_DIR) not in sys.path:
 
 import google.cloud.firestore as firestore
 
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
+from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 
 
 def _stored_model(model):
@@ -39,8 +39,8 @@ def main() -> int:
     if not emulator_host:
         raise RuntimeError("FIRESTORE_EMULATOR_HOST is required; run through Firebase emulators:exec")
 
-    uid = "v17-python-apply-emulator-user"
-    collections = V17Collections(uid=uid)
+    uid = "memory-python-apply-emulator-user"
+    collections = MemoryCollections(uid=uid)
     db_client = firestore.Client(project=PROJECT_ID)
 
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=3, source_generation=5)
@@ -125,7 +125,7 @@ def main() -> int:
     expected_state_head = {
         "schema_version": 1,
         "uid": uid,
-        "source": "v17_memory_state_head",
+        "source": "memory_state_head",
         "account_generation": result.control_state.account_generation,
         "head_commit_id": result.control_state.head_commit_id,
         "commit_sequence": result.control_state.commit_sequence,
@@ -133,7 +133,7 @@ def main() -> int:
     for key, value in expected_state_head.items():
         if stored_state_head.get(key) != value:
             raise AssertionError(f"state-head {key} mismatch: {stored_state_head.get(key)!r} != {value!r}")
-    trusted = read_v17_v3_trusted_account_generation(uid=uid, db_client=db_client)
+    trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=db_client)
     if trusted.read_error_reason is not None:
         raise AssertionError(f"trusted account-generation reader failed: {trusted.read_error_reason}")
     if trusted.account_generation != result.control_state.account_generation:
@@ -155,7 +155,7 @@ def main() -> int:
         raise AssertionError("retry did not return stored committed memory item metadata")
 
     print(
-        "PASS: Python apply_long_term_patch_firestore committed and replayed V17 docs on Firestore emulator "
+        "PASS: Python apply_long_term_patch_firestore committed and replayed memory docs on Firestore emulator "
         "including users/{uid}/memory_state/head trusted account-generation state-head "
         f"(uid={uid}, operation={operation.operation_id}, commit={result.control_state.head_commit_id})"
     )

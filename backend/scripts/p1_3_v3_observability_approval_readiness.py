@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` observability/telemetry approval readiness matrix.
+"""Safe memory `/v3` observability/telemetry approval readiness matrix.
 
 This artifact is deliberately pre-runtime and read-only. It inventories the
 telemetry fields, existing local observability mechanisms, approval artifacts,
 rollback/canary blockers, and static privacy guardrails required before future
-`GET /v3/memories` V17 runtime wiring. It does not import FastAPI routers, read
+`GET /v3/memories` memory runtime wiring. It does not import FastAPI routers, read
 Firestore, call telemetry sinks/providers, mutate state, or claim approval.
 """
 
@@ -83,8 +83,8 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "read_source",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Selected read source for the request after the V17 `/v3` planner runs.",
-        "allowed_values": ["legacy_primary", "v17_compatibility_projection", "fail_closed"],
+        "description": "Selected read source for the request after the memory `/v3` planner runs.",
+        "allowed_values": ["legacy_primary", "memory_compatibility_projection", "fail_closed"],
         "cardinality": "low",
         "contains_pii": False,
         "contains_raw_memory_content": False,
@@ -98,7 +98,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
         "description": "Final route decision selected by the future compatibility planner.",
-        "allowed_values": ["use_legacy_safe", "use_v17", "deny_memory", "fail_closed"],
+        "allowed_values": ["use_legacy_safe", "use_memory", "deny_memory", "fail_closed"],
         "cardinality": "low",
         "contains_pii": False,
         "contains_raw_memory_content": False,
@@ -152,7 +152,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "projection_generation",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "V17-derived compatibility projection generation required to match control/account/cursor fences.",
+        "description": "memory-derived compatibility projection generation required to match control/account/cursor fences.",
         "allowed_values": "bounded_non_negative_integer_or_absent",
         "cardinality": "bounded_integer",
         "contains_pii": False,
@@ -248,7 +248,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "no_legacy_fallback",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Explicit marker that V17 failure states did not fall back to legacy reads or merge results.",
+        "description": "Explicit marker that memory failure states did not fall back to legacy reads or merge results.",
         "allowed_values": [True],
         "cardinality": "boolean",
         "contains_pii": False,
@@ -262,8 +262,8 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "projection_source",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Projection source used by future GET reads; must not imply direct legacy fallback after V17 failure.",
-        "allowed_values": ["none", "v17_derived_compatibility_projection"],
+        "description": "Projection source used by future GET reads; must not imply direct legacy fallback after memory failure.",
+        "allowed_values": ["none", "memory_derived_compatibility_projection"],
         "cardinality": "low",
         "contains_pii": False,
         "contains_raw_memory_content": False,
@@ -276,7 +276,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "request_limit",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Bounded limit bucket for V17 mode; do not emit full request payloads.",
+        "description": "Bounded limit bucket for memory mode; do not emit full request payloads.",
         "allowed_values": ["1_25", "26_100", "101_500", "over_max_rejected"],
         "cardinality": "low",
         "contains_pii": False,
@@ -301,10 +301,10 @@ REQUIRED_TELEMETRY_FIELDS = [
         "approval_claimed": False,
     },
     {
-        "field_id": "request_offset_disallowed_in_v17",
+        "field_id": "request_offset_disallowed_in_v3",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "V17 cursor mode marker proving offset and the legacy 5000 first-page override were not applied.",
+        "description": "memory cursor mode marker proving offset and the legacy 5000 first-page override were not applied.",
         "allowed_values": [True],
         "cardinality": "boolean",
         "contains_pii": False,
@@ -318,7 +318,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "archive_default_visibility_decision",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Default Archive visibility decision; initial `/v3` V17 default reads must keep Archive unavailable.",
+        "description": "Default Archive visibility decision; initial `/v3` memory default reads must keep Archive unavailable.",
         "allowed_values": ["default_unavailable", "explicitly_authorized", "denied"],
         "cardinality": "low",
         "contains_pii": False,
@@ -346,7 +346,7 @@ REQUIRED_TELEMETRY_FIELDS = [
         "field_id": "rollback_read_disable_gate",
         "status": "BLOCKED",
         "route_refs": _REQUIRED_ROUTE_REFS,
-        "description": "Future emergency read-disable gate state for V17 `/v3` GET.",
+        "description": "Future emergency read-disable gate state for memory `/v3` GET.",
         "allowed_values": ["not_wired", "disabled", "enabled"],
         "cardinality": "low",
         "contains_pii": False,
@@ -391,7 +391,7 @@ EXISTING_MECHANISMS = [
         "mechanism_id": "prometheus_metrics_endpoint",
         "status": "EXISTS_NOT_V3_WIRED",
         "source": "backend/routers/metrics.py + backend/utils/metrics.py",
-        "details": "Repository exposes authenticated Prometheus metrics, but no memory `/v3` V17 counters/gauges/histograms are defined or wired.",
+        "details": "Repository exposes authenticated Prometheus metrics, but no memory `/v3` memory counters/gauges/histograms are defined or wired.",
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
@@ -399,31 +399,31 @@ EXISTING_MECHANISMS = [
         "mechanism_id": "log_sanitizer",
         "status": "EXISTS_REQUIRED_FOR_FUTURE_WIRING",
         "source": "backend/utils/log_sanitizer.py",
-        "details": "Existing logging policy requires sanitize/sanitize_pii; future V17 `/v3` telemetry must emit only derived labels and never raw memory content.",
+        "details": "Existing logging policy requires sanitize/sanitize_pii; future memory `/v3` telemetry must emit only derived labels and never raw memory content.",
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
     {
-        "mechanism_id": "v17_read_decision_model",
+        "mechanism_id": "memory_read_decision_model",
         "status": "EXISTS_NOT_V3_GET_WIRED",
-        "source": "backend/utils/memory/v17_default_read_rollout.py",
-        "details": "Existing V17 read-decision concepts can inform low-cardinality labels, but GET /v3 remains legacy-only until future wiring.",
+        "source": "backend/utils/memory/default_read_rollout.py",
+        "details": "Existing memory read-decision concepts can inform low-cardinality labels, but GET /v3 remains legacy-only until future wiring.",
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
     {
-        "mechanism_id": "v17_v3_local_telemetry_and_rollback_seam",
+        "mechanism_id": "v3_local_telemetry_and_rollback_seam",
         "status": "LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED",
-        "source": "backend/utils/memory/v17_v3_local_telemetry.py",
+        "source": "backend/utils/memory/v3_local_telemetry.py",
         "test": "backend/tests/unit/test_v3_local_telemetry.py",
-        "details": "Local pure/fake-injectable seam builds sanitized low-cardinality V17 /v3 GET telemetry events, defaults to a no-op sink, and decides rollback/read-disable config without reading production state.",
+        "details": "Local pure/fake-injectable seam builds sanitized low-cardinality memory /v3 GET telemetry events, defaults to a no-op sink, and decides rollback/read-disable config without reading production state.",
         "production_call_executed": False,
         "runtime_wired_to_v3_get": False,
     },
     {
-        "mechanism_id": "v17_v3_canary_approval_artifact_schema_seam",
+        "mechanism_id": "v3_canary_approval_artifact_schema_seam",
         "status": "LOCAL_SCHEMA_SEAM_PROVED_NOT_V3_GET_WIRED",
-        "source": "backend/utils/memory/v17_v3_canary_approval.py",
+        "source": "backend/utils/memory/v3_canary_approval.py",
         "test": "backend/tests/unit/test_v3_canary_approval_artifact.py",
         "details": (
             "Local pure/fake-injectable schema validator pins the future server-owned GET /v3/memories "
@@ -434,9 +434,9 @@ EXISTING_MECHANISMS = [
         "runtime_wired_to_v3_get": False,
     },
     {
-        "mechanism_id": "v17_v3_canary_approval_artifact_reader_seam",
+        "mechanism_id": "v3_canary_approval_artifact_reader_seam",
         "status": "LOCAL_READER_SEAM_PROVED_NOT_V3_GET_WIRED",
-        "source": "backend/utils/memory/v17_v3_canary_approval.py",
+        "source": "backend/utils/memory/v3_canary_approval.py",
         "test": "backend/tests/unit/test_v3_canary_approval_artifact.py",
         "details": (
             "Local fake-injectable reader protocol consumes the schema validator for a future server-owned "
@@ -473,14 +473,14 @@ BLOCKERS = [
     {
         "blocker_id": "canary_enrollment_artifact_missing",
         "status": "BLOCKED",
-        "required_evidence": "Provide server-owned canary cohort/enrollment artifact and label mapping for GET /v3 V17 read rollout.",
+        "required_evidence": "Provide server-owned canary cohort/enrollment artifact and label mapping for GET /v3 memory read rollout.",
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "blocker_id": "rollback_read_disable_gate_not_wired_to_v3_get",
         "status": "BLOCKED",
-        "required_evidence": "Wire and test a fail-closed read-disable/rollback gate before any V17 /v3 GET canary.",
+        "required_evidence": "Wire and test a fail-closed read-disable/rollback gate before any memory /v3 GET canary.",
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
@@ -541,7 +541,7 @@ OBSERVABILITY_APPROVAL_READINESS_PROOF = {
         "local_pure_canary_approval_artifact_reader_validation_proved",
         "approved_artifact_produces_bounded_labels_only_without_pii_or_payloads",
         "canary_enrollment_and_rollback_read_disable_gate_required",
-        "no_legacy_fallback_marker_required_for_v17_failures",
+        "no_legacy_fallback_marker_required_for_memory_failures",
         "archive_default_unavailable_and_stale_short_term_hidden_markers_required",
         "product_privacy_operational_approval_artifact_missing",
         "no_pii_raw_memory_content_or_high_cardinality_labels",
@@ -554,7 +554,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         1 for field in REQUIRED_TELEMETRY_FIELDS if field["status"] in {"BLOCKED", "NOT_RUN"}
     )
     return {
-        "artifact": "v17_p1_3_v3_observability_approval_readiness",
+        "artifact": "p1_3_v3_observability_approval_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -570,7 +570,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "telemetry_sink_calls_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Safe local observability/telemetry/rollback/approval readiness matrix for future GET /v3/memories V17 runtime wiring.",
+        "scope": "Safe local observability/telemetry/rollback/approval readiness matrix for future GET /v3/memories memory runtime wiring.",
         "required_telemetry_fields": REQUIRED_TELEMETRY_FIELDS,
         "existing_mechanisms": EXISTING_MECHANISMS,
         "blockers": BLOCKERS,
@@ -588,7 +588,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No PII/raw memory content telemetry emitted.",
             "No secret or cursor token logging allowed or performed.",
             "No production rollout approval claimed.",
-            "No legacy fallback/merge for V17 failures claimed.",
+            "No legacy fallback/merge for memory failures claimed.",
             "No Archive default visibility or stale Short-term default visibility claimed.",
         ],
         "summary": {

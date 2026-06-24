@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` canary approval lifecycle/evidence-bundle readiness contract.
+"""Safe memory `/v3` canary approval lifecycle/evidence-bundle readiness contract.
 
 This readiness artifact is local-only and pre-runtime. It defines the human/ops
 approval evidence bundle, expiry/rotation rules, rollback ownership, monitoring
@@ -16,7 +16,7 @@ import json
 from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
-ARTIFACT_DOCUMENT_PATH = "system/v17_v3_canary_approvals/routes/get_v3_memories"
+ARTIFACT_DOCUMENT_PATH = "system/v3_canary_approvals/routes/get_v3_memories"
 ARTIFACT_SOURCE = f"firestore:{ARTIFACT_DOCUMENT_PATH}"
 OWNER_GROUPS = ["product_privacy_ops", "memory_platform_oncall"]
 APPROVER_ROLES = ["product_privacy_ops"]
@@ -128,49 +128,49 @@ REQUIRED_EVIDENCE_BUNDLE = [
 FAIL_CLOSED_SEMANTICS = [
     {
         "state": "approval_evidence_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "approval_evidence_stale_or_unrotated",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "rollback_owner_or_steps_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "monitoring_gates_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "production_read_proof_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "iam_emulator_proof_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
     },
     {
         "state": "route_scope_mismatch",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "required_before_runtime_change": True,
         "approval_claimed": False,
@@ -182,7 +182,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     proof_status = "BLOCKED" if execute else "NOT_RUN"
     blocked_required_evidence_count = sum(1 for item in REQUIRED_EVIDENCE_BUNDLE if item["status"] == "BLOCKED")
     return {
-        "artifact": "v17_p1_3_v3_canary_approval_lifecycle_readiness",
+        "artifact": "p1_3_v3_canary_approval_lifecycle_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -210,7 +210,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No telemetry sink production call executed or claimed.",
             "No PII/raw content telemetry emitted.",
             "No secret/cursor logging allowed or performed.",
-            "No legacy fallback/merge for V17 failures claimed.",
+            "No legacy fallback/merge for memory failures claimed.",
             "No Archive default visibility or stale Short-term default visibility claimed.",
         ],
         "summary": {

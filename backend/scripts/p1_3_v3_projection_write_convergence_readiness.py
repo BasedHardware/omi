@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Production-safe V17 `/v3` projection write convergence/freshness-fence readiness proof.
+"""Production-safe memory `/v3` projection write convergence/freshness-fence readiness proof.
 
 This runner defines the future evidence contract that must be proven before
-`GET /v3/memories` can trust the V17-derived compatibility projection read
+`GET /v3/memories` can trust the memory-derived compatibility projection read
 source. By default it performs no production calls and reports NOT_RUN/BLOCKED.
 With explicit environment gates it may run one read-only metadata/evidence probe
 for a route-scoped convergence state document. It never imports FastAPI routers,
@@ -22,10 +22,10 @@ from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
 ROUTE_SCOPE_LABEL = "get_v3_memories"
-SOURCE_TYPE = "firestore_v17_projection_write_convergence_state"
-STATE_PATH_TEMPLATE = "memory_control/v17_projection_write_convergence"
-ROUTE_STATE_PATH_TEMPLATE = "memory_control/v17_projection_write_convergence/routes/{route_scope_label}"
-SOURCE_NAME = "v17_projection_write_convergence_state"
+SOURCE_TYPE = "firestore_projection_write_convergence_state"
+STATE_PATH_TEMPLATE = "memory_control/projection_write_convergence"
+ROUTE_STATE_PATH_TEMPLATE = "memory_control/projection_write_convergence/routes/{route_scope_label}"
+SOURCE_NAME = "projection_write_convergence_state"
 PROJECTION_VERSION = "v3_memorydb_compatibility"
 MAX_STALENESS_SECONDS = 300
 
@@ -85,10 +85,10 @@ PROJECTION_WRITE_CONVERGENCE_CONTRACT = {
     "idempotency_key_required": True,
     "required_fence_fields": REQUIRED_FENCE_FIELDS,
     "rollback_fail_closed_required": True,
-    "rollback_to_legacy_after_v17_write_allowed": False,
+    "rollback_to_legacy_after_memory_write_allowed": False,
     "fail_closed_on_missing_stale_malformed_evidence": True,
     "legacy_fallback_allowed": False,
-    "merge_legacy_and_v17_allowed": False,
+    "merge_legacy_and_memory_allowed": False,
     "archive_default_available": False,
     "stale_short_term_default_visible": False,
     "runtime_wired": False,
@@ -117,7 +117,7 @@ PROJECTION_WRITE_CONVERGENCE_CONTRACT = {
         "vector_cleanup_fence_generation",
         "rollback_behavior",
         "legacy_fallback_allowed",
-        "merge_legacy_and_v17_allowed",
+        "merge_legacy_and_memory_allowed",
     ],
     "telemetry_safe_labels": TELEMETRY_SAFE_LABELS,
     "telemetry_forbidden_dimensions": FORBIDDEN_TELEMETRY_DIMENSIONS,
@@ -151,7 +151,7 @@ WRITE_CONVERGENCE_REQUIREMENTS = [
         "status": "LOCAL_CONTRACT_DEFINED",
         "dual_write_projection_writer_required": True,
         "projection_writer_ready": True,
-        "direct_legacy_only_write_after_v17_enabled_allowed": False,
+        "direct_legacy_only_write_after_memory_enabled_allowed": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -189,8 +189,8 @@ WRITE_CONVERGENCE_REQUIREMENTS = [
     {
         "requirement_id": "rollback_behavior_fail_closed",
         "status": "LOCAL_CONTRACT_DEFINED",
-        "rollback_behavior": "fail_closed_disable_v17_reads_until_reconciled",
-        "rollback_to_legacy_after_v17_write_allowed": False,
+        "rollback_behavior": "fail_closed_disable_memory_reads_until_reconciled",
+        "rollback_to_legacy_after_memory_write_allowed": False,
         "decommission_reconciliation_required_for_write_to_off": True,
         "required_before_runtime_change": True,
         "runtime_wired": False,
@@ -200,7 +200,7 @@ WRITE_CONVERGENCE_REQUIREMENTS = [
         "requirement_id": "no_legacy_fallback_or_merge_claim",
         "status": "LOCAL_CONTRACT_DEFINED",
         "legacy_fallback_allowed": False,
-        "merge_legacy_and_v17_allowed": False,
+        "merge_legacy_and_memory_allowed": False,
         "empty_projection_allows_legacy_query": False,
         "projection_error_allows_legacy_query": False,
         "required_before_runtime_change": True,
@@ -234,9 +234,9 @@ def example_valid_convergence_evidence(route_scope_label: str) -> dict[str, Any]
         "freshness_fence_generation": 7,
         "tombstone_fence_generation": 7,
         "vector_cleanup_fence_generation": 7,
-        "rollback_behavior": "fail_closed_disable_v17_reads_until_reconciled",
+        "rollback_behavior": "fail_closed_disable_memory_reads_until_reconciled",
         "legacy_fallback_allowed": False,
-        "merge_legacy_and_v17_allowed": False,
+        "merge_legacy_and_memory_allowed": False,
     }
 
 
@@ -360,11 +360,11 @@ def _validate_convergence_evidence(
         "idempotency_key_contract", ""
     ):
         return _invalid_result("convergence_evidence_idempotency_contract_malformed")
-    if metadata.get("rollback_behavior") != "fail_closed_disable_v17_reads_until_reconciled":
+    if metadata.get("rollback_behavior") != "fail_closed_disable_memory_reads_until_reconciled":
         return _invalid_result("convergence_evidence_rollback_behavior_unsafe")
     if (
         metadata.get("legacy_fallback_allowed") is not False
-        or metadata.get("merge_legacy_and_v17_allowed") is not False
+        or metadata.get("merge_legacy_and_memory_allowed") is not False
     ):
         return _invalid_result("convergence_evidence_legacy_fallback_or_merge_allowed")
     return {
@@ -422,7 +422,7 @@ def build_report(
                 proof_status = "BLOCKED"
 
     report = {
-        "artifact": "v17_p1_3_v3_projection_write_convergence_readiness",
+        "artifact": "p1_3_v3_projection_write_convergence_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -445,7 +445,7 @@ def build_report(
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",
             "No production calls by default; explicit execution is read-only route-scoped convergence evidence proof only.",
-            "No client-controlled collection/path/source, legacy fallback, V17/legacy merge, or rollback-to-legacy-after-V17-write is allowed.",
+            "No client-controlled collection/path/source, legacy fallback, memory/legacy merge, or rollback-to-legacy-after-memory-write is allowed.",
             "No uid, session, memory id, request payload, cursor token, secret, or memory content telemetry labels are allowed.",
             "No production Firestore write, vector/provider call, telemetry sink call, Archive default visibility, stale Short-term default visibility, rollout approval, or canary approval claimed.",
         ],

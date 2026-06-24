@@ -12,8 +12,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config.memory_rollout import PASSED, V17Mode, V17StageGate
-from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
+from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 
 ROLLLOUT_READINESS_STATUS_NOT_RUN = "NOT_RUN"
 CANONICAL_CONSUMERS = ["mcp", "developer_api", "omi_chat"]
@@ -36,7 +36,7 @@ REJECTED_LEGACY_ALIAS_FIELDS = [
 NON_CLAIMS = [
     "Default and execute modes are read-only schema inventory only; no Firestore reads/writes, cloud calls, or provider calls are executed.",
     "production_rollout_approved=false; this artifact does not approve rollout or mutate users/{uid}/memory_control/state.",
-    "Legacy top-level *_default_memory_grant aliases are rejected compatibility examples only and must not appear in canonical V17 rollout examples.",
+    "Legacy top-level *_default_memory_grant aliases are rejected compatibility examples only and must not appear in canonical memory rollout examples.",
     "Archive remains default-unavailable; canonical .archive only records a separate explicit Archive capability.",
 ]
 
@@ -46,21 +46,21 @@ class RolloutSchemaReadinessConfig:
     execute: bool
 
 
-def _base_schema_v1_doc(uid: str = "v17-schema-readiness-user") -> Dict[str, Any]:
+def _base_schema_v1_doc(uid: str = "memory-schema-readiness-user") -> Dict[str, Any]:
     return {
         "uid": uid,
-        "schema_version": V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
-        "mode": V17Mode.read.value,
+        "schema_version": DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+        "mode": MemoryRolloutMode.read.value,
         "mode_epoch": 7,
         "cutover_epoch": 7,
         "account_generation": 3,
         "fallback_projection_ready": True,
-        "persistent_v17_writes_started": True,
+        "persistent_memory_writes_started": True,
         "writes_blocked": False,
         "stage_gates": {
-            V17StageGate.shadow.value: PASSED,
-            V17StageGate.write.value: PASSED,
-            V17StageGate.read.value: PASSED,
+            MemoryRolloutStageGate.shadow.value: PASSED,
+            MemoryRolloutStageGate.write.value: PASSED,
+            MemoryRolloutStageGate.read.value: PASSED,
         },
         "grants": {
             "mcp": {"default_memory": True},
@@ -73,7 +73,7 @@ def _base_schema_v1_doc(uid: str = "v17-schema-readiness-user") -> Dict[str, Any
 
 
 def _valid_examples() -> list[Dict[str, Any]]:
-    uid = "v17-schema-readiness-user"
+    uid = "memory-schema-readiness-user"
     document = _base_schema_v1_doc(uid)
     return [
         {
@@ -81,14 +81,14 @@ def _valid_examples() -> list[Dict[str, Any]]:
             "uid": uid,
             "consumer": consumer,
             "document": document,
-            "expected_decision": "USE_V17",
+            "expected_decision": "USE_MEMORY",
         }
         for consumer in CANONICAL_CONSUMERS
     ]
 
 
 def _rejected_legacy_shapes() -> list[Dict[str, Any]]:
-    uid = "v17-schema-readiness-user"
+    uid = "memory-schema-readiness-user"
     missing_schema = _base_schema_v1_doc(uid)
     missing_schema.pop("schema_version")
     mismatched_uid = _base_schema_v1_doc("other-user")
@@ -151,7 +151,7 @@ def _rejected_legacy_shapes() -> list[Dict[str, Any]]:
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Safe V17 rollout/control schema_version=1 readiness inventory; emits canonical and rejected shapes without Firestore/cloud calls."
+        description="Safe memory rollout/control schema_version=1 readiness inventory; emits canonical and rejected shapes without Firestore/cloud calls."
     )
     parser.add_argument(
         "--execute", action="store_true", help="Emit the same read-only local inventory; no provider calls."
@@ -173,7 +173,7 @@ def build_readiness_artifact(config: RolloutSchemaReadinessConfig) -> Dict[str, 
         "firestore_reads_executed": False,
         "firestore_writes_executed": False,
         "production_rollout_approved": False,
-        "canonical_schema_version": V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+        "canonical_schema_version": DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
         "canonical_consumers": CANONICAL_CONSUMERS,
         "canonical_shape": {
             "path": "users/{uid}/memory_control/state",
@@ -181,7 +181,7 @@ def build_readiness_artifact(config: RolloutSchemaReadinessConfig) -> Dict[str, 
             "grant_paths": CANONICAL_GRANT_PATHS,
             "compatibility_notes": [
                 "uid must exactly match the path/authenticated uid; missing uid fails closed with uid_mismatch.",
-                "schema_version must equal V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION / schema_version=1.",
+                "schema_version must equal DEFAULT_READ_ROLLOUT_SCHEMA_VERSION / schema_version=1.",
                 "default grants are recognized only at grants.<consumer>.default_memory for mcp, developer_api, and omi_chat.",
                 "Archive capability is optional and recognized only at grants.<consumer>.archive for explicit Archive reads; it is never default-visible.",
             ],

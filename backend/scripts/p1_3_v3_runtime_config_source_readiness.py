@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production-safe V17 `/v3` runtime control/config source-selection readiness proof.
+"""Production-safe memory `/v3` runtime control/config source-selection readiness proof.
 
 This runner selects the server-owned route-scoped config sources that future
 `GET /v3/memories` runtime enablement decisions must consult before any route
@@ -22,8 +22,8 @@ from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
 ROUTE_SCOPE_LABEL = "get_v3_memories"
-GLOBAL_READ_GATE_PATH = "memory_control/v17_global_read_gate"
-WRITE_CONVERGENCE_GATE_PATH = "memory_control/v17_write_convergence_gate"
+GLOBAL_READ_GATE_PATH = "memory_control/global_read_gate"
+WRITE_CONVERGENCE_GATE_PATH = "memory_control/write_convergence_gate"
 SELECTED_CONFIG_PATHS = [GLOBAL_READ_GATE_PATH, WRITE_CONVERGENCE_GATE_PATH]
 EXPECTED_CONFIG_PATHS_VALUE = ",".join(SELECTED_CONFIG_PATHS)
 MAX_STALENESS_SECONDS = 300
@@ -54,20 +54,20 @@ SOURCE_API_SHAPE = {
     "selected_sources": [
         {
             "path": GLOBAL_READ_GATE_PATH,
-            "purpose": "v17_v3_runtime_enablement",
+            "purpose": "v3_runtime_enablement",
             "required_fields": [
                 "route_scope",
                 "purpose",
                 "owner",
                 "config_schema_version",
                 "max_staleness_seconds",
-                "v17_reads_enabled",
+                "memory_reads_enabled",
                 "kill_switch_active",
             ],
         },
         {
             "path": WRITE_CONVERGENCE_GATE_PATH,
-            "purpose": "v17_v3_write_convergence_gate",
+            "purpose": "v3_write_convergence_gate",
             "required_fields": [
                 "route_scope",
                 "purpose",
@@ -87,7 +87,7 @@ SOURCE_API_SHAPE = {
         "owner",
         "config_schema_version",
         "max_staleness_seconds",
-        "v17_reads_enabled",
+        "memory_reads_enabled",
         "kill_switch_active",
         "durable_outbox_enabled",
         "dual_write_projection_ready",
@@ -299,7 +299,7 @@ def build_report(
             proof_status = "NOT_RUN"
 
     report = {
-        "artifact": "v17_p1_3_v3_runtime_config_source_readiness",
+        "artifact": "p1_3_v3_runtime_config_source_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,

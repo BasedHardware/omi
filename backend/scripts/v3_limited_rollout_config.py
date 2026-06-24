@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit reviewed Firestore config docs for limited V17 `/v3` rollout.
+"""Emit reviewed Firestore config docs for limited memory `/v3` rollout.
 
 Dry-run only: this script prints the exact document paths/payloads that an admin
 or deployment pipeline may apply. It intentionally performs no cloud writes.
@@ -22,7 +22,7 @@ from utils.memory.v3_limited_rollout_config import build_limited_rollout_config_
 def build_report(*, uid: str, account_generation: int) -> dict:
     bundle = build_limited_rollout_config_bundle(uid=uid, account_generation=account_generation)
     return {
-        'artifact': 'v17_v3_limited_rollout_config',
+        'artifact': 'v3_limited_rollout_config',
         'status': 'SAFE_INERT_TEMPLATE',
         'read_only': True,
         'writes_executed': bundle.writes_executed,

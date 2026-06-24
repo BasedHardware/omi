@@ -19,7 +19,7 @@ ROUTE_SURFACES: List[Dict[str, Any]] = [
             'backend/tests/unit/test_tools_agent_route_response_shape.py',
             'backend/tests/unit/test_tools_rest_memory_runtime_adapter.py',
         ],
-        'required_fastapi_testclient_proof': 'Exercise the real FastAPI route via TestClient with dependency overrides, then prove response-model serialization preserves bounded V17 evidence text and fail-closed text.',
+        'required_fastapi_testclient_proof': 'Exercise the real FastAPI route via TestClient with dependency overrides, then prove response-model serialization preserves bounded memory evidence text and fail-closed text.',
         'evidence': [],
     },
     {
@@ -31,7 +31,7 @@ ROUTE_SURFACES: List[Dict[str, Any]] = [
             'backend/tests/unit/test_tools_agent_route_response_shape.py',
             'backend/tests/unit/test_tools_rest_memory_runtime_adapter.py',
         ],
-        'required_fastapi_testclient_proof': 'Exercise the real FastAPI route via TestClient with dependency overrides, request-body validation, and response-model serialization for V17 vector memory text.',
+        'required_fastapi_testclient_proof': 'Exercise the real FastAPI route via TestClient with dependency overrides, request-body validation, and response-model serialization for memory vector memory text.',
         'evidence': [],
     },
     {
@@ -55,7 +55,7 @@ BEHAVIOR_CASES: List[Dict[str, Any]] = [
     {
         'key': 'quoted_evidence_boundary_preservation',
         'status': 'NOT_RUN',
-        'required_proof': 'V17 memory text with boundary notice, source_marker, content_quoted=..., policy=default_memory, and archive_default_visible=False survives actual route serialization unchanged.',
+        'required_proof': 'memory memory text with boundary notice, source_marker, content_quoted=..., policy=default_memory, and archive_default_visible=False survives actual route serialization unchanged.',
         'evidence': [],
     },
     {
@@ -67,7 +67,7 @@ BEHAVIOR_CASES: List[Dict[str, Any]] = [
     {
         'key': 'enabled_empty_state_stability',
         'status': 'NOT_RUN',
-        'required_proof': 'Enabled-empty default and vector V17 outputs remain stable through route serialization and are distinguishable from denied states.',
+        'required_proof': 'Enabled-empty default and vector memory outputs remain stable through route serialization and are distinguishable from denied states.',
         'evidence': [],
     },
     {
@@ -193,7 +193,7 @@ def build_report(execute: bool = False) -> Dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description='Safe V17 P1-5/P1-3 readiness artifact for tools REST/agent FastAPI TestClient route proof.'
+        description='Safe memory P1-5/P1-3 readiness artifact for tools REST/agent FastAPI TestClient route proof.'
     )
     parser.add_argument('--execute', action='store_true', help='Emit the same read-only BLOCKED/NOT_RUN report.')
     args = parser.parse_args()

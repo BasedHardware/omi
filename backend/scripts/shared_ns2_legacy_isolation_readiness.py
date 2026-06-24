@@ -15,25 +15,25 @@ LEGACY_SEARCH_INVENTORY = [
         "function": "database.vector_db.find_similar_memories",
         "namespace": SHARED_NAMESPACE,
         "caller_examples": ["MCP legacy fallback", "chat legacy fallback", "duplicate checks"],
-        "required_filter_barrier": {"v17_schema_version": {"$exists": False}},
+        "required_filter_barrier": {"memory_schema_version": {"$exists": False}},
         "legacy_id_shape": "{uid}-{memory_id}",
     },
     {
         "function": "database.vector_db.search_memories_by_vector",
         "namespace": SHARED_NAMESPACE,
         "caller_examples": ["legacy semantic memory search"],
-        "required_filter_barrier": {"v17_schema_version": {"$exists": False}},
+        "required_filter_barrier": {"memory_schema_version": {"$exists": False}},
         "legacy_id_shape": "{uid}-{memory_id}",
     },
 ]
 
-V17_METADATA_BARRIERS = {
-    "v17_schema_version": "V17 vectors must carry v17_schema_version=1; legacy queries exclude records where it exists.",
-    "uid": "Both legacy and V17 filters must constrain exact uid before hydration.",
-    "memory_tier": "V17 default filters only short_term/long_term; archive requires explicit archive mode.",
-    "status": "V17 vector filters require active status; hydration remains authoritative.",
-    "source_state": "V17 vector filters require active source_state so tombstoned/deleted sources do not pass metadata filtering.",
-    "restricted_sensitivity": "V17 vector filters exclude restricted_sensitivity=true from candidate selection.",
+MEMORY_METADATA_BARRIERS = {
+    "memory_schema_version": "memory vectors must carry memory_schema_version=1; legacy queries exclude records where it exists.",
+    "uid": "Both legacy and memory filters must constrain exact uid before hydration.",
+    "memory_tier": "memory default filters only short_term/long_term; archive requires explicit archive mode.",
+    "status": "memory vector filters require active status; hydration remains authoritative.",
+    "source_state": "memory vector filters require active source_state so tombstoned/deleted sources do not pass metadata filtering.",
+    "restricted_sensitivity": "memory vector filters exclude restricted_sensitivity=true from candidate selection.",
     "account_generation": "Hydration must compare candidate metadata to the current required account generation.",
     "item_revision": "Hydration must compare candidate metadata to the authoritative item revision.",
     "source_commit_id": "Hydration must reject missing or stale source commit metadata.",
@@ -42,21 +42,21 @@ V17_METADATA_BARRIERS = {
 }
 
 REQUIRED_BARRIERS = {
-    "legacy_queries_exclude_v17_schema": (
-        "Every legacy ns2 memory search must include {'v17_schema_version': {'$exists': False}} before top-k "
-        "selection so V17 Short-term, Long-term, Archive, tombstoned, or stale-revision vectors cannot consume "
+    "legacy_queries_exclude_memory_schema": (
+        "Every legacy ns2 memory search must include {'memory_schema_version': {'$exists': False}} before top-k "
+        "selection so memory Short-term, Long-term, Archive, tombstoned, or stale-revision vectors cannot consume "
         "legacy result slots."
     ),
-    "v17_queries_include_schema_and_tier_filters": (
-        "V17 ns2 searches must include v17_schema_version, uid, tier, status, source_state, visibility, and "
+    "memory_queries_include_schema_and_tier_filters": (
+        "memory ns2 searches must include memory_schema_version, uid, tier, status, source_state, visibility, and "
         "restricted_sensitivity filters before hydration."
     ),
     "stale_or_deleted_physical_ids": (
-        "Legacy filters only exclude V17 schema records; real Pinecone proof is still required for stale/deleted "
-        "legacy physical IDs and duplicate V17 physical IDs."
+        "Legacy filters only exclude memory schema records; real Pinecone proof is still required for stale/deleted "
+        "legacy physical IDs and duplicate memory physical IDs."
     ),
     "overfetch_refill": (
-        "This slice does not solve V17 overfetch/refill: stale filtered candidates can still collapse recall until P0-7 "
+        "This slice does not solve memory overfetch/refill: stale filtered candidates can still collapse recall until P0-7 "
         "adds measured overfetch/refill and budgets."
     ),
 }
@@ -79,7 +79,7 @@ class SharedNs2LegacyIsolationConfig:
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Safe-by-default shared ns2 legacy/V17 vector isolation readiness runner. Default mode is NOT_RUN."
+        description="Safe-by-default shared ns2 legacy/memory vector isolation readiness runner. Default mode is NOT_RUN."
     )
     parser.add_argument(
         "--execute", action="store_true", help="Check provider prerequisites for future read-only proof."
@@ -121,7 +121,7 @@ def build_readiness_artifact(config: SharedNs2LegacyIsolationConfig) -> Dict[str
         "provider_ready_for_readonly_inventory": provider_ready_for_readonly_inventory,
         "prerequisites": prerequisites,
         "legacy_search_inventory": LEGACY_SEARCH_INVENTORY,
-        "v17_metadata_barriers": V17_METADATA_BARRIERS,
+        "memory_metadata_barriers": MEMORY_METADATA_BARRIERS,
         "required_barriers": REQUIRED_BARRIERS,
         "planned_provider_actions": ["read-only query/inventory only; no upsert/delete/update"],
         "planned_safe_commands": build_planned_commands(),

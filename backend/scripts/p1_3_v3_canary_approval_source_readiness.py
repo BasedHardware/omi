@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` canary approval artifact source-selection readiness contract.
+"""Safe memory `/v3` canary approval artifact source-selection readiness contract.
 
 This artifact is deliberately pre-runtime and read-only. It selects and inventories
 the future server-owned canary/approval artifact source, ownership groups, IAM/rules
@@ -15,10 +15,10 @@ import json
 from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
-ARTIFACT_DOCUMENT_PATH = "system/v17_v3_canary_approvals/routes/get_v3_memories"
+ARTIFACT_DOCUMENT_PATH = "system/v3_canary_approvals/routes/get_v3_memories"
 FUTURE_ARTIFACT_SOURCE = f"firestore:{ARTIFACT_DOCUMENT_PATH}"
 BOUNDED_OWNER_GROUPS = ["product_privacy_ops", "memory_platform_oncall"]
-RULES_EMULATOR_COMMAND = "npm run test:v17-v3-canary-approval-source:emulator"
+RULES_EMULATOR_COMMAND = "npm run test:memory-v3-canary-approval-source:emulator"
 
 SOURCE_SELECTION_CONTRACT = {
     "route_scope": ROUTE_SCOPE,
@@ -27,7 +27,7 @@ SOURCE_SELECTION_CONTRACT = {
     "server_owned_only": True,
     "client_supplied_artifact_trusted": False,
     "bounded_owner_groups": BOUNDED_OWNER_GROUPS,
-    "artifact_path_dimensions": ["system", "v17_v3_canary_approvals", "routes", "get_v3_memories"],
+    "artifact_path_dimensions": ["system", "v3_canary_approvals", "routes", "get_v3_memories"],
     "forbidden_path_or_label_dimensions": [
         "uid",
         "user_id",
@@ -206,13 +206,13 @@ CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
 FAILURE_SEMANTICS = [
     {
         "state": "source_missing",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "approval_claimed": False,
     },
     {
         "state": "iam_denied_or_timeout",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "approval_claimed": False,
     },
@@ -230,7 +230,7 @@ FAILURE_SEMANTICS = [
     },
     {
         "state": "owner_not_bounded_group_or_approval_stale",
-        "future_route_behavior": "fail_closed_before_v17_read",
+        "future_route_behavior": "fail_closed_before_memory_read",
         "legacy_fallback_allowed": False,
         "approval_claimed": False,
     },
@@ -240,7 +240,7 @@ FAILURE_SEMANTICS = [
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_required_proof_count = sum(1 for proof in REQUIRED_IAM_RULES_PRIVACY_PROOFS if proof["status"] == "BLOCKED")
     return {
-        "artifact": "v17_p1_3_v3_canary_approval_source_readiness",
+        "artifact": "p1_3_v3_canary_approval_source_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -274,7 +274,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No telemetry sink production call executed or claimed.",
             "No PII/raw memory content telemetry emitted.",
             "No secret/cursor token logging allowed or performed.",
-            "No legacy fallback/merge for V17 failures claimed.",
+            "No legacy fallback/merge for memory failures claimed.",
             "No Archive default visibility or stale Short-term default visibility claimed.",
         ],
         "summary": {

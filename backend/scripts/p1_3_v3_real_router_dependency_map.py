@@ -114,15 +114,15 @@ IMPORT_SIDE_EFFECTS_BLOCKED = [
 
 FUTURE_GET_WIRING_SEAM = [
     "GET /v3/memories query params",
-    "adapt_v17_v3_request_parameters(...) request adapter",
-    "plan_v17_v3_memory_route(...) route planner",
-    "adapt_v17_v3_memory_response(...) response adapter",
+    "adapt_v3_request_parameters(...) request adapter",
+    "plan_v3_memory_route(...) route planner",
+    "adapt_v3_memory_response(...) response adapter",
 ]
 
 BLOCKED_BEFORE_REAL_TESTCLIENT = [
-    "Replace import stubs with explicit FastAPI dependency_overrides and route-local V17 control/projection/write evidence seams.",
-    "Prove GET does not call memories_db.get_memories for enrolled V17 projection-ready accounts before including the real router in TestClient.",
-    "Prove POST/DELETE write convergence or keep enrolled V17 writes blocked before exercising mutating routes.",
+    "Replace import stubs with explicit FastAPI dependency_overrides and route-local memory control/projection/write evidence seams.",
+    "Prove GET does not call memories_db.get_memories for enrolled memory projection-ready accounts before including the real router in TestClient.",
+    "Prove POST/DELETE write convergence or keep enrolled memory writes blocked before exercising mutating routes.",
 ]
 
 REAL_ROUTER_DEPENDENCY_MAP_PROOF = {
@@ -271,7 +271,7 @@ def _probe_code() -> str:
         sys.modules["utils.memory"] = memory_pkg
         setattr(utils_pkg, "memory", memory_pkg)
         production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
-        class ProductionV17V3GetRuntime:
+        class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
                 self.source_decision = source_decision
@@ -279,22 +279,22 @@ def _probe_code() -> str:
                 self.adapters = adapters
                 for key, value in kwargs.items():
                     setattr(self, key, value)
-        def build_v17_v3_production_runtime(*, uid, db_client, env=None):
-            return ProductionV17V3GetRuntime(enabled=False, source_decision="disabled")
-        production_runtime.V17V3GetRuntime = ProductionV17V3GetRuntime
-        production_runtime.build_v17_v3_production_runtime = build_v17_v3_production_runtime
+        def build_v3_production_runtime(*, uid, db_client, env=None):
+            return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
+        production_runtime.V3GetRuntime = ProductionV3GetRuntime
+        production_runtime.build_v3_production_runtime = build_v3_production_runtime
         sys.modules["utils.memory.v3_production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
         composed = types.ModuleType("utils.memory.v3_composed_get_service")
-        class V17V3ComposedRequestParams:
+        class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
                 self.offset = offset
                 self.cursor = cursor
                 self.include_archive = include_archive
                 self.include_historical = include_historical
-        class V17V3ComposedResponse:
+        class V3ComposedResponse:
             def __init__(self, http_status=200, body=None, public_error=None, headers=None, source="none", decision="ok"):
                 self.http_status = http_status
                 self.body = body
@@ -302,8 +302,8 @@ def _probe_code() -> str:
                 self.headers = headers or {}
                 self.source = source
                 self.decision = decision
-        composed.V17V3ComposedRequestParams = V17V3ComposedRequestParams
-        composed.V17V3ComposedResponse = V17V3ComposedResponse
+        composed.V3ComposedRequestParams = V3ComposedRequestParams
+        composed.V3ComposedResponse = V3ComposedResponse
         sys.modules["utils.memory.v3_composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
@@ -421,7 +421,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             merged["response_model"] = _normalize_response_model(merged["response_model"])
         pinned_routes.append(merged)
     return {
-        "artifact": "v17_p1_3_v3_real_router_dependency_map",
+        "artifact": "p1_3_v3_real_router_dependency_map",
         "status": "BLOCKED",
         "execute": execute,
         "read_only": True,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V17-V3-F5 real-service read-only evidence preparation runner.
+"""memory-V3-F5 real-service read-only evidence preparation runner.
 
 Default invocation is preparation/default-NOT_RUN: it constructs no cloud client,
 performs no network/provider/Firestore calls, imports no production app/router,

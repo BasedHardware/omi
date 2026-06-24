@@ -31,7 +31,7 @@ PASS_FAIL_CRITERIA = {
     ),
     "shared_ns2_isolation": (
         "Shared ns2 isolation must be read-only inventory unless a separate production-approved plan exists: legacy "
-        "vectors not touched, legacy query filters exclude V17 schema records, and baseline legacy recall is retained."
+        "vectors not touched, legacy query filters exclude memory schema records, and baseline legacy recall is retained."
     ),
     "legacy_vectors_not_touched": (
         "All mutating operations must be constrained to the confirmed throwaway test namespace and throwaway prefix; "
@@ -64,7 +64,7 @@ class PineconeRepairValidationConfig:
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Safe-by-default V17 Pinecone repair validation readiness runner. Default mode is NOT_RUN."
+        description="Safe-by-default memory Pinecone repair validation readiness runner. Default mode is NOT_RUN."
     )
     parser.add_argument(
         "--execute", action="store_true", help="Require all safety gates; still emits NOT_RUN plan here."
@@ -125,8 +125,8 @@ def evaluate_prerequisites(config: PineconeRepairValidationConfig) -> List[str]:
             prerequisites.append("--confirm-throwaway-prefix must exactly match --throwaway-prefix")
         if config.throwaway_prefix and len(config.throwaway_prefix) < MIN_SAFE_PREFIX_LEN:
             prerequisites.append("throwaway vector id prefix must be at least 12 characters")
-        if config.throwaway_prefix and not config.throwaway_prefix.startswith("v17-proof-"):
-            prerequisites.append("throwaway vector id prefix must start with v17-proof-")
+        if config.throwaway_prefix and not config.throwaway_prefix.startswith("memory-proof-"):
+            prerequisites.append("throwaway vector id prefix must start with memory-proof-")
     return prerequisites
 
 
@@ -160,7 +160,7 @@ def build_planned_commands(config: PineconeRepairValidationConfig) -> List[str]:
         (
             "python3 backend/scripts/pinecone_repair_validation_readiness.py --execute "
             "--allow-throwaway-mutation --test-namespace <throwaway-test-namespace-not-ns2> "
-            "--throwaway-prefix v17-proof-<ticket>- --confirm-throwaway-prefix v17-proof-<ticket>- "
+            "--throwaway-prefix memory-proof-<ticket>- --confirm-throwaway-prefix memory-proof-<ticket>- "
             "--shared-ns2-readonly"
         ),
         (

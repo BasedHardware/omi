@@ -20,7 +20,7 @@ from typing import Any
 
 def _load_dependency_map_constants() -> list[dict[str, Any]]:
     spec = importlib.util.spec_from_file_location(
-        "v17_p1_3_v3_real_router_dependency_map",
+        "p1_3_v3_real_router_dependency_map",
         Path(__file__).with_name("p1_3_v3_real_router_dependency_map.py"),
     )
     if spec is None or spec.loader is None:
@@ -45,7 +45,7 @@ GET_DEPENDENCY_AUTH_READINESS_PROOF = {
         "get_without_auth_override_is_blocked_in_controlled_testclient_probe",
         "current_get_route_has_no_rate_limit_dependency",
         "get_with_auth_override_calls_stubbed_legacy_get_memories_for_non_enrolled_baseline",
-        "no_v17_cohort_control_dependency_present_or_invoked",
+        "no_memory_cohort_control_dependency_present_or_invoked",
         "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
     ],
 }
@@ -175,7 +175,7 @@ def _probe_code() -> str:
         sys.modules["utils.memory"] = memory_pkg
         setattr(utils_pkg, "memory", memory_pkg)
         production_runtime = types.ModuleType("utils.memory.v3_production_runtime")
-        class ProductionV17V3GetRuntime:
+        class ProductionV3GetRuntime:
             def __init__(self, enabled=False, source_decision="disabled", service=None, adapters=None, **kwargs):
                 self.enabled = enabled
                 self.source_decision = source_decision
@@ -183,22 +183,22 @@ def _probe_code() -> str:
                 self.adapters = adapters
                 for key, value in kwargs.items():
                     setattr(self, key, value)
-        def build_v17_v3_production_runtime(*, uid, db_client, env=None):
-            return ProductionV17V3GetRuntime(enabled=False, source_decision="disabled")
-        production_runtime.V17V3GetRuntime = ProductionV17V3GetRuntime
-        production_runtime.build_v17_v3_production_runtime = build_v17_v3_production_runtime
+        def build_v3_production_runtime(*, uid, db_client, env=None):
+            return ProductionV3GetRuntime(enabled=False, source_decision="disabled")
+        production_runtime.V3GetRuntime = ProductionV3GetRuntime
+        production_runtime.build_v3_production_runtime = build_v3_production_runtime
         sys.modules["utils.memory.v3_production_runtime"] = production_runtime
         setattr(memory_pkg, "v3_production_runtime", production_runtime)
 
         composed = types.ModuleType("utils.memory.v3_composed_get_service")
-        class V17V3ComposedRequestParams:
+        class V3ComposedRequestParams:
             def __init__(self, limit=None, offset=None, cursor=None, include_archive=False, include_historical=False):
                 self.limit = limit
                 self.offset = offset
                 self.cursor = cursor
                 self.include_archive = include_archive
                 self.include_historical = include_historical
-        class V17V3ComposedResponse:
+        class V3ComposedResponse:
             def __init__(self, http_status=200, body=None, public_error=None, headers=None, source="none", decision="ok"):
                 self.http_status = http_status
                 self.body = body
@@ -206,8 +206,8 @@ def _probe_code() -> str:
                 self.headers = headers or {}
                 self.source = source
                 self.decision = decision
-        composed.V17V3ComposedRequestParams = V17V3ComposedRequestParams
-        composed.V17V3ComposedResponse = V17V3ComposedResponse
+        composed.V3ComposedRequestParams = V3ComposedRequestParams
+        composed.V3ComposedResponse = V3ComposedResponse
         sys.modules["utils.memory.v3_composed_get_service"] = composed
         setattr(memory_pkg, "v3_composed_get_service", composed)
 
@@ -306,14 +306,14 @@ def _probe_code() -> str:
         client_with_override = TestClient(app_with_override)
         with_auth_response = client_with_override.get("/v3/memories")
 
-        v17_adapter_modules = [
+        memory_adapter_modules = [
             "utils.memory.v3_compatibility",
             "utils.memory.v3_request_adapter",
             "utils.memory.v3_route_planner",
             "utils.memory.v3_memory_read_service",
             "utils.memory.v3_response_adapter",
         ]
-        loaded_adapters = [name for name in v17_adapter_modules if name in sys.modules]
+        loaded_adapters = [name for name in memory_adapter_modules if name in sys.modules]
 
         print(json.dumps({
             "testclient_ok": with_auth_response.status_code == 200,
@@ -338,9 +338,9 @@ def _probe_code() -> str:
             "observed_get_memories_calls": observed_get_calls,
             "stubbed_legacy_get_memories_call_count": len(observed_get_calls),
             "mutation_flags": mutation_flags,
-            "v17_control_dependency_present": False,
-            "v17_control_dependency_invoked": False,
-            "v17_adapter_modules_loaded": loaded_adapters,
+            "memory_control_dependency_present": False,
+            "memory_control_dependency_invoked": False,
+            "memory_adapter_modules_loaded": loaded_adapters,
             "runtime_cutover_claimed": False,
         }, sort_keys=True))
         '''
@@ -391,7 +391,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     proof_status = "PARTIAL" if testclient_ok and without_auth_blocked else ("BLOCKED" if execute else "NOT_RUN")
     status = "PARTIAL" if proof_status == "PARTIAL" else "BLOCKED"
     return {
-        "artifact": "v17_p1_3_v3_get_dependency_auth_readiness",
+        "artifact": "p1_3_v3_get_dependency_auth_readiness",
         "status": status,
         "proof_status": proof_status,
         "execute": execute,
@@ -415,9 +415,9 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "stubbed_legacy_get_memories_executed": bool(probe.get("stubbed_legacy_get_memories_call_count")),
         "non_enrolled_legacy_behavior_preserved_under_auth_override": auth_override_works
         and bool(probe.get("stubbed_legacy_get_memories_call_count")),
-        "v17_cohort_control_dependency_present": bool(probe.get("v17_control_dependency_present")),
-        "v17_cohort_control_dependency_invoked": bool(probe.get("v17_control_dependency_invoked")),
-        "v17_adapters_invoked": bool(probe.get("v17_adapter_modules_loaded")),
+        "memory_cohort_control_dependency_present": bool(probe.get("memory_control_dependency_present")),
+        "memory_cohort_control_dependency_invoked": bool(probe.get("memory_control_dependency_invoked")),
+        "memory_adapters_invoked": bool(probe.get("memory_adapter_modules_loaded")),
         "runtime_cutover_claimed": False,
         "mutation_flags_clear": bool(mutation_flags) and not any(mutation_flags.values()),
         "probe": probe,
@@ -427,7 +427,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No backend/main.py import or production app startup executed.",
             "No real Firestore, Pinecone, cloud, provider, or network calls executed.",
             "No mutating /v3 routes executed and no production approval claimed.",
-            "No V17 cohort/control dependency is currently present or invoked by GET /v3/memories.",
+            "No memory cohort/control dependency is currently present or invoked by GET /v3/memories.",
             "This controlled stub proof is not real production auth/rate-limit/runtime evidence.",
         ],
         "summary": {
@@ -439,8 +439,8 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "without_auth_override_blocked": without_auth_blocked,
             "has_rate_limit_dependency": bool(route_evidence.get("has_rate_limit_dependency")),
             "stubbed_legacy_get_memories_call_count": probe.get("stubbed_legacy_get_memories_call_count", 0),
-            "v17_cohort_control_dependency_present": bool(probe.get("v17_control_dependency_present")),
-            "v17_cohort_control_dependency_invoked": bool(probe.get("v17_control_dependency_invoked")),
+            "memory_cohort_control_dependency_present": bool(probe.get("memory_control_dependency_present")),
+            "memory_cohort_control_dependency_invoked": bool(probe.get("memory_control_dependency_invoked")),
             "runtime_cutover_claimed": False,
         },
     }

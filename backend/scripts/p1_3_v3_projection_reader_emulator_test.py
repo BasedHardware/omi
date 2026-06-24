@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Firestore-emulator proof for fenced V17 `/v3` compatibility projection reader.
+"""Firestore-emulator proof for fenced memory `/v3` compatibility projection reader.
 
 Emulator-only: exits before constructing a Firestore client unless
 FIRESTORE_EMULATOR_HOST is present. Writes only local emulator fixtures under the
-server-owned V17 compatibility projection paths, reads them via the projection
+server-owned memory compatibility projection paths, reads them via the projection
 reader, and proves fail-closed fences. It does not wire runtime `/v3`, does not
 read live memory_items, and does not contact production Firestore/providers.
 """
@@ -17,23 +17,23 @@ from typing import Any
 
 from google.cloud import firestore
 
-from database.memory_collections import V17Collections
-from database.memory_compatibility_projection import read_v17_v3_compatibility_projection_page
+from database.memory_collections import MemoryCollections
+from database.memory_compatibility_projection import read_v3_compatibility_projection_page
 from utils.memory.v3_projection_reader_contract import (
-    V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-    V17V3ProjectionFailureReason,
-    V17V3ProjectionReadError,
-    V17V3ProjectionReadRequest,
+    V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+    V3ProjectionFailureReason,
+    V3ProjectionReadError,
+    V3ProjectionReadRequest,
 )
 
-PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-v17-memory"
-UID = "v17-v3-projection-reader-emulator-user"
+PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-memory"
+UID = "memory-v3-projection-reader-emulator-user"
 ACCOUNT_GENERATION = 70
 PROJECTION_GENERATION = 90
 SOURCE_COMMIT_ID = "source-90"
 PROJECTION_COMMIT_ID = "commit-90"
 FENCE = "fence-90"
-PATHS = V17Collections(uid=UID)
+PATHS = MemoryCollections(uid=UID)
 
 
 def _require_emulator() -> None:
@@ -44,13 +44,13 @@ def _require_emulator() -> None:
 def _state(**overrides: Any) -> dict[str, Any]:
     doc = {
         "uid": UID,
-        "schema_version": V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-        "source": "v17_memory_items_projection",
+        "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+        "source": "memory_items_projection",
         "ready": True,
         "account_generation": ACCOUNT_GENERATION,
         "projection_generation": PROJECTION_GENERATION,
         "source_commit_id": SOURCE_COMMIT_ID,
-        "source_version": "v17",
+        "source_version": "memory",
         "projection_commit_id": PROJECTION_COMMIT_ID,
         "projection_version": "v3_memorydb_compatibility",
         "source_evidence_fence": FENCE,
@@ -71,8 +71,8 @@ def _item(memory_id: str, created_at: datetime, **overrides: Any) -> dict[str, A
     doc = {
         "uid": UID,
         "memory_id": memory_id,
-        "schema_version": V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-        "source": "v17_memory_items_projection",
+        "schema_version": V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+        "source": "memory_items_projection",
         "account_generation": ACCOUNT_GENERATION,
         "projection_generation": PROJECTION_GENERATION,
         "source_commit_id": SOURCE_COMMIT_ID,
@@ -109,7 +109,7 @@ def _item(memory_id: str, created_at: datetime, **overrides: Any) -> dict[str, A
     return doc
 
 
-def _request(**overrides: Any) -> V17V3ProjectionReadRequest:
+def _request(**overrides: Any) -> V3ProjectionReadRequest:
     params = {
         "uid": UID,
         "limit": 2,
@@ -118,7 +118,7 @@ def _request(**overrides: Any) -> V17V3ProjectionReadRequest:
         "offset": None,
     }
     params.update(overrides)
-    return V17V3ProjectionReadRequest(**params)
+    return V3ProjectionReadRequest(**params)
 
 
 def _delete_collection(db: firestore.Client, collection_path: str) -> None:
@@ -137,11 +137,11 @@ def _write_items(db: firestore.Client, items: dict[str, dict[str, Any]]) -> None
 
 
 def _assert_failure(
-    db: firestore.Client, reason: V17V3ProjectionFailureReason, request: V17V3ProjectionReadRequest | None = None
+    db: firestore.Client, reason: V3ProjectionFailureReason, request: V3ProjectionReadRequest | None = None
 ) -> None:
     try:
-        read_v17_v3_compatibility_projection_page(db_client=db, request=request or _request())
-    except V17V3ProjectionReadError as exc:
+        read_v3_compatibility_projection_page(db_client=db, request=request or _request())
+    except V3ProjectionReadError as exc:
         assert exc.reason == reason, (exc.reason, reason)
         return
     raise AssertionError(f"expected {reason.value}")
@@ -150,7 +150,7 @@ def _assert_failure(
 def _assert_ready_empty(db: firestore.Client) -> None:
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(_state(empty_projection=True))
-    page = read_v17_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
     assert page.items == []
     assert page.empty_projection is True
 
@@ -160,19 +160,19 @@ def _assert_fail_closed_cases(db: firestore.Client) -> None:
     db.document(PATHS.v3_compatibility_projection_state).set(_state())
     _assert_failure(
         db,
-        V17V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH,
+        V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH,
         _request(expected_account_generation=ACCOUNT_GENERATION + 1),
     )
 
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(_state(projection_commit_id="old"))
-    _assert_failure(db, V17V3ProjectionFailureReason.FENCE_MISMATCH)
+    _assert_failure(db, V3ProjectionFailureReason.FENCE_MISMATCH)
 
     _reset_fixture(db)
     db.document(PATHS.v3_compatibility_projection_state).set(
         _state(freshness_fence_generation=PROJECTION_GENERATION - 1)
     )
-    _assert_failure(db, V17V3ProjectionFailureReason.FENCE_MISMATCH)
+    _assert_failure(db, V3ProjectionFailureReason.FENCE_MISMATCH)
 
 
 def _assert_exclusions(db: firestore.Client) -> None:
@@ -188,7 +188,7 @@ def _assert_exclusions(db: firestore.Client) -> None:
             "stale": _item("stale", now, short_term_stale=True),
         },
     )
-    page = read_v17_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
+    page = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
     assert [item["id"] for item in page.items] == ["visible"]
 
 
@@ -207,10 +207,8 @@ def _assert_keyset(db: firestore.Client) -> None:
             "d": _item("d", t3),
         },
     )
-    first = read_v17_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
-    second = read_v17_v3_compatibility_projection_page(
-        db_client=db, request=_request(limit=2, cursor=first.next_cursor)
-    )
+    first = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
+    second = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2, cursor=first.next_cursor))
     assert [item["id"] for item in first.items] == ["d", "c"]
     assert [item["id"] for item in second.items] == ["b", "a"]
     assert second.next_cursor is None

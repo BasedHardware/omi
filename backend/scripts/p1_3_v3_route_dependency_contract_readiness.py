@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` route dependency auth/rate-limit/fail-closed readiness contract.
+"""Safe memory `/v3` route dependency auth/rate-limit/fail-closed readiness contract.
 
 This pre-runtime artifact defines the route dependency contract that must exist
 before changing GET `/v3/memories` runtime behavior. It is intentionally static
@@ -27,7 +27,7 @@ ROUTE_DEPENDENCY_CONTRACT_READINESS_PROOF = {
         "authenticated_subject_binding_required_before_any_read",
         "legacy_token_api_key_mcp_auth_behavior_inventory_required",
         "client_uid_override_rejected_before_read_source_selection",
-        "non_enrolled_legacy_boundary_and_enrolled_v17_boundary_required",
+        "non_enrolled_legacy_boundary_and_enrolled_memory_boundary_required",
         "rate_limit_or_backpressure_dependency_hook_required_for_get",
         "missing_invalid_auth_control_cursor_config_fail_closed_required",
         "real_testclient_scenarios_blocked_until_runtime_route_wiring_exists",
@@ -58,7 +58,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
         "required_before_runtime_wiring": True,
         "required_contract": (
             "Document and preserve applicable legacy bearer-token/API-key/MCP-adjacent auth behavior while ensuring "
-            "no unauthenticated or scope-less caller can enter a V17 read path."
+            "no unauthenticated or scope-less caller can enter a memory read path."
         ),
         "must_prove": [
             "legacy_mobile_token_compatibility_inventory",
@@ -84,18 +84,18 @@ REQUIRED_CONTRACT_EVIDENCE = [
         "runtime_wired": False,
     },
     {
-        "evidence_id": "non_enrolled_legacy_boundary_and_enrolled_v17_boundary_required",
+        "evidence_id": "non_enrolled_legacy_boundary_and_enrolled_memory_boundary_required",
         "status": "BLOCKED",
         "route_refs": ["GET /v3/memories"],
         "required_before_runtime_wiring": True,
         "required_contract": (
             "Non-enrolled users preserve the current legacy-primary limit/offset behavior; enrolled users enter the "
-            "V17 control/projection contract and never fall back to legacy on V17 failures."
+            "memory control/projection contract and never fall back to legacy on memory failures."
         ),
         "must_prove": [
             "non_enrolled_offset_zero_limit_5000_legacy_only",
             "non_enrolled_explicit_limit_offset_legacy_only",
-            "enrolled_v17_projection_only_when_all_gates_ready",
+            "enrolled_memory_projection_only_when_all_gates_ready",
             "enrolled_no_legacy_merge_or_exception_fallback",
         ],
         "runtime_wired": False,
@@ -106,7 +106,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
         "route_refs": ["GET /v3/memories"],
         "required_before_runtime_wiring": True,
         "required_contract": (
-            "GET must have an explicit route dependency or equivalent server-side backpressure hook before V17 reads "
+            "GET must have an explicit route dependency or equivalent server-side backpressure hook before memory reads "
             "can fan into control, projection, cursor, or compatibility stores."
         ),
         "must_prove": [
@@ -122,7 +122,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
         "route_refs": ["GET /v3/memories"],
         "required_before_runtime_wiring": True,
         "required_contract": (
-            "Missing or invalid auth/control/cursor/config must fail closed with no legacy fallback, no V17/legacy "
+            "Missing or invalid auth/control/cursor/config must fail closed with no legacy fallback, no memory/legacy "
             "merge, no provider/vector call, and no secret or content logging."
         ),
         "must_prove": [
@@ -147,7 +147,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
             "actual_rate_limit_or_backpressure_dependency",
             "actual_fail_closed_responses_before_any_read",
             "actual_non_enrolled_legacy_boundary",
-            "actual_enrolled_v17_boundary",
+            "actual_enrolled_memory_boundary",
         ],
         "runtime_wired": False,
     },
@@ -180,7 +180,7 @@ BLOCKED_TESTCLIENT_SCENARIOS = [
     },
     {
         "scenario_id": "enrolled_projection_ready",
-        "expected_behavior": "v17_projection_only_no_legacy_merge",
+        "expected_behavior": "memory_projection_only_no_legacy_merge",
         "executed_now": False,
         "blocked_until_route_wiring": True,
     },
@@ -239,7 +239,7 @@ PRODUCTION_CALL_CONTRACT = {
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     blocked_count = sum(1 for item in REQUIRED_CONTRACT_EVIDENCE if item["status"] == "BLOCKED")
     return {
-        "artifact": "v17_p1_3_v3_route_dependency_contract_readiness",
+        "artifact": "p1_3_v3_route_dependency_contract_readiness",
         "status": "BLOCKED",
         "proof_status": "BLOCKED" if execute else "NOT_RUN",
         "execute": execute,
@@ -270,7 +270,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
             "No production Firestore read/write, cloud, provider, vector, or network call executed.",
             "No telemetry sink production call executed or claimed.",
             "No secret material, cursor token, client-supplied uid, or user memory content logging.",
-            "No legacy fallback/merge for V17 failures, Archive default visibility, or stale Short-term default visibility claimed.",
+            "No legacy fallback/merge for memory failures, Archive default visibility, or stale Short-term default visibility claimed.",
             "Real route-level scenarios remain blocked until explicit runtime route wiring exists.",
         ],
         "summary": {

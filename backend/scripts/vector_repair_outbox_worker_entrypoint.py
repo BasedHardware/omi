@@ -28,63 +28,63 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_vector_repair_outbox_worker import (
-    V17VectorRepairOutboxWorkerTickConfig,
-    run_v17_vector_repair_outbox_worker_tick,
+    VectorRepairOutboxWorkerTickConfig,
+    run_vector_repair_outbox_worker_tick,
 )
 from database.memory_vector_repair_pinecone_adapter import (
-    V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
-    make_v17_pinecone_vector_deleter,
-    make_v17_pinecone_vector_repairer,
+    VECTOR_REPAIR_PINECONE_NAMESPACE,
+    make_pinecone_vector_deleter,
+    make_pinecone_vector_repairer,
 )
-from models.product_memory import V17MemoryItem
+from models.product_memory import MemoryItem
 
-V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
-V17_VECTOR_REPAIR_OUTBOX_UID_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_UID"
-V17_VECTOR_REPAIR_OUTBOX_WORKER_ID_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID"
-V17_VECTOR_REPAIR_OUTBOX_LIMIT_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT"
-V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS"
-V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS"
+MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
+MEMORY_VECTOR_REPAIR_OUTBOX_UID_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_UID"
+MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID"
+MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT"
+MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS"
+MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS"
 PINECONE_API_KEY_ENV = "PINECONE_API_KEY"
 PINECONE_INDEX_NAME_ENV = "PINECONE_INDEX_NAME"
 OPENAI_API_KEY_ENV = "OPENAI_API_KEY"
 
 
 @dataclass(frozen=True)
-class V17VectorRepairOutboxEntrypointConfig:
+class VectorRepairOutboxEntrypointConfig:
     enabled: bool
     uid: Optional[str]
-    tick_config: Optional[V17VectorRepairOutboxWorkerTickConfig]
+    tick_config: Optional[VectorRepairOutboxWorkerTickConfig]
 
 
 @dataclass(frozen=True)
-class V17VectorRepairOutboxProductionDependencies:
+class VectorRepairOutboxProductionDependencies:
     db_client: Any
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]]
     vector_deleter: Callable[[Dict[str, Any]], Any]
     vector_repairer: Callable[[Dict[str, Any], Any], Any]
 
 
-def run_v17_vector_repair_outbox_worker_entrypoint(
+def run_vector_repair_outbox_worker_entrypoint(
     *,
     env: Mapping[str, str],
     db_client: Any,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
     vector_deleter: Callable[[Dict[str, Any]], Any],
     vector_repairer: Callable[[Dict[str, Any], Any], Any],
-    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+    tick_runner: Callable[..., Dict[str, Any]] = run_vector_repair_outbox_worker_tick,
     print_json: Callable[[str], Any] = print,
 ) -> int:
     """Run the disabled-by-default Cloud Run/Tasks wrapper contract for one worker tick.
 
     This wrapper is deliberately small and fake-injectable. It reads only explicit
     server-owned env/config, refuses malformed or unbounded execution, invokes one
-    bounded `run_v17_vector_repair_outbox_worker_tick(...)` when enabled, and
+    bounded `run_vector_repair_outbox_worker_tick(...)` when enabled, and
     prints exactly one deterministic JSON summary for Cloud Run/Tasks logs.
     """
     try:
-        entrypoint_config = parse_v17_vector_repair_outbox_worker_entrypoint_config(env)
+        entrypoint_config = parse_vector_repair_outbox_worker_entrypoint_config(env)
     except ValueError as exc:
         print_json(
             json.dumps(_entrypoint_summary(config_valid=False, errors=[_error("config", str(exc))]), sort_keys=True)
@@ -130,22 +130,22 @@ def run_v17_vector_repair_outbox_worker_entrypoint(
     return 1 if _summary_has_failures(output) else 0
 
 
-def parse_v17_vector_repair_outbox_worker_entrypoint_config(
+def parse_vector_repair_outbox_worker_entrypoint_config(
     env: Mapping[str, str],
-) -> V17VectorRepairOutboxEntrypointConfig:
-    enabled = _parse_enabled(env.get(V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV))
+) -> VectorRepairOutboxEntrypointConfig:
+    enabled = _parse_enabled(env.get(MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV))
     if not enabled:
-        return V17VectorRepairOutboxEntrypointConfig(enabled=False, uid=None, tick_config=None)
+        return VectorRepairOutboxEntrypointConfig(enabled=False, uid=None, tick_config=None)
 
-    uid = _required_env(env, V17_VECTOR_REPAIR_OUTBOX_UID_ENV)
-    worker_id = _required_env(env, V17_VECTOR_REPAIR_OUTBOX_WORKER_ID_ENV)
-    limit = _positive_int_env(env, V17_VECTOR_REPAIR_OUTBOX_LIMIT_ENV, 25)
-    lease_seconds = _positive_int_env(env, V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS_ENV, 300)
-    max_attempts = _positive_int_env(env, V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV, 3)
-    return V17VectorRepairOutboxEntrypointConfig(
+    uid = _required_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_UID_ENV)
+    worker_id = _required_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID_ENV)
+    limit = _positive_int_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT_ENV, 25)
+    lease_seconds = _positive_int_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS_ENV, 300)
+    max_attempts = _positive_int_env(env, MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS_ENV, 3)
+    return VectorRepairOutboxEntrypointConfig(
         enabled=True,
         uid=uid,
-        tick_config=V17VectorRepairOutboxWorkerTickConfig(
+        tick_config=VectorRepairOutboxWorkerTickConfig(
             enabled=True,
             worker_id=worker_id,
             limit=limit,
@@ -155,11 +155,11 @@ def parse_v17_vector_repair_outbox_worker_entrypoint_config(
     )
 
 
-def build_v17_vector_repair_outbox_production_dependencies(
+def build_vector_repair_outbox_production_dependencies(
     env: Mapping[str, str],
     *,
     module_loader: Callable[[str], Any] = importlib.import_module,
-) -> V17VectorRepairOutboxProductionDependencies:
+) -> VectorRepairOutboxProductionDependencies:
     """Build production dependencies for an explicitly enabled worker invocation.
 
     This resolver is deliberately called only after wrapper config has enabled the
@@ -181,41 +181,41 @@ def build_v17_vector_repair_outbox_production_dependencies(
     db_client = firestore_client_module.db
     embeddings = llm_clients_module.embeddings
 
-    return V17VectorRepairOutboxProductionDependencies(
+    return VectorRepairOutboxProductionDependencies(
         db_client=db_client,
-        authoritative_item_loader=make_v17_authoritative_item_loader(db_client=db_client),
-        vector_deleter=make_v17_pinecone_vector_deleter(
+        authoritative_item_loader=make_authoritative_item_loader(db_client=db_client),
+        vector_deleter=make_pinecone_vector_deleter(
             delete_vectors=pinecone_index.delete,
-            namespace=V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+            namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
-        vector_repairer=make_v17_pinecone_vector_repairer(
+        vector_repairer=make_pinecone_vector_repairer(
             embed_text=embeddings.embed_query,
             upsert_vectors=pinecone_index.upsert,
-            namespace=V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
+            namespace=VECTOR_REPAIR_PINECONE_NAMESPACE,
         ),
     )
 
 
-def make_v17_authoritative_item_loader(*, db_client: Any) -> Callable[[Dict[str, Any]], Optional[V17MemoryItem]]:
+def make_authoritative_item_loader(*, db_client: Any) -> Callable[[Dict[str, Any]], Optional[MemoryItem]]:
     """Return a worker-compatible loader for authoritative `memory_items` docs."""
 
-    def load_authoritative_item(record: Dict[str, Any]) -> Optional[V17MemoryItem]:
+    def load_authoritative_item(record: Dict[str, Any]) -> Optional[MemoryItem]:
         uid = _required_record_str(record, "uid")
         memory_id = _required_record_str(record, "memory_id")
-        snapshot = db_client.document(f"{V17Collections(uid=uid).memory_items}/{memory_id}").get()
+        snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
         if not getattr(snapshot, "exists", False):
             return None
         data = snapshot.to_dict() or {}
-        return V17MemoryItem(**data)
+        return MemoryItem(**data)
 
     return load_authoritative_item
 
 
-def run_v17_vector_repair_outbox_worker_http_tick(
+def run_vector_repair_outbox_worker_http_tick(
     *,
     env: Mapping[str, str],
-    dependency_builder: Callable[[Mapping[str, str]], V17VectorRepairOutboxProductionDependencies],
-    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+    dependency_builder: Callable[[Mapping[str, str]], VectorRepairOutboxProductionDependencies],
+    tick_runner: Callable[..., Dict[str, Any]] = run_vector_repair_outbox_worker_tick,
 ) -> Dict[str, Any]:
     """Cloud Run/Tasks HTTP shim for one disabled-by-default worker tick.
 
@@ -228,7 +228,7 @@ def run_v17_vector_repair_outbox_worker_http_tick(
     never from a client request body.
     """
     try:
-        entrypoint_config = parse_v17_vector_repair_outbox_worker_entrypoint_config(env)
+        entrypoint_config = parse_vector_repair_outbox_worker_entrypoint_config(env)
     except ValueError as exc:
         return _entrypoint_summary(config_valid=False, errors=[_error("config", str(exc))])
 
@@ -269,13 +269,13 @@ def run_v17_vector_repair_outbox_worker_http_tick(
     return output
 
 
-def create_v17_vector_repair_outbox_worker_app(
+def create_vector_repair_outbox_worker_app(
     *,
     env: Optional[Mapping[str, str]] = None,
     dependency_builder: Callable[
-        [Mapping[str, str]], V17VectorRepairOutboxProductionDependencies
-    ] = build_v17_vector_repair_outbox_production_dependencies,
-    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+        [Mapping[str, str]], VectorRepairOutboxProductionDependencies
+    ] = build_vector_repair_outbox_production_dependencies,
+    tick_runner: Callable[..., Dict[str, Any]] = run_vector_repair_outbox_worker_tick,
 ) -> FastAPI:
     """Create the minimal ASGI surface used by Cloud Run service deployments.
 
@@ -283,18 +283,18 @@ def create_v17_vector_repair_outbox_worker_app(
     are synchronous, and FastAPI runs sync handlers in a threadpool.
     """
     effective_env = os.environ if env is None else env
-    worker_app = FastAPI(title="v17-vector-repair-outbox-worker", docs_url=None, redoc_url=None, openapi_url=None)
+    worker_app = FastAPI(title="memory-vector-repair-outbox-worker", docs_url=None, redoc_url=None, openapi_url=None)
     routes_by_path = {}
 
-    @worker_app.post("/v17-vector-repair-outbox-worker/tick", include_in_schema=False)
-    def v17_vector_repair_outbox_worker_tick_http() -> Dict[str, Any]:
-        return run_v17_vector_repair_outbox_worker_http_tick(
+    @worker_app.post("/memory-vector-repair-outbox-worker/tick", include_in_schema=False)
+    def vector_repair_outbox_worker_tick_http() -> Dict[str, Any]:
+        return run_vector_repair_outbox_worker_http_tick(
             env=effective_env,
             dependency_builder=dependency_builder,
             tick_runner=tick_runner,
         )
 
-    routes_by_path["/v17-vector-repair-outbox-worker/tick"] = v17_vector_repair_outbox_worker_tick_http
+    routes_by_path["/memory-vector-repair-outbox-worker/tick"] = vector_repair_outbox_worker_tick_http
     worker_app.routes_by_path = routes_by_path
     return worker_app
 
@@ -302,13 +302,13 @@ def create_v17_vector_repair_outbox_worker_app(
 def main(
     *,
     env: Optional[Mapping[str, str]] = None,
-    tick_runner: Callable[..., Dict[str, Any]] = run_v17_vector_repair_outbox_worker_tick,
+    tick_runner: Callable[..., Dict[str, Any]] = run_vector_repair_outbox_worker_tick,
     print_json: Callable[[str], Any] = print,
 ) -> int:
     """CLI hook for disabled-by-default Cloud Run/Tasks images."""
     effective_env = os.environ if env is None else env
     try:
-        entrypoint_config = parse_v17_vector_repair_outbox_worker_entrypoint_config(effective_env)
+        entrypoint_config = parse_vector_repair_outbox_worker_entrypoint_config(effective_env)
     except ValueError as exc:
         print_json(
             json.dumps(_entrypoint_summary(config_valid=False, errors=[_error("config", str(exc))]), sort_keys=True)
@@ -320,7 +320,7 @@ def main(
         return 0
 
     try:
-        dependencies = build_v17_vector_repair_outbox_production_dependencies(effective_env)
+        dependencies = build_vector_repair_outbox_production_dependencies(effective_env)
     except ValueError as exc:
         print_json(
             json.dumps(
@@ -329,7 +329,7 @@ def main(
         )
         return 2
 
-    return run_v17_vector_repair_outbox_worker_entrypoint(
+    return run_vector_repair_outbox_worker_entrypoint(
         env=effective_env,
         db_client=dependencies.db_client,
         authoritative_item_loader=dependencies.authoritative_item_loader,
@@ -345,7 +345,7 @@ def _parse_enabled(raw: Optional[str]) -> bool:
         return False
     if raw.lower() == "true":
         return True
-    raise ValueError(f"{V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV} must be 'true' or 'false'")
+    raise ValueError(f"{MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV} must be 'true' or 'false'")
 
 
 def _required_env(env: Mapping[str, str], key: str) -> str:
@@ -371,7 +371,7 @@ def _positive_int_env(env: Mapping[str, str], key: str, default: int) -> int:
 def _required_dependency_env(env: Mapping[str, str], key: str) -> str:
     value = env.get(key)
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} is required when V17 vector repair worker is enabled")
+        raise ValueError(f"{key} is required when memory vector repair worker is enabled")
     return value.strip()
 
 
@@ -423,7 +423,7 @@ def _missing_production_repair_dependency(record: Dict[str, Any], item: Any) -> 
     raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
 
 
-app = create_v17_vector_repair_outbox_worker_app()
+app = create_vector_repair_outbox_worker_app()
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safe V17 `/v3` trusted account-generation source/readiness artifact.
+"""Safe memory `/v3` trusted account-generation source/readiness artifact.
 
 This artifact identifies the independent server-owned account-generation source
 that future `GET /v3/memories` wiring must use for `expected_account_generation`
@@ -17,15 +17,15 @@ from typing import Any
 TRUSTED_ACCOUNT_GENERATION_SOURCE = {
     "source_id": "trusted_memory_state_head",
     "canonical_path": "users/{uid}/memory_state/head",
-    "reader_contract": "backend/utils/memory/v17_v3_account_generation_source.py",
-    "writer": "backend/database/v17_memory_apply_store.py",
+    "reader_contract": "backend/utils/memory/v3_account_generation_source.py",
+    "writer": "backend/database/memory_apply_store.py",
     "unit_test": "backend/tests/unit/test_v3_account_generation_source.py",
     "writer_unit_test": "backend/tests/unit/test_firestore_apply_store.py",
     "emulator_test": "backend/scripts/firestore_python_apply_emulator_test.py",
     "rules_emulator_test": "backend/scripts/firestore_rules_emulator_test.mjs",
-    "npm_emulator_command": "npm run test:v17-v3-state-head:emulator",
+    "npm_emulator_command": "npm run test:memory-v3-state-head:emulator",
     "schema_version": 1,
-    "required_source_field": "v17_memory_state_head",
+    "required_source_field": "memory_state_head",
     "required_fields": ["uid", "schema_version", "source", "account_generation", "head_commit_id", "commit_sequence"],
     "server_owned": True,
     "independent_from_control_doc": True,
@@ -38,7 +38,7 @@ TRUSTED_ACCOUNT_GENERATION_SOURCE = {
 
 STATE_HEAD_WRITER_EMULATOR_EVIDENCE = {
     "status": "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED",
-    "writer_path": "backend/database/v17_memory_apply_store.py",
+    "writer_path": "backend/database/memory_apply_store.py",
     "writer_function": "_write_apply_result",
     "materializes_from": "committed MemoryControlState returned by apply_long_term_patch_transaction",
     "lockstep_fields": ["uid", "account_generation", "head_commit_id", "commit_sequence", "updated_at"],
@@ -46,7 +46,7 @@ STATE_HEAD_WRITER_EMULATOR_EVIDENCE = {
     "server_owned": True,
     "client_rules_denial_proof": "backend/scripts/firestore_rules_emulator_test.mjs",
     "admin_emulator_writer_reader_proof": "backend/scripts/firestore_python_apply_emulator_test.py",
-    "npm_emulator_command": "npm run test:v17-v3-state-head:emulator",
+    "npm_emulator_command": "npm run test:memory-v3-state-head:emulator",
     "runtime_wired": False,
     "production_rollout_approved": False,
 }
@@ -97,14 +97,14 @@ NON_CLAIMS = [
     "No production Firestore/cloud/provider/vector calls.",
     "No client-supplied generation trust.",
     "No copying observed control/projection generation into expected generation.",
-    "No legacy fallback/merge for V17 failures.",
+    "No legacy fallback/merge for memory failures.",
 ]
 
 
 def build_report(*, execute: bool = False) -> dict[str, Any]:
     proof_status = "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED" if execute else "NOT_RUN"
     return {
-        "artifact": "v17_p1_3_v3_account_generation_readiness",
+        "artifact": "p1_3_v3_account_generation_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,

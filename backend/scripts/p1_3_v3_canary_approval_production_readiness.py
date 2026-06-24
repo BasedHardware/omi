@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Production-safe V17 `/v3` canary approval read-proof readiness contract.
+"""Production-safe memory `/v3` canary approval read-proof readiness contract.
 
 This runner is disabled by default. Without explicit environment gates it performs
 no production calls and reports NOT_RUN/BLOCKED. With the gates present it may run
 one read-only backend service-principal document read for
-`system/v17_v3_canary_approvals/routes/get_v3_memories`, validate the artifact
-using the local V17 canary approval schema seam, and still refuse to claim product
+`system/v3_canary_approvals/routes/get_v3_memories`, validate the artifact
+using the local memory canary approval schema seam, and still refuse to claim product
 rollout approval or route readiness. It never imports FastAPI routers, writes
 Firestore, calls vector/provider services, emits telemetry sinks, or changes
 runtime behavior.
@@ -27,9 +27,9 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from utils.memory.v3_canary_approval import ROUTE_SCOPE, validate_v17_v3_canary_approval_artifact
+from utils.memory.v3_canary_approval import ROUTE_SCOPE, validate_memory_v3_canary_approval_artifact
 
-ARTIFACT_DOCUMENT_PATH = "system/v17_v3_canary_approvals/routes/get_v3_memories"
+ARTIFACT_DOCUMENT_PATH = "system/v3_canary_approvals/routes/get_v3_memories"
 ARTIFACT_SOURCE = f"firestore:{ARTIFACT_DOCUMENT_PATH}"
 ALLOW_ENV = "MEMORY_V3_CANARY_APPROVAL_PROD_READ_ALLOW"
 PROJECT_ID_ENV = "MEMORY_V3_CANARY_APPROVAL_PROD_READ_PROJECT_ID"
@@ -105,7 +105,7 @@ def _read_artifact_with_firestore(project_id: str) -> dict[str, Any] | None:
 
 
 def _evaluate_artifact(artifact: dict[str, Any] | None, *, now: datetime) -> dict[str, Any]:
-    decision = validate_v17_v3_canary_approval_artifact(
+    decision = validate_memory_v3_canary_approval_artifact(
         artifact,
         requested_route_scope=ROUTE_SCOPE,
         requested_cohort=DEFAULT_COHORT,
@@ -176,7 +176,7 @@ def build_report(
         "approval_claimed": False,
     }
     return {
-        "artifact": "v17_p1_3_v3_canary_approval_production_readiness",
+        "artifact": "p1_3_v3_canary_approval_production_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -201,7 +201,7 @@ def build_report(
             "No production Firestore write, vector/provider call, or telemetry sink call is allowed.",
             "No PII/raw memory content telemetry emitted.",
             "No secret/cursor token logging allowed or performed.",
-            "No legacy fallback/merge for V17 failures claimed.",
+            "No legacy fallback/merge for memory failures claimed.",
             "No Archive default visibility or stale Short-term default visibility claimed.",
         ],
         "summary": summary,

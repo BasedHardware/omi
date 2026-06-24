@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Safe `/v3` V17 compatibility projection store/API readiness artifact.
+"""Safe `/v3` memory compatibility projection store/API readiness artifact.
 
-This is a read-only local contract inventory for the future V17-derived
+This is a read-only local contract inventory for the future memory-derived
 compatibility projection read API/store needed before `GET /v3/memories` can be
 cut over. It intentionally does not import FastAPI routers, contact production
 Firestore, call Pinecone/providers/cloud/network services, mutate state, implement
@@ -19,7 +19,7 @@ from typing import Any
 
 def _load_external_readiness_module():
     spec = importlib.util.spec_from_file_location(
-        "v17_p1_3_v3_external_compatibility_readiness",
+        "p1_3_v3_external_compatibility_readiness",
         Path(__file__).with_name("p1_3_v3_external_compatibility_readiness.py"),
     )
     if spec is None or spec.loader is None:
@@ -55,7 +55,7 @@ STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "canonical_projection_path_api",
         "status": "LOCAL_IMPLEMENTED",
-        "required_contract": "Canonical server-owned V17-derived projection state/items paths exist for a future `/v3` reader.",
+        "required_contract": "Canonical server-owned memory-derived projection state/items paths exist for a future `/v3` reader.",
         "canonical_state_path": "users/{uid}/v3_compatibility_projection/state",
         "canonical_items_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
         "canonical_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
@@ -70,7 +70,7 @@ STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "memorydb_materialization_fields",
         "status": "LOCAL_IMPLEMENTED",
-        "required_contract": "Projection records must materialize List[MemoryDB] without leaking V17-only body fields.",
+        "required_contract": "Projection records must materialize List[MemoryDB] without leaking memory-only body fields.",
         "required_fields": [
             "id",
             "uid",
@@ -87,7 +87,7 @@ STORE_API_REQUIREMENTS = [
             "conversation_id",
             "data_protection_level",
         ],
-        "v17_only_body_fields_forbidden": [
+        "memory_only_body_fields_forbidden": [
             "memory_item_id",
             "generation",
             "source_commit_id",
@@ -106,7 +106,7 @@ STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "generation_account_projection_freshness_fences",
         "status": "LOCAL_IMPLEMENTED",
-        "required_contract": "Read API must prove account/projection generation freshness before returning enrolled V17 data.",
+        "required_contract": "Read API must prove account/projection generation freshness before returning enrolled memory data.",
         "required_fields": [
             "uid",
             "account_generation",
@@ -166,7 +166,7 @@ STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "enabled_empty_representation",
         "status": "LOCAL_IMPLEMENTED",
-        "required_contract": "Enabled empty V17 projection returns HTTP 200 with [] and never falls back to stale legacy rows.",
+        "required_contract": "Enabled empty memory projection returns HTTP 200 with [] and never falls back to stale legacy rows.",
         "response_body": [],
         "legacy_fallback_allowed": False,
         "empty_projection_flag_required": True,
@@ -193,12 +193,12 @@ STORE_API_REQUIREMENTS = [
     {
         "requirement_id": "pagination_cursor_compatibility",
         "status": "LOCAL_IMPLEMENTED",
-        "required_contract": "V17 projection reads need stable cursor inputs/outputs while preserving current non-enrolled legacy offset behavior.",
+        "required_contract": "memory projection reads need stable cursor inputs/outputs while preserving current non-enrolled legacy offset behavior.",
         "cursor_inputs": ["limit", "cursor", "filter_hash", "projection_generation", "account_generation"],
         "cursor_outputs": ["items", "next_cursor", "has_more", "projection_generation"],
         "legacy_non_enrolled_offset_behavior_preserved": True,
         "legacy_offset_zero_limit_5000_only_for_legacy_primary": True,
-        "v17_cursor_required_before_cutover": True,
+        "v3_cursor_required_before_cutover": True,
         "evidence_sources": ["cursor_service_proof", "request_adapter_proof", "memory_read_service_proof"],
         "missing_real_firestore_or_api_evidence": False,
         "required_before_runtime_change": True,
@@ -220,7 +220,7 @@ STORE_API_REQUIREMENTS = [
 ]
 
 FAKE_INJECTABLE_READ_INTERFACE = {
-    "interface_name": "V17V3CompatibilityProjectionReader",
+    "interface_name": "V3CompatibilityProjectionReader",
     "method": "read_projection_page",
     "input_fields": [
         "uid",
@@ -247,8 +247,8 @@ FAKE_INJECTABLE_READ_INTERFACE = {
     ],
     "fake_injectable": True,
     "production_firestore_reader_implemented": True,
-    "implementation": "backend/database/v17_v3_compatibility_projection.py",
-    "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+    "implementation": "backend/database/v3_compatibility_projection.py",
+    "contract": "backend/utils/memory/v3_projection_reader_contract.py",
     "emulator_proof": "backend/scripts/p1_3_v3_projection_reader_emulator_test.py",
     "runtime_route_wiring_now": False,
 }
@@ -256,7 +256,7 @@ FAKE_INJECTABLE_READ_INTERFACE = {
 PROPOSED_NEXT_SAFE_STEPS = [
     {
         "step_id": "choose_canonical_projection_path_and_schema",
-        "description": "Pick and document the canonical Firestore/API path and schema for V17-derived `/v3` compatibility projection records.",
+        "description": "Pick and document the canonical Firestore/API path and schema for memory-derived `/v3` compatibility projection records.",
         "implements_runtime_wiring_now": False,
         "implements_production_writes_now": False,
     },
@@ -292,7 +292,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
     local_implementation_count = sum(1 for item in STORE_API_REQUIREMENTS if str(item["status"]).startswith("LOCAL_"))
     missing_evidence_count = sum(1 for item in STORE_API_REQUIREMENTS if item["missing_real_firestore_or_api_evidence"])
     return {
-        "artifact": "v17_p1_3_v3_projection_store_readiness",
+        "artifact": "p1_3_v3_projection_store_readiness",
         "status": "BLOCKED",
         "proof_status": "LOCAL_IMPLEMENTATION_PROVED" if execute else "NOT_RUN",
         "execute": execute,
@@ -309,13 +309,13 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "pinecone_calls_executed": False,
         "production_rollout_approved": False,
         "approval_claimed": False,
-        "scope": "Readiness/local implementation and emulator proof inventory for future V17-derived `/v3` compatibility projection read API/store.",
+        "scope": "Readiness/local implementation and emulator proof inventory for future memory-derived `/v3` compatibility projection read API/store.",
         "local_implementation_evidence": {
-            "reader": "backend/database/v17_v3_compatibility_projection.py",
-            "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+            "reader": "backend/database/v3_compatibility_projection.py",
+            "contract": "backend/utils/memory/v3_projection_reader_contract.py",
             "unit_tests": "backend/tests/unit/test_v3_compatibility_projection.py",
             "emulator_test": "backend/scripts/p1_3_v3_projection_reader_emulator_test.py",
-            "npm_command": "npm run test:v17-v3-projection-reader:emulator",
+            "npm_command": "npm run test:memory-v3-projection-reader:emulator",
             "server_owned_state_path": "users/{uid}/v3_compatibility_projection/state",
             "server_owned_items_path": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
         },
@@ -325,7 +325,7 @@ def build_report(*, execute: bool = False) -> dict[str, Any]:
         "proposed_next_safe_steps": PROPOSED_NEXT_SAFE_STEPS,
         "non_claims": [
             "No production compatibility projection store writes implemented.",
-            "Local Firestore emulator evidence collected only by npm run test:v17-v3-projection-reader:emulator; no production cloud evidence collected.",
+            "Local Firestore emulator evidence collected only by npm run test:memory-v3-projection-reader:emulator; no production cloud evidence collected.",
             "No Pinecone, provider, production cloud, or network calls executed by readiness artifact.",
             "No `/v3` route wiring changed.",
             "No Archive default visibility or stale Short-term default visibility introduced.",

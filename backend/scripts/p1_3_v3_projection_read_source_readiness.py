@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Production-safe V17 `/v3` projection read source contract/readiness proof.
+"""Production-safe memory `/v3` projection read source contract/readiness proof.
 
 This runner defines the future backend-owned projection read source contract for
-serving `GET /v3/memories` from V17-derived compatibility projection data. By
+serving `GET /v3/memories` from memory-derived compatibility projection data. By
 default it performs no production calls and reports NOT_RUN/BLOCKED. With explicit
 environment gates it may run one read-only metadata/source-shape probe for the
 authenticated subject's projection state and validate only source/contract fields.
 It never imports FastAPI routers, changes route wiring, writes Firestore, reads
-legacy memories, reads live V17 memory_items, calls vector/provider services,
+legacy memories, reads live memory memory_items, calls vector/provider services,
 emits telemetry sinks, trusts client-selected collection/path/source values, logs
 secret/cursor/user content, or claims production rollout approval.
 """
@@ -23,10 +23,10 @@ from typing import Any
 
 ROUTE_SCOPE = "GET /v3/memories"
 ROUTE_SCOPE_LABEL = "get_v3_memories"
-SOURCE_TYPE = "firestore_v17_compatibility_projection"
+SOURCE_TYPE = "firestore_compatibility_projection"
 STATE_PATH_TEMPLATE = "users/{uid}/v3_compatibility_projection/state"
 ITEMS_PATH_TEMPLATE = "users/{uid}/v3_compatibility_projection_items/{memory_id}"
-SOURCE_NAME = "v17_memory_items_projection"
+SOURCE_NAME = "memory_items_projection"
 PROJECTION_VERSION = "v3_memorydb_compatibility"
 MAX_LIMIT = 500
 DEFAULT_LIMIT = 100
@@ -108,7 +108,7 @@ PROJECTION_READ_SOURCE_CONTRACT = {
     "telemetry_forbidden_dimensions": FORBIDDEN_TELEMETRY_DIMENSIONS,
     "fail_closed_on_missing_stale_malformed_metadata": True,
     "legacy_fallback_allowed": False,
-    "merge_legacy_and_v17_allowed": False,
+    "merge_legacy_and_memory_allowed": False,
     "archive_default_available": False,
     "stale_short_term_default_visible": False,
     "runtime_wired": False,
@@ -143,7 +143,7 @@ READ_SOURCE_REQUIREMENTS = [
         "min_limit": 1,
         "default_limit": DEFAULT_LIMIT,
         "max_limit": MAX_LIMIT,
-        "legacy_offset_zero_limit_5000_allowed_for_v17": False,
+        "legacy_offset_zero_limit_5000_allowed_for_memory": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -153,7 +153,7 @@ READ_SOURCE_REQUIREMENTS = [
         "status": "LOCAL_CONTRACT_DEFINED",
         "ordering": PROJECTION_READ_SOURCE_CONTRACT["ordering"],
         "cursor_fields": PROJECTION_READ_SOURCE_CONTRACT["cursor_fields"],
-        "offset_supported_for_v17": False,
+        "offset_supported_for_memory": False,
         "required_before_runtime_change": True,
         "runtime_wired": False,
         "approval_claimed": False,
@@ -201,7 +201,7 @@ READ_SOURCE_REQUIREMENTS = [
         "requirement_id": "no_legacy_fallback_or_merge_claim",
         "status": "LOCAL_CONTRACT_DEFINED",
         "legacy_fallback_allowed": False,
-        "merge_legacy_and_v17_allowed": False,
+        "merge_legacy_and_memory_allowed": False,
         "empty_projection_allows_legacy_query": False,
         "projection_error_allows_legacy_query": False,
         "required_before_runtime_change": True,
@@ -445,7 +445,7 @@ def build_report(
                 proof_status = "BLOCKED"
 
     report = {
-        "artifact": "v17_p1_3_v3_projection_read_source_readiness",
+        "artifact": "p1_3_v3_projection_read_source_readiness",
         "status": "BLOCKED",
         "proof_status": proof_status,
         "execute": execute,
@@ -468,7 +468,7 @@ def build_report(
             "No backend/routers/memories.py runtime wiring changed.",
             "No runtime /v3 behavior changed.",
             "No production calls by default; explicit execution is read-only projection source metadata proof only.",
-            "No client-controlled collection/path/source, uid config dimension, legacy fallback, or V17/legacy merge is allowed.",
+            "No client-controlled collection/path/source, uid config dimension, legacy fallback, or memory/legacy merge is allowed.",
             "No uid, session, memory id, request payload, cursor token, secret, or memory content telemetry labels are allowed.",
             "No production Firestore write, vector/provider call, telemetry sink call, Archive default visibility, stale Short-term default visibility, rollout approval, or canary approval claimed.",
         ],

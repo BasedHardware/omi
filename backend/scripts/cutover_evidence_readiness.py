@@ -13,9 +13,9 @@ CUTOVER_GATE_STATUS_NOT_RUN = "NOT_RUN"
 CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
     "milestone_oracle_final_approval": {
         "status": CUTOVER_GATE_STATUS_BLOCKED,
-        "summary": "Milestone-specific Oracle review exists, but final approval for V17 production cutover is absent.",
+        "summary": "Milestone-specific Oracle review exists, but final approval for memory production cutover is absent.",
         "required_proof_commands_or_artifacts": [
-            "docs/epics/v17_t20_oracle_milestone_review.md updated with final approval section",
+            "docs/epics/memory_t20_oracle_milestone_review.md updated with final approval section",
             "Signed milestone/final approval artifact explicitly changing Oracle verdict from BLOCK production rollout to approved",
         ],
         "blockers": ["Oracle verdict remains BLOCK production rollout / NO-GO", "final approval not granted"],
@@ -36,11 +36,11 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
     },
     "real_firestore_cloud_iam_rules_validation": {
         "status": CUTOVER_GATE_STATUS_NOT_RUN,
-        "summary": "Real Firestore/cloud IAM and deployed Security Rules validation for V17 paths is absent.",
+        "summary": "Real Firestore/cloud IAM and deployed Security Rules validation for memory paths is absent.",
         "required_proof_commands_or_artifacts": [
             "python3 backend/scripts/firestore_rules_iam_proof.py --execute --project <approved-project>",
             "Cloud IAM/service-account binding evidence for memory_items, vector repair outbox, MCP keys, and app/key grants",
-            "Deployed Firestore Security Rules denial/allowance evidence for server-owned V17 control documents",
+            "Deployed Firestore Security Rules denial/allowance evidence for server-owned memory control documents",
         ],
         "blockers": ["no deployed Firestore/IAM proof output", "local emulator evidence is not cloud validation"],
         "evidence": [],
@@ -48,9 +48,9 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
     },
     "recall_precision_latency_no_silent_data_loss_benchmarks": {
         "status": CUTOVER_GATE_STATUS_NOT_RUN,
-        "summary": "Recall/precision/latency/no-silent-data-loss benchmarks are not collected for production-shaped V17 default reads/vector search.",
+        "summary": "Recall/precision/latency/no-silent-data-loss benchmarks are not collected for production-shaped memory default reads/vector search.",
         "required_proof_commands_or_artifacts": [
-            "Approved benchmark plan with Base/V17 recall and precision fixture set",
+            "Approved benchmark plan with Base/memory recall and precision fixture set",
             "Latency/load run with p50/p95/p99 budgets and high-volume accounts",
             "No-silent-data-loss report covering stale Short-term, Archive default-unavailable, tombstones, duplicates, malformed metadata, and partial outages",
         ],
@@ -62,7 +62,7 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "status": CUTOVER_GATE_STATUS_BLOCKED,
         "summary": "Production metrics aggregation/central telemetry is not wired to the selected ops sink/dashboard/alert policy.",
         "required_proof_commands_or_artifacts": [
-            "Central metrics sink integration for V17 rollout/read/vector/repair counters with low-cardinality labels",
+            "Central metrics sink integration for memory rollout/read/vector/repair counters with low-cardinality labels",
             "Dashboard and alert policy evidence for empty-after-hydration, budget exhaustion, retry/dead-letter backlog, and rollback gates",
             "Production-safe metric cardinality review showing no uid/query/vector/memory IDs or raw errors",
         ],
@@ -80,7 +80,7 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
             "python3 backend/scripts/t20_repair_projection_consistency_readiness.py",
             "T20 repair/projection-consistency evidence tying projection_commit_id/account_generation/item_revision/source_commit_id/content_hash to memory_items, vector metadata, and vector repair outbox records",
             "Vector repair outbox enqueue/dead-letter/backlog and worker execution artifact proving stale physical vectors/tombstones/duplicates converge without data loss",
-            "shared ns2 legacy/V17 isolation under stale candidates proof with repair/refill behavior",
+            "shared ns2 legacy/memory isolation under stale candidates proof with repair/refill behavior",
         ],
         "blockers": [
             "real repair/projection consistency not proven",
@@ -95,7 +95,7 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "summary": "T21 /v3 compatibility and cursor pagination requirements are not demonstrated for production cutover.",
         "required_proof_commands_or_artifacts": [
             "python3 backend/scripts/t21_v3_compatibility_cursor_readiness.py",
-            "T21 `/v3` compatibility and cursor pagination matrix for legacy/V17 readers covering /v3 endpoint compatibility, stable cursor pagination, category filters, and stable ordering",
+            "T21 `/v3` compatibility and cursor pagination matrix for legacy/memory readers covering /v3 endpoint compatibility, stable cursor pagination, category filters, and stable ordering",
             "Compatibility evidence for disabled/malformed/no-grant, enabled-but-empty, deleted/non-active records, Archive default-unavailable, external response shape compatibility, developer category filtering, and MCP REST/SSE shape consistency",
             "Regression output for affected `/v3` endpoints and product/developer/MCP/chat caller regression coverage",
         ],
@@ -113,13 +113,13 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "required_proof_commands_or_artifacts": [
             "python3 backend/scripts/t22_t23_external_writes_caller_coverage_readiness.py",
             "T22/T23 external writes and caller coverage matrix for external create/edit/delete/list/search write/read convergence across /v3, Developer API, MCP REST/SSE, chat, tools, and agent paths",
-            "Durable V17 write convergence or tested dual-write/outbox evidence before authoritative external reads, including no legacy unsafe fallback after V17 writes",
+            "Durable memory write convergence or tested dual-write/outbox evidence before authoritative external reads, including no legacy unsafe fallback after memory writes",
             "Caller coverage regression proving Developer API write/read paths, MCP REST/SSE write/read/list/search paths, chat/tool/agent caller coverage, app/key/scope grant enforcement, Archive default-unavailable, response-shape compatibility, delete/review/import compatibility, and rollback/disable behavior",
         ],
         "blockers": [
             "no T22/T23 external writes and caller coverage proof",
             "external create/edit/delete/list/search write/read convergence remains NOT_RUN",
-            "durable V17-write convergence or dual-write/outbox evidence remains NOT_RUN",
+            "durable memory-write convergence or dual-write/outbox evidence remains NOT_RUN",
             "caller coverage incomplete across Developer API, MCP REST/SSE, chat, tools, and agent paths",
         ],
         "evidence": [],
@@ -131,7 +131,7 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "required_proof_commands_or_artifacts": [
             "Final cutover checklist with all gates PASS and attached real evidence artifacts",
             "Explicit production owner approval naming environment, rollout cohort, rollback plan, and monitoring gates",
-            "Rollback/disable drill output for V17 read/vector cutover",
+            "Rollback/disable drill output for memory read/vector cutover",
         ],
         "blockers": ["required evidence absent", "production rollout approval not granted"],
         "evidence": [],
@@ -155,7 +155,7 @@ class CutoverEvidenceReadinessConfig:
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Safe V17 production cutover evidence readiness checklist. It inventories gates as BLOCKED/NOT_RUN without approval claims."
+        description="Safe memory production cutover evidence readiness checklist. It inventories gates as BLOCKED/NOT_RUN without approval claims."
     )
     parser.add_argument(
         "--execute", action="store_true", help="Emit the same read-only checklist; does not call providers."

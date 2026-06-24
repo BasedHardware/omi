@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 DEFAULT_ASSIGNMENT_FILE_ENV = "MEMORY_APP_KEY_MEMORY_GRANT_ASSIGNMENTS"
-V17_APP_KEY_MEMORY_GRANT_SUBPATH = "memory_control/v17_app_key_memory_grants"
+APP_KEY_MEMORY_GRANT_SUBPATH = "memory_control/app_key_memory_grants"
 ALLOWED_CONSUMERS = frozenset({"developer_api", "mcp", "third_party"})
 ALLOWED_PERSISTED_SCOPES = frozenset({"memories.read", "memories.write", "memories.archive.read"})
 REQUIRED_FIELDS = frozenset(
@@ -121,7 +121,7 @@ def normalize_assignments(assignments: Optional[Sequence[Mapping[str, Any]]]) ->
                 "app_id": app_id,
                 "key_id": key_id,
                 "grant_path": f"grants.{consumer}.apps.{app_id}.keys.{key_id}",
-                "document_path": f"users/{uid}/{V17_APP_KEY_MEMORY_GRANT_SUBPATH}",
+                "document_path": f"users/{uid}/{APP_KEY_MEMORY_GRANT_SUBPATH}",
                 "grant": {
                     "enabled": enabled,
                     "scopes": scopes,
@@ -244,7 +244,7 @@ def build_production_db_client() -> Any:
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Validate and optionally apply deterministic server-owned V17 app/key memory grant assignments. "
+            "Validate and optionally apply deterministic server-owned memory app/key memory grant assignments. "
             "Default mode is NOT_RUN and performs no Firestore reads or writes."
         )
     )
@@ -276,7 +276,7 @@ def main(argv: Optional[Sequence[str]] = None, *, db_client: Any = None) -> int:
             "status": "DENIED",
             "read_only": True,
             "mutation_allowed": False,
-            "errors": ["--assignment-file or V17_APP_KEY_MEMORY_GRANT_ASSIGNMENTS is required with --allow-write"],
+            "errors": ["--assignment-file or APP_KEY_MEMORY_GRANT_ASSIGNMENTS is required with --allow-write"],
             "non_claims": base_non_claims(executed=True),
         }
         print(json.dumps(payload, indent=2, sort_keys=True))
