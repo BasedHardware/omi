@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 
 @router.get('/v1/folders', response_model=List[Folder], tags=['folders'])
 def get_folders(uid: str = Depends(auth.get_current_user_uid)):
@@ -32,7 +34,17 @@ def get_folders(uid: str = Depends(auth.get_current_user_uid)):
     folders = folders_db.get_folders(uid)
     if not folders:
         folders = folders_db.initialize_system_folders(uid)
-    return folders
+    # Validate each folder individually so one malformed/legacy record doesn't fail the whole list
+    # with a 500.
+    valid_folders = []
+    for folder in folders:
+        try:
+            valid_folders.append(Folder.model_validate(folder))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid folder for uid {uid}: missing/invalid fields {invalid_fields}")
+            continue
+    return valid_folders
 
 
 @router.post('/v1/folders', response_model=Folder, tags=['folders'])
