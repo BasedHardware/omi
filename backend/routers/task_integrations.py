@@ -690,10 +690,17 @@ async def create_task_via_integration(
     if not integration.get('access_token'):
         raise HTTPException(status_code=401, detail=f"No access token for {app_key}")
 
-    # Parse due date if provided
+    # Parse due date if provided. due_date is a free-form Optional[str] from the request body, so an
+    # invalid value must return 422 rather than raising an unhandled ValueError that surfaces as a 500.
     due_date = None
     if request.due_date:
-        due_date = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
+        try:
+            due_date = datetime.fromisoformat(request.due_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid due_date format. Use ISO 8601, e.g. 2026-06-09 or 2026-06-09T15:00:00Z.",
+            )
 
     result = await _create_task_internal(
         uid=uid,
