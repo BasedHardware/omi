@@ -1,6 +1,6 @@
 """Safety boundaries for chat tool results passed back into model context."""
 
-from utils.memory.v17_chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
+from utils.memory.chat_memory_adapter import V17_CHAT_MEMORY_BOUNDARY_NOTICE, V17_CHAT_MEMORY_POLICY_MARKER
 
 CHAT_MEMORY_TOOL_NAMES = frozenset({'get_memories_tool', 'search_memories_tool'})
 V17_CHAT_MEMORY_SAFE_NO_RESULT = "No memories available for this request."
