@@ -1,0 +1,63 @@
+"""Canonical alias module for ``utils.memory.v17_v3_f6_readonly_contracts`` (WS-G).
+
+New canonical-path code may import from here; the V17 module name remains valid
+until a later rename wave. No behavior change — re-exports only.
+"""
+
+from utils.memory.v17_v3_f6_readonly_contracts import (
+    AuditCorrelationResult,
+    AuditLogClient,
+    AuditLogEvent,
+    AuditQuery,
+    EvidenceClientConfig,
+    FORBIDDEN_BROAD_ROLES,
+    FORBIDDEN_WRITE_PERMISSIONS,
+    FakeAuditLogClient,
+    FakeIdentityIamSource,
+    FakeReadEvidenceTransport,
+    GENERIC_OR_RAW_METHODS,
+    IdentityIamSource,
+    IdentityIamTarget,
+    IdentityIamVerificationResult,
+    MUTATOR_TOKENS,
+    REQUIRED_READ_PERMISSIONS,
+    ReadEvidenceRequest,
+    ReadEvidenceTransport,
+    ReadOnlyEvidenceClient,
+    RunRecord,
+    WRITE_METHOD_MARKERS,
+    _audit_method_is_write,
+    _method_family,
+    _method_is_forbidden,
+    assess_audit_correlation,
+    verify_identity_iam,
+)
+
+__all__ = [
+    "AuditCorrelationResult",
+    "AuditLogClient",
+    "AuditLogEvent",
+    "AuditQuery",
+    "EvidenceClientConfig",
+    "FORBIDDEN_BROAD_ROLES",
+    "FORBIDDEN_WRITE_PERMISSIONS",
+    "FakeAuditLogClient",
+    "FakeIdentityIamSource",
+    "FakeReadEvidenceTransport",
+    "GENERIC_OR_RAW_METHODS",
+    "IdentityIamSource",
+    "IdentityIamTarget",
+    "IdentityIamVerificationResult",
+    "MUTATOR_TOKENS",
+    "REQUIRED_READ_PERMISSIONS",
+    "ReadEvidenceRequest",
+    "ReadEvidenceTransport",
+    "ReadOnlyEvidenceClient",
+    "RunRecord",
+    "WRITE_METHOD_MARKERS",
+    "_audit_method_is_write",
+    "_method_family",
+    "_method_is_forbidden",
+    "assess_audit_correlation",
+    "verify_identity_iam",
+]
