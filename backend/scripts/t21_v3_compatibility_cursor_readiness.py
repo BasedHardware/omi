@@ -169,7 +169,7 @@ def build_readiness_artifact(config: T21V3CompatibilityCursorReadinessConfig) ->
         "approval_claimed": False,
         "compatibility_surfaces": [
             "/v3/memories legacy list response",
-            "/v17/memory/search product default read response",
+            "/memory/search product default read response",
             "/v1/dev/user/memories developer response",
             "MCP REST search_memories response",
             "MCP SSE search_memories response",
