@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, Sequence
 
 LOCAL_ROUTE_ADAPTER_AND_TEST_REFERENCES = {
-    "product_v17_default_search": "backend/routers/v17_memory_product.py GET /v17/memory/search",
-    "product_v17_vector_search": "backend/routers/v17_memory_product.py GET /v17/memory/vector/search",
-    "product_v17_archive_search": "backend/routers/v17_memory_product.py GET /v17/memory/archive/search",
+    "product_v17_default_search": "backend/routers/memory_product.py GET /memory/search",
+    "product_v17_vector_search": "backend/routers/memory_product.py GET /memory/vector/search",
+    "product_v17_archive_search": "backend/routers/memory_product.py GET /memory/archive/search",
     "v3_legacy_list": "backend/routers/memories.py GET /v3/memories",
     "developer_default_list": "backend/routers/developer.py GET /v1/dev/user/memories",
     "developer_vector_search": "backend/routers/developer.py GET /v1/dev/user/memories/vector/search",
