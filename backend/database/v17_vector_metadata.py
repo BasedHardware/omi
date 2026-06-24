@@ -10,6 +10,9 @@ from models.v17_product_memory import MemoryTier, V17MemoryItem
 
 V17_MEMORY_VECTOR_SCHEMA_VERSION = 1
 V17_MEMORY_VECTOR_ID_PREFIX = "v17mem"
+
+# Neutral canonical-memory vector schema (prod greenfield — no v17 metadata on canonical path).
+MEMORY_VECTOR_SCHEMA_VERSION = 1
 RESTRICTED_SENSITIVITY_LABELS = {
     "credential",
     "secret",
@@ -30,6 +33,13 @@ class ParsedV17VectorHit:
     reason: str
 
 
+@dataclass(frozen=True)
+class ParsedMemoryVectorHit:
+    hit: Optional[SearchVectorHit]
+    decision: SearchDecision
+    reason: str
+
+
 def deterministic_v17_memory_vector_id(uid: str, memory_id: str, tier: MemoryTier | str, item_revision: int) -> str:
     """Return a V17-only vector ID that cannot collide with legacy ``{uid}-{memory_id}`` IDs."""
     tier_value = tier.value if isinstance(tier, MemoryTier) else str(tier)
@@ -37,7 +47,7 @@ def deterministic_v17_memory_vector_id(uid: str, memory_id: str, tier: MemoryTie
     return f"{V17_MEMORY_VECTOR_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
 
 
-def build_v17_memory_vector_metadata(
+def _shared_memory_vector_metadata_fields(
     item: V17MemoryItem,
     *,
     projection_commit_id: str,
@@ -49,10 +59,8 @@ def build_v17_memory_vector_metadata(
         raise ValueError("vector_updated_at must be timezone-aware")
     labels = sorted({label.strip().lower() for label in item.sensitivity_labels if label and label.strip()})
     return {
-        "v17_schema_version": V17_MEMORY_VECTOR_SCHEMA_VERSION,
         "uid": item.uid,
         "memory_id": item.memory_id,
-        "memory_tier": item.tier.value,
         "status": item.status.value,
         "processing_state": item.processing_state.value,
         "source_state": item.source_state.value,
@@ -68,12 +76,83 @@ def build_v17_memory_vector_metadata(
     }
 
 
+def build_v17_memory_vector_metadata(
+    item: V17MemoryItem,
+    *,
+    projection_commit_id: str,
+    vector_updated_at: datetime,
+) -> Dict[str, Any]:
+    shared = _shared_memory_vector_metadata_fields(
+        item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
+    )
+    return {
+        "v17_schema_version": V17_MEMORY_VECTOR_SCHEMA_VERSION,
+        "memory_tier": item.tier.value,
+        **shared,
+    }
+
+
+def build_memory_vector_metadata(
+    item: V17MemoryItem,
+    *,
+    projection_commit_id: str,
+    vector_updated_at: datetime,
+) -> Dict[str, Any]:
+    """Neutral metadata for canonical-cohort Pinecone vectors (``memory_layer``, ``memory_schema_version``)."""
+    shared = _shared_memory_vector_metadata_fields(
+        item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
+    )
+    return {
+        "memory_schema_version": MEMORY_VECTOR_SCHEMA_VERSION,
+        "memory_layer": item.tier.value,
+        **shared,
+    }
+
+
 def build_v17_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_v17_filter(uid, {"memory_tier": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}})
 
 
 def build_v17_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
     return _base_v17_filter(uid, {"memory_tier": {"$eq": MemoryTier.archive.value}})
+
+
+def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
+    return _base_memory_vector_filter(
+        uid, {"memory_layer": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}}
+    )
+
+
+def build_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
+    return _base_memory_vector_filter(uid, {"memory_layer": {"$eq": MemoryTier.archive.value}})
+
+
+def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorHit:
+    metadata = match.get("metadata") or {}
+    try:
+        if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
+            raise ValueError("wrong_schema")
+        memory_id = _required_str(metadata, "memory_id")
+        projection_commit_id = _required_str(metadata, "projection_commit_id")
+        vector_updated_at = _parse_timestamp(_required_str(metadata, "vector_updated_at"))
+        score = float(match.get("score", 0.0))
+        hit = SearchVectorHit(
+            vector_id=_optional_match_id(match),
+            memory_id=memory_id,
+            score=score,
+            projection_commit_id=projection_commit_id,
+            vector_updated_at=vector_updated_at,
+            uid=_optional_str(metadata, "uid"),
+            account_generation=_optional_int(metadata, "account_generation"),
+            item_revision=_optional_int(metadata, "item_revision"),
+            source_commit_id=_optional_str(metadata, "source_commit_id"),
+            content_hash=_optional_str(metadata, "content_hash"),
+        )
+    except (TypeError, ValueError):
+        return ParsedMemoryVectorHit(
+            hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
+        )
+    return ParsedMemoryVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
 
 
 def parse_v17_search_vector_hit(match: Dict[str, Any]) -> ParsedV17VectorHit:
@@ -112,10 +191,29 @@ def _base_v17_filter(uid: str, tier_filter: Dict[str, Any]) -> Dict[str, Any]:
             {"uid": {"$eq": uid}},
             {"v17_schema_version": {"$eq": V17_MEMORY_VECTOR_SCHEMA_VERSION}},
             tier_filter,
-            {"status": {"$eq": "active"}},
-            {"source_state": {"$eq": "active"}},
-            {"visibility": {"$in": ["private", "public", "shared"]}},
-            {"restricted_sensitivity": {"$eq": False}},
+            *_active_memory_vector_filter_clauses(),
+        ]
+    }
+
+
+def _active_memory_vector_filter_clauses() -> list[Dict[str, Any]]:
+    return [
+        {"status": {"$eq": "active"}},
+        {"source_state": {"$eq": "active"}},
+        {"visibility": {"$in": ["private", "public", "shared"]}},
+        {"restricted_sensitivity": {"$eq": False}},
+    ]
+
+
+def _base_memory_vector_filter(uid: str, layer_filter: Dict[str, Any]) -> Dict[str, Any]:
+    if not uid or not uid.strip():
+        raise ValueError("uid is required")
+    return {
+        "$and": [
+            {"uid": {"$eq": uid}},
+            {"memory_schema_version": {"$eq": MEMORY_VECTOR_SCHEMA_VERSION}},
+            layer_filter,
+            *_active_memory_vector_filter_clauses(),
         ]
     }
 
