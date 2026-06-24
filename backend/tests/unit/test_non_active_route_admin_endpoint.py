@@ -71,8 +71,8 @@ def _v17_admin_router_import_isolation():
     for name in ("routers.memory_admin", "routers.v17_memory_admin"):
         sys.modules.pop(name, None)
     install_v17_product_router_stubs(fastapi_stub, types.ModuleType("utils.other.endpoints"))
-    from database.v17_non_active_memory_routes import NonActiveRoute
-    from utils.memory.v17_non_active_route_audit import NonActiveRouteAuditReport
+    from database.memory_non_active_routes import NonActiveRoute
+    from utils.memory.non_active_route_audit import NonActiveRouteAuditReport
 
     import routers.memory_admin as memory_admin
     import routers.memory_admin as v17_memory_admin

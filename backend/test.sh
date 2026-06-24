@@ -76,7 +76,7 @@ pytest tests/unit/test_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_memory_contracts.py -v
 pytest tests/unit/test_working_observations_extractor.py -v
 pytest tests/unit/test_durable_memory_patches.py -v
-pytest tests/unit/test_v17_patch_adapter.py -v
+pytest tests/unit/test_patch_adapter.py -v
 pytest tests/unit/test_memory_read_api.py -v
 pytest tests/unit/test_projections.py -v
 pytest tests/unit/test_vector_metadata.py -v
@@ -161,11 +161,13 @@ pytest tests/unit/test_firestore_emulator_harness.py -v
 pytest tests/unit/test_firestore_transaction_emulator_harness.py -v
 pytest tests/unit/test_firestore_python_adapter_emulator_harness.py -v
 pytest tests/unit/test_firestore_iam_deployment_doc.py -v
-pytest tests/unit/test_v17_non_active_routes.py -v
-pytest tests/unit/test_v17_non_active_route_audit.py -v
-pytest tests/unit/test_v17_non_active_route_report.py -v
-pytest tests/unit/test_v17_non_active_route_admin_endpoint.py -v
-pytest tests/unit/test_v17_review_queue_non_active_routes.py -v
+pytest tests/unit/test_non_active_routes.py -v
+pytest tests/unit/test_non_active_route_audit.py -v
+pytest tests/unit/test_non_active_route_report.py -v
+pytest tests/unit/test_non_active_route_admin_endpoint.py -v
+pytest tests/unit/test_review_queue_non_active_routes.py -v
+pytest tests/unit/test_l2_promotion_agent_v2.py -v
+pytest tests/unit/test_memory_tools.py -v
 pytest tests/unit/test_memory_ingestion_pipeline.py -v
 pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v

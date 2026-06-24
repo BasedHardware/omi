@@ -1,4 +1,4 @@
-"""WS-G retained module alias shims — import parity for deferred v17 chain only."""
+"""WS-G retained module alias shims — import parity for deferred router/env aliases."""
 
 import os
 import sys
@@ -29,20 +29,12 @@ def _ws_g_import_isolation():
     restore_sys_modules(saved)
 
 
-def test_memory_contracts_alias_reexports_match_v17():
-    from models import memory_contracts, v17_memory_contracts
-
-    assert memory_contracts.LifecycleState is v17_memory_contracts.LifecycleState
-    assert memory_contracts.DurablePatchDecision is v17_memory_contracts.DurablePatchDecision
-    assert memory_contracts.deterministic_contract_id is v17_memory_contracts.deterministic_contract_id
-
-
 def test_memory_contracts_l1_l2_symbol_aliases_are_identity():
-    from models import memory_contracts, v17_memory_contracts
+    from models import memory_contracts
 
-    assert memory_contracts.WorkingObservation is v17_memory_contracts.WorkingMemoryObservation
-    assert memory_contracts.WorkingObservationArchiveItem is v17_memory_contracts.L1MemoryArchiveItem
-    assert memory_contracts.PromotionRoute is v17_memory_contracts.L2MemoryRoute
+    assert memory_contracts.WorkingObservation is memory_contracts.WorkingMemoryObservation
+    assert memory_contracts.WorkingObservationArchiveItem is memory_contracts.L1MemoryArchiveItem
+    assert memory_contracts.PromotionRoute is memory_contracts.L2MemoryRoute
 
 
 def test_working_memory_batch_alias_is_identity():
@@ -165,19 +157,10 @@ def test_promotion_proposal_symbol_aliases_are_identity():
 
 
 def test_memory_contracts_durable_patch_fact_source_aliases():
-    from models import memory_contracts, v17_memory_contracts
+    from models import memory_contracts
 
     assert memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE == "durable_memory_patch"
     assert memory_contracts.V17_DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
-    assert v17_memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
-
-
-def test_memory_collections_alias_reexports_match_v17():
-    from database import memory_collections, v17_collections
-
-    assert memory_collections.V17Collections is v17_collections.V17Collections
-    assert memory_collections.MemoryCollections is v17_collections.V17Collections
-    assert v17_collections.V17Collections is memory_collections.MemoryCollections
 
 
 def test_memory_collections_neutral_symbols_are_canonical():
@@ -372,57 +355,6 @@ def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
     assert config.backfill_enabled is True
     assert config.backfill_daily_limit == 12
     assert config.archive_opt_in_enabled is True
-
-
-def test_memory_non_active_routes_alias_reexports_match_v17():
-    from database import memory_non_active_routes, v17_non_active_memory_routes
-
-    assert memory_non_active_routes.NonActiveRoute is v17_non_active_memory_routes.NonActiveRoute
-    assert (
-        memory_non_active_routes.persist_non_active_route_outcome
-        is v17_non_active_memory_routes.persist_non_active_route_outcome
-    )
-
-
-def test_memory_contracts_memory_tier_side_effect_reexport():
-    from models import product_memory, v17_memory_contracts
-
-    assert v17_memory_contracts.MemoryTier is product_memory.MemoryTier
-
-
-def test_memory_contracts_extended_alias_reexports_match_v17():
-    from models import memory_contracts, v17_memory_contracts
-
-    assert memory_contracts.L1MemoryArchiveItem is v17_memory_contracts.L1MemoryArchiveItem
-    assert memory_contracts.WorkingMemoryObservation is v17_memory_contracts.WorkingMemoryObservation
-    assert memory_contracts.L2MemoryRoute is v17_memory_contracts.L2MemoryRoute
-    assert memory_contracts.derive_allowed_use is v17_memory_contracts.derive_allowed_use
-
-
-def test_patch_adapter_alias_reexports_match_v17():
-    from utils.memory import patch_adapter, v17_patch_adapter
-
-    assert patch_adapter.apply_v17_patch_to_ledger_state is v17_patch_adapter.apply_v17_patch_to_ledger_state
-
-
-def test_non_active_route_report_alias_reexports_match_v17():
-    from utils.memory import non_active_route_report, v17_non_active_route_report
-
-    assert (
-        non_active_route_report.fetch_non_active_route_audit_report
-        is v17_non_active_route_report.fetch_non_active_route_audit_report
-    )
-
-
-def test_non_active_route_audit_alias_reexports_match_v17():
-    from utils.memory import non_active_route_audit, v17_non_active_route_audit
-
-    for name in (
-        "NonActiveRouteAuditEvidence",
-        "NonActiveRouteAuditReport",
-        "build_non_active_route_audit_report",
-    ):
-        assert getattr(non_active_route_audit, name) is getattr(v17_non_active_route_audit, name)
 
 
 def _router_method_path_pairs(router):

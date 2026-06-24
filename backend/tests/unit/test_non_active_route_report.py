@@ -10,8 +10,8 @@ os.environ.setdefault(
 
 sys.modules["database._client"] = MagicMock()
 
-from database.v17_non_active_memory_routes import NonActiveRoute
-from utils.memory.v17_non_active_route_report import fetch_non_active_route_audit_report
+from database.memory_non_active_routes import NonActiveRoute
+from utils.memory.non_active_route_report import fetch_non_active_route_audit_report
 
 
 class _FakeSnapshot:

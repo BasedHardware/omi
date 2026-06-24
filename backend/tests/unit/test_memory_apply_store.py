@@ -14,6 +14,10 @@ os.environ.setdefault(
 
 sys.modules["database._client"] = MagicMock()
 
+from tests.unit.memory_import_isolation import install_firestore_transactional_stub
+
+install_firestore_transactional_stub()
+
 from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation

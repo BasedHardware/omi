@@ -12,7 +12,7 @@ sys.modules["database.memories"] = MagicMock()
 sys.modules["database.memory_ledger"] = MagicMock()
 sys.modules["database.short_term_memories"] = MagicMock()
 
-from database.v17_non_active_memory_routes import NonActiveRoute
+from database.memory_non_active_routes import NonActiveRoute
 from database import review_queue
 
 sys.modules.pop("database.memories", None)

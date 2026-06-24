@@ -16,8 +16,8 @@ client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (
 sys.modules['database._client'] = client_stub
 
 from database.memory_ledger import HeadConflict
-from models.v17_memory_contracts import DurableMemoryPatch
-from utils.memory.v17_patch_adapter import (
+from models.memory_contracts import DurableMemoryPatch
+from utils.memory.patch_adapter import (
     apply_v17_patch_to_ledger_state,
     patch_to_ledger_mutations,
     persist_non_active_route_for_patch,
@@ -100,7 +100,7 @@ def test_v17_patch_adapter_persists_non_active_patch_decisions_through_route_sto
         return outcome
 
     fake_db = object()
-    import utils.memory.v17_patch_adapter as adapter
+    import utils.memory.patch_adapter as adapter
 
     monkeypatch.setattr(adapter, "persist_non_active_route_outcome", fake_persist)
     patch = _patch(
@@ -133,7 +133,7 @@ def test_v17_patch_adapter_persists_non_active_patch_decisions_through_route_sto
 
 
 def test_v17_patch_adapter_does_not_persist_active_patch_decisions(monkeypatch):
-    import utils.memory.v17_patch_adapter as adapter
+    import utils.memory.patch_adapter as adapter
 
     persist_mock = MagicMock()
     monkeypatch.setattr(adapter, "persist_non_active_route_outcome", persist_mock)

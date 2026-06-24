@@ -643,3 +643,60 @@ def install_v17_product_router_stubs(
     sys.modules["database._client"] = MagicMock()
     sys.modules["utils.other.endpoints"] = auth_stub
     return ["fastapi", "database._client", "utils.other.endpoints"]
+
+
+_NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False
+
+
+def install_firestore_transactional_stub() -> None:
+    """Install a fake-transaction-compatible ``transactional`` on ``firestore_v1``."""
+    google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
+    cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+    firestore_v1_stub = sys.modules.setdefault(
+        "google.cloud.firestore_v1", types.ModuleType("google.cloud.firestore_v1")
+    )
+
+    def transactional(func):
+        def wrapper(transaction, *args, **kwargs):
+            if hasattr(transaction, "_begin"):
+                transaction._begin()
+            try:
+                result = func(transaction, *args, **kwargs)
+                if hasattr(transaction, "_commit"):
+                    transaction._commit()
+                return result
+            except Exception:
+                if hasattr(transaction, "_rollback"):
+                    transaction._rollback()
+                raise
+            finally:
+                if hasattr(transaction, "_clean_up"):
+                    transaction._clean_up()
+
+        return wrapper
+
+    firestore_v1_stub.transactional = transactional
+    google_stub.cloud = cloud_stub
+    firestore_mod = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
+    cloud_stub.firestore = firestore_mod
+
+
+def ensure_non_active_routes_firestore_transactional_stub() -> None:
+    """Reload route-store module after binding fake-transaction-compatible decorator.
+
+    L2/memory-tools tests set ``transactional = lambda func: func``, which breaks
+    route-store unit fakes unless ``memory_non_active_routes`` is reloaded with a
+    wrapper that commits fake transactions.
+    """
+    global _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED
+    if _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED:
+        return
+
+    install_firestore_transactional_stub()
+
+    import importlib
+
+    import database.memory_non_active_routes as memory_non_active_routes
+
+    importlib.reload(memory_non_active_routes)
+    _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = True
