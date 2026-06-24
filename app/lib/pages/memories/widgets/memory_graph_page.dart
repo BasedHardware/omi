@@ -547,16 +547,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      final textSpan = TextSpan(
+      const textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
-      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
 
       textPainter.paint(canvas, Offset(xPos, yPos));
 
