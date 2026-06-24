@@ -82,7 +82,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_memory_adapter import read_canonical_memories
+from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from tests.unit.test_ws_b_short_term_lifecycle import (
     NOW,
@@ -164,8 +164,11 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+def _canonical_cohort_for_backfill(monkeypatch, request):
+    if "test_gate_blocks_non_whitelisted_uid" in request.node.name:
+        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        return
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", LEGACY_UID)
 
 
 @pytest.fixture
@@ -174,6 +177,73 @@ def _trusted_account(monkeypatch):
         "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
+
+
+def test_gate_blocks_non_whitelisted_uid(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-gate", content="Gated fact", conversation_id="conv-gate")]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+
+    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+
+    assert report.cohort_gated is True
+    assert report.written_count == 0
+    assert report.errors == ["cohort_gate: uid not in MEMORY_CANONICAL_USERS (use allow_admin_override=True to bypass)"]
+    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
+
+
+def test_dedup_prevents_doubles_when_live_written(monkeypatch, _trusted_account):
+    conversation_id = "conv-live-dup"
+    content = "User prefers dark mode"
+    rows = [_legacy_row(legacy_id="leg-live-dup", content=content, conversation_id=conversation_id)]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    live_id = extraction_memory_id(uid=LEGACY_UID, source_id=conversation_id, content=content)
+    live_item = MemoryItem(
+        memory_id=live_id,
+        uid=LEGACY_UID,
+        version=1,
+        tier=MemoryTier.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content=content,
+        evidence=[
+            MemoryEvidence(
+                evidence_id="ev_live_dup",
+                source_type="conversation",
+                source_id=conversation_id,
+                source_version="v1",
+                artifact_preservation=ArtifactPreservationState.preserved,
+            )
+        ],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW_TS,
+        updated_at=NOW_TS,
+        expires_at=NOW_TS + timedelta(days=30),
+        ledger_commit_id="commit_live",
+        ledger_sequence=1,
+        source_commit_id="commit_live",
+        source_commit_sequence=1,
+        content_hash="hash-live-dup",
+        account_generation=1,
+    )
+    db.docs[f"users/{LEGACY_UID}/memory_items/{live_id}"] = _stored_item(live_item)
+
+    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+
+    assert report.completed is True
+    assert report.written_count == 0
+    assert report.skipped_both_store_duplicate == 1
+    assert report.verified is True
+    backfill_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id="leg-live-dup")
+    assert f"users/{LEGACY_UID}/memory_items/{backfill_id}" not in db.docs
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert item_paths == [f"users/{LEGACY_UID}/memory_items/{live_id}"]
 
 
 def test_backfill_copies_legacy_without_mutating_source(_trusted_account):
