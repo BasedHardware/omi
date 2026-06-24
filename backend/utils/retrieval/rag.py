@@ -58,7 +58,8 @@ def get_better_conversation_chunk(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
     if num_tokens_from_string(conversation) < 250:
-        return conversations_to_string([memory], people=people, user_name=user_name)
+        context_data[memory.id] = conversations_to_string([memory], people=people, user_name=user_name)
+        return
     chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
         return
