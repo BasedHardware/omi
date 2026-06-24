@@ -733,6 +733,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
+    var hasSettledClosedForAutomation: Bool {
+        !state.showingAIConversation
+            && !suppressHoverResize
+            && pendingRestoreOrigin == nil
+            && NSEqualSizes(frame.size, Self.minBarSize)
+    }
+
     private func resizeToResponseHeight(animated: Bool = false) {
         // Determine the 2× cap from the user's saved (or default) preferred height.
         let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
@@ -1271,7 +1278,7 @@ class FloatingControlBarManager {
 
     private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
         await waitForAutomationCondition {
-            !window.state.showingAIConversation
+            window.hasSettledClosedForAutomation
         }
     }
 
@@ -2171,6 +2178,8 @@ class FloatingControlBarManager {
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
                 currentTracer?.end("pre_llm", metadata: ["error": "usage_limit"])
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
                 FloatingBarVoicePlaybackService.shared.speakOneShot(
                     "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions."
                 )

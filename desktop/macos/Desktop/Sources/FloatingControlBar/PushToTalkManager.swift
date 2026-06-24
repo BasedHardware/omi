@@ -1029,61 +1029,6 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func startLegacyTranscriptionAfterHubWait() {
-    // The floating bar's STT is the realtime omni model (replaces Deepgram):
-    // one omni model transcribes; reasoning/tools/TTS are untouched (the final
-    // transcript still goes to ChatProvider via sendTranscript()/sendQuery()).
-    // Falls back to legacy Deepgram STT only if no provider key is available.
-    if startOmniTranscription() { return }
-
-    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
-
-    if isBatchMode {
-      // Batch mode: just capture audio into buffer, no streaming connection
-      batchAudioLock.lock()
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
-      startMicCapture(batchMode: true)
-      log("PushToTalkManager: started audio capture (batch mode)")
-    } else {
-      // Live mode: start mic capture and stream to Deepgram
-      startMicCapture()
-
-      do {
-        let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let service = try TranscriptionService(
-          language: language,
-          channels: 1,
-          contextKeywords: currentContextSnapshot?.keywords ?? []
-        )
-        transcriptionService = service
-
-        service.start(
-          onSegments: { [weak self] segments in
-            Task { @MainActor in
-              self?.handleTranscriptSegments(segments)
-            }
-          },
-          onEvent: { _ in },  // PTT doesn't use events
-          onError: { [weak self] error in
-            Task { @MainActor in
-              logError("PushToTalkManager: transcription error", error: error)
-              self?.stopListening()
-            }
-          },
-          onConnected: {
-            Task { @MainActor in
-              log("PushToTalkManager: backend connected")
-            }
-          }
-        )
-      } catch {
-        logError("PushToTalkManager: failed to create TranscriptionService", error: error)
-        stopListening()
-      }
-    }
-  }
-
   private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
     if audioCaptureService == nil {
       if let override = overrideDeviceID {

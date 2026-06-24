@@ -200,6 +200,13 @@ final class DesktopAutomationStateStore {
     self.snapshot = snapshot
   }
 
+  func updateLiveFields(_ update: (inout DesktopAutomationSnapshot) -> Void) -> DesktopAutomationSnapshot {
+    lock.lock()
+    defer { lock.unlock() }
+    update(&snapshot)
+    return snapshot
+  }
+
   func current() -> DesktopAutomationSnapshot {
     lock.lock()
     defer { lock.unlock() }
@@ -208,7 +215,6 @@ final class DesktopAutomationStateStore {
 }
 
 private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
-  var snapshot = DesktopAutomationStateStore.shared.current()
   let floating = await MainActor.run {
     let floating = FloatingControlBarManager.shared.automationState
     return (
@@ -219,14 +225,14 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
       isAppActive: NSApp.isActive
     )
   }
-  snapshot.floatingBarVisible = floating.isVisible
-  snapshot.askOmiOpen = floating.isAskOmiOpen
-  snapshot.askOmiFocused = floating.isAskOmiFocused
-  snapshot.floatingBarFrame = floating.frame
-  snapshot.isAppActive = floating.isAppActive
-  snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
-  DesktopAutomationStateStore.shared.update(snapshot)
-  return snapshot
+  return DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+    snapshot.floatingBarVisible = floating.isVisible
+    snapshot.askOmiOpen = floating.isAskOmiOpen
+    snapshot.askOmiFocused = floating.isAskOmiFocused
+    snapshot.floatingBarFrame = floating.frame
+    snapshot.isAppActive = floating.isAppActive
+    snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+  }
 }
 
 private func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
@@ -584,7 +590,7 @@ final class DesktopAutomationBridge {
       let snapshot = await cachedAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/state"):
-      let snapshot = await cachedAutomationSnapshot()
+      let snapshot = await liveAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/traces/recent"):
       let traces = await DesktopAutomationTraceStore.shared.recent()

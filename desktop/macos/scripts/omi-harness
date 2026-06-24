@@ -519,7 +519,9 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
     initial_state = request_json(ctx.base_url, "GET", "/state")
     capabilities = request_json(ctx.base_url, "GET", "/capabilities")
     if initial_state.get("ok") and capabilities.get("ok"):
-        request_json(ctx.base_url, "POST", "/traces/clear")
+        clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
+        if not clear_response.get("ok"):
+            raise SystemExit(f"omi-harness: failed to clear traces: {clear_response.get('error')}")
     write_json(run_dir / "initial-state.json", initial_state)
     write_json(run_dir / "capabilities.json", capabilities)
 
@@ -642,15 +644,21 @@ def repeat_flow(args: argparse.Namespace) -> int:
         runs.append({"path": str(run_dir), "metrics": metrics, "total_ms": total_ms})
         print(f"{index + 1}/{count} {run_dir} total_ms={total_ms:.2f} ok={metrics.get('ok')}")
 
-    totals = [run["total_ms"] for run in runs]
-    best = min(runs, key=lambda run: run["total_ms"])
-    worst = max(runs, key=lambda run: run["total_ms"])
+    successful_runs = [run for run in runs if run["metrics"].get("ok")]
+    sample_runs = successful_runs or runs
+    totals = [run["total_ms"] for run in sample_runs]
+    best = min(sample_runs, key=lambda run: run["total_ms"])
+    worst = max(sample_runs, key=lambda run: run["total_ms"])
     print("")
+    if successful_runs:
+        print(f"successful_runs={len(successful_runs)}/{len(runs)}")
+    else:
+        print(f"successful_runs=0/{len(runs)} (timing stats include failed runs)")
     print(f"best_ms={best['total_ms']:.2f} path={best['path']}")
     print(f"median_ms={statistics.median(totals):.2f}")
     print(f"worst_ms={worst['total_ms']:.2f} path={worst['path']}")
 
-    step_ids = [str(step.get("id")) for step in runs[0]["metrics"].get("steps", [])]
+    step_ids = [str(step.get("id")) for step in sample_runs[0]["metrics"].get("steps", [])]
     if step_ids:
         print("")
         print("| step | median | best | worst |")
@@ -658,7 +666,7 @@ def repeat_flow(args: argparse.Namespace) -> int:
         for step_id in step_ids:
             values = []
             name = step_id
-            for run in runs:
+            for run in sample_runs:
                 by_id = {str(step.get("id")): step for step in run["metrics"].get("steps", [])}
                 step = by_id.get(step_id)
                 if not step:

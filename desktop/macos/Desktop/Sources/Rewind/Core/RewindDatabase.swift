@@ -2872,34 +2872,24 @@ actor RewindDatabase {
         }
 
         do {
-            // First get the image paths to delete (legacy JPEGs)
-            let imagePaths = try await dbQueue.read { db -> [String] in
-                try String.fetchAll(
+            let deleteResult = try await dbQueue.write { db -> DeleteResult in
+                let imagePaths = try String.fetchAll(
                     db,
                     sql: "SELECT imagePath FROM screenshots WHERE timestamp < ? AND imagePath IS NOT NULL",
                     arguments: [date]
                 )
-            }
 
-            // Get video chunk paths that will have frames deleted
-            let videoChunksToCheck = try await dbQueue.read { db -> [String] in
-                try String.fetchAll(
+                let videoChunksToCheck = try String.fetchAll(
                     db,
                     sql: "SELECT DISTINCT videoChunkPath FROM screenshots WHERE timestamp < ? AND videoChunkPath IS NOT NULL",
                     arguments: [date]
                 )
-            }
 
-            // Delete the records
-            try await dbQueue.write { db in
                 try db.execute(
                     sql: "DELETE FROM screenshots WHERE timestamp < ?",
                     arguments: [date]
                 )
-            }
 
-            // Check which video chunks are now orphaned (no remaining frames)
-            let orphanedChunks = try await dbQueue.read { db -> [String] in
                 var orphaned: [String] = []
                 for chunkPath in videoChunksToCheck {
                     let remainingCount = try Int.fetchOne(
@@ -2911,10 +2901,10 @@ actor RewindDatabase {
                         orphaned.append(chunkPath)
                     }
                 }
-                return orphaned
+                return DeleteResult(imagePaths: imagePaths, orphanedVideoChunks: orphaned)
             }
 
-            return DeleteResult(imagePaths: imagePaths, orphanedVideoChunks: orphanedChunks)
+            return deleteResult
         } catch {
             await recoverFromMaintenanceError(error, operation: "retention_cleanup")
             throw error
