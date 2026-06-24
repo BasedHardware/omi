@@ -36,7 +36,7 @@ from database.vector_db import upsert_vector2, update_vector_metadata, upsert_tr
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory, ShortTermMemory, render_memory
-from models.v17_product_memory import MemoryTier
+from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     AppResult,
