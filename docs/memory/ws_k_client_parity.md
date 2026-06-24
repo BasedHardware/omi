@@ -23,7 +23,7 @@
 | `MemoryTierBadge` shows "Short-term" / "Long-term" when `tierIsExplicit` | **Done** |
 | Layer info popover on badge click + `.help()` copy | **Done** |
 | `MemoryLayer` typealias + `layerInfoText` on `MemoryTier` | **Done** |
-| `ServerMemoryV17DecodingTests` layer fixtures | **Done** |
+| Server memory layer decoding unit tests | **Done** |
 | Conversation delete `cascade=true` | **Deferred** (out of scope) |
 | Flutter parity | **Deferred** |
 
@@ -85,7 +85,7 @@ Audit paths that write memories around the seam; ensure uploaded payloads do not
 
 Search: `deleteConversation` / conversation DELETE in `APIClient.swift`.
 
-### 8. Tests — `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`
+### 8. Tests — desktop server-memory layer decoding unit tests (`Desktop/Tests/`)
 
 Add fixtures with `"layer": "short_term"` (no `tier`/`memory_tier`) and with all three fields consistent.
 
