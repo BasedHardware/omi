@@ -42,8 +42,8 @@ if not cfg.layout.sentinel_path.is_file():
 safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=repo, instance=cfg.instance)
 scenario = _current_scenario_manifest(cfg)
 if not scenario:
-    print("Cannot launch desktop local profile: no V17 scenario has been seeded.")
-    print("Next step: make seed-v17-scenario SCENARIO=happy_path")
+    print("Cannot launch desktop local profile: no memory scenario has been seeded.")
+    print("Next step: make seed-memory-scenario SCENARIO=happy_path")
     raise SystemExit(1)
 
 users = _scenario_users_from_seed_manifest(cfg)
