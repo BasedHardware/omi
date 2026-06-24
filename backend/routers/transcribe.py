@@ -236,6 +236,8 @@ def resample_pcm(pcm_data: bytes, source_rate: int, target_rate: int) -> bytes:
     """Simple resampling by sample duplication/decimation."""
     if source_rate == target_rate:
         return pcm_data
+    if source_rate <= 0 or target_rate <= 0:
+        return pcm_data
     num_samples = len(pcm_data) // 2
     if num_samples == 0:
         return pcm_data
