@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Onboarding: the keys step is now optional with a primary \"Skip for now\" action (bring-your-own-keys demoted to a secondary \"Save keys\"); tasks step button now says \"Take me to Omi\"; dev builds get a \"Skip onboarding\" shortcut on the first screen"
+  ],
   "releases": [
     {
       "version": "0.11.508",
