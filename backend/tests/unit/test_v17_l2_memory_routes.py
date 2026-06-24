@@ -5,7 +5,7 @@ from pydantic import ValidationError
 import pytest
 
 from models.v17_memory_contracts import L2MemoryRoute
-from utils.llm.l2_memory_routes import classify_l2_memory_route
+from utils.llm.promotion_routes import classify_l2_memory_route
 
 
 class FakeLLM:
