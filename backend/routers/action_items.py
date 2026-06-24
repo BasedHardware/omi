@@ -320,7 +320,14 @@ def search_action_items(
 
     action_items = action_items_db.get_action_items_by_ids(uid, action_item_ids)
     action_items = [item for item in action_items if not item.get('is_locked', False)]
-    return {"action_items": [ActionItemResponse(**item) for item in action_items]}
+    response_items = []
+    for item in action_items:
+        try:
+            response_items.append(ActionItemResponse(**item))
+        except ValidationError:
+            logger.warning(f"Skipping malformed action item {item.get('id')} in search for uid {uid}")
+            continue
+    return {"action_items": response_items}
 
 
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
