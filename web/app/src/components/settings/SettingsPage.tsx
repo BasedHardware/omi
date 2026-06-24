@@ -2437,6 +2437,72 @@ function DeveloperSection({
           </button>
         </Card>
 
+        {/* Generic MCP Server Info */}
+        <Card>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 rounded-lg bg-bg-tertiary">
+              <Server className="w-5 h-5 text-text-tertiary" />
+            </div>
+            <div>
+              <p className="text-text-primary font-medium">MCP Server</p>
+              <p className="text-xs text-text-tertiary">
+                Connect ChatGPT, Codex, Claude, or any MCP client to your data
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                Server URL
+              </p>
+              <button
+                onClick={copyUrl}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-[#0d0d0d] border border-white/[0.06] hover:border-purple-500/50 transition-colors"
+              >
+                <code className="text-sm text-text-primary font-mono truncate mr-2">
+                  {mcpServerUrl}
+                </code>
+                {copiedUrl ? (
+                  <Check className="w-4 h-4 text-green-400 flex-shrink-0" />
+                ) : (
+                  <Copy className="w-4 h-4 text-text-quaternary flex-shrink-0" />
+                )}
+              </button>
+            </div>
+
+            <div className="border-t border-white/[0.06] pt-4">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                API Key Auth
+              </p>
+              <div className="flex items-center gap-4 text-sm">
+                <span className="text-text-tertiary">Header</span>
+                <code className="text-text-quaternary font-mono text-xs">
+                  Authorization: Bearer &lt;key&gt;
+                </code>
+              </div>
+            </div>
+
+            <div className="border-t border-white/[0.06] pt-4">
+              <p className="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2">
+                OAuth
+              </p>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client ID</span>
+                  <code className="text-text-primary font-mono">omi</code>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-text-tertiary w-24">Client Secret</span>
+                  <span className="text-text-quaternary italic text-xs">
+                    Use your MCP API key
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         {/* Claude Connector — 4 copy fields mirroring Claude's "Add custom connector" form */}
         <Card>
           <div className="flex items-center gap-3 mb-4">
