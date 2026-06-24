@@ -40,9 +40,11 @@ class HumeJobModelPredictionResponseModel:
     def __init__(
         self,
         time,
-        emotions: [HumePredictionEmotionResponseModel] = [],
+        emotions=None,
     ) -> None:
-        self.emotions = emotions
+        # Use a fresh list per instance, never a shared mutable default. from_dict appends to
+        # self.emotions, so a shared default would leak emotions across parsed callbacks.
+        self.emotions = emotions if emotions is not None else []
         self.time = time
 
     @classmethod

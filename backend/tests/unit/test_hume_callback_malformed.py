@@ -46,6 +46,15 @@ def test_prediction_from_dict_missing_time_and_emotions_no_raise():
     assert m2.emotions == []
 
 
+def test_prediction_emotions_not_shared_between_instances():
+    # __init__ must not use a shared mutable default list: from_dict appends to self.emotions, so a
+    # shared default would leak emotions from one parsed callback into the next.
+    a = HumeJobModelPredictionResponseModel.from_dict({'emotions': [{'name': 'joy', 'score': 0.5}]})
+    b = HumeJobModelPredictionResponseModel.from_dict({'emotions': [{'name': 'anger', 'score': 0.9}]})
+    assert [e.name for e in a.emotions] == ['joy']
+    assert [e.name for e in b.emotions] == ['anger']
+
+
 def test_callback_from_dict_missing_job_id_and_status_no_raise():
     m = HumeJobCallbackModel.from_dict('prosody', {})
     assert m.job_id is None
