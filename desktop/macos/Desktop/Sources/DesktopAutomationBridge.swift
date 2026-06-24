@@ -89,12 +89,14 @@ struct DesktopAutomationNavigationRequest: Codable {
   let settingsSection: String?
   let highlightedSettingId: String?
   let activateApp: Bool?
+  let settleMs: Int?
 }
 
 struct DesktopAutomationOpenConversationRequest: Codable {
   let conversationId: String
   let showTranscript: Bool?
   let activateApp: Bool?
+  let settleMs: Int?
 }
 
 struct DesktopAutomationVisualExportRequest: Codable {
@@ -164,8 +166,9 @@ private struct DesktopAutomationResponse<T: Codable>: Codable {
   let error: String?
 }
 
-actor DesktopAutomationStateStore {
+final class DesktopAutomationStateStore {
   static let shared = DesktopAutomationStateStore()
+  private let lock = NSLock()
 
   private var snapshot = DesktopAutomationSnapshot(
     bridgeEnabled: DesktopAutomationLaunchOptions.isEnabled,
@@ -192,16 +195,20 @@ actor DesktopAutomationStateStore {
   )
 
   func update(_ snapshot: DesktopAutomationSnapshot) {
+    lock.lock()
+    defer { lock.unlock() }
     self.snapshot = snapshot
   }
 
   func current() -> DesktopAutomationSnapshot {
-    snapshot
+    lock.lock()
+    defer { lock.unlock() }
+    return snapshot
   }
 }
 
 private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
-  var snapshot = await DesktopAutomationStateStore.shared.current()
+  var snapshot = DesktopAutomationStateStore.shared.current()
   let floating = await MainActor.run {
     let floating = FloatingControlBarManager.shared.automationState
     return (
@@ -217,6 +224,13 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   snapshot.askOmiFocused = floating.isAskOmiFocused
   snapshot.floatingBarFrame = floating.frame
   snapshot.isAppActive = floating.isAppActive
+  snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+  DesktopAutomationStateStore.shared.update(snapshot)
+  return snapshot
+}
+
+private func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  var snapshot = DesktopAutomationStateStore.shared.current()
   snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
   return snapshot
 }
@@ -244,6 +258,10 @@ actor DesktopAutomationTraceStore {
 
   func recent(limit: Int = 50) -> [DesktopAutomationRouteTrace] {
     Array(traces.suffix(max(1, min(limit, 200))))
+  }
+
+  func clear() {
+    traces.removeAll(keepingCapacity: true)
   }
 }
 
@@ -391,6 +409,13 @@ private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
     return fallback
   }
   return ["1", "true", "yes", "on"].contains(raw)
+}
+
+private func intParam(_ raw: String?, default fallback: Int) -> Int {
+  guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+    return fallback
+  }
+  return Int(raw) ?? fallback
 }
 
 final class DesktopAutomationBridge {
@@ -556,21 +581,24 @@ final class DesktopAutomationBridge {
   private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
     switch (request.method, request.path) {
     case ("GET", "/health"):
-      let snapshot = await liveAutomationSnapshot()
+      let snapshot = await cachedAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/state"):
-      let snapshot = await liveAutomationSnapshot()
+      let snapshot = await cachedAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/traces/recent"):
       let traces = await DesktopAutomationTraceStore.shared.recent()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: traces, error: nil))
+    case ("POST", "/traces/clear"):
+      await DesktopAutomationTraceStore.shared.clear()
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: "cleared", error: nil))
     case ("POST", "/navigate"):
       do {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
-        try await Task.sleep(for: .milliseconds(150))
-        let snapshot = await liveAutomationSnapshot()
+        try await sleepForAutomationSettle(payload.settleMs)
+        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -587,8 +615,8 @@ final class DesktopAutomationBridge {
         let payload = try JSONDecoder().decode(
           DesktopAutomationOpenConversationRequest.self, from: request.body)
         try await dispatchOpenConversation(payload)
-        try await Task.sleep(for: .milliseconds(350))
-        let snapshot = await liveAutomationSnapshot()
+        try await sleepForAutomationSettle(payload.settleMs)
+        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -634,6 +662,7 @@ final class DesktopAutomationBridge {
           "GET /capabilities",
           "GET /actions",
           "GET /traces/recent",
+          "POST /traces/clear",
           "POST /navigate",
           "POST /conversation/open",
           "POST /action",
@@ -657,9 +686,7 @@ final class DesktopAutomationBridge {
       do {
         let detail = try await DesktopAutomationActionRegistry.shared.perform(
           parsed.name, params: parsed.params)
-        if boolParam(parsed.params["wait"], default: true) {
-          try await Task.sleep(for: .milliseconds(150))
-        }
+        try await sleepForAutomationSettle(intParam(parsed.params["settleMs"], default: 0))
         let snapshot = await liveAutomationSnapshot()
         let result = DesktopAutomationActionResult(
           action: parsed.name, detail: detail, state: snapshot)
@@ -800,6 +827,12 @@ final class DesktopAutomationBridge {
         window.makeKeyAndOrderFront(nil)
       }
     }
+  }
+
+  private func sleepForAutomationSettle(_ milliseconds: Int?) async throws {
+    let clamped = max(0, min(milliseconds ?? 0, 5_000))
+    guard clamped > 0 else { return }
+    try await Task.sleep(for: .milliseconds(clamped))
   }
 
   private func exportWindow(
