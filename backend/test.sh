@@ -47,6 +47,7 @@ pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
 pytest tests/unit/test_high_priority_usage_tracking.py -v
 pytest tests/unit/test_new_usage_tracking_gaps.py -v
+pytest tests/unit/test_mcp_sse_conversations_clamp.py -v
 pytest tests/unit/test_llm_usage_db.py -v
 pytest tests/unit/test_user_usage.py -v
 pytest tests/unit/test_llm_usage_endpoints.py -v
