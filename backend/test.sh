@@ -156,6 +156,7 @@ pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
 pytest tests/unit/test_async_webhooks.py -v
 pytest tests/unit/test_async_app_integrations.py -v
+pytest tests/unit/test_async_realtime_integrations_offload.py -v
 pytest tests/unit/test_async_geocoding.py -v
 pytest tests/unit/test_geocoding_cache.py -v
 pytest tests/unit/test_realtime_integrations_usage_tracking.py -v
