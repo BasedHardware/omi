@@ -855,7 +855,23 @@ no agent may start a blocked WS against an unanswered question.
 > **Read this section first on waking.** Open issues/blockers requiring your judgment are listed here;
 > per-wave detail is in §11 below.
 
-### ⭐ v17-language-retirement run — END STATE (2026-06-24, ~06:30; pushed to `origin/memory-canonical-rollout` @ `6d3f54159`)
+### ✅✅ v17-language-retirement — FULLY COMPLETE (2026-06-24 ~15:00; pushed @ `dbe03e726`)
+
+All three owner decisions (below) were taken and executed in serialized verified waves A→E:
+- **Wave A (`9249baa08`)** — landed the L2-promotion WIP as a proper committed WS (15/15 tests green; `subject_entity_id` wired through `patch_adapter`), then promoted the last 7 `v17_*` modules to neutral. **Zero `v17_*` module files or imports remain.**
+- **Wave B (`b34588819`)** — removed all 6 `/v17/*` HTTP routes (neutral `/memory/*` + new `/memory/admin/*` serve them; 455 routes, zero `/v17`); dropped/renamed every `V17_*` env var to `MEMORY_*` (`.env.template` updated).
+- **Wave C (`0d6d5093a`)** — mass-renamed every remaining internal v17 symbol, string literal, Firestore doc path (`memory_control/global_read_gate`, `write_convergence_gate`, `app_key_memory_grants`), vector schema (`v17mem`→`memvec`, `v17_schema_version`→`memory_schema_version`), contract-id seeds, and cursor prefixes to neutral.
+- **Wave D (`eb633bc7c`)** — neutralized normative docs, banner-tagged historical epics, whole-repo verification.
+- **Wave E (`dbe03e726`)** — neutralized `scripts/dev-harness/` (scenario module, make targets, seeds, runbook callers); 31 harness tests pass, seed paths aligned to neutral backend gates.
+
+**Final state:** `rg "v17|V17"` in `backend/`, `scripts/`, `firestore.rules`, `package.json`, charts = **0**. Docs residual = historical epic narrative (each carries a "Historical: 'v17' was the internal codename… renamed 2026-06-24" banner) + binary noise (logos/JPEGs/package-lock) only. `import main` clean (455 routes); `test.sh` green except pre-existing env-only failures (missing native **libopus**, missing **`fakeredis`**) — **0 rename/rollout-caused failures**. Async scan exit 0. Branch `memory-canonical-rollout` pushed; nothing merged to `main`.
+
+**⚠️ OWNER ACTION — cloud resources (only out-of-repo follow-up).** The code/tests/contracts were renamed self-consistently, but if these GCP/Firebase resources are EVER provisioned they must be (re)created under the new names: Secret Manager `v17-v3-get-memories-cursor-signing-secret`→`memory-v3-get-cursor-signing-secret` (+ pinecone/openai vector-repair secrets `v17-vector-repair-*`→`memory-vector-repair-*`); Cloud Run service + Cloud Tasks queue + dead-letter + service account `v17-vector-repair-outbox-worker`→`memory-vector-repair-outbox-worker`; worker route `POST /v17-vector-repair-outbox-worker/tick`→`/memory-vector-repair-outbox-worker/tick`; image-digest env `V17_VECTOR_REPAIR_IMAGE_DIGEST`→`MEMORY_VECTOR_REPAIR_IMAGE_DIGEST`; GCP projects `omi-v17-dev`/`omi-v17-evidence-nonprod`→`omi-memory-dev`/`omi-memory-evidence-nonprod`; Firebase emulator project `demo-v17-memory`→`demo-memory`. (Owner confirmed the memory pipeline isn't in prod, so most/all of these likely don't exist yet.)
+
+---
+
+### ⭐ v17-language-retirement run — earlier END STATE snapshot (2026-06-24, ~06:30; @ `6d3f54159`)
+> Superseded by the FULLY-COMPLETE block above after the owner approved all 3 decisions. Kept for history.
 
 **Done autonomously tonight (prod datastore confirmed EMPTY by owner → greenfield, no data migration):**
 - **Production code is 100% v17-free at the module/import/routing level.** Neutral modules are source-of-truth across config → models → database → utils → v3 cluster → routers/jobs → L1/L2 (promote chain G5–G11), then all production importers flipped (Wave 40), all test/script importers flipped (Wave 41).
