@@ -744,7 +744,10 @@ def update_app(
     if 'external_integration' in data:
         ext_int = data['external_integration']
         if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+            auth_step_url = ext_int['auth_steps'][0].get('url')
+            if not auth_step_url:
+                raise HTTPException(status_code=422, detail='url is required for each auth step')
+            ext_int['app_home_url'] = auth_step_url
 
     try:
         update_app = AppUpdate.model_validate(data)
