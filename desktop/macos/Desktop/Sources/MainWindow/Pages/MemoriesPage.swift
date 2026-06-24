@@ -154,6 +154,8 @@ class MemoriesViewModel: ObservableObject {
   /// observing `MemoriesViewModel`, which is a pure production cost for a
   /// value nothing drives UI from.
   private(set) var refreshInvocations: Int = 0
+  /// Bumped at the top of `handleConversationDeleted()` for observer wiring tests.
+  private(set) var conversationDeleteInvocations: Int = 0
   @Published var showingAddMemory = false
   @Published var newMemoryText = ""
   @Published var editingMemory: ServerMemory? = nil
@@ -310,6 +312,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// After conversation delete (server cascade retract + local cache purge).
   func handleConversationDeleted(_ conversationId: String) async {
+    conversationDeleteInvocations += 1
     guard AuthState.shared.isSignedIn else { return }
 
     do {
