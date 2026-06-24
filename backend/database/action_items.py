@@ -446,7 +446,18 @@ def batch_update_action_items(uid: str, items: list) -> None:
     batch = db.batch()
     count = 0
 
+    # Pre-filter to existing docs: batch.update() on a missing doc raises
+    # google NotFound, which would 500 the whole batch on one stale id.
+    requested_ids = [item.id for item in items]
+    existing_ids = {
+        doc.id
+        for doc in db.get_all([action_items_ref.document(i) for i in requested_ids])
+        if doc is not None and doc.exists
+    }
+
     for item in items:
+        if item.id not in existing_ids:
+            continue
         update_data = {'updated_at': now}
         if item.sort_order is not None:
             update_data['sort_order'] = item.sort_order
