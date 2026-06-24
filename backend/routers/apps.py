@@ -1478,7 +1478,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     logo_url = await fetch_brandfetch_logo(domain) or ''
 
     app_id = str(ULID())
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
 
     # Check for OAuth metadata
     oauth_meta = await discover_oauth_metadata(server_url)
