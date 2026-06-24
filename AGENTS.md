@@ -254,3 +254,18 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
+
+## Cursor Cloud specific instructions
+
+This is a **Linux x86 VM**: only the Python services run here. The macOS desktop app, iOS/Android builds, and firmware **cannot** be built/run on this VM. The runnable target is the **Python backend** (`backend/`). `uv` (global), `redis-server`, `firebase-tools`, Java 21, and FFmpeg are preinstalled in the snapshot; the startup update script refreshes `backend/.venv` from `backend/pylock.toml`.
+
+### Running the backend (no real cloud creds)
+The backend constructs Firestore, GCS, OpenAI, Pinecone, and Typesense clients **at import time**, so it won't even import without satisfying them. For local dev without real credentials, `backend/.env` is pre-seeded (gitignored, persists in snapshot) with: `FIRESTORE_EMULATOR_HOST=127.0.0.1:8081`, `GOOGLE_CLOUD_PROJECT=demo-omi`, a dummy `GOOGLE_APPLICATION_CREDENTIALS=google-credentials.json` (lets the GCS client construct), placeholder `OPENAI_API_KEY` + `TYPESENSE_*`, `ENCRYPTION_SECRET`, `ADMIN_KEY=local_dev_admin_key`, and **Pinecone left unset** (so `database/vector_db.py` takes its `index = None` no-op path). If `backend/.env` is missing, recreate it from `.env.template` plus these values, and regenerate `google-credentials.json` as a syntactically valid service-account JSON (any generated RSA key — Firestore reads/writes go to the emulator, not real GCP).
+- Start Firestore emulator: `firebase emulators:start --only firestore --project demo-omi` from a dir with a `firebase.json` pinning firestore to port 8081 (a demo project id forces emulator-only mode, no creds).
+- Start Redis: `redis-server --daemonize yes`.
+- Start API: `cd backend && source .venv/bin/activate && python -m uvicorn main:app --host 0.0.0.0 --port 8080` (or `./scripts/dev-serve.sh`).
+- Auth bypass for local API calls: `Authorization: Bearer local_dev_admin_key<uid>` (the `<uid>` is taken verbatim as the user id). Verified hello-world: `POST /v3/memories` then `GET /v3/memories` round-trips through the Firestore emulator.
+- Features needing real external services (Deepgram STT, LLM chat, GCS audio, Pinecone/Typesense search) fail at **call time** with placeholders — that's expected, not an env bug. Supply real keys/`SERVICE_ACCOUNT_JSON` to exercise them.
+
+### Backend tests (known pre-existing failures on `main`)
+`bash test.sh` runs each file in its own pytest process and uses `set -e`, so it **halts at the first failing file**. On current `main` that is `tests/unit/test_speaker_sample.py` (pre-existing: it patches `deepgram_prerecorded_from_bytes`, renamed to `prerecorded_from_bytes`). Async-heavy files also fail because `pytest-asyncio` is **not** in the lock and no `asyncio_mode` is configured. Run files individually (`pytest tests/unit/test_x.py`) to validate; ~129/172 unit-test files pass in isolation. Do not run the whole `tests/unit` dir in one pytest process — cross-file mock contamination causes mass false failures (the per-file isolation in `test.sh` is intentional).
