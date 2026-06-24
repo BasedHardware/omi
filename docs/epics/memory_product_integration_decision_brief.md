@@ -1,7 +1,7 @@
-# V17 Memory Product Integration — Decision Brief
+# memory Memory Product Integration — Decision Brief
 
 **Audience:** David / product decision maker  
-**Source doc:** `docs/epics/v17_memory_product_integration_epic.md`  
+**Source doc:** `docs/epics/memory_product_integration_epic.md`  
 **Purpose:** Condensed, human-reviewable version of the implementer Epic.  
 **Status:** Updated with product terminology and rollout preferences.
 
@@ -9,7 +9,7 @@
 
 ## 1. Executive summary
 
-We should integrate V17 as a **simple, gradual, whitelist-first memory upgrade** that does not break old memory behavior.
+We should integrate memory as a **simple, gradual, whitelist-first memory upgrade** that does not break old memory behavior.
 
 The product model should use intuitive names:
 
@@ -111,9 +111,9 @@ Users do not need to manage many states. They should mostly see:
 
 ## 4. Why this still fits the benchmark result
 
-The benchmark showed V17.9 Long-term/L2 is much cleaner than Base Omi projection:
+The benchmark showed memory.9 Long-term/L2 is much cleaner than Base Omi projection:
 
-| Metric | Base Omi projection | V17.9 Long-term/L2 |
+| Metric | Base Omi projection | memory.9 Long-term/L2 |
 |---|---:|---:|
 | Avg utility/card | 0.386 | **1.404** |
 | Positive rate | 66.7% | **87.2%** |
@@ -122,7 +122,7 @@ The benchmark showed V17.9 Long-term/L2 is much cleaner than Base Omi projection
 
 But Base Omi had slightly more broad useful yield:
 
-| Metric | Base Omi projection | V17.9 Long-term/L2 |
+| Metric | Base Omi projection | memory.9 Long-term/L2 |
 |---|---:|---:|
 | Useful grounded safe memories / 100 contexts | **76.2** | 73.8 |
 
@@ -227,8 +227,8 @@ Recommended minimal config:
 
 | Config | Purpose |
 |---|---|
-| `V17_MEMORY_ENABLED_USERS` or allowlist | Who is on the new system. |
-| `V17_MODE` | `shadow`, `write`, or `read`. |
+| `MEMORY_ENABLED_USERS` or allowlist | Who is on the new system. |
+| `MEMORY_MODE` | `shadow`, `write`, or `read`. |
 | `V17_BACKFILL_ENABLED` | Whether progressive backfill runs for enabled users. |
 | `V17_BACKFILL_DAILY_LIMIT` | Simple safety cap. |
 | `V17_ARCHIVE_OPT_IN_ENABLED` | Whether Archive search can be explicitly used. |
@@ -299,7 +299,7 @@ From the current backend, relevant existing conventions include:
 
 Plan adjustment:
 
-- Do not invent a separate deletion philosophy for V17.
+- Do not invent a separate deletion philosophy for memory.
 - Extend existing deletion/export/account-purge paths to cover Short-term, Long-term, Archive, vectors, lineage, and backfill metadata.
 - Keep the user-facing semantics consistent with today’s product.
 - Preserve raw artifacts by default unless the existing deletion/account-purge flow deletes them.

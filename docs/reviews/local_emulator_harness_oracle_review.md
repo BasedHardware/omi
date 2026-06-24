@@ -40,7 +40,7 @@ Oracle's main warning: the docs currently say “local” by intent, but should 
 
 4. **Separate exploratory stack from isolated test stack.**
    - `make dev-up` is long-lived and exploratory.
-   - `make seed-v17-scenario` mutates the exploratory instance.
+   - `make seed-memory-scenario` mutates the exploratory instance.
    - Isolated local memory tests should create/reset/seed/run/report/clean an isolated test instance by default.
    - `REUSE_DEV_STACK=1` can exist as an explicit non-reproducible debug mode.
 

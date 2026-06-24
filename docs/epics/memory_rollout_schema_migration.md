@@ -1,4 +1,4 @@
-# V17 rollout/control schema_version=1 migration and compatibility note
+# memory rollout/control schema_version=1 migration and compatibility note
 
 Status: local readiness documentation only. Production rollout remains **BLOCKED / NO-GO** and `production_rollout_approved=false`.
 
@@ -8,7 +8,7 @@ This note makes the canonical `users/{uid}/memory_control/state` contract explic
 
 Path: `users/{uid}/memory_control/state`.
 
-Required top-level fields for default V17 reads:
+Required top-level fields for default memory reads:
 
 - `uid`: exact uid matching the path/authenticated uid. Missing or mismatched uid fails closed with `uid_mismatch`.
 - `schema_version: 1`: exact canonical rollout/control schema version. Missing or unsupported versions fail closed with `unsupported_rollout_schema`.
@@ -28,14 +28,14 @@ Default-memory reads require the matching nested `default_memory: true` for the 
 Example canonical document:
 
 ```yaml
-uid: v17-schema-readiness-user
+uid: memory-schema-readiness-user
 schema_version: 1
 mode: read
 mode_epoch: 7
 cutover_epoch: 7
 account_generation: 3
 fallback_projection_ready: true
-persistent_v17_writes_started: true
+persistent_memory_writes_started: true
 writes_blocked: false
 stage_gates:
   shadow: passed
@@ -59,7 +59,7 @@ Compatibility/readiness checklist before any migration or rollout stage:
 2. Convert valid rollout docs to the canonical schema above with `schema_version: 1` before relying on them for default reads.
 3. Do not infer or backfill grants from request scopes, MCP advertised tool metadata, app declarations, top-level legacy alias fields, or client-authenticated state.
 4. Keep Archive unavailable by default; only explicit Archive reads may consult canonical `.archive` capability after default-read authorization passes.
-5. Run the local static/readiness artifact: `python3 backend/scripts/v17_rollout_schema_readiness.py`.
+5. Run the local static/readiness artifact: `python3 backend/scripts/rollout_schema_readiness.py`.
 
 ## Rejected legacy shapes
 
@@ -77,14 +77,14 @@ The parser intentionally rejects the following compatibility shapes. These names
 
 Global and convergence gates are server-owned controls, separate from per-user rollout docs:
 
-- `memory_control/v17_global_read_gate`
-- `memory_control/v17_write_convergence_gate`
+- `memory_control/global_read_gate`
+- `memory_control/write_convergence_gate`
 
-Reads of these gates use the same bounded Firestore `.get(timeout=2.0)` helper as `users/{uid}/memory_control/state` when the SDK supports the timeout argument. Timeout, permission, deadline, or transport exceptions fail closed with explicit low-cardinality reasons: `global_read_gate_read_failed` denies V17 product reads and `write_convergence_gate_read_failed` keeps legacy write convergence not ready. Missing or malformed gate documents remain explicit fail-closed states (`missing_global_read_gate`, `malformed_global_read_gate`, `missing_write_convergence_gate`, `malformed_write_convergence_gate`) and do not expose Archive by default or make stale Short-term memory default-visible.
+Reads of these gates use the same bounded Firestore `.get(timeout=2.0)` helper as `users/{uid}/memory_control/state` when the SDK supports the timeout argument. Timeout, permission, deadline, or transport exceptions fail closed with explicit low-cardinality reasons: `global_read_gate_read_failed` denies memory product reads and `write_convergence_gate_read_failed` keeps legacy write convergence not ready. Missing or malformed gate documents remain explicit fail-closed states (`missing_global_read_gate`, `malformed_global_read_gate`, `missing_write_convergence_gate`, `malformed_write_convergence_gate`) and do not expose Archive by default or make stale Short-term memory default-visible.
 
 ## Local readiness artifact
 
-`backend/scripts/v17_rollout_schema_readiness.py` emits a read-only JSON inventory with:
+`backend/scripts/rollout_schema_readiness.py` emits a read-only JSON inventory with:
 
 - `status: NOT_RUN`
 - `read_only: true`
@@ -94,6 +94,6 @@ Reads of these gates use the same bounded Firestore `.get(timeout=2.0)` helper a
 - `firestore_writes_executed: false`
 - `canonical_schema_version: 1`
 - canonical valid examples for `mcp`, `developer_api`, and `omi_chat`
-- rejected legacy examples that are asserted to fail closed by `backend/tests/unit/test_v17_rollout_schema_readiness.py`
+- rejected legacy examples that are asserted to fail closed by `backend/tests/unit/test_rollout_schema_readiness.py`
 
 This artifact is not a production inventory, migration execution, Firestore/IAM proof, benchmark, telemetry sink integration, approval, or cloud/provider validation.

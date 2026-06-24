@@ -1,8 +1,8 @@
-# V17 memory UI/UX prescription — desktop-first
+# memory memory UI/UX prescription — desktop-first
 
 **Status:** First desktop iteration in progress.  
-**Scope:** Establish a maintainable UI/UX pattern for V17 memory tiers on desktop before broadening to mobile/web.  
-**Product source of truth:** `docs/epics/v17_memory_normative_architecture.md`.
+**Scope:** Establish a maintainable UI/UX pattern for memory memory tiers on desktop before broadening to mobile/web.  
+**Product source of truth:** `docs/epics/memory_normative_architecture.md`.
 
 ## Product rules the UI must preserve
 
@@ -16,15 +16,15 @@
 
 ## Oracle status for this slice
 
-A follow-up compact no-attachment Oracle run succeeded after the earlier browser/upload stalls. See `docs/epics/v17_memory_ui_desktop_foundation_oracle_review.md`.
+A follow-up compact no-attachment Oracle run succeeded after the earlier browser/upload stalls. See `docs/epics/memory_ui_desktop_foundation_oracle_review.md`.
 
 Oracle verdict for commit `a02ac1459`: **NO-GO as currently described**, while affirming that the architecture and UX direction are correct. The required local fixes before continuing are scope-aware reconciliation, scoped bulk operations, fail-closed malformed-tier handling, stale async/undo hardening, and real macOS build/test proof.
 
 ## Oracle/subagent consensus prescription
 
-The first maintainable slice should avoid a large redesign. Add V17-aware primitives underneath the existing memory UI:
+The first maintainable slice should avoid a large redesign. Add memory-aware primitives underneath the existing memory UI:
 
-1. **Normalize data first.** Add an explicit client `MemoryTier` model and decode both legacy and V17 response shapes.
+1. **Normalize data first.** Add an explicit client `MemoryTier` model and decode both legacy and memory response shapes.
 2. **Keep tier orthogonal to category.** Existing category filters (`Manual`, `About You`, `Insights`, `Workflow`) remain secondary.
 3. **Guard default access in the client cache and view model.** Even if a backend bug returns Archive rows, the default desktop list filters to Short-term + Long-term.
 4. **Make Archive explicit.** Users must select the `Archive` tier filter before Archive rows render or bulk actions apply to them.
@@ -41,7 +41,7 @@ The first maintainable slice should avoid a large redesign. Add V17-aware primit
 | Search | empty | Searches within current tier scope. |
 | Tier filter | `Default` | `Default`, `Short-term`, `Long-term`, `Archive`. |
 | Category filter | `All` | Secondary filter using legacy category field. |
-| Add | manual memory | Manual creation remains legacy-compatible; backend assigns V17 tier until write API is finalized. |
+| Add | manual memory | Manual creation remains legacy-compatible; backend assigns memory tier until write API is finalized. |
 | Management | visibility/delete | Bulk actions operate only on current visible scope. |
 
 ### Tier labels
@@ -59,7 +59,7 @@ The first maintainable slice should avoid a large redesign. Add V17-aware primit
 | Default empty | `No default memories yet` / explain that Short-term and Long-term appear here. |
 | Archive empty | `No archived memories found` / explain Archive is explicit historical context. |
 | Search empty | `No matching memories` scoped to current tier. |
-| Load error | Existing retry pattern; do not silently fall back to legacy when enrolled V17 read fails. |
+| Load error | Existing retry pattern; do not silently fall back to legacy when enrolled memory read fails. |
 
 ## First macOS implementation slice
 
@@ -106,7 +106,7 @@ type DesktopMemory = {
 
 Rules:
 
-- Map legacy `id` and V17 `memory_id` into one `id`.
+- Map legacy `id` and memory `memory_id` into one `id`.
 - Map missing tier to `long_term` for legacy records.
 - Default list and local-agent context exclude Archive.
 - Archive tab/filter is explicit.
@@ -127,7 +127,7 @@ Rules:
 
 The current web memory surface is mostly public/shared conversation memory, not the signed-in `/v3/memories` manager.
 
-If V17 tiering reaches web:
+If memory tiering reaches web:
 
 - Add tier as a facet/field, not as `structured.category`.
 - Public/search defaults should exclude Archive unless explicitly product-approved and permissioned.
@@ -138,7 +138,7 @@ If V17 tiering reaches web:
 
 Desktop local/client readiness requires:
 
-- Model tests for legacy + V17 decode.
+- Model tests for legacy + memory decode.
 - Filter tests proving default excludes Archive and explicit Archive includes only Archive.
 - Storage tests proving persisted tier roundtrips.
 - UI/e2e update proving header tier filter, badge rendering, Archive explicitness, detail provenance, and delete/undo.
@@ -150,4 +150,4 @@ Desktop local/client readiness requires:
 2. Update macOS e2e `memories.yaml` once a Mac runner/dev machine can exercise UI.
 3. Add Windows normalization/component tests.
 4. Add mobile schema/provider/widget tests.
-5. Create a shared V17 memory client fixture under `docs/fixtures` or `testing/fixtures`.
+5. Create a shared memory memory client fixture under `docs/fixtures` or `testing/fixtures`.

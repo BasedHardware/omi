@@ -58,7 +58,7 @@ This workflow is for local product-use/manual QA only. It emits `LOCAL_EMULATOR_
 
 ```bash
 make dev-up
-make seed-v17-scenario SCENARIO=happy_path   # optional; dev-up auto-seeds on first run
+make seed-memory-scenario SCENARIO=happy_path   # optional; dev-up auto-seeds on first run
 make desktop-run-local DESKTOP_USER=alice
 make dev-status
 make dev-summary
@@ -74,12 +74,12 @@ PROVIDER_MODE=offline make dev-status
 ### Fail-closed scenario
 
 ```bash
-make seed-v17-scenario SCENARIO=kill_switch
+make seed-memory-scenario SCENARIO=kill_switch
 make dev-status
 make desktop-run-local DESKTOP_USER=alice
 ```
 
-Other scenario names: `make list-v17-scenarios`
+Other scenario names: `make list-memory-scenarios`
 
 ### Reset
 

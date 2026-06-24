@@ -4,7 +4,7 @@
 **Primary customer:** Canonical memory development and validation
 **First surface target:** Desktop macOS app
 **Long-term customer:** Any Omi feature that needs backend + desktop/app/web/hardware integration testing
-**Related memory docs:** `docs/rollout/memory-v3-proof-order.md`, `docs/runbooks/memory-v3-dev-cloud-proof.md`, `docs/epics/v17_memory_product_integration_epic.md`
+**Related memory docs:** `docs/rollout/memory-v3-proof-order.md`, `docs/runbooks/memory-v3-dev-cloud-proof.md`, `docs/epics/memory_product_integration_epic.md`
 
 ## Problem
 
@@ -39,7 +39,7 @@ Top-level `make` commands are the stable user interface. Heavy implementation mu
 ```bash
 make dev-up
 make dev-check
-make seed-v17-scenario SCENARIO=happy_path
+make seed-memory-scenario SCENARIO=happy_path
 make desktop-run-local USER=alice
 make dev-status
 make dev-reset
@@ -52,8 +52,8 @@ Locked command contract:
 |---|---|
 | `make dev-up` | `scripts/dev-harness/dev-up.sh` starts or validates the long-lived local emulator/manual-QA instance. |
 | `make dev-check` | `scripts/dev-harness/dev-check.sh` runs prerequisite, safety, and provider preflight checks without mutating state. |
-| `make seed-v17-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-v17-scenario.py` validates and applies a Python-authored synthetic memory scenario to the running local instance. |
-| `make list-v17-scenarios` | `scripts/dev-harness/list-v17-scenarios.py` lists scenario fixture names and descriptions. |
+| `make seed-memory-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-memory-scenario.py` validates and applies a Python-authored synthetic memory scenario to the running local instance. |
+| `make list-memory-scenarios` | `scripts/dev-harness/list-memory-scenarios.py` lists scenario fixture names and descriptions. |
 | `make desktop-run-local USER=<name>` | `scripts/dev-harness/desktop-run-local.sh` launches a named local desktop bundle/profile against localhost services and a seeded local Auth emulator user. |
 | `make dev-status` | `scripts/dev-harness/dev-status.sh` prints owned process, port, endpoint, provider-mode, scenario, user, and state-root status. |
 | `make dev-reset` | `scripts/dev-harness/dev-reset.sh` clears only harness-owned local state after demo-project, loopback, database, and sentinel checks. |
@@ -68,7 +68,7 @@ The local emulator harness must reuse the repository-native Firebase and test as
 
 - `firebase.json` is the authoritative Firebase CLI configuration. It currently points Firestore to `firestore.rules` and `firestore.indexes.json` and assigns the Firestore emulator port `8085`; harness work should extend this config for Auth emulator support rather than introduce a separate Firebase config file.
 - `firestore.rules` and `firestore.indexes.json` are the rules/index assets for emulator startup and canonical-memory Firestore coverage.
-- `package.json` already contains memory Firestore emulator npm scripts using `firebase emulators:exec --only firestore --project demo-v17-memory`; those remain test-specific and must not become the long-lived manual-QA instance, which is fixed to `demo-omi-local` / `(default)`.
+- `package.json` already contains memory Firestore emulator npm scripts using `firebase emulators:exec --only firestore --project demo-memory-memory`; those remain test-specific and must not become the long-lived manual-QA instance, which is fixed to `demo-omi-local` / `(default)`.
 - Existing emulator proof scripts under `backend/scripts/v17_*_emulator_test.*` are short-lived emulator tests. Reuse their safety patterns, but do not make them the developer harness runtime.
 - `backend/testing/e2e/run.sh` is the fully fake hermetic backend E2E harness and remains the deterministic pass/fail layer. Offline provider mode should reuse hermetic fake-provider implementations where possible, not duplicate a second fake stack.
 - `desktop/macos/run.sh` is the current desktop local runner. `make desktop-run-local` should wrap it with a named local bundle/profile, localhost backend URLs, and emulator-auth bootstrapping rather than launching production, beta, or the default dev bundle directly.
@@ -91,7 +91,7 @@ The harness should provide:
 - desktop local profile that points a named desktop bundle to localhost services.
 - clear evidence labels that distinguish local emulator development from dev-cloud proof.
 
-The v1 long-lived emulator instance must run with Firebase CLI project `demo-omi-local`, Firestore database `(default)`, the repo `firebase.json`, and explicit loopback emulator endpoints. Existing test-only `demo-v17-memory` emulator commands are useful references but are not the harness project boundary.
+The v1 long-lived emulator instance must run with Firebase CLI project `demo-omi-local`, Firestore database `(default)`, the repo `firebase.json`, and explicit loopback emulator endpoints. Existing test-only `demo-memory-memory` emulator commands are useful references but are not the harness project boundary.
 
 ## Dependency boundary
 
@@ -172,7 +172,7 @@ Harness-owned state should live under a root such as `${OMI_LOCAL_STATE_ROOT:-<r
 - `make dev-up` starts or validates a long-lived named exploratory manual-QA instance.
 - `make dev-down` stops only processes owned by that instance.
 - `make dev-reset` clears only state owned by that instance.
-- `make seed-v17-scenario` mutates the exploratory instance.
+- `make seed-memory-scenario` mutates the exploratory instance.
 - `make dev-status` shows active instance, seeded scenario/users, provider mode, local endpoints, state root, and enabled external providers.
 - Local pass/fail tests are not run against the long-lived manual-QA instance; deterministic tests belong in the hermetic harness.
 - Commands fail on foreign port ownership and never kill unrelated processes.
@@ -217,7 +217,7 @@ The first desktop acceptance bar is:
 - launch a named local desktop bundle/profile without mutating production, beta, or existing dev bundles;
 - point the desktop app at localhost backend services;
 - authenticate as a seeded local Firebase Auth emulator user;
-- exercise at least one V17-relevant read path against local emulator state;
+- exercise at least one memory-relevant read path against local emulator state;
 - keep all mutable state local.
 
 ## Local vs dev-cloud boundary
@@ -227,8 +227,8 @@ Local emulator development can support manual QA of:
 - full-stack local wiring behavior;
 - route-selection logic;
 - fail-closed semantics;
-- no legacy fallback after V17 selection;
-- no V17 writes in GET paths under the harness;
+- no legacy fallback after memory selection;
+- no memory writes in GET paths under the harness;
 - desktop request/response shape compatibility;
 - Firebase/Auth emulator behavior for synthetic users;
 - deterministic scenario behavior with local mutable state.
@@ -242,7 +242,7 @@ Local emulator development must not claim:
 - real telemetry sinks or rollback propagation;
 - production or dev-cloud activation readiness.
 
-Evidence generated by this harness should be labelled `LOCAL_EMULATOR_DEV`. Only dev-cloud proof can produce `DEV_CLOUD_PROOF` evidence for V17 activation.
+Evidence generated by this harness should be labelled `LOCAL_EMULATOR_DEV`. Only dev-cloud proof can produce `DEV_CLOUD_PROOF` evidence for memory activation.
 
 ## Evidence report metadata
 
@@ -264,7 +264,7 @@ Every local session summary should include:
 - sanitized service endpoints
 - start/end timestamps
 - test results
-- V17 write-attempt counters
+- memory write-attempt counters
 - protected-state digest
 - explicit non-claims
 
@@ -280,8 +280,8 @@ Executable tickets live under `.codex-autorunner/tickets/`.
 | `TICKET-015-local-runtime-safety.md` | Add demo-project, environment, process, port, and destructive-operation safety guards. |
 | `TICKET-020-dev-up-foundation.md` | Add `dev-up` / `dev-reset` foundation for backend-local emulator services. |
 | `TICKET-025-provider-capabilities.md` | Define real-default provider mode, offline hermetic-shared provider mode, credential checks, and external side-effect guardrails. |
-| `TICKET-030-v17-scenario-fixtures.md` | Add Python-authored synthetic memory product-state scenarios and seed/reset tooling. |
-| `TICKET-040-local-emulator-v17-manual-qa.md` | Add local manual-QA workflow/status/session summaries outside mandatory CI (`docs/runbooks/local-emulator-manual-qa.md`). |
+| `TICKET-030-memory-scenario-fixtures.md` | Add Python-authored synthetic memory product-state scenarios and seed/reset tooling. |
+| `TICKET-040-local-emulator-memory-manual-qa.md` | Add local manual-QA workflow/status/session summaries outside mandatory CI (`docs/runbooks/local-emulator-manual-qa.md`). |
 | `TICKET-050-desktop-local-profile.md` | Add a desktop local profile for "Omi Dev Local". |
 | `TICKET-060-dev-cloud-preview-bridge.md` | Post-MVP handoff: define optional branch preview deploy/proof bridge without weakening gates. |
 | `TICKET-070-docs-and-adoption.md` | Document the developer loop and proof boundary. |

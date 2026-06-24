@@ -1,4 +1,4 @@
-# Oracle review — V17 desktop memory tier UX foundation
+# Oracle review — memory desktop memory tier UX foundation
 
 **Date:** 2026-06-21
 **Oracle session:** `we-need-prescripti-oracle-guidance-6`
@@ -9,9 +9,9 @@
 
 Oracle reviewed commit:
 
-- `a02ac1459 feat(v17): add desktop memory tier UX foundation`
+- `a02ac1459 feat(memory): add desktop memory tier UX foundation`
 
-The prompt asked whether the committed local-only desktop-first V17 memory UI/UX foundation is a safe maintainable first slice, with explicit non-claims for backend/dev-cloud/prod readiness and Mac test execution.
+The prompt asked whether the committed local-only desktop-first memory memory UI/UX foundation is a safe maintainable first slice, with explicit non-claims for backend/dev-cloud/prod readiness and Mac test execution.
 
 ## Verdict
 
@@ -43,7 +43,7 @@ Prescriptive fix:
 - Require `MemoryTierScope` on bulk storage and view-model methods.
 - Default bulk scope is Short-term + Long-term.
 - An all-tier destructive action must explicitly say “including Archive” and require confirmation.
-- Until the backend has matching tier-scoped mutation semantics, disable V17 bulk server operations rather than calling legacy global endpoints.
+- Until the backend has matching tier-scoped mutation semantics, disable memory bulk server operations rather than calling legacy global endpoints.
 
 ### P0-3 — Fail closed on malformed tiers and stale UI state
 
@@ -82,9 +82,9 @@ xcrun swift test --package-path Desktop \
 - That a default API listing represents every tier.
 - That hiding Archive in `filteredMemories` is sufficient even when synchronization and mutations remain unscoped.
 - That any unrecognized tier can safely become Long-term.
-- That locally migrated legacy rows labeled Long-term are thereby proven ledger-backed V17 Long-term records.
+- That locally migrated legacy rows labeled Long-term are thereby proven ledger-backed memory Long-term records.
 - That client-side filtering after offset pagination produces complete, stable pages.
-- That an additive decoder alone makes the existing API, deletion, export, chat, and reconciliation paths V17-safe.
+- That an additive decoder alone makes the existing API, deletion, export, chat, and reconciliation paths memory-safe.
 - That Linux static checks are a substitute for compiling and executing the macOS package.
 
 ## Recommended next sequence
@@ -107,7 +107,7 @@ None of these steps establishes production readiness. Dev-cloud/provider proof, 
 
 Verdict: **LIMITED GO** — stop local Linux iteration and hand commits `fcc20de16` and `19fd6bc61` to Mac local desktop testing. Oracle said no additional Linux-side code or documentation P0 fixes are required based on the evidence presented.
 
-Required next gate: execute `docs/epics/v17_memory_desktop_local_test_plan.md` exactly on a supported Mac/Xcode environment. Treat any compilation failure, test failure, unexpected bulk-network request, data-loss behavior, tier-scope leak, or restart inconsistency as a stop condition requiring remediation before proceeding.
+Required next gate: execute `docs/epics/memory_desktop_local_test_plan.md` exactly on a supported Mac/Xcode environment. Treat any compilation failure, test failure, unexpected bulk-network request, data-loss behavior, tier-scope leak, or restart inconsistency as a stop condition requiring remediation before proceeding.
 
 Successful Mac build/tests/smoke satisfies only the local desktop testing gate. All backend/dev-cloud/production items listed as blocked remain blocked pending separate proof and approval.
 
@@ -115,7 +115,7 @@ Successful Mac build/tests/smoke satisfies only the local desktop testing gate. 
 
 **Date:** 2026-06-21
 **Oracle session:** `we-need-a-prescripti-follow`
-**Reviewed commit:** `fcc20de16 fix(v17): scope desktop memory tier operations`
+**Reviewed commit:** `fcc20de16 fix(memory): scope desktop memory tier operations`
 **Model caveat:** Oracle again reported `requested=Pro; resolved=(unavailable); status=unavailable; strategy=current; verified=no`.
 
 Verdict: **LIMITED GO** for moving from Linux/static verification to **local Mac desktop testing**.
@@ -134,7 +134,7 @@ Oracle still requires Mac-side proof before this can become a validated local de
 - migration/restart smoke with seeded data,
 - UI smoke proving Default excludes Archive and bulk controls remain disabled.
 
-The executable local test plan lives in `docs/epics/v17_memory_desktop_local_test_plan.md`.
+The executable local test plan lives in `docs/epics/memory_desktop_local_test_plan.md`.
 
 ## Remediation status — local P0 slice
 

@@ -1,13 +1,13 @@
-# V17 Memory Product Integration — Oracle Review
+# memory Memory Product Integration — Oracle Review
 
 **Date:** 2026-06-18  
 **Reviewer:** Oracle (`oracle` CLI, browser-backed `gemini-3.5-flash`; model-selection evidence reported by Oracle as unresolved/unverified, but a complete response was returned)  
 **Inputs:**
-- `docs/epics/v17_memory_product_integration_epic.md`
-- `docs/epics/v17_memory_implementation_tickets.md`
-- `docs/epics/v17_memory_product_integration_decision_brief.md`
-- V17 contract/patch code excerpts from `backend/models/v17_memory_contracts.py` and `backend/utils/llm/durable_memory_patches.py`
-- V17 unit test excerpts
+- `docs/epics/memory_product_integration_epic.md`
+- `docs/epics/memory_implementation_tickets.md`
+- `docs/epics/memory_product_integration_decision_brief.md`
+- memory contract/patch code excerpts from `backend/models/v17_memory_contracts.py` and `backend/utils/llm/durable_memory_patches.py`
+- memory unit test excerpts
 
 ---
 
@@ -17,7 +17,7 @@ The product direction is sound, and the ticket set is unusually strong on migrat
 
 The blockers are not cosmetic. The plan does not fully specify the atomic Long-term write protocol, rollback behavior, canonical tier/lifecycle model, source-deletion races, or projection consistency. The current patch code also has paths that silently turn failures or rejected outputs into an empty result. Those gaps could cause duplicate memories, lost memories, resurrection after deletion, privacy leaks, or misleading benchmark gains.
 
-T00–T05 may proceed as design/audit work, but no persistent V17 writes, read switch, vector changes, or external API changes should ship until the P0 changes below are incorporated. This review is based on the attached Epic, tickets, decision brief, and supplied code/test excerpts; I did not have the full repository or execute its test suite.    
+T00–T05 may proceed as design/audit work, but no persistent memory writes, read switch, vector changes, or external API changes should ship until the P0 changes below are incorporated. This review is based on the attached Epic, tickets, decision brief, and supplied code/test excerpts; I did not have the full repository or execute its test suite.    
 
 ## 2. Top risks, ordered by severity
 
@@ -64,13 +64,13 @@ The new tickets introduce tier fields but do not explicitly replace or adapt the
 
 ### 4. P0 — Rollout and rollback semantics are underdefined
 
-`V17_MODE=off|shadow|write|read` is a single mutually exclusive value. It is not defined whether `read` includes V17 writes, whether normal user writes continue during `read`, or how an account moves back to legacy reads after receiving V17-only edits, deletes, Short-term memories, or Long-term commits.
+`MEMORY_MODE=off|shadow|write|read` is a single mutually exclusive value. It is not defined whether `read` includes memory writes, whether normal user writes continue during `read`, or how an account moves back to legacy reads after receiving memory-only edits, deletes, Short-term memories, or Long-term commits.
 
 “Rollback to legacy read is one config change” is not sufficient. A config rollback could:
 
-* Make V17-created memories disappear.
-* Resurrect a memory deleted only in V17.
-* Re-expose an older legacy value after a V17 edit.
+* Make memory-created memories disappear.
+* Resurrect a memory deleted only in memory.
+* Re-expose an older legacy value after a memory edit.
 * Lose visibility of Short-term memories that were never projected into the legacy store.
 
 The decision brief explicitly requires rollback for whitelisted users, but the tickets specify no data reconciliation or compatibility projection guarantee for rollback.  
@@ -137,7 +137,7 @@ The Epic identifies `process_conversation.py` and the existing extraction pipeli
 
 ```text
 new conversation/source
-→ V17 extraction
+→ memory extraction
 → Short-term persistence
 → lifecycle/backfill eligibility
 ```
@@ -186,10 +186,10 @@ Add a ticket defining a capability state machine rather than relying on the ambi
 
 It must specify:
 
-* Whether `read` implies V17 writes.
+* Whether `read` implies memory writes.
 * Which stores receive writes in each mode.
 * Whether whitelisted accounts dual-write compatibility projections.
-* How V17 edits/deletes are represented in legacy fallback.
+* How memory edits/deletes are represented in legacy fallback.
 * How rollback avoids disappearing memories or resurrecting deleted ones.
 * How a cohort is moved forward and backward with a reconciliation report.
 
@@ -209,7 +209,7 @@ Impossible combinations must be rejected—for example, `tier=archive` with defa
 
 A stable logical `memory_id` should survive tier transitions; tier-specific record/version IDs should be separate. The ticket must also define the product mapping for internal `context_only`, such as “remain Short-term until processed, then Archive.”
 
-### D. Live V17 extraction and source reprocessing
+### D. Live memory extraction and source reprocessing
 
 Add a dedicated ticket for `process_conversation.py` and `working_memory.py`.
 
@@ -217,7 +217,7 @@ Acceptance criteria:
 
 * Shadow mode produces audit artifacts without changing product behavior.
 * Write mode creates Short-term records for allowlisted users only.
-* V17 extraction failure cannot block the legacy pipeline.
+* memory extraction failure cannot block the legacy pipeline.
 * Conversation reprocessing supersedes/tombstones prior extracted versions rather than duplicating them.
 * Speaker correction or transcript edit invalidates affected evidence and queued patches.
 * Legacy usage tracking, KG behavior, and vector behavior remain unchanged outside the allowlist.
@@ -387,7 +387,7 @@ At minimum define:
 
 5. Move the benchmark runner and baseline report portion of T27 before any L2 write pilot. Move the T28 verifier skeleton to the first phase and extend it incrementally after each ticket.
 
-6. Move T20 before any code path is allowed to upsert V17 vectors. Until then, T15/T18 must explicitly prohibit V17 vector side effects.
+6. Move T20 before any code path is allowed to upsert memory vectors. Until then, T15/T18 must explicitly prohibit memory vector side effects.
 
 7. Add the missing live-ingestion, raw-artifact-copy, projection-outbox, search-authorization, and source-reprocessing tickets.
 
@@ -409,7 +409,7 @@ At minimum define:
 
 ### Immediate implementation restriction
 
-Keep the current V17 code in **off/shadow-only** use. It should not be allowed to advance a production cursor, create review outcomes, or apply a ledger mutation until synthesis failures become explicit terminal/retry outcomes and server-controlled idempotency is implemented.
+Keep the current memory code in **off/shadow-only** use. It should not be allowed to advance a production cursor, create review outcomes, or apply a ledger mutation until synthesis failures become explicit terminal/retry outcomes and server-controlled idempotency is implemented.
 
 ## 6. Code-level issues to fix now
 
@@ -620,4 +620,4 @@ Once the atomic write protocol, canonical state model, cutover behavior, live-in
 9m13s · gemini-3.5-flash[browser] · ↑34.59k ↓7.85k ↻0 Δ42.44k
 files=4
 
-9m13s · gemini-3.5-flash[browser] · ↑34.59k ↓7.85k ↻0 Δ42.44k | files=4 | slug=v17-plan-oracle-gemini2
+9m13s · gemini-3.5-flash[browser] · ↑34.59k ↓7.85k ↻0 Δ42.44k | files=4 | slug=memory-plan-oracle-gemini2

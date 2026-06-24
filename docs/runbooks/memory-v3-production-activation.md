@@ -5,11 +5,11 @@
 
 ## Current state
 
-Candidate `1294773c8 feat(v17): wire default-off v3 rollout runtime` is cleared only for local/default-off and dev-cloud preparation.
+Candidate `1294773c8 feat(memory): wire default-off v3 rollout runtime` is cleared only for local/default-off and dev-cloud preparation.
 
 Production activation remains NO-GO.
 
-A production deployment with `V17_V3_GET_ENABLED` absent or false is a dark deployment only. It does not prove enabled behavior and must not be cited as functional proof.
+A production deployment with `V3_GET_ENABLED` absent or false is a dark deployment only. It does not prove enabled behavior and must not be cited as functional proof.
 
 ## Preconditions before this runbook can execute
 
@@ -29,7 +29,7 @@ All must be true:
 | `prod-target-preflight.json` | Explicit production target confirmation; no implicit default project. Confirms this is Gate 3, not Gate 2. |
 | `prod-indexes-status.json` | Production required indexes are deployed and READY; actual production query shape is valid. |
 | `prod-iam-effective.json` | Production runtime identity and effective IAM verified; no human ADC/Owner/Editor; write permissions only if separately approved for non-GET paths. |
-| `prod-config-drift.json` | Production env/config matches approved values; `V17_V3_GET_ENABLED`, `V17_MODE`, and allowlist changes are explicit and auditable. |
+| `prod-config-drift.json` | Production env/config matches approved values; `V3_GET_ENABLED`, `MEMORY_MODE`, and allowlist changes are explicit and auditable. |
 | `prod-approval.md` | Human approval, owner groups, expiry/rotation plan, rollback owner, canary UID/cohort, and monitoring owner. |
 | `prod-telemetry-readiness.json` | Dashboards/alerts/log sinks ready; redaction verified; stable route/reason/trace fields. |
 | `prod-rollback-plan.md` | Kill-switch and env rollback steps, expected propagation bound, owner, and verification commands. |
@@ -44,8 +44,8 @@ All must be true:
 5. Prepare explicit rollback/kill-switch plan.
 6. Obtain named human approval.
 7. Apply the smallest possible production activation delta:
-   - exact `V17_V3_GET_ENABLED=true` only when approved;
-   - exact `V17_MODE=read` only when approved;
+   - exact `V3_GET_ENABLED=true` only when approved;
+   - exact `MEMORY_MODE=read` only when approved;
    - one/small approved allowlist entry only;
    - required server-owned control/grant/head/projection docs only through approved production path.
 8. Run tiny canary.

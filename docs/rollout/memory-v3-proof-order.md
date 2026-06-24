@@ -1,7 +1,7 @@
 # Memory `/v3` proof-order policy
 
 **Status:** Normative rollout gate for canonical `GET /v3/memories` activation.  
-**Current candidate:** `1294773c8 feat(v17): wire default-off v3 rollout runtime`  
+**Current candidate:** `1294773c8 feat(memory): wire default-off v3 rollout runtime`  
 **Oracle review:** Strategy change reviewed; decision was **GO to adopt non-production-first strategy**, **GO to begin dev-cloud environment/tooling work**, **NO-GO for dev-cloud functional proof until P0 artifacts pass**, and **NO-GO for production activation**.
 
 Production **must not** be the first environment in which the enabled `GET /v3/memories` path is exercised against a real cloud Firestore database.
@@ -64,8 +64,8 @@ Gate 2 GO means **dev-cloud functional proof passed**. It does not approve produ
 
 The canonical memory path is selected only when the server observes all of:
 
-1. `V17_V3_GET_ENABLED=true` exactly;
-2. `V17_MODE=read` exactly;
+1. `V3_GET_ENABLED=true` exactly;
+2. `MEMORY_MODE=read` exactly;
 3. a valid authenticated UID present in the server-side allowlist.
 
 (`V17_*` env names are retained as compatibility fallbacks; neutral rollout config is primary in code.)
@@ -89,7 +89,7 @@ Gate 3 is limited to production-specific deltas:
 - approved tiny canary;
 - production rollback execution and observation.
 
-A production deployment with `V17_V3_GET_ENABLED` absent or false is a dark deployment only. It does not satisfy Gate 2 and must not be cited as functional proof. Production index deployment while the runtime remains default-off may occur only under separate approval and also does not satisfy Gate 2.
+A production deployment with `V3_GET_ENABLED` absent or false is a dark deployment only. It does not satisfy Gate 2 and must not be cited as functional proof. Production index deployment while the runtime remains default-off may occur only under separate approval and also does not satisfy Gate 2.
 
 ## Evidence validity
 
@@ -113,7 +113,7 @@ The only gate statuses are `NOT_RUN`, `BLOCKED`, `NO_GO`, and `GO`. `PRE_GCP_REA
 
 ## Current candidate decision
 
-Candidate: `1294773c8 feat(v17): wire default-off v3 rollout runtime`
+Candidate: `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 
 - **Local/emulator gate:** GO to proceed to dev-cloud setup, based on recorded unit, hermetic E2E, configuration, and default-off evidence. This is not a cloud-runtime claim.
 - **Dev-cloud gate:** BLOCKED / NOT_RUN pending a dedicated dev project, deployed branch revision, dev index readiness, read-only runtime identity, synthetic fixture tooling, real-auth proof suite, operation evidence, and rollback evidence.

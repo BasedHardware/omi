@@ -1,4 +1,4 @@
-# V17 L1 to L2 Agentic Promotion Plan
+# memory L1 to L2 Agentic Promotion Plan
 
 ## Locked Decisions
 
@@ -14,7 +14,7 @@
 
 1. `jobs.l2_promotion_selector` finds unpromoted L1 items for completed sessions and groups adjacent sessions under configured caps.
 2. `utils.memory.promotion_bundle_builder` builds `promotion_bundle.v1` with session L1, vector seed, bounded graph context, evidence packets, and `observed_head_commit_id`.
-3. `jobs.v17_l2_promotion_worker` enforces the grounding guard. A headed ledger with empty vector seed and empty graph edges is `ungrounded_promotion`.
+3. `jobs.l2_promotion_worker` enforces the grounding guard. A headed ledger with empty vector seed and empty graph edges is `ungrounded_promotion`.
 4. `utils.memory.l2_promotion_agent` runs a bounded tool loop using `AgentSafetyGuard`.
 5. The LLM can call `vector_search`, `graph_walk`, `fetch_fact`, `list_session_l1`, `write_memory`, and `finish`.
 6. `utils.memory.memory_tools` validates writes, rejects malformed or ungrounded memory, persists non-active routes, and appends ledger commits.

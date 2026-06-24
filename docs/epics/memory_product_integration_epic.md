@@ -1,4 +1,4 @@
-# V17 Memory Product Integration Epic
+# memory Memory Product Integration Epic
 
 **Created:** 2026-06-18T08:05:17Z  
 **Owner:** David / Omi memory system  
@@ -9,7 +9,7 @@
 
 ## Goal
 
-Integrate the new V17 two-layer memory system into Omi product surfaces without losing user data, while preserving Base-Omi-like high-recall memory capture in L1 and progressively backfilling L2 durable memories under strict safety, review, and no-data-loss gates.
+Integrate the new memory two-layer memory system into Omi product surfaces without losing user data, while preserving Base-Omi-like high-recall memory capture in L1 and progressively backfilling L2 durable memories under strict safety, review, and no-data-loss gates.
 
 ## Non-negotiables
 
@@ -20,16 +20,16 @@ Integrate the new V17 two-layer memory system into Omi product surfaces without 
 5. **Long-term memory is stable synthesis.** Long-term uses existing-memory lookup, bounded replayable search, idempotent patches, review/reject routes, and append-only ledger semantics.
 6. **Archive is explicit-query historical context.** Archive is preserved/searchable but not included in default Omi/chat/third-party memory access unless explicitly queried or opted in.
 7. **Do not silently promote old memories.** Old Omi memories are migrated only for enabled/whitelisted accounts, enter Short-term/Archive candidates first, and become Long-term only through progressive backfill or explicit user/agent action.
-8. **Roll out gradually without breaking old memory.** Old memory logic stays intact by default; V17 starts behind a user allowlist and simple mode config (`shadow`, `write`, `read`).
+8. **Roll out gradually without breaking old memory.** Old memory logic stays intact by default; memory starts behind a user allowlist and simple mode config (`shadow`, `write`, `read`).
 9. **Keep UI/config simple.** Avoid many user-facing states, many toggles, and heavy manual review. Users can manage memory by chatting with Omi; agent mode should have memory-management tools.
-10. **Follow existing deletion conventions.** Extend existing memory/conversation/vector/account-purge flows to cover V17 tiers rather than inventing a separate deletion philosophy.
+10. **Follow existing deletion conventions.** Extend existing memory/conversation/vector/account-purge flows to cover memory tiers rather than inventing a separate deletion philosophy.
 11. **Benchmark parity stays honest.** Use fair utility metrics and Base Omi historical/projection anchors; do not optimize by hiding useful records in Archive/reject/review.
 
 ---
 
 # Product decision update — terminology, rollout, and defaults
 
-This section supersedes earlier wording that framed product states as “Archive / Durable / Context only.” If later historical Wave 1/2/3 notes still say `L1`, `L2`, `Durable`, or user-visible `Context only`, read them as implementation-history context, not final product guidance. The final normative source of truth is `docs/epics/v17_memory_normative_architecture.md`; implementation-ticket amendments live in `docs/epics/v17_memory_implementation_tickets.md`.
+This section supersedes earlier wording that framed product states as “Archive / Durable / Context only.” If later historical Wave 1/2/3 notes still say `L1`, `L2`, `Durable`, or user-visible `Context only`, read them as implementation-history context, not final product guidance. The final normative source of truth is `docs/epics/memory_normative_architecture.md`; implementation-ticket amendments live in `docs/epics/memory_implementation_tickets.md`.
 
 Final policy decisions:
 
@@ -73,25 +73,25 @@ Do not make “Context only” a normal user-visible state unless implementation
 
 Prefer a small configuration surface:
 
-- `V17_MEMORY_ENABLED_USERS` or equivalent allowlist.
-- `V17_MODE=shadow|write|read`.
+- `MEMORY_ENABLED_USERS` or equivalent allowlist.
+- `MEMORY_MODE=shadow|write|read`.
 - `V17_BACKFILL_ENABLED`.
 - `V17_BACKFILL_DAILY_LIMIT`.
 - `V17_ARCHIVE_OPT_IN_ENABLED`.
 
 Avoid many independent product rollout toggles unless implementation requires hidden internal safety switches.
 
-### V17 `/v3/memories` proof-order update — production is not first proof
+### memory `/v3/memories` proof-order update — production is not first proof
 
-For the V17 `GET /v3/memories` default-read path, the normative rollout gate is now `docs/rollout/v17-v3-proof-order.md`.
+For the memory `GET /v3/memories` default-read path, the normative rollout gate is now `docs/rollout/memory-v3-proof-order.md`.
 
-Production must not be the first environment where the enabled V17 `/v3` path is exercised against a real cloud Firestore database. The rollout order is:
+Production must not be the first environment where the enabled memory `/v3` path is exercised against a real cloud Firestore database. The rollout order is:
 
 1. **Local/emulator proof:** unit, fake-Firestore, Firebase-emulator where applicable, and hermetic E2E evidence. This can clear local behavior only.
-2. **Dev-cloud proof:** a dedicated non-production Firebase/GCP project with a deployed branch backend using its actual runtime identity, synthetic users/data only, checked-in indexes deployed and READY, and the mandatory proof matrix in `docs/runbooks/v17-v3-dev-cloud-proof.md`.
-3. **Production activation proof:** production-specific deltas only, after dev-cloud GO and independent review; see `docs/runbooks/v17-v3-production-activation.md`.
+2. **Dev-cloud proof:** a dedicated non-production Firebase/GCP project with a deployed branch backend using its actual runtime identity, synthetic users/data only, checked-in indexes deployed and READY, and the mandatory proof matrix in `docs/runbooks/memory-v3-dev-cloud-proof.md`.
+3. **Production activation proof:** production-specific deltas only, after dev-cloud GO and independent review; see `docs/runbooks/memory-v3-production-activation.md`.
 
-A local backend using dev credentials may supplement debugging, but cannot satisfy the dev-cloud gate. A production deployment with `V17_V3_GET_ENABLED` absent or false is dark plumbing only and must not be cited as enabled-path proof.
+A local backend using dev credentials may supplement debugging, but cannot satisfy the dev-cloud gate. A production deployment with `V3_GET_ENABLED` absent or false is dark plumbing only and must not be cited as enabled-path proof.
 
 ## Vector policy update
 
@@ -137,7 +137,7 @@ Primary mobile/app API: `backend/routers/memories.py`
 
 Developer API: `backend/routers/developer.py`
 - `GET/POST/PATCH/DELETE /v1/dev/user/memories*`
-- Current vector side effects differ from `/v3`; this must be reconciled before V17 read/write semantics become authoritative.
+- Current vector side effects differ from `/v3`; this must be reconciled before memory read/write semantics become authoritative.
 
 MCP API: `backend/routers/mcp.py`
 - `POST /v1/mcp/memories`
@@ -169,14 +169,14 @@ Append-only durable ledger: `backend/database/memory_ledger.py`
 Short-term/working memory store: `backend/database/short_term_memories.py`
 - Collection: `users/{uid}/short_term`
 - Already has `pending_review`, `consolidated`, tombstone-ish concepts.
-- Useful precedent, but V17 L1 archive has a different contract and needs explicit storage/read semantics.
+- Useful precedent, but memory L1 archive has a different contract and needs explicit storage/read semantics.
 
 Review queue: `backend/database/review_queue.py`
 - Collection: `users/{uid}/memory_review_queue`
 - Corrections: `users/{uid}/memory_corrections`
-- Existing review API exists but is not yet rich enough for V17 L1/L2/review UX.
+- Existing review API exists but is not yet rich enough for memory L1/L2/review UX.
 
-### 1.3 V17 contracts and product logic already present
+### 1.3 memory contracts and product logic already present
 
 Contracts: `backend/models/v17_memory_contracts.py`
 - `L1MemoryArchiveItem`
@@ -193,10 +193,10 @@ L2 product synthesizer: `backend/utils/llm/durable_memory_patches.py`
 - `synthesize_durable_memory_patches(...)`
 - Uses product prompt/rubric and deterministic patch IDs/idempotency keys.
 
-Patch adapter: `backend/utils/memory/v17_patch_adapter.py`
-- Maps V17 patches to ledger-like mutations.
+Patch adapter: `backend/utils/memory/memory_patch_adapter.py`
+- Maps memory patches to ledger-like mutations.
 
-Read API: `backend/utils/memory/v17_read_api.py`
+Read API: `backend/utils/memory/memory_read_api.py`
 - `query_l1_archive(...)`
 - `query_durable_memory(...)`
 - `query_working_memory(...)`
@@ -207,7 +207,7 @@ Read API: `backend/utils/memory/v17_read_api.py`
 
 Conversation processing: `backend/utils/conversations/process_conversation.py`
 - Current `_extract_memories_inner(...)` deletes/reprocesses conversation-tied memories, extracts using `utils.llm.memories`, dedups/conflict-resolves, writes `MemoryDB`, upserts vectors, triggers KG extraction.
-- V17 must fit into this post-processing pipeline without breaking usage tracking, executor/threadpool behavior, vector writes, KG, or conversation reprocess behavior.
+- memory must fit into this post-processing pipeline without breaking usage tracking, executor/threadpool behavior, vector writes, KG, or conversation reprocess behavior.
 
 LLM legacy extraction: `backend/utils/llm/memories.py`
 - Existing extraction/conflict/category functions still power product memory writes.
@@ -242,7 +242,7 @@ Vector DB: `backend/database/vector_db.py`
 Need decisions:
 - Separate namespaces for L1 archive vs L2 durable facts?
 - Metadata fields for lifecycle, layer, source commit, sensitive/review state?
-- Projection repair for V17 ledger + L1 archive.
+- Projection repair for memory ledger + L1 archive.
 
 ### 1.7 Raw data and deletion seams
 
@@ -260,7 +260,7 @@ Private-cloud pusher queue:
 
 Account deletion:
 - `backend/routers/users.py:_purge_derived_user_data(...)`
-- V17 collections/namespaces must be included.
+- memory collections/namespaces must be included.
 
 ### 1.8 Migration/backfill seams already present
 
@@ -384,22 +384,22 @@ Benchmark docs:
 Benchmark scripts:
 - `scripts/v17_4_e2e_pipeline.py`
 - `scripts/v17_product_l1_runner.py`
-- `scripts/v17_l2_packet_builder.py`
-- `scripts/v17_l2_custom_search.py`
-- `scripts/v17_l2_patch_runner.py`
+- `scripts/l2_packet_builder.py`
+- `scripts/l2_custom_search.py`
+- `scripts/l2_patch_runner.py`
 - `scripts/v17_final_l2_bridge_export.py`
 - `scripts/v10_judge.py`
 
 Latest important report:
-- `reports/v17/v17_9_product_l2_rubric_schema_guarded/`
+- `reports/memory/v17_9_product_l2_rubric_schema_guarded/`
 
 Fair comparison report:
-- `reports/v17/base_vs_v17_9_fair_utility/fair_utility_scorecard.md`
-- `reports/v17/base_vs_v17_9_fair_utility/base_vs_v17_9_fair_utility.png`
+- `reports/memory/base_vs_memory_9_fair_utility/fair_utility_scorecard.md`
+- `reports/memory/base_vs_memory_9_fair_utility/base_vs_memory_9_fair_utility.png`
 
 ### 3.2 Current benchmark signal
 
-V17.9 product L2 is cleaner than Base Omi projection:
+memory.9 product L2 is cleaner than Base Omi projection:
 - Avg utility/card: `1.404` vs `0.386`
 - Positive rate: `87.2%` vs `66.7%`
 - Harmful/noisy per 100 contexts: `16.7` vs `45.2`
@@ -407,7 +407,7 @@ V17.9 product L2 is cleaner than Base Omi projection:
 
 But Base Omi projection is still slightly higher useful-grounded-safe per 100 contexts:
 - Base Omi projection: `76.2`
-- V17.9 product L2: `73.8`
+- memory.9 product L2: `73.8`
 
 Implication: keep L1 broad/old-Omi-like and use L2 for precision, not yield collapse.
 
@@ -461,7 +461,7 @@ Raw-data preservation inventory:
 2. Should legacy `users/{uid}/memories` become L1 archive only first, or both L1 archive and low-confidence L2 genesis facts? Current user preference points to L1 first.
 3. Is `database/memory_ledger.py` the canonical durable L2 store, with legacy memory docs as projection? If yes, product applier should target ledger first.
 4. Should L1 archive have its own vector namespace, or share memory namespace with explicit metadata filters?
-5. Where are Firestore indexes managed/deployed for new V17 collections/queries?
+5. Where are Firestore indexes managed/deployed for new memory collections/queries?
 6. What is the rollout policy for chat/agents: L2 active by default, L1 only through explicit search/tool, review excluded unless asked?
 7. How should private-cloud raw audio queue drops be represented in no-data-loss guarantees?
 8. Should import/backfill generate user-visible review items immediately, or progressively cap review burden?
@@ -472,7 +472,7 @@ Raw-data preservation inventory:
 
 # Provisional Wave 1 synthesis
 
-The codebase already has many pieces of the desired architecture: V17 contracts, product L1/L2 prompts, durable patch IDs, ledger primitives, review queue, vector projection repair, benchmark replay artifacts, and rich desktop provenance UI fields.
+The codebase already has many pieces of the desired architecture: memory contracts, product L1/L2 prompts, durable patch IDs, ledger primitives, review queue, vector projection repair, benchmark replay artifacts, and rich desktop provenance UI fields.
 
 The missing integration layer is not one function; it is a set of seams:
 
@@ -495,7 +495,7 @@ Wave 2 converted the Wave 1 seam inventory into an implementation plan. Two plan
 
 ## Plan principles
 
-1. **Scaffold first, then dual-write/shadow, then read switch.** Do not make V17 authoritative until it can be observed, replayed, and rolled back.
+1. **Scaffold first, then dual-write/shadow, then read switch.** Do not make memory authoritative until it can be observed, replayed, and rolled back.
 2. **Old Omi memories land in L1 first.** L2 is a progressive promotion/backfill over L1 evidence, not a one-shot bulk durable import.
 3. **The durable ledger is L2 source of truth.** `users/{uid}/memories` remains compatibility projection during rollout.
 4. **Every bulk operation gets a job/run ID.** Imports, L1 writes, L2 backfills, review creation, projection repair, export, and deletion need traceability.
@@ -527,14 +527,14 @@ Unreviewed items must have a safe default: they remain excluded from durable per
 
 ## Canonical source-of-truth and write-path rules
 
-Before any V17 production write rollout, the architecture must enforce:
+Before any memory production write rollout, the architecture must enforce:
 
 1. **No durable L2 write bypasses the ledger.** Creates, edits, reviews, visibility changes, retractions, source tombstones, deletes, MCP writes, developer API writes, and manual user writes must go through one memory write service that appends ledger mutations first and updates `users/{uid}/memories` only as a compatibility projection.
 2. **L1 has its own persistent store.** L1 archive records live in `users/{uid}/memory_l1_archive/{archive_id}` and are not stable profile facts.
 3. **Patch idempotency is transactionally claimed.** Do not rely on ledger commit hash alone because the commit hash includes parent head. A patch application record keyed by `(uid, idempotency_key)` must be claimed before or atomically with ledger append.
-4. **Evidence schema is canonical.** V17 patch adapter, ledger fold, source tombstone, projection, read API, and export must agree on one evidence field shape.
-5. **Encryption/redaction applies to every V17 store.** L1 archive, ledger commits, patch applications, lineage, search replay artifacts, review queue payloads, vectors metadata, and export snapshots must not store plaintext for enhanced-protection users unless the existing protection model explicitly permits it.
-6. **Delete/account purge support precedes write pilots.** Staff/customer L1/L2 writes cannot be enabled until V17 collections, vectors, review records, patch records, lineage, and job metadata are covered by account purge and deletion/tombstone tests.
+4. **Evidence schema is canonical.** memory patch adapter, ledger fold, source tombstone, projection, read API, and export must agree on one evidence field shape.
+5. **Encryption/redaction applies to every memory store.** L1 archive, ledger commits, patch applications, lineage, search replay artifacts, review queue payloads, vectors metadata, and export snapshots must not store plaintext for enhanced-protection users unless the existing protection model explicitly permits it.
+6. **Delete/account purge support precedes write pilots.** Staff/customer L1/L2 writes cannot be enabled until memory collections, vectors, review records, patch records, lineage, and job metadata are covered by account purge and deletion/tombstone tests.
 
 ## Hard rollout blockers
 
@@ -542,7 +542,7 @@ Do not progress beyond dry-run/staff-local phases if any blocker is true:
 
 - Any legacy/source record has unknown migration outcome.
 - Any production write path can mutate durable memory without ledger entry.
-- Any V17 collection/vector namespace is omitted from account purge.
+- Any memory collection/vector namespace is omitted from account purge.
 - Any active credential/secret durable memory is produced.
 - Normal chat/MCP/tools can receive L1 archive as stable profile truth.
 - Hidden/context/reject/review missed-useful audit is absent.
@@ -555,7 +555,7 @@ Do not progress beyond dry-run/staff-local phases if any blocker is true:
 
 ### Create
 
-- `backend/models/v17_product_memory.py`
+- `backend/models/product_memory.py`
   - `L1ArchiveStoredRecord`
   - `LegacyMemoryL1MigrationOutcome`
   - `L2BackfillRun`
@@ -594,8 +594,8 @@ Do not progress beyond dry-run/staff-local phases if any blocker is true:
 
 ### Acceptance gates
 
-- All V17 write/read/backfill flags default to off or shadow.
-- Existing V17 tests still pass.
+- All memory write/read/backfill flags default to off or shadow.
+- Existing memory tests still pass.
 - New product DTO preserves existing `/v3/memories` response compatibility.
 
 ## Stage B — L1 persistent archive and import service
@@ -700,7 +700,7 @@ Purpose: broad source-backed, queryable, Base-Omi-like archive memory. It is not
   - `apply_patches_for_batch(...)`
   - `advance_l2_backfill_cursor(...)`
 - `backend/database/l2_backfill_jobs.py`
-- `backend/jobs/v17_l2_backfill_worker.py`
+- `backend/jobs/l2_backfill_worker.py`
 - `backend/routers/memory_backfill.py`
 
 ### Operational controls
@@ -751,7 +751,7 @@ Each batch records:
 
 ### Modify
 
-- `backend/utils/memory/v17_patch_adapter.py`
+- `backend/utils/memory/memory_patch_adapter.py`
 - `backend/database/memory_ledger.py`
 - `backend/database/review_queue.py`
 
@@ -779,7 +779,7 @@ Each batch records:
 
 ### Modify
 
-- `backend/utils/memory/v17_read_api.py`
+- `backend/utils/memory/memory_read_api.py`
 - `backend/database/memory_reads.py`
 - `backend/routers/memories.py`
 - `backend/routers/developer.py`
@@ -832,7 +832,7 @@ New or extended endpoints:
 
 - `backend/database/v17_projection_repair.py`
 - `backend/jobs/v17_projection_repair_worker.py`
-- `backend/migrations/009_repair_v17_memory_vectors.py`
+- `backend/migrations/009_repair_memory_memory_vectors.py`
 
 ### Modify
 
@@ -880,7 +880,7 @@ Preferred: separate namespace for L1 archive, e.g. `PINECONE_L1_MEMORY_NAMESPACE
 - Deleting a memory is not the same as deleting raw source data.
 - Deleting a source tombstones L1 source refs and L2 evidence refs.
 - L2 facts with no active evidence are retracted or routed to review by policy.
-- Account purge deletes V17 collections, vectors, review/correction records, patch applications, lineage, and import/backfill metadata.
+- Account purge deletes memory collections, vectors, review/correction records, patch applications, lineage, and import/backfill metadata.
 - Export can include durable, archive, review, provenance, and deleted/tombstoned history with explicit options.
 
 ## Stage I — No-data-loss verifier and telemetry
@@ -907,11 +907,11 @@ raw artifact / legacy memory / source row
 
 - `v17_l1_archive_write`
 - `v17_old_omi_l1_migration_started/completed`
-- `v17_l2_backfill_started/batch_completed`
-- `v17_l2_patch_applied/skipped/head_conflict`
+- `l2_backfill_started/batch_completed`
+- `l2_patch_applied/skipped/head_conflict`
 - `v17_memory_review_item_created/resolved`
 - `v17_projection_repair_completed/failed`
-- `v17_source_tombstoned`
+- `memory_source_tombstoned`
 - `v17_raw_artifact_missing`
 - `v17_private_queue_raw_drop`
 
@@ -1007,7 +1007,7 @@ Admin MVP:
 - Run old-memory inventory on test export/fixture users.
 - Generate no-data-loss report.
 - Run L2 backfill dry-run with no ledger writes.
-- Compare against benchmark V17.9 and Base Omi fair metrics.
+- Compare against benchmark memory.9 and Base Omi fair metrics.
 
 Gate:
 - 100% inventory accounted for.
@@ -1041,7 +1041,7 @@ Gate:
 ### Phase 4: cohort rollout
 
 - Expand by users/day and L1 items/day.
-- Keep V17 read in shadow until diff gate passes.
+- Keep memory read in shadow until diff gate passes.
 
 Gate:
 - support tickets/QA clear.
@@ -1056,7 +1056,7 @@ Gate:
 
 Gate:
 - rollback flag tested.
-- legacy projection and V17 reads diff acceptable.
+- legacy projection and memory reads diff acceptable.
 - user review UI ready.
 
 ## Stage L — Benchmark/eval gates
@@ -1066,8 +1066,8 @@ Gate:
 Use product-compatible benchmark paths:
 - `scripts/v17_4_e2e_pipeline.py`
 - `scripts/v10_judge.py`
-- `reports/v17/v17_9_product_l2_rubric_schema_guarded/`
-- `reports/v17/base_vs_v17_9_fair_utility/`
+- `reports/memory/v17_9_product_l2_rubric_schema_guarded/`
+- `reports/memory/base_vs_memory_9_fair_utility/`
 
 Add migration/backfill benchmark mode:
 - old Omi export → L1 import → L2 backfill dry-run/write simulation → judge.
@@ -1077,7 +1077,7 @@ Add migration/backfill benchmark mode:
 - **Base Omi leftmost** in graphs (historical/projection clearly labeled).
 - L1 import completeness: 100% accounted for or skip reason.
 - L2 active+review yield measured and not collapsed.
-- Utility/card does not regress from current V17.9 without explicit tradeoff.
+- Utility/card does not regress from current memory.9 without explicit tradeoff.
 - Useful-grounded-safe per 100 contexts should remain Base-like; avoid yield collapse.
 - Harmful/noisy per 100 contexts remains much lower than Base Omi projection.
 - active secrets = 0.
@@ -1089,7 +1089,7 @@ Add migration/backfill benchmark mode:
 
 ## First implementation tickets
 
-1. **V17 product DTO/config scaffolding**
+1. **memory product DTO/config scaffolding**
 2. **L1 archive Firestore store**
 3. **Old Omi memory inventory dry-run**
 4. **Old Omi memory → L1 archive dry-run + write**
@@ -1101,7 +1101,7 @@ Add migration/backfill benchmark mode:
 10. **Review queue expanded payload + review UI MVP**
 11. **Vector/projection repair dry-run**
 12. **Chat/MCP/tools read policy switch behind flag**
-13. **Export/delete/account purge V17 coverage**
+13. **Export/delete/account purge memory coverage**
 14. **Migration benchmark mode + rollout dashboard**
 
 ---
@@ -1110,7 +1110,7 @@ Add migration/backfill benchmark mode:
 
 1. L1 persistent store is not currently implemented; many downstream UI/API assumptions depend on it.
 2. Existing `007_genesis_ledger_backfill.py` can be confused with the desired old-memory-to-L1 migration; it needs warning/docs or de-emphasis.
-3. `/v3`, developer API, MCP, and tools have inconsistent vector side effects today; V17 read/write service should normalize them before read switch.
+3. `/v3`, developer API, MCP, and tools have inconsistent vector side effects today; memory read/write service should normalize them before read switch.
 4. Private-cloud raw chunk drops conflict with absolute “no raw data loss”; Epic should define this as observable loss with explicit telemetry rather than pretend preservation.
 5. Firestore index management path remains unclear and must be answered before adding new collection queries at scale.
 6. Review burden can overwhelm users unless per-user daily caps and “keep as archive” defaults exist.
@@ -1167,7 +1167,7 @@ Required amendments incorporated into the Epic:
 - Make Firestore index deployment/load testing a blocking Stage A/B gate.
 - Require per-user durable-memory writer serialization or lease/lock because live extraction, backfill, review, deletes, and user edits all contend for one ledger head.
 - Make separate L1 vector namespace and layer-prefixed vector IDs the default, not merely preferred.
-- Define POST/PATCH/DELETE semantics for `/v3`, developer API, MCP, and tools before V17 read/write switch.
+- Define POST/PATCH/DELETE semantics for `/v3`, developer API, MCP, and tools before memory read/write switch.
 
 ## Migration/benchmark/safety review — APPROVE_WITH_CHANGES
 
@@ -1180,7 +1180,7 @@ Required amendments incorporated into the Epic:
 - Add anti-reward-hacking gates for hidden/context/reject/review routes:
   - measure active-only, active+review, active+context, all non-rejected proposed memories, and L1 recall.
   - audit missed useful grounded safe memories in non-active routes.
-- Make benchmark wording conservative: V17.9 is cleaner on the 42-context fair utility benchmark but has slightly lower useful-grounded-safe yield per 100 contexts than Base Omi projection; treat as directional, not launch proof.
+- Make benchmark wording conservative: memory.9 is cleaner on the 42-context fair utility benchmark but has slightly lower useful-grounded-safe yield per 100 contexts than Base Omi projection; treat as directional, not launch proof.
 - Add bootstrap/confidence intervals or equivalent uncertainty reporting for benchmark charts where feasible.
 - Add full-pipeline idempotency matrix covering L1, vectors, L2 packets, search replay, patch synthesis, ledger apply, review queue, source tombstone, export/delete side effects.
 - Add rollback mode for every stage, not just read switch.

@@ -15,7 +15,7 @@
 | **15** | 2026-06-24 | `database/` alias shims | `database/memory_collections.py`, `database/memory_apply_store.py`, `database/memory_vector_metadata.py`, `tests/unit/test_ws_g_module_aliases.py` |
 | **11 (WS-K)** | 2026-06-24 | Additive API `layer` field on `MemoryDB` (derived from `memory_tier`) | `models/memories.py`, `tests/unit/test_ws_k_layer_field.py` — **not** a rename; storage stays `tier` |
 
-Executors must **not** re-do Waves 10/15 or re-touch persisted Firestore `tier` / `V17MemoryItem.tier`.
+Executors must **not** re-do Waves 10/15 or re-touch persisted Firestore `tier` / `MemoryItem.tier`.
 
 ---
 
@@ -26,12 +26,12 @@ Executors must **not** re-do Waves 10/15 or re-touch persisted Firestore `tier` 
 | Location | Count | Files |
 |----------|------:|-------|
 | `config/` | 1 | `v17_memory.py` |
-| `database/` | 10 | `v17_collections.py`, `v17_memory_apply_store.py`, `v17_vector_metadata.py`, `v17_non_active_memory_routes.py`, `v17_v3_compatibility_projection.py`, `v17_app_key_memory_grants.py`, `v17_vector_repair_outbox.py`, `v17_vector_repair_outbox_telemetry.py`, `v17_vector_repair_outbox_worker.py`, `v17_vector_repair_pinecone_adapter.py` |
-| `models/` | 5 | `v17_product_memory.py`, `v17_memory_contracts.py`, `v17_memory_apply.py`, `v17_memory_search_gateway.py`, `v17_memory_operations.py` |
-| `routers/` | 2 | `v17_memory_product.py`, `v17_memory_admin.py` |
-| `jobs/` | 1 | `v17_short_term_lifecycle_worker.py` |
+| `database/` | 10 | `v17_collections.py`, `v17_memory_apply_store.py`, `v17_vector_metadata.py`, `v17_non_active_memory_routes.py`, `v3_compatibility_projection.py`, `app_key_memory_grants.py`, `v17_vector_repair_outbox.py`, `memory_vector_repair_outbox_telemetry.py`, `vector_repair_outbox_worker.py`, `v17_vector_repair_pinecone_adapter.py` |
+| `models/` | 5 | `product_memory.py`, `v17_memory_contracts.py`, `v17_memory_apply.py`, `v17_memory_search_gateway.py`, `v17_memory_operations.py` |
+| `routers/` | 2 | `memory_product.py`, `memory_admin.py` |
+| `jobs/` | 1 | `short_term_lifecycle_worker.py` |
 | `utils/memory/` (top-level `v17_*.py`) | 39 | See §1.2 |
-| `utils/memory/v17_v3_f6/` (subpackage) | 17 | `__init__.py`, `aggregate.py`, `audit.py`, `config.py`, … |
+| `utils/memory/v3_f6/` (subpackage) | 17 | `__init__.py`, `aggregate.py`, `audit.py`, `config.py`, … |
 | **Total `v17_*` named modules** | **58** | Excludes `scripts/` (53 readiness/proof scripts) and `__pycache__` |
 
 **Reference counts:**
@@ -43,19 +43,19 @@ Executors must **not** re-do Waves 10/15 or re-touch persisted Firestore `tier` 
 
 | Module | Direct importers (approx.) | Notes |
 |--------|---------------------------|-------|
-| `v17_product_memory_read_service.py` | 8+ | Product search read path |
+| `product_memory_read_service.py` | 8+ | Product search read path |
 | `v17_vector_search_service.py` | 6+ | Vector search + repair |
-| `v17_v3_production_runtime.py` | 5+ | Env-driven rollout runtime |
-| `v17_v3_memory_read_service.py` | 4+ | V3 GET composition |
+| `v3_production_runtime.py` | 5+ | Env-driven rollout runtime |
+| `v3_memory_read_service.py` | 4+ | V3 GET composition |
 | `v17_chat_memory_adapter.py` | 4+ | Chat tool boundary |
 | `v17_developer_memory_adapter.py` | 3+ | Developer API |
-| `v17_read_api.py` | 3+ | Working-memory read API |
-| `v17_default_read_rollout.py` | 3+ | Rollout gate decisions |
-| `v17_patch_adapter.py` | 2+ | Durable patch → apply |
+| `memory_read_api.py` | 3+ | Working-memory read API |
+| `default_read_rollout.py` | 3+ | Rollout gate decisions |
+| `memory_patch_adapter.py` | 2+ | Durable patch → apply |
 | `v17_projections.py` | 2+ | Ledger projections |
-| `v17_product_authorization.py` | 2+ | Consumer scopes |
+| `product_authorization.py` | 2+ | Consumer scopes |
 | `v17_non_active_route_*` (2) | 2+ each | Audit-only routes |
-| `v17_v3_*` cluster (22 top-level + f6) | cross-import heavy | V3 GET/evidence/canary |
+| `v3_*` cluster (22 top-level + f6) | cross-import heavy | V3 GET/evidence/canary |
 
 Canonical-path code already importing neutral modules: `canonical_memory_adapter.py`, `legacy_backfill.py`, `short_term_promotion.py`, `atom_keyword_index.py`, `kg_graph_traversal.py` — **flip targets for later B-waves**.
 
@@ -68,43 +68,43 @@ Canonical-path code already importing neutral modules: `canonical_memory_adapter
 | `v17_vector_metadata` | 5 | ✅ `memory_vector_metadata.py` |
 | `v17_vector_repair_outbox` | 10 | ❌ |
 | `v17_non_active_memory_routes` | 9 | ❌ |
-| `v17_v3_compatibility_projection` | 4 | ❌ |
-| `v17_vector_repair_outbox_worker` | 4 | ❌ |
-| `v17_app_key_memory_grants` | 2 | ❌ |
+| `v3_compatibility_projection` | 4 | ❌ |
+| `vector_repair_outbox_worker` | 4 | ❌ |
+| `app_key_memory_grants` | 2 | ❌ |
 | `v17_vector_repair_*` (telemetry, pinecone) | 2 each | ❌ |
 
 ### 1.4 `models/v17_*` importer counts
 
 | Module | Importers | Alias shim |
 |--------|----------:|------------|
-| `v17_product_memory` | 54 | ✅ partial (`product_memory.py` — subset of symbols) |
+| `product_memory` | 54 | ✅ partial (`product_memory.py` — subset of symbols) |
 | `v17_memory_contracts` | 23 | ✅ partial (`memory_contracts.py` — subset) |
 | `v17_memory_apply` | 12 | ❌ |
 | `v17_memory_search_gateway` | 11 | ❌ |
 | `v17_memory_operations` | 9 | ❌ |
 
-### 1.5 `/v17/` HTTP routes (registered in `main.py`)
+### 1.5 `/memory/` HTTP routes (registered in `main.py`)
 
 | Method | Path | Router file | Bucket |
 |--------|------|-------------|--------|
-| GET | `/v17/memory/search` | `routers/v17_memory_product.py` | **B** (shipped clients) |
-| GET | `/v17/memory/vector/search` | same | **B** |
-| GET | `/v17/memory/archive/search` | same | **B** |
-| GET | `/v17/admin/users/{uid}/read-rollout-decision` | `routers/v17_memory_admin.py` | **B** (admin) |
-| GET | `/v17/admin/users/{uid}/non-active-route-report` | same | **B** |
-| POST | `/v17/admin/users/{uid}/short-term-lifecycle/run` | same | **B** |
+| GET | `/memory/memory/search` | `routers/memory_product.py` | **B** (shipped clients) |
+| GET | `/memory/memory/vector/search` | same | **B** |
+| GET | `/memory/memory/archive/search` | same | **B** |
+| GET | `/memory/admin/users/{uid}/read-rollout-decision` | `routers/memory_admin.py` | **B** (admin) |
+| GET | `/memory/admin/users/{uid}/non-active-route-report` | same | **B** |
+| POST | `/memory/admin/users/{uid}/short-term-lifecycle/run` | same | **B** |
 
-**Client usage:** Desktop Swift codebase has **zero** hardcoded `/v17/` URL strings (grep 2026-06-23). Primary product surface remains `/v3/memories`. `/v17/memory/*` is backend/admin/integration surface — still **do not remove without parallel routes + deprecation window**.
+**Client usage:** Desktop Swift codebase has **zero** hardcoded `/memory/` URL strings (grep 2026-06-23). Primary product surface remains `/v3/memories`. `/memory/memory/*` is backend/admin/integration surface — still **do not remove without parallel routes + deprecation window**.
 
-### 1.6 `v17mem:` vector ID prefix
+### 1.6 `memvec:` vector ID prefix
 
 | Location | Role | Bucket |
 |----------|------|--------|
-| `database/v17_vector_metadata.py` | `V17_MEMORY_VECTOR_ID_PREFIX = "v17mem"`; `deterministic_v17_memory_vector_id()` | **D** (stored Pinecone IDs) |
-| `database/v17_vector_repair_pinecone_adapter.py` | Upserts via `deterministic_v17_memory_vector_id` | **D** |
-| `database/vector_db.py` | Parses legacy + `v17mem:` + neutral `mem_…` | **B** (read compat — keep) |
-| `utils/memory/canonical_memory_adapter.py` | Canonical path uses neutral `mem_…`; comment notes V17 apply still emits `v17mem:` | **D** |
-| Tests | `test_v17_vector_*.py`, `test_ws_j_delete_privacy.py` | keep during transition |
+| `database/v17_vector_metadata.py` | `MEMORY_VECTOR_ID_PREFIX = "memvec"`; `deterministic_memory_vector_id()` | **D** (stored Pinecone IDs) |
+| `database/v17_vector_repair_pinecone_adapter.py` | Upserts via `deterministic_memory_vector_id` | **D** |
+| `database/vector_db.py` | Parses legacy + `memvec:` + neutral `mem_…` | **B** (read compat — keep) |
+| `utils/memory/canonical_memory_adapter.py` | Canonical path uses neutral `mem_…`; comment notes memory apply still emits `memvec:` | **D** |
+| Tests | `test_memory_vector_*.py`, `test_ws_j_delete_privacy.py` | keep during transition |
 
 **Risk:** Changing the prefix without backfill orphans vectors in Pinecone `ns2`. Coordinate with **WS-J**; treat as **data migration**, not a rename-only WS-G wave.
 
@@ -113,7 +113,7 @@ Canonical-path code already importing neutral modules: `canonical_memory_adapter
 | Surface | Field(s) | Bucket | Notes |
 |---------|----------|--------|-------|
 | Firestore `memory_items` docs | `tier` | **D — OUT OF SCOPE** | Plan explicitly freezes storage field |
-| `V17MemoryItem.tier` / `MemoryTier` enum | `tier` | **D** (storage) / **B** (type rename) | Enum rename is churn; alias `MemoryLayer` first |
+| `MemoryItem.tier` / `MemoryTier` enum | `tier` | **D** (storage) / **B** (type rename) | Enum rename is churn; alias `MemoryLayer` first |
 | `MemoryDB` API (`/v3/memories`) | `memory_tier` + computed `layer` | **A done (WS-K)** | `layer` additive; keep `memory_tier` |
 | `canonical_memory_adapter` | emits `"tier"` in some payloads | **B** | Flip to `layer` when clients ready |
 | Pinecone metadata filters | `memory_tier` | **D** | Indexed metadata — migration |
@@ -138,24 +138,24 @@ Canonical-path code already importing neutral modules: `canonical_memory_adapter
 
 **Recommendation:** Alias new names in `models/memory_contracts.py` first (A), then flip `working_memory.py` / `l2_memory_routes.py` importers (B). **Do not rename** `durable_memory_patch.v1` schema literal — external benchmark contract.
 
-### 1.9 V17 rollout env flags
+### 1.9 memory rollout env flags
 
 **Primary env vars (production):**
 
 | Env var | Read in | Bucket |
 |---------|---------|--------|
-| `V17_MODE` | `config/v17_memory.py`, `v17_v3_production_runtime.py`, `routers/memories.py` | **B** |
-| `V17_MEMORY_ENABLED_USERS` | same | **B** |
+| `MEMORY_MODE` | `config/v17_memory.py`, `v3_production_runtime.py`, `routers/memories.py` | **B** |
+| `MEMORY_ENABLED_USERS` | same | **B** |
 | `V17_BACKFILL_ENABLED` | `config/v17_memory.py` | **B** |
 | `V17_BACKFILL_DAILY_LIMIT` | same | **B** |
 | `V17_ARCHIVE_OPT_IN_ENABLED` | same | **B** |
-| `V17_V3_GET_ENABLED` | `v17_v3_production_runtime.py`, dev-cloud proof | **B** |
-| `V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` | worker entrypoint | **B** |
+| `V3_GET_ENABLED` | `v3_production_runtime.py`, dev-cloud proof | **B** |
+| `MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED` | worker entrypoint | **B** |
 | + ~30 more `V17_*` proof/readiness vars | scripts/tests | **defer** |
 
-**Critical invariant (WS-E):** `V17_MODE` / `V17_MEMORY_ENABLED_USERS` must **NOT** feed `resolve_memory_system()` — they govern legacy-cohort read composition only.
+**Critical invariant (WS-E):** `MEMORY_MODE` / `MEMORY_ENABLED_USERS` must **NOT** feed `resolve_memory_system()` — they govern legacy-cohort read composition only.
 
-**Rename approach:** Add `MEMORY_ROLLOUT_*` aliases in `config/memory_rollout.py` that read new names with fallback to `V17_*`. Deploy config keeps old names until ops cutover. Code symbols (`V17Mode` → `MemoryRolloutMode`) are **B** after config alias lands.
+**Rename approach:** Add `MEMORY_ROLLOUT_*` aliases in `config/memory_rollout.py` that read new names with fallback to `V17_*`. Deploy config keeps old names until ops cutover. Code symbols (`MemoryRolloutMode` → `MemoryRolloutMode`) are **B** after config alias lands.
 
 ### 1.10 Frozen names (bucket **C** — DO NOT TOUCH)
 
@@ -197,12 +197,12 @@ Canonical-path code already importing neutral modules: `canonical_memory_adapter
 
 #### Analytics / PostHog event keys
 
-No memory-domain PostHog `capture()` event names were found in `backend/` production code (readiness tests explicitly assert `posthog` absent from V17 proof manifests). **Rule:** do not rename any existing analytics event strings if discovered later; map new states additively.
+No memory-domain PostHog `capture()` event names were found in `backend/` production code (readiness tests explicitly assert `posthog` absent from memory proof manifests). **Rule:** do not rename any existing analytics event strings if discovered later; map new states additively.
 
 #### Other frozen literals
 
 - `durable_memory_patch.v1` / `durable_memory_patch_proposal.v1` schema version strings (benchmark contract)
-- `v17_durable_memory_patch` source tag in `v17_patch_adapter.py` (persisted operation metadata — treat as **C** until backfill)
+- `durable_memory_patch` source tag in `memory_patch_adapter.py` (persisted operation metadata — treat as **C** until backfill)
 
 ---
 
@@ -213,7 +213,7 @@ No memory-domain PostHog `capture()` event names were found in `backend/` produc
 | **A** | Pure alias re-export; zero call-site edits | ~45 new shim files (remaining modules) |
 | **B** | Call-site / symbol / route churn | ~288 files referencing `v17_`; 6 HTTP routes; L1/L2 symbols; env symbol renames |
 | **C** | Frozen — skip | 4 name families + schema literals (§1.10) |
-| **D** | Data migration — separate WS-J / WS-H | Firestore `tier` field; `memory_items` collection; `v17mem:` vectors; Pinecone `memory_tier` metadata |
+| **D** | Data migration — separate WS-J / WS-H | Firestore `tier` field; `memory_items` collection; `memvec:` vectors; Pinecone `memory_tier` metadata |
 
 ---
 
@@ -242,7 +242,7 @@ For each module group G:
 | Item | Detail |
 |------|--------|
 | **Bucket** | A |
-| **Files to add** | `backend/config/memory_rollout.py` → re-export `V17Mode`, `V17RolloutConfig`, `V17RolloutState`, `V17Capabilities`, `parse_enabled_users`, `from_env` from `config/v17_memory.py` |
+| **Files to add** | `backend/config/memory_rollout.py` → re-export `MemoryRolloutMode`, `MemoryRolloutConfig`, `MemoryRolloutState`, `MemoryRolloutCapabilities`, `parse_enabled_users`, `from_env` from `config/v17_memory.py` |
 | **Old → new mapping** | `config.v17_memory` → `config.memory_rollout` (import path only) |
 | **Blast radius** | 0 runtime change |
 | **Tests** | Extend `test_ws_g_module_aliases.py`; `pytest tests/unit/test_ws_g_module_aliases.py tests/unit/test_memory_domain.py -q` |
@@ -254,9 +254,9 @@ For each module group G:
 | Item | Detail |
 |------|--------|
 | **Bucket** | A |
-| **Files to add** | `database/memory_non_active_routes.py` → `v17_non_active_memory_routes`; `database/memory_compatibility_projection.py` → `v17_v3_compatibility_projection`; `database/memory_app_key_grants.py` → `v17_app_key_memory_grants` |
+| **Files to add** | `database/memory_non_active_routes.py` → `v17_non_active_memory_routes`; `database/memory_compatibility_projection.py` → `v3_compatibility_projection`; `database/memory_app_key_grants.py` → `app_key_memory_grants` |
 | **Blast radius** | 0; 15 combined importers |
-| **Tests** | `test_ws_g_module_aliases.py` + `test_v17_non_active_route_*` + `test_v17_app_key_grant_store.py` |
+| **Tests** | `test_ws_g_module_aliases.py` + `test_memory_non_active_route_*` + `test_memory_app_key_grant_store.py` |
 | **Dependencies** | Wave 16 optional |
 
 ### Wave 18 — Database alias shims (vector repair family)
@@ -266,7 +266,7 @@ For each module group G:
 | **Bucket** | A |
 | **Files to add** | `database/memory_vector_repair_outbox.py`, `memory_vector_repair_outbox_worker.py`, `memory_vector_repair_outbox_telemetry.py`, `memory_vector_repair_pinecone_adapter.py` |
 | **Blast radius** | 0; repair worker path |
-| **Tests** | `test_v17_vector_repair_outbox*.py`, `test_ws_j_delete_privacy.py` |
+| **Tests** | `test_memory_vector_repair_outbox*.py`, `test_ws_j_delete_privacy.py` |
 | **Dependencies** | Wave 17 |
 | **Risk** | Low-Medium (repair worker is production-adjacent; alias-only is safe) |
 
@@ -276,9 +276,9 @@ For each module group G:
 |------|--------|
 | **Bucket** | A |
 | **Files to add** | `models/memory_apply.py` → `v17_memory_apply`; `models/memory_search_gateway.py` → `v17_memory_search_gateway`; `models/memory_operations.py` → `v17_memory_operations` |
-| **Extend** | `models/product_memory.py` + `models/memory_contracts.py` to re-export remaining high-traffic symbols if missing (`V17MemoryItem`, `L1MemoryArchiveItem`, etc.) |
+| **Extend** | `models/product_memory.py` + `models/memory_contracts.py` to re-export remaining high-traffic symbols if missing (`MemoryItem`, `L1MemoryArchiveItem`, etc.) |
 | **Blast radius** | 0; 32 importers |
-| **Tests** | `test_ws_g_module_aliases.py`, `test_v17_atomic_apply.py`, `test_v17_memory_contracts.py` |
+| **Tests** | `test_ws_g_module_aliases.py`, `test_memory_atomic_apply.py`, `test_memory_memory_contracts.py` |
 
 ### Wave 20 — Utils/memory alias shims (core read path)
 
@@ -286,9 +286,9 @@ For each module group G:
 |------|--------|
 | **Bucket** | A |
 | **Files to add** | `utils/memory/product_memory_read_service.py`, `memory_read_api.py`, `vector_search_service.py`, `default_read_rollout.py`, `projections.py` |
-| **Mapping** | `v17_product_memory_read_service` → `product_memory_read_service`, etc. |
+| **Mapping** | `product_memory_read_service` → `product_memory_read_service`, etc. |
 | **Blast radius** | 0; touches read hot path names only |
-| **Tests** | `test_v17_product_memory_read_service.py`, `test_v17_read_api.py`, `test_v17_vector_search_service.py`, `test_v17_default_read_rollout_decision.py` |
+| **Tests** | `test_memory_product_memory_read_service.py`, `test_memory_read_api.py`, `test_memory_vector_search_service.py`, `test_default_read_rollout_decision.py` |
 | **Dependencies** | Waves 17–19 |
 
 ### Wave 21 — Utils/memory alias shims (surface adapters)
@@ -297,7 +297,7 @@ For each module group G:
 |------|--------|
 | **Bucket** | A |
 | **Files to add** | `utils/memory/chat_memory_adapter.py`, `developer_memory_adapter.py`, `patch_adapter.py`, `product_authorization.py`, `non_active_route_report.py`, `non_active_route_audit.py` |
-| **Tests** | `test_v17_chat_memory_adapter.py`, `test_v17_developer_memory_adapter.py`, `test_v17_patch_adapter.py`, `test_v17_product_authorization.py` |
+| **Tests** | `test_memory_chat_memory_adapter.py`, `test_memory_developer_memory_adapter.py`, `test_memory_patch_adapter.py`, `test_memory_product_authorization.py` |
 
 ### Wave 22 — Utils/memory alias shims (V3 GET cluster part 1)
 
@@ -305,16 +305,16 @@ For each module group G:
 |------|--------|
 | **Bucket** | A |
 | **Files to add** | 8 shims: `v3_memory_read_service`, `v3_production_runtime`, `v3_request_adapter`, `v3_response_adapter`, `v3_route_planner`, `v3_composed_get_service`, `v3_control_state_adapter`, `v3_limited_rollout_config` |
-| **Blast radius** | 0; `/v3/memories` V17 read composition |
-| **Tests** | `test_v17_v3_*` suite (20+ modules in `test.sh`) |
+| **Blast radius** | 0; `/v3/memories` memory read composition |
+| **Tests** | `test_memory_v3_*` suite (20+ modules in `test.sh`) |
 
 ### Wave 23 — Utils/memory alias shims (V3 GET cluster part 2 + f6)
 
 | Item | Detail |
 |------|--------|
 | **Bucket** | A |
-| **Files to add** | Remaining `v17_v3_*` top-level shims (14) + `utils/memory/v3_f6/` package alias re-exporting `v17_v3_f6/` |
-| **Tests** | `test_v17_v3_f6_*`, dev-cloud readiness tests |
+| **Files to add** | Remaining `v3_*` top-level shims (14) + `utils/memory/v3_f6/` package alias re-exporting `v3_f6/` |
+| **Tests** | `test_memory_v3_f6_*`, dev-cloud readiness tests |
 | **Risk** | Medium coupling — split if any import cycle; keep alias-only |
 
 ### Wave 24 — Jobs + routers alias shims
@@ -322,9 +322,9 @@ For each module group G:
 | Item | Detail |
 |------|--------|
 | **Bucket** | A |
-| **Files to add** | `jobs/short_term_lifecycle_worker.py` → `v17_short_term_lifecycle_worker`; `routers/memory_product.py` → `v17_memory_product`; `routers/memory_admin.py` → `v17_memory_admin` |
+| **Files to add** | `jobs/short_term_lifecycle_worker.py` → `short_term_lifecycle_worker`; `routers/memory_product.py` → `memory_product`; `routers/memory_admin.py` → `memory_admin` |
 | **Note** | Router alias modules do **not** change URL paths yet |
-| **Tests** | `test_v17_product_memory_router.py`, `test_v17_non_active_route_admin_endpoint.py`, `test_v17_short_term_lifecycle_worker.py` |
+| **Tests** | `test_memory_product_memory_router.py`, `test_memory_non_active_route_admin_endpoint.py`, `test_memory_short_term_lifecycle_worker.py` |
 
 ---
 
@@ -345,9 +345,9 @@ For each module group G:
 |------|--------|
 | **Bucket** | A then B |
 | **A:** Add to `models/memory_contracts.py`: `WorkingObservation = WorkingMemoryObservation`, `WorkingObservationArchiveItem = L1MemoryArchiveItem`, `PromotionRoute = L2MemoryRoute` |
-| **B:** Flip `utils/llm/working_memory.py`, `l2_memory_routes.py`, `v17_read_api.py` to use aliases |
+| **B:** Flip `utils/llm/working_memory.py`, `l2_memory_routes.py`, `memory_read_api.py` to use aliases |
 | **Do NOT rename** | `durable_memory_patch.v1` schema string |
-| **Tests** | `test_v17_memory_contracts.py`, `test_v17_working_memory_extractor.py`, `test_v17_l2_memory_routes.py`, `test_v17_durable_memory_patches.py` |
+| **Tests** | `test_memory_memory_contracts.py`, `test_memory_working_memory_extractor.py`, `test_memory_l2_memory_routes.py`, `test_memory_durable_memory_patches.py` |
 
 ### Wave 32 — Env var dual-read (bucket B)
 
@@ -355,9 +355,9 @@ For each module group G:
 |------|--------|
 | **Bucket** | B |
 | **Files** | `config/v17_memory.py` (or new `memory_rollout.py` implementation layer) |
-| **Change** | `MEMORY_MODE` reads with fallback to `V17_MODE`; same for `MEMORY_ENABLED_USERS` / `V17_MEMORY_ENABLED_USERS` |
+| **Change** | `MEMORY_MODE` reads with fallback to `MEMORY_MODE`; same for `MEMORY_ENABLED_USERS` / `MEMORY_ENABLED_USERS` |
 | **Blast radius** | Deploy configs must set one or both; no behavior change if only old vars set |
-| **Tests** | `test_v17_v3_production_runtime_wiring.py`, `test_memory_service_parity.py` |
+| **Tests** | `test_v3_production_runtime_wiring.py`, `test_memory_service_parity.py` |
 | **Risk** | Medium — ops coordination; **do not** rename deployed env keys until runbook updated |
 
 ### Wave 33 — Parallel HTTP routes (bucket B, **HIGH RISK**)
@@ -365,19 +365,19 @@ For each module group G:
 | Item | Detail |
 |------|--------|
 | **Bucket** | B |
-| **Files** | `routers/v17_memory_product.py` (or `routers/memory_product.py`) |
-| **Change** | Register **duplicate** handlers: `/memory/search`, `/memory/vector/search`, `/memory/archive/search` delegating to same functions as `/v17/memory/*` |
-| **Keep** | `/v17/memory/*` routes until deprecation window ends |
-| **Tests** | `test_v17_product_memory_router.py` + new route registration tests |
-| **Risk** | **HIGH** — external integrators may bookmark `/v17/` paths; desktop uses `/v3/memories` today |
-| **Recommendation** | Worth doing for API cleanliness; **not** worth removing `/v17/` until WS-H |
+| **Files** | `routers/memory_product.py` (or `routers/memory_product.py`) |
+| **Change** | Register **duplicate** handlers: `/memory/search`, `/memory/vector/search`, `/memory/archive/search` delegating to same functions as `/memory/memory/*` |
+| **Keep** | `/memory/memory/*` routes until deprecation window ends |
+| **Tests** | `test_memory_product_memory_router.py` + new route registration tests |
+| **Risk** | **HIGH** — external integrators may bookmark `/memory/` paths; desktop uses `/v3/memories` today |
+| **Recommendation** | Worth doing for API cleanliness; **not** worth removing `/memory/` until WS-H |
 
 ### Wave 34 — `MemoryTier` → `MemoryLayer` type alias expansion (bucket B)
 
 | Item | Detail |
 |------|--------|
 | **Bucket** | B |
-| **Files** | `models/v17_product_memory.py`, `models/product_memory.py`, `models/memory_domain.py` |
+| **Files** | `models/product_memory.py`, `models/product_memory.py`, `models/memory_domain.py` |
 | **Change** | `MemoryLayer = MemoryTier` alias; new code uses `MemoryLayer`; keep `MemoryTier` name |
 | **Out of scope** | Firestore field rename |
 | **Tests** | `test_memory_domain.py`, `test_ws_k_layer_field.py` |
@@ -388,7 +388,7 @@ For each module group G:
 |------|--------|
 | **Bucket** | D (WS-J) |
 | **Files** | `v17_memory_apply_store.py`, `canonical_memory_adapter.py`, `v17_vector_repair_pinecone_adapter.py` |
-| **Change** | Canonical apply uses `mem_…` IDs; V17 repair path keeps `v17mem:` until backfill |
+| **Change** | Canonical apply uses `mem_…` IDs; memory repair path keeps `memvec:` until backfill |
 | **Risk** | **CRITICAL** — orphaned vectors if flipped without backfill |
 | **Recommendation** | Defer until cohort non-empty + repair job proven; not a cosmetic rename |
 
@@ -405,7 +405,7 @@ For each module group G:
 ### Wave 40+ — Call-site flips (remaining ~175 importers)
 
 Split by directory across multiple PRs:
-- `tests/unit/test_v17_*` (141 files) — **low risk** but noisy; batch rename test module names last
+- `tests/unit/test_memory_*` (141 files) — **low risk** but noisy; batch rename test module names last
 - `routers/`, `utils/conversations/` — medium
 - `scripts/v17_*` (53) — **defer** to WS-H or archive; readiness scripts are not production paths
 
@@ -414,7 +414,7 @@ Split by directory across multiple PRs:
 Only after:
 - All importers flipped to aliases
 - Cohort fully on canonical system
-- `/v17/` routes deprecated with telemetry showing zero traffic
+- `/memory/` routes deprecated with telemetry showing zero traffic
 
 **Honest assessment:** Full file deletion of 58 `v17_*` modules is **WS-H work**, not pre-decommission WS-G.
 
@@ -463,7 +463,7 @@ cd backend && ./test.sh  # or memory subset lines 33–120+
 ### New tests
 
 - Import-parity: extend `test_ws_g_module_aliases.py` every alias wave (required).
-- Optional: `test_ws_g_no_v17_imports_in_canonical_modules.py` once Wave 30 lands — grep guard for canonical-only modules.
+- Optional: `test_ws_g_no_memory_imports_in_canonical_modules.py` once Wave 30 lands — grep guard for canonical-only modules.
 
 ---
 
@@ -471,12 +471,12 @@ cd backend && ./test.sh  # or memory subset lines 33–120+
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| `/v17/memory/*` route removal breaks integrators | **HIGH** | Parallel routes (Wave 33); keep `/v17/` until WS-H |
-| `v17mem:` prefix change orphans Pinecone vectors | **CRITICAL** | WS-J backfill; dual-prefix read in `vector_db.py` already exists |
+| `/memory/memory/*` route removal breaks integrators | **HIGH** | Parallel routes (Wave 33); keep `/memory/` until WS-H |
+| `memvec:` prefix change orphans Pinecone vectors | **CRITICAL** | WS-J backfill; dual-prefix read in `vector_db.py` already exists |
 | Firestore `tier` field rename | **CRITICAL** | **Do not do** — API alias only |
-| `V17_MODE` wired into `resolve_memory_system` | **HIGH** | Frozen invariant; code review gate |
+| `MEMORY_MODE` wired into `resolve_memory_system` | **HIGH** | Frozen invariant; code review gate |
 | Renaming 53 `scripts/v17_*` | **LOW value** | Defer — not production; archive with docs |
-| Renaming 141 `test_v17_*` modules | **LOW value / high noise** | Defer to end; behavior tests matter not names |
+| Renaming 141 `test_memory_*` modules | **LOW value / high noise** | Defer to end; behavior tests matter not names |
 | `MemoryTier` enum rename in API | **MEDIUM** | Alias `MemoryLayer`; keep `MemoryTier` until clients migrated |
 | L1/L2 symbol rename breaks benchmark drift guard | **MEDIUM** | Keep schema literals frozen; rename Python symbols only |
 | Concurrent edit on shared plan file | **PROCESS** | This doc is the execution source; plan file is separate |
@@ -485,8 +485,8 @@ cd backend && ./test.sh  # or memory subset lines 33–120+
 
 - Renaming `memory_items` Firestore collection
 - Mass-renaming `scripts/v17_*` readiness tooling
-- Renaming test file prefixes `test_v17_*`
-- Removing `V17MemoryItem` class name (keep until store unified)
+- Renaming test file prefixes `test_memory_*`
+- Removing `MemoryItem` class name (keep until store unified)
 
 ---
 

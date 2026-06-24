@@ -1,4 +1,4 @@
-# V17 Milestone 1 Oracle Review — Foundations
+# memory Milestone 1 Oracle Review — Foundations
 
 **Date:** 2026-06-19  
 **Milestone:** P0 foundations: rollout state, canonical product-memory/evidence models, unified collection constants, Firestore indexes.
@@ -27,23 +27,23 @@ This is a static review of the supplied files; it does not include executing the
 
 Affected code:
 
-* `backend/config/v17_memory.py::V17RolloutConfig.for_user`
-* `backend/config/v17_memory.py::decide_v17_capabilities`
-* `backend/config/v17_memory.py::V17RolloutState.can_transition_to`
+* `backend/config/v17_memory.py::MemoryRolloutConfig.for_user`
+* `backend/config/v17_memory.py::decide_memory_rollout_capabilities`
+* `backend/config/v17_memory.py::MemoryRolloutState.can_transition_to`
 
-`for_user()` currently uses only the global mode and allowlist. It can return `v17_reads_enabled=True` even when the user’s `fallback_projection_ready` is false or their stage gates have failed. `decide_v17_capabilities()` also provides a public bypass around the allowlist and state entirely.
+`for_user()` currently uses only the global mode and allowlist. It can return `memory_reads_enabled=True` even when the user’s `fallback_projection_ready` is false or their stage gates have failed. `decide_memory_rollout_capabilities()` also provides a public bypass around the allowlist and state entirely.
 
 Required change:
 
-* Add typed stage-gate statuses to `V17RolloutState`, as explicitly required by the architecture.
-* Introduce one public resolver taking both `V17RolloutConfig` and `V17RolloutState`.
+* Add typed stage-gate statuses to `MemoryRolloutState`, as explicitly required by the architecture.
+* Introduce one public resolver taking both `MemoryRolloutConfig` and `MemoryRolloutState`.
 * Enable `write` only after the applicable write gates pass.
 * Enable `read` only after read gates pass and `fallback_projection_ready=True`.
-* Make `decide_v17_capabilities()` private or require the full state/gate input.
+* Make `decide_memory_rollout_capabilities()` private or require the full state/gate input.
 * Ensure a blocked account/control state cannot receive write capability.
 * Validate nonnegative `mode_epoch`, `cutover_epoch`, and `account_generation`.
 
-`V17RolloutState` is also not currently an enforceable state machine. A caller can directly assign `state.mode = V17Mode.off` and bypass `can_transition_to()`. Add a transition operation that returns or persists a validated new state, increments `mode_epoch`, and updates `cutover_epoch` according to defined semantics. Prefer making direct state mutation impossible.
+`MemoryRolloutState` is also not currently an enforceable state machine. A caller can directly assign `state.mode = MemoryRolloutMode.off` and bypass `can_transition_to()`. Add a transition operation that returns or persists a validated new state, increments `mode_epoch`, and updates `cutover_epoch` according to defined semantics. Prefer making direct state mutation impossible.
 
 Also cover rollback to every legacy-authoritative mode. The implementation protects `read → write`, but `read → shadow` currently bypasses the fallback-readiness check even though both targets return authority to legacy reads.
 
@@ -51,7 +51,7 @@ Also cover rollback to every legacy-authoritative mode. The implementation prote
 
 Affected code:
 
-* `backend/models/v17_product_memory.py::V17MemoryItem`
+* `backend/models/product_memory.py::MemoryItem`
 * `backend/models/memory_evidence.py::MemoryEvidence`
 
 The canonical stored model currently defaults security-critical fields:
@@ -85,7 +85,7 @@ At minimum, persisted hydration must require:
 * `captured_at`
 * `updated_at`
 
-Use strict validation or equivalent repository-level presence checks. Do not expose `V17MemoryItem` directly as an API/model-output input type. The server must continue to mint `memory_id`.
+Use strict validation or equivalent repository-level presence checks. Do not expose `MemoryItem` directly as an API/model-output input type. The server must continue to mint `memory_id`.
 
 Additional required invariants:
 
@@ -101,8 +101,8 @@ Additional required invariants:
 
 Affected code:
 
-* `backend/models/v17_product_memory.py::derived_default_access_allowed`
-* `backend/tests/unit/test_v17_normative_foundations.py::test_product_memory_item_invariants_short_term_long_term_archive`
+* `backend/models/product_memory.py::derived_default_access_allowed`
+* `backend/tests/unit/test_memory_normative_foundations.py::test_product_memory_item_invariants_short_term_long_term_archive`
 
 The current helper has several critical problems:
 
@@ -144,7 +144,7 @@ Add negative tests for unknown consumer types, blocked items, expired Short-term
 
 Affected code:
 
-* `backend/models/v17_product_memory.py::V17MemoryItem.validate_tier_invariants`, lines 90–91
+* `backend/models/product_memory.py::MemoryItem.validate_tier_invariants`, lines 90–91
 
 This validation is incorrect:
 
@@ -168,7 +168,7 @@ Add a test that an active user-asserted Long-term item can transition to Archive
 Affected code:
 
 * `backend/models/memory_evidence.py::MemoryEvidence`
-* `backend/tests/unit/test_v17_normative_foundations.py::test_evidence_requires_source_identity_or_typed_missing_reason`
+* `backend/tests/unit/test_memory_normative_foundations.py::test_evidence_requires_source_identity_or_typed_missing_reason`
 
 The evidence model does not currently satisfy the requirement to record raw-artifact lineage and preservation/loss outcome for every source-backed item:
 
@@ -200,16 +200,16 @@ That item can then pass default access. For a non-user-asserted item, `source_st
 
 Affected code:
 
-* `backend/models/v17_product_memory.py::V17MemoryItem.canonical_memory_id`
-* `backend/models/v17_product_memory.py::V17MemoryItem.aliases`
-* `backend/models/v17_product_memory.py::V17MemoryItemAlias`
+* `backend/models/product_memory.py::MemoryItem.canonical_memory_id`
+* `backend/models/product_memory.py::MemoryItem.aliases`
+* `backend/models/product_memory.py::MemoryItemAlias`
 * `backend/database/v17_collections.py::memory_lineage`
 
 There are currently three possible alias authorities:
 
 * `canonical_memory_id` on the old item
 * An inline `aliases` list on the target item
-* Separate `V17MemoryItemAlias` records
+* Separate `MemoryItemAlias` records
 
 They can drift, and the inline list can become unbounded in many-to-one consolidation.
 
@@ -227,8 +227,8 @@ If separate alias documents are retained, define their collection path and inclu
 
 Affected code:
 
-* `backend/tests/unit/test_v17_normative_foundations.py`
-* `backend/tests/unit/test_v17_firestore_indexes.py`
+* `backend/tests/unit/test_memory_normative_foundations.py`
+* `backend/tests/unit/test_memory_firestore_indexes.py`
 
 Required additions:
 
@@ -247,7 +247,7 @@ Required additions:
 * Raw-artifact preservation/loss outcome is required
 * Alias self-reference and ambiguous authority are rejected
 
-`test_v17_firestore_indexes_are_checked_in_for_unified_memory_store()` converts index fields to sets. That means it would still pass if `updated_at` changed from descending to ascending, `__name__` changed direction, or the fields were in an unusable order. Assert exact ordered `(fieldPath, order)` tuples and `queryScope`.
+`test_memory_firestore_indexes_are_checked_in_for_unified_memory_store()` converts index fields to sets. That means it would still pass if `updated_at` changed from descending to ascending, `__name__` changed direction, or the fields were in an unusable order. Assert exact ordered `(fieldPath, order)` tuples and `queryScope`.
 
 The operations and outbox indexes are currently tested only by collection name. Assert their actual fields and directions as well.
 
@@ -257,8 +257,8 @@ The checked-in index definitions themselves are reasonable for the listed per-us
 
 * Return a typed eligibility decision with a denial reason instead of a bare Boolean. This will improve auditability without changing policy.
 * Add a persisted `schema_version` so future canonical-model changes can be migrated explicitly.
-* Rename `V17Collections.all_collection_paths()` to `all_subcollection_paths()` and add a separate method for document paths such as `memory_control/state` and `memory_state/head`.
-* Reuse `parse_enabled_users()` inside `V17RolloutConfig.from_env()` and validate that `backfill_daily_limit` is nonnegative.
+* Rename `MemoryCollections.all_collection_paths()` to `all_subcollection_paths()` and add a separate method for document paths such as `memory_control/state` and `memory_state/head`.
+* Reuse `parse_enabled_users()` inside `MemoryRolloutConfig.from_env()` and validate that `backfill_daily_limit` is nonnegative.
 * Add Firestore emulator tests that execute the intended list, expiry, operation, and outbox queries rather than only inspecting JSON.
 * Add the `processing_state + expires_at` composite index once the exact unprocessed-expiry worker query is fixed.
 * Normalize sensitivity labels and source types at ingestion rather than leaving them as arbitrary strings.
@@ -269,23 +269,23 @@ The checked-in index definitions themselves are reasonable for the listed per-us
 
 | Normative requirement                                                                                   | Contradicting implementation                                                                                                 |
 | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Per-user rollout state includes stage-gate statuses                                                     | `V17RolloutState` has no stage-gate state.                                                                                   |
-| Write/read modes apply only after gates pass                                                            | `V17RolloutConfig.for_user()` and `decide_v17_capabilities()` never inspect gates or persisted rollout state.                |
+| Per-user rollout state includes stage-gate statuses                                                     | `MemoryRolloutState` has no stage-gate state.                                                                                   |
+| Write/read modes apply only after gates pass                                                            | `MemoryRolloutConfig.for_user()` and `decide_memory_rollout_capabilities()` never inspect gates or persisted rollout state.                |
 | Default access is eligible Short-term plus Long-term; Archive requires an explicit operation and policy | `derived_default_access_allowed()` returns `True` for Archive based solely on a magic consumer string.                       |
 | Consumer policy is server-derived                                                                       | `consumer: str` is caller-provided and unknown consumers are allowed for Short-term/Long-term.                               |
-| Missing or malformed status/user/version/source-state metadata fails closed                             | `V17MemoryItem` defaults missing `status` to active, `version` to 1, and `source_state` to active.                           |
+| Missing or malformed status/user/version/source-state metadata fails closed                             | `MemoryItem` defaults missing `status` to active, `version` to 1, and `source_state` to active.                           |
 | Visibility, source state, review state, sensitivity, and app grants can restrict access                 | The helper ignores visibility/app grants, allows blocked processing state, and has only two exact sensitivity-string checks. |
 | `expires_at` is required for Short-term                                                                 | The validator requires it only when Short-term is active.                                                                    |
 | Long-term may transition to Archive while keeping its stable identity                                   | The model rejects Archive whenever the preserved provenance flag `user_asserted=True`.                                       |
 | Every source-backed item records raw-artifact lineage and preservation/loss outcome                     | `artifact_refs` and the encryption/redaction field are optional and untyped; no outcome is required.                         |
 
-One potential contradiction needs clarification: `V17Collections.memory_runs` is acceptable as non-authoritative diagnostics, but it must not become a second operation/result journal. The normative architecture requires `memory_operations` to be the single server-owned journal for active and non-active outcomes.
+One potential contradiction needs clarification: `MemoryCollections.memory_runs` is acceptable as non-authoritative diagnostics, but it must not become a second operation/result journal. The normative architecture requires `memory_operations` to be the single server-owned journal for active and non-active outcomes.
 
 The following parts are aligned and should be retained:
 
 * `MemoryTier` contains exactly `short_term`, `long_term`, and `archive`.
 * Review/reject/skip are not represented as product tiers.
-* `V17Collections.memory_items` uses the unified canonical path.
+* `MemoryCollections.memory_items` uses the unified canonical path.
 * No canonical Short-term or Archive collection is introduced.
 * Status, processing-state, and source-state enum values match the normative shape.
 * Active Long-term items require ledger commit metadata.

@@ -1,4 +1,4 @@
-# V17 Milestone 3 Oracle Review — Atomic Apply, Outbox, Search Gateway
+# memory Milestone 3 Oracle Review — Atomic Apply, Outbox, Search Gateway
 
 **Date:** 2026-06-19  
 **Milestone:** Atomic apply skeleton, outbox barriers/watermarks, fail-closed search gateway.  
@@ -104,7 +104,7 @@ Do not overwrite an immutable `observed_head` field on the logical operation. Ei
 
 ```python
 attempt_id = hash_id(
-    "omi:v17:apply-attempt:v1",
+    "omi:memory:apply-attempt:v1",
     operation_id,
     expected_head.sequence,
     expected_head.commit_id,
@@ -249,7 +249,7 @@ Recommended event identity:
 
 ```python
 event_id = hash_id(
-    "omi:v17:outbox:v1",
+    "omi:memory:outbox:v1",
     uid,
     account_generation,
     commit_sequence,

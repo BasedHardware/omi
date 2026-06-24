@@ -71,7 +71,7 @@ Produce one immutable bundle named like:
 memory-v3-dev-cloud-<git-sha>-<run-id>.tar.gz
 ```
 
-(Legacy bundles may use the `v17-v3-dev-cloud-…` prefix; tooling accepts both during transition.)
+(Legacy bundles may use the `memory-v3-dev-cloud-…` prefix; tooling accepts both during transition.)
 
 The bundle must exclude credentials, bearer tokens, private keys, raw memory text from real users, and production identifiers beyond allowed project metadata.
 
@@ -90,7 +90,7 @@ Required files:
 | `proof-results.json` | One result per mandatory proof case, no skips. Include test ID, trace ID, authenticated UID, route decision, legacy invocation count, canonical-memory Firestore adapter read count, canonical-memory Firestore write/attempt count, HTTP result, stable reason/error code, assertion outcome. |
 | `junit.xml` | CI/JUnit output for the proof suite. |
 | `http-transcripts.redacted.ndjson` | Requests/responses for proof cases with tokens removed. Include route-selection diagnostics and allowed headers. |
-| `v17-operations.ndjson` | Canonical-memory Firestore adapter operation records correlated by trace ID (legacy filename retained). Primary evidence for zero off-path operations and zero GET writes. |
+| `memory-operations.ndjson` | Canonical-memory Firestore adapter operation records correlated by trace ID (legacy filename retained). Primary evidence for zero off-path operations and zero GET writes. |
 | `audit-extract.ndjson` | Supporting Firestore Data Access audit records where enabled, filtered to runtime principal and test interval. Supporting only, not the sole proof. |
 | `telemetry-redaction-report.json` | Required fields present; auth tokens, raw cursors, memory text, and sensitive payloads absent. No production sink claim. |
 | `rollback-report.json` | Positive request before rollback, kill-switch change, first observed fail-closed request, propagation time, warm-instance repeated requests, restoration, positive request after restoration. |
@@ -105,7 +105,7 @@ Use one valid baseline and mutate one prerequisite at a time.
 | Case | Required result |
 |---|---|
 | Feature variable absent, false, or non-exact | Canonical memory path not selected; zero canonical-memory adapter calls; existing legacy/off contract unchanged. |
-| `V17_MODE` not exactly `read` | Canonical memory path not selected; zero canonical-memory adapter calls. |
+| `MEMORY_MODE` not exactly `read` | Canonical memory path not selected; zero canonical-memory adapter calls. |
 | Authenticated UID not allowlisted | Canonical memory path not selected; no canonical-memory Firestore calls. |
 | Valid allowlisted user | Exact synthetic memories, ordering, pagination, generation, and headers expected by API contract. |
 | Client UID/query/body/mode/header spoof | No effect on authenticated UID or route selection. |

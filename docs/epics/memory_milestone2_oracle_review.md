@@ -1,4 +1,4 @@
-# V17 Milestone 2 Oracle Review — Typed Synthesis and Operation Journal
+# memory Milestone 2 Oracle Review — Typed Synthesis and Operation Journal
 
 **Date:** 2026-06-19  
 **Milestone:** Typed synthesis outcomes, source-backed candidate contract, server-owned operation journal.  
@@ -134,7 +134,7 @@ However, Milestone 2 must expose contracts that make those checks unavoidable; i
 [1]: https://github.com/BasedHardware/omi/blob/7a4259526f7aff6e7fbf1d64bdb98383b187a5a5/backend/models/v17_memory_contracts.py "omi/backend/models/v17_memory_contracts.py at 7a4259526f7aff6e7fbf1d64bdb98383b187a5a5 · BasedHardware/omi · GitHub"
 [2]: https://github.com/BasedHardware/omi/blob/7a4259526/backend/utils/llm/durable_memory_patches.py "omi/backend/utils/llm/durable_memory_patches.py at 7a4259526f7aff6e7fbf1d64bdb98383b187a5a5 · BasedHardware/omi · GitHub"
 [3]: https://github.com/BasedHardware/omi/blob/7a4259526f7aff6e7fbf1d64bdb98383b187a5a5/backend/models/v17_memory_operations.py "omi/backend/models/v17_memory_operations.py at 7a4259526f7aff6e7fbf1d64bdb98383b187a5a5 · BasedHardware/omi · GitHub"
-[4]: https://github.com/BasedHardware/omi/commit/7a4259526 "feat: add V17 typed synthesis outcomes and operation journal · BasedHardware/omi@7a42595 · GitHub"
+[4]: https://github.com/BasedHardware/omi/commit/7a4259526 "feat: add memory typed synthesis outcomes and operation journal · BasedHardware/omi@7a42595 · GitHub"
 
 
 8m52s · gpt-5.5-pro[browser] · ↑10k ↓1.82k ↻0 Δ11.82k

@@ -1,4 +1,4 @@
-# V17 memory desktop local test plan
+# memory memory desktop local test plan
 
 **Status:** Ready to execute on a Mac runner/dev machine after commit `fcc20de16` plus acceptance-test additions.  
 **Scope:** Local macOS desktop validation only. This does **not** prove backend/dev-cloud/production readiness.

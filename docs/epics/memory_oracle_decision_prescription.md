@@ -1,4 +1,4 @@
-# V17 Memory Product Integration — Oracle Decision Prescription
+# memory Memory Product Integration — Oracle Decision Prescription
 
 **Date:** 2026-06-18  
 **Reviewer:** Oracle (`oracle` CLI, browser-backed `gemini-3.5-flash`; same prior browser session could not be followed up because Oracle had no recoverable ChatGPT conversation URL, so this was a new Oracle run using the prior review plus the Epic/tickets/code context)  
@@ -6,17 +6,17 @@
 
 **David follow-up decisions baked in:**
 - Accept the Oracle prescriptions by default.
-- For deletion/account semantics, follow current product behavior found in code (`DELETE /v3/memories*`, `DELETE /v1/users/delete-account`, conversation delete, recording-permission delete) rather than inventing a new stronger deletion promise for V17.
+- For deletion/account semantics, follow current product behavior found in code (`DELETE /v3/memories*`, `DELETE /v1/users/delete-account`, conversation delete, recording-permission delete) rather than inventing a new stronger deletion promise for memory.
 - Retain available raw/source artifacts indefinitely for now; memory deletion does not delete raw source artifacts; source/account/recording-permission deletion remain the controls that can remove raw artifacts.
 - Use the rest of Oracle's recommended defaults: existing broad memory permission maps to Short-term + Long-term; Archive/raw provenance require new explicit capabilities; no dedicated MVP Archive promotion/review UI.
 
 **Inputs:**
-- `docs/epics/v17_memory_oracle_review.md`
-- `docs/epics/v17_memory_product_integration_epic.md`
-- `docs/epics/v17_memory_implementation_tickets.md`
-- `docs/epics/v17_memory_product_integration_decision_brief.md`
-- V17 contract/patch code excerpts from `backend/models/v17_memory_contracts.py` and `backend/utils/llm/durable_memory_patches.py`
-- V17 unit test excerpts
+- `docs/epics/memory_oracle_review.md`
+- `docs/epics/memory_product_integration_epic.md`
+- `docs/epics/memory_implementation_tickets.md`
+- `docs/epics/memory_product_integration_decision_brief.md`
+- memory contract/patch code excerpts from `backend/models/v17_memory_contracts.py` and `backend/utils/llm/durable_memory_patches.py`
+- memory unit test excerpts
 
 ---
 
@@ -47,7 +47,7 @@ The Oracle review correctly identified that the current tickets are unsafe as an
 
 ## What remains blocked
 
-Production writes, vector changes, V17 reads, and external API cutover remain blocked until the P0 amendments below pass.
+Production writes, vector changes, memory reads, and external API cutover remain blocked until the P0 amendments below pass.
 
 Only three matters require David-level product or legal input:
 
@@ -69,7 +69,7 @@ Two additional items require investigation, but **not David’s taste**:
 | Product tiers                  | Canonical tiers are exactly `short_term`, `long_term`, and `archive`. `context_only`, `review`, and `reject` are processing outcomes, not tiers.                                                                                                                                                                                                                                                   | Prevents product state and pipeline state from becoming one inconsistent taxonomy.                                                      | Revise T01 and normative Epic section.                               | no                 |
 | Canonical product store        | Create one `users/{uid}/memory_items/{memory_id}` collection containing all three tiers. Do not create separate `memory_short_term` and `memory_archive` collections.                                                                                                                                                                                                                              | Simplifies tier transitions, pagination, deletion, identity, API reads, and vector repair.                                              | Replace T03 collection plan; revise T07.                             | no                 |
 | Tier authority                 | `memory_items` is authoritative for Short-term and Archive. The ledger is authoritative for Long-term; its `memory_items` record is a transactionally synchronized projection.                                                                                                                                                                                                                     | Retains the stable ledger without imposing ledger complexity on high-volume source-backed records.                                      | Revise T01, T03, T15, T21.                                           | no                 |
-| Existing short-term store      | Do not reuse `users/{uid}/short_term` as the V17 canonical store. Treat it as a legacy input/adapter only.                                                                                                                                                                                                                                                                                         | Existing semantics such as pending/consolidated do not cleanly match the final tier model. Two authoritative stores would create drift. | T07 must explicitly reject reuse as canonical.                       | no                 |
+| Existing short-term store      | Do not reuse `users/{uid}/short_term` as the memory canonical store. Treat it as a legacy input/adapter only.                                                                                                                                                                                                                                                                                         | Existing semantics such as pending/consolidated do not cleanly match the final tier model. Two authoritative stores would create drift. | T07 must explicitly reject reuse as canonical.                       | no                 |
 | Stable identity                | Mint an opaque server-generated `memory_id` at first persistence. Retain it for one-to-one Short-term→Long-term and Short-term→Archive transitions. For many-to-one merges, the target Long-term ID wins and old IDs become resolvable aliases.                                                                                                                                                    | Preserves links and edit/delete semantics without pretending many source records can all retain one canonical ID.                       | Revise T01; add alias behavior to T15/T21/T22.                       | no                 |
 | Record versions                | Use a separate monotonically increasing `version` and immutable operation/commit IDs. Never encode content or tier into the public ID.                                                                                                                                                                                                                                                             | Supports optimistic edits, vector version checks, and safe transitions.                                                                 | T01, T20, T22.                                                       | no                 |
 | Access policy                  | Remove persisted `normal_default_access`, `explicit_archive_query_only`, and free-form `allowed_use` from the canonical model. Compute access from tier, status, visibility, sensitivity, consumer scope, and source state. Compatibility DTOs may expose a derived value.                                                                                                                         | Redundant flags can disagree with each other and currently use conflicting vocabularies.                                                | Revise T01 and T04; add central policy service.                      | no                 |
@@ -79,8 +79,8 @@ Two additional items require investigation, but **not David’s taste**:
 | Internal Context-only          | Keep the existing enum as a legacy/internal alias if needed, but normalize it to the `archive` route. Never persist `context_only` as a product tier or show it to users.                                                                                                                                                                                                                          | Minimizes code/benchmark churn while enforcing the final product model.                                                                 | T01, T13, T17, T25.                                                  | no                 |
 | Review route                   | A review outcome creates an operation/review record and moves affected source candidates to Archive. It does not create an active Long-term fact or remain default-access Short-term.                                                                                                                                                                                                              | Safe default with no new visible tier.                                                                                                  | Revise T17.                                                          | no                 |
 | Review UX                      | MVP review is internal/admin and conversational. No mandatory user review queue. Auto-close unresolved items as “keep Archive” after 30 days.                                                                                                                                                                                                                                                      | Avoids burdening users and prevents review becoming a permanent holding area.                                                           | Split backend review controls from optional later UI in T25.         | yes                |
-| Rollout mode semantics         | `off`: legacy only. `shadow`: legacy authoritative; isolated audit artifacts only. `write`: legacy reads remain authoritative; V17 sidecar writes occur. `read`: includes all `write` behavior and makes V17 reads authoritative.                                                                                                                                                                  | Preserves one simple external mode while removing ambiguity.                                                                            | Rewrite T00.                                                         | no                 |
-| Rollback                       | `read → write` is supported by one config change, but reads use a reconciled V17-derived legacy compatibility projection. `write → off` is blocked after V17 writes until an explicit decommission reconciliation succeeds.                                                                                                                                                                        | Prevents disappearing V17 memories and resurrection of deleted legacy values.                                                           | New rollback/reconciliation acceptance criteria in T00/T21.          | no                 |
+| Rollout mode semantics         | `off`: legacy only. `shadow`: legacy authoritative; isolated audit artifacts only. `write`: legacy reads remain authoritative; memory sidecar writes occur. `read`: includes all `write` behavior and makes memory reads authoritative.                                                                                                                                                                  | Preserves one simple external mode while removing ambiguity.                                                                            | Rewrite T00.                                                         | no                 |
+| Rollback                       | `read → write` is supported by one config change, but reads use a reconciled memory-derived legacy compatibility projection. `write → off` is blocked after memory writes until an explicit decommission reconciliation succeeds.                                                                                                                                                                        | Prevents disappearing memory memories and resurrection of deleted legacy values.                                                           | New rollback/reconciliation acceptance criteria in T00/T21.          | no                 |
 | Non-whitelisted users          | No new collection reads, writes, filters, metrics, or vector behavior for non-whitelisted users.                                                                                                                                                                                                                                                                                                   | This is a locked rollout requirement.                                                                                                   | T00/T05 architectural tests.                                         | no                 |
 | Old-memory migration           | Old memories never become Long-term directly. Recent/manual records become prioritized Short-term candidates; older records become Archive; all remain backfill-eligible.                                                                                                                                                                                                                          | Preserves data without silently promoting stale facts.                                                                                  | Keep T08–T12, revise model/store targets.                            | no                 |
 | New explicit user memory       | A first-party explicit “remember this” request creates Long-term directly as a user assertion. Automated extraction and generic third-party POSTs default to Short-term.                                                                                                                                                                                                                           | Explicit user intent is stronger than inferred stability; forcing it through backfill adds latency and surprises.                       | Revise T22/T24.                                                      | no                 |
@@ -100,9 +100,9 @@ Two additional items require investigation, but **not David’s taste**:
 | Sensitive data                 | Credentials/authentication secrets never become Long-term or default-access memory. Health, intimate, minors, financial identifiers, workplace-confidential and sensitive third-party data may be preserved encrypted but are excluded from automatic Long-term promotion and third-party default access. Explicit user assertion may permit restricted first-party Long-term, except credentials. | Concrete privacy boundary without deleting useful source context.                                                                       | Strengthen T04 and deterministic policy code.                        | no                 |
 | Third-party relationship facts | Remove the blanket “all third-party facts become Context-only” rule. User-relevant close relationships and cared-about entities may become Long-term; incidental or unlinked third-party facts go to Archive/review.                                                                                                                                                                               | The current guard is too blunt and contradicts the synthesis rubric.                                                                    | Patch current guard; revise T04/T13.                                 | no                 |
 | Third-party scopes             | Existing broad memory permission maps to `memory:default` = Short-term + Long-term. Archive requires a distinct `memory:archive` grant and explicit archive query. Source quotes require a separate provenance permission.                                                                                                                                                                         | Matches the stated default-access model without exposing Archive or raw evidence.                                                       | T23 and app-policy docs.                                             | yes                |
-| Raw artifacts                  | For bytes observed after V17 rollout and legally retainable, perform encrypted copy-before-ack/drop into content-addressed storage. Historical or already-dropped artifacts remain explicit loss outcomes.                                                                                                                                                                                         | Accounting alone does not preserve ephemeral bytes.                                                                                     | Rewrite T10.                                                         | no                 |
+| Raw artifacts                  | For bytes observed after memory rollout and legally retainable, perform encrypted copy-before-ack/drop into content-addressed storage. Historical or already-dropped artifacts remain explicit loss outcomes.                                                                                                                                                                                         | Accounting alone does not preserve ephemeral bytes.                                                                                     | Rewrite T10.                                                         | no                 |
 | Raw retention                  | Retain raw artifacts according to the source/account retention policy by default, rather than creating a separate memory-specific user toggle.                                                                                                                                                                                                                                                     | Simple and predictable, but the actual retention promise is product/legal.                                                              | T04/T10/data-retention doc.                                          | yes                |
-| Memory deletion                | Tombstone the product item, append a Long-term retraction when applicable, and enqueue vector deletion. Do not delete raw source by default.                                                                                                                                                                                                                                                       | Follows existing user semantics while covering V17.                                                                                     | T06/T22.                                                             | no                 |
+| Memory deletion                | Tombstone the product item, append a Long-term retraction when applicable, and enqueue vector deletion. Do not delete raw source by default.                                                                                                                                                                                                                                                       | Follows existing user semantics while covering memory.                                                                                     | T06/T22.                                                             | no                 |
 | Source deletion                | Hide/tombstone source-backed items. Machine-extracted Long-term memories with no surviving evidence leave default access and go to review; explicit user assertions remain unless the memory itself is deleted.                                                                                                                                                                                    | Distinguishes evidence removal from explicit user intent.                                                                               | T06/T17.                                                             | no                 |
 | Account deletion               | Block writes and increment generation first; destroy the user content-encryption key; delete hot-store records, vectors, jobs and artifacts; retain at most a non-content purge receipt if legally permitted.                                                                                                                                                                                      | Prevents resurrection and provides practical crypto-erasure.                                                                            | T04/T06.                                                             | yes                |
 | Live ingestion                 | Add an explicit conversation/source → Short-term ticket. Reprocessing supersedes prior extraction versions rather than creating duplicates.                                                                                                                                                                                                                                                        | Current queue can migrate old data without implementing the actual ongoing product flow.                                                | New T07A.                                                            | no                 |
@@ -116,9 +116,9 @@ Two additional items require investigation, but **not David’s taste**:
 
 # 3. P0 amendment plan
 
-## Order 0 — `A00: Normative V17 architecture specification`
+## Order 0 — `A00: Normative memory architecture specification`
 
-**New document:** `docs/epics/v17_memory_normative_architecture.md`
+**New document:** `docs/epics/memory_normative_architecture.md`
 
 **Changes:**
 
@@ -142,11 +142,11 @@ Two additional items require investigation, but **not David’s taste**:
 
 **Acceptance criteria:**
 
-* `read` includes V17 writes.
+* `read` includes memory writes.
 * `write` keeps legacy reads authoritative until cutover.
 * A per-user rollout document records mode epoch, cutover epoch, expected account generation, last reconciled legacy revision and whether fallback projection is ready.
 * `read → write` immediately switches to the reconciled compatibility projection.
-* `write → off` is rejected after persistent V17 writes unless a decommission reconciliation succeeds.
+* `write → off` is rejected after persistent memory writes unless a decommission reconciliation succeeds.
 * Non-whitelisted users never read the rollout document and remain on legacy paths.
 * Failure tests cover mode change during active workers.
 
@@ -229,7 +229,7 @@ Existing Long-term ledger collections remain.
 **Acceptance criteria:**
 
 * No separate canonical Short-term or Archive collection.
-* No V17 code hardcodes collection names.
+* No memory code hardcodes collection names.
 * All required indexes are checked into source control.
 * Emulator/CI tests validate default tier queries, Archive queries, lifecycle jobs, operation status, outbox scans and cursor pagination.
 * Existing `users/{uid}/short_term` is documented as legacy/non-authoritative.
@@ -243,8 +243,8 @@ Existing Long-term ledger collections remain.
 **Acceptance criteria:**
 
 * Every memory create, edit, delete, review, visibility change, source deletion, vector search and repair call site is classified.
-* All V17 Long-term writes call one write service.
-* All V17 product vector searches call one search gateway.
+* All memory Long-term writes call one write service.
+* All memory product vector searches call one search gateway.
 * Architectural tests or static checks fail when product code directly imports restricted raw ledger/vector mutation functions.
 * Non-whitelisted golden tests prove byte-for-byte-equivalent legacy DTO behavior where deterministic.
 
@@ -333,7 +333,7 @@ Existing Long-term ledger collections remain.
 
 * Shadow mode creates audit artifacts only.
 * Write mode creates Short-term records for allowlisted users only.
-* V17 extraction failure never blocks or changes the legacy pipeline.
+* memory extraction failure never blocks or changes the legacy pipeline.
 * The ingestion key is stable across delivery retries and based on source ID, source version, extractor version and source span identity.
 * Transcript edits, speaker corrections and extractor-version changes supersede prior candidates; they do not produce uncontrolled duplicates.
 * Source deletion during extraction prevents persistence.
@@ -393,7 +393,7 @@ invalid
 * All non-active candidates in the fixed offline set receive a missed-useful audit.
 * Reports separately show active, active+review, active+Archive and all non-rejected yield.
 
-The current documents show why this is necessary: V17.9 is substantially cleaner but slightly below the Base projection on broad useful-grounded-safe yield. 
+The current documents show why this is necessary: memory.9 is substantially cleaner but slightly below the Base projection on broad useful-grounded-safe yield. 
 
 ---
 
@@ -499,7 +499,7 @@ memory_legacy_fallback/{memory_id}  # when cutover state requires it
 * Product list pagination uses the unified collection and stable `(updated_at, memory_id)` cursor.
 * Released-client golden fixtures parse the additive DTO.
 * Read-after-write sees the transactionally updated product item.
-* Read rollback uses the V17-derived compatibility projection and cannot resurrect old deleted values.
+* Read rollback uses the memory-derived compatibility projection and cannot resurrect old deleted values.
 
 ---
 
@@ -532,7 +532,7 @@ memory_legacy_fallback/{memory_id}  # when cutover state requires it
 
 ---
 
-# 4. Code-level decisions for the current V17 contract/patch code
+# 4. Code-level decisions for the current memory contract/patch code
 
 The current code trusts model-supplied control fields, computes IDs before deterministic guards, includes output index and observed head in idempotency, filters quote wrappers silently, returns `[]` for provider and parsing failures, validates the whole batch together, and hard-codes source-backed items as Archive. The current tests explicitly expect some of those silent-empty behaviors. 
 
@@ -773,7 +773,7 @@ Do not implement a separate vector namespace, standalone distributed lease servi
 
 # 6. Prior-review conclusions now downgraded or modified
 
-1. **Standalone writer lease is downgraded from required to unnecessary.** A separate lease would add expiration and stale-owner failure modes. The actual correctness boundary should be the atomic transaction on the per-user head/control document. A monotonic fence is only needed if some writer cannot participate in that transaction; T05-R must ensure there is no such V17 writer.
+1. **Standalone writer lease is downgraded from required to unnecessary.** A separate lease would add expiration and stale-owner failure modes. The actual correctness boundary should be the atomic transaction on the per-user head/control document. A monotonic fence is only needed if some writer cannot participate in that transaction; T05-R must ensure there is no such memory writer.
 
 2. **Separate Short-term and Archive stores are replaced with one tiered `memory_items` collection.** This is materially simpler and resolves identity, transition, pagination and deletion problems.
 
@@ -785,7 +785,7 @@ Do not implement a separate vector namespace, standalone distributed lease servi
 
 6. **“Exactly once” is narrowed to idempotent atomic application.** LLM synthesis and queue delivery may be at-least-once; the system guarantees that one logical operation has at most one externally visible commit/result.
 
-7. **“Rollback is one config change” is retained only for `read → write`.** Returning from persistent V17 writes all the way to `off` requires reconciliation and cannot safely be a blind flag flip.
+7. **“Rollback is one config change” is retained only for `read → write`.** Returning from persistent memory writes all the way to `off` requires reconciliation and cannot safely be a blind flag flip.
 
 8. **Raw-artifact preservation is made prospective and technically precise.** New available bytes must be copied before drop where feasible. Historical ephemeral losses remain explicit loss; they are not repairable or retrospectively “preserved.”
 

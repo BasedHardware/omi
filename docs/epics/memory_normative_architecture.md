@@ -1,8 +1,8 @@
-# V17 Memory Product Integration — Normative Architecture
+# memory Memory Product Integration — Normative Architecture
 
 **Status:** Locked product/architecture decisions after Oracle prescription + David decisions  
 **Date:** 2026-06-18  
-**Supersedes:** Historical Wave 1/2/3 planning language in `v17_memory_product_integration_epic.md` where it conflicts with this document.
+**Supersedes:** Historical Wave 1/2/3 planning language in `memory_product_integration_epic.md` where it conflicts with this document.
 
 ---
 
@@ -41,7 +41,7 @@ Do **not** create separate canonical Short-term and Archive collections.
 Existing/current stores:
 
 - `users/{uid}/memories` remains the current legacy compatibility/projection store during rollout.
-- Existing `users/{uid}/short_term` is not the V17 canonical store; treat it as legacy/adapter input only if needed.
+- Existing `users/{uid}/short_term` is not the memory canonical store; treat it as legacy/adapter input only if needed.
 - Existing ledger collections remain Long-term source of truth.
 
 ### Long-term authority
@@ -88,10 +88,10 @@ Keep a simple external rollout mode, but define exact semantics:
 
 | Mode | Behavior |
 |---|---|
-| `off` | Legacy only. No V17 reads/writes/workers for non-whitelisted users. |
-| `shadow` | Legacy authoritative; V17 audit artifacts only; no product-visible writes. |
-| `write` | Legacy reads remain authoritative; V17 sidecar writes may run for whitelisted users after gates pass. |
-| `read` | Superset of `write`; V17 read service becomes authoritative for whitelisted users. |
+| `off` | Legacy only. No memory reads/writes/workers for non-whitelisted users. |
+| `shadow` | Legacy authoritative; memory audit artifacts only; no product-visible writes. |
+| `write` | Legacy reads remain authoritative; memory sidecar writes may run for whitelisted users after gates pass. |
+| `read` | Superset of `write`; memory read service becomes authoritative for whitelisted users. |
 
 Required per-user rollout state:
 
@@ -106,9 +106,9 @@ stage gate statuses
 
 Rollback:
 
-- `read → write` can be one config change only because reads fall back to the reconciled V17-derived compatibility projection.
-- `write → off` is not a blind flag flip after persistent V17 writes; it requires explicit decommission reconciliation.
-- Rollback must not make V17-created memories disappear, resurrect deleted legacy values, or expose stale vectors.
+- `read → write` can be one config change only because reads fall back to the reconciled memory-derived compatibility projection.
+- `write → off` is not a blind flag flip after persistent memory writes; it requires explicit decommission reconciliation.
+- Rollback must not make memory-created memories disappear, resurrect deleted legacy values, or expose stale vectors.
 
 ---
 
@@ -236,12 +236,12 @@ Current code behavior found in product repo:
 | Store-recording permission delete | `DELETE /v1/users/store-recording-permission` sets permission false and deletes all conversation recordings. |
 | Source deletion ripple | Existing `ripple_source_deletion` tombstones evidence, retracts memories with no active evidence, and tombstones short-term source records, but this is not the same as generic conversation delete unless wired into that path. |
 
-V17 deletion/export must follow and extend these conventions:
+memory deletion/export must follow and extend these conventions:
 
 - Memory deletion removes Omi's memory item/projection/vector/search visibility; it does **not** delete original conversation/audio/imported raw artifacts unless the product's source/account deletion flow does so.
 - Source deletion tombstones evidence/lineage and may retract/supersede memories, but raw artifact retention follows the source/account policy below.
-- Account deletion must block future writes first, increment account generation, cancel queued jobs, delete/tombstone V17 Firestore state and vectors, and follow current product account-wipe conventions.
-- V17 must not promise stronger erasure than product currently implements without a separate product/legal decision.
+- Account deletion must block future writes first, increment account generation, cancel queued jobs, delete/tombstone memory Firestore state and vectors, and follow current product account-wipe conventions.
+- memory must not promise stronger erasure than product currently implements without a separate product/legal decision.
 - The ledger/history erasure model remains: align with current hard-delete/account-wipe behavior; if append-only history is retained before full deletion, it must be encrypted and excluded from all product/search/export surfaces after deletion.
 
 ---
@@ -253,7 +253,7 @@ David decision: **retain raw/source artifacts forever for now**, subject to exis
 Normative policy:
 
 - Preserve available raw/source artifacts indefinitely by default.
-- Do not add a user-facing raw-retention TTL or toggle for V17 MVP.
+- Do not add a user-facing raw-retention TTL or toggle for memory MVP.
 - Copy ephemeral/raw bytes into durable encrypted storage before drop wherever technically feasible.
 - Historical already-missing ephemeral data remains explicit loss; do not claim it was preserved.
 - Memory deletion does not delete raw/source artifacts.
@@ -293,4 +293,4 @@ Only one remaining non-engineering question is unresolved:
 
 - Whether current and future account-deletion promises legally require physical deletion of append-only history immediately, or whether encrypted crypto-erasure plus async physical cleanup is acceptable.
 
-Until answered, V17 implementation should mirror current product deletion behavior and avoid adding new user-visible deletion promises beyond current product semantics.
+Until answered, memory implementation should mirror current product deletion behavior and avoid adding new user-visible deletion promises beyond current product semantics.
