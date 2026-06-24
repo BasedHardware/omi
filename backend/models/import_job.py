@@ -24,6 +24,7 @@ class ImportJob(BaseModel):
     total_files: int = Field(default=0, description="Total number of files to process")
     processed_files: int = Field(default=0, description="Number of files processed so far")
     conversations_created: int = Field(default=0, description="Number of conversations created")
+    conversations_skipped: int = Field(default=0, description="Number of lifelogs skipped as already imported")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: Optional[datetime] = Field(default=None, description="When processing started")
     completed_at: Optional[datetime] = Field(default=None, description="When processing completed")
@@ -47,5 +48,6 @@ class ImportJobResponse(BaseModel):
     total_files: Optional[int] = None
     processed_files: Optional[int] = None
     conversations_created: Optional[int] = None
+    conversations_skipped: Optional[int] = None
     created_at: Optional[str] = None
     error: Optional[str] = None
