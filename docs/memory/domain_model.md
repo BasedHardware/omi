@@ -98,12 +98,12 @@ flowchart TD
 | **Legacy flat memories** | Original production store + extractor | `users/{uid}/memories`, `MemoryDB`, `new_memories_extractor`, `/v3/memories` | **Long-term** in unified Memories (`layer=long_term`) | **Migrate** → **Retire** store |
 | **Legacy categories** | Old taxonomy on legacy rows | `core`, `hobbies`, `lifestyle`, `work`, `skills`, `learnings`, … | **Keep** as `category` metadata; UI filters use primary four (`interesting`, `system`, `manual`, `workflow`) | **Keep** (not layers) |
 | **Shadow short_term** | Interim shadow write path | `users/{uid}/short_term`, `OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED` | **Short-term** in unified Memories (`layer=short_term`) | **Fold** → **Retire** collection |
-| **Canonical product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, neutral `memory_*` modules (legacy `v17_*` shims retained) | **Canonical Memories store** | **Rename** complete; store is canonical |
+| **Canonical product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, neutral `memory_*` modules | **Canonical Memories store** | **Rename** complete; store is canonical |
 | **Rollout modes** | Gradual rollout control | `off` / `shadow` / `write` / `read`, `MEMORY_MODE` (compat), `MEMORY_ENABLED_USERS`, `memory_control/state` | **`MemorySystem`** + `resolve_memory_system(uid)` | **Collapse** |
 | **`tier` product field** | Persisted item field | `short_term` / `long_term` / `archive` on `memory_items` | **`layer`** (same semantics) | **Rename** API + clients |
 | **`memory_reads.py`** | Merges legacy + shadow for reads | split-brain reader shim | Single Memories query by `layer` | **Retire** |
 
-Normative reference (locked 2026-06-18): [`docs/epics/memory_normative_architecture.md`](../epics/v17_memory_normative_architecture.md)
+Normative reference (locked 2026-06-18): [`docs/epics/memory_normative_architecture.md`](../epics/memory_normative_architecture.md)
 — product tiers are exactly `short_term`, `long_term`, `archive`; `context_only` is **not** a tier.
 
 ### Internal pipeline jargon (do not expose as product language)
@@ -112,9 +112,9 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 
 | Internal term (retire in product/docs) | Code locations | Means | Canonical term |
 |----------------------------------------|----------------|-------|----------------|
-| **L1**, `L1MemoryArchiveItem`, `WorkingMemoryObservation` | `working_memory.py`, `v17_memory_contracts.py` | Working-memory / archive extraction candidates | **Working observation** or **short-term candidate** |
+| **L1**, `L1MemoryArchiveItem`, `WorkingMemoryObservation` | `working_memory.py`, `memory_contracts.py` | Working-memory / archive extraction candidates | **Working observation** or **short-term candidate** |
 | **L2**, `L2MemoryRoute`, `durable_memory_patch*` | `l2_memory_routes.py`, `durable_memory_patches.py` | Durable synthesis / promotion routing | **Promotion proposal** / **consolidation route** |
-| **`LifecycleState.working`** | `v17_memory_contracts.py` | In-flight extraction state | Internal only; not a product layer |
+| **`LifecycleState.working`** | `memory_contracts.py` | In-flight extraction state | Internal only; not a product layer |
 | **`context_only`** | projections, route hints | Processing outcome | **Not a tier** — normalize to **Archive** or non-default outcome |
 | **`processing_state`** | `pending` / `processed` / `blocked` | Item processing pipeline | **Keep** internal; separate from `layer` |
 | **`status`** | `active` / `superseded` / `tombstoned` | Record lifecycle | **Keep**; distinct from `layer` |
@@ -150,7 +150,7 @@ No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surfa
 
 | Retire | Replace with | WS |
 |--------|--------------|-----|
-| `memory`, `v17_*` modules, `memvec:` vector prefix (stored IDs — migrate per rollout Q5) | `memory` / `canonical_memory` / neutral vector IDs | WS-G, WS-J |
+| `memvec:` vector prefix (stored IDs — migrate per rollout Q5) | `memory` / `canonical_memory` / neutral vector IDs | WS-G, WS-J |
 | `tier` (product field on items) | `layer` | WS-G, WS-F |
 | `L1`, `L2`, `layer1`, `layer2` in **product/UI** context | **Short-term** / **Long-term** / **promotion** | WS-G, WS-F |
 | `L1MemoryArchiveItem`, `WorkingMemoryObservation` in **docs/comments** | working observation / short-term candidate | WS-G |
