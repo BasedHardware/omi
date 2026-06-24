@@ -51,7 +51,7 @@ def test_entrypoint_malformed_enabled_env_is_denied_without_tick():
     printer = _Printer()
 
     exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
-        env={"V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "yes"},
+        env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "yes"},
         db_client=object(),
         authoritative_item_loader=lambda record: calls.append("load"),
         vector_deleter=lambda record: calls.append("delete"),
@@ -66,7 +66,7 @@ def test_entrypoint_malformed_enabled_env_is_denied_without_tick():
     assert payload["enabled"] is False
     assert payload["config_valid"] is False
     assert payload["errors"] == [
-        {"stage": "config", "error": "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED must be 'true' or 'false'"}
+        {"stage": "config", "error": "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED must be 'true' or 'false'"}
     ]
 
 
@@ -75,7 +75,7 @@ def test_entrypoint_enabled_requires_explicit_uid_and_stable_worker_id():
     printer = _Printer()
 
     exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
-        env={"V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true", "V17_VECTOR_REPAIR_OUTBOX_UID": "u1"},
+        env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true", "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1"},
         db_client=object(),
         authoritative_item_loader=lambda record: calls.append("load"),
         vector_deleter=lambda record: calls.append("delete"),
@@ -89,7 +89,7 @@ def test_entrypoint_enabled_requires_explicit_uid_and_stable_worker_id():
     assert calls == []
     assert payload["config_valid"] is False
     assert payload["errors"] == [
-        {"stage": "config", "error": "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID is required when enabled"}
+        {"stage": "config", "error": "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID is required when enabled"}
     ]
 
 
@@ -118,12 +118,12 @@ def test_entrypoint_enabled_invokes_injected_tick_and_prints_deterministic_summa
     repairer = object()
     exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
-            "V17_VECTOR_REPAIR_OUTBOX_LIMIT": "7",
-            "V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS": "90",
-            "V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS": "4",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT": "7",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS": "90",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS": "4",
         },
         db_client=db,
         authoritative_item_loader=loader,
@@ -166,9 +166,9 @@ def test_entrypoint_dependency_or_action_failure_is_summarized_and_nonzero():
 
     exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
         },
         db_client=object(),
         authoritative_item_loader=lambda record: None,
@@ -239,9 +239,9 @@ def test_main_enabled_calls_production_dependency_resolver_once(monkeypatch):
 
     exit_code = entrypoint.main(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
         },
         tick_runner=fake_runner,
         print_json=printer,
@@ -249,7 +249,7 @@ def test_main_enabled_calls_production_dependency_resolver_once(monkeypatch):
 
     assert exit_code == 0
     assert len(calls) == 1
-    assert calls[0]["V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"] == "true"
+    assert calls[0]["MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"] == "true"
     assert printer.payload()["config_valid"] is True
 
 
@@ -263,9 +263,9 @@ def test_main_enabled_missing_production_dependency_config_fails_before_lease(mo
 
     exit_code = entrypoint.main(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u1",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-a",
         },
         tick_runner=fake_runner,
         print_json=printer,
@@ -312,7 +312,7 @@ def test_http_shim_disabled_post_fails_closed_without_dependency_initialization(
 def test_http_shim_enabled_malformed_config_denies_before_dependencies():
     calls = []
     app = entrypoint.create_v17_vector_repair_outbox_worker_app(
-        env={"V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true"},
+        env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true"},
         dependency_builder=lambda env: calls.append("deps"),
         tick_runner=lambda **kwargs: calls.append("tick"),
     )
@@ -321,7 +321,9 @@ def test_http_shim_enabled_malformed_config_denies_before_dependencies():
 
     assert calls == []
     assert response["config_valid"] is False
-    assert response["errors"] == [{"stage": "config", "error": "V17_VECTOR_REPAIR_OUTBOX_UID is required when enabled"}]
+    assert response["errors"] == [
+        {"stage": "config", "error": "MEMORY_VECTOR_REPAIR_OUTBOX_UID is required when enabled"}
+    ]
 
 
 def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
@@ -354,9 +356,9 @@ def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
 
     app = entrypoint.create_v17_vector_repair_outbox_worker_app(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u-http",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u-http",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
         },
         dependency_builder=fake_dependency_builder,
         tick_runner=fake_tick_runner,
@@ -380,9 +382,9 @@ def test_http_shim_dependency_failure_is_deterministic_summary_before_tick():
 
     app = entrypoint.create_v17_vector_repair_outbox_worker_app(
         env={
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
-            "V17_VECTOR_REPAIR_OUTBOX_UID": "u-http",
-            "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u-http",
+            "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID": "worker-http",
         },
         dependency_builder=failing_dependency_builder,
         tick_runner=lambda **kwargs: calls.append(("tick", kwargs)),
@@ -406,7 +408,7 @@ def test_http_shim_documents_cloud_run_iam_oidc_enforcement_not_custom_auth():
     assert "Cloud Run IAM (roles/run.invoker)" in source
     assert "OIDC" in source
     assert "custom shared secret" not in source
-    assert "V17_VECTOR_REPAIR_OUTBOX_UID" in source
+    assert "MEMORY_VECTOR_REPAIR_OUTBOX_UID" in source
 
 
 def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env():
