@@ -153,6 +153,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected && (sessionProvider == RealtimeHubSettings.shared.provider || sessionProvider == fallbackProvider)
   }
 
+  /// PTT cold-start grace: give an already-warming/reconnecting hub a short chance to
+  /// become ready before falling back to the slower transcript cascade.
+  func waitUntilActive(timeout: TimeInterval) async -> Bool {
+    ensureWarm()
+    if isActive { return true }
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if Task.isCancelled { return false }
+      if isActive { return true }
+    }
+    return isActive
+  }
+
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
     // The hub provider follows the "Voice Model" picker, so re-warm when it changes —

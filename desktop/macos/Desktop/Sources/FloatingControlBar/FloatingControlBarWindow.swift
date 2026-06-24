@@ -35,6 +35,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.08
     private static let askOmiSettleDelay: TimeInterval = 0.10
+    private static let topInset: CGFloat = 40
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -776,12 +777,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Compute the default origin for the collapsed pill (top-center of the key screen).
     /// Used by closeAIConversation in non-draggable mode and centerOnMainScreen.
     private func defaultPillOrigin() -> NSPoint {
-        let size = FloatingControlBarWindow.minBarSize
+        defaultTopCenteredOrigin(for: FloatingControlBarWindow.minBarSize)
+    }
+
+    private func defaultTopCenteredOrigin(for size: NSSize) -> NSPoint {
         let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen = targetScreen else { return .zero }
         let visibleFrame = screen.visibleFrame
-        let x = visibleFrame.midX - size.width / 2
-        let y = visibleFrame.maxY - size.height - 20
+        let x = (visibleFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
+        let y = visibleFrame.maxY - size.height - Self.topInset
         return NSPoint(x: x, y: y)
     }
 
@@ -793,11 +797,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        let visibleFrame = screen.visibleFrame
-        let x = visibleFrame.midX - frame.width / 2
-        let y = visibleFrame.maxY - frame.height - 20  // 20pt from top
-        self.setFrameOrigin(NSPoint(x: x, y: y))
-        log("FloatingControlBarWindow: centered at (\(x), \(y)) on screen \(visibleFrame)")
+        let origin = defaultTopCenteredOrigin(for: frame.size)
+        self.setFrameOrigin(origin)
+        log("FloatingControlBarWindow: centered at \(origin) on screen \(screen.visibleFrame)")
     }
 
     func resetPosition() {
@@ -1444,6 +1446,26 @@ class FloatingControlBarManager {
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
     func openAIInputWithQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window else { return }
+        guard let provider = activeFloatingProvider() else { return }
+
+        if fromVoice {
+            chatCancellable?.cancel()
+            chatCancellable = nil
+            window.cancelInputHeightObserver()
+            window.state.currentQueryFromVoice = true
+            window.state.isVoiceResponseActive = true
+            if window.state.showingAIConversation {
+                window.closeAIConversation()
+            } else if !window.isVisible {
+                window.makeKeyAndOrderFront(nil)
+            }
+            Task { @MainActor in
+                await self.withQueryTracer(query: query, fromVoice: true) {
+                    await self.sendVoiceOnlyQuery(query, barWindow: window, provider: provider)
+                }
+            }
+            return
+        }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
         chatCancellable?.cancel()
@@ -1457,8 +1479,6 @@ class FloatingControlBarManager {
         window.state.currentQueryFromVoice = fromVoice
         pendingNotificationContext = nil
         floatingSessionKey = "floating"
-
-        guard let provider = activeFloatingProvider() else { return }
 
         // Re-wire the onSendQuery to use the isolated floating-bar provider.
         // Subsequent typed messages also go through the AI router. A message arriving
@@ -2096,6 +2116,94 @@ class FloatingControlBarManager {
                 isFinal: true
             )
         }
+    }
+
+    private func sendVoiceOnlyQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        let currentTracer = QueryTracerContext.current
+        currentTracer?.begin("pre_llm")
+        activeQueryGeneration += 1
+        let generation = activeQueryGeneration
+
+        barWindow.state.currentQueryFromVoice = true
+        barWindow.state.isVoiceListening = false
+        barWindow.state.isVoiceLocked = false
+        barWindow.state.isVoiceFollowUp = false
+        barWindow.state.voiceTranscript = ""
+        barWindow.state.voiceFollowUpTranscript = ""
+
+        let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider {
+            if limiter.isLimitReached {
+                currentTracer?.end("pre_llm", metadata: ["error": "usage_limit"])
+                FloatingBarVoicePlaybackService.shared.speakOneShot(
+                    "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions."
+                )
+                return
+            }
+            limiter.recordQuery()
+        }
+
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+        barWindow.state.isVoiceResponseActive = true
+        FloatingBarVoicePlaybackService.shared.tracer = currentTracer
+        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data?
+        if needsScreenshot {
+            currentTracer?.begin("screenshot_capture")
+            screenshotData = await Task.detached { () -> Data? in
+                ScreenCaptureManager.captureScreenData()
+            }.value
+            currentTracer?.end("screenshot_capture")
+        } else {
+            screenshotData = nil
+            currentTracer?.mark("screenshot_capture")
+        }
+
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+
+        let messageCountBefore = provider.messages.count
+        chatCancellable?.cancel()
+        chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
+                guard messages.count > messageCountBefore,
+                      let aiMessage = messages.last,
+                      aiMessage.sender == .ai
+                else { return }
+                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                    aiMessage,
+                    isFinal: !aiMessage.isStreaming
+                )
+            }
+
+        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+            ? ModelQoS.Claude.defaultSelection
+            : ShortcutSettings.shared.selectedModel
+        currentTracer?.end("pre_llm")
+        await provider.sendMessage(
+            message,
+            model: floatingModel,
+            systemPromptStyle: .floating,
+            sessionKey: floatingSessionKey,
+            imageData: screenshotData
+        )
+
+        guard isActiveQueryGeneration(generation) else { return }
+        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
+        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+            FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
+        } else if let errorText = provider.errorMessage, !errorText.isEmpty {
+            FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
+        } else {
+            FloatingBarVoicePlaybackService.shared.speakOneShot("I couldn't get a response. Please try again.")
+        }
+
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        barWindow.state.currentQueryFromVoice = false
     }
 
     private func notificationContextSuffixIfNeeded(for message: String) -> String? {

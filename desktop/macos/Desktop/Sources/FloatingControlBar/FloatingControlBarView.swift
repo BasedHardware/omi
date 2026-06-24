@@ -397,33 +397,13 @@ struct FloatingControlBarView: View {
                 .foregroundColor(.white)
 
             if state.isVoiceLocked {
-                Text("LOCKED")
+                Image(systemName: "lock.fill")
                     .scaledFont(size: 10, weight: .bold)
                     .foregroundColor(.orange)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .frame(width: 18, height: 18)
                     .background(Color.orange.opacity(0.2))
                     .cornerRadius(4)
             }
-
-            Text(voiceStatusText)
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(.white.opacity(0.78))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private var voiceStatusText: String {
-        if !state.voiceTranscript.isEmpty {
-            return state.voiceTranscript
-        }
-
-        if state.isVoiceLocked {
-            return "Tap \(shortcutSettings.pttShortcut.displayLabel) to send"
-        } else {
-            return "Release \(shortcutSettings.pttShortcut.displayLabel) to send"
         }
     }
 
