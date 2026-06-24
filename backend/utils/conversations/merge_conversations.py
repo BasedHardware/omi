@@ -390,8 +390,25 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
         except Exception as e:
             logger.error(f"Error fetching photos for {conv['id']}: {e}")
 
-    # Sort by creation time
-    all_photos.sort(key=lambda p: p.get('created_at', datetime.min))
+    # Sort by creation time. Firestore photo created_at is tz-aware, but a
+    # photo missing the field must fall back to a tz-aware sentinel — a naive
+    # datetime.min would raise TypeError when compared against aware values
+    # and fail the whole merge. String created_at (older write paths) is
+    # coerced too so every sort key is a uniform tz-aware datetime.
+    _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
+
+    def _photo_sort_key(p):
+        ca = p.get('created_at')
+        if isinstance(ca, str):
+            try:
+                ca = datetime.fromisoformat(ca.replace('Z', '+00:00'))
+            except ValueError:
+                ca = None
+        if isinstance(ca, datetime):
+            return ca if ca.tzinfo else ca.replace(tzinfo=timezone.utc)
+        return _EPOCH
+
+    all_photos.sort(key=_photo_sort_key)
     return all_photos
 
 
