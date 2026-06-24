@@ -111,6 +111,11 @@ class DurableMemoryPatchProposals(BaseModel):
     patches: List[DurableMemoryPatchProposal] = Field(default_factory=list)
 
 
+# Neutral product vocabulary aliases (WS-G11).
+PromotionProposal = DurableMemoryPatchProposal
+PromotionProposals = DurableMemoryPatchProposals
+
+
 class SynthesisStatus(str, Enum):
     success = "success"
     partial = "partial"
@@ -141,6 +146,9 @@ class DurableMemorySynthesisResult(BaseModel):
     outcomes: List[CandidateOutcome] = Field(default_factory=list)
     error_code: Optional[str] = None
     synthesis_terminal: bool = False
+
+
+PromotionSynthesisResult = DurableMemorySynthesisResult
 
 
 durable_memory_patch_prompt = ChatPromptTemplate.from_messages(
@@ -191,6 +199,8 @@ Custom search replay artifact:
         ),
     ]
 )
+
+promotion_proposal_prompt = durable_memory_patch_prompt
 
 
 def _content_from_response(response) -> str:
