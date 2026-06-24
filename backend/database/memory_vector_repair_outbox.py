@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database.memory_collections import MemoryCollections
-from models.v17_memory_contracts import deterministic_contract_id
+from models.memory_contracts import deterministic_contract_id
 
 V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE = "vector_repair_purge"
 V17_VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION = 1

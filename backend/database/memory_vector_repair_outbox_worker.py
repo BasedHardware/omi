@@ -14,7 +14,7 @@ from database.memory_vector_repair_outbox_telemetry import (
     emit_v17_vector_repair_outbox_worker_telemetry,
 )
 from models.memory_evidence import SourceState
-from models.v17_product_memory import MemoryItemStatus
+from models.product_memory import MemoryItemStatus
 
 V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS = "pending"
 V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS = "in_progress"

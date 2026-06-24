@@ -16,7 +16,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database.memory_collections import MemoryCollections
-from utils.memory.v17_v3_projection_reader_contract import (
+from utils.memory.v3_projection_reader_contract import (
     V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
     V17_V3_COMPATIBILITY_PROJECTION_SOURCE,
     V17_V3_COMPATIBILITY_PROJECTION_VERSION,

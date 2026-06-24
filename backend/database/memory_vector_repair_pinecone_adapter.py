@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from database.memory_vector_metadata import build_v17_memory_vector_metadata, deterministic_v17_memory_vector_id
 from models.memory_evidence import SourceState
-from models.v17_product_memory import MemoryItemStatus, V17MemoryItem
+from models.product_memory import MemoryItemStatus, V17MemoryItem
 
 # Existing production memory vectors use Pinecone namespace ns2 in database/vector_db.py.
 # Keep this seam explicit and injectable so unit tests never import/call the real Pinecone client.

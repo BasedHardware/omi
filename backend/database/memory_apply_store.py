@@ -35,16 +35,16 @@ from pydantic import BaseModel
 from database._client import db
 from database.memory_collections import MemoryCollections
 from models.memory_evidence import MemoryEvidence
-from models.v17_memory_contracts import DurablePatchDecision
-from models.v17_memory_apply import (
+from models.memory_contracts import DurablePatchDecision
+from models.memory_apply import (
     ApplyResult,
     ApplyStatus,
     MemoryControlState,
     apply_long_term_patch_transaction,
 )
-from models.v17_memory_operations import MemoryOperation
-from models.v17_product_memory import MemoryItemStatus, V17MemoryItem
-from utils.memory.v17_v3_account_generation_source import (
+from models.memory_operations import MemoryOperation
+from models.product_memory import MemoryItemStatus, V17MemoryItem
+from utils.memory.v3_account_generation_source import (
     V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
     V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
 )

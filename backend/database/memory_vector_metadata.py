@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from models.v17_memory_search_gateway import SearchDecision, SearchVectorHit
-from models.v17_product_memory import MemoryTier, V17MemoryItem
+from models.memory_search_gateway import SearchDecision, SearchVectorHit
+from models.product_memory import MemoryTier, V17MemoryItem
 
 V17_MEMORY_VECTOR_SCHEMA_VERSION = 1
 V17_MEMORY_VECTOR_ID_PREFIX = "v17mem"
