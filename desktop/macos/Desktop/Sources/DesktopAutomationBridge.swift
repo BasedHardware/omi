@@ -72,6 +72,16 @@ struct DesktopAutomationOpenConversationRequest: Codable {
   let activateApp: Bool?
 }
 
+struct DesktopAutomationVisualExportRequest: Codable {
+  let path: String
+}
+
+struct DesktopAutomationVisualExportResult: Codable {
+  let path: String
+  let width: Int
+  let height: Int
+}
+
 struct DesktopAutomationExecuteExportRequest: Codable {
   let destination: String
 }
@@ -90,6 +100,24 @@ struct DesktopAutomationActionResult: Codable {
   let action: String
   let detail: [String: String]?
   let state: DesktopAutomationSnapshot
+}
+
+struct DesktopAutomationCapabilities: Codable {
+  let schemaVersion: Int
+  let routes: [String]
+  let lanes: [String]
+  let waits: [String]
+  let assertions: [String]
+  let artifactTypes: [String]
+  let actions: [DesktopAutomationActionDescriptor]
+}
+
+struct DesktopAutomationRouteTrace: Codable {
+  let method: String
+  let path: String
+  let statusCode: Int
+  let durationMs: Double
+  let finishedAt: String
 }
 
 enum DesktopAutomationActionError: LocalizedError {
@@ -139,6 +167,32 @@ actor DesktopAutomationStateStore {
 
   func current() -> DesktopAutomationSnapshot {
     snapshot
+  }
+}
+
+actor DesktopAutomationTraceStore {
+  static let shared = DesktopAutomationTraceStore()
+
+  private var traces: [DesktopAutomationRouteTrace] = []
+  private let formatter = ISO8601DateFormatter()
+
+  func record(method: String, path: String, statusCode: Int, durationMs: Double) {
+    traces.append(
+      DesktopAutomationRouteTrace(
+        method: method,
+        path: path,
+        statusCode: statusCode,
+        durationMs: durationMs,
+        finishedAt: formatter.string(from: Date())
+      )
+    )
+    if traces.count > 200 {
+      traces.removeFirst(traces.count - 200)
+    }
+  }
+
+  func recent(limit: Int = 50) -> [DesktopAutomationRouteTrace] {
+    Array(traces.suffix(max(1, min(limit, 200))))
   }
 }
 
@@ -410,6 +464,19 @@ final class DesktopAutomationBridge {
   }
 
   private func route(request: HTTPRequest) async -> HTTPResponse {
+    let started = DispatchTime.now().uptimeNanoseconds
+    let response = await routeUntimed(request: request)
+    let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+    await DesktopAutomationTraceStore.shared.record(
+      method: request.method,
+      path: request.path,
+      statusCode: response.statusCode,
+      durationMs: (elapsedMs * 100).rounded() / 100
+    )
+    return response
+  }
+
+  private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
     switch (request.method, request.path) {
     case ("GET", "/health"):
       let snapshot = await DesktopAutomationStateStore.shared.current()
@@ -417,6 +484,9 @@ final class DesktopAutomationBridge {
     case ("GET", "/state"):
       let snapshot = await DesktopAutomationStateStore.shared.current()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
+    case ("GET", "/traces/recent"):
+      let traces = await DesktopAutomationTraceStore.shared.recent()
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: traces, error: nil))
     case ("POST", "/navigate"):
       do {
         let payload = try JSONDecoder().decode(
@@ -477,6 +547,28 @@ final class DesktopAutomationBridge {
     case ("GET", "/actions"):
       let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: descriptors, error: nil))
+    case ("GET", "/capabilities"):
+      let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
+      let capabilities = DesktopAutomationCapabilities(
+        schemaVersion: 1,
+        routes: [
+          "GET /health",
+          "GET /state",
+          "GET /capabilities",
+          "GET /actions",
+          "GET /traces/recent",
+          "POST /navigate",
+          "POST /conversation/open",
+          "POST /action",
+          "POST /visual/export",
+        ],
+        lanes: ["bridge", "visual", "ui"],
+        waits: ["state", "log", "trace"],
+        assertions: ["state", "log", "trace", "ax"],
+        artifactTypes: ["state", "bridge_response", "visual_png", "logs", "traces", "summary"],
+        actions: descriptors
+      )
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: capabilities, error: nil))
     case ("POST", "/action"):
       guard let parsed = parseActionRequest(from: request.body) else {
         return jsonResponse(
@@ -498,6 +590,19 @@ final class DesktopAutomationBridge {
           DesktopAutomationResponse<DesktopAutomationActionResult>(
             ok: false, result: nil, error: error.localizedDescription),
           statusCode: 400
+        )
+      }
+    case ("POST", "/visual/export"):
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationVisualExportRequest.self, from: request.body)
+        let result = try await exportMainWindow(payload)
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<DesktopAutomationVisualExportResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500
         )
       }
     case ("POST", "/open-export"):
@@ -615,6 +720,47 @@ final class DesktopAutomationBridge {
       if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
         window.makeKeyAndOrderFront(nil)
       }
+    }
+  }
+
+  private func exportMainWindow(
+    _ payload: DesktopAutomationVisualExportRequest
+  ) async throws -> DesktopAutomationVisualExportResult {
+    try await MainActor.run {
+      let url = URL(fileURLWithPath: payload.path)
+      try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
+      guard
+        let window = NSApp.windows.first(where: { window in
+          window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow
+        }),
+        let contentView = window.contentView
+      else {
+        throw DesktopAutomationActionError.invalidParams("main window not available")
+      }
+
+      contentView.needsLayout = true
+      contentView.layoutSubtreeIfNeeded()
+
+      let bounds = contentView.bounds
+      guard !bounds.isEmpty,
+        let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds)
+      else {
+        throw DesktopAutomationActionError.invalidParams("main window has no renderable content")
+      }
+
+      contentView.cacheDisplay(in: bounds, to: bitmap)
+      guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
+        throw DesktopAutomationActionError.invalidParams("failed to encode png")
+      }
+
+      try pngData.write(to: url, options: [.atomic])
+      return DesktopAutomationVisualExportResult(
+        path: payload.path,
+        width: bitmap.pixelsWide,
+        height: bitmap.pixelsHigh
+      )
     }
   }
 
