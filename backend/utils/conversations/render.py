@@ -48,7 +48,7 @@ def populate_speaker_names(uid: str, conversations: List[Dict]) -> None:
     people_map = {}
     if all_person_ids:
         people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-        people_map = {p['id']: p['name'] for p in people_data}
+        people_map = {p['id']: (p.get('name') or '') for p in people_data if p.get('id')}
 
     for conv in conversations:
         for seg in conv.get('transcript_segments', []):
