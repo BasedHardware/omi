@@ -117,7 +117,6 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "set_user_preferences",
   "ask_followup",
   "complete_onboarding",
-  "save_knowledge_graph",
 ]);
 
 // Tool order: local tools first (always available), then backend RAG tools (require auth token).

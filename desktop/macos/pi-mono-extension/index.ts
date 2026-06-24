@@ -28,7 +28,7 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -507,17 +507,20 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   promptGuidelines?: string[];
   properties: T;
   required: (keyof T)[];
+  schemaOptions?: Record<string, unknown>;
 }) {
+  const parameters = Type.Object(
+    spec.properties,
+    { additionalProperties: false },
+  );
+  Object.assign(parameters, spec.schemaOptions);
   return defineTool({
     name: spec.name,
     label: spec.label,
     description: spec.description,
     promptSnippet: spec.promptSnippet,
     promptGuidelines: spec.promptGuidelines,
-    parameters: Type.Object(
-      spec.properties,
-      { additionalProperties: false },
-    ),
+    parameters,
     async execute(_toolCallId, params, signal) {
       const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal);
       return { content: [{ type: "text" as const, text: result }], details: undefined };
@@ -627,6 +630,13 @@ export const OMI_TOOLS = [
       limit: Type.Optional(Type.Number({ description: "Maximum artifacts to return. Default 50, max 200." })),
     },
     required: [],
+    schemaOptions: {
+      anyOf: [
+        { required: ["sessionId"] },
+        { required: ["runId"] },
+        { required: ["attemptId"] },
+      ],
+    },
   }),
   omiTool({
     name: "send_agent_message",
@@ -675,6 +685,14 @@ export const OMI_TOOLS = [
       metadata: Type.Optional(Type.Object({}, { additionalProperties: true })),
     },
     required: ["mode", "parentRunId", "objective"],
+    schemaOptions: {
+      allOf: [
+        {
+          if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
+          then: { required: ["childSessionId"] },
+        },
+      ],
+    },
   }),
   omiTool({
     name: "spawn_agent",
@@ -736,6 +754,43 @@ export const OMI_TOOLS = [
       task_id: Type.String({ description: "backendId from action_items" }),
     },
     required: ["task_id"],
+  }),
+  defineTool({
+    name: "load_skill",
+    label: "Load Skill",
+    description: "Load the full instructions for a named skill listed in available_skills.",
+    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    parameters: Type.Object({
+      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const name = String((params as { name?: unknown }).name ?? "").trim();
+      const workspace = process.env.OMI_WORKSPACE || "";
+      const candidates = [
+        workspace ? join(workspace, ".claude", "skills", name, "SKILL.md") : "",
+        join(homedir(), ".claude", "skills", name, "SKILL.md"),
+      ].filter(Boolean);
+
+      let content: string | null = null;
+      for (const filePath of candidates) {
+        try {
+          content = await readFile(filePath, "utf8");
+          break;
+        } catch {
+          // Try the next configured skill location.
+        }
+      }
+      if (content && name === "dev-mode" && workspace) {
+        content = `Workspace: ${workspace}\n\n${content}`;
+      }
+      return {
+        content: [{
+          type: "text" as const,
+          text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+        }],
+        details: undefined,
+      };
+    },
   }),
   omiTool({
     name: "save_knowledge_graph",

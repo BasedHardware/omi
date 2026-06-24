@@ -214,7 +214,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       ?? projection.adapterSessionId
     projection.status = status
     projection.statusText = statusText
-    projection.errorMessage = errorMessage ?? (terminal ? nil : projection.errorMessage)
+    projection.errorMessage = errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil
     projection.costUsd = (payload["costUsd"] as? Double) ?? projection.costUsd

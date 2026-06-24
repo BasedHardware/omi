@@ -42,6 +42,7 @@ interface ActiveRequestContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
   clientId: string;
+  ownerId: string;
   adapterId: string;
   sessionId?: string;
   runId?: string;
@@ -97,6 +98,7 @@ export class JsonlCompatibilityFacade {
       protocolVersion: message.protocolVersion,
       requestId: input.requestId,
       clientId: input.clientId,
+      ownerId: input.ownerId,
       adapterId: input.adapterId ?? this.defaultAdapterId,
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
@@ -151,7 +153,7 @@ export class JsonlCompatibilityFacade {
     }
   }
 
-  async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
+  async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
     const runId =
@@ -165,6 +167,7 @@ export class JsonlCompatibilityFacade {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
         clientId,
+        ownerId: message.ownerId ?? this.ownerId,
         adapterId: this.defaultAdapterId,
         sessionId: message.sessionId,
         runId,
@@ -214,7 +217,7 @@ export class JsonlCompatibilityFacade {
   handleInvalidateSession(message: InvalidateSessionMessage): void {
     const legacySessionKey = message.sessionKey;
     const result = this.kernel.invalidateBindings({
-      ownerId: this.ownerId,
+      ownerId: message.ownerId ?? this.ownerId,
       surfaceKind: "legacy_jsonl",
       legacyClientScope: this.legacyClientScope(undefined),
       legacySessionKey,
@@ -238,7 +241,7 @@ export class JsonlCompatibilityFacade {
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
 
     return {
-      ownerId: this.ownerId,
+      ownerId: message.ownerId ?? this.ownerId,
       sessionId: message.protocolVersion === 2 ? message.sessionId : undefined,
       surfaceKind: message.surfaceKind ?? "legacy_jsonl",
       externalRefKind: message.externalRefKind,
@@ -263,6 +266,22 @@ export class JsonlCompatibilityFacade {
         protocolVersion: message.protocolVersion ?? 1,
         source: "jsonl_compatibility_facade",
       },
+    };
+  }
+
+  unscopedToolCallCorrelation(): Partial<QueryScopedOutbound> {
+    if (this.activeByRequest.size !== 1) return {};
+    const context = this.activeByRequest.values().next().value as ActiveRequestContext | undefined;
+    if (!context || context.protocolVersion !== 2) return {};
+    return {
+      protocolVersion: 2,
+      requestId: context.requestId,
+      clientId: context.clientId,
+      sessionId: context.sessionId,
+      runId: context.runId,
+      attemptId: context.attemptId,
+      adapterSessionId: context.adapterSessionId,
+      legacyAdapterSessionId: context.legacyAdapterSessionId,
     };
   }
 

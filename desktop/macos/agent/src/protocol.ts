@@ -11,6 +11,8 @@ export interface ProtocolEnvelope {
   /** v1 `id` maps to requestId during the compatibility window. */
   requestId?: string;
   clientId?: string;
+  /** Signed-in Omi/Firebase uid used to scope persisted runtime state. */
+  ownerId?: string;
 }
 
 export interface CanonicalCorrelation {
@@ -85,6 +87,7 @@ export interface WarmupMessage extends ProtocolEnvelope {
 export interface RefreshTokenMessage {
   type: "refresh_token";
   token: string;
+  ownerId?: string;
 }
 
 export type InboundMessage =

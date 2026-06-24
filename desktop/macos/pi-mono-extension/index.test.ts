@@ -927,8 +927,8 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 24 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 24);
+test("OMI_TOOLS: exactly 25 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 25);
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -977,6 +977,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     get_agent_run: ["runId"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
+    load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
     delegate_agent: ["mode", "parentRunId", "objective"],
     spawn_agent: ["brief"],
@@ -1002,6 +1003,23 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
       `${tool.name} required fields mismatch`,
     );
   }
+});
+
+test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
+  const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
+  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
+    { required: ["sessionId"] },
+    { required: ["runId"] },
+    { required: ["attemptId"] },
+  ]);
+
+  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
+  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
+    {
+      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
+      then: { required: ["childSessionId"] },
+    },
+  ]);
 });
 
 test("OMI_TOOLS: all declared properties have TypeBox type metadata", () => {

@@ -83,21 +83,28 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       env,
       stdio: ["pipe", "pipe", "pipe"],
     });
-
-    if (!this.process.stdin || !this.process.stdout || !this.process.stderr) {
-      throw new Error("Failed to create ACP subprocess pipes");
-    }
-
-    this.process.on("error", (err) => {
-      this.log(`ACP process error: ${err.message}`);
+    const proc = this.process;
+    let finalized = false;
+    const finalizeProcess = (reason: string): void => {
+      if (finalized || this.process !== proc) return;
+      finalized = true;
+      this.log(reason);
       this.process = null;
       this.stdinWriter = null;
       this.readline = null;
       for (const [, handler] of this.responseHandlers) {
-        handler.reject(new Error(`ACP process error: ${err.message}`));
+        handler.reject(new Error(reason));
       }
       this.responseHandlers.clear();
       this.onProcessExit?.();
+    };
+
+    if (!proc.stdin || !proc.stdout || !proc.stderr) {
+      throw new Error("Failed to create ACP subprocess pipes");
+    }
+
+    proc.on("error", (err) => {
+      finalizeProcess(`ACP process error: ${err.message}`);
     });
 
     this.stdinWriter = (line: string) => {
@@ -109,29 +116,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     };
 
     this.readline = createInterface({
-      input: this.process.stdout,
+      input: proc.stdout,
       terminal: false,
     });
 
     this.readline.on("line", (line: string) => this.handleLine(line));
 
-    this.process.stderr.on("data", (data: Buffer) => {
+    proc.stderr.on("data", (data: Buffer) => {
       const text = data.toString().trim();
       if (text) {
         this.log(`ACP stderr: ${text}`);
       }
     });
 
-    this.process.on("exit", (code) => {
-      this.log(`ACP process exited with code ${code}`);
-      this.process = null;
-      this.stdinWriter = null;
-      this.readline = null;
-      for (const [, handler] of this.responseHandlers) {
-        handler.reject(new Error(`ACP process exited (code ${code})`));
-      }
-      this.responseHandlers.clear();
-      this.onProcessExit?.();
+    proc.on("exit", (code) => {
+      finalizeProcess(`ACP process exited with code ${code}`);
     });
   }
 

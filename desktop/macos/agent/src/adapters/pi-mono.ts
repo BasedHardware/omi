@@ -33,6 +33,10 @@ import {
 } from "./interface.js";
 import type { WarmupSessionConfig } from "../protocol.js";
 
+type PiMonoConfig = HarnessConfig & {
+  onRestart?: (reason: string) => void;
+};
+
 // Pi-mono RPC command/event types
 interface PiRpcCommand {
   id?: string;
@@ -163,7 +167,7 @@ function resolveBundledExtension(): string {
 export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
-  private config: HarnessConfig;
+  private config: PiMonoConfig;
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
@@ -201,7 +205,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
-  constructor(config: HarnessConfig, piPath?: string, extensionPath?: string) {
+  constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
@@ -553,6 +557,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("token_refresh");
     this.pendingTokenRefresh = false;
     process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
     return true;
@@ -580,6 +585,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
+    this.config.onRestart?.(reasons.join("+"));
     process.stderr.write(
       `[pi-mono] deferred restart executed (${reasons.join("+")}; subprocess restarted)\n`
     );

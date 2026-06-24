@@ -36,6 +36,7 @@ import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
   OutboundMessage,
+  QueryScopedOutbound,
   QueryMessage,
   WarmupMessage,
   RefreshTokenMessage,
@@ -115,6 +116,7 @@ function agentStateDir(): string {
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
+let unscopedToolCallCorrelation: (() => Partial<QueryScopedOutbound>) | undefined;
 
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
@@ -190,11 +192,13 @@ function startOmiToolsRelay(): Promise<string> {
               }
 
               // Forward tool call to Swift via stdout
+              const correlation = unscopedToolCallCorrelation?.() ?? {};
               send({
                 type: "tool_use",
                 callId: msg.callId,
                 name: msg.name,
                 input: msg.input,
+                ...correlation,
               });
 
               // Create a promise that will be resolved when Swift responds
@@ -567,8 +571,20 @@ async function main(): Promise<void> {
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
+  const kernel = new AgentRuntimeKernel({ store, registry });
   let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
   let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
+  let piMonoOwnerId = "desktop-local-user";
+  const invalidatePiMonoBindings = (reason: string) => {
+    kernel.invalidateBindings({
+      ownerId: piMonoOwnerId,
+      surfaceKind: "legacy_jsonl",
+      defaultAdapterId: "pi-mono",
+      adapterId: "pi-mono",
+      reason,
+    });
+    logErr(`Pi-mono: subprocess restarted; active bindings invalidated (${reason})`);
+  };
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (piMonoRuntimeAdapter) return true;
     if (!authToken) return false;
@@ -576,6 +592,7 @@ async function main(): Promise<void> {
     piMonoAdapter = new PiMonoAdapter({
       omiApiBaseUrl: process.env.OMI_API_BASE_URL,
       authToken,
+      onRestart: (reason) => invalidatePiMonoBindings(`pi_mono_restart_${reason}`),
     });
     piMonoRuntimeAdapter = new PiMonoRuntimeAdapter(piMonoAdapter);
     await piMonoRuntimeAdapter.start();
@@ -591,7 +608,6 @@ async function main(): Promise<void> {
     send({ type: "error", message: msg });
     process.exit(1);
   }
-  const kernel = new AgentRuntimeKernel({ store, registry });
   agentControlToolContext = { kernel };
   const facade = new JsonlCompatibilityFacade({
     kernel,
@@ -606,6 +622,7 @@ async function main(): Promise<void> {
     },
     maxRecoverableRetries: 2,
   });
+  unscopedToolCallCorrelation = () => facade.unscopedToolCallCorrelation();
 
   // 3. Signal readiness
   send({ type: "init", sessionId: "" });
@@ -630,6 +647,9 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
+          if (adapterId === "pi-mono" && query.ownerId) {
+            piMonoOwnerId = query.ownerId;
+          }
           if (adapterId === "acp") {
             await initializeAcp();
           }
@@ -671,6 +691,7 @@ async function main(): Promise<void> {
       case "refresh_token": {
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
+        piMonoOwnerId = rtm.ownerId ?? piMonoOwnerId;
         try {
           if (!piMonoAdapter) {
             await ensurePiMonoAdapter(rtm.token);
@@ -678,14 +699,7 @@ async function main(): Promise<void> {
           }
           const restarted = await piMonoAdapter.updateAuthToken(rtm.token);
           if (restarted) {
-            kernel.invalidateBindings({
-              ownerId: "desktop-local-user",
-              surfaceKind: "legacy_jsonl",
-              defaultAdapterId: "pi-mono",
-              adapterId: "pi-mono",
-              reason: "pi_mono_token_refresh_restart",
-            });
-            logErr("Pi-mono: token refresh restarted subprocess; active bindings invalidated");
+            logErr("Pi-mono: token refresh restarted subprocess");
           }
         } catch (err) {
           logErr(`Pi-mono token refresh error: ${err}`);

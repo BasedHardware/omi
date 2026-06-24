@@ -1,6 +1,7 @@
 import type {
   AdapterAttemptResult,
   AdapterBindingHandle,
+  CancelDispatchResult,
   OpenedBinding,
   PromptBlock,
   RuntimeAdapter,
@@ -220,6 +221,9 @@ export class AgentRuntimeKernel {
   private readonly runtimeNodeId: string;
   private readonly subscribers = new Set<KernelEventSubscriber>();
   private readonly activeExecutions = new Map<string, ActiveExecution>();
+  private readonly bindingResolutionLocks = new Map<string, Promise<void>>();
+  private transactionDepth = 0;
+  private pendingSubscriberEvents: AgentEvent[] = [];
 
   constructor(options: AgentRuntimeKernelOptions) {
     this.store = options.store;
@@ -307,7 +311,7 @@ export class AgentRuntimeKernel {
   }
 
   private createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
-    return this.store.withTransaction(() => {
+    return this.withTransaction(() => {
       const session = this.resolveSession(input);
       const run = this.store.insertRun({
         sessionId: session.sessionId,
@@ -370,17 +374,19 @@ export class AgentRuntimeKernel {
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
       try {
-        const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
-        const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-        const resolved = await pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
-          this.resolveBindingForAttempt({
-            input,
-            session: accepted.session,
-            adapter: worker.adapter,
-            attempt,
-            adapterId,
-          })
-        );
+        const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
+          const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
+          const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
+          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
+            this.resolveBindingForAttempt({
+              input,
+              session: accepted.session,
+              adapter: worker.adapter,
+              attempt,
+              adapterId,
+            })
+          );
+        });
         binding = resolved.binding;
         handle = resolved.handle;
       } catch (error) {
@@ -487,7 +493,7 @@ export class AgentRuntimeKernel {
     const attempt = this.readActiveAttempt(runId);
     const requestedAt = Date.now();
 
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.updateRun(runId, { status: "cancelling", updatedAtMs: requestedAt });
       if (attempt) {
         this.updateAttempt(attempt.attemptId, {
@@ -515,16 +521,33 @@ export class AgentRuntimeKernel {
     let dispatchAttempted = false;
     let adapterAcknowledged = false;
     if (active && attempt) {
-      const dispatch = await active.adapter.cancelAttempt({
-        sessionId: active.sessionId,
-        runId,
-        attemptId: attempt.attemptId,
-        binding: active.binding,
-      });
+      let dispatch: CancelDispatchResult = {
+        accepted: true,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+        message: undefined as string | undefined,
+      };
+      try {
+        dispatch = await active.adapter.cancelAttempt({
+          sessionId: active.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+          binding: active.binding,
+        });
+      } catch (error) {
+        dispatch = {
+          accepted: true,
+          dispatchAttempted: true,
+          adapterAcknowledged: false,
+          message: messageFrom(error),
+        };
+      } finally {
+        active.abortController.abort();
+      }
       dispatchAttempted = dispatch.dispatchAttempted;
       adapterAcknowledged = dispatch.adapterAcknowledged;
       const now = Date.now();
-      this.store.withTransaction(() => {
+      this.withTransaction(() => {
         this.updateAttempt(attempt.attemptId, {
           cancellationDispatchedAtMs: dispatch.dispatchAttempted ? now : null,
           cancellationAcknowledgedAtMs: dispatch.adapterAcknowledged ? now : null,
@@ -546,10 +569,10 @@ export class AgentRuntimeKernel {
             accepted: true,
             dispatchAttempted,
             adapterAcknowledged,
+            message: dispatch.message,
           },
         });
       });
-      active.abortController.abort();
     }
 
     return {
@@ -655,7 +678,7 @@ export class AgentRuntimeKernel {
     }
 
     const now = Date.now();
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       for (const bindingId of invalidatedBindingIds) {
         this.updateBinding(bindingId, {
           status: "invalid",
@@ -685,7 +708,7 @@ export class AgentRuntimeKernel {
     childRunInput: ExecuteAgentRunInput,
     input: DelegateAgentInput
   ): { session: AgentSession; run: AgentRun; delegation: AgentDelegation } {
-    return this.store.withTransaction(() => {
+    return this.withTransaction(() => {
       const session = this.resolveSession(childRunInput);
       if (session.sessionId === parentSession.sessionId) {
         throw new Error("Delegated child session must be distinct from parent session");
@@ -803,7 +826,7 @@ export class AgentRuntimeKernel {
 
   private updateDelegationStatus(delegation: AgentDelegation, status: DelegationStatus, errorMessage?: string): AgentDelegation {
     const now = Date.now();
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.store.execute(
         `UPDATE delegations
          SET status = ?, completed_at_ms = ?, result_artifact_id = result_artifact_id
@@ -899,7 +922,7 @@ export class AgentRuntimeKernel {
     retryReason: string | null;
     resumeFromAttemptId: string | null;
   }): RunAttempt {
-    return this.store.withTransaction(() => {
+    return this.withTransaction(() => {
       const active = this.readActiveAttempt(input.runId);
       if (active) {
         throw new Error(`Run ${input.runId} already has active attempt ${active.attemptId}`);
@@ -952,7 +975,7 @@ export class AgentRuntimeKernel {
 
     const nextGeneration = this.nextBindingGeneration(input.session.sessionId, input.adapterId);
     if (input.input.legacyAdapterSessionId && input.adapter.capabilities.supportsNativeResume && nextGeneration === 1) {
-      const adopted = this.store.withTransaction(() => {
+      const adopted = this.withTransaction(() => {
         const binding = this.store.insertAdapterBinding({
           sessionId: input.session.sessionId,
           adapterId: input.adapterId,
@@ -1026,7 +1049,7 @@ export class AgentRuntimeKernel {
         systemPrompt: input.input.systemPrompt,
         mcpServers: input.input.mcpServers,
       });
-      this.store.withTransaction(() => {
+      this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
           adapterInstanceId: this.runtimeNodeId,
           lastUsedAtMs: Date.now(),
@@ -1075,7 +1098,7 @@ export class AgentRuntimeKernel {
       mcpServers: input.input.mcpServers,
       metadata: input.input.metadata,
     });
-    const binding = this.store.withTransaction(() => {
+    const binding = this.withTransaction(() => {
       const created = this.store.insertAdapterBinding({
         sessionId: input.session.sessionId,
         adapterId: input.adapterId,
@@ -1116,7 +1139,7 @@ export class AgentRuntimeKernel {
 
   private markAttemptRunning(attempt: RunAttempt, binding: AdapterBinding): void {
     const run = this.readRun(attempt.runId);
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.updateRun(attempt.runId, { status: "running", updatedAtMs: Date.now() });
       this.updateAttempt(attempt.attemptId, {
         status: "running",
@@ -1150,7 +1173,7 @@ export class AgentRuntimeKernel {
     result: AdapterAttemptResult
   ): KernelRunResult {
     const status = result.terminalStatus;
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
         adapterNativeSessionId: result.adapterSessionId,
         lastUsedAtMs: Date.now(),
@@ -1226,7 +1249,7 @@ export class AgentRuntimeKernel {
 
   private failAttemptBeforeExecution(attempt: RunAttempt, errorCode: string, errorMessage: string, retryable: boolean): void {
     const run = this.readRun(attempt.runId);
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.updateAttempt(attempt.attemptId, {
         status: "failed",
         retryable: retryable ? 1 : 0,
@@ -1288,7 +1311,7 @@ export class AgentRuntimeKernel {
     if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
       return;
     }
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
         return;
       }
@@ -1305,7 +1328,7 @@ export class AgentRuntimeKernel {
 
   private markBindingStale(binding: AdapterBinding, attempt: RunAttempt, reason: string): void {
     const run = this.readRun(attempt.runId);
-    this.store.withTransaction(() => {
+    this.withTransaction(() => {
       this.updateBinding(binding.bindingId, {
         status: "stale",
         invalidatedAtMs: Date.now(),
@@ -1339,6 +1362,38 @@ export class AgentRuntimeKernel {
       visibility: input.visibility ?? "ui",
       payloadJson: JSON.stringify(input.payload ?? {}),
     });
+    if (this.transactionDepth > 0) {
+      this.pendingSubscriberEvents.push(event);
+      return event;
+    }
+    this.notifySubscribers(event);
+    return event;
+  }
+
+  private withTransaction<T>(work: () => T): T {
+    const pendingStart = this.pendingSubscriberEvents.length;
+    this.transactionDepth += 1;
+    let committed = false;
+    try {
+      const result = this.store.withTransaction(work);
+      committed = true;
+      return result;
+    } finally {
+      this.transactionDepth -= 1;
+      if (!committed) {
+        this.pendingSubscriberEvents.splice(pendingStart);
+      }
+      if (this.transactionDepth === 0) {
+        const events = this.pendingSubscriberEvents;
+        this.pendingSubscriberEvents = [];
+        for (const event of events) {
+          this.notifySubscribers(event);
+        }
+      }
+    }
+  }
+
+  private notifySubscribers(event: AgentEvent): void {
     for (const subscriber of this.subscribers) {
       try {
         subscriber(event);
@@ -1347,7 +1402,32 @@ export class AgentRuntimeKernel {
         // by UI/projection listener failures.
       }
     }
-    return event;
+  }
+
+  private async withBindingResolutionLock<T>(
+    sessionId: string,
+    adapterId: string,
+    work: () => Promise<T>
+  ): Promise<T> {
+    const key = `${sessionId}:${adapterId}`;
+    const previous = this.bindingResolutionLocks.get(key);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous ? previous.then(() => current, () => current) : current;
+    this.bindingResolutionLocks.set(key, tail);
+    try {
+      if (previous) {
+        await previous.catch(() => undefined);
+      }
+      return await work();
+    } finally {
+      release();
+      if (this.bindingResolutionLocks.get(key) === tail) {
+        this.bindingResolutionLocks.delete(key);
+      }
+    }
   }
 
   private readSession(sessionId: string): AgentSession {

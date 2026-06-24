@@ -159,6 +159,9 @@ actor AgentRuntimeProcess {
       "requestId": UUID().uuidString,
       "clientId": clientId,
     ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
     if let cwd { dict["cwd"] = cwd }
     dict["sessions"] = sessions.map { session -> [String: Any] in
       var entry: [String: Any] = [
@@ -174,32 +177,44 @@ actor AgentRuntimeProcess {
   }
 
   func invalidateSession(clientId: String, sessionKey: String) {
-    sendJson([
+    var dict: [String: Any] = [
       "type": "invalidate_session",
       "protocolVersion": 2,
       "requestId": UUID().uuidString,
       "clientId": clientId,
       "sessionKey": sessionKey,
-    ])
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
   }
 
   func refreshAuthToken(_ token: String) {
-    sendJson([
+    var dict: [String: Any] = [
       "type": "refresh_token",
       "token": token,
-    ])
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
   }
 
   func interrupt(clientId: String, requestId: String) {
     guard var request = activeRequests[requestId], request.clientId == clientId else { return }
     request.isInterrupted = true
     activeRequests[requestId] = request
-    sendJson([
+    var dict: [String: Any] = [
       "type": "interrupt",
       "protocolVersion": 2,
       "requestId": requestId,
       "clientId": clientId,
-    ])
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
   }
 
   func query(
@@ -298,6 +313,9 @@ actor AgentRuntimeProcess {
       }
       if let imageData {
         queryDict["imageBase64"] = imageData.base64EncodedString()
+      }
+      if let ownerId = currentOwnerId() {
+        queryDict["ownerId"] = ownerId
       }
       sendJson(queryDict)
     }
@@ -641,6 +659,10 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
+    if (message.payload["terminalStatus"] as? String) == "cancelled" {
+      request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
     request.continuation.resume(returning: queryResult(from: message))
   }
 
@@ -684,6 +706,13 @@ actor AgentRuntimeProcess {
     } catch {
       log("AgentRuntimeProcess: failed to write stdin: \(error.localizedDescription)")
     }
+  }
+
+  private func currentOwnerId() -> String? {
+    guard let value = UserDefaults.standard.string(forKey: "auth_userId"), !value.isEmpty else {
+      return nil
+    }
+    return value
   }
 
   private func markOOM() {

@@ -833,6 +833,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self.pendingAttachments.removeAll()
                     self.sessions.removeAll()
                     self.currentSession = nil
+                    AgentRuntimeStatusStore.shared.reset()
                 }
             }
 
@@ -3103,14 +3104,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let resolvedOmiSessionId = omiSessionId ?? resolvedSurface.flatMap {
                 AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
             }
+            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
             let resolvedLegacyClientScope =
                 legacyClientScope
-                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(sessionId)" : nil)
+                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? sessionId),
+                sessionKey: resolvedSessionKey,
                 omiSessionId: resolvedOmiSessionId,
                 surfaceKind: resolvedSurface?.surfaceKind,
                 externalRefKind: resolvedSurface?.externalRefKind,

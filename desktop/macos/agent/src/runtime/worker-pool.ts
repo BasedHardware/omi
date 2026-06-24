@@ -17,6 +17,7 @@ export class AdapterWorker {
   readonly workerId: string;
   readonly adapter: RuntimeAdapter;
   private activeAttemptId: string | null = null;
+  private activeBindingId: string | null = null;
   private pinnedBindingId: string | null = null;
 
   constructor(workerId: string, adapter: RuntimeAdapter) {
@@ -35,6 +36,10 @@ export class AdapterWorker {
     return Boolean(binding?.bindingId && binding.bindingId === this.pinnedBindingId);
   }
 
+  hasActiveBinding(bindingId: string): boolean {
+    return this.activeBindingId === bindingId;
+  }
+
   pinBinding(binding: AdapterBindingHandle): void {
     if (!binding.bindingId) {
       throw new Error("Pinned adapter workers require a bindingId");
@@ -47,29 +52,35 @@ export class AdapterWorker {
     this.pinnedBindingId = binding.bindingId;
   }
 
-  async runExclusive<T>(attemptId: string, work: () => Promise<T>): Promise<T> {
+  async runExclusive<T>(attemptId: string, binding: AdapterBindingHandle | undefined, work: () => Promise<T>): Promise<T> {
     if (this.activeAttemptId && this.activeAttemptId !== attemptId) {
       throw new Error(
         `Worker ${this.workerId} already has active attempt ${this.activeAttemptId}`
       );
     }
     if (!this.activeAttemptId) {
-      this.activeAttemptId = attemptId;
+      this.reserve(attemptId, binding);
+    } else if (binding?.bindingId && this.activeBindingId !== binding.bindingId) {
+      throw new Error(
+        `Worker ${this.workerId} has active binding ${this.activeBindingId ?? "(none)"}`
+      );
     }
     try {
       return await work();
     } finally {
       this.activeAttemptId = null;
+      this.activeBindingId = null;
     }
   }
 
-  reserve(attemptId: string): void {
+  reserve(attemptId: string, binding?: AdapterBindingHandle): void {
     if (this.activeAttemptId) {
       throw new Error(
         `Worker ${this.workerId} already has active attempt ${this.activeAttemptId}`
       );
     }
     this.activeAttemptId = attemptId;
+    this.activeBindingId = binding?.bindingId ?? null;
   }
 }
 
@@ -106,6 +117,13 @@ export class AdapterWorkerPool {
   }
 
   acquire(binding?: AdapterBindingHandle): AdapterWorker | null {
+    const bindingId = binding?.bindingId;
+    if (bindingId) {
+      if (this.workers.some((worker) => worker.hasActiveBinding(bindingId))) {
+        return null;
+      }
+    }
+
     const idle = this.workers.find((worker) => worker.canRun(binding));
     if (idle) {
       if (binding && idle.adapter.capabilities.requiresPinnedWorker) {
@@ -134,7 +152,7 @@ export class AdapterWorkerPool {
   ): Promise<T> {
     const worker = await this.acquireQueued(binding, attemptId);
     try {
-      return await worker.runExclusive(attemptId, () => work(worker));
+      return await worker.runExclusive(attemptId, binding, () => work(worker));
     } finally {
       this.drainWaiters();
     }
@@ -143,6 +161,7 @@ export class AdapterWorkerPool {
   private acquireQueued(binding: AdapterBindingHandle | undefined, attemptId: string): Promise<AdapterWorker> {
     const worker = this.acquire(binding);
     if (worker) {
+      worker.reserve(attemptId, binding);
       return Promise.resolve(worker);
     }
     return new Promise((resolve) => {
@@ -159,7 +178,7 @@ export class AdapterWorkerPool {
         continue;
       }
       this.waiters.splice(i, 1);
-      worker.reserve(waiter.attemptId);
+      worker.reserve(waiter.attemptId, waiter.binding);
       waiter.resolve(worker);
     }
   }
