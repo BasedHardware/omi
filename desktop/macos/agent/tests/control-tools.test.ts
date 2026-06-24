@@ -233,6 +233,32 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("lets invalid adapter ids reach kernel adapter-not-registered handling", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
+    const first = await kernel.executeRun(baseRunInput);
+
+    const failed = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "send_agent_message", {
+        ownerId: "owner",
+        sessionId: first.session.sessionId,
+        prompt: "use missing adapter",
+        adapterId: "missing-adapter",
+        requestId: "missing-adapter-request",
+      }),
+    );
+
+    expect(failed).toMatchObject({
+      ok: true,
+      terminalStatus: "failed",
+      run: {
+        status: "failed",
+        errorCode: "adapter_not_registered",
+      },
+    });
+    expect(failed.run.errorMessage).toContain("Adapter not registered: missing-adapter");
+    store.close();
+  });
+
   it("rejects synchronous nested pi-mono control runs while pi-mono is busy", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
     adapter.deferResult();

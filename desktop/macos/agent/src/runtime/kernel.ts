@@ -664,6 +664,10 @@ export class AgentRuntimeKernel {
     return activeCount < this.registry.capacity(adapterId);
   }
 
+  isAdapterRegistered(adapterId: string): boolean {
+    return this.registry.has(adapterId);
+  }
+
   defaultAdapterIdForSession(sessionId: string): string {
     return this.readSession(sessionId).defaultAdapterId;
   }

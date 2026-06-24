@@ -89,4 +89,17 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("currentHarnessMode"))
     XCTAssertFalse(source.contains("harness changed"))
   }
+
+  func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("cleanupFailedStart(process: proc, error: error)"))
+    XCTAssertTrue(source.contains("isRunning = false"))
+    XCTAssertTrue(source.contains("receivedInit = false"))
+    XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.stopped)"))
+  }
 }

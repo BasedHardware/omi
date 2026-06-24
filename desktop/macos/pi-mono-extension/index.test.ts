@@ -923,8 +923,11 @@ test("summarizeInput: read path preserved", () => {
 // ---------------------------------------------------------------------------
 
 /** Helper: create a Unix socket server on a temp path. */
+let mockBridgeCounter = 0;
+
 function createMockBridge(): { server: Server; sockPath: string } {
-  const sockPath = pathJoin(tmpdir(), `omi-test-${process.pid}-${Date.now()}.sock`);
+  mockBridgeCounter += 1;
+  const sockPath = pathJoin(tmpdir(), `omi-test-${process.pid}-${Date.now()}-${mockBridgeCounter}.sock`);
   const server = createServer();
   return { server, sockPath };
 }
@@ -1195,6 +1198,51 @@ test("callSwiftTool: disconnect resolves pending calls with error", async () => 
     __resetOmiPipeForTest();
     server.close();
     try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: stale socket close does not clear active connection pending calls", async () => {
+  __resetOmiPipeForTest();
+  const first = createMockBridge();
+  const second = createMockBridge();
+  let firstSocket: import("node:net").Socket | undefined;
+
+  try {
+    await new Promise<void>((resolve) => first.server.listen(first.sockPath, resolve));
+    first.server.on("connection", (socket) => {
+      firstSocket = socket;
+    });
+    await __connectOmiPipeForTest(first.sockPath);
+
+    await new Promise<void>((resolve) => second.server.listen(second.sockPath, resolve));
+    second.server.on("connection", (socket) => {
+      let buf = "";
+      socket.on("data", (data) => {
+        buf += data.toString();
+        const idx = buf.indexOf("\n");
+        if (idx < 0) return;
+        const msg = JSON.parse(buf.slice(0, idx));
+        socket.write(JSON.stringify({
+          type: "tool_result",
+          callId: msg.callId,
+          result: "active-result",
+        }) + "\n");
+      });
+    });
+    await __connectOmiPipeForTest(second.sockPath);
+
+    firstSocket?.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "active-result");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    first.server.close();
+    second.server.close();
+    try { await unlink(first.sockPath); } catch {}
+    try { await unlink(second.sockPath); } catch {}
   }
 });
 

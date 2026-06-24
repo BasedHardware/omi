@@ -167,10 +167,10 @@ describe("AdapterWorkerPool", () => {
     expect(first).not.toBeNull();
     expect(second).toBe(first);
 
-    void first?.runExclusive("attempt-1", async () => new Promise(() => {}));
+    void first?.runExclusive("attempt-1", undefined, async () => new Promise(() => {}));
     const concurrent = pool.acquire();
     expect(concurrent?.workerId).toBe("worker-2");
-    void concurrent?.runExclusive("attempt-2", async () => new Promise(() => {}));
+    void concurrent?.runExclusive("attempt-2", undefined, async () => new Promise(() => {}));
 
     expect(pool.acquire()).toBeNull();
     expect(pool.size).toBe(2);
@@ -184,12 +184,13 @@ describe("AdapterWorkerPool", () => {
     let release!: () => void;
     const active = worker!.runExclusive(
       "attempt-1",
+      undefined,
       async () => new Promise<void>((resolve) => {
         release = resolve;
       })
     );
 
-    await expect(worker!.runExclusive("attempt-2", async () => {})).rejects.toThrow(
+    await expect(worker!.runExclusive("attempt-2", undefined, async () => {})).rejects.toThrow(
       "already has active attempt attempt-1"
     );
 
@@ -197,7 +198,7 @@ describe("AdapterWorkerPool", () => {
     await active;
   });
 
-  it("pins pi-mono-style bindings to a single worker", () => {
+  it("reuses idle pi-mono-style workers for later bindings", () => {
     const pinnedAdapter = {
       ...fakeAdapter("pi-mono"),
       capabilities: {
@@ -226,6 +227,7 @@ describe("AdapterWorkerPool", () => {
     });
 
     expect(first?.workerId).toBe("worker-1");
-    expect(second?.workerId).toBe("worker-2");
+    expect(second?.workerId).toBe("worker-1");
+    expect(pool.size).toBe(1);
   });
 });

@@ -40,6 +40,13 @@ function createAdapter() {
   return { adapter, events };
 }
 
+function seedSessions(adapter: PiMonoAdapter, ...sessionIds: string[]) {
+  const sessions = (adapter as any).sessions as Map<string, unknown>;
+  for (const sessionId of sessionIds) {
+    sessions.set(sessionId, { cwd: "/tmp" });
+  }
+}
+
 function makeTurnEndEvent(text: string, totalCost = 1.25) {
   return {
     type: "turn_end",
@@ -67,6 +74,7 @@ function makeTurnEndEvent(text: string, totalCost = 1.25) {
 describe("PiMonoAdapter prompt correlation", () => {
   it("rejects the previous prompt when a new generation supersedes it", async () => {
     const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1", "session-2");
 
     const firstPrompt = adapter.sendPrompt(
       "session-1",
@@ -112,6 +120,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
   it("resolves abort before turn_end and drops the late completion", async () => {
     const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
 
     const prompt = adapter.sendPrompt(
       "session-1",

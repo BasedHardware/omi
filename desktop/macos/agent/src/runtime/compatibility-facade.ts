@@ -70,17 +70,27 @@ interface WarmupHint {
   systemPrompt?: string;
 }
 
+const TERMINAL_RUN_EVENT_STATUSES = new Set([
+  "succeeded",
+  "failed",
+  "cancelled",
+  "timed_out",
+  "orphaned",
+]);
+
 export function selectUnscopedToolCallCorrelation(
   contexts: Iterable<UnscopedToolCallContext>
 ): Partial<QueryScopedOutbound> {
-  const v2Contexts = Array.from(contexts).filter((context) => context.protocolVersion === 2);
-  const runningContexts = v2Contexts.filter((context) => context.isRunning);
-  const selected =
-    runningContexts.length === 1
-      ? runningContexts[0]
-      : v2Contexts.length === 1
-        ? v2Contexts[0]
-        : undefined;
+  const allContexts = Array.from(contexts);
+  const runningContexts = allContexts.filter((context) => context.isRunning);
+  let selected: UnscopedToolCallContext | undefined;
+  if (runningContexts.length > 0) {
+    if (runningContexts.length === 1 && runningContexts[0].protocolVersion === 2) {
+      selected = runningContexts[0];
+    }
+  } else if (allContexts.length === 1 && allContexts[0].protocolVersion === 2) {
+    selected = allContexts[0];
+  }
   if (!selected) return {};
   return {
     protocolVersion: 2,
@@ -348,6 +358,12 @@ export class JsonlCompatibilityFacade {
     }
     if (event.type === "attempt.started" || event.type === "run.running") {
       context.isRunning = true;
+    }
+    if (
+      event.type.startsWith("run.") &&
+      TERMINAL_RUN_EVENT_STATUSES.has(event.type.slice("run.".length))
+    ) {
+      context.isRunning = false;
     }
     if (!event.type.startsWith("adapter.")) return;
 

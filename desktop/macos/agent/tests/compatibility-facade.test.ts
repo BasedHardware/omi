@@ -70,6 +70,43 @@ describe("JsonlCompatibilityFacade", () => {
     ).toEqual({});
   });
 
+  it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {
+    expect(
+      selectUnscopedToolCallCorrelation([
+        {
+          protocolVersion: 1,
+          requestId: "legacy-running",
+          clientId: "legacy-client",
+          isRunning: true,
+        },
+        {
+          protocolVersion: 2,
+          requestId: "request-v2",
+          clientId: "client-v2",
+          runId: "run-v2",
+          attemptId: "attempt-v2",
+        },
+      ]),
+    ).toEqual({});
+
+    expect(
+      selectUnscopedToolCallCorrelation([
+        {
+          protocolVersion: 1,
+          requestId: "legacy-queued",
+          clientId: "legacy-client",
+        },
+        {
+          protocolVersion: 2,
+          requestId: "request-v2",
+          clientId: "client-v2",
+          runId: "run-v2",
+          attemptId: "attempt-v2",
+        },
+      ]),
+    ).toEqual({});
+  });
+
   it("maps v1 sessionKey to a legacy alias and returns adapter-native sessionId compatibility", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];
@@ -519,6 +556,41 @@ describe("JsonlCompatibilityFacade", () => {
       status: "started",
     });
     expect(activity?.runId).toMatch(/^run_/);
+    store.close();
+  });
+
+  it("clears running marker after a terminal run event for unscoped correlation", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "terminal marker" }),
+      protocolVersion: 2,
+      requestId: "request-terminal-marker",
+      clientId: "client-terminal-marker",
+      legacySessionKey: "terminal-marker-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    expect(facade.unscopedToolCallCorrelation()).toMatchObject({
+      requestId: "request-terminal-marker",
+      runId: adapter.executed[0].runId,
+    });
+
+    adapter.resolveDeferred({
+      text: "done",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+
+    expect(facade.unscopedToolCallCorrelation()).toEqual({});
     store.close();
   });
 

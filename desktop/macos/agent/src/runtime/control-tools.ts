@@ -337,6 +337,9 @@ function controlToolOwnerId(context: AgentControlToolContext): string {
 }
 
 function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string, sessionId?: string): void {
+  if (!context.kernel.isAdapterRegistered(adapterId)) {
+    return;
+  }
   if (
     (sessionId && context.kernel.hasActiveExecutionForSessionAdapter(sessionId, adapterId)) ||
     !context.kernel.hasExecutionCapacityForAdapter(adapterId)

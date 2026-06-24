@@ -446,7 +446,36 @@ actor AgentRuntimeProcess {
     isRunning = true
     startReadingStdout()
 
-    try await waitForInit(timeout: 30.0)
+    do {
+      try await waitForInit(timeout: 30.0)
+    } catch {
+      await cleanupFailedStart(process: proc, error: error)
+      throw error
+    }
+  }
+
+  private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
+    log("AgentRuntimeProcess: startup failed after launch: \(error)")
+    if failedProcess.isRunning {
+      failedProcess.terminate()
+      let start = Date()
+      while failedProcess.isRunning && Date().timeIntervalSince(start) < 1.0 {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      if failedProcess.isRunning {
+        kill(failedProcess.processIdentifier, SIGKILL)
+      }
+    }
+    if let currentProcess = process, currentProcess === failedProcess {
+      process = nil
+    }
+    readTask?.cancel()
+    readTask = nil
+    closePipes()
+    isRunning = false
+    receivedInit = false
+    resumeAllRequests(throwing: BridgeError.stopped)
+    resumeInitContinuations(throwing: BridgeError.stopped)
   }
 
   private func waitForInit(timeout: TimeInterval) async throws {

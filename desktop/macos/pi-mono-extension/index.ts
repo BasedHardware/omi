@@ -421,7 +421,7 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
 let omiPipeConnection: Socket | null = null;
 let omiPipeBuffer = "";
 let omiCallIdCounter = 0;
-const omiPendingCalls = new Map<string, { resolve: (result: string) => void }>();
+const omiPendingCalls = new Map<string, { connection: Socket; resolve: (result: string) => void }>();
 
 function connectOmiPipe(pipePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -460,11 +460,13 @@ function connectOmiPipe(pipePath: string): Promise<void> {
       process.stderr.write("[omi-tools] Pipe disconnected\n");
       if (omiPipeConnection === connection) {
         omiPipeConnection = null;
+        for (const [callId, pending] of omiPendingCalls) {
+          if (pending.connection === connection) {
+            pending.resolve("Error: Omi bridge disconnected");
+            omiPendingCalls.delete(callId);
+          }
+        }
       }
-      for (const [, pending] of omiPendingCalls) {
-        pending.resolve("Error: Omi bridge disconnected");
-      }
-      omiPendingCalls.clear();
     });
   });
 }
@@ -485,6 +487,7 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
     };
     signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
+      connection: omiPipeConnection,
       resolve: (result: string) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cleanup);
