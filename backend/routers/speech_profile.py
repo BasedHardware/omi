@@ -52,7 +52,10 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
-    aseg = AudioSegment.from_wav(file_path)
+    try:
+        aseg = AudioSegment.from_wav(file_path)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
