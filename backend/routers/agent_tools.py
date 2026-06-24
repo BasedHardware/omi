@@ -9,6 +9,7 @@ Endpoints:
 - POST /v1/agent/keepalive     — pings the VM to reset its idle auto-stop timer
 """
 
+import asyncio
 import logging
 
 from utils.executors import db_executor, run_blocking
