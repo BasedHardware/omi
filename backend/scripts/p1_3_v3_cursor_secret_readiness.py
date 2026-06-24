@@ -48,7 +48,7 @@ CURSOR_SECRET_PRODUCTION_READINESS_PROOF = {
 SERVER_OWNED_SECRET_SOURCE = {
     "status": "BLOCKED",
     "required_source": "server-owned V17_V3_CURSOR_SIGNING_SECRET or managed secret injected into backend runtime",
-    "candidate_env_var": "V17_V3_CURSOR_SIGNING_SECRET",
+    "candidate_env_var": "MEMORY_V3_CURSOR_SIGNING_SECRET",
     "candidate_production_metadata_runner": "backend/scripts/p1_3_v3_cursor_secret_production_readiness.py",
     "blocker": "No existing runtime-owned V17 /v3 cursor signing secret/config source is wired.",
     "required_before_runtime_change": True,
