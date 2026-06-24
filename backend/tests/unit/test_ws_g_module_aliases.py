@@ -83,15 +83,50 @@ def test_memory_collections_alias_reexports_match_v17():
     from database import memory_collections, v17_collections
 
     assert memory_collections.V17Collections is v17_collections.V17Collections
+    assert memory_collections.MemoryCollections is v17_collections.V17Collections
+    assert v17_collections.V17Collections is memory_collections.MemoryCollections
+
+
+def test_memory_collections_neutral_symbols_are_canonical():
+    from database import memory_collections
+
+    assert memory_collections.V17Collections is memory_collections.MemoryCollections
+
+
+def test_memory_collections_frozen_path_strings_unchanged():
+    from database.memory_collections import MemoryCollections
+
+    paths = MemoryCollections(uid="uid-test")
+    assert paths.memory_items == "users/uid-test/memory_items"
+    assert paths.memory_operations == "users/uid-test/memory_operations"
+    assert paths.memory_outbox == "users/uid-test/memory_outbox"
+    assert paths.memory_control_state == "users/uid-test/memory_control/state"
+    assert paths.memory_lineage == "users/uid-test/memory_lineage"
+    assert paths.memory_evidence == "users/uid-test/memory_evidence"
+    assert paths.memory_runs == "users/uid-test/memory_runs"
+    assert paths.non_active_memory_routes == "users/uid-test/non_active_memory_routes"
+    assert paths.short_term_lifecycle_transitions == "users/uid-test/short_term_lifecycle_transitions"
+    assert paths.legacy_fallback == "users/uid-test/memory_legacy_fallback"
+    assert paths.memory_commits == "users/uid-test/memory_commits"
+    assert paths.memory_state_head == "users/uid-test/memory_state/head"
+    assert paths.v3_compatibility_projection_state == "users/uid-test/v3_compatibility_projection/state"
+    assert paths.v3_compatibility_projection_items == "users/uid-test/v3_compatibility_projection_items"
 
 
 def test_memory_apply_store_alias_reexports_match_v17():
     from database import memory_apply_store, v17_memory_apply_store
 
+    assert memory_apply_store.MemoryFirestoreApplyError is v17_memory_apply_store.V17FirestoreApplyError
     assert memory_apply_store.V17FirestoreApplyError is v17_memory_apply_store.V17FirestoreApplyError
     assert memory_apply_store.MissingV17Document is v17_memory_apply_store.MissingV17Document
     assert memory_apply_store.apply_long_term_patch_firestore is v17_memory_apply_store.apply_long_term_patch_firestore
     assert memory_apply_store.atomic_bump_source_generation is v17_memory_apply_store.atomic_bump_source_generation
+
+
+def test_memory_apply_store_neutral_symbols_are_canonical():
+    from database import memory_apply_store
+
+    assert memory_apply_store.V17FirestoreApplyError is memory_apply_store.MemoryFirestoreApplyError
 
 
 def test_memory_vector_metadata_alias_reexports_match_v17():
@@ -351,8 +386,16 @@ def test_memory_vector_repair_outbox_alias_reexports_match_v17():
     from database import memory_vector_repair_outbox, v17_vector_repair_outbox
 
     assert (
+        memory_vector_repair_outbox.V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE
+        is v17_vector_repair_outbox.V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE
+    )
+    assert (
         memory_vector_repair_outbox.build_v17_vector_repair_purge_outbox_records
         is v17_vector_repair_outbox.build_v17_vector_repair_purge_outbox_records
+    )
+    assert (
+        memory_vector_repair_outbox.write_v17_vector_repair_purge_outbox_records
+        is v17_vector_repair_outbox.write_v17_vector_repair_purge_outbox_records
     )
 
 
