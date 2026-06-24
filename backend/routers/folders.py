@@ -91,6 +91,11 @@ def delete_folder(
     if folder.get('is_system'):
         raise HTTPException(status_code=400, detail="Cannot delete system folder")
 
+    if move_to_folder_id:
+        target_folder = folders_db.get_folder(uid, move_to_folder_id)
+        if not target_folder:
+            raise HTTPException(status_code=404, detail="Target folder not found")
+
     folders_db.delete_folder(uid, folder_id, move_to_folder_id)
 
 
