@@ -37,6 +37,7 @@ pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
+pytest tests/unit/test_folders_reorder_missing_id.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
