@@ -62,7 +62,7 @@ pytest tests/unit/test_tools_agent_route_response_shape.py -v
 pytest tests/unit/test_tools_rest_memory_runtime_adapter.py -v
 pytest tests/unit/test_p1_5_tools_fastapi_testclient_readiness.py -v
 pytest tests/unit/test_developer_memory_adapter.py -v
-pytest tests/unit/test_v17_mcp_memory_adapter.py -v
+pytest tests/unit/test_mcp_memory_adapter.py -v
 pytest tests/unit/test_product_memory_router.py -v
 pytest tests/unit/test_product_authorization.py -v
 pytest tests/unit/test_memory_app_key_grants.py -v
@@ -107,7 +107,7 @@ pytest tests/unit/test_v3_route_planner.py -v
 pytest tests/unit/test_v3_get_dependency_seam.py -v
 pytest tests/unit/test_v3_archive_visibility_readiness.py -v
 pytest tests/unit/test_v3_local_telemetry.py -v
-# V17 /v3 canary approval schema + fake-injectable reader readiness seam.
+# memory /v3 canary approval schema + fake-injectable reader readiness seam.
 pytest tests/unit/test_v3_canary_approval_artifact.py -v
 pytest tests/unit/test_v3_control_reader_contract.py -v
 pytest tests/unit/test_v3_control_state_adapter.py -v

@@ -114,7 +114,7 @@ def classify_l2_memory_route(
     elif get_llm is not None:
         model = get_llm("memory_l2")
     else:
-        logger.error("Error classifying V17 L2 memory route: missing_llm_client")
+        logger.error("Error classifying memory L2 memory route: missing_llm_client")
         return None
 
     try:
@@ -131,5 +131,5 @@ def classify_l2_memory_route(
             )
         return route
     except (ValidationError, Exception) as exc:
-        logger.error("Error classifying V17 L2 memory route: %s", type(exc).__name__)
+        logger.error("Error classifying memory L2 memory route: %s", type(exc).__name__)
         return None

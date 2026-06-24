@@ -14,10 +14,10 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.memory.chat_memory_adapter import (
-    list_v17_default_chat_memories_decision_text,
-    search_v17_default_chat_memories_vector_decision_text,
+    list_default_chat_memories_decision_text,
+    search_memory_default_chat_memories_vector_decision_text,
 )
-from utils.memory.default_read_rollout import V17ReadDecision
+from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
 
@@ -34,7 +34,7 @@ def get_memories_text(
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
 
-    # Cap request bounds before either V17 or legacy reads.
+    # Cap request bounds before either memory or legacy reads.
     limit = max(1, min(limit, 5000))
     offset = max(0, offset)
 
@@ -68,22 +68,22 @@ def get_memories_text(
             return "No memories found."
         return f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}".strip()
 
-    v17_default_memories = list_v17_default_chat_memories_decision_text(
+    default_memories = list_default_chat_memories_decision_text(
         uid=uid,
         limit=limit,
         offset=offset,
         db_client=firestore_db,
         allow_legacy_safe_fallback=True,
     )
-    if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
-        logger.info("get_memories_text - using V17 default chat memory list results")
-        return v17_default_memories.text or "No V17 default memories found."
-    if v17_default_memories.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("get_memories_text - using memory default chat memory list results")
+        return default_memories.text or "No memory default memories found."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         logger.info(
-            "get_memories_text - V17 default memory list denied without legacy fallback: "
-            f"{v17_default_memories.fallback_reason}"
+            "get_memories_text - memory default memory list denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
         )
-        return v17_default_memories.text or "No memories available for this request."
+        return default_memories.text or "No memories available for this request."
 
     # Fetch
     memories = []
@@ -149,22 +149,22 @@ def search_memories_text(
             )
         return result.strip()
 
-    v17_default_memories = search_v17_default_chat_memories_vector_decision_text(
+    default_memories = search_memory_default_chat_memories_vector_decision_text(
         uid=uid,
         query=query,
         limit=limit,
         db_client=firestore_db,
         allow_legacy_safe_fallback=True,
     )
-    if v17_default_memories.read_decision == V17ReadDecision.USE_V17:
-        logger.info("search_memories_text - using V17 default chat vector memory results")
-        return v17_default_memories.text or f"No V17 vector memories found matching '{query}'."
-    if v17_default_memories.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("search_memories_text - using memory default chat vector memory results")
+        return default_memories.text or f"No memory vector memories found matching '{query}'."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         logger.info(
-            "search_memories_text - V17 default memory vector search denied without legacy fallback: "
-            f"{v17_default_memories.fallback_reason}"
+            "search_memories_text - memory default memory vector search denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
         )
-        return v17_default_memories.text or "No memories available for this request."
+        return default_memories.text or "No memories available for this request."
 
     try:
         matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)

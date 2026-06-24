@@ -249,21 +249,21 @@ def _with_server_control_ids(
     patch: DurableMemoryPatch, packet: Dict[str, Any], observed_head_commit_id: Optional[str]
 ) -> DurableMemoryPatch:
     payload = _logical_patch_payload(patch, packet)
-    idempotency_key = deterministic_contract_id("v17-durable-patch-idempotency", payload)
-    patch_id = deterministic_contract_id("v17-durable-patch", payload)
+    idempotency_key = deterministic_contract_id("memory-durable-patch-idempotency", payload)
+    patch_id = deterministic_contract_id("memory-durable-patch", payload)
     new_memory_id = patch.new_memory_id
     if patch.decision in {DurablePatchDecision.add, DurablePatchDecision.keep_both} and not patch.target_memory_id:
         new_memory_id = patch.new_memory_id or "mem_" + patch_id[:32]
         payload = {**payload, "new_memory_id": new_memory_id}
-        idempotency_key = deterministic_contract_id("v17-durable-patch-idempotency", payload)
-        patch_id = deterministic_contract_id("v17-durable-patch", payload)
+        idempotency_key = deterministic_contract_id("memory-durable-patch-idempotency", payload)
+        patch_id = deterministic_contract_id("memory-durable-patch", payload)
     return patch.model_copy(
         update={
             "patch_id": patch_id,
             "idempotency_key": idempotency_key,
             "observed_head_commit_id": observed_head_commit_id,
             "packet_id": patch.packet_id or packet.get("packet_id"),
-            "run_id": patch.run_id or packet.get("run_id") or "v17_l2_patch_synthesizer",
+            "run_id": patch.run_id or packet.get("run_id") or "l2_patch_synthesizer",
             "new_memory_id": new_memory_id,
         }
     )
@@ -379,7 +379,7 @@ def _proposal_to_patch(
     return DurableMemoryPatch(
         patch_id="server_pending",
         packet_id=packet.get("packet_id") or "unknown_packet",
-        run_id=packet.get("run_id") or "v17_l2_patch_synthesizer",
+        run_id=packet.get("run_id") or "l2_patch_synthesizer",
         observed_head_commit_id=observed_head_commit_id,
         idempotency_key="server_pending",
         decision=proposal.decision,
@@ -420,7 +420,7 @@ def synthesize_durable_memory_patch_result(
     elif get_llm is not None:
         model = get_llm("memory_l2")
     else:
-        logger.error("Error synthesizing V17 durable patches: missing_llm_client")
+        logger.error("Error synthesizing memory durable patches: missing_llm_client")
         return DurableMemorySynthesisResult(
             status=SynthesisStatus.retryable_failure,
             error_code="missing_llm_client",
@@ -430,7 +430,7 @@ def synthesize_durable_memory_patch_result(
     try:
         response = model.invoke(messages)
     except Exception as exc:
-        logger.error("Error invoking V17 durable patch synthesizer: %s", type(exc).__name__)
+        logger.error("Error invoking memory durable patch synthesizer: %s", type(exc).__name__)
         return DurableMemorySynthesisResult(
             status=SynthesisStatus.retryable_failure,
             error_code="provider_error",
@@ -440,7 +440,7 @@ def synthesize_durable_memory_patch_result(
     try:
         raw_payload = _raw_payload_from_response_text(_content_from_response(response))
     except Exception as exc:
-        logger.error("Error parsing V17 durable patch payload: %s", type(exc).__name__)
+        logger.error("Error parsing memory durable patch payload: %s", type(exc).__name__)
         return DurableMemorySynthesisResult(
             status=SynthesisStatus.retryable_failure,
             error_code="parse_error",
@@ -560,6 +560,6 @@ def synthesize_durable_memory_patches(
     )
     if result.status != SynthesisStatus.success and result.status != SynthesisStatus.partial:
         raise RuntimeError(
-            f"V17 durable synthesis did not reach terminal success: {result.error_code or result.status.value}"
+            f"memory durable synthesis did not reach terminal success: {result.error_code or result.status.value}"
         )
     return result.patches

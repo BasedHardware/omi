@@ -2,18 +2,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from config.memory_rollout import V17Capabilities
+from config.memory_rollout import MemoryRolloutCapabilities
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
-from utils.memory.product_authorization import V17ProductAuthorizationContext
+from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.memory.default_read_rollout import (
-    V17DefaultReadRolloutDecision,
-    V17ReadDecision,
-    build_v17_default_read_rollout_observability,
-    disabled_v17_default_read_rollout_decision,
-    read_v17_default_read_rollout,
+    DefaultReadRolloutDecision,
+    MemoryReadDecision,
+    build_default_read_rollout_observability,
+    disabled_default_read_rollout_decision,
+    read_default_read_rollout,
 )
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_v17_vector_memory_search
+from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
 ACTIVITY_TAGS = {
     'activity',
@@ -32,12 +32,12 @@ ACTIVITY_PREFIXES = (
 )
 
 
-V17McpDefaultMemoryRolloutDecision = V17DefaultReadRolloutDecision
+McpDefaultMemoryRolloutDecision = DefaultReadRolloutDecision
 
 
 @dataclass(frozen=True)
-class McpV17VerifiedAuth:
-    """Server-verified MCP identity/scope payload for future V17 memory reads.
+class McpVerifiedAuth:
+    """Server-verified MCP identity/scope payload for future memory memory reads.
 
     Existing MCP API-key dependencies return only uid and remain unchanged. This
     helper type is deliberately fake-injectable so REST/OAuth/SSE call sites can
@@ -51,11 +51,11 @@ class McpV17VerifiedAuth:
     scopes: tuple[str, ...] = ()
 
 
-MCP_V17_DEFAULT_MEMORY_READ_SURFACE = 'mcp_default_memory_read'
+MCP_MEMORY_DEFAULT_MEMORY_READ_SURFACE = 'mcp_default_memory_read'
 
 
-def build_mcp_v17_default_memory_read_context(auth: McpV17VerifiedAuth) -> V17ProductAuthorizationContext:
-    """Build the MCP V17 default-memory authorization context.
+def build_mcp_default_memory_read_context(auth: McpVerifiedAuth) -> ProductAuthorizationContext:
+    """Build the MCP memory default-memory authorization context.
 
     This function does not grant access by itself. Missing app/key identity or a
     missing `memories.read` scope is carried into the shared app/key/scope
@@ -63,10 +63,10 @@ def build_mcp_v17_default_memory_read_context(auth: McpV17VerifiedAuth) -> V17Pr
     never enabled by this default-read context.
     """
 
-    return V17ProductAuthorizationContext(
+    return ProductAuthorizationContext(
         uid=auth.uid,
         consumer='mcp',
-        surface=MCP_V17_DEFAULT_MEMORY_READ_SURFACE,
+        surface=MCP_MEMORY_DEFAULT_MEMORY_READ_SURFACE,
         app_id=auth.app_id,
         key_id=auth.key_id,
         scopes=tuple(scope for scope in auth.scopes if scope in {'memories.read', 'memories.write'}),
@@ -74,38 +74,38 @@ def build_mcp_v17_default_memory_read_context(auth: McpV17VerifiedAuth) -> V17Pr
 
 
 @dataclass(frozen=True)
-class V17McpMemorySearchResult:
+class McpMemorySearchResult:
     memories: list[dict]
-    read_decision: V17ReadDecision
+    read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
 
 
 @dataclass(frozen=True)
-class V17McpMemoryListResult:
+class McpMemoryListResult:
     memories: list[dict]
-    read_decision: V17ReadDecision
+    read_decision: MemoryReadDecision
     fallback_reason: Optional[str] = None
 
     @property
     def should_use_legacy_fallback(self) -> bool:
-        return self.read_decision == V17ReadDecision.USE_LEGACY_SAFE
+        return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
 
 
-def _format_v17_mcp_default_memory_item(item: dict, policy: MemoryAccessPolicy) -> dict:
+def _format_memory_mcp_default_memory_item(item: dict, policy: MemoryAccessPolicy) -> dict:
     return {
         'id': item['memory_id'],
         'content': item.get('content') or '',
         'category': 'other',
-        'category_source': 'mcp_v17_compatibility_default_no_source_category',
+        'category_source': 'mcp_memory_compatibility_default_no_source_category',
         'reviewed': False,
-        'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+        'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
         'manually_added': False,
-        'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
-        'v17_default_memory': True,
+        'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
+        'memory_default_memory': True,
         'archive_default_visible': False,
         'policy': {
             'consumer': policy.consumer.value,
@@ -116,17 +116,17 @@ def _format_v17_mcp_default_memory_item(item: dict, policy: MemoryAccessPolicy) 
     }
 
 
-def build_v17_mcp_default_memory_rollout_observability(
-    decision: V17McpDefaultMemoryRolloutDecision,
+def build_mcp_default_memory_rollout_observability(
+    decision: McpDefaultMemoryRolloutDecision,
 ) -> dict:
-    observability = build_v17_default_read_rollout_observability(decision)
+    observability = build_default_read_rollout_observability(decision)
     return {
         'uid': decision.uid,
         'source_path': decision.source_path,
-        'enabled': decision.v17_default_mcp_enabled,
+        'enabled': decision.memory_default_mcp_enabled,
         'reason': observability['reason'],
         'mode': observability['mode'],
-        'v17_reads_enabled': observability['v17_reads_enabled'],
+        'memory_reads_enabled': observability['memory_reads_enabled'],
         'legacy_reads_authoritative': observability['legacy_reads_authoritative'],
         'mcp_default_memory_grant': observability['default_memory_grant'],
         'archive_default_visible': observability['archive_default_visible'],
@@ -137,8 +137,8 @@ def build_v17_mcp_default_memory_rollout_observability(
     }
 
 
-def read_v17_mcp_default_memory_rollout(*, uid: str, db_client) -> V17McpDefaultMemoryRolloutDecision:
-    """Read server-owned V17 MCP default-memory rollout state.
+def read_mcp_default_memory_rollout(*, uid: str, db_client) -> McpDefaultMemoryRolloutDecision:
+    """Read server-owned memory MCP default-memory rollout state.
 
     The authoritative per-user document is `users/{uid}/memory_control/state`.
     Missing, malformed, or grant-less docs fail closed to legacy MCP search before
@@ -146,7 +146,7 @@ def read_v17_mcp_default_memory_rollout(*, uid: str, db_client) -> V17McpDefault
     the MCP default search path always keeps `archive_capability=False`.
     """
 
-    return read_v17_default_read_rollout(uid=uid, db_client=db_client, consumer='mcp')
+    return read_default_read_rollout(uid=uid, db_client=db_client, consumer='mcp')
 
 
 def parse_mcp_datetime(value: Optional[str], field_name: str) -> Optional[datetime]:
@@ -349,27 +349,27 @@ def collect_filtered_memories(
     }
 
 
-def search_v17_default_mcp_memories(
+def search_default_mcp_memories(
     *,
     uid: str,
     query: str,
     limit: int,
     db_client,
-    rollout_capabilities: Optional[V17Capabilities],
+    rollout_capabilities: Optional[MemoryRolloutCapabilities],
     app_has_default_memory_grant: bool = True,
     now: Optional[datetime] = None,
 ) -> Optional[list[dict]]:
-    """Search default-visible V17 product memory for the MCP memory-search caller.
+    """Search default-visible memory product memory for the MCP memory-search caller.
 
     This is an explicit caller adapter for `/v1/mcp/memories/search`: callers must
-    pass V17 read rollout capabilities and the MCP default-memory grant before it
+    pass memory read rollout capabilities and the MCP default-memory grant before it
     touches Firestore. Archive capability is always false here; Archive remains
     available only through the separate explicit product Archive search seam.
 
     Returns `None` when the caller should keep using the legacy MCP memory path.
     """
 
-    if not rollout_capabilities or not rollout_capabilities.v17_reads_enabled:
+    if not rollout_capabilities or not rollout_capabilities.memory_reads_enabled:
         return None
     if not app_has_default_memory_grant:
         return None
@@ -398,13 +398,13 @@ def search_v17_default_mcp_memories(
                 'id': item['memory_id'],
                 'content': item['content'],
                 'category': 'other',
-                'category_source': 'mcp_v17_compatibility_default_no_source_category',
+                'category_source': 'mcp_memory_compatibility_default_no_source_category',
                 'reviewed': False,
-                'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+                'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
                 'manually_added': False,
-                'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
+                'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
                 'relevance_score': round(1.0 - (rank * 0.0001), 4),
-                'v17_default_memory': True,
+                'memory_default_memory': True,
                 'archive_default_visible': False,
                 'policy': {
                     'consumer': policy.consumer.value,
@@ -417,21 +417,21 @@ def search_v17_default_mcp_memories(
     return formatted
 
 
-def list_v17_default_mcp_memories(
+def list_default_mcp_memories(
     *,
     uid: str,
     limit: int,
     offset: int,
     db_client,
-    rollout_decision: Optional[V17McpDefaultMemoryRolloutDecision] = None,
-    rollout_capabilities: Optional[V17Capabilities] = None,
+    rollout_decision: Optional[McpDefaultMemoryRolloutDecision] = None,
+    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
     categories: Optional[list[str]] = None,
     reviewed: Optional[bool] = None,
     manually_added: Optional[bool] = None,
     now: Optional[datetime] = None,
-) -> V17McpMemoryListResult:
-    """List default-visible V17 memories for MCP get/list callers.
+) -> McpMemoryListResult:
+    """List default-visible memory memories for MCP get/list callers.
 
     This mirrors the MCP search adapter's rollout decision contract: malformed,
     missing, no-grant, disabled, and shadow states return an explicit decision and
@@ -441,14 +441,14 @@ def list_v17_default_mcp_memories(
 
     if rollout_decision is None:
         if rollout_capabilities is None:
-            rollout_decision = disabled_v17_default_read_rollout_decision(
+            rollout_decision = disabled_default_read_rollout_decision(
                 uid=uid,
                 source_path=f'users/{uid}/memory_control/state',
                 consumer='mcp',
                 reason='missing_rollout_state',
             )
         else:
-            rollout_decision = V17DefaultReadRolloutDecision(
+            rollout_decision = DefaultReadRolloutDecision(
                 uid=uid,
                 source_path=f'users/{uid}/memory_control/state',
                 consumer='mcp',
@@ -457,8 +457,8 @@ def list_v17_default_mcp_memories(
                 archive_capability=False,
             )
 
-    if rollout_decision.read_decision != V17ReadDecision.USE_V17:
-        return V17McpMemoryListResult(
+    if rollout_decision.read_decision != MemoryReadDecision.USE_MEMORY:
+        return McpMemoryListResult(
             memories=[],
             read_decision=rollout_decision.read_decision,
             fallback_reason=rollout_decision.fallback_reason,
@@ -484,7 +484,7 @@ def list_v17_default_mcp_memories(
     normalized_categories = {str(category) for category in categories or [] if str(category)}
     formatted_memories = []
     for item in response['items']:
-        formatted = _format_v17_mcp_default_memory_item(item, policy)
+        formatted = _format_memory_mcp_default_memory_item(item, policy)
         if normalized_categories and formatted['category'] not in normalized_categories:
             continue
         if reviewed is not None and formatted['reviewed'] != reviewed:
@@ -492,25 +492,25 @@ def list_v17_default_mcp_memories(
         if manually_added is not None and formatted['manually_added'] != manually_added:
             continue
         formatted_memories.append(formatted)
-    return V17McpMemoryListResult(
+    return McpMemoryListResult(
         memories=formatted_memories,
-        read_decision=V17ReadDecision.USE_V17,
+        read_decision=MemoryReadDecision.USE_MEMORY,
     )
 
 
-def search_v17_default_mcp_memories_vector(
+def search_default_mcp_memories_vector(
     *,
     uid: str,
     query: str,
     limit: int,
     db_client,
-    rollout_capabilities: Optional[V17Capabilities] = None,
+    rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[V17McpDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[McpDefaultMemoryRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
-) -> V17McpMemorySearchResult:
-    """Search hydrated V17 vectors for the concrete MCP memory-search caller.
+) -> McpMemorySearchResult:
+    """Search hydrated memory vectors for the concrete MCP memory-search caller.
 
     Returns an explicit read decision before vector lookup or
     `users/{uid}/memory_items` reads. Missing/malformed/no-grant/disabled rollout
@@ -522,14 +522,14 @@ def search_v17_default_mcp_memories_vector(
 
     if rollout_decision is None:
         if rollout_capabilities is None:
-            rollout_decision = disabled_v17_default_read_rollout_decision(
+            rollout_decision = disabled_default_read_rollout_decision(
                 uid=uid,
                 source_path=f'users/{uid}/memory_control/state',
                 consumer='mcp',
                 reason='missing_rollout_state',
             )
         else:
-            rollout_decision = V17DefaultReadRolloutDecision(
+            rollout_decision = DefaultReadRolloutDecision(
                 uid=uid,
                 source_path=f'users/{uid}/memory_control/state',
                 consumer='mcp',
@@ -538,8 +538,8 @@ def search_v17_default_mcp_memories_vector(
                 archive_capability=False,
             )
 
-    if rollout_decision.read_decision != V17ReadDecision.USE_V17:
-        return V17McpMemorySearchResult(
+    if rollout_decision.read_decision != MemoryReadDecision.USE_MEMORY:
+        return McpMemorySearchResult(
             memories=[],
             read_decision=rollout_decision.read_decision,
             fallback_reason=rollout_decision.fallback_reason,
@@ -548,9 +548,9 @@ def search_v17_default_mcp_memories_vector(
     bounded_limit = max(1, min(limit, 20))
     projection_commit_id = required_projection_commit_id or rollout_decision.vector_projection_commit_id
     if not projection_commit_id:
-        return V17McpMemorySearchResult(
+        return McpMemorySearchResult(
             memories=[],
-            read_decision=V17ReadDecision.DENY_MEMORY,
+            read_decision=MemoryReadDecision.DENY_MEMORY,
             fallback_reason='missing_vector_projection_commit_id',
         )
     policy = MemoryAccessPolicy(
@@ -559,7 +559,7 @@ def search_v17_default_mcp_memories_vector(
         archive_capability=False,
         raw_provenance_capability=False,
     )
-    response = fetch_default_v17_vector_memory_search(
+    response = fetch_default_vector_memory_search(
         uid=uid,
         query=query,
         db_client=db_client,
@@ -579,13 +579,13 @@ def search_v17_default_mcp_memories_vector(
                 'id': memory_id,
                 'content': item.get('content') or '',
                 'category': 'other',
-                'category_source': 'mcp_v17_compatibility_default_no_source_category',
+                'category_source': 'mcp_memory_compatibility_default_no_source_category',
                 'reviewed': False,
-                'reviewed_source': 'mcp_v17_compatibility_default_no_review_state',
+                'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
                 'manually_added': False,
-                'manually_added_source': 'mcp_v17_compatibility_default_no_manual_state',
+                'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
                 'relevance_score': round(float(scores_by_memory_id.get(memory_id, 0)), 4),
-                'v17_default_memory': True,
+                'memory_default_memory': True,
                 'archive_default_visible': False,
                 'policy': {
                     'consumer': policy.consumer.value,
@@ -595,4 +595,4 @@ def search_v17_default_mcp_memories_vector(
                 },
             }
         )
-    return V17McpMemorySearchResult(memories=formatted, read_decision=V17ReadDecision.USE_V17)
+    return McpMemorySearchResult(memories=formatted, read_decision=MemoryReadDecision.USE_MEMORY)

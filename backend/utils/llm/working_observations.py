@@ -185,7 +185,7 @@ def extract_l1_memory_archive_items_from_text(
     elif get_llm is not None:
         model = get_llm("memory_l1")
     else:
-        logger.error("Error extracting V17 L1 archive items: missing_llm_client")
+        logger.error("Error extracting memory L1 archive items: missing_llm_client")
         return []
 
     try:
@@ -193,7 +193,7 @@ def extract_l1_memory_archive_items_from_text(
         parsed = parser.parse(_content_from_response(response))
         items = _with_deterministic_archive_ids(parsed.items, uid, source_id, source_type)
     except Exception as exc:
-        logger.error("Error extracting V17 L1 archive items: %s", type(exc).__name__)
+        logger.error("Error extracting memory L1 archive items: %s", type(exc).__name__)
         return []
 
     if persist_route_outcomes:
