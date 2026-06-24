@@ -77,6 +77,7 @@ pytest tests/unit/test_action_items_conversation_list_malformed.py -v
 pytest tests/unit/test_firmware_pagination.py -v
 pytest tests/unit/test_vad_gate.py -v
 pytest tests/unit/test_vad_onnx.py -v
+pytest tests/unit/test_scores_daily_date_validation.py -v
 pytest tests/unit/test_log_sanitizer.py -v
 pytest tests/unit/test_hume_callback_malformed.py -v
 pytest tests/unit/test_file_upload_security.py -v
