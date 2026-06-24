@@ -413,9 +413,9 @@ extension APIClient {
     return try await get("v1/conversations/\(id)")
   }
 
-  /// Deletes a conversation by ID
+  /// Deletes a conversation by ID and cascades memory/action-item cleanup on the backend.
   func deleteConversation(id: String) async throws {
-    try await delete("v1/conversations/\(id)")
+    try await delete("v1/conversations/\(id)?cascade=true")
   }
 
   /// Updates the starred status of a conversation
