@@ -41,6 +41,10 @@ export class AdapterWorker {
     return this.activeBindingId === bindingId;
   }
 
+  hasPinnedBinding(bindingId: string): boolean {
+    return this.pinnedBindingId === bindingId;
+  }
+
   pinBinding(binding: AdapterBindingHandle): void {
     if (!binding.bindingId) {
       throw new Error("Pinned adapter workers require a bindingId");
@@ -125,7 +129,10 @@ export class AdapterWorkerPool {
       }
     }
 
-    const idle = this.workers.find((worker) => worker.canRun(binding));
+    const pinnedIdle = bindingId
+      ? this.workers.find((worker) => worker.canRun(binding) && worker.hasPinnedBinding(bindingId))
+      : undefined;
+    const idle = pinnedIdle ?? this.workers.find((worker) => worker.canRun(binding));
     if (idle) {
       if (binding && idle.adapter.capabilities.requiresPinnedWorker) {
         idle.pinBinding(binding);

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import {
@@ -105,6 +105,38 @@ describe("JsonlCompatibilityFacade", () => {
         },
       ]),
     ).toEqual({});
+  });
+
+  it("passes request correlation into MCP server builders", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const buildMcpServers = vi.fn(() => []);
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+      buildMcpServers,
+    });
+
+    await facade.handleQuery({
+      ...v1Query({ prompt: "mcp context" }),
+      protocolVersion: 2,
+      ownerId: "owner-firebase-uid",
+      requestId: "request-mcp",
+      clientId: "client-mcp",
+      sessionId: "session-mcp",
+      legacySessionKey: "mcp-key",
+      cwd: "/tmp/mcp",
+    });
+
+    expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/mcp", "mcp-key", {
+      ownerId: "owner-firebase-uid",
+      requestId: "request-mcp",
+      clientId: "client-mcp",
+      protocolVersion: 2,
+      sessionId: "session-mcp",
+    });
+    store.close();
   });
 
   it("maps v1 sessionKey to a legacy alias and returns adapter-native sessionId compatibility", async () => {

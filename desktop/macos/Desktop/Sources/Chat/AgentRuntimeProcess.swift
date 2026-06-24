@@ -141,6 +141,10 @@ actor AgentRuntimeProcess {
   }
 
   func restart(harnessMode: String) async throws {
+    guard activeRequests.isEmpty else {
+      log("AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) are active")
+      throw BridgeError.requestAlreadyActive
+    }
     await stopProcess(resumeRequestsWith: BridgeError.stopped)
     try await startProcess(preferredHarnessMode: harnessMode)
   }

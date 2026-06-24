@@ -38,6 +38,7 @@ import type {
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
+  ProtocolVersion,
   WarmupMessage,
   RefreshTokenMessage,
   AuthMethod,
@@ -48,7 +49,7 @@ import type { PromptBlock } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
-import { JsonlCompatibilityFacade } from "./runtime/compatibility-facade.js";
+import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { handleAgentControlToolCall, isAgentControlToolName, type AgentControlToolContext } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
@@ -165,6 +166,14 @@ function startOmiToolsRelay(): Promise<string> {
               callId: string;
               name: string;
               input: Record<string, unknown>;
+              protocolVersion?: number;
+              requestId?: string;
+              clientId?: string;
+              sessionId?: string;
+              runId?: string;
+              attemptId?: string;
+              adapterSessionId?: string;
+              legacyAdapterSessionId?: string;
             };
 
             if (msg.type === "tool_use") {
@@ -192,7 +201,20 @@ function startOmiToolsRelay(): Promise<string> {
               }
 
               // Forward tool call to Swift via stdout
-              const correlation = unscopedToolCallCorrelation?.() ?? {};
+              const protocolVersion: ProtocolVersion | undefined =
+                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
+              const correlation = msg.requestId
+                ? {
+                    protocolVersion,
+                    requestId: msg.requestId,
+                    clientId: msg.clientId,
+                    sessionId: msg.sessionId,
+                    runId: msg.runId,
+                    attemptId: msg.attemptId,
+                    adapterSessionId: msg.adapterSessionId,
+                    legacyAdapterSessionId: msg.legacyAdapterSessionId,
+                  }
+                : unscopedToolCallCorrelation?.() ?? {};
               send({
                 type: "tool_use",
                 callId: msg.callId,
@@ -422,7 +444,12 @@ type McpServerConfig = {
   env: Array<{ name: string; value: string }>;
 };
 
-function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpServerConfig[] {
+function buildMcpServers(
+  mode: string,
+  cwd?: string,
+  sessionKey?: string,
+  context?: McpServerBuildContext
+): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
   // omi-tools (stdio, connects back via Unix socket)
@@ -430,6 +457,19 @@ function buildMcpServers(mode: string, cwd?: string, sessionKey?: string): McpSe
     { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
     { name: "OMI_QUERY_MODE", value: mode },
   ];
+  if (context) {
+    omiToolsEnv.push(
+      { name: "OMI_OWNER_ID", value: context.ownerId },
+      { name: "OMI_REQUEST_ID", value: context.requestId },
+      { name: "OMI_CLIENT_ID", value: context.clientId }
+    );
+    if (context.protocolVersion) {
+      omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+    }
+    if (context.sessionId) {
+      omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+    }
+  }
   if (cwd) {
     omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
   }

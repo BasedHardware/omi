@@ -536,6 +536,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("system_prompt");
     this.pendingSystemPromptRefresh = false;
     process.stderr.write(
       "[pi-mono] subprocess restarted with new system prompt\n"

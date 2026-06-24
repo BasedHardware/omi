@@ -28,9 +28,10 @@ vi.mock("child_process", async () => {
   };
 });
 
-function createAdapter() {
+function createAdapter(configOverrides: Partial<HarnessConfig> & { onRestart?: (reason: string) => void } = {}) {
   const config: HarnessConfig = {
     authToken: "test-token",
+    ...configOverrides,
   };
   const adapter = new PiMonoAdapter(config);
   const events: OutboundMessage[] = [];
@@ -155,6 +156,23 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     expect(events).toEqual([]);
     expect((adapter as any).pendingRequests.size).toBe(0);
+  });
+});
+
+describe("PiMonoAdapter restart lifecycle", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockClear();
+  });
+
+  it("notifies restart observers after an immediate system prompt restart", async () => {
+    const onRestart = vi.fn();
+    const { adapter } = createAdapter({ onRestart });
+
+    await adapter.start();
+    await expect(adapter.setSystemPrompt("new prompt")).resolves.toBe(true);
+
+    expect(onRestart).toHaveBeenCalledWith("system_prompt");
+    expect(spawn).toHaveBeenCalledTimes(2);
   });
 });
 

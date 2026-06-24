@@ -19,7 +19,19 @@ import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
 export type CompatibilitySend = (message: OutboundMessage) => void;
 export type CompatibilityLog = (message: string) => void;
-export type McpServerBuilder = (mode: RunMode, cwd: string, sessionKey?: string) => Record<string, unknown>[];
+export interface McpServerBuildContext {
+  ownerId: string;
+  requestId: string;
+  clientId: string;
+  protocolVersion?: ProtocolVersion;
+  sessionId?: string;
+}
+export type McpServerBuilder = (
+  mode: RunMode,
+  cwd: string,
+  sessionKey: string | undefined,
+  context: McpServerBuildContext
+) => Record<string, unknown>[];
 export type RecoverableErrorPredicate = (error: unknown) => boolean;
 export type RecoverableErrorHandler = (error: unknown) => Promise<void>;
 
@@ -289,9 +301,12 @@ export class JsonlCompatibilityFacade {
     const hint = legacySessionKey ? this.warmupHints.get(legacySessionKey) : undefined;
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
 
+    const ownerId = message.ownerId ?? this.ownerId;
+    const sessionId = message.protocolVersion === 2 ? message.sessionId : undefined;
+
     return {
-      ownerId: message.ownerId ?? this.ownerId,
-      sessionId: message.protocolVersion === 2 ? message.sessionId : undefined,
+      ownerId,
+      sessionId,
       surfaceKind: message.surfaceKind ?? "legacy_jsonl",
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
@@ -307,7 +322,13 @@ export class JsonlCompatibilityFacade {
       mode,
       cwd,
       model: message.model ?? hint?.model ?? requestedModel,
-      mcpServers: this.buildMcpServers?.(mode, cwd, legacySessionKey),
+      mcpServers: this.buildMcpServers?.(mode, cwd, legacySessionKey, {
+        ownerId,
+        requestId,
+        clientId,
+        protocolVersion: message.protocolVersion,
+        sessionId,
+      }),
       legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
       recoverAfterError: this.recoverAfterError(),

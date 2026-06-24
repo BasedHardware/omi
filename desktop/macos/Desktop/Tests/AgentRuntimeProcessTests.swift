@@ -102,4 +102,15 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("receivedInit = false"))
     XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.stopped)"))
   }
+
+  func testSharedRestartIsBlockedWhileRequestsAreActive() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("guard activeRequests.isEmpty else"))
+    XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
+  }
 }

@@ -101,7 +101,16 @@ async function requestSwiftTool(
 
   return new Promise<string>((resolve) => {
     pendingToolCalls.set(callId, { resolve });
-    const msg = JSON.stringify({ type: "tool_use", callId, name, input });
+    const msg = JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      protocolVersion: process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined,
+      requestId: process.env.OMI_REQUEST_ID,
+      clientId: process.env.OMI_CLIENT_ID,
+      sessionId: process.env.OMI_SESSION_ID,
+    });
     pipeConnection!.write(msg + "\n");
   });
 }
