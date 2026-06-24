@@ -166,7 +166,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     if conversation.is_locked:
         return []
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
