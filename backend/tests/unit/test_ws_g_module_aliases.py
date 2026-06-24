@@ -35,7 +35,12 @@ def test_product_memory_alias_reexports_match_v17():
     assert product_memory.MemoryTier is v17_product_memory.MemoryTier
     assert product_memory.MemoryLayer is v17_product_memory.MemoryLayer
     assert product_memory.MemoryLayer is product_memory.MemoryTier
+    assert product_memory.MemoryItem is v17_product_memory.MemoryItem
     assert product_memory.V17MemoryItem is v17_product_memory.V17MemoryItem
+    assert product_memory.MemoryItem is product_memory.V17MemoryItem
+    assert product_memory.MemoryItemAlias is v17_product_memory.MemoryItemAlias
+    assert product_memory.V17MemoryItemAlias is v17_product_memory.V17MemoryItemAlias
+    assert product_memory.MemoryItemAlias is product_memory.V17MemoryItemAlias
 
 
 def test_memory_contracts_alias_reexports_match_v17():
@@ -64,6 +69,14 @@ def test_l2_memory_route_response_alias_is_identity():
     from utils.llm.l2_memory_routes import L2MemoryRouteResponse, PromotionRouteResponse
 
     assert L2MemoryRouteResponse is PromotionRouteResponse
+
+
+def test_memory_contracts_durable_patch_fact_source_aliases():
+    from models import memory_contracts, v17_memory_contracts
+
+    assert memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE == "durable_memory_patch"
+    assert memory_contracts.V17_DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
+    assert v17_memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
 
 
 def test_memory_collections_alias_reexports_match_v17():
