@@ -602,7 +602,10 @@ async def transcribe_voice_message(
             shutil.copyfileobj(file_obj, buffer)
 
     for file in upload_files:
-        if file.filename.lower().endswith('.wav'):
+        filename = file.filename
+        if not filename:
+            raise HTTPException(status_code=400, detail='Each uploaded file must have a filename')
+        if filename.lower().endswith('.wav'):
             # For WAV files, save directly to a temporary path
             temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
             await run_blocking(storage_executor, _save_wav, temp_path, file.file)
