@@ -1,12 +1,12 @@
-# V17 Firestore IAM and Service Account Deployment Gate
+# Canonical Memory Firestore IAM and Service Account Deployment Gate
 
-**Status:** local Firebase emulator gate now exists for V17 vector repair outbox persistence and client-rule denial, but this is **not a cloud IAM validation** and does not claim that production IAM was inspected or changed. It makes the V17 production write-gate assumptions explicit until they can be validated against the real Firebase project.
+**Status:** local Firebase emulator gate now exists for vector repair outbox persistence and client-rule denial, but this is **not a cloud IAM validation** and does not claim that production IAM was inspected or changed. It makes the canonical-memory production write-gate assumptions explicit until they can be validated against the real Firebase project.
 
 ## Boundary
 
-V17 Firestore memory state is server-owned. The backend uses the Firebase Admin SDK / Google Cloud Firestore Admin SDK with a backend service account to read and write the canonical V17 collections. Mobile, desktop, web, third-party, and MCP clients must not use the Firebase client SDK to access these collections directly.
+Canonical-memory Firestore state is server-owned. The backend uses the Firebase Admin SDK / Google Cloud Firestore Admin SDK with a backend service account to read and write the canonical memory collections. Mobile, desktop, web, third-party, and MCP clients must not use the Firebase client SDK to access these collections directly.
 
-Checked-in `firestore.rules` is the client boundary: clients denied for direct read, create, update, and delete on protected V17 paths. Product access must flow through backend APIs, which derive authenticated UID, rollout state, access policy, and archive/default visibility server-side. There must be **no client SDK writes** to V17 memory collections.
+Checked-in `firestore.rules` is the client boundary: clients denied for direct read, create, update, and delete on protected memory paths. Product access must flow through backend APIs, which derive authenticated UID, rollout state, access policy, and archive/default visibility server-side. There must be **no client SDK writes** to canonical memory collections.
 
 Protected paths:
 
@@ -24,20 +24,20 @@ mcp_api_keys/{key_id}
 
 ## Required service account
 
-The deployed backend service account is the only principal expected to mutate V17 Firestore state. Use least privilege for the service account:
+The deployed backend service account is the only principal expected to mutate canonical-memory Firestore state. Use least privilege for the service account:
 
 - Grant Firestore document read/write through `roles/datastore.user` on the production project unless deployment evidence proves a narrower custom role is available and maintained.
-- Do not grant broad owner/editor roles for the V17 write gate.
+- Do not grant broad owner/editor roles for the canonical-memory write gate.
 - Do not distribute service account keys to clients. Production should use workload identity / platform-provided credentials where possible; local development may use `SERVICE_ACCOUNT_JSON` only on trusted developer/server machines.
 - Keep vector/search/outbox consumer credentials separate when feasible so a compromised consumer cannot bypass the Long-term apply transaction.
 
 ## Dev-cloud before production IAM proof
 
-For V17 `GET /v3/memories` activation, cloud IAM must now be proven first in a dedicated non-production Firebase/GCP project. See:
+For canonical `GET /v3/memories` activation, cloud IAM must now be proven first in a dedicated non-production Firebase/GCP project. See:
 
-- `docs/rollout/v17-v3-proof-order.md`
-- `docs/runbooks/v17-v3-dev-cloud-proof.md`
-- `docs/runbooks/v17-v3-production-activation.md`
+- `docs/rollout/memory-v3-proof-order.md`
+- `docs/runbooks/memory-v3-dev-cloud-proof.md`
+- `docs/runbooks/memory-v3-production-activation.md`
 
 Dev-cloud proof must use a deployed branch backend revision with its actual runtime identity. A local backend using dev credentials is supplemental only and cannot satisfy the dev-cloud gate.
 

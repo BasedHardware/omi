@@ -1,19 +1,19 @@
 # Local Emulator Full-Stack Dev Harness Epic
 
 **Status:** Proposed infra epic
-**Primary customer:** V17 memory development and validation
+**Primary customer:** Canonical memory development and validation
 **First surface target:** Desktop macOS app
 **Long-term customer:** Any Omi feature that needs backend + desktop/app/web/hardware integration testing
-**Related V17 docs:** `docs/rollout/v17-v3-proof-order.md`, `docs/runbooks/v17-v3-dev-cloud-proof.md`, `docs/epics/v17_memory_product_integration_epic.md`
+**Related memory docs:** `docs/rollout/memory-v3-proof-order.md`, `docs/runbooks/memory-v3-dev-cloud-proof.md`, `docs/epics/v17_memory_product_integration_epic.md`
 
 ## Problem
 
-Omi has a fully fake hermetic E2E harness, but developers still need a deployed GCP/Firebase environment to honestly test local full-stack behavior. For V17 memory in particular, this slows iteration because:
+Omi has a fully fake hermetic E2E harness, but developers still need a deployed GCP/Firebase environment to honestly test local full-stack behavior. For canonical memory in particular, this slows iteration because:
 
 - the desktop app can run locally, but normally points at cloud backends;
 - hermetic E2E is intentionally fake and cannot catch emulator/runtime wiring issues;
 - local live backend setup is credential-heavy and not scenario-driven;
-- V17 dev-cloud proof is intentionally strict and should remain a promotion gate, not every developer's inner loop.
+- canonical-memory dev-cloud proof is intentionally strict and should remain a promotion gate, not every developer's inner loop.
 
 The result is a gap between fast hermetic tests and expensive dev-cloud proof.
 
@@ -21,16 +21,16 @@ The result is a gap between fast hermetic tests and expensive dev-cloud proof.
 
 Create a local emulator full-stack development harness that lets developers run, seed, reset, and manually QA realistic Omi memory scenarios by actually using the product without waiting on GCP deploys, while preserving dev-cloud proof for the things only deployed GCP can prove.
 
-The harness is general infrastructure. V17 memory is the first validation target because it needs high-confidence backend + desktop product behavior before cloud promotion. Deterministic pass/fail testing remains the job of the existing hermetic E2E harness.
+The harness is general infrastructure. Canonical memory is the first validation target because it needs high-confidence backend + desktop product behavior before cloud promotion. Deterministic pass/fail testing remains the job of the existing hermetic E2E harness.
 
 ## Non-goals
 
 - Do not replace the existing hermetic test harness.
-- Do not weaken V17 dev-cloud or production proof requirements.
+- Do not weaken canonical-memory dev-cloud or production proof requirements.
 - Do not use production data, production UIDs, production tokens, production Firebase projects, production Firestore projects, or production GCS buckets.
 - Do not make local emulator evidence count as IAM, Cloud Run revision, deployed index, telemetry sink, or rollback proof.
 - Do not make long-lived full-stack orchestration or desktop launch a mandatory CI gate in v1.
-- Do not make V17 a dumping ground for general developer-infra work.
+- Do not make canonical memory a dumping ground for general developer-infra work.
 
 ## Target developer experience
 
@@ -52,7 +52,7 @@ Locked command contract:
 |---|---|
 | `make dev-up` | `scripts/dev-harness/dev-up.sh` starts or validates the long-lived local emulator/manual-QA instance. |
 | `make dev-check` | `scripts/dev-harness/dev-check.sh` runs prerequisite, safety, and provider preflight checks without mutating state. |
-| `make seed-v17-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-v17-scenario.py` validates and applies a Python-authored synthetic V17 scenario to the running local instance. |
+| `make seed-v17-scenario SCENARIO=<name>` | `scripts/dev-harness/seed-v17-scenario.py` validates and applies a Python-authored synthetic memory scenario to the running local instance. |
 | `make list-v17-scenarios` | `scripts/dev-harness/list-v17-scenarios.py` lists scenario fixture names and descriptions. |
 | `make desktop-run-local USER=<name>` | `scripts/dev-harness/desktop-run-local.sh` launches a named local desktop bundle/profile against localhost services and a seeded local Auth emulator user. |
 | `make dev-status` | `scripts/dev-harness/dev-status.sh` prints owned process, port, endpoint, provider-mode, scenario, user, and state-root status. |
@@ -67,8 +67,8 @@ Implementation tickets may add helper modules below `scripts/dev-harness/`, but 
 The local emulator harness must reuse the repository-native Firebase and test assets already present instead of creating a parallel rules/index stack:
 
 - `firebase.json` is the authoritative Firebase CLI configuration. It currently points Firestore to `firestore.rules` and `firestore.indexes.json` and assigns the Firestore emulator port `8085`; harness work should extend this config for Auth emulator support rather than introduce a separate Firebase config file.
-- `firestore.rules` and `firestore.indexes.json` are the rules/index assets for emulator startup and V17 Firestore coverage.
-- `package.json` already contains V17 Firestore emulator npm scripts using `firebase emulators:exec --only firestore --project demo-v17-memory`; those remain test-specific and must not become the long-lived manual-QA instance, which is fixed to `demo-omi-local` / `(default)`.
+- `firestore.rules` and `firestore.indexes.json` are the rules/index assets for emulator startup and canonical-memory Firestore coverage.
+- `package.json` already contains memory Firestore emulator npm scripts using `firebase emulators:exec --only firestore --project demo-v17-memory`; those remain test-specific and must not become the long-lived manual-QA instance, which is fixed to `demo-omi-local` / `(default)`.
 - Existing emulator proof scripts under `backend/scripts/v17_*_emulator_test.*` are short-lived emulator tests. Reuse their safety patterns, but do not make them the developer harness runtime.
 - `backend/testing/e2e/run.sh` is the fully fake hermetic backend E2E harness and remains the deterministic pass/fail layer. Offline provider mode should reuse hermetic fake-provider implementations where possible, not duplicate a second fake stack.
 - `desktop/macos/run.sh` is the current desktop local runner. `make desktop-run-local` should wrap it with a named local bundle/profile, localhost backend URLs, and emulator-auth bootstrapping rather than launching production, beta, or the default dev bundle directly.
@@ -85,7 +85,7 @@ The harness should provide:
 - pre-populated local test user by default.
 - easy multi-user local test profiles for cross-user/isolation testing.
 - local Redis or equivalent local-only state service.
-- Python-authored synthetic scenario fixtures for V17 memory gates, projections, cursors, cross-user isolation, and rollback/kill-switch behavior.
+- Python-authored synthetic scenario fixtures for canonical memory gates, projections, cursors, cross-user isolation, and rollback/kill-switch behavior.
 - external processor integrations that use explicit dev API keys by default for realistic manual QA and can switch to offline providers with `PROVIDER_MODE=offline`.
 - a prerequisite check that fails fast for core local prerequisites before startup and lists missing dev credentials when real-provider mode is selected.
 - desktop local profile that points a named desktop bundle to localhost services.
@@ -280,16 +280,16 @@ Executable tickets live under `.codex-autorunner/tickets/`.
 | `TICKET-015-local-runtime-safety.md` | Add demo-project, environment, process, port, and destructive-operation safety guards. |
 | `TICKET-020-dev-up-foundation.md` | Add `dev-up` / `dev-reset` foundation for backend-local emulator services. |
 | `TICKET-025-provider-capabilities.md` | Define real-default provider mode, offline hermetic-shared provider mode, credential checks, and external side-effect guardrails. |
-| `TICKET-030-v17-scenario-fixtures.md` | Add Python-authored synthetic V17 product-state scenarios and seed/reset tooling. |
-| `TICKET-040-local-emulator-v17-manual-qa.md` | Add V17 local manual-QA workflow/status/session summaries outside mandatory CI. |
+| `TICKET-030-v17-scenario-fixtures.md` | Add Python-authored synthetic memory product-state scenarios and seed/reset tooling. |
+| `TICKET-040-local-emulator-v17-manual-qa.md` | Add local manual-QA workflow/status/session summaries outside mandatory CI (`docs/runbooks/local-emulator-manual-qa.md`). |
 | `TICKET-050-desktop-local-profile.md` | Add a desktop local profile for "Omi Dev Local". |
 | `TICKET-060-dev-cloud-preview-bridge.md` | Post-MVP handoff: define optional branch preview deploy/proof bridge without weakening gates. |
 | `TICKET-070-docs-and-adoption.md` | Document the developer loop and proof boundary. |
 
 ## Acceptance
 
-- A developer can run at least one V17 memory happy-path and one fail-closed scenario locally against emulators without GCP deploy access.
+- A developer can run at least one canonical-memory happy-path and one fail-closed scenario locally against emulators without GCP deploy access.
 - The desktop app can be launched against the local stack with a named dev profile and seeded local Firebase Auth emulator user.
 - The harness fails fast with a clear missing-dev-credential checklist when default real-provider mode is selected and required dev keys are absent.
 - All harness-owned mutable state is local and resettable.
-- The docs explicitly state that local emulator development supplements, but does not replace, V17 dev-cloud proof.
+- The docs explicitly state that local emulator development supplements, but does not replace, canonical-memory dev-cloud proof.

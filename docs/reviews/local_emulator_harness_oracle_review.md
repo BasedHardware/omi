@@ -16,7 +16,7 @@ Oracle agreed with the core direction:
 - keep all harness-authoritative mutable state local;
 - emit only `LOCAL_EMULATOR_DEV` evidence.
 
-Oracle's main warning: the docs currently say “local” by intent, but should make it mechanically impossible to reach cloud state or delete unrelated state. It also warned that `test-v17-local` must not pass against contaminated long-lived developer state.
+Oracle's main warning: the docs currently say “local” by intent, but should make it mechanically impossible to reach cloud state or delete unrelated state. It also warned that isolated local memory tests must not pass against contaminated long-lived developer state.
 
 ## Required amendments before implementation
 
@@ -41,7 +41,7 @@ Oracle's main warning: the docs currently say “local” by intent, but should 
 4. **Separate exploratory stack from isolated test stack.**
    - `make dev-up` is long-lived and exploratory.
    - `make seed-v17-scenario` mutates the exploratory instance.
-   - `make test-v17-local` should create/reset/seed/run/report/clean an isolated test instance by default.
+   - Isolated local memory tests should create/reset/seed/run/report/clean an isolated test instance by default.
    - `REUSE_DEV_STACK=1` can exist as an explicit non-reproducible debug mode.
 
 5. **Make Auth emulator fidelity explicit.**

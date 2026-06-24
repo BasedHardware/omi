@@ -68,7 +68,7 @@ session_budget_usd=2
 estimated_session_cost_usd=<value>
 firebase_project=demo-omi-local
 firestore_database=(default)
-seed_version=v17
+seed_version=memory
 git_sha=<sha>
 ```
 
