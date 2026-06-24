@@ -406,6 +406,12 @@ def test_memory_operations_alias_reexports_match_v17():
     assert memory_operations.build_operation_id is v17_memory_operations.build_operation_id
 
 
+def test_memory_contracts_memory_tier_side_effect_reexport():
+    from models import product_memory, v17_memory_contracts
+
+    assert v17_memory_contracts.MemoryTier is product_memory.MemoryTier
+
+
 def test_memory_contracts_extended_alias_reexports_match_v17():
     from models import memory_contracts, v17_memory_contracts
 
