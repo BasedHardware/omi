@@ -221,7 +221,7 @@ describe("agent control tools", () => {
         code: "control_tool_failed",
       },
     });
-    expect(blocked.error.message).toContain("Synchronous ACP control-tool runs are unavailable");
+    expect(blocked.error.message).toContain("Synchronous acp control-tool runs are unavailable");
 
     adapter.resolveDeferred({
       text: "done",
@@ -230,6 +230,63 @@ describe("agent control tools", () => {
       terminalStatus: "succeeded",
     });
     await running;
+    store.close();
+  });
+
+  it("rejects synchronous nested pi-mono control runs while pi-mono is busy", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    adapter.deferResult();
+    const running = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    const blocked = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "send_agent_message", {
+        ownerId: "owner",
+        sessionId: adapter.executed[0].sessionId,
+        prompt: "nested follow up",
+        requestId: "nested-send-pi",
+      }),
+    );
+
+    expect(blocked).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+      },
+    });
+    expect(blocked.error.message).toContain("Synchronous pi-mono control-tool runs are unavailable");
+
+    adapter.resolveDeferred({
+      text: "done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+    store.close();
+  });
+
+  it("falls back when the active owner getter returns an empty string", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "desktop-local-user" });
+    await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "other-owner",
+      externalRefId: "other-task",
+      requestId: "other-request",
+    });
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall({ kernel, getOwnerId: () => "   " }, "list_agent_sessions", {}),
+    );
+
+    expect(listed.ok).toBe(true);
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0].session.ownerId).toBe("desktop-local-user");
     store.close();
   });
 

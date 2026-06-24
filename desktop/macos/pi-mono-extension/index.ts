@@ -28,7 +28,7 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
@@ -790,12 +790,19 @@ export const OMI_TOOLS = [
 
       let content: string | null = null;
       for (const root of roots) {
-        const filePath = resolve(root, name, "SKILL.md");
-        if (!filePath.startsWith(`${root}/`)) {
+        let realRoot: string;
+        let realFilePath: string;
+        try {
+          realRoot = await realpath(root);
+          realFilePath = await realpath(resolve(root, name, "SKILL.md"));
+        } catch {
+          continue;
+        }
+        if (!realFilePath.startsWith(`${realRoot}/`)) {
           continue;
         }
         try {
-          content = await readFile(filePath, "utf8");
+          content = await readFile(realFilePath, "utf8");
           break;
         } catch {
           // Try the next configured skill location.

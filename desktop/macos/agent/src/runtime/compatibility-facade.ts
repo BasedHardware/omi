@@ -392,7 +392,7 @@ export class JsonlCompatibilityFacade {
   }
 
   private latestRunByClientKey(ownerId: string, clientId: string): string {
-    return `${ownerId}:${clientId}`;
+    return JSON.stringify([ownerId, clientId]);
   }
 
   private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {

@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile, unlink } from "node:fs/promises";
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
@@ -1095,6 +1095,34 @@ test("load_skill: rejects traversal and path-like names", () => {
   assert.equal(isSafeSkillName("nested/skill"), false);
   assert.equal(isSafeSkillName(".."), false);
   assert.equal(isSafeSkillName("safe..looking"), false);
+});
+
+test("load_skill: refuses symlink escapes from the skills root", async () => {
+  const root = await mkdtemp(pathJoin(tmpdir(), "omi-skill-root-"));
+  const outside = await mkdtemp(pathJoin(tmpdir(), "omi-skill-outside-"));
+  const previousWorkspace = process.env.OMI_WORKSPACE;
+  try {
+    await mkdir(pathJoin(root, ".claude", "skills"), { recursive: true });
+    await mkdir(pathJoin(outside, "secret-skill"), { recursive: true });
+    await writeFile(pathJoin(outside, "secret-skill", "SKILL.md"), "secret instructions");
+    await symlink(pathJoin(outside, "secret-skill"), pathJoin(root, ".claude", "skills", "secret-skill"));
+    process.env.OMI_WORKSPACE = root;
+
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === "load_skill")!;
+    const result = await tool.execute("call-1", { name: "secret-skill" }, new AbortController().signal);
+
+    assert.equal(result.content[0].type, "text");
+    assert.match(result.content[0].text, /not found/i);
+    assert.doesNotMatch(result.content[0].text, /secret instructions/);
+  } finally {
+    if (previousWorkspace === undefined) {
+      delete process.env.OMI_WORKSPACE;
+    } else {
+      process.env.OMI_WORKSPACE = previousWorkspace;
+    }
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
 });
 
 test("callSwiftTool: returns error when not connected", async () => {

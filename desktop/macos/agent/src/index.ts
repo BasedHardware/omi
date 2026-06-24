@@ -575,9 +575,10 @@ async function main(): Promise<void> {
   let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
   let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
   let currentOwnerId = "desktop-local-user";
+  let piMonoOwnerId = "desktop-local-user";
   const invalidatePiMonoBindings = (reason: string) => {
     kernel.invalidateBindings({
-      ownerId: currentOwnerId,
+      ownerId: piMonoOwnerId,
       surfaceKind: "legacy_jsonl",
       defaultAdapterId: "pi-mono",
       adapterId: "pi-mono",
@@ -649,6 +650,9 @@ async function main(): Promise<void> {
           const adapterId = query.adapterId ?? defaultAdapterId;
           if (query.ownerId) {
             currentOwnerId = query.ownerId;
+            if (adapterId === "pi-mono") {
+              piMonoOwnerId = query.ownerId;
+            }
           }
           if (adapterId === "acp") {
             await initializeAcp();
@@ -692,6 +696,7 @@ async function main(): Promise<void> {
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
         currentOwnerId = rtm.ownerId ?? currentOwnerId;
+        piMonoOwnerId = rtm.ownerId ?? piMonoOwnerId;
         try {
           if (!piMonoAdapter) {
             await ensurePiMonoAdapter(rtm.token);

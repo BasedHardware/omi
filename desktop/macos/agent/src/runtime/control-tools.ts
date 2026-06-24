@@ -330,13 +330,14 @@ export async function handleAgentControlToolCall(
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {
-  return context.getOwnerId?.() ?? "desktop-local-user";
+  const ownerId = context.getOwnerId?.().trim();
+  return ownerId || "desktop-local-user";
 }
 
 function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string): void {
-  if (adapterId === "acp" && context.kernel.hasActiveExecutionForAdapter("acp")) {
+  if (context.kernel.hasActiveExecutionForAdapter(adapterId)) {
     throw new Error(
-      "Synchronous ACP control-tool runs are unavailable while the ACP adapter is already executing; use spawn mode or retry after the current run finishes."
+      `Synchronous ${adapterId} control-tool runs are unavailable while that adapter is already executing; use spawn mode or retry after the current run finishes.`
     );
   }
 }

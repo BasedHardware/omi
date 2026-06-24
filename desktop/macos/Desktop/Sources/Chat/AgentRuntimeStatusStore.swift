@@ -129,6 +129,9 @@ final class AgentRuntimeStatusStore: ObservableObject {
   }
 
   func updateActivity(surface: AgentSurfaceReference, statusText: String?) {
+    if projectionsBySurface[surface.key]?.status.isTerminal == true {
+      return
+    }
     update(surface: surface, status: .running, statusText: statusText, terminal: false)
   }
 
