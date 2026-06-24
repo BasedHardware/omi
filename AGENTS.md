@@ -254,3 +254,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
+
+## Cursor Cloud specific instructions
+
+Running in a Cursor Cloud VM (Linux x86)? See **[.cursor/cloud-agent-environment.md](.cursor/cloud-agent-environment.md)** — what runs here, the credential-free **hermetic E2E harness** (preferred), running the backend live, and known pre-existing test failures.
