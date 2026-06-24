@@ -29,7 +29,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         try await super.tearDown()
     }
 
-    func testVisibilityReconciliationBypassesRecentLocalChangeGuardWithoutOverwritingDescription() async throws {
+    func testVisibilityReconciliationBypassesRecentLocalChangeGuardWithoutOverwritingDescriptionOrDueDateEdit() async throws {
         let originalDueAt = Date(timeIntervalSince1970: 1_750_000_000)
         let serverDueAt = Date(timeIntervalSince1970: 1_750_086_400)
         let createdAt = Date(timeIntervalSince1970: 1_749_900_000)
@@ -82,7 +82,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         )
         XCTAssertTrue(refreshed.completed)
         XCTAssertEqual(refreshed.deleted, true)
-        XCTAssertEqual(refreshed.dueAt, serverDueAt)
+        XCTAssertEqual(refreshed.dueAt, originalDueAt)
         XCTAssertEqual(refreshed.description, "local description must survive")
     }
 

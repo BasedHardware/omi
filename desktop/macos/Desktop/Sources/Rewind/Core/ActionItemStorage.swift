@@ -611,9 +611,9 @@ actor ActionItemStorage {
 
     /// Reconcile dashboard visibility fields from authoritative server rows without
     /// overwriting user-editable task content. This deliberately bypasses the
-    /// 60-second optimistic-update guard in `syncTaskActionItems` only for fields
-    /// that decide whether a row belongs in dashboard buckets: completion,
-    /// deletion, and due date.
+    /// 60-second optimistic-update guard in `syncTaskActionItems` only for completion
+    /// and deletion; due dates are reconciled only when they are not protected by a
+    /// recent local edit, because due date edits are PATCHed optimistically.
     @discardableResult
     func reconcileDashboardVisibilityFields(_ items: [TaskActionItem]) async throws -> Int {
         guard !items.isEmpty else { return 0 }
@@ -641,13 +641,15 @@ actor ActionItemStorage {
                     record.deletedBy = item.deletedBy
                     changed = true
                 }
-                if record.dueAt != item.dueAt {
+                let incomingTimestamp = item.updatedAt ?? item.createdAt
+                let protectsRecentLocalDueDate = Date().timeIntervalSince(record.updatedAt) < 60
+                    && record.updatedAt > incomingTimestamp
+                if record.dueAt != item.dueAt && !protectsRecentLocalDueDate {
                     record.dueAt = item.dueAt
                     changed = true
                 }
 
                 guard changed else { continue }
-                let incomingTimestamp = item.updatedAt ?? item.createdAt
                 if incomingTimestamp > record.updatedAt {
                     record.updatedAt = incomingTimestamp
                 }
