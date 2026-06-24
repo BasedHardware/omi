@@ -355,6 +355,7 @@ actor VideoChunkEncoder {
         // Write to ffmpeg stdin
         do {
             try stdin.write(contentsOf: pngData)
+            ffmpegNotReadyCount = 0
         } catch {
             throw RewindError.storageError("Failed to write frame to ffmpeg: \(error.localizedDescription)")
         }
