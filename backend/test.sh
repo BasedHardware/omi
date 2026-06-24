@@ -72,6 +72,7 @@ pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v
+pytest tests/unit/test_people_list_name_poison.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_action_items_conversation_list_malformed.py -v
 pytest tests/unit/test_firmware_pagination.py -v
