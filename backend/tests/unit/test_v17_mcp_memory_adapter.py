@@ -35,17 +35,21 @@ def test_mcp_rest_search_route_wires_app_key_scope_grant_before_v17_vector_adapt
     uid_assignment = 'uid = auth_context.uid'
     rollout_call = 'read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)'
     vector_adapter_call = 'search_v17_default_mcp_memories_vector('
-    legacy_call = 'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
+    legacy_safe_call = 'return memory_service.search_mcp(uid, query, limit=limit)'
     assert context_dependency in search_route
     assert grant_call in search_route
     assert uid_assignment in search_route
     assert rollout_call in search_route
     assert vector_adapter_call in search_route
-    assert legacy_call in search_route
+    assert legacy_safe_call in search_route
     assert search_route.index(grant_call) < search_route.index(rollout_call)
     assert search_route.index(grant_call) < search_route.index(vector_adapter_call)
-    assert search_route.index(grant_call) < search_route.index(legacy_call)
-    assert search_route.index(rollout_call) < search_route.index(vector_adapter_call) < search_route.index(legacy_call)
+    assert search_route.index(grant_call) < search_route.rindex(legacy_safe_call)
+    assert (
+        search_route.index(rollout_call)
+        < search_route.index(vector_adapter_call)
+        < search_route.rindex(legacy_safe_call)
+    )
 
 
 def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
@@ -107,14 +111,17 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
 def test_mcp_rest_search_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
+    search_route = contents[
+        contents.index('@router.get("/v1/mcp/memories/search"') : contents.index('@router.get("/v1/mcp/memories"')
+    ]
 
-    assert 'V17ReadDecision.USE_V17' in contents
-    assert 'V17ReadDecision.USE_LEGACY_SAFE' in contents
-    assert 'if v17_vector_results.read_decision == V17ReadDecision.USE_V17:' in contents
-    assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in contents
-    assert contents.index('if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:') < contents.index(
-        'vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)'
-    )
+    assert 'V17ReadDecision.USE_V17' in search_route
+    assert 'V17ReadDecision.USE_LEGACY_SAFE' in search_route
+    assert 'if v17_vector_results.read_decision == V17ReadDecision.USE_V17:' in search_route
+    assert 'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:' in search_route
+    assert search_route.index(
+        'if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:'
+    ) < search_route.rindex('return memory_service.search_mcp(uid, query, limit=limit)')
 
 
 def test_mcp_rest_get_route_only_reaches_legacy_after_explicit_legacy_safe_decision():
