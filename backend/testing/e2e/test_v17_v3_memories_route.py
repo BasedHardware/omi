@@ -92,7 +92,7 @@ def test_enrolled_v17_fake_success_maps_body_cursor_and_allowlisted_headers(clie
     captured = []
 
     def fake_v17_service(params, _adapters):
-        from utils.memory.v17_v3_composed_get_service import V17V3ComposedResponse
+        from utils.memory.v3_composed_get_service import V17V3ComposedResponse
 
         captured.append(params)
         response = V17V3ComposedResponse.success(
@@ -127,7 +127,7 @@ def test_enrolled_v17_fake_error_fails_closed_with_public_error_and_headers(clie
     seed_memory("123", _memory_doc("legacy-not-fallback", "must not be returned"))
 
     def failing_v17_service(_params, _adapters):
-        from utils.memory.v17_v3_composed_get_service import V17V3ComposedResponse
+        from utils.memory.v3_composed_get_service import V17V3ComposedResponse
 
         return V17V3ComposedResponse.error(503, "infrastructure_failure")
 
