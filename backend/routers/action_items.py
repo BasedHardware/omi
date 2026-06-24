@@ -287,7 +287,13 @@ def get_action_items(
             description = item.get('description', '')
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
-    response_items = [ActionItemResponse(**item) for item in action_items]
+    response_items = []
+    for item in action_items:
+        try:
+            response_items.append(ActionItemResponse(**item))
+        except ValidationError:
+            logger.warning(f"Skipping malformed action item {item.get('id')} in action items list for uid {uid}")
+            continue
 
     has_more = len(action_items) == limit
     if has_more:
