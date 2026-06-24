@@ -1,5 +1,7 @@
 # memory Memory Product Integration — Decision Brief
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Audience:** David / product decision maker  
 **Source doc:** `docs/epics/memory_product_integration_epic.md`  
 **Purpose:** Condensed, human-reviewable version of the implementer Epic.  
