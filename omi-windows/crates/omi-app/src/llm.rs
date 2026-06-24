@@ -699,6 +699,13 @@ pub async fn process_conversation(
                     if let Err(e) = db.insert_memory(Some(conversation_id), content, category) {
                         tracing::error!("[LLM] Failed to insert memory: {e}");
                     } else {
+                        let backend_url = cfg.backend_url.clone();
+                        let token = cfg.firebase_id_token.clone();
+                        let c_content = content.to_string();
+                        let c_category = category.unwrap_or("interesting").to_string();
+                        tokio::spawn(async move {
+                            crate::sync::upload_memory(backend_url, token, c_content, c_category).await;
+                        });
                         inserted += 1;
                     }
                 }

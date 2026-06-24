@@ -329,6 +329,14 @@ pub async fn run_context_watcher(
                 if kind == ContextKind::Browser && !result.starts_with("⚠️") {
                     if let Err(e) = db.insert_memory(None, &result, Some("screen_context")) {
                         warn!("[CTX] Failed to save browser memory: {e:#}");
+                    } else {
+                        let backend_url = cfg.backend_url.clone();
+                        let token = cfg.firebase_id_token.clone();
+                        let c_content = result.clone();
+                        let c_category = "screen_context".to_string();
+                        tokio::spawn(async move {
+                            crate::sync::upload_memory(backend_url, token, c_content, c_category).await;
+                        });
                     }
                 }
             }

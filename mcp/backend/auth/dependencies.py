@@ -15,6 +15,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from auth.supabase_client import get_anon_client
 
+import jwt
+import uuid
+import hashlib
+
 bearer_scheme = HTTPBearer(auto_error=True)
 
 
@@ -22,26 +26,30 @@ async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
 ) -> Dict:
     """
-    Validates the Bearer JWT issued by Supabase Auth.
+    Decodes the Bearer JWT issued by Firebase (from the desktop app).
     Returns { id, email, user_id, access_token }
-    Raises 401 if token is missing, expired, or invalid.
     """
     token = credentials.credentials
-    client = get_anon_client()
 
     try:
-        response = client.auth.get_user(token)
-        if not response or not response.user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        user = response.user
+        # Decode Firebase JWT without signature verification for local backend use
+        payload = jwt.decode(token, options={"verify_signature": False})
+        
+        firebase_uid = payload.get("sub")
+        email = payload.get("email", "")
+        
+        if not firebase_uid:
+            raise ValueError("Token missing 'sub' claim")
+            
+        # Hash the Firebase UID into a valid UUID format for Supabase database compatibility
+        m = hashlib.md5()
+        m.update(firebase_uid.encode('utf-8'))
+        stable_uuid = str(uuid.UUID(m.hexdigest()))
+        
         return {
-            "id": user.id,
-            "email": user.email,
-            "user_id": user.id,       # alias for compatibility with knowledge.py
+            "id": stable_uuid,
+            "email": email,
+            "user_id": stable_uuid,
             "access_token": token,
         }
     except HTTPException:

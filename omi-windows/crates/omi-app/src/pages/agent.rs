@@ -63,6 +63,7 @@ pub fn AgentPage() -> Element {
     let mut history: Signal<Vec<(String, String)>> = use_signal(Vec::new);
     let mut input_text = use_signal(String::new);
     let is_loading = use_signal(|| false);
+    let mut pending_hitl: Signal<Option<String>> = use_signal(|| None);
 
     // Pre-fill from a tapped suggestion (if one exists in context)
     let mut suggestion_prompt: Signal<Option<String>> = use_context();
@@ -83,6 +84,7 @@ pub fn AgentPage() -> Element {
         let mut msgs = messages.clone();
         let mut hist = history.clone();
         let mut loading = is_loading.clone();
+        let mut hitl_state = pending_hitl.clone();
 
         spawn(async move {
             let mut rx = runtime_ref.read().subscribe();
@@ -133,6 +135,13 @@ pub fn AgentPage() -> Element {
                         let mut list = msgs.read().clone();
                         list.push(ChatMessage::system(format!("⚠ {message}")));
                         msgs.set(list);
+                        loading.set(false);
+                    }
+                    Ok(AgentEvent::HitlRequest { thread_id, message }) => {
+                        let mut list = msgs.read().clone();
+                        list.push(ChatMessage::system(format!("🔒 Action Required: {message}\n(Type 'yes' or 'no' below)")));
+                        msgs.set(list);
+                        hitl_state.set(Some(thread_id));
                         loading.set(false);
                     }
                     Ok(_) => {}
@@ -222,6 +231,25 @@ pub fn AgentPage() -> Element {
 
         // Clear suggestion pill after use
         suggestion_prompt.set(None);
+
+        let mut p_hitl = pending_hitl.clone();
+        let thread_id_opt = p_hitl.read().clone();
+        if let Some(thread_id) = thread_id_opt {
+            p_hitl.set(None);
+            let hitl_text = text.clone();
+            spawn(async move {
+                let cfg = config.read().clone();
+                let rt = runtime_ref.read().clone();
+                if let Err(e) = rt.confirm_mcp_hitl(&thread_id, &hitl_text, &cfg).await {
+                    tracing::error!("[AGENT PAGE] MCP HITL confirm failed: {e}");
+                    let mut list = msgs.read().clone();
+                    list.push(ChatMessage::system(format!("⚠ {e}")));
+                    msgs.set(list);
+                    loading.set(false);
+                }
+            });
+            return;
+        }
 
         spawn(async move {
             let cfg = config.read().clone();

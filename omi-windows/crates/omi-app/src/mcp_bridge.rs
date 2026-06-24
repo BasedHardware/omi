@@ -130,7 +130,7 @@ pub async fn ensure_started(cfg: &AppConfig) -> Result<()> {
         .args([
             "-m",
             "uvicorn",
-            "backend.api.main:app",
+            "api.main:app",
             "--host",
             "127.0.0.1",
             "--port",
@@ -146,15 +146,20 @@ pub async fn ensure_started(cfg: &AppConfig) -> Result<()> {
 
     *guard = Some(child);
     info!("[MCP] Backend subprocess started on http://127.0.0.1:8002");
-
-    // Give the server a moment to come up
     drop(guard);
-    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
-    // Health check
-    match health_check().await {
-        Ok(true) => info!("[MCP] Backend health check passed ✅"),
-        Ok(false) | Err(_) => warn!("[MCP] Backend health check failed — will retry on next query"),
+    let mut started = false;
+    for i in 0..15 {
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        if let Ok(true) = health_check().await {
+            info!("[MCP] Backend health check passed ✅ after {}s", (i + 1) * 2);
+            started = true;
+            break;
+        }
+    }
+
+    if !started {
+        warn!("[MCP] Backend health check failed to pass after 30 seconds");
     }
 
     Ok(())
@@ -212,11 +217,12 @@ pub async fn query_mcp(user_query: &str, cfg: &AppConfig) -> Option<McpResponse>
 
     info!("[MCP] Sending query: {}", &user_query[..user_query.len().min(80)]);
 
-    match client
-        .post("http://127.0.0.1:8002/api/message")
-        .json(&body)
-        .send()
-        .await
+    let mut req = client.post("http://127.0.0.1:8002/api/message").json(&body);
+    if !cfg.firebase_id_token.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", cfg.firebase_id_token));
+    }
+
+    match req.send().await
     {
         Ok(resp) if resp.status().is_success() => {
             let json: serde_json::Value = resp.json().await.ok()?;

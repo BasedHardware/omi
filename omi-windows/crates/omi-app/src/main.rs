@@ -17,6 +17,7 @@ mod pages;
 mod proactive;
 mod recording;
 mod sidecar;
+mod sync;
 mod tts_engine;
 mod tray;
 

@@ -115,6 +115,14 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
                                         Some("screenshot"),
                                     ) {
                                         tracing::error!("[CAPTURE] Failed to save screenshot summary memory: {e}");
+                                    } else {
+                                        let backend_url = cfg_extract.backend_url.clone();
+                                        let token = cfg_extract.firebase_id_token.clone();
+                                        let c_content = extraction.summary.trim().to_string();
+                                        let c_category = "screenshot".to_string();
+                                        tokio::spawn(async move {
+                                            crate::sync::upload_memory(backend_url, token, c_content, c_category).await;
+                                        });
                                     }
                                 }
                             }
@@ -145,6 +153,14 @@ async fn capture_one(db: &omi_db::Database, cfg: &AppConfig) {
                                         memory.category.as_deref(),
                                     ) {
                                         tracing::error!("[CAPTURE] Failed to save screenshot memory: {e}");
+                                    } else {
+                                        let backend_url = cfg_extract.backend_url.clone();
+                                        let token = cfg_extract.firebase_id_token.clone();
+                                        let c_content = content.to_string();
+                                        let c_category = memory.category.as_deref().unwrap_or("interesting").to_string();
+                                        tokio::spawn(async move {
+                                            crate::sync::upload_memory(backend_url, token, c_content, c_category).await;
+                                        });
                                     }
                                 }
                             }

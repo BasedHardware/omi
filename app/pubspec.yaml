@@ -131,9 +131,7 @@ dependencies:
   image: ^4.3.0
   calendar_date_picker2: ^2.0.1
   whisper_flutter_new:
-    git:
-      url: https://github.com/BasedHardware/whisper_flutter_new.git
-      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
+    path: ../whisper_flutter_new
   disk_space_2: ^1.0.11
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
