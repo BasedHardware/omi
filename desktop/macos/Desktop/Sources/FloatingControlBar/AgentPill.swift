@@ -592,14 +592,18 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .running
         }
 
-        let activity = describeActivity(for: aiMessage)
+        let activity = Self.describeActivity(for: aiMessage)
         if !activity.isEmpty && activity != pill.latestActivity {
             pill.latestActivity = activity
             pill.transcript.append(activity)
         }
     }
 
-    private func describeActivity(for message: ChatMessage) -> String {
+    /// Pill-bar activity string for an AI message. While a message is still
+    /// streaming, skip partial text chunks so the pill does not flicker through
+    /// mid-token labels like "O..." or "Open..." before the final response lands.
+    /// Tool calls still show immediately because they are atomic activity.
+    private static func describeActivity(for message: ChatMessage) -> String {
         for block in message.contentBlocks.reversed() {
             switch block {
             case .toolCall(_, let name, _, _, let input, _):
@@ -609,6 +613,7 @@ final class AgentPillsManager: ObservableObject {
                 }
                 return display
             case .text(_, let text):
+                guard !message.isStreaming else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
@@ -618,7 +623,7 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         let trimmedFallback = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedFallback.isEmpty {
+        if !message.isStreaming, !trimmedFallback.isEmpty {
             return String(trimmedFallback.prefix(110))
         }
         return "Working…"
