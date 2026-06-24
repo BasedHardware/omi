@@ -21,8 +21,8 @@ REQUIRED_ARTIFACT_TERMS = [
     "PINECONE_API_KEY",
     "PINECONE_INDEX_NAME",
     "PINECONE_INDEX_HOST",
-    "V17_PROVIDER_PROOF_FIRESTORE_PROJECT",
-    "V17_PROVIDER_PROOF_UID",
+    "MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT",
+    "MEMORY_PROVIDER_PROOF_UID",
 ]
 
 FORBIDDEN_MUTATION_TERMS = [
@@ -99,8 +99,8 @@ def test_provider_readiness_execute_requires_prerequisites_and_remains_read_only
     assert "PINECONE_API_KEY is required" in prerequisites
     assert "PINECONE_INDEX_NAME is required" in prerequisites
     assert "PINECONE_INDEX_HOST is required" in prerequisites
-    assert "V17_PROVIDER_PROOF_FIRESTORE_PROJECT or --firestore-project is required" in prerequisites
-    assert "V17_PROVIDER_PROOF_UID or --proof-uid is required" in prerequisites
+    assert "MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT or --firestore-project is required" in prerequisites
+    assert "MEMORY_PROVIDER_PROOF_UID or --proof-uid is required" in prerequisites
     artifact = module.build_readiness_artifact(missing)
     assert artifact["status"] == "NOT_RUN"
     assert artifact["read_only"] is True
