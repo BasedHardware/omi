@@ -7,14 +7,14 @@ REQUIRED_CONTRACT_TERMS = [
     "uvicorn",
     "scripts.vector_repair_outbox_worker_entrypoint:app",
     "POST /v17-vector-repair-outbox-worker/tick",
-    "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
+    "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED",
     "value: \"false\"",
-    "V17_VECTOR_REPAIR_OUTBOX_UID",
-    "V17_VECTOR_REPAIR_OUTBOX_WORKER_ID",
+    "MEMORY_VECTOR_REPAIR_OUTBOX_UID",
+    "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID",
     "PINECONE_API_KEY",
     "PINECONE_INDEX_NAME",
     "OPENAI_API_KEY",
-    "V17_VECTOR_REPAIR_PINECONE_NAMESPACE",
+    "MEMORY_VECTOR_REPAIR_PINECONE_NAMESPACE",
     "ns2",
     "Cloud Scheduler",
     "Cloud Tasks",
@@ -60,7 +60,7 @@ def test_v17_vector_repair_outbox_cloud_deployment_contract_is_disabled_and_oidc
     assert "state: PAUSED" in contract
     assert "schedule: \"*/15 * * * *\"" in contract
     assert "uri: https://REGION-PROJECT_ID.run.app/v17-vector-repair-outbox-worker/tick" in contract
-    assert "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true" in contract
+    assert "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true" in contract
     assert "Do not set the true value until all production gates pass" in contract
     assert "CLI one-tick entrypoint" not in contract
     assert "must exist before applying the Service/Tasks shape" not in contract
