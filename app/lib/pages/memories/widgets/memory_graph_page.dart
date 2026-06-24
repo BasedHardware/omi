@@ -822,7 +822,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _highlightedNodeIds.clear();
 
       if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId!);
+        _highlightedNodeIds.add(hitNodeId);
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
