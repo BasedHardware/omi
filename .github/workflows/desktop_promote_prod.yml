@@ -1,95 +1,110 @@
 name: Promote Desktop Backend to Prod
 
-# Promotes the desktop (Rust) backend to PRODUCTION. Merges to main deploy ONLY
-# to development (see desktop_auto_release.yml), so beta testers get every build
-# while prod users stay on the last promoted, version-locked release.
+# Keeps the prod desktop (Rust) backend in sync with whatever desktop release is
+# on the STABLE channel — automatically. You change ONE thing (flip a release's
+# `channel:` field to `stable`, which already promotes the app via the appcast),
+# and this reconciler deploys the matching backend to prod. No tags to manage.
 #
-# RELIABLE path — `workflow_dispatch`: run this with a v*-macos tag to promote.
-# It builds + deploys the backend from THAT tag's commit (not main HEAD) and
-# (by default) flips the GitHub release to `channel: stable`, so one run does the
-# whole promotion (app channel + backend) atomically. Use `dry_run: true` to
-# build-and-verify without deploying or changing the channel.
+# Why a reconciler instead of a `release: edited` trigger: GitHub does not
+# reliably emit Actions runs for release edits (verified). A scheduled
+# reconcile is the robust way to make "flip the channel" auto-promote the
+# backend. `workflow_dispatch` runs it immediately (no waiting for the cron).
 #
-# Best-effort path — `release: edited`: if a release is edited to
-# `channel: stable` and GitHub fires the event, this also promotes. NOTE: GitHub
-# does not reliably emit Actions runs for release edits, so do not depend on it —
-# the workflow_dispatch above is the supported promotion mechanism.
+# Safety: roll-FORWARD only. It deploys the newest `channel: stable` release iff
+# that commit is newer than what's already on prod (tracked by the
+# `desktop-backend-prod-deployed` git tag) — so it never downgrades prod. Use
+# the `force` input (with an optional `tag`) to deploy/rollback to a specific
+# release deliberately.
 
 on:
+  schedule:
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'v*-macos tag to promote to prod (e.g. v0.11.498+11498-macos)'
-        required: true
-      dry_run:
-        description: 'Build + verify only — skip the prod deploy and channel flip'
+        description: 'Override tag to deploy (default: newest channel:stable release)'
+        required: false
+      force:
+        description: 'Deploy even if not newer than current prod (allows rollback)'
         type: boolean
         default: false
-      set_channel_stable:
-        description: 'Also flip the GitHub release to channel: stable (promote the app)'
-        type: boolean
-        default: true
-  release:
-    types: [edited, released]
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-promote-prod
+  group: desktop-backend-reconcile
   cancel-in-progress: false
 
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  TRACK_TAG: desktop-backend-prod-deployed
 
 jobs:
-  gate:
+  check:
     runs-on: ubuntu-latest
     outputs:
-      proceed: ${{ steps.g.outputs.proceed }}
-      tag: ${{ steps.g.outputs.tag }}
-      dry_run: ${{ steps.g.outputs.dry_run }}
-      flip_channel: ${{ steps.g.outputs.flip_channel }}
+      deploy: ${{ steps.c.outputs.deploy }}
+      target_sha: ${{ steps.c.outputs.target_sha }}
+      target_tag: ${{ steps.c.outputs.target_tag }}
     steps:
-      - name: Resolve tag + gate
-        id: g
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine target + roll-forward decision
+        id: c
         env:
-          EVENT: ${{ github.event_name }}
-          DISPATCH_TAG: ${{ github.event.inputs.tag }}
-          DISPATCH_DRY: ${{ github.event.inputs.dry_run }}
-          DISPATCH_FLIP: ${{ github.event.inputs.set_channel_stable }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OVERRIDE_TAG: ${{ github.event.inputs.tag }}
+          FORCE: ${{ github.event.inputs.force }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            echo "Manual promotion of $DISPATCH_TAG (dry_run=$DISPATCH_DRY)"
-            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-            echo "dry_run=$DISPATCH_DRY" >> "$GITHUB_OUTPUT"
-            echo "flip_channel=$DISPATCH_FLIP" >> "$GITHUB_OUTPUT"
+
+          # 1) TARGET: explicit override, else newest v*-macos release on channel: stable
+          TARGET_TAG="${OVERRIDE_TAG:-}"
+          if [ -z "$TARGET_TAG" ]; then
+            for tag in $(gh release list --repo "$REPO" --limit 30 --json tagName -q '.[].tagName' | grep -- '-macos'); do
+              body=$(gh release view "$tag" --repo "$REPO" --json body -q .body)
+              if printf '%s\n' "$body" | grep -qiE '^[[:space:]]*channel:[[:space:]]*stable[[:space:]]*$'; then
+                TARGET_TAG="$tag"
+                break
+              fi
+            done
+          fi
+          if [ -z "$TARGET_TAG" ]; then
+            echo "No channel:stable desktop release found; nothing to do."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # release event (best-effort): only desktop tags marked channel: stable
-          echo "dry_run=false" >> "$GITHUB_OUTPUT"
-          echo "flip_channel=false" >> "$GITHUB_OUTPUT"
-          case "$RELEASE_TAG" in
-            *-macos) ;;
-            *) echo "Not a desktop tag ($RELEASE_TAG) — skipping."; echo "proceed=false" >> "$GITHUB_OUTPUT"; exit 0 ;;
-          esac
-          if printf '%s\n' "$RELEASE_BODY" | grep -qiE '^[[:space:]]*channel:[[:space:]]*stable[[:space:]]*$'; then
-            echo "$RELEASE_TAG is channel: stable — promoting to prod."
-            echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "$RELEASE_TAG is not channel: stable — skipping prod deploy."
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
+
+          TARGET_SHA=$(git rev-list -n1 "$TARGET_TAG" 2>/dev/null || true)
+          if [ -z "$TARGET_SHA" ]; then
+            TARGET_SHA=$(gh api "repos/$REPO/git/ref/tags/$TARGET_TAG" --jq '.object.sha')
+          fi
+          CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || echo "")
+          echo "target=$TARGET_TAG ($TARGET_SHA) | tracked-prod=$CURRENT_SHA | force=${FORCE:-false}"
+
+          DEPLOY=true
+          if [ "${FORCE:-false}" = "true" ]; then
+            DEPLOY=true
+          elif [ "$TARGET_SHA" = "$CURRENT_SHA" ]; then
+            DEPLOY=false   # already on prod
+          elif [ -n "$CURRENT_SHA" ] && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA"; then
+            DEPLOY=false   # target is older than prod — never auto-downgrade
           fi
 
-  promote-prod:
-    needs: gate
-    if: needs.gate.outputs.proceed == 'true'
+          echo "deploy=$DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "target_tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "Decision - deploy=$DEPLOY for $TARGET_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
     environment: prod
     permissions:
       contents: write
@@ -99,14 +114,11 @@ jobs:
       - name: Delete huge unnecessary tools folder
         run: rm -rf /opt/hostedtoolcache
 
-      - name: Checkout promoted tag
+      - name: Checkout target commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ needs.gate.outputs.tag }}
-
-      - name: Resolve commit sha
-        id: sha
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          ref: ${{ needs.check.outputs.target_sha }}
+          fetch-depth: 0
 
       - name: Google Auth
         uses: google-github-actions/auth@v2
@@ -122,30 +134,24 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
 
-      - name: Build and Push Desktop Backend Image (from promoted tag)
+      - name: Build and Push Desktop Backend Image
         uses: docker/build-push-action@v6
         with:
           context: ./desktop/macos/Backend-Rust
           file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
           tags: |
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.sha.outputs.sha }}
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ needs.check.outputs.target_sha }}
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:prod
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
-      - name: Dry run — skip deploy
-        if: needs.gate.outputs.dry_run == 'true'
-        run: |
-          echo "dry_run - image built from ${{ needs.gate.outputs.tag }} (${{ steps.sha.outputs.sha }}); SKIPPING prod deploy + channel flip." >> "$GITHUB_STEP_SUMMARY"
-
       - name: Deploy Desktop Backend to Production
-        if: needs.gate.outputs.dry_run != 'true'
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.sha.outputs.sha }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ needs.check.outputs.target_sha }}
           flags: '--allow-unauthenticated'
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
@@ -164,22 +170,11 @@ jobs:
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
 
-      - name: Promote release channel to stable
-        if: github.event_name == 'workflow_dispatch' && needs.gate.outputs.dry_run != 'true' && needs.gate.outputs.flip_channel == 'true'
+      - name: Advance prod-tracking tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.gate.outputs.tag }}
         run: |
           set -euo pipefail
-          gh release view "$TAG" --json body --jq '.body' > /tmp/body.md
-          if grep -qiE '^[[:space:]]*channel:[[:space:]]*stable[[:space:]]*$' /tmp/body.md; then
-            echo "Release already channel: stable — nothing to flip."
-          else
-            sed -i -E 's/^([[:space:]]*channel:[[:space:]]*)beta([[:space:]]*)$/\1stable\2/' /tmp/body.md
-            gh release edit "$TAG" --notes-file /tmp/body.md
-            echo "Flipped $TAG to channel: stable."
-          fi
-
-      - name: Summary
-        if: needs.gate.outputs.dry_run != 'true'
-        run: echo "✅ Promoted desktop-backend to PROD from ${{ needs.gate.outputs.tag }} (${{ steps.sha.outputs.sha }})" >> "$GITHUB_STEP_SUMMARY"
+          git tag -f "$TRACK_TAG" "${{ needs.check.outputs.target_sha }}"
+          git push -f origin "$TRACK_TAG"
+          echo "Promoted desktop-backend to PROD - ${{ needs.check.outputs.target_tag }} (${{ needs.check.outputs.target_sha }})" >> "$GITHUB_STEP_SUMMARY"
