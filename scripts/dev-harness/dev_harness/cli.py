@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 from typing import Iterable
 
-from . import config, providers, safety, v17_scenarios
+from . import config, providers, safety, memory_scenarios
 
 OWNERSHIP_PREFIX = "omi-dev-harness"
 SERVICE_PORTS = {
@@ -216,12 +216,12 @@ def _git_metadata(repo_root: Path) -> dict[str, object]:
 
 
 def _current_scenario_manifest(cfg: config.HarnessConfig) -> dict[str, object] | None:
-    current = cfg.layout.state_root / "manifests" / "v17-scenario-current.json"
+    current = cfg.layout.state_root / "manifests" / "memory-scenario-current.json"
     if current.is_file():
         data = _load_json(current, {})
         if data:
             return data
-    manifests = sorted((cfg.layout.state_root / "manifests").glob("v17-scenario-*-seed.json"))
+    manifests = sorted((cfg.layout.state_root / "manifests").glob("memory-scenario-*-seed.json"))
     if not manifests:
         return None
     latest = max(manifests, key=lambda path: path.stat().st_mtime)
@@ -229,7 +229,7 @@ def _current_scenario_manifest(cfg: config.HarnessConfig) -> dict[str, object] |
 
 
 def _scenario_users_from_seed_manifest(cfg: config.HarnessConfig) -> list[str]:
-    manifests = sorted((cfg.layout.state_root / "manifests").glob("v17-scenario-*-seed.json"))
+    manifests = sorted((cfg.layout.state_root / "manifests").glob("memory-scenario-*-seed.json"))
     if not manifests:
         return []
     latest = max(manifests, key=lambda path: path.stat().st_mtime)
@@ -246,7 +246,7 @@ def _scenario_users_from_seed_manifest(cfg: config.HarnessConfig) -> list[str]:
 
 
 def _summary_path(cfg: config.HarnessConfig) -> Path:
-    return cfg.layout.reports_dir / "local-emulator-v17-session-summary.json"
+    return cfg.layout.reports_dir / "local-emulator-memory-session-summary.json"
 
 
 def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.ProviderPreflight) -> dict[str, object]:
@@ -289,7 +289,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
             "instrumented": False,
             "placeholder": "Provider broker policy is present; live per-call accounting is not wired in this manual-QA slice.",
         },
-        "v17_write_attempt_instrumentation": {
+        "memory_write_attempt_instrumentation": {
             "instrumented": False,
             "placeholder": "Firestore adapter/client-boundary write-attempt counters are reserved for the live desktop/backend instrumentation slice.",
             "attempted_write_count": None,
@@ -309,7 +309,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "non_claims": [
             "Not DEV_CLOUD_PROOF.",
             "Not production, dev-cloud, IAM, deployed index, telemetry sink, rollback, or activation proof.",
-            "Does not imply prod/dev-cloud V17 activation eligibility.",
+            "Does not imply prod/dev-cloud memory activation eligibility.",
         ],
     }
 
@@ -581,7 +581,7 @@ def cmd_up(args: argparse.Namespace) -> int:
         return 1
     if _current_scenario_manifest(cfg) is None:
         try:
-            v17_scenarios.seed_scenario("happy_path", cfg)
+            memory_scenarios.seed_scenario("happy_path", cfg)
             print("auto-seeded scenario=happy_path (first run)")
         except Exception as exc:  # noqa: BLE001
             print(f"warning: auto-seed happy_path failed: {exc}")
@@ -608,7 +608,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         safety.read_and_validate_sentinel(cfg.layout.state_root, repo_root=cfg.repo_root, instance=cfg.instance)
         print("sentinel: ok")
     scenario = _current_scenario_manifest(cfg)
-    print("\nV17 manual-QA state:")
+    print("\nMemory manual-QA state:")
     if scenario:
         print(f"  scenario_id: {scenario.get('scenario_id')}")
         print(f"  scenario_digest: {scenario.get('scenario_digest')}")
@@ -617,7 +617,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  seeded_users: {', '.join(users) if users else 'unknown'}")
     else:
         print(
-            "  scenario_id: none (run make dev-up to auto-seed happy_path, or make seed-v17-scenario SCENARIO=happy_path)"
+            "  scenario_id: none (run make dev-up to auto-seed happy_path, or make seed-memory-scenario SCENARIO=happy_path)"
         )
         print("  seeded_users: none")
     print(f"  session_summary_path: {_summary_path(cfg)}")
