@@ -1,14 +1,12 @@
-"""Canonical alias module for ``utils.memory.v17_v3_gcp_evidence_config`` (WS-G).
+"""Canonical module for ``utils.memory.v3_gcp_evidence_config`` (WS-G8b).
 
-New canonical-path code may import from here; the V17 module name remains valid
-until a later rename wave. No behavior change — re-exports only.
+Neutral ``v3_gcp_evidence_config`` is the source of truth. Legacy ``v17_v3_gcp_evidence_config`` remains an importable alias.
 """
 
-from utils.memory.v17_v3_gcp_evidence_config import (
+from __future__ import annotations
+
+from utils.memory.v3_f6.config import (
     AUDIT_FIELDS,
-    DEFAULT_APPROVED_METADATA_PATHS,
-    DEFAULT_EVIDENCE_TARGETS,
-    DEFAULT_INDEX_EXPECTATIONS,
     INDEX_FIELDS,
     LIMIT_FIELDS,
     PLACEHOLDER_MARKERS,
@@ -18,6 +16,11 @@ from utils.memory.v17_v3_gcp_evidence_config import (
     EvidenceTarget,
     EvidenceTargetRegistry,
     ValidationError,
+)
+from utils.memory.v3_f6.local_defaults import (
+    DEFAULT_APPROVED_METADATA_PATHS,
+    DEFAULT_EVIDENCE_TARGETS,
+    DEFAULT_INDEX_EXPECTATIONS,
 )
 
 __all__ = [
@@ -35,3 +38,5 @@ __all__ = [
     "TARGET_FIELDS",
     "ValidationError",
 ]
+
+# Neutral symbol aliases (V17 names remain valid via shim)
