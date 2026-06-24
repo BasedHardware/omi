@@ -2734,7 +2734,8 @@ struct Goal: Codable, Identifiable {
   /// Progress as a percentage (0-100), based on targetValue
   var progress: Double {
     guard targetValue != minValue else { return 0 }
-    return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    let pct = ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    return min(max(pct, 0), 100)
   }
 
   /// Whether the goal is completed
