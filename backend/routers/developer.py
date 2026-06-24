@@ -925,7 +925,23 @@ def get_conversations(
 
     populate_folder_names(uid, unlocked_conversations)
 
-    return unlocked_conversations
+    # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
+    # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
+    valid_conversations = []
+    for conv in unlocked_conversations:
+        if not isinstance(conv, dict) or not conv.get('id'):
+            logger.warning('Skipping malformed conversation in Developer API conversation list')
+            continue
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_conversations
 
 
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])

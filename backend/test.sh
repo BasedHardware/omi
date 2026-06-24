@@ -133,6 +133,7 @@ pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_integration_malformed_records.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
+pytest tests/unit/test_dev_api_conversations_poison.py -v
 pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_dev_api_action_items_poison.py -v
 pytest tests/unit/test_rate_limiting.py -v
