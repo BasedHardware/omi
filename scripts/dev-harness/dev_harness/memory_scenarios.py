@@ -34,6 +34,7 @@ ALICE_USER_ID = "alice"
 BOB_USER_ID = "bob"
 # Short-term seeds must stay visible across long local-dev sessions.
 SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
+SYNTHETIC_SOURCE_VERSION = "memory-local-synthetic-source-1"
 AUTH_UID_MANIFEST = "canonical-auth-uids.json"
 LOCAL_DEV_PROJECT_ID = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
 LOCAL_DEV_DATABASE_ID = safety.DEFAULT_FIRESTORE_DATABASE_ID
@@ -339,9 +340,68 @@ def _projection_state(uid: str, ctx: DeterministicContext) -> FirestoreSeed:
     )
 
 
+def _synthetic_conversation_id(memory_key: str) -> str:
+    return f"conv_local_{memory_key}_030"
+
+
+def _synthetic_evidence_id(memory_key: str) -> str:
+    return f"ev_local_{memory_key}_030"
+
+
+def _synthetic_memory_evidence(memory_key: str, content: str) -> dict[str, object]:
+    conversation_id = _synthetic_conversation_id(memory_key)
+    return {
+        "evidence_id": _synthetic_evidence_id(memory_key),
+        "source_type": "conversation",
+        "source_id": conversation_id,
+        "source_version": SYNTHETIC_SOURCE_VERSION,
+        "conversation_id": conversation_id,
+        "artifact_refs": [],
+        "artifact_preservation": "preserved",
+        "quote_refs": [{"quote": content, "source_id": conversation_id}],
+        "source_state": "active",
+        "provenance_visibility": "visible",
+        "redaction_status": "active",
+        "encryption_or_redaction_status": "active",
+    }
+
+
+def _memory_evidence_doc(uid: str, memory_key: str, content: str) -> FirestoreSeed:
+    evidence = _synthetic_memory_evidence(memory_key, content)
+    return FirestoreSeed(
+        path=f"users/{uid}/memory_evidence/{evidence['evidence_id']}",
+        protected=True,
+        data=evidence,
+    )
+
+
+def _append_sourced_memory(
+    seeds: list[FirestoreSeed],
+    uid: str,
+    memory_key: str,
+    memory_id: str,
+    tier: str,
+    content: str,
+    captured: str,
+    expires: str | None = None,
+) -> None:
+    seeds.append(_memory_doc(uid, memory_id, tier, content, captured, expires, memory_key=memory_key))
+    seeds.append(_memory_evidence_doc(uid, memory_key, content))
+
+
 def _memory_doc(
-    uid: str, memory_id: str, tier: str, content: str, captured: str, expires: str | None = None
+    uid: str,
+    memory_id: str,
+    tier: str,
+    content: str,
+    captured: str,
+    expires: str | None = None,
+    *,
+    memory_key: str | None = None,
 ) -> FirestoreSeed:
+    evidence_entries: list[dict[str, object]] = []
+    if memory_key is not None:
+        evidence_entries = [_synthetic_memory_evidence(memory_key, content)]
     data: dict[str, object] = {
         "memory_id": memory_id,
         "uid": uid,
@@ -351,7 +411,7 @@ def _memory_doc(
         "status": "active",
         "processing_state": "processed",
         "content": content,
-        "evidence": [],
+        "evidence": evidence_entries,
         "source_state": "active",
         "sensitivity_labels": [],
         "visibility": "private",
@@ -685,7 +745,9 @@ def _base_firestore(
             alice_stale,
             "2026-01-01T11:30:00Z",
             "2026-01-02T11:30:00Z",
+            memory_key="alice_short_stale",
         ),
+        _memory_evidence_doc(ALICE_USER_ID, "alice_short_stale", alice_stale),
         _memory_doc(ALICE_USER_ID, ctx.ids["alice_archive"], "archive", alice_archive, "2025-12-01T08:00:00Z"),
         _memory_doc(BOB_USER_ID, ctx.ids["bob_long"], "long_term", bob_long, "2026-01-11T09:00:00Z"),
         _projection_item(
@@ -702,15 +764,15 @@ def _base_firestore(
         if any(key == promoted[0] for promoted in promoted_short_to_long):
             continue
         memory_id = ctx.ids[key]
-        seeds.append(_memory_doc(uid, memory_id, "short_term", content, captured, SHORT_TERM_EXPIRES_AT))
+        _append_sourced_memory(seeds, uid, key, memory_id, "short_term", content, captured, SHORT_TERM_EXPIRES_AT)
         seeds.append(_projection_item(uid, memory_id, content, captured, category="commitments"))
     for key, content, captured, category in promoted_short_to_long:
         memory_id = ctx.ids[key]
-        seeds.append(_memory_doc(uid, memory_id, "long_term", content, captured))
+        _append_sourced_memory(seeds, uid, key, memory_id, "long_term", content, captured)
         seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
     for key, content, captured, category in long_memories:
         memory_id = ctx.ids[key]
-        seeds.append(_memory_doc(uid, memory_id, "long_term", content, captured))
+        _append_sourced_memory(seeds, uid, key, memory_id, "long_term", content, captured)
         seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
     seeds.extend(_alice_knowledge_graph_seeds(uid, ctx))
     return seeds
@@ -735,6 +797,7 @@ def _expected_protected() -> tuple[ExpectedProtectedCollectionChange, ...]:
     return (
         ExpectedProtectedCollectionChange("memory_control", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/memory_items", ()),
+        ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/memory_evidence", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/v3_compatibility_projection_items", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_nodes", ()),
         ExpectedProtectedCollectionChange(f"users/{ALICE_USER_ID}/knowledge_edges", ()),
