@@ -311,7 +311,7 @@ def _hit_proactive_notification_rate_limits(uid: str, app: App):
 
 def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
-    mem_db.set_proactive_noti_sent_at(uid, app, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
     redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
