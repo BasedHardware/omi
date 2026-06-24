@@ -2,7 +2,7 @@
 
 > **Normative reference (WS-A).** This document is the single source of truth for the
 > canonical memory vocabulary, Memories record schema, and legal state-combination matrix.
-> It supersedes scattered V17-era docs for domain terminology. Implementation types live
+> It supersedes scattered legacy codename-era docs for domain terminology. Implementation types live
 > in `backend/models/memory_domain.py`.
 
 ## Glossary
@@ -98,9 +98,9 @@ flowchart TD
 | **Legacy flat memories** | Original production store + extractor | `users/{uid}/memories`, `MemoryDB`, `new_memories_extractor`, `/v3/memories` | **Long-term** in unified Memories (`layer=long_term`) | **Migrate** → **Retire** store |
 | **Legacy categories** | Old taxonomy on legacy rows | `core`, `hobbies`, `lifestyle`, `work`, `skills`, `learnings`, … | **Keep** as `category` metadata; UI filters use primary four (`interesting`, `system`, `manual`, `workflow`) | **Keep** (not layers) |
 | **Shadow short_term** | Interim shadow write path | `users/{uid}/short_term`, `OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED` | **Short-term** in unified Memories (`layer=short_term`) | **Fold** → **Retire** collection |
-| **V17 product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, `v17_*` modules | **Canonical Memories store** | **Rename** modules; store becomes canonical |
-| **V17 rollout modes** | Gradual rollout control | `off` / `shadow` / `write` / `read`, `V17_MODE`, `V17_MEMORY_ENABLED_USERS`, `memory_control/state` | **`MemorySystem`** + `resolve_memory_system(uid)` | **Collapse** |
-| **`tier` product field** | V17 item field | `short_term` / `long_term` / `archive` on `memory_items` | **`layer`** (same semantics) | **Rename** API + clients |
+| **Canonical product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, neutral `memory_*` modules (legacy `v17_*` shims retained) | **Canonical Memories store** | **Rename** complete; store is canonical |
+| **Rollout modes** | Gradual rollout control | `off` / `shadow` / `write` / `read`, `V17_MODE` (compat), `V17_MEMORY_ENABLED_USERS`, `memory_control/state` | **`MemorySystem`** + `resolve_memory_system(uid)` | **Collapse** |
+| **`tier` product field** | Persisted item field | `short_term` / `long_term` / `archive` on `memory_items` | **`layer`** (same semantics) | **Rename** API + clients |
 | **`memory_reads.py`** | Merges legacy + shadow for reads | split-brain reader shim | Single Memories query by `layer` | **Retire** |
 
 Normative reference (locked 2026-06-18): [`docs/epics/v17_memory_normative_architecture.md`](../epics/v17_memory_normative_architecture.md)
@@ -108,7 +108,7 @@ Normative reference (locked 2026-06-18): [`docs/epics/v17_memory_normative_archi
 
 ### Internal pipeline jargon (do not expose as product language)
 
-V17 introduced **L1/L2 as processing stages** — **not** the same as product Short-term/Long-term.
+The legacy pipeline introduced **L1/L2 as processing stages** — **not** the same as product Short-term/Long-term.
 
 | Internal term (retire in product/docs) | Code locations | Means | Canonical term |
 |----------------------------------------|----------------|-------|----------------|
@@ -141,7 +141,7 @@ V17 introduced **L1/L2 as processing stages** — **not** the same as product Sh
 | API today | Role | After migration |
 |-----------|------|-----------------|
 | `/v3/memories` | Primary legacy REST | **Keep** route shape for parity; dispatch via `MemoryService` |
-| `/v17/memory/search`, `/vector/search`, `/archive/search` | V17-specific reads | **Fold** into canonical memory API; drop `v17` path prefix |
+| `/v17/memory/search`, `/vector/search`, `/archive/search` | Canonical-memory reads (legacy `/v17/` prefix retained pending sign-off) | **Fold** into neutral memory API; drop `v17` path prefix when clients migrate |
 | `/v1/mcp/memories`, `/v1/tools/memories` | Surface adapters | Route through seam (WS-L) |
 
 No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surface.
@@ -156,7 +156,7 @@ No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surfa
 | `L1MemoryArchiveItem`, `WorkingMemoryObservation` in **docs/comments** | working observation / short-term candidate | WS-G |
 | `durable_memory_patch`, `L2MemoryRoute` in **docs/comments** | promotion proposal / consolidation route | WS-G |
 | `context_only` as a user-visible tier | Archive or internal processing outcome only | WS-B, WS-G |
-| V17 rollout `off` / `shadow` / `write` / `read` | `MemorySystem = { legacy, canonical }` + cohort record | WS-E |
+| Rollout `off` / `shadow` / `write` / `read` | `MemorySystem = { legacy, canonical }` + cohort record | WS-E |
 | `memory_items` collection name (optional) | `memories` or neutral canonical name (decide in WS-G) | WS-G |
 | `plugins_results`, `processing_memory_id` | Already mirrored — document sunset timeline | WS-D |
 | Legacy `category` values (`core`, `hobbies`, …) | Keep in DB; map to primary four in UI filters | WS-F |
@@ -213,7 +213,7 @@ anything else is a bug a validator should reject.
 - **Promotion requires `processing_state=processed`** — a `pending`/`blocked` item never reaches `long_term`.
 - `archive` items are **never `superseded`** (terminal) — they tombstone or are resurfaced.
 - `status=tombstoned` overrides visibility at **every** layer (hard-excluded from default reads).
-- Physical storage may carry `status=hidden` (V17 pipeline outcome for secret/rejected items). It has
+- Physical storage may carry `status=hidden` (canonical pipeline outcome for secret/rejected items). It has
   **no** §1.3 axis value — boundary-map to `tombstoned` at validation/materialization
   (`physical_status_to_record_status()` in `memory_domain.py`). Persisted rows keep `hidden`; canonical
   validation treats them as tombstoned (same default-read exclusion).
@@ -363,10 +363,10 @@ must remain byte-unchanged.
 
 Status legend: ✅ handled in code today · ⚠️ gated / needs sign-off · 🔜 future wave · — not applicable
 
-| Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical neutral `mem_…`) | Pinecone ns2 (V17 `v17mem:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
+| Trigger | legacy `memories` | canonical `memory_items` | `memory_evidence` | `memory_operations` | Pinecone ns2 (legacy `{uid}-{id}`) | Pinecone ns2 (canonical neutral `mem_…`) | Pinecone ns2 (legacy `v17mem:…`) | `review_queue` | Neo4j KG | WS-M keyword index |
 |---------|-------------------|--------------------------|-------------------|---------------------|-------------------------------------|------------------------------------------|-------------------------------|--------------|----------|-------------------|
 | **Conversation delete, `cascade=false`** (current server default) | — (no cascade) | — | — | — | — | — | — | — | — | — |
-| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ `MemoryService.retract_conversation_memories` (canonical cohort only) | ✅ tombstone in retract | — | ✅ `delete_memory_vector` for retracted legacy ids | ✅ purge outbox via retract (`neutral_vector_id_for_memory`) | 🔜 V17-read vectors not purged on cascade yet | 🔜 no cascade purge wired | 🔜 `invalidate_kg_for_memory_retraction` logs deferral | 🔜 TBD (WS-M) |
+| **Conversation delete, `cascade=true`** | ✅ `ripple_source_deletion` / tombstone evidence | ✅ `MemoryService.retract_conversation_memories` (canonical cohort only) | ✅ tombstone in retract | — | ✅ `delete_memory_vector` for retracted legacy ids | ✅ purge outbox via retract (`neutral_vector_id_for_memory`) | 🔜 legacy `v17mem:` vectors not purged on cascade yet | 🔜 no cascade purge wired | 🔜 `invalidate_kg_for_memory_retraction` logs deferral | 🔜 TBD (WS-M) |
 | **Account delete** | ✅ Firestore recursive wipe + `delete_memory_vectors_batch` | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ Firestore recursive wipe | ✅ `_purge_derived_user_data` | ✅ `purge_canonical_derived_user_data` (canonical cohort only) | 🔜 not enumerated on account delete | ✅ subcollection wipe | ✅ `knowledge_nodes` / `knowledge_edges` wiped | 🔜 TBD (WS-M) |
 | **Reprocess / sync-merge (Q7 full retract)** | ✅ legacy path in `_extract_memories_inner` | ✅ `retract_conversation_sourced_memories` | ✅ evidence tombstone in retract | — | ✅ legacy delete in reprocess inner | ✅ purge outbox in retract | 🔜 apply `vector_sync` still writes `v17mem:` (carry-forward WS-G) | 🔜 | 🔜 KG hook defers to rebuild | 🔜 TBD (WS-M) |
 | **Supersede / tombstone (single memory)** | ✅ `invalidate_memory` / ripple | ✅ `delete_canonical_memory` | ✅ per-item tombstone | ✅ via apply path | ✅ router delete | ✅ purge outbox | 🔜 | 🔜 | 🔜 | 🔜 TBD (WS-M) |
@@ -387,6 +387,6 @@ desktop client fix (WS-K).
 
 ### Q5 — neutral vector id (canonical)
 
-Canonical purge paths use `neutral_vector_id_for_memory` (`mem_…` = `memory_id`). V17 apply
+Canonical purge paths use `neutral_vector_id_for_memory` (`mem_…` = `memory_id`). Legacy apply
 `vector_sync` / repair worker still upserts `v17mem:…` via `deterministic_v17_memory_vector_id` —
-**carry-forward to WS-G**; do not break existing V17 vectors in shared Pinecone ns2.
+**carry-forward to WS-G**; do not break existing `v17mem:` vectors in shared Pinecone ns2.
