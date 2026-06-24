@@ -1,0 +1,620 @@
+#!/usr/bin/env python3
+"""Safe V17 `/v3` observability/telemetry approval readiness matrix.
+
+This artifact is deliberately pre-runtime and read-only. It inventories the
+telemetry fields, existing local observability mechanisms, approval artifacts,
+rollback/canary blockers, and static privacy guardrails required before future
+`GET /v3/memories` V17 runtime wiring. It does not import FastAPI routers, read
+Firestore, call telemetry sinks/providers, mutate state, or claim approval.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from typing import Any
+
+_REQUIRED_ROUTE_REFS = ["GET /v3/memories"]
+
+CANARY_APPROVAL_SOURCE_READINESS_PROOF = {
+    "service": "backend/scripts/p1_3_v3_canary_approval_source_readiness.py",
+    "test": "backend/tests/unit/test_p1_3_v3_canary_approval_source_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "approval_claimed": False,
+    "blocker": (
+        "Future GET /v3/memories canary approval artifact source is selected as a server-owned route-scoped "
+        "artifact with static/local emulator-harness coverage for signed-in client read/write denial and Admin-context "
+        "read fixture readiness, but production source existence and backend production service-principal read proof remain "
+        "missing/not-run."
+    ),
+}
+
+CANARY_APPROVAL_PRODUCTION_READINESS_PROOF = {
+    "service": "backend/scripts/p1_3_v3_canary_approval_production_readiness.py",
+    "test": "backend/tests/unit/test_p1_3_v3_canary_approval_production_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Production-safe backend service-principal artifact read and artifact-existence proof is available as a "
+        "disabled-by-default read-only runner; no product/privacy/ops rollout approval is claimed."
+    ),
+}
+
+CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF = {
+    "service": "backend/scripts/p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "test": "backend/tests/unit/test_p1_3_v3_canary_approval_lifecycle_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "proof_status": "NOT_RUN",
+    "approval_claimed": False,
+    "blocker": (
+        "Human/ops approval evidence bundle, expiry/rotation, rollback ownership, monitoring gates, "
+        "production read proof reference, IAM/emulator proof reference, telemetry/runbook reference, and exact route "
+        "scope are inventoried locally but not supplied as production evidence."
+    ),
+}
+
+CANARY_APPROVAL_AGGREGATE_READINESS_PROOF = {
+    "service": "backend/scripts/p1_3_v3_canary_approval_aggregate_readiness.py",
+    "test": "backend/tests/unit/test_p1_3_v3_canary_approval_aggregate_readiness.py",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "status": "BLOCKED",
+    "decision": "NO_GO",
+    "approval_claimed": False,
+    "blocker": (
+        "Final local canary approval aggregate readiness consolidates local contracts but remains NO_GO until "
+        "production read proof, artifact validity, human approval evidence, sink/runbook proof, and route wiring pass."
+    ),
+}
+
+REQUIRED_TELEMETRY_FIELDS = [
+    {
+        "field_id": "read_source",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Selected read source for the request after the V17 `/v3` planner runs.",
+        "allowed_values": ["legacy_primary", "v17_compatibility_projection", "fail_closed"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "route_decision",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Final route decision selected by the future compatibility planner.",
+        "allowed_values": ["use_legacy_safe", "use_v17", "deny_memory", "fail_closed"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "failure_reason",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Low-cardinality failure reason when the route denies or fails closed.",
+        "allowed_values": [
+            "none",
+            "control_missing",
+            "control_malformed",
+            "control_timeout",
+            "uid_mismatch",
+            "no_default_memory_grant",
+            "account_generation_mismatch",
+            "projection_not_ready",
+            "write_convergence_not_ready",
+            "cursor_invalid",
+            "rollback_read_disabled",
+            "archive_default_unavailable",
+        ],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "control_generation",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Server-owned rollout/control generation used for the decision.",
+        "allowed_values": "bounded_non_negative_integer_or_absent",
+        "cardinality": "bounded_integer",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "projection_generation",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "V17-derived compatibility projection generation required to match control/account/cursor fences.",
+        "allowed_values": "bounded_non_negative_integer_or_absent",
+        "cardinality": "bounded_integer",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "account_generation",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Trusted account generation from the server-owned memory_state/head source.",
+        "allowed_values": "bounded_non_negative_integer_or_absent",
+        "cardinality": "bounded_integer",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "cursor_validation_result",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Cursor validation outcome without logging the cursor token itself.",
+        "allowed_values": ["not_present", "valid", "invalid"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "cursor_validation_reason",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Low-cardinality cursor validation reason without raw token/secret material.",
+        "allowed_values": [
+            "none",
+            "not_present",
+            "cursor_tampered",
+            "cursor_expired",
+            "uid_mismatch",
+            "account_generation_mismatch",
+            "projection_generation_mismatch",
+            "filter_mismatch",
+            "source_mismatch",
+            "read_mode_mismatch",
+            "unsupported_cursor_version",
+        ],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "canary_cohort",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Bounded future canary cohort label; no user id/session id label allowed.",
+        "allowed_values": ["none", "shadow", "canary_1", "canary_5", "canary_25", "general_availability"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "canary_enrollment",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Whether server-owned enrollment made the caller eligible for the future route path.",
+        "allowed_values": ["not_enrolled", "enrolled", "unknown_fail_closed"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "no_legacy_fallback",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Explicit marker that V17 failure states did not fall back to legacy reads or merge results.",
+        "allowed_values": [True],
+        "cardinality": "boolean",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "projection_source",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Projection source used by future GET reads; must not imply direct legacy fallback after V17 failure.",
+        "allowed_values": ["none", "v17_derived_compatibility_projection"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "request_limit",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Bounded limit bucket for V17 mode; do not emit full request payloads.",
+        "allowed_values": ["1_25", "26_100", "101_500", "over_max_rejected"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "request_cursor_present",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Boolean cursor presence only; never log the raw cursor token.",
+        "allowed_values": [True, False],
+        "cardinality": "boolean",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "request_offset_disallowed_in_v17",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "V17 cursor mode marker proving offset and the legacy 5000 first-page override were not applied.",
+        "allowed_values": [True],
+        "cardinality": "boolean",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "archive_default_visibility_decision",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Default Archive visibility decision; initial `/v3` V17 default reads must keep Archive unavailable.",
+        "allowed_values": ["default_unavailable", "explicitly_authorized", "denied"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "short_term_default_visibility_decision",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Short-term visibility decision preserving stale Short-term not-default-visible semantics.",
+        "allowed_values": ["fresh_visible", "stale_hidden", "not_applicable"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "rollback_read_disable_gate",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Future emergency read-disable gate state for V17 `/v3` GET.",
+        "allowed_values": ["not_wired", "disabled", "enabled"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "approval_owner",
+        "status": "NOT_RUN",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Explicit product/privacy/operational approval owner identifier or owner group, not an end-user id.",
+        "allowed_values": "bounded_owner_group_identifier_required",
+        "cardinality": "owner_identifier",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+    {
+        "field_id": "approval_status",
+        "status": "BLOCKED",
+        "route_refs": _REQUIRED_ROUTE_REFS,
+        "description": "Approval artifact status; readiness scripts must never mark production rollout approved.",
+        "allowed_values": ["missing", "pending", "approved", "rejected"],
+        "cardinality": "low",
+        "contains_pii": False,
+        "contains_raw_memory_content": False,
+        "logs_secret_or_cursor_token": False,
+        "required_before_runtime_change": True,
+        "runtime_wired": False,
+        "approval_claimed": False,
+    },
+]
+
+EXISTING_MECHANISMS = [
+    {
+        "mechanism_id": "prometheus_metrics_endpoint",
+        "status": "EXISTS_NOT_V3_WIRED",
+        "source": "backend/routers/metrics.py + backend/utils/metrics.py",
+        "details": "Repository exposes authenticated Prometheus metrics, but no memory `/v3` V17 counters/gauges/histograms are defined or wired.",
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+    {
+        "mechanism_id": "log_sanitizer",
+        "status": "EXISTS_REQUIRED_FOR_FUTURE_WIRING",
+        "source": "backend/utils/log_sanitizer.py",
+        "details": "Existing logging policy requires sanitize/sanitize_pii; future V17 `/v3` telemetry must emit only derived labels and never raw memory content.",
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+    {
+        "mechanism_id": "v17_read_decision_model",
+        "status": "EXISTS_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_default_read_rollout.py",
+        "details": "Existing V17 read-decision concepts can inform low-cardinality labels, but GET /v3 remains legacy-only until future wiring.",
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+    {
+        "mechanism_id": "v17_v3_local_telemetry_and_rollback_seam",
+        "status": "LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_v3_local_telemetry.py",
+        "test": "backend/tests/unit/test_v3_local_telemetry.py",
+        "details": "Local pure/fake-injectable seam builds sanitized low-cardinality V17 /v3 GET telemetry events, defaults to a no-op sink, and decides rollback/read-disable config without reading production state.",
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+    {
+        "mechanism_id": "v17_v3_canary_approval_artifact_schema_seam",
+        "status": "LOCAL_SCHEMA_SEAM_PROVED_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_v3_canary_approval.py",
+        "test": "backend/tests/unit/test_v3_canary_approval_artifact.py",
+        "details": (
+            "Local pure/fake-injectable schema validator pins the future server-owned GET /v3/memories "
+            "canary approval artifact shape, fail-closed reasons, rollback plan, monitoring gates, bounded cohorts, "
+            "metadata-only approval ids/timestamps, and bounded telemetry labels without route wiring."
+        ),
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+    {
+        "mechanism_id": "v17_v3_canary_approval_artifact_reader_seam",
+        "status": "LOCAL_READER_SEAM_PROVED_NOT_V3_GET_WIRED",
+        "source": "backend/utils/memory/v17_v3_canary_approval.py",
+        "test": "backend/tests/unit/test_v3_canary_approval_artifact.py",
+        "details": (
+            "Local fake-injectable reader protocol consumes the schema validator for a future server-owned "
+            "canary/approval artifact source, fails closed for missing reader/source, reader exception/timeout, "
+            "malformed/mismatched/stale/unapproved/sensitive artifacts, and exposes only bounded labels."
+        ),
+        "production_call_executed": False,
+        "runtime_wired_to_v3_get": False,
+    },
+]
+
+BLOCKERS = [
+    {
+        "blocker_id": "v3_route_telemetry_not_runtime_wired",
+        "status": "BLOCKED",
+        "required_evidence": "Future GET /v3 route wiring must emit/read the approved derived telemetry labels at the decision/read seam.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+    {
+        "blocker_id": "memory_v3_prometheus_metrics_missing",
+        "status": "BLOCKED",
+        "required_evidence": "Define low-cardinality memory_v3 counters/histograms/gauges or explicitly choose another sink before canary.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+    {
+        "blocker_id": "structured_event_sink_not_selected",
+        "status": "BLOCKED",
+        "required_evidence": "Select and document the structured event/log sink and retention/privacy policy; no production sink is called by this proof.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+    {
+        "blocker_id": "canary_enrollment_artifact_missing",
+        "status": "BLOCKED",
+        "required_evidence": "Provide server-owned canary cohort/enrollment artifact and label mapping for GET /v3 V17 read rollout.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+    {
+        "blocker_id": "rollback_read_disable_gate_not_wired_to_v3_get",
+        "status": "BLOCKED",
+        "required_evidence": "Wire and test a fail-closed read-disable/rollback gate before any V17 /v3 GET canary.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+    {
+        "blocker_id": "approval_artifact_missing",
+        "status": "BLOCKED",
+        "required_evidence": "Create explicit product/privacy/operational approval artifact naming owner, cohort, rollback plan, and monitoring gates.",
+        "required_before_runtime_change": True,
+        "approval_claimed": False,
+    },
+]
+
+STATIC_GUARDRAILS = [
+    {
+        "guardrail_id": "no_pii_or_raw_memory_content",
+        "status": "READY_FOR_REQUIREMENT",
+        "requirement": "Telemetry labels/events must contain only derived source/decision/generation/bucket values and never raw memory content, text, names, emails, uid labels, or request bodies.",
+    },
+    {
+        "guardrail_id": "low_cardinality_failure_reasons_only",
+        "status": "READY_FOR_REQUIREMENT",
+        "requirement": "Failure/cursor/decision labels must come from bounded enums; no exception strings, memory ids, cursor ids, or user/session ids as labels.",
+    },
+    {
+        "guardrail_id": "no_secret_or_cursor_token_logging",
+        "status": "READY_FOR_REQUIREMENT",
+        "requirement": "Cursor presence/result/reason may be emitted; raw cursor tokens, signatures, and signing secret material must never be logged.",
+    },
+    {
+        "guardrail_id": "no_production_calls_by_default",
+        "status": "READY_FOR_REQUIREMENT",
+        "requirement": "Default and --execute modes are local inventory only and do not call Firestore, cloud, providers, telemetry sinks, or production routes.",
+    },
+    {
+        "guardrail_id": "no_approval_claimed_by_readiness",
+        "status": "READY_FOR_REQUIREMENT",
+        "requirement": "This artifact can record missing approval requirements only; it never flips production_rollout_approved or approval_claimed.",
+    },
+]
+
+
+OBSERVABILITY_APPROVAL_READINESS_PROOF = {
+    "service": "backend/scripts/p1_3_v3_observability_approval_readiness.py",
+    "test": "backend/tests/unit/test_p1_3_v3_observability_approval_readiness.py",
+    "status": "BLOCKED",
+    "runtime_wired": False,
+    "production_rollout_approved": False,
+    "external_calls": [],
+    "telemetry_sink_calls_executed": False,
+    "approval_claimed": False,
+    "covered_defaults": [
+        "read_source_route_decision_failure_reason_required_before_v3_get_cutover",
+        "control_projection_account_generation_labels_required_and_bounded",
+        "cursor_validation_result_reason_without_token_or_secret_logging",
+        "local_pure_telemetry_event_builder_and_noop_fake_sink_proved",
+        "local_pure_rollback_read_disable_config_decision_proved",
+        "local_pure_canary_approval_artifact_schema_validation_proved",
+        "local_pure_canary_approval_artifact_reader_validation_proved",
+        "approved_artifact_produces_bounded_labels_only_without_pii_or_payloads",
+        "canary_enrollment_and_rollback_read_disable_gate_required",
+        "no_legacy_fallback_marker_required_for_v17_failures",
+        "archive_default_unavailable_and_stale_short_term_hidden_markers_required",
+        "product_privacy_operational_approval_artifact_missing",
+        "no_pii_raw_memory_content_or_high_cardinality_labels",
+    ],
+}
+
+
+def build_report(*, execute: bool = False) -> dict[str, Any]:
+    blocked_or_not_run_field_count = sum(
+        1 for field in REQUIRED_TELEMETRY_FIELDS if field["status"] in {"BLOCKED", "NOT_RUN"}
+    )
+    return {
+        "artifact": "v17_p1_3_v3_observability_approval_readiness",
+        "status": "BLOCKED",
+        "proof_status": "BLOCKED" if execute else "NOT_RUN",
+        "execute": execute,
+        "read_only": True,
+        "mutation_allowed": False,
+        "runtime_wiring_changed": False,
+        "routers_memories_modified": False,
+        "network_or_provider_calls_executed": False,
+        "provider_calls_executed": False,
+        "firestore_reads_executed": False,
+        "firestore_writes_executed": False,
+        "pinecone_calls_executed": False,
+        "telemetry_sink_calls_executed": False,
+        "production_rollout_approved": False,
+        "approval_claimed": False,
+        "scope": "Safe local observability/telemetry/rollback/approval readiness matrix for future GET /v3/memories V17 runtime wiring.",
+        "required_telemetry_fields": REQUIRED_TELEMETRY_FIELDS,
+        "existing_mechanisms": EXISTING_MECHANISMS,
+        "blockers": BLOCKERS,
+        "static_guardrails": STATIC_GUARDRAILS,
+        "observability_approval_readiness_proof": OBSERVABILITY_APPROVAL_READINESS_PROOF,
+        "canary_approval_source_readiness_proof": CANARY_APPROVAL_SOURCE_READINESS_PROOF,
+        "canary_approval_production_readiness_proof": CANARY_APPROVAL_PRODUCTION_READINESS_PROOF,
+        "canary_approval_lifecycle_readiness_proof": CANARY_APPROVAL_LIFECYCLE_READINESS_PROOF,
+        "canary_approval_aggregate_readiness_proof": CANARY_APPROVAL_AGGREGATE_READINESS_PROOF,
+        "non_claims": [
+            "No backend/routers/memories.py runtime wiring changed.",
+            "No runtime /v3 behavior changed.",
+            "No production traffic, Firestore, Pinecone, cloud, provider, or network calls executed.",
+            "No telemetry sink production call executed or claimed.",
+            "No PII/raw memory content telemetry emitted.",
+            "No secret or cursor token logging allowed or performed.",
+            "No production rollout approval claimed.",
+            "No legacy fallback/merge for V17 failures claimed.",
+            "No Archive default visibility or stale Short-term default visibility claimed.",
+        ],
+        "summary": {
+            "status": "BLOCKED",
+            "proof_status": "BLOCKED" if execute else "NOT_RUN",
+            "telemetry_field_count": len(REQUIRED_TELEMETRY_FIELDS),
+            "blocked_or_not_run_field_count": blocked_or_not_run_field_count,
+            "existing_mechanism_count": len(EXISTING_MECHANISMS),
+            "blocker_count": len(BLOCKERS),
+            "guardrail_count": len(STATIC_GUARDRAILS),
+            "telemetry_sink_calls_executed": False,
+            "read_only": True,
+            "mutation_allowed": False,
+            "runtime_wiring_changed": False,
+            "approval_claimed": False,
+        },
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--execute", action="store_true", help="Emit the same safe BLOCKED readiness inventory")
+    args = parser.parse_args()
+    print(json.dumps(build_report(execute=args.execute), indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
