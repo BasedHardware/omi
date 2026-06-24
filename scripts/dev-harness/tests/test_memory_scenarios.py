@@ -11,7 +11,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev_harness import config, safety
-from dev_harness import v17_scenarios
+from dev_harness import memory_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -24,9 +24,9 @@ def _env(tmp_path: Path) -> dict[str, str]:
     return env
 
 
-def test_all_v17_scenarios_import_and_validate() -> None:
-    v17_scenarios.validate_all_scenarios()
-    names = {scenario.scenario_id for scenario in v17_scenarios.list_scenarios()}
+def test_all_memory_scenarios_import_and_validate() -> None:
+    memory_scenarios.validate_all_scenarios()
+    names = {scenario.scenario_id for scenario in memory_scenarios.list_scenarios()}
     assert {
         "happy_path",
         "default_off",
@@ -37,7 +37,7 @@ def test_all_v17_scenarios_import_and_validate() -> None:
         "cross_user_isolation",
     }.issubset(names)
 
-    happy = v17_scenarios.get_scenario("happy_path")
+    happy = memory_scenarios.get_scenario("happy_path")
     assert {user.uid for user in happy.users} >= {"local_default_user", "alice", "bob"}
     assert happy.selected_user == "alice"
     assert happy.report_metadata.evidence_class == "LOCAL_EMULATOR_DEV"
@@ -45,10 +45,10 @@ def test_all_v17_scenarios_import_and_validate() -> None:
     assert all(case.expected_no_write for case in happy.request_cases)
 
 
-def test_v17_scenario_cli_listing_json(tmp_path: Path) -> None:
+def test_memory_scenario_cli_listing_json(tmp_path: Path) -> None:
     env = _env(tmp_path)
     result = subprocess.run(
-        [sys.executable, "-m", "dev_harness.v17_scenarios", "list", "--json"],
+        [sys.executable, "-m", "dev_harness.memory_scenarios", "list", "--json"],
         cwd=REPO_ROOT,
         env=env,
         text=True,
@@ -66,15 +66,15 @@ def test_seed_manifest_generation_is_dry_run_without_emulators(tmp_path: Path) -
     env = _env(tmp_path)
     cfg = config.load_config(REPO_ROOT, env=env, create_layout=True)
 
-    manifest = v17_scenarios.seed_scenario("happy_path", cfg, dry_run=True)
+    manifest = memory_scenarios.seed_scenario("happy_path", cfg, dry_run=True)
 
     assert manifest.scenario_id == "happy_path"
     assert manifest.dry_run is True
     assert manifest.applied is False
     assert manifest.report_metadata.evidence_class == "LOCAL_EMULATOR_DEV"
     assert manifest.report_metadata.activation_eligible is False
-    assert any(op.kind == "firestore" and op.target == "memory_control/v17_global_read_gate" for op in manifest.operations)
-    manifest_path = cfg.layout.process_manifest.parent / "v17-scenario-happy_path-seed.json"
+    assert any(op.kind == "firestore" and op.target == "memory_control/global_read_gate" for op in manifest.operations)
+    manifest_path = cfg.layout.process_manifest.parent / "memory-scenario-happy_path-seed.json"
     assert manifest_path.is_file()
     saved = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert saved["report_metadata"]["watermark"] == "NOT_ACTIVATION_EVIDENCE"
@@ -84,8 +84,8 @@ def test_reset_manifest_is_idempotent_in_temp_state(tmp_path: Path) -> None:
     env = _env(tmp_path)
     cfg = config.load_config(REPO_ROOT, env=env, create_layout=True)
 
-    first = v17_scenarios.reset_scenario("happy_path", cfg, dry_run=True)
-    second = v17_scenarios.reset_scenario("happy_path", cfg, dry_run=True)
+    first = memory_scenarios.reset_scenario("happy_path", cfg, dry_run=True)
+    second = memory_scenarios.reset_scenario("happy_path", cfg, dry_run=True)
 
     assert first.dry_run is True
     assert second.dry_run is True
@@ -94,7 +94,7 @@ def test_reset_manifest_is_idempotent_in_temp_state(tmp_path: Path) -> None:
 
 
 def test_fixtures_cannot_choose_evidence_labels() -> None:
-    for scenario in v17_scenarios.list_scenarios():
+    for scenario in memory_scenarios.list_scenarios():
         assert scenario.report_metadata.evidence_class == "LOCAL_EMULATOR_DEV"
         assert scenario.report_metadata.activation_eligible is False
         for seed in (*scenario.profile_seed, *scenario.firestore_seed):
@@ -104,7 +104,9 @@ def test_fixtures_cannot_choose_evidence_labels() -> None:
         assert scenario.local_flags["activation_eligible"] is False
 
 
-def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     env = _env(tmp_path)
     cfg = config.load_config(REPO_ROOT, env=env, create_layout=True)
     calls: list[tuple[str, str, dict[str, object] | None]] = []
@@ -115,15 +117,15 @@ def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(monkeypatch
             return 400, 'UNEXPECTED_PARAMETER : User ID'
         return 200, '{}'
 
-    monkeypatch.setattr(v17_scenarios, '_request_json', fake_request)
-    op = v17_scenarios.SeedOperation(
+    monkeypatch.setattr(memory_scenarios, '_request_json', fake_request)
+    op = memory_scenarios.SeedOperation(
         kind='auth',
         action='upsert',
         target='alice',
         payload={'localId': 'alice', 'email': 'alice@local.omi.invalid', 'password': 'local-test'},
     )
 
-    v17_scenarios._apply_operation(cfg, op)
+    memory_scenarios._apply_operation(cfg, op)
 
     assert len(calls) == 2
     assert calls[0][2] and calls[0][2].get('localId') == 'alice'
@@ -131,8 +133,8 @@ def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(monkeypatch
 
 
 def test_happy_path_has_rich_default_memory_fixture_set() -> None:
-    ctx = v17_scenarios._clock()
-    default_ids = v17_scenarios._alice_default_memory_ids(ctx)
+    ctx = memory_scenarios._clock()
+    default_ids = memory_scenarios._alice_default_memory_ids(ctx)
     assert len(default_ids) == 24
     assert ctx.ids["alice_short_active"] in default_ids
     assert ctx.ids["alice_long_edu"] in default_ids
@@ -141,12 +143,12 @@ def test_happy_path_has_rich_default_memory_fixture_set() -> None:
 
 
 def test_remap_firestore_seed_to_auth_uid() -> None:
-    seed = v17_scenarios.FirestoreSeed(
+    seed = memory_scenarios.FirestoreSeed(
         path="users/alice/memory_items/mem_alice_long_030",
         protected=True,
         data={"uid": "alice", "memory_id": "mem_alice_long_030"},
     )
-    remapped = v17_scenarios._remap_firestore_seed(seed, {"alice": "auth-uid-123"})
+    remapped = memory_scenarios._remap_firestore_seed(seed, {"alice": "auth-uid-123"})
     assert remapped.path == "users/auth-uid-123/memory_items/mem_alice_long_030"
     assert remapped.data["uid"] == "auth-uid-123"
 
@@ -154,7 +156,7 @@ def test_remap_firestore_seed_to_auth_uid() -> None:
 def test_entrypoint_seed_dry_run_outputs_manifest(tmp_path: Path) -> None:
     env = _env(tmp_path)
     result = subprocess.run(
-        [sys.executable, "scripts/dev-harness/seed-v17-scenario.py", "happy_path", "--dry-run"],
+        [sys.executable, "scripts/dev-harness/seed-memory-scenario.py", "happy_path", "--dry-run"],
         cwd=REPO_ROOT,
         env=env,
         text=True,
