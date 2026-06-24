@@ -243,9 +243,15 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
     # Check if the IP is already rate-limited
     current = cached.get(key)
     if current:
-        current = json.loads(current)
-        remaining = current["remaining"]
-        timestamp = current["timestamp"]
+        try:
+            current = json.loads(current)
+            remaining = current["remaining"]
+            timestamp = current["timestamp"]
+        except (json.JSONDecodeError, TypeError, KeyError):
+            # Corrupt cache entry: fail open by starting a fresh window rather than 500ing the request.
+            current = None
+
+    if current:
         current_time = int(time.time())
 
         # Check if the time window has expired
