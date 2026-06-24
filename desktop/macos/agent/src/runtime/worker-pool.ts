@@ -29,11 +29,12 @@ export class AdapterWorker {
     return this.activeAttemptId !== null;
   }
 
-  canRun(binding?: AdapterBindingHandle): boolean {
+  canRun(_binding?: AdapterBindingHandle): boolean {
     if (this.isBusy) return false;
     if (!this.adapter.capabilities.requiresPinnedWorker) return true;
-    if (!this.pinnedBindingId) return true;
-    return Boolean(binding?.bindingId && binding.bindingId === this.pinnedBindingId);
+    // Pinned adapters retain process-local state only while busy. Once idle,
+    // the worker can be assigned to another binding and pinBinding records it.
+    return true;
   }
 
   hasActiveBinding(bindingId: string): boolean {
@@ -44,7 +45,7 @@ export class AdapterWorker {
     if (!binding.bindingId) {
       throw new Error("Pinned adapter workers require a bindingId");
     }
-    if (this.pinnedBindingId && this.pinnedBindingId !== binding.bindingId) {
+    if (this.activeAttemptId && this.pinnedBindingId && this.pinnedBindingId !== binding.bindingId) {
       throw new Error(
         `Worker ${this.workerId} is already pinned to binding ${this.pinnedBindingId}`
       );
