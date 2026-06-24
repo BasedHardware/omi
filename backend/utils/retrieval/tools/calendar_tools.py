@@ -1072,7 +1072,7 @@ async def delete_calendar_event_tool(
             logger.info(f"📅 Found {len(matching_events)} matching event(s) to delete")
 
             # Delete all matching events
-            deleted_count = 0
+            deleted_events = []
             failed_deletions = []
 
             for event in matching_events:
@@ -1085,16 +1085,16 @@ async def delete_calendar_event_tool(
 
                 try:
                     await delete_google_calendar_event(access_token, event_id)
-                    deleted_count += 1
+                    deleted_events.append(event)
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"❌ Failed to delete {event_title_found}: {error_msg}")
                     failed_deletions.append((event_title_found, error_msg))
 
             # Build result message
-            if deleted_count > 0:
-                result = f"✅ Successfully deleted {deleted_count} calendar event(s):\n"
-                for event in matching_events[:deleted_count]:
+            if deleted_events:
+                result = f"✅ Successfully deleted {len(deleted_events)} calendar event(s):\n"
+                for event in deleted_events:
                     summary = event.get('summary', 'Untitled')
                     start = event.get('start', {})
                     if 'dateTime' in start:
