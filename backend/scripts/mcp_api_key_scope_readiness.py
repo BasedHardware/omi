@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 MCP_API_KEY_COLLECTION = "mcp_api_keys"
-DEFAULT_ASSIGNMENT_FILE_ENV = "V17_MCP_API_KEY_SCOPE_ASSIGNMENTS"
+DEFAULT_ASSIGNMENT_FILE_ENV = "MEMORY_MCP_API_KEY_SCOPE_ASSIGNMENTS"
 ALLOWED_SERVER_ASSIGNED_SCOPES = frozenset({"memories.read", "memories.write", "memories.archive.read"})
 REQUIRED_DEFAULT_READ_SCOPE = "memories.read"
 
