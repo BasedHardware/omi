@@ -1,4 +1,4 @@
-"""Synthetic V17 local product scenario fixtures and seed/reset tooling.
+"""Synthetic local memory product scenario fixtures and seed/reset tooling.
 
 These fixtures are for the local emulator dev harness only. They are safe to
 commit, use deterministic synthetic IDs/content, and intentionally cannot choose
@@ -37,10 +37,10 @@ SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
 AUTH_UID_MANIFEST = "canonical-auth-uids.json"
 LOCAL_DEV_PROJECT_ID = safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
 LOCAL_DEV_DATABASE_ID = safety.DEFAULT_FIRESTORE_DATABASE_ID
-GLOBAL_READ_GATE_PATH = "memory_control/v17_global_read_gate"
-WRITE_CONVERGENCE_GATE_PATH = "memory_control/v17_write_convergence_gate"
+GLOBAL_READ_GATE_PATH = "memory_control/global_read_gate"
+WRITE_CONVERGENCE_GATE_PATH = "memory_control/write_convergence_gate"
 
-RouteDecision = Literal["disabled", "legacy_primary", "v17_read", "fail_closed"]
+RouteDecision = Literal["disabled", "legacy_primary", "memory_read", "fail_closed"]
 
 
 @dataclass(frozen=True)
@@ -90,7 +90,7 @@ class RequestCase:
     query: Mapping[str, str] = field(default_factory=dict)
     authenticated_user: str = ALICE_USER_ID
     expected_status: int = 200
-    expected_route_decision: RouteDecision = "v17_read"
+    expected_route_decision: RouteDecision = "memory_read"
     expected_memory_ids: tuple[str, ...] = ()
     expected_read_paths: tuple[str, ...] = ()
     expected_no_write: bool = True
@@ -109,7 +109,7 @@ class ExpectedFailClosedBehavior:
     reason: str | None = None
     no_legacy_fallback: bool = True
     no_cross_user_disclosure: bool = True
-    no_v17_writes: bool = True
+    no_memory_writes: bool = True
 
 
 @dataclass(frozen=True)
@@ -122,7 +122,7 @@ class LocalReportMetadata:
 
 
 @dataclass(frozen=True)
-class V17Scenario:
+class MemoryScenario:
     schema_version: int
     scenario_id: str
     description: str
@@ -168,7 +168,12 @@ def _iso(ts: str) -> str:
 
 
 def _user(uid: str, name: str) -> ScenarioUser:
-    return ScenarioUser(uid=uid, email=f"{uid}@local.omi.invalid", display_name=f"Synthetic {name}", password=f"{uid}-local-password-030")
+    return ScenarioUser(
+        uid=uid,
+        email=f"{uid}@local.omi.invalid",
+        display_name=f"Synthetic {name}",
+        password=f"{uid}-local-password-030",
+    )
 
 
 USERS = (_user(DEFAULT_LOCAL_USER_ID, "Default"), _user(ALICE_USER_ID, "Alice"), _user(BOB_USER_ID, "Bob"))
@@ -199,7 +204,7 @@ def _profile_seeds(users: Sequence[ScenarioUser]) -> tuple[FirestoreSeed, ...]:
                 "display_name": user.display_name,
                 "synthetic": True,
                 "local_harness": True,
-                "created_by": "TICKET-030-v17-scenario-fixtures",
+                "created_by": "TICKET-030-memory-scenario-fixtures",
             },
         )
         for user in users
@@ -209,9 +214,9 @@ def _profile_seeds(users: Sequence[ScenarioUser]) -> tuple[FirestoreSeed, ...]:
 def _clock() -> DeterministicContext:
     return DeterministicContext(
         now="2026-01-15T12:00:00Z",
-        run_id="v17-local-synthetic-run-030",
-        cursor_secret="synthetic-v17-local-cursor-secret-030",
-        cursor_policy_version="v17v3-cursor-policy-local-030",
+        run_id="memory-local-synthetic-run-030",
+        cursor_secret="synthetic-memory-local-cursor-secret-030",
+        cursor_policy_version="memory-v3-cursor-policy-local-030",
         cursor_secret_version="local-synthetic-030",
         cursor_ttl_seconds=600,
         ids={
@@ -255,7 +260,7 @@ def _clock() -> DeterministicContext:
         },
         cursors={
             "valid_start": "cursor_local_start_030",
-            "malformed": "not-a-valid-v17-cursor",
+            "malformed": "not-a-valid-memory-cursor",
             "cross_user_bob": "cursor_claims_bob_subject_synthetic_invalid_for_alice",
         },
     )
@@ -267,10 +272,10 @@ def _global_gate(*, enabled: bool, kill: bool = False) -> FirestoreSeed:
         protected=True,
         data={
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_runtime_enablement",
+            "purpose": "memory_v3_runtime_enablement",
             "owner": "memory_platform_local_harness",
             "config_schema_version": 1,
-            "v17_reads_enabled": enabled,
+            "memory_reads_enabled": enabled,
             "kill_switch_active": kill,
             "fixture_source": "TICKET-030-local-synthetic",
         },
@@ -283,7 +288,7 @@ def _write_convergence() -> FirestoreSeed:
         protected=True,
         data={
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_write_convergence_gate",
+            "purpose": "memory_v3_write_convergence_gate",
             "owner": "memory_platform_local_harness",
             "config_schema_version": 1,
             "durable_outbox_enabled": True,
@@ -306,7 +311,7 @@ def _control(uid: str, *, read: bool = True, default_grant: bool = True, archive
             "cutover_epoch": 1 if read else 0,
             "account_generation": 7,
             "fallback_projection_ready": read,
-            "persistent_v17_writes_started": False,
+            "persistent_memory_writes_started": False,
             "decommission_reconciled": False,
             "writes_blocked": False,
             "stage_gates": {"shadow": "passed", "write": "passed", "read": "passed" if read else "blocked"},
@@ -325,13 +330,15 @@ def _projection_state(uid: str, ctx: DeterministicContext) -> FirestoreSeed:
             "projection_generation": 3,
             "projection_commit_id": ctx.ids["projection_commit"],
             "source_commit_id": ctx.ids["source_commit"],
-            "source_version": "v17-local-synthetic-source-1",
+            "source_version": "memory-local-synthetic-source-1",
             "updated_at": ctx.now,
         },
     )
 
 
-def _memory_doc(uid: str, memory_id: str, tier: str, content: str, captured: str, expires: str | None = None) -> FirestoreSeed:
+def _memory_doc(
+    uid: str, memory_id: str, tier: str, content: str, captured: str, expires: str | None = None
+) -> FirestoreSeed:
     data: dict[str, object] = {
         "memory_id": memory_id,
         "uid": uid,
@@ -368,7 +375,7 @@ def _projection_item(
     created: str,
     *,
     archive: bool = False,
-    category: str = "v17-local-synthetic",
+    category: str = "memory-local-synthetic",
 ) -> FirestoreSeed:
     return FirestoreSeed(
         path=f"users/{uid}/v3_compatibility_projection_items/{memory_id}",
@@ -385,7 +392,7 @@ def _projection_item(
             "projection_generation": 3,
             "projection_commit_id": "projection_commit_local_030",
             "source_commit_id": "source_commit_local_030",
-            "source_version": "v17-local-synthetic-source-1",
+            "source_version": "memory-local-synthetic-source-1",
             "tier": "archive" if archive else "default",
             "synthetic": True,
         },
@@ -411,7 +418,9 @@ def _kg_node(uid: str, node_id: str, label: str, node_type: str, *, memory_ids: 
     )
 
 
-def _kg_edge(uid: str, edge_id: str, source_id: str, target_id: str, label: str, *, memory_ids: Sequence[str] = ()) -> FirestoreSeed:
+def _kg_edge(
+    uid: str, edge_id: str, source_id: str, target_id: str, label: str, *, memory_ids: Sequence[str] = ()
+) -> FirestoreSeed:
     return FirestoreSeed(
         path=f"users/{uid}/knowledge_edges/{edge_id}",
         protected=True,
@@ -477,16 +486,36 @@ def _alice_knowledge_graph_seeds(uid: str, ctx: DeterministicContext) -> list[Fi
         _kg_node(uid, ids["kg_warp"], "Warp", "thing", memory_ids=(long_warp,)),
         _kg_node(uid, ids["kg_pixel"], "Pixel", "thing", memory_ids=(long_pet,)),
         _kg_edge(uid, "kg_edge_alice_lives_sf_030", ids["kg_alice"], ids["kg_sf"], "lives_in", memory_ids=(long_sf,)),
-        _kg_edge(uid, "kg_edge_alice_works_omi_030", ids["kg_alice"], ids["kg_omi"], "works_at", memory_ids=(long_work,)),
-        _kg_edge(uid, "kg_edge_alice_partner_jordan_030", ids["kg_alice"], ids["kg_jordan"], "partner", memory_ids=(long_partner,)),
-        _kg_edge(uid, "kg_edge_alice_sister_mia_030", ids["kg_alice"], ids["kg_mia"], "sibling", memory_ids=(long_sister,)),
+        _kg_edge(
+            uid, "kg_edge_alice_works_omi_030", ids["kg_alice"], ids["kg_omi"], "works_at", memory_ids=(long_work,)
+        ),
+        _kg_edge(
+            uid,
+            "kg_edge_alice_partner_jordan_030",
+            ids["kg_alice"],
+            ids["kg_jordan"],
+            "partner",
+            memory_ids=(long_partner,),
+        ),
+        _kg_edge(
+            uid, "kg_edge_alice_sister_mia_030", ids["kg_alice"], ids["kg_mia"], "sibling", memory_ids=(long_sister,)
+        ),
         _kg_edge(uid, "kg_edge_alice_uses_warp_030", ids["kg_alice"], ids["kg_warp"], "uses", memory_ids=(long_warp,)),
         _kg_edge(uid, "kg_edge_alice_pet_pixel_030", ids["kg_alice"], ids["kg_pixel"], "owns", memory_ids=(long_pet,)),
-        _kg_edge(uid, "kg_edge_alice_from_portland_030", ids["kg_alice"], ids["kg_portland"], "grew_up_in", memory_ids=(long_birthplace,)),
+        _kg_edge(
+            uid,
+            "kg_edge_alice_from_portland_030",
+            ids["kg_alice"],
+            ids["kg_portland"],
+            "grew_up_in",
+            memory_ids=(long_birthplace,),
+        ),
     ]
 
 
-def _base_firestore(ctx: DeterministicContext, *, global_enabled: bool = True, kill: bool = False) -> list[FirestoreSeed]:
+def _base_firestore(
+    ctx: DeterministicContext, *, global_enabled: bool = True, kill: bool = False
+) -> list[FirestoreSeed]:
     uid = ALICE_USER_ID
     alice_short = "Alice has a synthetic local standup at 09:00 in the lab room."
     alice_long = "Alice prefers concise memory summaries for local QA."
@@ -495,31 +524,129 @@ def _base_firestore(ctx: DeterministicContext, *, global_enabled: bool = True, k
     bob_long = "Bob keeps a separate synthetic notebook for isolation checks."
     short_memories: tuple[tuple[str, str, str], ...] = (
         ("alice_short_active", alice_short, "2026-01-15T11:30:00Z"),
-        ("alice_short_demo", "Alice is presenting the memory platform demo to the team on Friday at 14:00.", "2026-06-18T16:00:00Z"),
-        ("alice_short_dentist", "Alice has a dentist appointment on Thursday at 14:30 downtown.", "2026-06-19T09:15:00Z"),
-        ("alice_short_grocery", "Alice needs to pick up oat milk and espresso beans after work.", "2026-06-20T18:45:00Z"),
-        ("alice_short_call_mom", "Alice promised to call her mom this weekend about summer travel plans.", "2026-06-21T10:00:00Z"),
-        ("alice_short_pr_review", "Alice needs to review PR #482 for the canonical memory adapter before end of day.", "2026-06-22T11:00:00Z"),
+        (
+            "alice_short_demo",
+            "Alice is presenting the memory platform demo to the team on Friday at 14:00.",
+            "2026-06-18T16:00:00Z",
+        ),
+        (
+            "alice_short_dentist",
+            "Alice has a dentist appointment on Thursday at 14:30 downtown.",
+            "2026-06-19T09:15:00Z",
+        ),
+        (
+            "alice_short_grocery",
+            "Alice needs to pick up oat milk and espresso beans after work.",
+            "2026-06-20T18:45:00Z",
+        ),
+        (
+            "alice_short_call_mom",
+            "Alice promised to call her mom this weekend about summer travel plans.",
+            "2026-06-21T10:00:00Z",
+        ),
+        (
+            "alice_short_pr_review",
+            "Alice needs to review PR #482 for the canonical memory adapter before end of day.",
+            "2026-06-22T11:00:00Z",
+        ),
         ("alice_short_yoga", "Alice has yoga class Wednesday at 07:00 at Mission Yoga Studio.", "2026-06-16T06:30:00Z"),
-        ("alice_short_presentation", "Alice is preparing slides for next week's product review on Brain Map UX.", "2026-06-17T13:20:00Z"),
-        ("alice_short_flights", "Alice should check her SFO to Seattle flight status before Friday's trip to visit Mia.", "2026-06-23T08:00:00Z"),
+        (
+            "alice_short_presentation",
+            "Alice is preparing slides for next week's product review on Brain Map UX.",
+            "2026-06-17T13:20:00Z",
+        ),
+        (
+            "alice_short_flights",
+            "Alice should check her SFO to Seattle flight status before Friday's trip to visit Mia.",
+            "2026-06-23T08:00:00Z",
+        ),
     )
     long_memories: tuple[tuple[str, str, str, str], ...] = (
         ("alice_long", alice_long, "2026-01-10T09:00:00Z", "preferences"),
-        ("alice_long_birthplace", "Alice grew up in Portland, Oregon and visits her parents there each winter.", "2024-11-03T10:00:00Z", "biographical"),
-        ("alice_long_partner", "Alice's partner is Jordan Chen; they have been together since 2019.", "2025-02-14T12:00:00Z", "relationships"),
-        ("alice_long_work", "Alice is a software engineer at Omi working on the memory platform and desktop sync.", "2025-08-01T09:00:00Z", "work"),
-        ("alice_long_tool_warp", "Alice uses Warp as her primary terminal on macOS for local development.", "2025-09-12T15:30:00Z", "tools"),
-        ("alice_long_tool_obsidian", "Alice keeps personal research notes in Obsidian with a daily journaling workflow.", "2025-10-02T08:45:00Z", "tools"),
-        ("alice_long_pref_coffee", "Alice prefers oat milk lattes with no sugar, usually from local cafes in the Mission.", "2025-05-20T07:30:00Z", "preferences"),
-        ("alice_long_pref_sf", "Alice lives in San Francisco's Mission District and bikes to work when weather allows.", "2025-01-08T18:00:00Z", "location"),
-        ("alice_long_family_sister", "Alice's younger sister Mia lives in Seattle and works in UX research.", "2025-03-22T19:00:00Z", "relationships"),
-        ("alice_long_commit_rust", "Alice is learning Rust to contribute to Omi's desktop backend components.", "2026-02-01T10:00:00Z", "commitments"),
-        ("alice_long_health_running", "Alice runs a 5K three times per week, usually along the Embarcadero.", "2025-07-15T06:00:00Z", "health"),
-        ("alice_long_lang_spanish", "Alice speaks conversational Spanish and is studying for professional fluency.", "2025-11-11T20:00:00Z", "skills"),
-        ("alice_long_pet", "Alice has a tabby cat named Pixel who often sits on her desk during standups.", "2025-04-18T21:00:00Z", "relationships"),
-        ("alice_long_goal_marathon", "Alice is training for the Oakland Marathon in fall 2026.", "2026-01-05T07:00:00Z", "commitments"),
-        ("alice_long_edu", "Alice earned a BS in Computer Science from the University of Washington in 2018.", "2024-09-01T12:00:00Z", "biographical"),
+        (
+            "alice_long_birthplace",
+            "Alice grew up in Portland, Oregon and visits her parents there each winter.",
+            "2024-11-03T10:00:00Z",
+            "biographical",
+        ),
+        (
+            "alice_long_partner",
+            "Alice's partner is Jordan Chen; they have been together since 2019.",
+            "2025-02-14T12:00:00Z",
+            "relationships",
+        ),
+        (
+            "alice_long_work",
+            "Alice is a software engineer at Omi working on the memory platform and desktop sync.",
+            "2025-08-01T09:00:00Z",
+            "work",
+        ),
+        (
+            "alice_long_tool_warp",
+            "Alice uses Warp as her primary terminal on macOS for local development.",
+            "2025-09-12T15:30:00Z",
+            "tools",
+        ),
+        (
+            "alice_long_tool_obsidian",
+            "Alice keeps personal research notes in Obsidian with a daily journaling workflow.",
+            "2025-10-02T08:45:00Z",
+            "tools",
+        ),
+        (
+            "alice_long_pref_coffee",
+            "Alice prefers oat milk lattes with no sugar, usually from local cafes in the Mission.",
+            "2025-05-20T07:30:00Z",
+            "preferences",
+        ),
+        (
+            "alice_long_pref_sf",
+            "Alice lives in San Francisco's Mission District and bikes to work when weather allows.",
+            "2025-01-08T18:00:00Z",
+            "location",
+        ),
+        (
+            "alice_long_family_sister",
+            "Alice's younger sister Mia lives in Seattle and works in UX research.",
+            "2025-03-22T19:00:00Z",
+            "relationships",
+        ),
+        (
+            "alice_long_commit_rust",
+            "Alice is learning Rust to contribute to Omi's desktop backend components.",
+            "2026-02-01T10:00:00Z",
+            "commitments",
+        ),
+        (
+            "alice_long_health_running",
+            "Alice runs a 5K three times per week, usually along the Embarcadero.",
+            "2025-07-15T06:00:00Z",
+            "health",
+        ),
+        (
+            "alice_long_lang_spanish",
+            "Alice speaks conversational Spanish and is studying for professional fluency.",
+            "2025-11-11T20:00:00Z",
+            "skills",
+        ),
+        (
+            "alice_long_pet",
+            "Alice has a tabby cat named Pixel who often sits on her desk during standups.",
+            "2025-04-18T21:00:00Z",
+            "relationships",
+        ),
+        (
+            "alice_long_goal_marathon",
+            "Alice is training for the Oakland Marathon in fall 2026.",
+            "2026-01-05T07:00:00Z",
+            "commitments",
+        ),
+        (
+            "alice_long_edu",
+            "Alice earned a BS in Computer Science from the University of Washington in 2018.",
+            "2024-09-01T12:00:00Z",
+            "biographical",
+        ),
     )
     seeds: list[FirestoreSeed] = [
         _global_gate(enabled=global_enabled, kill=kill),
@@ -528,10 +655,24 @@ def _base_firestore(ctx: DeterministicContext, *, global_enabled: bool = True, k
         _control(BOB_USER_ID, read=True, default_grant=True, archive=False),
         _projection_state(ALICE_USER_ID, ctx),
         _projection_state(BOB_USER_ID, ctx),
-        _memory_doc(ALICE_USER_ID, ctx.ids["alice_short_stale"], "short_term", alice_stale, "2026-01-01T11:30:00Z", "2026-01-02T11:30:00Z"),
+        _memory_doc(
+            ALICE_USER_ID,
+            ctx.ids["alice_short_stale"],
+            "short_term",
+            alice_stale,
+            "2026-01-01T11:30:00Z",
+            "2026-01-02T11:30:00Z",
+        ),
         _memory_doc(ALICE_USER_ID, ctx.ids["alice_archive"], "archive", alice_archive, "2025-12-01T08:00:00Z"),
         _memory_doc(BOB_USER_ID, ctx.ids["bob_long"], "long_term", bob_long, "2026-01-11T09:00:00Z"),
-        _projection_item(ALICE_USER_ID, ctx.ids["alice_archive"], alice_archive, "2025-12-01T08:00:00Z", archive=True, category="archive"),
+        _projection_item(
+            ALICE_USER_ID,
+            ctx.ids["alice_archive"],
+            alice_archive,
+            "2025-12-01T08:00:00Z",
+            archive=True,
+            category="archive",
+        ),
         _projection_item(BOB_USER_ID, ctx.ids["bob_long"], bob_long, "2026-01-11T09:00:00Z", category="work"),
     ]
     for key, content, captured in short_memories:
@@ -548,14 +689,14 @@ def _base_firestore(ctx: DeterministicContext, *, global_enabled: bool = True, k
 
 def _local_flags(ctx: DeterministicContext, *, enabled: bool = True) -> Mapping[str, object]:
     return {
-        "V17_V3_GET_ENABLED": "true" if enabled else "false",
-        "V17_MODE": "read" if enabled else "off",
-        "V17_MEMORY_ENABLED_USERS": f"{ALICE_USER_ID},{BOB_USER_ID}",
-        "V17_ARCHIVE_OPT_IN_ENABLED": "true",
-        "V17_V3_CURSOR_SECRET": ctx.cursor_secret,
-        "V17_V3_CURSOR_POLICY_VERSION": ctx.cursor_policy_version,
-        "V17_V3_CURSOR_SECRET_VERSION": ctx.cursor_secret_version,
-        "V17_V3_CURSOR_TTL_SECONDS": str(ctx.cursor_ttl_seconds),
+        "MEMORY_V3_GET_ENABLED": "true" if enabled else "false",
+        "MEMORY_MODE": "read" if enabled else "off",
+        "MEMORY_ENABLED_USERS": f"{ALICE_USER_ID},{BOB_USER_ID}",
+        "MEMORY_ARCHIVE_OPT_IN_ENABLED": "true",
+        "MEMORY_V3_CURSOR_SECRET": ctx.cursor_secret,
+        "MEMORY_V3_CURSOR_POLICY_VERSION": ctx.cursor_policy_version,
+        "MEMORY_V3_CURSOR_SECRET_VERSION": ctx.cursor_secret_version,
+        "MEMORY_V3_CURSOR_TTL_SECONDS": str(ctx.cursor_ttl_seconds),
         "LOCAL_EMULATOR_DEV": True,
         "activation_eligible": False,
     }
@@ -581,9 +722,9 @@ def _scenario(
     flags_enabled: bool = True,
     cases: Sequence[RequestCase],
     fail_closed: ExpectedFailClosedBehavior,
-) -> V17Scenario:
+) -> MemoryScenario:
     ctx = _clock()
-    return V17Scenario(
+    return MemoryScenario(
         schema_version=SCHEMA_VERSION,
         scenario_id=scenario_id,
         description=description,
@@ -594,15 +735,20 @@ def _scenario(
         auth_seed=_auth_seed(USERS),
         profile_seed=_profile_seeds(USERS),
         firestore_seed=tuple(firestore if firestore is not None else _base_firestore(ctx)),
-        redis_seed=(RedisSeed(key=f"v17:scenario:{scenario_id}:selected_user", value=selected_user),),
-        file_seed=(FileSeed(relative_path=f"v17-scenarios/{scenario_id}/README.txt", content=f"Synthetic local-only V17 scenario: {scenario_id}\n"),),
+        redis_seed=(RedisSeed(key=f"memory:scenario:{scenario_id}:selected_user", value=selected_user),),
+        file_seed=(
+            FileSeed(
+                relative_path=f"memory-scenarios/{scenario_id}/README.txt",
+                content=f"Synthetic local-only memory scenario: {scenario_id}\n",
+            ),
+        ),
         request_cases=tuple(cases),
         expected_protected_collection_changes=_expected_protected(),
         expected_fail_closed=fail_closed,
     )
 
 
-def _build_scenarios() -> dict[str, V17Scenario]:
+def _build_scenarios() -> dict[str, MemoryScenario]:
     ctx = _clock()
     default_reads = _alice_default_memory_ids(ctx)
     base_reads = (
@@ -613,7 +759,7 @@ def _build_scenarios() -> dict[str, V17Scenario]:
     )
     happy = _scenario(
         "happy_path",
-        "Enabled local V17 /v3 read with synthetic Short-term and Long-term memories; Archive and stale Short-term are excluded by default.",
+        "Enabled local memory /v3 read with synthetic Short-term and Long-term memories; Archive and stale Short-term are excluded by default.",
         cases=(
             RequestCase(
                 case_id="alice_default_read",
@@ -621,7 +767,7 @@ def _build_scenarios() -> dict[str, V17Scenario]:
                 path="/v3/memories",
                 query={"limit": "10", "offset": "0"},
                 expected_status=200,
-                expected_route_decision="v17_read",
+                expected_route_decision="memory_read",
                 expected_memory_ids=default_reads,
                 expected_read_paths=base_reads,
             ),
@@ -630,36 +776,86 @@ def _build_scenarios() -> dict[str, V17Scenario]:
     )
     default_off = _scenario(
         "default_off",
-        "Legacy-safe default-off scenario: server env does not select V17 and must perform zero V17 adapter reads/writes.",
+        "Legacy-safe default-off scenario: server env does not select memory reads and must perform zero memory adapter reads/writes.",
         flags_enabled=False,
-        cases=(RequestCase(case_id="v17_route_disabled", method="GET", path="/v3/memories", expected_route_decision="disabled", expected_memory_ids=()),),
-        fail_closed=ExpectedFailClosedBehavior(False, "v17_disabled", no_legacy_fallback=False),
+        cases=(
+            RequestCase(
+                case_id="memory_route_disabled",
+                method="GET",
+                path="/v3/memories",
+                expected_route_decision="disabled",
+                expected_memory_ids=(),
+            ),
+        ),
+        fail_closed=ExpectedFailClosedBehavior(False, "memory_disabled", no_legacy_fallback=False),
     )
     kill = _scenario(
         "kill_switch",
-        "Global V17 read kill switch is active; V17 selection must fail closed with no legacy fallback after selection.",
+        "Global memory read kill switch is active; Memory selection must fail closed with no legacy fallback after selection.",
         firestore=_base_firestore(ctx, global_enabled=True, kill=True),
-        cases=(RequestCase(case_id="kill_switch_blocks", method="GET", path="/v3/memories", expected_status=403, expected_route_decision="fail_closed", expected_fail_closed_reason="global_v17_read_kill_switch_active"),),
-        fail_closed=ExpectedFailClosedBehavior(True, "global_v17_read_kill_switch_active"),
+        cases=(
+            RequestCase(
+                case_id="kill_switch_blocks",
+                method="GET",
+                path="/v3/memories",
+                expected_status=403,
+                expected_route_decision="fail_closed",
+                expected_fail_closed_reason="global_memory_read_kill_switch_active",
+            ),
+        ),
+        fail_closed=ExpectedFailClosedBehavior(True, "global_memory_read_kill_switch_active"),
     )
     malformed_cursor = _scenario(
         "malformed_cursor",
-        "Malformed V17 cursor must return a stable fail-closed client error and never disclose cross-user state.",
-        cases=(RequestCase(case_id="malformed_cursor", method="GET", path="/v3/memories", query={"cursor": ctx.cursors["malformed"]}, expected_status=400, expected_route_decision="fail_closed", expected_fail_closed_reason="malformed_cursor"),),
+        "Malformed memory cursor must return a stable fail-closed client error and never disclose cross-user state.",
+        cases=(
+            RequestCase(
+                case_id="malformed_cursor",
+                method="GET",
+                path="/v3/memories",
+                query={"cursor": ctx.cursors["malformed"]},
+                expected_status=400,
+                expected_route_decision="fail_closed",
+                expected_fail_closed_reason="malformed_cursor",
+            ),
+        ),
         fail_closed=ExpectedFailClosedBehavior(True, "malformed_cursor"),
     )
     stale = _scenario(
         "stale_short_exclusion",
         "Default read excludes expired Short-term records while keeping active Short-term and Long-term records visible.",
-        cases=(RequestCase(case_id="stale_short_excluded", method="GET", path="/v17/memory/search", expected_memory_ids=default_reads, expected_route_decision="v17_read", expected_read_paths=base_reads),),
+        cases=(
+            RequestCase(
+                case_id="stale_short_excluded",
+                method="GET",
+                path="/memory/search",
+                expected_memory_ids=default_reads,
+                expected_route_decision="memory_read",
+                expected_read_paths=base_reads,
+            ),
+        ),
         fail_closed=ExpectedFailClosedBehavior(False, None),
     )
     archive = _scenario(
         "archive_default_exclusion",
         "Archive memories exist but default reads exclude them unless an explicit archive-capable route is used.",
         cases=(
-            RequestCase(case_id="archive_not_in_default", method="GET", path="/v3/memories", expected_memory_ids=default_reads, expected_route_decision="v17_read", expected_read_paths=base_reads),
-            RequestCase(case_id="archive_explicit", method="GET", path="/v17/memory/archive/search", query={"include_archive": "true"}, expected_memory_ids=(ctx.ids["alice_archive"],), expected_route_decision="v17_read"),
+            RequestCase(
+                case_id="archive_not_in_default",
+                method="GET",
+                path="/v3/memories",
+                expected_memory_ids=default_reads,
+                expected_route_decision="memory_read",
+                expected_read_paths=base_reads,
+            ),
+            RequestCase(
+                case_id="archive_explicit",
+                method="GET",
+                path="/memory/archive/search",
+                query={"include_archive": "true"},
+                expected_memory_ids=(ctx.ids["alice_archive"],),
+                expected_route_decision="memory_read",
+            ),
         ),
         fail_closed=ExpectedFailClosedBehavior(False, None),
     )
@@ -667,8 +863,24 @@ def _build_scenarios() -> dict[str, V17Scenario]:
         "cross_user_isolation",
         "Alice and Bob are both seeded; Alice requests must never return Bob's synthetic memory even with a cross-user cursor.",
         cases=(
-            RequestCase(case_id="alice_default_no_bob", method="GET", path="/v3/memories", authenticated_user=ALICE_USER_ID, expected_memory_ids=default_reads, expected_route_decision="v17_read"),
-            RequestCase(case_id="alice_with_bob_cursor", method="GET", path="/v3/memories", authenticated_user=ALICE_USER_ID, query={"cursor": ctx.cursors["cross_user_bob"]}, expected_status=400, expected_route_decision="fail_closed", expected_fail_closed_reason="cursor_subject_mismatch"),
+            RequestCase(
+                case_id="alice_default_no_bob",
+                method="GET",
+                path="/v3/memories",
+                authenticated_user=ALICE_USER_ID,
+                expected_memory_ids=default_reads,
+                expected_route_decision="memory_read",
+            ),
+            RequestCase(
+                case_id="alice_with_bob_cursor",
+                method="GET",
+                path="/v3/memories",
+                authenticated_user=ALICE_USER_ID,
+                query={"cursor": ctx.cursors["cross_user_bob"]},
+                expected_status=400,
+                expected_route_decision="fail_closed",
+                expected_fail_closed_reason="cursor_subject_mismatch",
+            ),
         ),
         fail_closed=ExpectedFailClosedBehavior(True, "cursor_subject_mismatch"),
     )
@@ -688,23 +900,25 @@ def _jsonable(value: object) -> object:
     return value
 
 
-def scenario_digest(scenario: V17Scenario) -> str:
+def scenario_digest(scenario: MemoryScenario) -> str:
     payload = json.dumps(_jsonable(scenario), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def list_scenarios() -> tuple[V17Scenario, ...]:
+def list_scenarios() -> tuple[MemoryScenario, ...]:
     return tuple(SCENARIOS[name] for name in sorted(SCENARIOS))
 
 
-def get_scenario(scenario_id: str) -> V17Scenario:
+def get_scenario(scenario_id: str) -> MemoryScenario:
     try:
         return SCENARIOS[scenario_id]
     except KeyError as exc:
-        raise ValueError(f"Unknown V17 scenario {scenario_id!r}; choose one of {', '.join(sorted(SCENARIOS))}") from exc
+        raise ValueError(
+            f"Unknown memory scenario {scenario_id!r}; choose one of {', '.join(sorted(SCENARIOS))}"
+        ) from exc
 
 
-def validate_scenario(scenario: V17Scenario) -> None:
+def validate_scenario(scenario: MemoryScenario) -> None:
     if scenario.schema_version != SCHEMA_VERSION:
         raise ValueError(f"Unsupported scenario schema_version={scenario.schema_version}")
     if scenario.scenario_id not in SCENARIOS:
@@ -724,9 +938,9 @@ def validate_scenario(scenario: V17Scenario) -> None:
             raise ValueError("Fixture seed documents cannot select evidence/report labels")
     for request in scenario.request_cases:
         if request.method != "GET":
-            raise ValueError("V17 local scenario request cases are read-only GET paths in this slice")
+            raise ValueError("Local memory scenario request cases are read-only GET paths in this slice")
         if request.expected_no_write is not True:
-            raise ValueError("GET request cases must assert no V17 writes")
+            raise ValueError("GET request cases must assert no memory writes")
         if request.authenticated_user not in user_ids:
             raise ValueError("Request authenticated_user must be a synthetic scenario user")
     if scenario.local_flags.get("activation_eligible") is not False:
@@ -742,7 +956,7 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _metadata_operation(scenario: V17Scenario) -> SeedOperation:
+def _metadata_operation(scenario: MemoryScenario) -> SeedOperation:
     return SeedOperation(
         kind="metadata",
         action="write",
@@ -849,7 +1063,9 @@ def canonical_users_from_manifest(cfg: config.HarnessConfig) -> str | None:
     return None
 
 
-def _apply_seed_operations(cfg: config.HarnessConfig, scenario: V17Scenario, ops: tuple[SeedOperation, ...]) -> dict[str, str] | None:
+def _apply_seed_operations(
+    cfg: config.HarnessConfig, scenario: MemoryScenario, ops: tuple[SeedOperation, ...]
+) -> dict[str, str] | None:
     auth_ops = [op for op in ops if op.kind == "auth"]
     other_ops = [op for op in ops if op.kind != "auth"]
     for op in auth_ops:
@@ -861,22 +1077,29 @@ def _apply_seed_operations(cfg: config.HarnessConfig, scenario: V17Scenario, ops
     return uid_map
 
 
-def build_seed_operations(scenario: V17Scenario) -> tuple[SeedOperation, ...]:
+def build_seed_operations(scenario: MemoryScenario) -> tuple[SeedOperation, ...]:
     validate_scenario(scenario)
     ops: list[SeedOperation] = [_metadata_operation(scenario)]
     ops.extend(SeedOperation("auth", "upsert", str(user["localId"]), user) for user in scenario.auth_seed)
-    ops.extend(SeedOperation("firestore", "upsert", seed.path, seed.data, seed.protected) for seed in scenario.profile_seed)
-    ops.extend(SeedOperation("firestore", "upsert", seed.path, seed.data, seed.protected) for seed in scenario.firestore_seed)
+    ops.extend(
+        SeedOperation("firestore", "upsert", seed.path, seed.data, seed.protected) for seed in scenario.profile_seed
+    )
+    ops.extend(
+        SeedOperation("firestore", "upsert", seed.path, seed.data, seed.protected) for seed in scenario.firestore_seed
+    )
     ops.extend(SeedOperation("redis", "upsert", seed.key, seed.value) for seed in scenario.redis_seed)
     ops.extend(SeedOperation("file", "write", seed.relative_path, seed.content) for seed in scenario.file_seed)
     return tuple(ops)
 
 
-def build_reset_operations(scenario: V17Scenario) -> tuple[SeedOperation, ...]:
+def build_reset_operations(scenario: MemoryScenario) -> tuple[SeedOperation, ...]:
     validate_scenario(scenario)
     ops: list[SeedOperation] = []
     ops.extend(SeedOperation("auth", "delete", str(user["localId"])) for user in scenario.auth_seed)
-    ops.extend(SeedOperation("firestore", "delete", seed.path, protected=seed.protected) for seed in (*scenario.profile_seed, *scenario.firestore_seed))
+    ops.extend(
+        SeedOperation("firestore", "delete", seed.path, protected=seed.protected)
+        for seed in (*scenario.profile_seed, *scenario.firestore_seed)
+    )
     ops.extend(SeedOperation("redis", "delete", seed.key) for seed in scenario.redis_seed)
     ops.extend(SeedOperation("file", "delete", seed.relative_path) for seed in scenario.file_seed)
     ops.append(SeedOperation("metadata", "delete", f"scenario:{scenario.scenario_id}"))
@@ -941,7 +1164,7 @@ def _request_json(method: str, url: str, payload: Mapping[str, object] | None = 
 def _apply_firestore_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> bool:
     """Apply Firestore seed/reset through emulator Admin-style credentials when available.
 
-    The repo's Firestore rules intentionally deny all client writes to V17
+    The repo's Firestore rules intentionally deny all client writes to memory
     protected collections. For live local emulator seeding, use the Python
     Firestore client with AnonymousCredentials against FIRESTORE_EMULATOR_HOST,
     which bypasses rules like backend/Admin tooling. If the dependency is not
@@ -987,7 +1210,7 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
             target.unlink()
         return
     if op.kind == "metadata":
-        target = cfg.layout.state_root / "manifests" / "v17-scenario-current.json"
+        target = cfg.layout.state_root / "manifests" / "memory-scenario-current.json"
         if op.action == "write":
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(op.payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -1000,7 +1223,9 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
         encoded_path = "/".join(quote(part, safe="") for part in op.target.split("/"))
         url = f"http://{cfg.firestore_host}/v1/projects/{cfg.project_id}/databases/{quote(cfg.database_id, safe='')}/documents/{encoded_path}"
         if op.action == "upsert":
-            status, body = _request_json("PATCH", url, _firestore_document_payload(op.payload if isinstance(op.payload, Mapping) else {}))
+            status, body = _request_json(
+                "PATCH", url, _firestore_document_payload(op.payload if isinstance(op.payload, Mapping) else {})
+            )
             if status >= 400:
                 raise RuntimeError(f"Firestore emulator write failed for {op.target}: HTTP {status} {body[:200]}")
         elif op.action == "delete":
@@ -1038,7 +1263,7 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
 
 
 def build_manifest(
-    scenario: V17Scenario,
+    scenario: MemoryScenario,
     cfg: config.HarnessConfig,
     *,
     operations: tuple[SeedOperation, ...],
@@ -1060,7 +1285,7 @@ def build_manifest(
 
 def write_manifest(cfg: config.HarnessConfig, manifest: SeedManifest, *, reset: bool = False) -> Path:
     cfg.layout.process_manifest.parent.mkdir(parents=True, exist_ok=True)
-    name = f"v17-scenario-{manifest.scenario_id}-{'reset' if reset else 'seed'}.json"
+    name = f"memory-scenario-{manifest.scenario_id}-{'reset' if reset else 'seed'}.json"
     path = cfg.layout.process_manifest.parent / name
     path.write_text(json.dumps(_jsonable(manifest), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
@@ -1101,7 +1326,11 @@ def reset_scenario(scenario_id: str, cfg: config.HarnessConfig, *, dry_run: bool
             uid_map = _resolve_auth_uid_map(cfg, scenario.users)
         typed_uid_map = {str(k): str(v) for k, v in uid_map.items()}
         for op in ops:
-            remapped = _remap_auth_operation(op, typed_uid_map) if op.kind == "auth" else _remap_seed_operation(op, typed_uid_map)
+            remapped = (
+                _remap_auth_operation(op, typed_uid_map)
+                if op.kind == "auth"
+                else _remap_seed_operation(op, typed_uid_map)
+            )
             _apply_operation(cfg, remapped)
         manifest_path = _auth_uid_manifest_path(cfg)
         if manifest_path.exists():
@@ -1124,15 +1353,24 @@ def _repo_root() -> Path:
 def print_scenario_list(*, json_output: bool = False) -> None:
     validate_all_scenarios()
     if json_output:
-        print(json.dumps([{"scenario_id": s.scenario_id, "description": s.description, "selected_user": s.selected_user} for s in list_scenarios()], indent=2, sort_keys=True))
+        print(
+            json.dumps(
+                [
+                    {"scenario_id": s.scenario_id, "description": s.description, "selected_user": s.selected_user}
+                    for s in list_scenarios()
+                ],
+                indent=2,
+                sort_keys=True,
+            )
+        )
         return
-    print("V17 local emulator scenarios (LOCAL_EMULATOR_DEV, activation_eligible=false)")
+    print("Local memory emulator scenarios (LOCAL_EMULATOR_DEV, activation_eligible=false)")
     for scenario in list_scenarios():
         print(f"- {scenario.scenario_id}: {scenario.description}")
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="v17-scenarios")
+    parser = argparse.ArgumentParser(prog="memory-scenarios")
     sub = parser.add_subparsers(dest="command", required=True)
     list_parser = sub.add_parser("list")
     list_parser.add_argument("--json", action="store_true")
@@ -1165,7 +1403,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             print(json.dumps(_jsonable(manifest), indent=2, sort_keys=True))
             return 0
     except (ValueError, safety.SafetyError, RuntimeError) as exc:
-        print(f"V17 scenario command failed: {exc}", file=sys.stderr)
+        print(f"Memory scenario command failed: {exc}", file=sys.stderr)
         return 2
     return 1
 
