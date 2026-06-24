@@ -11,6 +11,14 @@ import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+from tests.unit.memory_import_isolation import install_database_client_stub
+
+from pathlib import Path
+
+import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
     'ENCRYPTION_SECRET',
@@ -37,7 +45,6 @@ _stubs = [
     'ulid',
     'pinecone',
     'typesense',
-    'database._client',
     'database.conversations',
     'database.action_items',
     'database.memories',
@@ -147,6 +154,20 @@ _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
 _endpoints.get_user = MagicMock()
 _register_module('utils.other.endpoints', _endpoints)
+
+install_database_client_stub()
+
+_utils_memory_pkg = ModuleType('utils.memory')
+_utils_memory_pkg.__path__ = []
+_register_module('utils.memory', _utils_memory_pkg)
+
+_memory_service_stub = ModuleType('utils.memory.memory_service')
+_memory_service_stub.MemoryService = MagicMock()
+_register_module('utils.memory.memory_service', _memory_service_stub)
+
+_surface_routing_stub = ModuleType('utils.memory.surface_routing')
+_surface_routing_stub.pin_memory_system = MagicMock()
+_register_module('utils.memory.surface_routing', _surface_routing_stub)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
