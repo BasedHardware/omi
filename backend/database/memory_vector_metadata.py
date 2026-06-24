@@ -1,6 +1,6 @@
 """Canonical vector metadata builders and parsers (WS-G7).
 
-Neutral builders serve the canonical-cohort memory path. Legacy ``build_v17_*`` builders
+Neutral builders serve the canonical-cohort memory path. Legacy ``build_memory_*`` builders
 remain for the disabled repair adapter path.
 """
 
@@ -12,13 +12,12 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from models.memory_search_gateway import SearchDecision, SearchVectorHit
-from models.product_memory import MemoryTier, V17MemoryItem
+from models.product_memory import MemoryTier, MemoryItem
 
-V17_MEMORY_VECTOR_SCHEMA_VERSION = 1
-V17_MEMORY_VECTOR_ID_PREFIX = "v17mem"
-
-# Neutral canonical-memory vector schema (prod greenfield — no v17 metadata on canonical path).
 MEMORY_VECTOR_SCHEMA_VERSION = 1
+MEMORY_VECTOR_ID_PREFIX = "memvec"
+
+# Neutral canonical-memory vector schema (prod greenfield — no legacy metadata on canonical path).
 RESTRICTED_SENSITIVITY_LABELS = {
     "credential",
     "secret",
@@ -33,7 +32,7 @@ RESTRICTED_SENSITIVITY_LABELS = {
 
 
 @dataclass(frozen=True)
-class ParsedV17VectorHit:
+class ParsedVectorHit:
     hit: Optional[SearchVectorHit]
     decision: SearchDecision
     reason: str
@@ -46,15 +45,15 @@ class ParsedMemoryVectorHit:
     reason: str
 
 
-def deterministic_v17_memory_vector_id(uid: str, memory_id: str, tier: MemoryTier | str, item_revision: int) -> str:
-    """Return a V17-only vector ID that cannot collide with legacy ``{uid}-{memory_id}`` IDs."""
+def deterministic_memory_vector_id(uid: str, memory_id: str, tier: MemoryTier | str, item_revision: int) -> str:
+    """Return a memory-only vector ID that cannot collide with legacy ``{uid}-{memory_id}`` IDs."""
     tier_value = tier.value if isinstance(tier, MemoryTier) else str(tier)
     payload = f"{uid}\0{memory_id}\0{tier_value}\0{int(item_revision)}".encode("utf-8")
-    return f"{V17_MEMORY_VECTOR_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
+    return f"{MEMORY_VECTOR_ID_PREFIX}:{hashlib.sha256(payload).hexdigest()}"
 
 
 def _shared_memory_vector_metadata_fields(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     projection_commit_id: str,
     vector_updated_at: datetime,
@@ -82,24 +81,8 @@ def _shared_memory_vector_metadata_fields(
     }
 
 
-def build_v17_memory_vector_metadata(
-    item: V17MemoryItem,
-    *,
-    projection_commit_id: str,
-    vector_updated_at: datetime,
-) -> Dict[str, Any]:
-    shared = _shared_memory_vector_metadata_fields(
-        item, projection_commit_id=projection_commit_id, vector_updated_at=vector_updated_at
-    )
-    return {
-        "v17_schema_version": V17_MEMORY_VECTOR_SCHEMA_VERSION,
-        "memory_tier": item.tier.value,
-        **shared,
-    }
-
-
 def build_memory_vector_metadata(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     projection_commit_id: str,
     vector_updated_at: datetime,
@@ -113,14 +96,6 @@ def build_memory_vector_metadata(
         "memory_layer": item.tier.value,
         **shared,
     }
-
-
-def build_v17_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
-    return _base_v17_filter(uid, {"memory_tier": {"$in": [MemoryTier.short_term.value, MemoryTier.long_term.value]}})
-
-
-def build_v17_archive_memory_vector_filter(uid: str) -> Dict[str, Any]:
-    return _base_v17_filter(uid, {"memory_tier": {"$eq": MemoryTier.archive.value}})
 
 
 def build_default_memory_vector_filter(uid: str) -> Dict[str, Any]:
@@ -161,10 +136,10 @@ def parse_memory_search_vector_hit(match: Dict[str, Any]) -> ParsedMemoryVectorH
     return ParsedMemoryVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
 
 
-def parse_v17_search_vector_hit(match: Dict[str, Any]) -> ParsedV17VectorHit:
+def parse_search_vector_hit(match: Dict[str, Any]) -> ParsedVectorHit:
     metadata = match.get("metadata") or {}
     try:
-        if metadata.get("v17_schema_version") != V17_MEMORY_VECTOR_SCHEMA_VERSION:
+        if metadata.get("memory_schema_version") != MEMORY_VECTOR_SCHEMA_VERSION:
             raise ValueError("wrong_schema")
         memory_id = _required_str(metadata, "memory_id")
         projection_commit_id = _required_str(metadata, "projection_commit_id")
@@ -183,23 +158,10 @@ def parse_v17_search_vector_hit(match: Dict[str, Any]) -> ParsedV17VectorHit:
             content_hash=_optional_str(metadata, "content_hash"),
         )
     except (TypeError, ValueError):
-        return ParsedV17VectorHit(
+        return ParsedVectorHit(
             hit=None, decision=SearchDecision.stale_vector, reason="invalid_or_missing_vector_metadata"
         )
-    return ParsedV17VectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
-
-
-def _base_v17_filter(uid: str, tier_filter: Dict[str, Any]) -> Dict[str, Any]:
-    if not uid or not uid.strip():
-        raise ValueError("uid is required")
-    return {
-        "$and": [
-            {"uid": {"$eq": uid}},
-            {"v17_schema_version": {"$eq": V17_MEMORY_VECTOR_SCHEMA_VERSION}},
-            tier_filter,
-            *_active_memory_vector_filter_clauses(),
-        ]
-    }
+    return ParsedVectorHit(hit=hit, decision=SearchDecision.allowed, reason="parsed")
 
 
 def _active_memory_vector_filter_clauses() -> list[Dict[str, Any]]:
@@ -265,18 +227,14 @@ def _parse_timestamp(value: str) -> datetime:
 
 __all__ = [
     "MEMORY_VECTOR_SCHEMA_VERSION",
-    "V17_MEMORY_VECTOR_ID_PREFIX",
-    "V17_MEMORY_VECTOR_SCHEMA_VERSION",
+    "MEMORY_VECTOR_ID_PREFIX",
     "RESTRICTED_SENSITIVITY_LABELS",
     "ParsedMemoryVectorHit",
-    "ParsedV17VectorHit",
+    "ParsedVectorHit",
     "build_archive_memory_vector_filter",
     "build_default_memory_vector_filter",
     "build_memory_vector_metadata",
-    "build_v17_archive_memory_vector_filter",
-    "build_v17_default_memory_vector_filter",
-    "build_v17_memory_vector_metadata",
-    "deterministic_v17_memory_vector_id",
+    "deterministic_memory_vector_id",
     "parse_memory_search_vector_hit",
-    "parse_v17_search_vector_hit",
+    "parse_search_vector_hit",
 ]

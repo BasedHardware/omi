@@ -1,6 +1,6 @@
 """Canonical Firestore collection path helpers for memory storage (WS-G7).
 
-Neutral ``MemoryCollections`` is the source of truth. Legacy ``V17Collections`` remains
+Neutral ``MemoryCollections`` is the source of truth. Legacy ``MemoryCollections`` remains
 an importable alias. Collection path strings are frozen — only Python symbol names change.
 """
 
@@ -87,6 +87,6 @@ class MemoryCollections:
         ]
 
 
-V17Collections = MemoryCollections
+MemoryCollections = MemoryCollections
 
-__all__ = ["MemoryCollections", "V17Collections"]
+__all__ = ["MemoryCollections", "MemoryCollections"]

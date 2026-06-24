@@ -8,7 +8,7 @@ from models.product_memory import (
     AccessDecision,
     MemoryAccessPolicy,
     MemoryTier,
-    V17MemoryItem,
+    MemoryItem,
     is_default_access_eligible,
 )
 from utils.memory.short_term_lifecycle import ShortTermLifecycleDecision, evaluate_short_term_lifecycle
@@ -24,7 +24,7 @@ class ProductMemoryItemDecision:
 
 @dataclass(frozen=True)
 class DefaultProductMemoryReadReport:
-    visible_items: List[V17MemoryItem] = field(default_factory=list)
+    visible_items: List[MemoryItem] = field(default_factory=list)
     decisions: Dict[str, ProductMemoryItemDecision] = field(default_factory=dict)
     lifecycle_audit_metadata: Dict[str, Dict] = field(default_factory=dict)
 
@@ -67,9 +67,9 @@ def _decision_from_lifecycle(
 
 
 def filter_default_product_memory_items(
-    items: Iterable[V17MemoryItem], *, policy: MemoryAccessPolicy, now: Optional[datetime] = None
+    items: Iterable[MemoryItem], *, policy: MemoryAccessPolicy, now: Optional[datetime] = None
 ) -> DefaultProductMemoryReadReport:
-    """Filter authoritative V17 memory items for default product reads.
+    """Filter authoritative memory memory items for default product reads.
 
     This helper is intentionally narrow: callers pass already-fetched authoritative
     `memory_items`, and the seam returns only default-visible Short-term/Long-term
@@ -79,7 +79,7 @@ def filter_default_product_memory_items(
     """
 
     current_time = _current_time(now)
-    visible_items: List[V17MemoryItem] = []
+    visible_items: List[MemoryItem] = []
     decisions: Dict[str, ProductMemoryItemDecision] = {}
     lifecycle_audit_metadata: Dict[str, Dict] = {}
 

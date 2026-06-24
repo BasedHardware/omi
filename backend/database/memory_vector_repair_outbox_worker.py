@@ -10,22 +10,22 @@ from google.cloud import firestore
 
 from database.memory_collections import MemoryCollections
 from database.memory_vector_repair_outbox_telemetry import (
-    V17VectorRepairOutboxTelemetryConfig,
-    emit_v17_vector_repair_outbox_worker_telemetry,
+    VectorRepairOutboxTelemetryConfig,
+    emit_vector_repair_outbox_worker_telemetry,
 )
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItemStatus
 
-V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS = "pending"
-V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS = "in_progress"
-V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS = "completed"
-V17_VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS = "dead_letter"
-V17_VECTOR_REPAIR_PURGE_EVENT_TYPE = "vector_repair_purge"
+VECTOR_REPAIR_OUTBOX_PENDING_STATUS = "pending"
+VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS = "in_progress"
+VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS = "completed"
+VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS = "dead_letter"
+VECTOR_REPAIR_PURGE_EVENT_TYPE = "vector_repair_purge"
 
 _TERMINAL_OR_LEASED_STATUSES = {
-    V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
-    V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
-    V17_VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS,
+    VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
+    VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
+    VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS,
 }
 _DELETE_REASONS = {"missing_authoritative_item"}
 _TOMBSTONE_STATUSES = {"deleted", "tombstoned", "purged", MemoryItemStatus.tombstoned.value}
@@ -33,7 +33,7 @@ _TOMBSTONE_SOURCE_STATES = {SourceState.missing.value, SourceState.tombstoned.va
 
 
 @dataclass(frozen=True)
-class V17VectorRepairOutboxWorkerTickConfig:
+class VectorRepairOutboxWorkerTickConfig:
     """Server-owned config for one vector repair outbox worker tick.
 
     The default is intentionally disabled/fail-closed. Cloud Run/Tasks or a
@@ -42,29 +42,29 @@ class V17VectorRepairOutboxWorkerTickConfig:
     """
 
     enabled: bool = False
-    worker_id: str = "v17-vector-repair-outbox-worker-disabled"
+    worker_id: str = "memory-vector-repair-outbox-worker-disabled"
     limit: int = 25
     lease_seconds: int = 300
     max_attempts: int = 3
 
 
-def run_v17_vector_repair_outbox_worker_tick(
+def run_vector_repair_outbox_worker_tick(
     *,
     db_client,
     uid: str,
-    config: V17VectorRepairOutboxWorkerTickConfig,
+    config: VectorRepairOutboxWorkerTickConfig,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
     vector_deleter: Callable[[Dict[str, Any]], Any],
     vector_repairer: Callable[[Dict[str, Any], Any], Any],
     now: Optional[datetime] = None,
     telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]] = None,
-    telemetry_config: Optional[V17VectorRepairOutboxTelemetryConfig] = None,
+    telemetry_config: Optional[VectorRepairOutboxTelemetryConfig] = None,
     backlog: Optional[Dict[str, Any]] = None,
     duration_ms: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Run one explicit, fake-injectable lease/process/ack worker tick.
 
-    This is the Cloud Run/Tasks/scheduler execution contract seam for V17 vector
+    This is the Cloud Run/Tasks/scheduler execution contract seam for memory vector
     repair outbox work: a caller with server-owned config invokes one bounded
     tick for one uid, leases due pending records, processes them through injected
     authoritative loader and vector adapter functions, and applies ack/retry/
@@ -74,7 +74,7 @@ def run_v17_vector_repair_outbox_worker_tick(
     _validate_worker_tick_inputs(uid=uid, config=config)
     summary = _empty_worker_tick_summary(uid=uid, config=config)
     if not config.enabled:
-        return _attach_v17_vector_repair_outbox_worker_telemetry(
+        return _attach_vector_repair_outbox_worker_telemetry(
             summary,
             telemetry_emitter=telemetry_emitter,
             telemetry_config=telemetry_config,
@@ -83,7 +83,7 @@ def run_v17_vector_repair_outbox_worker_tick(
         )
 
     try:
-        leased = lease_v17_vector_repair_purge_outbox_records(
+        leased = lease_vector_repair_purge_outbox_records(
             db_client=db_client,
             uid=uid,
             worker_id=config.worker_id,
@@ -93,7 +93,7 @@ def run_v17_vector_repair_outbox_worker_tick(
         )
     except Exception as exc:
         summary["errors"].append({"stage": "lease", "error": str(exc)})
-        return _attach_v17_vector_repair_outbox_worker_telemetry(
+        return _attach_vector_repair_outbox_worker_telemetry(
             summary,
             telemetry_emitter=telemetry_emitter,
             telemetry_config=telemetry_config,
@@ -105,16 +105,16 @@ def run_v17_vector_repair_outbox_worker_tick(
 
     def ack_record(record: Dict[str, Any], patch: Dict[str, Any]) -> None:
         try:
-            ack_v17_vector_repair_purge_outbox_record(db_client=db_client, record=record, patch=patch, now=now)
+            ack_vector_repair_purge_outbox_record(db_client=db_client, record=record, patch=patch, now=now)
         except Exception as exc:
             summary["ack_failed_count"] += 1
             summary["errors"].append(
                 {"stage": "ack", "record_id": str(record.get("record_id") or ""), "error": str(exc)}
             )
-            if patch.get("status") == V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS:
+            if patch.get("status") == VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS:
                 raise
 
-    processed = process_v17_vector_repair_purge_outbox_records(
+    processed = process_vector_repair_purge_outbox_records(
         leased,
         authoritative_item_loader=authoritative_item_loader,
         vector_deleter=vector_deleter,
@@ -127,7 +127,7 @@ def run_v17_vector_repair_outbox_worker_tick(
     summary["skipped_count"] = processed["skipped_count"]
     summary["failed_count"] = processed["failed_count"]
     summary["actions"] = processed["actions"]
-    return _attach_v17_vector_repair_outbox_worker_telemetry(
+    return _attach_vector_repair_outbox_worker_telemetry(
         summary,
         telemetry_emitter=telemetry_emitter,
         telemetry_config=telemetry_config,
@@ -136,18 +136,18 @@ def run_v17_vector_repair_outbox_worker_tick(
     )
 
 
-def _attach_v17_vector_repair_outbox_worker_telemetry(
+def _attach_vector_repair_outbox_worker_telemetry(
     summary: Dict[str, Any],
     *,
     telemetry_emitter: Optional[Callable[[Dict[str, Any]], Any]],
-    telemetry_config: Optional[V17VectorRepairOutboxTelemetryConfig],
+    telemetry_config: Optional[VectorRepairOutboxTelemetryConfig],
     backlog: Optional[Dict[str, Any]],
     duration_ms: Optional[int],
 ) -> Dict[str, Any]:
     if telemetry_emitter is None or telemetry_config is None:
         return summary
     output = dict(summary)
-    output["telemetry"] = emit_v17_vector_repair_outbox_worker_telemetry(
+    output["telemetry"] = emit_vector_repair_outbox_worker_telemetry(
         tick_summary=output,
         emitter=telemetry_emitter,
         config=telemetry_config,
@@ -157,10 +157,10 @@ def _attach_v17_vector_repair_outbox_worker_telemetry(
     return output
 
 
-def _validate_worker_tick_inputs(*, uid: str, config: V17VectorRepairOutboxWorkerTickConfig) -> None:
+def _validate_worker_tick_inputs(*, uid: str, config: VectorRepairOutboxWorkerTickConfig) -> None:
     if not isinstance(uid, str) or not uid.strip():
         raise ValueError("uid is required")
-    if not isinstance(config, V17VectorRepairOutboxWorkerTickConfig):
+    if not isinstance(config, VectorRepairOutboxWorkerTickConfig):
         raise ValueError("config is required")
     if not isinstance(config.enabled, bool):
         raise ValueError("config.enabled must be boolean")
@@ -174,7 +174,7 @@ def _validate_worker_tick_inputs(*, uid: str, config: V17VectorRepairOutboxWorke
         raise ValueError("config.max_attempts must be positive")
 
 
-def _empty_worker_tick_summary(*, uid: str, config: V17VectorRepairOutboxWorkerTickConfig) -> Dict[str, Any]:
+def _empty_worker_tick_summary(*, uid: str, config: VectorRepairOutboxWorkerTickConfig) -> Dict[str, Any]:
     return {
         "enabled": config.enabled,
         "worker_id": config.worker_id,
@@ -189,7 +189,7 @@ def _empty_worker_tick_summary(*, uid: str, config: V17VectorRepairOutboxWorkerT
     }
 
 
-def lease_v17_vector_repair_purge_outbox_records(
+def lease_vector_repair_purge_outbox_records(
     *,
     db_client,
     uid: str,
@@ -198,7 +198,7 @@ def lease_v17_vector_repair_purge_outbox_records(
     lease_seconds: int = 300,
     now: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
-    """Select and claim pending V17 vector repair/purge outbox records.
+    """Select and claim pending memory vector repair/purge outbox records.
 
     This is a narrow Firestore/fake-friendly seam for
     `users/{uid}/memory_outbox/*`. It intentionally does not start a production
@@ -209,7 +209,7 @@ def lease_v17_vector_repair_purge_outbox_records(
     emulator-testable while production concurrency/IAM validation remains a gate.
 
     Returned records preserve the original pending status so they can be passed
-    to `process_v17_vector_repair_purge_outbox_records(...)`; the stored document
+    to `process_vector_repair_purge_outbox_records(...)`; the stored document
     is marked `in_progress` with lease metadata to prevent duplicate leases.
     """
     if not isinstance(uid, str) or not uid.strip():
@@ -227,8 +227,8 @@ def lease_v17_vector_repair_purge_outbox_records(
     collection_path = MemoryCollections(uid=uid).memory_outbox
     query = (
         db_client.collection(collection_path)
-        .where("event_type", "==", V17_VECTOR_REPAIR_PURGE_EVENT_TYPE)
-        .where("status", "==", V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS)
+        .where("event_type", "==", VECTOR_REPAIR_PURGE_EVENT_TYPE)
+        .where("status", "==", VECTOR_REPAIR_OUTBOX_PENDING_STATUS)
         .where("available_at", "<=", now_iso)
         .limit(limit)
     )
@@ -236,7 +236,7 @@ def lease_v17_vector_repair_purge_outbox_records(
     leased: List[Dict[str, Any]] = []
     for snapshot in query.stream():
         path = getattr(getattr(snapshot, "reference", None), "path", f"{collection_path}/{snapshot.id}")
-        claimed = _claim_v17_vector_repair_purge_outbox_snapshot(
+        claimed = _claim_vector_repair_purge_outbox_snapshot(
             db_client=db_client,
             path=path,
             worker_id=worker_id,
@@ -248,7 +248,7 @@ def lease_v17_vector_repair_purge_outbox_records(
     return leased
 
 
-def ack_v17_vector_repair_purge_outbox_record(
+def ack_vector_repair_purge_outbox_record(
     *,
     db_client,
     record: Dict[str, Any],
@@ -258,7 +258,7 @@ def ack_v17_vector_repair_purge_outbox_record(
     """Apply a worker ack/retry/dead-letter patch to one outbox document.
 
     Supports the patch shape emitted by
-    `process_v17_vector_repair_purge_outbox_records(...)`: `in_progress`,
+    `process_vector_repair_purge_outbox_records(...)`: `in_progress`,
     `completed`, `pending` retry, or `dead_letter`, with fields such as
     `attempt_count`, `last_error`, and `action`. Write failures deliberately
     propagate so callers can account for ambiguous acks instead of dropping them.
@@ -276,7 +276,7 @@ def ack_v17_vector_repair_purge_outbox_record(
     return ack_patch
 
 
-def _claim_v17_vector_repair_purge_outbox_snapshot(
+def _claim_vector_repair_purge_outbox_snapshot(
     *,
     db_client,
     path: str,
@@ -288,7 +288,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot(
     if callable(transaction_factory):
         transaction = transaction_factory()
         if transaction.__class__.__module__.startswith("google.cloud.firestore"):
-            return _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+            return _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
                 transaction,
                 db_client=db_client,
                 path=path,
@@ -296,7 +296,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot(
                 now_iso=now_iso,
                 lease_expires_at=lease_expires_at,
             )
-        return _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+        return _claim_vector_repair_purge_outbox_snapshot_in_transaction(
             transaction=transaction,
             db_client=db_client,
             path=path,
@@ -305,7 +305,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot(
             lease_expires_at=lease_expires_at,
         )
 
-    return _claim_v17_vector_repair_purge_outbox_snapshot_without_transaction(
+    return _claim_vector_repair_purge_outbox_snapshot_without_transaction(
         db_client=db_client,
         path=path,
         worker_id=worker_id,
@@ -315,7 +315,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot(
 
 
 @firestore.transactional
-def _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
+def _claim_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
     transaction,
     *,
     db_client,
@@ -324,7 +324,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
     now_iso: str,
     lease_expires_at: str,
 ) -> Optional[Dict[str, Any]]:
-    return _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+    return _claim_vector_repair_purge_outbox_snapshot_in_transaction(
         transaction=transaction,
         db_client=db_client,
         path=path,
@@ -334,7 +334,7 @@ def _claim_v17_vector_repair_purge_outbox_snapshot_in_firestore_transaction(
     )
 
 
-def _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
+def _claim_vector_repair_purge_outbox_snapshot_in_transaction(
     *,
     transaction,
     db_client,
@@ -348,14 +348,14 @@ def _claim_v17_vector_repair_purge_outbox_snapshot_in_transaction(
     if not getattr(snapshot, "exists", False):
         return None
     record = snapshot.to_dict() or {}
-    if not _is_claimable_v17_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
+    if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
     transaction.update(doc_ref, _lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
 
-def _claim_v17_vector_repair_purge_outbox_snapshot_without_transaction(
+def _claim_vector_repair_purge_outbox_snapshot_without_transaction(
     *,
     db_client,
     path: str,
@@ -368,17 +368,17 @@ def _claim_v17_vector_repair_purge_outbox_snapshot_without_transaction(
     if not getattr(snapshot, "exists", False):
         return None
     record = snapshot.to_dict() or {}
-    if not _is_claimable_v17_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
+    if not _is_claimable_vector_repair_purge_outbox_record(record=record, now_iso=now_iso):
         return None
     record["outbox_path"] = path
     doc_ref.update(_lease_patch(worker_id=worker_id, now_iso=now_iso, lease_expires_at=lease_expires_at))
     return record
 
 
-def _is_claimable_v17_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:
-    if record.get("event_type") != V17_VECTOR_REPAIR_PURGE_EVENT_TYPE:
+def _is_claimable_vector_repair_purge_outbox_record(*, record: Dict[str, Any], now_iso: str) -> bool:
+    if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
         return False
-    if record.get("status") != V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
+    if record.get("status") != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
         return False
     available_at = record.get("available_at")
     return isinstance(available_at, str) and available_at <= now_iso
@@ -386,7 +386,7 @@ def _is_claimable_v17_vector_repair_purge_outbox_record(*, record: Dict[str, Any
 
 def _lease_patch(*, worker_id: str, now_iso: str, lease_expires_at: str) -> Dict[str, Any]:
     return {
-        "status": V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
+        "status": VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
         "lease_owner": worker_id,
         "leased_at": now_iso,
         "locked_at": now_iso,
@@ -395,7 +395,7 @@ def _lease_patch(*, worker_id: str, now_iso: str, lease_expires_at: str) -> Dict
     }
 
 
-def process_v17_vector_repair_purge_outbox_records(
+def process_vector_repair_purge_outbox_records(
     records: Iterable[Dict[str, Any]],
     *,
     authoritative_item_loader: Callable[[Dict[str, Any]], Optional[Any]],
@@ -405,7 +405,7 @@ def process_v17_vector_repair_purge_outbox_records(
     max_attempts: int = 3,
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Process prepared V17 vector repair/purge outbox records with fake-injected side effects.
+    """Process prepared memory vector repair/purge outbox records with fake-injected side effects.
 
     This is the first narrow worker seam only. It does not start a background
     worker and it does not import or call Pinecone directly. Callers inject the
@@ -426,10 +426,10 @@ def process_v17_vector_repair_purge_outbox_records(
         idempotency_key = _required_str(record, "idempotency_key")
         record_id = _required_str(record, "record_id")
         status = record.get("status")
-        if status != V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
+        if status != VECTOR_REPAIR_OUTBOX_PENDING_STATUS:
             skipped_count += 1
             continue
-        if record.get("event_type") != V17_VECTOR_REPAIR_PURGE_EVENT_TYPE:
+        if record.get("event_type") != VECTOR_REPAIR_PURGE_EVENT_TYPE:
             skipped_count += 1
             continue
         if idempotency_key in seen_idempotency_keys:
@@ -443,7 +443,7 @@ def process_v17_vector_repair_purge_outbox_records(
             outbox_updater(
                 record,
                 {
-                    "status": V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
+                    "status": VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS,
                     "locked_at": observed_now,
                     "last_error": None,
                 },
@@ -460,7 +460,7 @@ def process_v17_vector_repair_purge_outbox_records(
             outbox_updater(
                 record,
                 {
-                    "status": V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
+                    "status": VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS,
                     "action": action,
                     "completed_at": observed_now,
                     "last_error": None,
@@ -472,9 +472,9 @@ def process_v17_vector_repair_purge_outbox_records(
             failed_count += 1
             next_attempt_count = int(record.get("attempt_count") or 0) + 1
             next_status = (
-                V17_VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS
+                VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS
                 if next_attempt_count >= max_attempts
-                else V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS
+                else VECTOR_REPAIR_OUTBOX_PENDING_STATUS
             )
             outbox_updater(
                 record,
@@ -548,14 +548,14 @@ def _iso_now(value: Optional[datetime]) -> str:
 
 
 __all__ = [
-    "V17VectorRepairOutboxWorkerTickConfig",
-    "V17_VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS",
-    "V17_VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS",
-    "V17_VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS",
-    "V17_VECTOR_REPAIR_OUTBOX_PENDING_STATUS",
-    "V17_VECTOR_REPAIR_PURGE_EVENT_TYPE",
-    "ack_v17_vector_repair_purge_outbox_record",
-    "lease_v17_vector_repair_purge_outbox_records",
-    "process_v17_vector_repair_purge_outbox_records",
-    "run_v17_vector_repair_outbox_worker_tick",
+    "VectorRepairOutboxWorkerTickConfig",
+    "VECTOR_REPAIR_OUTBOX_COMPLETED_STATUS",
+    "VECTOR_REPAIR_OUTBOX_DEAD_LETTER_STATUS",
+    "VECTOR_REPAIR_OUTBOX_IN_PROGRESS_STATUS",
+    "VECTOR_REPAIR_OUTBOX_PENDING_STATUS",
+    "VECTOR_REPAIR_PURGE_EVENT_TYPE",
+    "ack_vector_repair_purge_outbox_record",
+    "lease_vector_repair_purge_outbox_records",
+    "process_vector_repair_purge_outbox_records",
+    "run_vector_repair_outbox_worker_tick",
 ]

@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
-V17_VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT = "v17_vector_repair_outbox_worker"
+VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT = "vector_repair_outbox_worker"
 _ALLOWED_LABEL_KEYS = {"worker_component", "status", "action", "reason", "event_type"}
 
 
 @dataclass(frozen=True)
-class V17VectorRepairOutboxTelemetryConfig:
-    """Low-cardinality telemetry config for the V17 vector repair outbox worker.
+class VectorRepairOutboxTelemetryConfig:
+    """Low-cardinality telemetry config for the memory vector repair outbox worker.
 
     This seam intentionally accepts an injected emitter so unit tests, Cloud Run
     log adapters, Prometheus/OpenTelemetry bridges, or alert-rule renderers can
@@ -21,14 +21,14 @@ class V17VectorRepairOutboxTelemetryConfig:
     """
 
     enabled: bool = False
-    worker_component: str = V17_VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT
+    worker_component: str = VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT
 
 
-def emit_v17_vector_repair_outbox_worker_telemetry(
+def emit_vector_repair_outbox_worker_telemetry(
     *,
     tick_summary: Mapping[str, Any],
     emitter: Callable[[Dict[str, Any]], Any],
-    config: V17VectorRepairOutboxTelemetryConfig,
+    config: VectorRepairOutboxTelemetryConfig,
     backlog: Optional[Mapping[str, Any]] = None,
     duration_ms: Optional[int] = None,
 ) -> Dict[str, Any]:
@@ -38,13 +38,13 @@ def emit_v17_vector_repair_outbox_worker_telemetry(
     to callers. This preserves the worker cleanup/ack result even when the central
     metrics/log sink is unavailable.
     """
-    if not isinstance(config, V17VectorRepairOutboxTelemetryConfig):
+    if not isinstance(config, VectorRepairOutboxTelemetryConfig):
         raise ValueError("telemetry config is required")
     if not config.enabled:
         return _telemetry_result(enabled=False)
 
     result = _telemetry_result(enabled=True)
-    for payload in _build_v17_vector_repair_outbox_worker_telemetry_payloads(
+    for payload in _build_vector_repair_outbox_worker_telemetry_payloads(
         tick_summary=tick_summary,
         config=config,
         backlog=backlog or {},
@@ -59,10 +59,10 @@ def emit_v17_vector_repair_outbox_worker_telemetry(
     return result
 
 
-def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
+def _build_vector_repair_outbox_worker_telemetry_payloads(
     *,
     tick_summary: Mapping[str, Any],
-    config: V17VectorRepairOutboxTelemetryConfig,
+    config: VectorRepairOutboxTelemetryConfig,
     backlog: Mapping[str, Any],
     duration_ms: Optional[int],
 ) -> List[Dict[str, Any]]:
@@ -77,7 +77,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     ):
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_records_total",
+                "vector_repair_outbox_worker_records_total",
                 _safe_int(tick_summary.get(key)),
                 {**labels_base, "status": status},
             )
@@ -91,7 +91,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     for action_name, count in action_counts.items():
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_action_total",
+                "vector_repair_outbox_worker_action_total",
                 count,
                 {**labels_base, "action": action_name},
             )
@@ -101,7 +101,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     if failed_count:
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_retry_total",
+                "vector_repair_outbox_worker_retry_total",
                 failed_count,
                 {**labels_base, "reason": _reason_bucket_from_summary(tick_summary)},
             )
@@ -110,7 +110,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     dead_letter_count = _safe_int(backlog.get("dead_letter_count")) + _safe_int(tick_summary.get("dead_letter_count"))
     payloads.append(
         _metric(
-            "v17_vector_repair_outbox_worker_dead_letter_total",
+            "vector_repair_outbox_worker_dead_letter_total",
             dead_letter_count,
             {**labels_base, "reason": _reason_bucket_from_summary(tick_summary)},
         )
@@ -118,7 +118,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     if dead_letter_count:
         payloads.append(
             _event(
-                "v17_vector_repair_outbox_worker_dead_letter",
+                "vector_repair_outbox_worker_dead_letter",
                 {**labels_base, "reason": _reason_bucket_from_summary(tick_summary), "event_type": "threshold_signal"},
                 {"dead_letter_count": dead_letter_count},
             )
@@ -127,7 +127,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     ack_failed_count = _safe_int(tick_summary.get("ack_failed_count"))
     payloads.append(
         _metric(
-            "v17_vector_repair_outbox_worker_ack_failure_total",
+            "vector_repair_outbox_worker_ack_failure_total",
             ack_failed_count,
             {**labels_base, "reason": "ack_failure"},
         )
@@ -135,7 +135,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     if ack_failed_count:
         payloads.append(
             _event(
-                "v17_vector_repair_outbox_worker_ack_failure",
+                "vector_repair_outbox_worker_ack_failure",
                 {**labels_base, "reason": "ack_failure", "event_type": "threshold_signal"},
                 {"ack_failed_count": ack_failed_count},
             )
@@ -144,7 +144,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     for status, key in (("pending", "pending_count"), ("dead_letter", "dead_letter_count")):
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_backlog_count",
+                "vector_repair_outbox_worker_backlog_count",
                 _safe_int(backlog.get(key)),
                 {**labels_base, "status": status},
             )
@@ -152,7 +152,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     if "oldest_pending_age_seconds" in backlog:
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_oldest_pending_age_seconds",
+                "vector_repair_outbox_worker_oldest_pending_age_seconds",
                 _safe_int(backlog.get("oldest_pending_age_seconds")),
                 {**labels_base, "status": "pending"},
             )
@@ -160,7 +160,7 @@ def _build_v17_vector_repair_outbox_worker_telemetry_payloads(
     if duration_ms is not None:
         payloads.append(
             _metric(
-                "v17_vector_repair_outbox_worker_duration_ms",
+                "vector_repair_outbox_worker_duration_ms",
                 _safe_int(duration_ms),
                 {**labels_base, "status": "tick"},
             )
@@ -218,7 +218,7 @@ def _telemetry_result(*, enabled: bool) -> Dict[str, Any]:
 
 
 __all__ = [
-    "V17VectorRepairOutboxTelemetryConfig",
-    "V17_VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT",
-    "emit_v17_vector_repair_outbox_worker_telemetry",
+    "VectorRepairOutboxTelemetryConfig",
+    "VECTOR_REPAIR_OUTBOX_WORKER_COMPONENT",
+    "emit_vector_repair_outbox_worker_telemetry",
 ]

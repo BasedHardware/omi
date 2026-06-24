@@ -8,11 +8,11 @@ from typing import Any, Dict, List, Optional
 from database.memory_collections import MemoryCollections
 from models.memory_contracts import deterministic_contract_id
 
-V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE = "vector_repair_purge"
-V17_VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION = 1
+VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE = "vector_repair_purge"
+VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION = 1
 
 
-def build_v17_vector_repair_purge_outbox_records(
+def build_vector_repair_purge_outbox_records(
     *,
     uid: str,
     candidates: List[Dict[str, Any]],
@@ -52,11 +52,11 @@ def build_v17_vector_repair_purge_outbox_records(
         outbox_path = f"{MemoryCollections(uid=uid).memory_outbox}/{record_id}"
         records.append(
             {
-                "schema_version": V17_VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION,
+                "schema_version": VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION,
                 "record_id": record_id,
                 "idempotency_key": record_id,
                 "uid": uid,
-                "event_type": V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE,
+                "event_type": VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE,
                 "status": "pending",
                 "vector_id": vector_id,
                 "memory_id": memory_id,
@@ -84,7 +84,7 @@ def build_v17_vector_repair_purge_outbox_records(
     return records
 
 
-def write_v17_vector_repair_purge_outbox_records(*, db_client, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def write_vector_repair_purge_outbox_records(*, db_client, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Persist prepared vector repair/purge records with stable ids.
 
     The function is deliberately small and fake-friendly. Callers may inject a
@@ -111,7 +111,7 @@ def _record_id(
     required_account_generation: int,
 ) -> str:
     digest = deterministic_contract_id(
-        "v17-vector-repair-purge-outbox",
+        "memory-vector-repair-purge-outbox",
         {
             "uid": uid,
             "vector_id": vector_id,
@@ -121,7 +121,7 @@ def _record_id(
             "required_account_generation": required_account_generation,
         },
     )
-    return f"v17vrp_{digest[:32]}"
+    return f"memvrp_{digest[:32]}"
 
 
 def _required_str(value: Dict[str, Any], key: str) -> str:
@@ -139,8 +139,8 @@ def _required_int(value: Dict[str, Any], key: str) -> int:
 
 
 __all__ = [
-    "V17_VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE",
-    "V17_VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION",
-    "build_v17_vector_repair_purge_outbox_records",
-    "write_v17_vector_repair_purge_outbox_records",
+    "VECTOR_REPAIR_PURGE_OUTBOX_EVENT_TYPE",
+    "VECTOR_REPAIR_PURGE_OUTBOX_SCHEMA_VERSION",
+    "build_vector_repair_purge_outbox_records",
+    "write_vector_repair_purge_outbox_records",
 ]

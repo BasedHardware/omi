@@ -22,10 +22,10 @@ def create_mcp_key(
     Creates a new MCP API key for a user.
     Returns the raw key and the key's metadata.
 
-    New keys carry stable server-owned app/key identity for future V17
+    New keys carry stable server-owned app/key identity for future memory
     authorization. Scopes default to None/no verified scopes so existing keys do
     not implicitly gain memory access; a server-side grant/migration must set
-    scopes before V17 MCP route enforcement can authorize.
+    scopes before memory MCP route enforcement can authorize.
     """
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
@@ -99,7 +99,7 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
 
     Backward compatibility: old key docs and old Redis entries still authenticate
     uid-only. Missing persisted scopes/app_id remain None, not inferred from MCP
-    tool advertisements, so V17 authorization fails closed.
+    tool advertisements, so memory authorization fails closed.
     """
     if not api_key.startswith("omi_mcp_"):
         return None

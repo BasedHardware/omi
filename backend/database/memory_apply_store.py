@@ -43,10 +43,10 @@ from models.memory_apply import (
     apply_long_term_patch_transaction,
 )
 from models.memory_operations import MemoryOperation
-from models.product_memory import MemoryItemStatus, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryItem
 from utils.memory.v3_account_generation_source import (
-    V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
-    V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
+    V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
+    V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
 )
 
 
@@ -54,10 +54,10 @@ class MemoryFirestoreApplyError(Exception):
     pass
 
 
-V17FirestoreApplyError = MemoryFirestoreApplyError
+MemoryFirestoreApplyError = MemoryFirestoreApplyError
 
 
-class MissingV17Document(MemoryFirestoreApplyError):
+class MissingMemoryDocument(MemoryFirestoreApplyError):
     pass
 
 
@@ -68,9 +68,9 @@ def apply_long_term_patch_firestore(
     patch_payload: Dict[str, Any],
     db_client=db,
 ) -> ApplyResult:
-    """Apply a V17 Long-term patch through the Firestore transaction boundary.
+    """Apply a memory Long-term patch through the Firestore transaction boundary.
 
-    The pure contract in `models.v17_memory_apply` stays dependency-free. This
+    The pure contract in `models.memory_apply` stays dependency-free. This
     adapter owns authoritative Firestore reads/writes and never trusts caller
     snapshots for control state, operation state, or evidence/source state.
     """
@@ -234,7 +234,7 @@ def _read_authoritative_target_item(
     transaction,
     collections: MemoryCollections,
     operation: MemoryOperation,
-) -> Optional[V17MemoryItem]:
+) -> Optional[MemoryItem]:
     if operation.logical_payload.decision != DurablePatchDecision.update.value:
         return None
     target_id = operation.logical_payload.target_memory_id or operation.target_memory_id
@@ -244,7 +244,7 @@ def _read_authoritative_target_item(
     snapshot = target_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
-    return V17MemoryItem(**(snapshot.to_dict() or {}))
+    return MemoryItem(**(snapshot.to_dict() or {}))
 
 
 def _validate_authoritative_targets(
@@ -261,7 +261,7 @@ def _validate_authoritative_targets(
         snapshot = target_ref.get(transaction=transaction)
         if not snapshot.exists:
             return _target_not_active(control_state, operation, f"missing target memory item: {target_id}")
-        target = V17MemoryItem(**(snapshot.to_dict() or {}))
+        target = MemoryItem(**(snapshot.to_dict() or {}))
         if target.uid != operation.uid:
             return _target_not_active(control_state, operation, "target memory uid mismatch")
         if target.account_generation != control_state.account_generation:
@@ -333,9 +333,9 @@ def _write_apply_result(
 
 def _memory_state_head_from_control(control_state: MemoryControlState) -> Dict[str, Any]:
     return {
-        "schema_version": V17_V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
+        "schema_version": V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
         "uid": control_state.uid,
-        "source": V17_V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
+        "source": V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
         "account_generation": control_state.account_generation,
         "head_commit_id": control_state.head_commit_id,
         "commit_sequence": control_state.commit_sequence,
@@ -346,7 +346,7 @@ def _memory_state_head_from_control(control_state: MemoryControlState) -> Dict[s
 def _required_model(*, ref, transaction, model, label: str):
     snapshot = ref.get(transaction=transaction)
     if not snapshot.exists:
-        raise MissingV17Document(f"missing {label}: {ref.path}")
+        raise MissingMemoryDocument(f"missing {label}: {ref.path}")
     data = snapshot.to_dict() or {}
     return model(**data)
 
@@ -367,8 +367,8 @@ def _firestore_data(value: Any) -> Any:
 
 __all__ = [
     "MemoryFirestoreApplyError",
-    "MissingV17Document",
-    "V17FirestoreApplyError",
+    "MissingMemoryDocument",
+    "MemoryFirestoreApplyError",
     "apply_long_term_patch_firestore",
     "atomic_bump_source_generation",
 ]

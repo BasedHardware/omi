@@ -12,12 +12,12 @@ from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_default_memory_vector_filter,
     build_memory_vector_metadata,
-    build_v17_archive_memory_vector_filter,
-    build_v17_default_memory_vector_filter,
+    build_archive_memory_vector_filter,
+    build_default_memory_vector_filter,
     parse_memory_search_vector_hit,
-    parse_v17_search_vector_hit,
+    parse_search_vector_hit,
 )
-from models.product_memory import V17MemoryItem
+from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 import logging
@@ -171,18 +171,18 @@ MEMORIES_NAMESPACE = "ns2"
 
 
 def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> dict:
-    """Return the legacy ns2 memory-search filter with an explicit V17 schema barrier.
+    """Return the legacy ns2 memory-search filter with an explicit memory schema barrier.
 
-    Legacy memory vectors in ``ns2`` do not carry ``v17_schema_version``. V17
+    Legacy memory vectors in ``ns2`` do not carry ``memory_schema_version``. memory
     vectors intentionally do, so every legacy search path must exclude that
-    field before top-k is selected. This prevents V17 Short-term, Long-term,
+    field before top-k is selected. This prevents memory Short-term, Long-term,
     Archive, stale-revision, or tombstoned candidates from occupying legacy
     result slots or being hydrated as legacy memories.
     """
     filter_data = {
         '$and': [
             {'uid': {'$eq': uid}},
-            {'v17_schema_version': {'$exists': False}},
+            {'memory_schema_version': {'$exists': False}},
         ]
     }
     if subject_entity_id:
@@ -191,7 +191,7 @@ def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = 
 
 
 @dataclass(frozen=True)
-class V17VectorCandidateQueryResult:
+class VectorCandidateQueryResult:
     hits: List[SearchVectorHit] = field(default_factory=list)
     rejected_count: int = 0
 
@@ -352,24 +352,24 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
     return [match['metadata'].get('memory_id') for match in xc.get('matches', [])]
 
 
-def query_v17_memory_vector_candidates(
+def query_memory_vector_candidates(
     uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
-) -> V17VectorCandidateQueryResult:
-    """Query existing ns2 for V17 candidates using strict tier-safe metadata filters.
+) -> VectorCandidateQueryResult:
+    """Query existing ns2 for memory candidates using strict tier-safe metadata filters.
 
     The returned hits are vector candidates only. Product callers must still
-    hydrate authoritative ``memory_items`` and run the V17 search gateway before
+    hydrate authoritative ``memory_items`` and run the memory search gateway before
     returning any memory to a user or integration.
     """
     if index is None:
-        logger.warning('Pinecone index not initialized, skipping V17 memory vector candidate search')
-        return V17VectorCandidateQueryResult()
+        logger.warning('Pinecone index not initialized, skipping memory memory vector candidate search')
+        return VectorCandidateQueryResult()
 
     vector = embeddings.embed_query(query)
     filter_data = (
-        build_v17_archive_memory_vector_filter(uid)
+        build_archive_memory_vector_filter(uid)
         if mode == SearchMode.archive_explicit
-        else build_v17_default_memory_vector_filter(uid)
+        else build_default_memory_vector_filter(uid)
     )
     response = index.query(
         vector=vector,
@@ -383,16 +383,16 @@ def query_v17_memory_vector_candidates(
     hits: List[SearchVectorHit] = []
     rejected_count = 0
     for match in response.get('matches', []):
-        parsed = parse_v17_search_vector_hit(match)
+        parsed = parse_search_vector_hit(match)
         if parsed.hit is None:
             rejected_count += 1
             continue
         hits.append(parsed.hit)
-    return V17VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
+    return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
 def upsert_canonical_memory_vector(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     projection_commit_id: str | None = None,
 ) -> List[float] | None:
@@ -432,11 +432,11 @@ def upsert_canonical_memory_vector(
 
 def query_memory_vector_candidates(
     uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
-) -> V17VectorCandidateQueryResult:
+) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
-        return V17VectorCandidateQueryResult()
+        return VectorCandidateQueryResult()
 
     vector = embeddings.embed_query(query)
     filter_data = (
@@ -461,7 +461,7 @@ def query_memory_vector_candidates(
             rejected_count += 1
             continue
         hits.append(parsed.hit)
-    return V17VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
+    return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
 def delete_memory_vector(uid: str, memory_id: str):
@@ -844,7 +844,7 @@ def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
 def delete_pinecone_memory_vectors_by_id(vector_ids: List[str]) -> int:
     """Delete ns2 memory vectors by exact Pinecone id.
 
-    Supports legacy ``{uid}-{memory_id}``, V17 ``v17mem:…``, and canonical neutral ``mem_…`` ids.
+    Supports legacy ``{uid}-{memory_id}``, memory ``memvec:…``, and canonical neutral ``mem_…`` ids.
     Used by canonical account-delete purge; legacy batch delete keeps ``{uid}-{id}`` scheme unchanged.
     """
     if index is None:
