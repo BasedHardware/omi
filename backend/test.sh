@@ -132,6 +132,7 @@ pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
 pytest tests/unit/test_dev_api_memories_pagination.py -v
 pytest tests/unit/test_rate_limiting.py -v
+pytest tests/unit/test_rate_limit_json_failopen.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
 pytest tests/unit/test_sync_v2.py -v
