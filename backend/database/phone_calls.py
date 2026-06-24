@@ -154,7 +154,12 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
     if not doc.exists:
         return None
     data = doc.to_dict()
-    created_at = datetime.fromisoformat(data['created_at'])
+    try:
+        created_at = datetime.fromisoformat(data.get('created_at'))
+    except (TypeError, ValueError):
+        # Malformed/legacy pending verification (missing or non-ISO created_at); treat as expired.
+        db.collection('pending_verifications').document(doc_id).delete()
+        return None
     elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
     if elapsed > PENDING_VERIFICATION_TTL_SECONDS:
         db.collection('pending_verifications').document(doc_id).delete()
