@@ -1111,7 +1111,7 @@ def retrieve_metadata_fields_from_transcript(
     metadata = {
         'people': [normalize_filter(p) for p in result.people],
         'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.topics],
+        'entities': [normalize_filter(e) for e in result.entities],
         'dates': [],
     }
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
