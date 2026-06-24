@@ -437,11 +437,14 @@ The system prompt guides the LLM through a 5-step strategy:
 | Model | Use Case | Location |
 |-------|----------|----------|
 | `gpt-4.1-mini` | Fast classification, date extraction | `requires_context()`, filters |
-| `gpt-4.1` | Medium complexity, initial QA | QA with RAG context |
 | `gpt-5.1` | Agentic workflows with tool calling | Main chat agent |
+| `claude-sonnet-4-6` | Chat agent (Anthropic) | `chat_agent` profile |
+| `gemini-2.5-flash-lite` | Session titles, followups (Gemini) | Light tasks |
 | `text-embedding-3-large` | Vector embeddings (3,072 dims) | Pinecone queries |
-| Gemini Flash 1.5 | Persona responses | Via OpenRouter |
-| Claude 3.5 Sonnet | Persona responses | Via OpenRouter |
+
+<Note>
+Models are selected via QoS profiles in `backend/utils/llm/model_config.py`. Premium users and BYOK accounts may route to different models. See the config file for the current set.
+</Note>
 
 ## Streaming Response Format
 
