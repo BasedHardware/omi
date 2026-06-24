@@ -100,18 +100,24 @@ def get_import_jobs(
     """
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
-    return [
-        ImportJobResponse(
-            job_id=job['id'],
-            status=ImportJobStatus(job['status']),
-            total_files=job.get('total_files'),
-            processed_files=job.get('processed_files'),
-            conversations_created=job.get('conversations_created'),
-            created_at=job.get('created_at'),
-            error=job.get('error'),
+    responses = []
+    for job in jobs:
+        try:
+            status_val = ImportJobStatus(job.get('status'))
+        except (ValueError, TypeError):
+            status_val = ImportJobStatus.failed
+        responses.append(
+            ImportJobResponse(
+                job_id=job['id'],
+                status=status_val,
+                total_files=job.get('total_files'),
+                processed_files=job.get('processed_files'),
+                conversations_created=job.get('conversations_created'),
+                created_at=job.get('created_at'),
+                error=job.get('error'),
+            )
         )
-        for job in jobs
-    ]
+    return responses
 
 
 @router.get(
