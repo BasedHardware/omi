@@ -1,7 +1,7 @@
 """Canonical short-term lifecycle worker (WS-G9).
 
 Neutral ``short_term_lifecycle_worker`` is the source of truth.
-Legacy ``v17_short_term_lifecycle_worker`` remains an importable alias.
+Legacy ``short_term_lifecycle_worker`` remains an importable alias.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Mapping, Optional, Protocol, Tuple
 
-from database.memory_collections import V17Collections
-from models.product_memory import MemoryTier, V17MemoryItem
+from database.memory_collections import MemoryCollections
+from models.product_memory import MemoryTier, MemoryItem
 from utils.memory.short_term_lifecycle import (
     ShortTermDisposition,
     ShortTermLifecycleDecision,
@@ -135,7 +135,7 @@ def _persist_short_term_lifecycle_transition_transaction(
     now: Optional[datetime],
 ) -> ShortTermLifecyclePersistResult:
     transition_id = _stable_transition_id(record.uid, record.idempotency_key)
-    collections = V17Collections(uid=record.uid)
+    collections = MemoryCollections(uid=record.uid)
     transition_ref = db_client.document(f'{collections.short_term_lifecycle_transitions}/{transition_id}')
     snapshot = transition_ref.get(transaction=transaction)
 
@@ -180,8 +180,8 @@ def _coerce_dispositions(
     return dict(dispositions or {})
 
 
-def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optional[int] = None) -> List[V17MemoryItem]:
-    """Fetch authoritative Short-term V17 memory_items for a user.
+def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optional[int] = None) -> List[MemoryItem]:
+    """Fetch authoritative Short-term memory memory_items for a user.
 
     The lifecycle runner only evaluates `memory_items` in the Short-term tier;
     Long-term and Archive are intentionally excluded at the Firestore query seam
@@ -193,11 +193,13 @@ def fetch_short_term_memory_items_firestore(*, uid: str, db_client, limit: Optio
     if limit is not None and limit <= 0:
         raise ValueError('short-term lifecycle firestore fetch limit must be positive')
 
-    query = db_client.collection(V17Collections(uid=uid).memory_items).where('tier', '==', MemoryTier.short_term.value)
+    query = db_client.collection(MemoryCollections(uid=uid).memory_items).where(
+        'tier', '==', MemoryTier.short_term.value
+    )
     snapshots = query.stream()
-    items: List[V17MemoryItem] = []
+    items: List[MemoryItem] = []
     for snapshot in snapshots:
-        item = V17MemoryItem(**(snapshot.to_dict() or {}))
+        item = MemoryItem(**(snapshot.to_dict() or {}))
         if item.uid != uid:
             raise ValueError(f'short-term lifecycle firestore fetch uid mismatch for {item.memory_id}')
         if item.tier == MemoryTier.short_term:
@@ -231,7 +233,7 @@ def run_short_term_lifecycle_firestore(
     )
 
 
-def _source_refs(item: V17MemoryItem) -> List[Dict[str, Optional[str]]]:
+def _source_refs(item: MemoryItem) -> List[Dict[str, Optional[str]]]:
     refs: List[Dict[str, Optional[str]]] = []
     for evidence in item.evidence:
         refs.append(
@@ -312,7 +314,7 @@ def _transition_required(decision: ShortTermLifecycleDecision) -> bool:
 
 
 def build_short_term_lifecycle_transition_record(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     decision: ShortTermLifecycleDecision,
     run_id: str,
@@ -362,7 +364,7 @@ def build_short_term_lifecycle_transition_record(
 
 
 def process_short_term_lifecycle_item(
-    item: V17MemoryItem,
+    item: MemoryItem,
     *,
     store: ShortTermLifecycleTransitionStore,
     now: Optional[datetime] = None,
@@ -378,7 +380,7 @@ def process_short_term_lifecycle_item(
 
 
 def process_short_term_lifecycle_items(
-    items: Iterable[V17MemoryItem],
+    items: Iterable[MemoryItem],
     *,
     store: ShortTermLifecycleTransitionStore,
     now: Optional[datetime] = None,

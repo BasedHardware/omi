@@ -18,8 +18,8 @@ from database.vector_db import (
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
-from utils.memory.v3_composed_get_service import V17V3ComposedRequestParams, V17V3ComposedResponse
-from utils.memory.v3_production_runtime import build_v17_v3_production_runtime
+from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
+from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
@@ -33,9 +33,9 @@ router = APIRouter()
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
 
-V17V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'v17_read']
+V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'memory_read']
 
-_V17_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
+_MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
     {
         'X-Omi-Memory-Read-Source',
         'X-Omi-Memory-Read-Decision',
@@ -47,7 +47,7 @@ _V17_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
 
 
 @dataclass(frozen=True)
-class V17V3GetRuntime:
+class V3GetRuntime:
     """Lazy, overrideable F4 runtime bundle for GET `/v3/memories`.
 
     The production/default dependency below is structurally disabled in F4. TestClient
@@ -57,8 +57,8 @@ class V17V3GetRuntime:
     """
 
     enabled: bool = False
-    source_decision: V17V3GetSourceDecision = 'disabled'
-    service: Optional[Callable[[V17V3ComposedRequestParams, object], V17V3ComposedResponse]] = None
+    source_decision: V3GetSourceDecision = 'disabled'
+    service: Optional[Callable[[V3ComposedRequestParams, object], V3ComposedResponse]] = None
     adapters: object = None
     source_selector: object = None
     control_reader: object = None
@@ -71,18 +71,18 @@ class V17V3GetRuntime:
     observer: object = None
 
 
-def get_v17_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
+def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
     """Return the production/default runtime bundle for GET `/v3/memories`.
 
     Default production behavior is still disabled. Server-owned configuration can
-    only enter V17 when all of these are true: `V17_MODE` is not off,
-    `V17_MEMORY_ENABLED_USERS` contains the authenticated uid, the persisted
+    only enter memory when all of these are true: `MEMORY_MODE` is not off,
+    `MEMORY_ENABLED_USERS` contains the authenticated uid, the persisted
     control state is read-mode, and global/read-convergence gates allow the
     composed service to proceed. Client headers, query params, request bodies,
-    and persisted user docs alone cannot activate V17.
+    and persisted user docs alone cannot activate memory.
     """
 
-    return build_v17_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
+    return build_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -127,24 +127,26 @@ def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
     return valid_memories
 
 
-def _apply_v17_response_headers(http_response: Response, v17_response: V17V3ComposedResponse) -> None:
-    for name, value in v17_response.headers.items():
-        if name in _V17_GET_ALLOWLISTED_RESPONSE_HEADERS:
+def _apply_memory_response_headers(http_response: Response, memory_response: V3ComposedResponse) -> None:
+    for name, value in memory_response.headers.items():
+        if name in _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS:
             http_response.headers[name] = value
     http_response.headers['Cache-Control'] = 'no-store'
 
 
-def _v17_allowlisted_headers(v17_response: V17V3ComposedResponse) -> Dict[str, str]:
+def _memory_allowlisted_headers(memory_response: V3ComposedResponse) -> Dict[str, str]:
     return {
-        name: value for name, value in v17_response.headers.items() if name in _V17_GET_ALLOWLISTED_RESPONSE_HEADERS
+        name: value
+        for name, value in memory_response.headers.items()
+        if name in _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS
     }
 
 
-def _raise_v17_http_exception(v17_response: V17V3ComposedResponse) -> None:
+def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
     raise HTTPException(
-        status_code=v17_response.http_status,
-        detail=v17_response.public_error or 'v17_read_failed',
-        headers=_v17_allowlisted_headers(v17_response),
+        status_code=memory_response.http_status,
+        detail=memory_response.public_error or 'memory_read_failed',
+        headers=_memory_allowlisted_headers(memory_response),
     )
 
 
@@ -273,37 +275,37 @@ def get_memories(
     offset: int = 0,
     cursor: Optional[str] = None,
     uid: str = Depends(auth.get_current_user_uid),
-    v17_runtime: V17V3GetRuntime = Depends(get_v17_v3_get_runtime),
+    memory_runtime: V3GetRuntime = Depends(get_v3_get_runtime),
 ):
     if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(uid, limit=limit, offset=offset)
 
-    if not v17_runtime.enabled or v17_runtime.source_decision == 'disabled':
+    if not memory_runtime.enabled or memory_runtime.source_decision == 'disabled':
         return _legacy_get_memories(uid, limit, offset)
 
-    if v17_runtime.source_decision == 'legacy_primary':
+    if memory_runtime.source_decision == 'legacy_primary':
         return _legacy_get_memories(uid, limit, offset)
 
-    if v17_runtime.source_decision != 'v17_read' or v17_runtime.service is None:
-        logger.info("v17_v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
+    if memory_runtime.source_decision != 'memory_read' or memory_runtime.service is None:
+        logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
         raise HTTPException(status_code=503, detail='infrastructure_failure')
 
-    params = V17V3ComposedRequestParams(limit=limit, offset=offset, cursor=cursor)
-    v17_response = v17_runtime.service(params, v17_runtime.adapters)
-    if not isinstance(v17_response, V17V3ComposedResponse):
-        logger.info("v17_v3_get route=GET /v3/memories source=none status=503 decision=adapter_contract")
+    params = V3ComposedRequestParams(limit=limit, offset=offset, cursor=cursor)
+    memory_response = memory_runtime.service(params, memory_runtime.adapters)
+    if not isinstance(memory_response, V3ComposedResponse):
+        logger.info("v3_get route=GET /v3/memories source=none status=503 decision=adapter_contract")
         raise HTTPException(status_code=503, detail='infrastructure_failure')
 
-    _apply_v17_response_headers(response, v17_response)
+    _apply_memory_response_headers(response, memory_response)
     logger.info(
-        "v17_v3_get route=GET /v3/memories source=%s status=%s decision=%s",
-        v17_response.source,
-        v17_response.http_status,
-        v17_response.public_error or v17_response.decision,
+        "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
+        memory_response.source,
+        memory_response.http_status,
+        memory_response.public_error or memory_response.decision,
     )
-    if v17_response.http_status != 200:
-        _raise_v17_http_exception(v17_response)
-    return [MemoryDB.model_validate(item) for item in v17_response.body or []]
+    if memory_response.http_status != 200:
+        _raise_memory_http_exception(memory_response)
+    return [MemoryDB.model_validate(item) for item in memory_response.body or []]
 
 
 @router.get('/v3/memories/review-queue', tags=['memories'])

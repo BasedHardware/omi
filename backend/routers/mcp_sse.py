@@ -36,29 +36,29 @@ from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.default_read_rollout import (
-    V17ReadDecision,
+    MemoryReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_v17_write_convergence_gate,
+    read_write_convergence_gate,
 )
 from utils.memory.product_authorization import (
-    V17ProductAuthorizationContext,
-    authorize_v17_external_default_memory_read,
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.mcp_memories import (
-    McpV17VerifiedAuth,
-    build_mcp_v17_default_memory_read_context,
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
     collect_filtered_memories,
-    list_v17_default_mcp_memories,
+    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    read_v17_mcp_default_memory_rollout,
-    search_v17_default_mcp_memories_vector,
+    read_mcp_default_memory_rollout,
+    search_default_mcp_memories_vector,
 )
 
 router = APIRouter()
@@ -119,7 +119,7 @@ class MCPSession:
         self,
         session_id: str,
         user_id: str,
-        auth_context: Optional[V17ProductAuthorizationContext] = None,
+        auth_context: Optional[ProductAuthorizationContext] = None,
     ):
         self.session_id = session_id
         self.user_id = user_id
@@ -134,12 +134,12 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
     return auth_context.uid if auth_context else None
 
 
-def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[V17ProductAuthorizationContext]:
-    """Validate an MCP bearer token and return persisted app/key/scope V17 context.
+def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
+    """Validate an MCP bearer token and return persisted app/key/scope memory context.
 
     Streamable HTTP/SSE must not infer scopes from MCP tool advertisements or
     client-supplied request fields. Missing persisted scopes/app_id/key_id are
-    carried through to the V17 grant authorizer so memory reads fail closed.
+    carried through to the memory grant authorizer so memory reads fail closed.
     """
     if not authorization:
         return None
@@ -156,8 +156,8 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     if not user_data or not user_data.get("user_id"):
         return None
 
-    return build_mcp_v17_default_memory_read_context(
-        McpV17VerifiedAuth(
+    return build_mcp_default_memory_read_context(
+        McpVerifiedAuth(
             uid=user_data["user_id"],
             app_id=user_data.get("app_id"),
             key_id=user_data.get("key_id"),
@@ -554,7 +554,7 @@ def execute_tool(
     user_id: str,
     tool_name: str,
     arguments: dict,
-    auth_context: Optional[V17ProductAuthorizationContext] = None,
+    auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     memory_system = pin_memory_system(user_id, db_client=db)
@@ -611,20 +611,20 @@ def execute_tool(
                 ]
             }
 
-        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        v17_list_results = list_v17_default_mcp_memories(
+        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_list_results = list_default_mcp_memories(
             uid=user_id,
             limit=limit,
             offset=offset,
             db_client=db,
-            rollout_decision=v17_rollout,
+            rollout_decision=memory_rollout,
             categories=valid_categories,
             reviewed=reviewed,
             manually_added=manually_added,
         )
-        if v17_list_results.read_decision == V17ReadDecision.USE_V17:
-            return {"memories": v17_list_results.memories}
-        if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": memory_list_results.memories}
+        if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
             return {"memories": []}
 
         result = collect_filtered_memories(
@@ -653,14 +653,14 @@ def execute_tool(
         if not content:
             raise ToolExecutionError("Content is required")
 
-        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            v17_rollout,
+        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            memory_rollout,
             operation="mcp_tool_memory_create",
-            write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+            write_convergence_policy=read_write_convergence_gate(db_client=db),
         )
-        if not v17_write_guard.allowed:
-            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
         # Auto-categorize memories from MCP clients
         category = identify_category_for_memory(content)
@@ -679,14 +679,14 @@ def execute_tool(
             MemoryService(db_client=db).delete(user_id, memory_id)
             return {"success": True}
 
-        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            v17_rollout,
+        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            memory_rollout,
             operation="mcp_tool_memory_delete",
-            write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+            write_convergence_policy=read_write_convergence_gate(db_client=db),
         )
-        if not v17_write_guard.allowed:
-            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
         memory = memories_db.get_memory(user_id, memory_id)
         if not memory:
@@ -703,14 +703,14 @@ def execute_tool(
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
 
-        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            v17_rollout,
+        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+            memory_rollout,
             operation="mcp_tool_memory_edit",
-            write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+            write_convergence_policy=read_write_convergence_gate(db_client=db),
         )
-        if not v17_write_guard.allowed:
-            raise ToolExecutionError(str(v17_write_guard.detail), code=-32009)
+        if not memory_write_guard.allowed:
+            raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
         memory = memories_db.get_memory(user_id, memory_id)
         if not memory:
@@ -809,22 +809,22 @@ def execute_tool(
             return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
 
         if auth_context is None:
-            raise ToolExecutionError("Missing MCP API app/key identity for V17 memory authorization", code=-32009)
-        v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
-        if not v17_app_key_grant.allowed:
-            raise ToolExecutionError(str(v17_app_key_grant.observability), code=-32009)
+            raise ToolExecutionError("Missing MCP API app/key identity for memory memory authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
-        v17_rollout = read_v17_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        v17_vector_results = search_v17_default_mcp_memories_vector(
+        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        vector_search_results = search_default_mcp_memories_vector(
             uid=user_id,
             query=query,
             limit=limit,
             db_client=db,
-            rollout_decision=v17_rollout,
+            rollout_decision=memory_rollout,
         )
-        if v17_vector_results.read_decision == V17ReadDecision.USE_V17:
-            return {"memories": v17_vector_results.memories}
-        if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+        if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
+            return {"memories": vector_search_results.memories}
+        if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
             return {"memories": []}
 
         matches = vector_db.find_similar_memories(user_id, query, threshold=0.0, limit=fetch_limit)
@@ -1022,7 +1022,7 @@ def handle_mcp_message(
     user_id: str,
     message: dict,
     session: Optional[MCPSession] = None,
-    auth_context: Optional[V17ProductAuthorizationContext] = None,
+    auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.

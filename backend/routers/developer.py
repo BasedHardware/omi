@@ -33,7 +33,7 @@ from dependencies import (
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
-    get_developer_v17_default_memory_read_context,
+    get_developer_memory_default_memory_read_context,
     get_uid_with_memories_write,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
@@ -52,18 +52,18 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.memory.developer_memory_adapter import (
-    read_v17_developer_default_memory_rollout,
-    search_v17_default_developer_memories,
-    search_v17_default_developer_memories_vector,
+    read_developer_default_memory_rollout,
+    search_memory_default_developer_memories,
+    search_memory_default_developer_memories_vector,
 )
 from utils.memory.product_authorization import (
-    V17ProductAuthorizationContext,
-    authorize_v17_external_default_memory_read,
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
 )
 from utils.memory.default_read_rollout import (
-    V17ReadDecision,
+    MemoryReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_v17_write_convergence_gate,
+    read_write_convergence_gate,
 )
 import logging
 
@@ -260,7 +260,7 @@ class BatchMemoriesResponse(BaseModel):
 
 @router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
-    auth_context: V17ProductAuthorizationContext = Depends(get_developer_v17_default_memory_read_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -278,13 +278,13 @@ def get_memories(
         memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
         return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
 
-    v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
-    if not v17_app_key_grant.allowed:
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
         raise HTTPException(
-            status_code=v17_app_key_grant.status_code,
+            status_code=app_key_grant.status_code,
             detail={
                 'enabled': False,
-                'reason': v17_app_key_grant.reason,
+                'reason': app_key_grant.reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
@@ -292,31 +292,31 @@ def get_memories(
                 'key_id': auth_context.key_id,
             },
         )
-    v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
-    v17_result = search_v17_default_developer_memories(
+    memory_rollout = read_developer_default_memory_rollout(uid=uid, db_client=db)
+    memory_result = search_memory_default_developer_memories(
         uid=uid,
         query='',
         limit=limit,
         offset=offset,
         db_client=db,
-        rollout_decision=v17_rollout,
+        rollout_decision=memory_rollout,
         categories=[c.value for c in category_list],
     )
 
-    if v17_result.read_decision == V17ReadDecision.USE_V17:
-        return [CleanerMemory.model_validate(memory) for memory in v17_result.memories]
-    if v17_result.read_decision in {V17ReadDecision.DENY_MEMORY, V17ReadDecision.SHADOW_ONLY}:
+    if memory_result.read_decision == MemoryReadDecision.USE_MEMORY:
+        return [CleanerMemory.model_validate(memory) for memory in memory_result.memories]
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
             status_code=403,
             detail={
                 'enabled': False,
-                'reason': v17_result.fallback_reason,
+                'reason': memory_result.fallback_reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
             },
         )
-    if v17_result.should_use_legacy_fallback:
+    if memory_result.should_use_legacy_fallback:
         pass
 
     memories = memories_db.get_memories(uid, limit, offset, [c.value for c in category_list])
@@ -345,16 +345,16 @@ def get_memories(
 
 @router.get("/v1/dev/user/memories/vector/search", tags=["developer"])
 def search_memories_vector(
-    auth_context: V17ProductAuthorizationContext = Depends(get_developer_v17_default_memory_read_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_read_context),
     query: str = Query(..., min_length=1),
     limit: int = Query(10, ge=1, le=100),
 ):
-    """Search developer-readable default V17 memory through hydrated vector candidates.
+    """Search developer-readable default memory memory through hydrated vector candidates.
 
     This narrow developer API vector endpoint fails closed unless the authenticated
     Developer API app/key has a verified memories.read scope, a persisted app/key
     default-read grant, and the server-owned rollout state enables developer_api
-    V17 default-memory reads. Vector hits are hydrated from authoritative
+    memory default-memory reads. Vector hits are hydrated from authoritative
     `users/{uid}/memory_items` before returning results, so stale Short-term and
     Archive remain unavailable by default.
     """
@@ -386,13 +386,13 @@ def search_memories_vector(
             },
         }
 
-    v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
-    if not v17_app_key_grant.allowed:
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
         raise HTTPException(
-            status_code=v17_app_key_grant.status_code,
+            status_code=app_key_grant.status_code,
             detail={
                 'enabled': False,
-                'reason': v17_app_key_grant.reason,
+                'reason': app_key_grant.reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
@@ -401,39 +401,39 @@ def search_memories_vector(
             },
         )
 
-    v17_rollout = read_v17_developer_default_memory_rollout(uid=uid, db_client=db)
-    v17_result = search_v17_default_developer_memories_vector(
+    memory_rollout = read_developer_default_memory_rollout(uid=uid, db_client=db)
+    memory_result = search_memory_default_developer_memories_vector(
         uid=uid,
         query=query,
         limit=limit,
         db_client=db,
-        rollout_decision=v17_rollout,
+        rollout_decision=memory_rollout,
     )
-    if v17_result.read_decision in {V17ReadDecision.DENY_MEMORY, V17ReadDecision.SHADOW_ONLY}:
+    if memory_result.read_decision in {MemoryReadDecision.DENY_MEMORY, MemoryReadDecision.SHADOW_ONLY}:
         raise HTTPException(
             status_code=403,
             detail={
                 'enabled': False,
-                'reason': v17_result.fallback_reason,
+                'reason': memory_result.fallback_reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
             },
         )
-    if v17_result.should_use_legacy_fallback:
+    if memory_result.should_use_legacy_fallback:
         raise HTTPException(
             status_code=403,
             detail={
                 'enabled': False,
-                'reason': v17_result.fallback_reason,
+                'reason': memory_result.fallback_reason,
                 'consumer': 'developer_api',
                 'archive_default_visible': False,
                 'archive_capability': False,
             },
         )
     return {
-        'items': v17_result.memories,
-        'returned_count': len(v17_result.memories),
+        'items': memory_result.memories,
+        'returned_count': len(memory_result.memories),
         'archive_default_visible': False,
         'policy': {
             'consumer': 'developer_api',
@@ -461,9 +461,9 @@ def create_memory(
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        read_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='create_memory',
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -519,9 +519,9 @@ def create_memories_batch(
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        read_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='batch_create_memories',
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -605,9 +605,9 @@ def delete_memory(
     - **memory_id**: The ID of the memory to delete
     """
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        read_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='delete_memory',
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
@@ -643,9 +643,9 @@ def update_memory(
     - **category**: New category for the memory (optional)
     """
     write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_v17_developer_default_memory_rollout(uid=uid, db_client=db),
+        read_developer_default_memory_rollout(uid=uid, db_client=db),
         operation='update_memory',
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)

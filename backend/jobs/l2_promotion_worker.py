@@ -10,7 +10,7 @@ from utils.memory.l2_promotion_agent import run_l2_promotion_agent
 from utils.memory.promotion_bundle_builder import PromotionBundleConfig, build_promotion_bundle
 from utils.memory.promotion_bundle_builder import enforce_grounded_promotion_bundle
 from utils.memory.promotion_bundle_builder import fetch_durable_facts_from_ledger
-from utils.memory.promotion_bundle_builder import make_v17_vector_seed_fetcher
+from utils.memory.promotion_bundle_builder import make_vector_seed_fetcher
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ def _lineage_for_work_item(run_id: str, work_item: PromotionWorkItem) -> Dict[st
     }
 
 
-def run_v17_l2_promotion_worker(
+def run_l2_promotion_worker(
     *,
     run_id: str,
     config: L2PromotionWorkerConfig,
@@ -81,7 +81,7 @@ def run_v17_l2_promotion_worker(
                 l1_items=l1_items,
                 config=config.bundle,
                 durable_facts_fetcher=durable_facts_fetcher,
-                vector_seed_fetcher=vector_seed_fetcher or make_v17_vector_seed_fetcher(),
+                vector_seed_fetcher=vector_seed_fetcher or make_vector_seed_fetcher(),
             ).to_dict()
             grounding = enforce_grounded_promotion_bundle(bundle, environment=config.environment)
             trace = run_l2_promotion_agent(bundle=bundle, uid=work_item.uid, llm=llm)
@@ -100,7 +100,7 @@ def run_v17_l2_promotion_worker(
                 }
             )
     return L2PromotionWorkerReport(
-        schema_version='v17_l2_promotion_worker_report.v1',
+        schema_version='l2_promotion_worker_report.v1',
         run_id=run_id,
         mode=config.orchestrator.mode,
         started_at=started_at,

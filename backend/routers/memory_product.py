@@ -1,6 +1,6 @@
 """Canonical product memory router (WS-G9).
 
-Neutral ``memory_product`` is the source of truth. Legacy ``v17_memory_product``
+Neutral ``memory_product`` is the source of truth. Legacy ``memory_product``
 remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
@@ -9,12 +9,12 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database._client import db
-from database.memory_vector_repair_outbox import write_v17_vector_repair_purge_outbox_records
+from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
-from utils.memory.default_read_rollout import V17_GLOBAL_READ_GATE_PATH
+from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
 from utils.memory.product_authorization import (
-    V17ProductAuthorizationContext,
-    authorize_v17_product_memory_route,
+    ProductAuthorizationContext,
+    authorize_memory_product_memory_route,
 )
 from utils.memory.product_memory_read_service import (
     MAX_PRODUCT_MEMORY_READ_LIMIT,
@@ -22,8 +22,8 @@ from utils.memory.product_memory_read_service import (
     fetch_default_product_memory_search,
 )
 from utils.memory.vector_search_service import (
-    MAX_V17_VECTOR_SEARCH_LIMIT,
-    fetch_default_v17_vector_memory_search,
+    MAX_MEMORY_VECTOR_SEARCH_LIMIT,
+    fetch_default_vector_memory_search,
 )
 from utils.other import endpoints as auth
 
@@ -50,8 +50,8 @@ def _validate_search_pagination(limit: int, offset: int) -> None:
 
 
 def _validate_vector_limit(limit: int) -> None:
-    if limit < 1 or limit > MAX_V17_VECTOR_SEARCH_LIMIT:
-        raise HTTPException(status_code=400, detail=f'limit must be between 1 and {MAX_V17_VECTOR_SEARCH_LIMIT}')
+    if limit < 1 or limit > MAX_MEMORY_VECTOR_SEARCH_LIMIT:
+        raise HTTPException(status_code=400, detail=f'limit must be between 1 and {MAX_MEMORY_VECTOR_SEARCH_LIMIT}')
 
 
 def _policy_payload(policy: MemoryAccessPolicy) -> dict:
@@ -64,7 +64,7 @@ def _policy_payload(policy: MemoryAccessPolicy) -> dict:
 
 
 def _write_vector_repair_purge_outbox_records(records: list[dict]) -> list[dict]:
-    return write_v17_vector_repair_purge_outbox_records(db_client=db, records=records)
+    return write_vector_repair_purge_outbox_records(db_client=db, records=records)
 
 
 def _global_read_gate_observability(gate) -> dict:
@@ -76,31 +76,31 @@ def _global_read_gate_observability(gate) -> dict:
     }
 
 
-def _require_v17_product_authorization(context: V17ProductAuthorizationContext):
-    decision = authorize_v17_product_memory_route(context, db_client=db)
+def _require_product_authorization(context: ProductAuthorizationContext):
+    decision = authorize_memory_product_memory_route(context, db_client=db)
     if not decision.allowed:
         raise HTTPException(status_code=decision.status_code, detail=decision.observability)
     return decision
 
 
 @router.get('/memory/search', tags=['memories', 'memory'])
-def search_v17_product_memory(
+def search_product_memory(
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Search default-visible V17 product memory for the authenticated user.
+    """Search default-visible memory product memory for the authenticated user.
 
     This product endpoint constructs the default Omi-chat access policy explicitly
-    and delegates Firestore reads/filtering to the V17 product read service. It
+    and delegates Firestore reads/filtering to the memory product read service. It
     never enables Archive capability, so Archive and stale Short-term records are
     excluded from default responses.
     """
 
     _validate_search_pagination(limit, offset)
-    authz = _require_v17_product_authorization(
-        V17ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_default_search')
+    authz = _require_product_authorization(
+        ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_default_search')
     )
     global_read_gate = _global_read_gate_observability(authz.global_gate)
     rollout_observability = authz.observability
@@ -126,24 +126,24 @@ def search_v17_product_memory(
 
 
 @router.get('/memory/vector/search', tags=['memories', 'memory'])
-def search_v17_vector_memory(
+def search_vector_memory(
     query: str = Query(...),
     limit: int = Query(10),
     uid: str = Depends(auth.get_current_user_uid),
     vector_query=None,
 ):
-    """Search default-visible V17 memory through hydrated vector candidates.
+    """Search default-visible memory memory through hydrated vector candidates.
 
     The route fails closed unless the persisted server-owned default-read rollout
-    state enables `omi_chat` V17 reads and default memory. Vector hits are only
+    state enables `omi_chat` memory reads and default memory. Vector hits are only
     candidates: the service hydrates authoritative `users/{uid}/memory_items`
     before returning default-visible Short-term/Long-term results. Archive is
     never available through this default vector route.
     """
 
     _validate_vector_limit(limit)
-    authz = _require_v17_product_authorization(
-        V17ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_vector_search')
+    authz = _require_product_authorization(
+        ProductAuthorizationContext(uid=uid, consumer='omi_chat', surface='product_vector_search')
     )
     rollout = authz.rollout
     if rollout is None:
@@ -157,7 +157,7 @@ def search_v17_vector_memory(
 
     policy = authz.policy or _default_omi_chat_policy()
     try:
-        response = fetch_default_v17_vector_memory_search(
+        response = fetch_default_vector_memory_search(
             uid=uid,
             query=query,
             db_client=db,
@@ -181,14 +181,14 @@ def search_v17_vector_memory(
 
 
 @router.get('/memory/archive/search', tags=['memories', 'memory'])
-def search_v17_archive_memory(
+def search_archive_memory(
     query: str = Query(''),
     limit: int = Query(100),
     offset: int = Query(0),
     include_archive: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Search explicit V17 Archive memory for archive-capable product callers only.
+    """Search explicit memory Archive memory for archive-capable product callers only.
 
     This route is intentionally separate from `/memory/search` and requires
     both an explicit caller opt-in flag and a persisted server-owned Archive
@@ -200,8 +200,8 @@ def search_v17_archive_memory(
     if not include_archive:
         raise HTTPException(status_code=403, detail='explicit archive capability is required')
 
-    authz = _require_v17_product_authorization(
-        V17ProductAuthorizationContext(
+    authz = _require_product_authorization(
+        ProductAuthorizationContext(
             uid=uid,
             consumer='omi_chat',
             surface='product_archive_search',
@@ -240,7 +240,7 @@ __all__ = [
     "fetch_archive_product_memory_search",
     "fetch_default_product_memory_search",
     "router",
-    "search_v17_archive_memory",
-    "search_v17_product_memory",
-    "search_v17_vector_memory",
+    "search_archive_memory",
+    "search_product_memory",
+    "search_vector_memory",
 ]

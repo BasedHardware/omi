@@ -28,28 +28,28 @@ from utils.llm.memories import identify_category_for_memory
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_v17_default_memory_read_context
+from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_memory_default_memory_read_context
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
-    V17ReadDecision,
+    MemoryReadDecision,
     assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_v17_write_convergence_gate,
+    read_write_convergence_gate,
 )
 from utils.memory.product_authorization import (
-    V17ProductAuthorizationContext,
-    authorize_v17_external_default_memory_read,
+    ProductAuthorizationContext,
+    authorize_memory_external_default_memory_read,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
-    list_v17_default_mcp_memories,
+    list_default_mcp_memories,
     parse_mcp_bool,
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    read_v17_mcp_default_memory_rollout,
-    search_v17_default_mcp_memories_vector,
+    read_mcp_default_memory_rollout,
+    search_default_mcp_memories_vector,
 )
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
@@ -82,14 +82,14 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
-    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        v17_rollout,
+    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        memory_rollout,
         operation="mcp_memory_create",
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
-    if not v17_write_guard.allowed:
-        raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)
+    if not memory_write_guard.allowed:
+        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
     # Auto-categorize memories from external sources
     memory.category = identify_category_for_memory(memory.content)
@@ -125,14 +125,14 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
         MemoryService(db_client=db).delete(uid, memory_id)
         return {"status": "ok"}
 
-    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        v17_rollout,
+    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        memory_rollout,
         operation="mcp_memory_delete",
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
-    if not v17_write_guard.allowed:
-        raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)
+    if not memory_write_guard.allowed:
+        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
     _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
@@ -145,14 +145,14 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    v17_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        v17_rollout,
+    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
+        memory_rollout,
         operation="mcp_memory_edit",
-        write_convergence_policy=read_v17_write_convergence_gate(db_client=db),
+        write_convergence_policy=read_write_convergence_gate(db_client=db),
     )
-    if not v17_write_guard.allowed:
-        raise HTTPException(status_code=v17_write_guard.status_code, detail=v17_write_guard.detail)
+    if not memory_write_guard.allowed:
+        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
     memory = _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
@@ -192,7 +192,7 @@ class CleanerMemory(BaseModel):
     reviewed_source: Optional[str] = None
     manually_added: Optional[bool] = None
     manually_added_source: Optional[str] = None
-    v17_default_memory: Optional[bool] = None
+    memory_default_memory: Optional[bool] = None
     archive_default_visible: Optional[bool] = None
     policy: Optional[dict] = None
 
@@ -205,13 +205,13 @@ class SearchedMemory(CleanerMemory):
 def search_memories(
     query: str,
     limit: int = 10,
-    auth_context: V17ProductAuthorizationContext = Depends(get_mcp_v17_default_memory_read_context),
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
 ):
-    v17_app_key_grant = authorize_v17_external_default_memory_read(auth_context, db_client=db)
-    if not v17_app_key_grant.allowed:
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
         raise HTTPException(
-            status_code=v17_app_key_grant.status_code,
-            detail=v17_app_key_grant.observability,
+            status_code=app_key_grant.status_code,
+            detail=app_key_grant.observability,
         )
 
     uid = auth_context.uid
@@ -223,17 +223,17 @@ def search_memories(
     if memory_system == MemorySystem.CANONICAL:
         return memory_service.search_mcp(uid, query, limit=limit)
 
-    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    v17_vector_results = search_v17_default_mcp_memories_vector(
+    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    vector_search_results = search_default_mcp_memories_vector(
         uid=uid,
         query=query,
         limit=limit,
         db_client=db,
-        rollout_decision=v17_rollout,
+        rollout_decision=memory_rollout,
     )
-    if v17_vector_results.read_decision == V17ReadDecision.USE_V17:
-        return v17_vector_results.memories
-    if v17_vector_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+    if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
+        return vector_search_results.memories
+    if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         return []
 
     return memory_service.search_mcp(uid, query, limit=limit)
@@ -287,20 +287,20 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    v17_rollout = read_v17_mcp_default_memory_rollout(uid=uid, db_client=db)
-    v17_list_results = list_v17_default_mcp_memories(
+    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_list_results = list_default_mcp_memories(
         uid=uid,
         limit=limit,
         offset=offset,
         db_client=db,
-        rollout_decision=v17_rollout,
+        rollout_decision=memory_rollout,
         categories=[category.value for category in category_list],
         reviewed=reviewed,
         manually_added=manually_added,
     )
-    if v17_list_results.read_decision == V17ReadDecision.USE_V17:
-        return v17_list_results.memories
-    if v17_list_results.read_decision != V17ReadDecision.USE_LEGACY_SAFE:
+    if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
+        return memory_list_results.memories
+    if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         return []
 
     result = collect_filtered_memories(
