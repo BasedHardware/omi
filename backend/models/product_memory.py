@@ -15,6 +15,7 @@ from models.v17_product_memory import (
     V17MemoryItem,
     V17MemoryItemAlias,
     is_archive_access_eligible,
+    is_default_access_eligible,
     new_memory_id,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "V17MemoryItem",
     "V17MemoryItemAlias",
     "is_archive_access_eligible",
+    "is_default_access_eligible",
     "new_memory_id",
 ]
