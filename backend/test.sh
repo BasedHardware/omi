@@ -127,6 +127,7 @@ pytest tests/unit/test_pusher_ghost_connections.py -v
 pytest tests/unit/test_async_tasks.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_integration_malformed_records.py -v
+pytest tests/unit/test_oauth_callback_uid_guard.py -v
 pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
 pytest tests/unit/test_dev_api_memories_pagination.py -v
