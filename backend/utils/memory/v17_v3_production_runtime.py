@@ -1,32 +1,14 @@
-"""Production `/v3/memories` V17 runtime wiring.
+"""Backward-compatible shim — implementation lives in ``utils.memory.v3_production_runtime`` (WS-G8b)."""
 
-Default behavior remains hard off unless server-owned rollout configuration enables
-V17 for the authenticated uid. The wiring reuses the existing canonical control
-state, global gates, fenced compatibility projection reader, and composed service.
-It performs no writes and never lets clients activate V17 directly.
-"""
-
-from __future__ import annotations
-
-import os
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Literal
-
-from config.v17_memory import (
-    V17Mode,
-    V17RolloutConfig,
-    parse_enabled_users,
-    rollout_archive_opt_in_enabled_env_value,
-    rollout_backfill_daily_limit_env_value,
-    rollout_backfill_enabled_env_value,
-    rollout_enabled_users_env_raw,
-    rollout_mode_env_value,
-    rollout_v3_get_enabled_env_value,
-)
-from database.v17_v3_compatibility_projection import read_v17_v3_compatibility_projection_page
-from utils.memory.v17_v3_account_generation_source import read_v17_v3_trusted_account_generation
-from utils.memory.v17_v3_composed_get_service import (
+from utils.memory.v3_production_runtime import (
+    build_v17_v3_production_runtime,
+    compose_v17_v3_get,
+    create_v17_v3_cursor,
+    decide_v17_v3_control_route,
+    parse_v17_v3_cursor,
+    read_v17_v3_compatibility_projection_page,
+    read_v17_v3_control,
+    read_v17_v3_trusted_account_generation,
     V17V3ComposedAdapters,
     V17V3ComposedCursor,
     V17V3ComposedDependencyDecision,
@@ -37,392 +19,89 @@ from utils.memory.v17_v3_composed_get_service import (
     V17V3ComposedResponse,
     V17V3ComposedRow,
     V17V3ComposedSnapshotDecision,
-    compose_v17_v3_get,
-)
-from utils.memory.v17_v3_control_reader_contract import (
     V17V3ControlReaderRequest,
     V17V3ControlRouteFamily,
-    decide_v17_v3_control_route,
-)
-from utils.memory.v17_v3_control_state_adapter import read_v17_v3_control
-from utils.memory.v17_v3_cursor import (
     V17V3CursorContext,
     V17V3CursorError,
+    V17V3GetRuntime,
+    V17V3GetSourceDecision,
     V17V3Keyset,
-    create_v17_v3_cursor,
-    parse_v17_v3_cursor,
+    V17V3ProjectionCursor,
+    V17V3ProjectionReadRequest,
+    V3GetRuntime,
+    V3GetSourceDecision,
+    _composed_cursor,
+    _cursor_context,
+    _cursor_secret_from_env,
+    _cursor_ttl_from_env,
+    _DEFAULT_CURSOR_POLICY_VERSION,
+    _DEFAULT_CURSOR_SECRET_VERSION,
+    _DEFAULT_CURSOR_TTL_SECONDS,
+    _DEFAULT_LIMIT,
+    _DEFAULT_READ_MODE,
+    _filter_hash,
+    _ProductionV17V3Adapters,
+    _projection_cursor,
+    _projection_item_to_row,
+    _read_doc_dict,
+    _required_str,
+    _rollout_config_from_env,
+    _runtime_enabled,
+    _RuntimeConfig,
+    _source_decision_for_uid,
+    _V17_SOURCE,
+    _v3_get_route_enabled,
 )
-from utils.memory.v17_v3_projection_reader_contract import V17V3ProjectionCursor, V17V3ProjectionReadRequest
 
-V17V3GetSourceDecision = Literal['disabled', 'legacy_primary', 'v17_read']
-_DEFAULT_LIMIT = 100
-_DEFAULT_CURSOR_TTL_SECONDS = 600
-_DEFAULT_CURSOR_POLICY_VERSION = 'v17v3-cursor-policy-1'
-_DEFAULT_CURSOR_SECRET_VERSION = 'unconfigured'
-_DEFAULT_READ_MODE = 'default_memory'
-_V17_SOURCE = 'v17_compatibility_projection'
-
-
-@dataclass(frozen=True)
-class V17V3GetRuntime:
-    enabled: bool = False
-    source_decision: V17V3GetSourceDecision = 'disabled'
-    service: object = None
-    adapters: object = None
-    source_selector: object = None
-    control_reader: object = None
-    legacy_reader: object = None
-    projection_reader: object = None
-    cursor_keyring: object = None
-    cursor_codec: object = None
-    clock: object = None
-    deadline: object = None
-    observer: object = None
-
-
-@dataclass(frozen=True)
-class _RuntimeConfig:
-    uid: str
-    db_client: object
-    rollout_config: V17RolloutConfig
-    cursor_secret: bytes | None
-    cursor_policy_version: str
-    cursor_secret_version: str
-    cursor_ttl_seconds: int
-
-
-class _ProductionV17V3Adapters:
-    def __init__(self, config: _RuntimeConfig):
-        self.config = config
-        self._last_control = None
-        self._last_route_decision = None
-        self._last_trusted_generation = None
-
-    def normalize_request(self, params: V17V3ComposedRequestParams) -> V17V3ComposedRequest:
-        return V17V3ComposedRequest(
-            limit=params.limit or _DEFAULT_LIMIT,
-            offset=params.offset,
-            cursor=params.cursor,
-            include_archive=params.include_archive,
-            include_historical=params.include_historical,
-        )
-
-    def decide_dependency(self, request: V17V3ComposedRequest, budget_ms: int) -> V17V3ComposedDependencyDecision:
-        control = read_v17_v3_control(
-            uid=self.config.uid,
-            db_client=self.config.db_client,
-            rollout_config=self.config.rollout_config,
-        )
-        if not control.cohort_enrolled:
-            self._last_control = control
-            self._last_trusted_generation = None
-            return V17V3ComposedDependencyDecision.legacy(self.config.uid)
-        trusted_generation = read_v17_v3_trusted_account_generation(
-            uid=self.config.uid, db_client=self.config.db_client
-        )
-        expected_generation = trusted_generation.account_generation
-        route_decision = decide_v17_v3_control_route(
-            V17V3ControlReaderRequest(
-                uid=self.config.uid,
-                expected_account_generation=expected_generation,
-                cursor_v17_read_requested=bool(request.cursor),
-                cursor_secret_config_present=self.config.cursor_secret is not None,
-                archive_requested=request.include_archive,
-            ),
-            control,
-        )
-        self._last_control = control
-        self._last_route_decision = route_decision
-        self._last_trusted_generation = trusted_generation
-        if route_decision.route_family == V17V3ControlRouteFamily.LEGACY_PRIMARY:
-            return V17V3ComposedDependencyDecision.legacy(self.config.uid)
-        if route_decision.route_family != V17V3ControlRouteFamily.V17_PROJECTION or not route_decision.allowed:
-            return V17V3ComposedDependencyDecision.fail(route_decision.reason.value, route_decision.http_status)
-        return V17V3ComposedDependencyDecision.enrolled_ready(self.config.uid)
-
-    def build_snapshot(
-        self, subject_uid: str, request: V17V3ComposedRequest, budget_ms: int
-    ) -> V17V3ComposedSnapshotDecision:
-        if subject_uid != self.config.uid:
-            return V17V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
-        if self._last_control is None or self._last_control.state is None or self._last_trusted_generation is None:
-            return V17V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
-        control_state = self._last_control.state
-        projection_state_data = _read_doc_dict(
-            self.config.db_client, f'users/{subject_uid}/v3_compatibility_projection/state'
-        )
-        if not isinstance(projection_state_data, dict):
-            return V17V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
-        try:
-            account_generation = int(projection_state_data.get('account_generation'))
-            projection_generation = int(projection_state_data.get('projection_generation'))
-            projection_commit = _required_str(projection_state_data.get('projection_commit_id'))
-            source_commit = _required_str(projection_state_data.get('source_commit_id'))
-            source_version = _required_str(projection_state_data.get('source_version'))
-        except (TypeError, ValueError):
-            return V17V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
-        if account_generation != self._last_trusted_generation.account_generation:
-            return V17V3ComposedSnapshotDecision.fail('infrastructure_failure', 503)
-        now_ms = self.now_ms()
-        context = V17V3ComposedExecutionContext(
-            subject_uid=subject_uid,
-            grant_epoch=f'mode-{control_state.mode_epoch}',
-            config_epoch=f'schema-{control_state.schema_version}',
-            account_generation=account_generation,
-            projection_generation=projection_generation,
-            projection_commit=projection_commit,
-            cursor_policy_version=self.config.cursor_policy_version,
-            cursor_secret_version=self.config.cursor_secret_version,
-            read_timestamp_ms=now_ms,
-            deadline_ms=now_ms + max(budget_ms, 1),
-            filter_hash=_filter_hash(request),
-            archive_requested=request.include_archive,
-            source=_V17_SOURCE,
-            read_mode=_DEFAULT_READ_MODE,
-        )
-        self._projection_source_commit = source_commit
-        self._projection_source_version = source_version
-        return V17V3ComposedSnapshotDecision.ready(context)
-
-    def decode_cursor(
-        self, token: str | None, context: V17V3ComposedExecutionContext, budget_ms: int
-    ) -> V17V3ComposedCursor | None:
-        if token is None:
-            return None
-        if self.config.cursor_secret is None:
-            raise V17V3CursorError('missing_cursor_secret')
-        claims = parse_v17_v3_cursor(token, _cursor_context(context, self.now_ms()), self.config.cursor_secret)
-        return V17V3ComposedCursor(created_at_ms=claims.keyset.created_at_ms, memory_id=claims.keyset.memory_id)
-
-    def read_projection(
-        self,
-        request: V17V3ComposedRequest,
-        context: V17V3ComposedExecutionContext,
-        after: V17V3ComposedCursor | None,
-        limit: int,
-        budget_ms: int,
-    ) -> V17V3ComposedProjectionPage:
-        projection_page = read_v17_v3_compatibility_projection_page(
-            db_client=self.config.db_client,
-            request=V17V3ProjectionReadRequest(
-                uid=context.subject_uid,
-                limit=limit,
-                expected_account_generation=context.account_generation,
-                cursor=_projection_cursor(after, context),
-                offset=request.offset,
-                include_archive=request.include_archive,
-            ),
-        )
-        rows = tuple(_projection_item_to_row(item, context, projection_page) for item in projection_page.items)
-        return V17V3ComposedProjectionPage(
-            rows=rows,
-            next_cursor=_composed_cursor(projection_page.next_cursor),
-            subject_uid=context.subject_uid,
-            grant_epoch=context.grant_epoch,
-            config_epoch=context.config_epoch,
-            account_generation=projection_page.account_generation,
-            projection_generation=projection_page.projection_generation,
-            projection_commit=projection_page.projection_commit_id,
-            cursor_policy_version=context.cursor_policy_version,
-            cursor_secret_version=context.cursor_secret_version,
-            read_timestamp_ms=context.read_timestamp_ms,
-            scanned_count=len(rows),
-            partial=False,
-            estimated_response_bytes=sum(row.estimated_response_bytes for row in rows),
-        )
-
-    def encode_cursor(self, cursor: V17V3ComposedCursor, context: V17V3ComposedExecutionContext, budget_ms: int) -> str:
-        if self.config.cursor_secret is None:
-            raise V17V3CursorError('missing_cursor_secret')
-        return create_v17_v3_cursor(
-            V17V3Keyset(created_at_ms=cursor.created_at_ms, memory_id=cursor.memory_id),
-            _cursor_context(context, self.now_ms()),
-            self.config.cursor_secret,
-            ttl_seconds=self.config.cursor_ttl_seconds,
-        )
-
-    def read_legacy(self, request: V17V3ComposedRequest, budget_ms: int) -> V17V3ComposedResponse:
-        return V17V3ComposedResponse.error(503, 'infrastructure_failure')
-
-    def now_ms(self) -> int:
-        return int(datetime.now(tz=timezone.utc).timestamp() * 1000)
-
-    def as_composed_adapters(self) -> V17V3ComposedAdapters:
-        return V17V3ComposedAdapters(
-            normalize_request=self.normalize_request,
-            decide_dependency=self.decide_dependency,
-            build_snapshot=self.build_snapshot,
-            decode_cursor=self.decode_cursor,
-            read_projection=self.read_projection,
-            encode_cursor=self.encode_cursor,
-            read_legacy=self.read_legacy,
-            now_ms=self.now_ms,
-        )
-
-
-def _read_doc_dict(db_client, path: str) -> dict | None:
-    snapshot = db_client.document(path).get()
-    if getattr(snapshot, 'exists', False) is False:
-        return None
-    data = snapshot.to_dict()
-    return data if isinstance(data, dict) else None
-
-
-def _required_str(value: object) -> str:
-    if not isinstance(value, str) or not value:
-        raise ValueError('missing_string')
-    return value
-
-
-def _filter_hash(request: V17V3ComposedRequest) -> str:
-    archive = 'archive' if request.include_archive else 'noarchive'
-    historical = 'historical' if request.include_historical else 'nohistorical'
-    return f'default:{archive}:{historical}'
-
-
-def _cursor_context(context: V17V3ComposedExecutionContext, now_ms: int) -> V17V3CursorContext:
-    return V17V3CursorContext(
-        uid=context.subject_uid,
-        account_generation=context.account_generation,
-        projection_generation=context.projection_generation,
-        filter_hash=context.filter_hash,
-        source=context.source,
-        read_mode=context.read_mode,
-        now_epoch_seconds=int(now_ms / 1000),
-    )
-
-
-def _projection_cursor(
-    cursor: V17V3ComposedCursor | None, context: V17V3ComposedExecutionContext
-) -> V17V3ProjectionCursor | None:
-    if cursor is None:
-        return None
-    return V17V3ProjectionCursor(
-        created_at=datetime.fromtimestamp(cursor.created_at_ms / 1000, tz=timezone.utc),
-        memory_id=cursor.memory_id,
-        account_generation=context.account_generation,
-        projection_generation=context.projection_generation,
-        projection_commit_id=context.projection_commit,
-    )
-
-
-def _composed_cursor(cursor: V17V3ProjectionCursor | None) -> V17V3ComposedCursor | None:
-    if cursor is None:
-        return None
-    return V17V3ComposedCursor(created_at_ms=int(cursor.created_at.timestamp() * 1000), memory_id=cursor.memory_id)
-
-
-def _projection_item_to_row(item: dict, context: V17V3ComposedExecutionContext, projection_page) -> V17V3ComposedRow:
-    created_at = item.get('created_at')
-    if not isinstance(created_at, datetime):
-        created_at = item.get('updated_at')
-    created_at_ms = (
-        int(created_at.timestamp() * 1000) if isinstance(created_at, datetime) else context.read_timestamp_ms
-    )
-    memory_id = str(item.get('id'))
-    estimated_bytes = len(str(item).encode('utf-8'))
-    return V17V3ComposedRow(
-        memory_id=memory_id,
-        created_at_ms=created_at_ms,
-        subject_uid=context.subject_uid,
-        account_generation=projection_page.account_generation,
-        projection_generation=projection_page.projection_generation,
-        projection_commit=projection_page.projection_commit_id,
-        item_revision=1,
-        source_version=projection_page.source_version,
-        source_commit=projection_page.source_commit_id,
-        deleted=False,
-        tombstoned=False,
-        visibility='long_term',
-        lifecycle_status='active',
-        source_freshness='stable',
-        source_backed_projection=True,
-        memorydb_item=item,
-        estimated_response_bytes=estimated_bytes,
-    )
-
-
-def _cursor_secret_from_env(env) -> bytes | None:
-    raw = env.get('V17_V3_CURSOR_SECRET') or ''
-    return raw.encode('utf-8') if raw else None
-
-
-def _cursor_ttl_from_env(env) -> int:
-    raw = env.get('V17_V3_CURSOR_TTL_SECONDS') or ''
-    if not raw:
-        return _DEFAULT_CURSOR_TTL_SECONDS
-    try:
-        return max(1, int(raw))
-    except ValueError:
-        return _DEFAULT_CURSOR_TTL_SECONDS
-
-
-def _v3_get_route_enabled(env) -> bool:
-    return rollout_v3_get_enabled_env_value(env)
-
-
-def _runtime_enabled(rollout_config: V17RolloutConfig) -> bool:
-    return rollout_config.mode == V17Mode.read and bool(rollout_config.enabled_users)
-
-
-def _rollout_config_from_env(env) -> V17RolloutConfig:
-    try:
-        mode = V17Mode(rollout_mode_env_value(env))
-        backfill_daily_limit = rollout_backfill_daily_limit_env_value(env)
-    except (TypeError, ValueError):
-        return V17RolloutConfig()
-    return V17RolloutConfig(
-        enabled_users=parse_enabled_users(rollout_enabled_users_env_raw(env)),
-        mode=mode,
-        backfill_enabled=rollout_backfill_enabled_env_value(env),
-        backfill_daily_limit=backfill_daily_limit,
-        archive_opt_in_enabled=rollout_archive_opt_in_enabled_env_value(env),
-    )
-
-
-def _source_decision_for_uid(*, uid: str, db_client, rollout_config: V17RolloutConfig) -> V17V3GetSourceDecision:
-    if not _runtime_enabled(rollout_config):
-        return 'disabled'
-    control = read_v17_v3_control(uid=uid, db_client=db_client, rollout_config=rollout_config)
-    if not control.cohort_enrolled:
-        return 'legacy_primary'
-    if control.state is not None and control.state.effective_mode != V17Mode.read:
-        return 'legacy_primary'
-    return 'v17_read'
-
-
-def build_v17_v3_production_runtime(*, uid: str, db_client, env: dict[str, str] | None = None) -> V17V3GetRuntime:
-    effective_env = env if env is not None else os.environ
-    if not _v3_get_route_enabled(effective_env):
-        return V17V3GetRuntime(enabled=False, source_decision='disabled')
-    rollout_config = _rollout_config_from_env(effective_env)
-    if not _runtime_enabled(rollout_config):
-        return V17V3GetRuntime(enabled=False, source_decision='disabled')
-
-    source_decision = _source_decision_for_uid(uid=uid, db_client=db_client, rollout_config=rollout_config)
-    if source_decision == 'disabled':
-        return V17V3GetRuntime(enabled=False, source_decision='disabled')
-    if source_decision == 'legacy_primary':
-        return V17V3GetRuntime(enabled=True, source_decision='legacy_primary')
-
-    config = _RuntimeConfig(
-        uid=uid,
-        db_client=db_client,
-        rollout_config=rollout_config,
-        cursor_secret=_cursor_secret_from_env(effective_env),
-        cursor_policy_version=effective_env.get('V17_V3_CURSOR_POLICY_VERSION') or _DEFAULT_CURSOR_POLICY_VERSION,
-        cursor_secret_version=effective_env.get('V17_V3_CURSOR_SECRET_VERSION') or _DEFAULT_CURSOR_SECRET_VERSION,
-        cursor_ttl_seconds=_cursor_ttl_from_env(effective_env),
-    )
-    adapters = _ProductionV17V3Adapters(config)
-    return V17V3GetRuntime(
-        enabled=True,
-        source_decision='v17_read',
-        service=compose_v17_v3_get,
-        adapters=adapters.as_composed_adapters(),
-        source_selector='server_side_rollout_config_and_control_state',
-        control_reader=read_v17_v3_control,
-        projection_reader=read_v17_v3_compatibility_projection_page,
-        cursor_codec='v17_v3_hmac_cursor',
-        clock=adapters.now_ms,
-    )
+__all__ = [
+    "build_v17_v3_production_runtime",
+    "compose_v17_v3_get",
+    "create_v17_v3_cursor",
+    "decide_v17_v3_control_route",
+    "parse_v17_v3_cursor",
+    "read_v17_v3_compatibility_projection_page",
+    "read_v17_v3_control",
+    "read_v17_v3_trusted_account_generation",
+    "V17V3ComposedAdapters",
+    "V17V3ComposedCursor",
+    "V17V3ComposedDependencyDecision",
+    "V17V3ComposedExecutionContext",
+    "V17V3ComposedProjectionPage",
+    "V17V3ComposedRequest",
+    "V17V3ComposedRequestParams",
+    "V17V3ComposedResponse",
+    "V17V3ComposedRow",
+    "V17V3ComposedSnapshotDecision",
+    "V17V3ControlReaderRequest",
+    "V17V3ControlRouteFamily",
+    "V17V3CursorContext",
+    "V17V3CursorError",
+    "V17V3GetRuntime",
+    "V17V3GetSourceDecision",
+    "V17V3Keyset",
+    "V17V3ProjectionCursor",
+    "V17V3ProjectionReadRequest",
+    "V3GetRuntime",
+    "V3GetSourceDecision",
+    "_composed_cursor",
+    "_cursor_context",
+    "_cursor_secret_from_env",
+    "_cursor_ttl_from_env",
+    "_DEFAULT_CURSOR_POLICY_VERSION",
+    "_DEFAULT_CURSOR_SECRET_VERSION",
+    "_DEFAULT_CURSOR_TTL_SECONDS",
+    "_DEFAULT_LIMIT",
+    "_DEFAULT_READ_MODE",
+    "_filter_hash",
+    "_ProductionV17V3Adapters",
+    "_projection_cursor",
+    "_projection_item_to_row",
+    "_read_doc_dict",
+    "_required_str",
+    "_rollout_config_from_env",
+    "_runtime_enabled",
+    "_RuntimeConfig",
+    "_source_decision_for_uid",
+    "_V17_SOURCE",
+    "_v3_get_route_enabled",
+]
