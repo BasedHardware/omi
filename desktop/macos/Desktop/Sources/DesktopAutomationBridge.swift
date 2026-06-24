@@ -5,6 +5,7 @@ import Network
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
   static let portPrefix = "--automation-port="
+  static let captureRootPrefix = "--automation-capture-root="
   static let defaultPort: UInt16 = 47777
 
   static var isEnabled: Bool {
@@ -36,6 +37,26 @@ enum DesktopAutomationLaunchOptions {
     }
 
     return defaultPort
+  }
+
+  static var captureRoot: URL {
+    for argument in CommandLine.arguments {
+      guard argument.hasPrefix(captureRootPrefix) else { continue }
+      let rawValue = String(argument.dropFirst(captureRootPrefix.count))
+      if !rawValue.isEmpty {
+        return URL(fileURLWithPath: rawValue).standardizedFileURL
+      }
+    }
+
+    if let rawValue = ProcessInfo.processInfo.environment["OMI_AUTOMATION_CAPTURE_ROOT"],
+      !rawValue.isEmpty
+    {
+      return URL(fileURLWithPath: rawValue).standardizedFileURL
+    }
+
+    return URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("omi-harness", isDirectory: true)
+      .standardizedFileURL
   }
 }
 
@@ -391,7 +412,13 @@ final class DesktopAutomationBridge {
         log("DesktopAutomationBridge: invalid port \(DesktopAutomationLaunchOptions.port)")
         return
       }
-      let listener = try NWListener(using: parameters, on: port)
+      guard let loopback = IPv4Address("127.0.0.1") else {
+        log("DesktopAutomationBridge: failed to resolve loopback address")
+        return
+      }
+      parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(loopback), port: port)
+
+      let listener = try NWListener(using: parameters)
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
@@ -779,7 +806,12 @@ final class DesktopAutomationBridge {
     _ payload: DesktopAutomationVisualExportRequest
   ) async throws -> DesktopAutomationVisualExportResult {
     try await MainActor.run {
-      let url = URL(fileURLWithPath: payload.path)
+      let url = URL(fileURLWithPath: payload.path).standardizedFileURL
+      let captureRoot = DesktopAutomationLaunchOptions.captureRoot
+      guard url.path == captureRoot.path || url.path.hasPrefix(captureRoot.path + "/") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "visual export path must be under \(captureRoot.path)")
+      }
       try FileManager.default.createDirectory(
         at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
