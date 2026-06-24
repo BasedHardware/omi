@@ -1,5 +1,7 @@
 # Local Emulator Full-Stack Dev Harness Epic
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Status:** Proposed infra epic
 **Primary customer:** Canonical memory development and validation
 **First surface target:** Desktop macOS app
