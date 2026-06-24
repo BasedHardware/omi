@@ -610,6 +610,10 @@ actor AgentBridge {
     guard isRunning else { return }
     isInterrupted = true
     sendLine("{\"type\":\"interrupt\"}")
+    if let continuation = messageContinuation {
+      messageContinuation = nil
+      continuation.resume(throwing: BridgeError.stopped)
+    }
   }
 
   /// Push a refreshed Firebase ID token to the bridge (piMono mode only).
