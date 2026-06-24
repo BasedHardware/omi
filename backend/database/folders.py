@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db
+from ._client import db, document_id_from_seed
 from models.folder import Folder
 
 # System folders that are created for new users
@@ -225,7 +225,10 @@ def initialize_system_folders(uid: str) -> List[dict]:
     now = datetime.now(timezone.utc)
 
     for i, folder_config in enumerate(SYSTEM_FOLDERS):
-        folder_id = str(uuid.uuid4())
+        # Derive a deterministic doc id from uid + category so two concurrent
+        # initializers write the SAME three doc ids; the second .set() then
+        # harmlessly overwrites instead of creating duplicate system folders.
+        folder_id = document_id_from_seed(f"{uid}:system_folder:{folder_config['category_mapping']}")
         folder_data = {
             'id': folder_id,
             'name': folder_config['name'],
