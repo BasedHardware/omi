@@ -268,6 +268,8 @@ actor EmbeddingService {
       if totalProcessed > 0 {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
+    } catch let error as EmbeddingError where error.isExpectedBackendState {
+      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }
@@ -330,6 +332,16 @@ actor EmbeddingService {
       case .invalidResponse: return "AI service returned an unexpected response. Please try again."
       case .serverError(let statusCode, let body): return "Embedding API error (HTTP \(statusCode)): \(body)"
       }
+    }
+
+    /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited).
+    /// These are not actionable bugs: they should be logged locally rather than reported to
+    /// Sentry as high-priority errors, and must not drive tight retry loops.
+    var isExpectedBackendState: Bool {
+      if case .serverError(let statusCode, _) = self {
+        return statusCode == 402 || statusCode == 429
+      }
+      return false
     }
   }
 }

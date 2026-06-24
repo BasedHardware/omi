@@ -118,6 +118,10 @@ class Conversation(BaseModel):
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
+    # Lazy processing (freemium cost cut): True when this desktop conversation was stored as a
+    # raw transcript with no LLM enrichment yet — enrichment runs on first open
+    # (get_conversation_by_id → process_conversation). Cleared once enriched.
+    deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")

@@ -235,7 +235,21 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Listening Lifecycle
 
+  /// True iff the user is on the Omi account (not BYOK) and has hit the monthly free-tier
+  /// chat-question limit. PTT turns count toward that limit (desktop_chat_realtime), so they
+  /// must be gated by it too — same as typed chat (ChatProvider / floating bar). Without this,
+  /// a free user over 30 questions could keep talking for free. Posts the same usage-limit
+  /// popup and returns true so the caller early-returns.
+  private func isBlockedByUsageLimit() -> Bool {
+    guard !APIKeyService.isByokActive, FloatingBarUsageLimiter.shared.isLimitReached else { return false }
+    log("PushToTalkManager: PTT blocked — monthly free-tier chat limit reached")
+    NotificationCenter.default.post(
+      name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "ptt"])
+    return true
+  }
+
   private func startListening() {
+    if isBlockedByUsageLimit() { return }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -266,6 +280,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func enterLockedListening() {
+    if isBlockedByUsageLimit() { return }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()

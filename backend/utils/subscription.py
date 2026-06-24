@@ -68,6 +68,27 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
     return subscription.current_period_end
 
 
+def should_defer_desktop_processing(uid: str) -> bool:
+    """True for desktop users on a non-desktop-entitled plan (basic / Neo) without active
+    BYOK — their conversations are stored as raw transcript on capture and the expensive LLM
+    enrichment is deferred until they first open the conversation (freemium cost cut).
+
+    Operator / Architect (desktop-entitled) and BYOK users (who pay their own LLM bill) are
+    processed normally. The caller restricts this to `source == desktop`. Fails safe to False
+    (process normally) on any error so a Firestore blip never silently strips a paid user's
+    summaries.
+    """
+    try:
+        if users_db.is_byok_active(uid):
+            return False
+        subscription = users_db.get_user_valid_subscription(uid)
+        plan = subscription.plan if subscription else PlanType.basic
+        return plan not in DESKTOP_ENTITLED_PLAN_TYPES
+    except Exception as e:
+        logger.warning("should_defer_desktop_processing lookup failed for uid=%s: %s", uid, e)
+        return False
+
+
 # Desktop-only 3-day trial paywall.
 #
 # Applies to desktop users without a desktop-entitled plan (basic OR Neo) once
@@ -76,6 +97,14 @@ def neo_grandfather_until(subscription: Optional[Subscription]) -> Optional[int]
 # (Operator / Architect), BYOK users, and accounts inside the trial window are
 # exempt.
 TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
+
+# Master switch for the desktop trial paywall. Default OFF: basic/Neo desktop users are
+# never locked out (no 402) AND the client never sees `trial_expired=True`, so the
+# "you've hit your monthly limit" upgrade popup does not fire just from account age — only
+# the actual chat-question quota (30/mo) gates them. Set TRIAL_PAYWALL_ENABLED=true to
+# restore the 3-day trial lockout. NOTE: this changes ONLY the trial paywall — plan limits
+# (Neo questions, data-intake caps) are untouched.
+TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
 
 # Platform identifiers that count as desktop for paywall purposes. The Swift
 # client sends X-App-Platform: macos and the listen WS uses source=desktop.
@@ -162,6 +191,8 @@ def is_trial_paywalled(uid: str, platform: Optional[str]) -> bool:
     `source` query param for the listen WebSocket. Mobile (ios/android),
     Omi devices, and any unknown/missing platform are never paywalled.
     """
+    if not TRIAL_PAYWALL_ENABLED:
+        return False  # trial paywall disabled — never block on account age
     if not platform or platform.lower() not in _TRIAL_PAYWALL_DESKTOP_TOKENS:
         return False
     return _is_trial_expired_cached(uid)
@@ -182,6 +213,17 @@ def get_trial_metadata(uid: str) -> TrialMetadata:
     and benefits from the same Redis cache for the expensive bits.
     """
     try:
+        # Trial paywall disabled → there is no trial to expire. Report an always-active
+        # (non-expired) trial so the desktop client never renders the "trial expired /
+        # you've hit your monthly limit" upgrade popup from account age alone.
+        if not TRIAL_PAYWALL_ENABLED:
+            return TrialMetadata(
+                trial_expired=False,
+                trial_duration_seconds=TRIAL_LENGTH_SECONDS,
+                trial_features=TRIAL_FEATURES,
+                plan_after_trial=get_plan_display_name(PlanType.basic),
+            )
+
         subscription = users_db.get_user_valid_subscription(uid)
         plan = subscription.plan if subscription else PlanType.basic
 

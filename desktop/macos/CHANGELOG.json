@@ -2,6 +2,50 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.507",
+      "date": "2026-06-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.506",
+      "date": "2026-06-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.504",
+      "date": "2026-06-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.503",
+      "date": "2026-06-23",
+      "changes": [
+        "Stopped reporting expected realtime voice session closes (idle timeouts, cancellations) as errors",
+        "Fixed Rewind screen recording dropping ~2.5s of footage and logging spurious errors when the video encoder failed to start, by retrying immediately on the next frame instead of waiting for an emergency reset",
+        "Fixed a task-sync crash that could fail with a database UNIQUE constraint error when a task was synced more than once"
+      ]
+    },
+    {
+      "version": "0.11.501",
+      "date": "2026-06-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.500",
+      "date": "2026-06-23",
+      "changes": [
+        "Proactive assistants (Insights, Focus, Tasks, Memory) now pause when their notifications are off \u2014 no background screen analysis unless you turn notifications on, saving battery and cost"
+      ]
+    },
+    {
       "version": "0.11.499",
       "date": "2026-06-23",
       "changes": [

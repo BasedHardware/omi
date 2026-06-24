@@ -99,6 +99,13 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
+# Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
+# collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
+# OMI_DEV_DIR (explicit overrides always win; the primary checkout keeps "Omi Dev" + 10201).
+source "$(dirname "$0")/../../scripts/dev-instance.sh"
+BACKEND_PORT="${PORT:-$RUST_PORT}"
+export PORT="$BACKEND_PORT"
+
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
@@ -146,7 +153,7 @@ if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
 fi
 AUTOMATION_ARGS=()
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
-    AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-47777}"
+    AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
     AUTOMATION_ARGS+=(--automation-bridge "--automation-port=$AUTOMATION_PORT")
 fi
 
@@ -184,11 +191,16 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Kill any old Rust backend by process name (port-agnostic)
-pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
-    substep "Killing old backend (PID: $pid)"
-    kill -9 "$pid" 2>/dev/null || true
-done
+# Kill only THIS instance's old Rust backend (tracked via pidfile) — never other
+# worktrees' backends. (Previously `pkill -f omi-desktop-backend` killed every agent's.)
+if [ -f "$OMI_DEV_DIR/rust-backend.pid" ]; then
+    OLD_BACKEND_PID="$(cat "$OMI_DEV_DIR/rust-backend.pid" 2>/dev/null)"
+    if [ -n "$OLD_BACKEND_PID" ] && kill -0 "$OLD_BACKEND_PID" 2>/dev/null; then
+        substep "Killing our old backend (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
+        kill -9 "$OLD_BACKEND_PID" 2>/dev/null || true
+    fi
+    rm -f "$OMI_DEV_DIR/rust-backend.pid"
+fi
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
@@ -297,9 +309,7 @@ if [ "$1" = "--yolo" ]; then
     apply_yolo_env
 fi
 
-# Read backend PORT from env (default: 10201, never use 8080)
-BACKEND_PORT="${PORT:-10201}"
-export PORT="$BACKEND_PORT"
+# BACKEND_PORT / PORT already derived per-worktree near the top (scripts/dev-instance.sh).
 
 # Validate credentials (needed for both backend and auth)
 CREDS_PATH="$BACKEND_DIR/google-credentials.json"
@@ -337,6 +347,16 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     step "Starting Rust backend..."
     cd "$BACKEND_DIR"
 
+    # Fail loud (don't clobber) if our derived port is already held — another worktree
+    # likely owns it (or a stale process). Better to stop than to silently steal it.
+    PORT_HOLDER="$(lsof -ti tcp:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+    if [ -n "$PORT_HOLDER" ]; then
+        echo "ERROR: backend port $BACKEND_PORT (instance '$OMI_INSTANCE') is already in use by pid $PORT_HOLDER:"
+        echo "  $(ps -o command= -p "$PORT_HOLDER" 2>/dev/null)"
+        echo "  Another worktree probably owns it. Stop that process, or run with PORT=<free> / OMI_INSTANCE=<name>."
+        exit 1
+    fi
+
     # Build if binary doesn't exist or source is newer
     if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
         step "Building Rust backend (cargo build --release)..."
@@ -345,6 +365,7 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
 
     ./target/release/omi-desktop-backend &
     BACKEND_PID=$!
+    echo "$BACKEND_PID" > "$OMI_DEV_DIR/rust-backend.pid"
     cd - > /dev/null
 
     step "Waiting for backend to start..."

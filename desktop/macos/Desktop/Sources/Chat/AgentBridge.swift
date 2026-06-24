@@ -95,6 +95,7 @@ actor AgentBridge {
     let wasRegistered = registered
     registered = false
     activeRequestId = nil
+    lastKnownQuota = nil
     guard wasRegistered else { return }
     await runtime.unregisterClient(clientId: clientId)
   }
@@ -105,6 +106,7 @@ actor AgentBridge {
     let wasRegistered = registered
     registered = false
     activeRequestId = nil
+    lastKnownQuota = nil
     guard wasRegistered else { return }
     Task {
       await runtime.unregisterClient(clientId: clientId)

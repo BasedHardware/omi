@@ -12,7 +12,12 @@ actor InsightAssistant: ProactiveAssistant {
     var isEnabled: Bool {
         get async {
             await MainActor.run {
+                // Gate the Gemini screen analysis on notifications: if this assistant's
+                // notifications are off (the default), don't spend a Gemini call analyzing
+                // screenshots. Proactive assistants only run when notifications are enabled;
+                // re-enabling notifications in Settings resumes analysis.
                 InsightAssistantSettings.shared.isEnabled
+                    && InsightAssistantSettings.shared.notificationsEnabled
             }
         }
     }
