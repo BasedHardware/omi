@@ -6,6 +6,7 @@ import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import {
   JsonlCompatibilityFacade,
+  selectAdapterScopedToolCallCorrelation,
   selectUnscopedToolCallCorrelation,
 } from "../src/runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
@@ -105,6 +106,37 @@ describe("JsonlCompatibilityFacade", () => {
         },
       ]),
     ).toEqual({});
+  });
+
+  it("selects the sole running adapter context for adapter-scoped tool-call correlation", () => {
+    expect(
+      selectAdapterScopedToolCallCorrelation([
+        {
+          protocolVersion: 2,
+          adapterId: "acp",
+          requestId: "request-acp",
+          clientId: "client-acp",
+          runId: "run-acp",
+          attemptId: "attempt-acp",
+          isRunning: true,
+        },
+        {
+          protocolVersion: 2,
+          adapterId: "pi-mono",
+          requestId: "request-pi",
+          clientId: "client-pi",
+          runId: "run-pi",
+          attemptId: "attempt-pi",
+          isRunning: true,
+        },
+      ], "pi-mono"),
+    ).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-pi",
+      clientId: "client-pi",
+      runId: "run-pi",
+      attemptId: "attempt-pi",
+    });
   });
 
   it("passes request correlation into MCP server builders", async () => {
@@ -612,6 +644,11 @@ describe("JsonlCompatibilityFacade", () => {
     expect(facade.unscopedToolCallCorrelation()).toMatchObject({
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
+    });
+    expect(facade.toolCallCorrelationForRequest("request-terminal-marker")).toMatchObject({
+      requestId: "request-terminal-marker",
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
     });
 
     adapter.resolveDeferred({

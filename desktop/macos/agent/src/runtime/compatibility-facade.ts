@@ -68,6 +68,7 @@ export interface UnscopedToolCallContext {
   protocolVersion?: ProtocolVersion;
   requestId: string;
   clientId: string;
+  adapterId?: string;
   sessionId?: string;
   runId?: string;
   attemptId?: string;
@@ -114,6 +115,16 @@ export function selectUnscopedToolCallCorrelation(
     adapterSessionId: selected.adapterSessionId,
     legacyAdapterSessionId: selected.legacyAdapterSessionId,
   };
+}
+
+export function selectAdapterScopedToolCallCorrelation(
+  contexts: Iterable<UnscopedToolCallContext>,
+  adapterId: string
+): Partial<QueryScopedOutbound> {
+  const runningContexts = Array.from(contexts).filter(
+    (context) => context.isRunning && context.adapterId === adapterId && context.protocolVersion === 2
+  );
+  return runningContexts.length === 1 ? selectUnscopedToolCallCorrelation(runningContexts) : {};
 }
 
 export class JsonlCompatibilityFacade {
@@ -341,6 +352,25 @@ export class JsonlCompatibilityFacade {
 
   unscopedToolCallCorrelation(): Partial<QueryScopedOutbound> {
     return selectUnscopedToolCallCorrelation(this.activeByRequest.values());
+  }
+
+  toolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
+    const context = this.activeByRequest.get(requestId);
+    if (!context || context.protocolVersion !== 2) return {};
+    return {
+      protocolVersion: 2,
+      requestId: context.requestId,
+      clientId: context.clientId,
+      sessionId: context.sessionId,
+      runId: context.runId,
+      attemptId: context.attemptId,
+      adapterSessionId: context.adapterSessionId,
+      legacyAdapterSessionId: context.legacyAdapterSessionId,
+    };
+  }
+
+  toolCallCorrelationForAdapter(adapterId: string): Partial<QueryScopedOutbound> {
+    return selectAdapterScopedToolCallCorrelation(this.activeByRequest.values(), adapterId);
   }
 
   private promptBlocks(message: QueryMessage): PromptBlock[] {

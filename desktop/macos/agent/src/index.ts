@@ -117,7 +117,9 @@ function agentStateDir(): string {
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
-let unscopedToolCallCorrelation: (() => Partial<QueryScopedOutbound>) | undefined;
+let toolCallCorrelation:
+  | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
+  | undefined;
 
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
@@ -174,6 +176,7 @@ function startOmiToolsRelay(): Promise<string> {
               attemptId?: string;
               adapterSessionId?: string;
               legacyAdapterSessionId?: string;
+              adapterId?: string;
             };
 
             if (msg.type === "tool_use") {
@@ -203,18 +206,17 @@ function startOmiToolsRelay(): Promise<string> {
               // Forward tool call to Swift via stdout
               const protocolVersion: ProtocolVersion | undefined =
                 msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
-              const correlation = msg.requestId
-                ? {
-                    protocolVersion,
-                    requestId: msg.requestId,
-                    clientId: msg.clientId,
-                    sessionId: msg.sessionId,
-                    runId: msg.runId,
-                    attemptId: msg.attemptId,
-                    adapterSessionId: msg.adapterSessionId,
-                    legacyAdapterSessionId: msg.legacyAdapterSessionId,
-                  }
-                : unscopedToolCallCorrelation?.() ?? {};
+              const correlation = {
+                ...(toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {}),
+                ...(msg.requestId ? { requestId: msg.requestId } : {}),
+                ...(msg.clientId ? { clientId: msg.clientId } : {}),
+                ...(protocolVersion ? { protocolVersion } : {}),
+                ...(msg.sessionId ? { sessionId: msg.sessionId } : {}),
+                ...(msg.runId ? { runId: msg.runId } : {}),
+                ...(msg.attemptId ? { attemptId: msg.attemptId } : {}),
+                ...(msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
+                ...(msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
+              };
               send({
                 type: "tool_use",
                 callId: msg.callId,
@@ -456,10 +458,10 @@ function buildMcpServers(
   const omiToolsEnv: Array<{ name: string; value: string }> = [
     { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
     { name: "OMI_QUERY_MODE", value: mode },
+    { name: "OMI_ADAPTER_ID", value: "acp" },
   ];
   if (context) {
     omiToolsEnv.push(
-      { name: "OMI_OWNER_ID", value: context.ownerId },
       { name: "OMI_REQUEST_ID", value: context.requestId },
       { name: "OMI_CLIENT_ID", value: context.clientId }
     );
@@ -663,7 +665,15 @@ async function main(): Promise<void> {
     },
     maxRecoverableRetries: 2,
   });
-  unscopedToolCallCorrelation = () => facade.unscopedToolCallCorrelation();
+  toolCallCorrelation = ({ requestId, adapterId }) => {
+    if (requestId) {
+      return facade.toolCallCorrelationForRequest(requestId);
+    }
+    if (adapterId) {
+      return facade.toolCallCorrelationForAdapter(adapterId);
+    }
+    return facade.unscopedToolCallCorrelation();
+  };
 
   // 3. Signal readiness
   send({ type: "init", sessionId: "" });

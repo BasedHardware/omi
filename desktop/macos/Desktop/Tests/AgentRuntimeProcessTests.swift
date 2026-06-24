@@ -111,6 +111,19 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("guard activeRequests.isEmpty else"))
+    XCTAssertTrue(source.contains("isRestarting = true"))
+    XCTAssertTrue(source.contains("guard !isRestarting else"))
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
+  }
+
+  func testStartupTimeoutResumesInitContinuations() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.timeout)"))
+    XCTAssertFalse(source.contains("withThrowingTaskGroup(of: Void.self)"))
   }
 }

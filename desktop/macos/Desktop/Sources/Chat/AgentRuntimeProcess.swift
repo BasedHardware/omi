@@ -101,10 +101,14 @@ actor AgentRuntimeProcess {
   private var activeRequests: [String: ActiveRequest] = [:]
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private var receivedInit = false
+  private var isRestarting = false
 
   var isAlive: Bool { isRunning }
 
   func registerClient(clientId: String, harnessMode: String) async throws {
+    guard !isRestarting else {
+      throw BridgeError.requestAlreadyActive
+    }
     var registration = clients[clientId] ?? ClientRegistration(harnessMode: harnessMode)
     registration.harnessMode = harnessMode
     clients[clientId] = registration
@@ -145,6 +149,8 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) are active")
       throw BridgeError.requestAlreadyActive
     }
+    isRestarting = true
+    defer { isRestarting = false }
     await stopProcess(resumeRequestsWith: BridgeError.stopped)
     try await startProcess(preferredHarnessMode: harnessMode)
   }
@@ -485,18 +491,18 @@ actor AgentRuntimeProcess {
   private func waitForInit(timeout: TimeInterval) async throws {
     if receivedInit { return }
 
-    try await withThrowingTaskGroup(of: Void.self) { group in
-      group.addTask {
-        try await withCheckedThrowingContinuation { continuation in
-          Task { await self.storeInitContinuation(continuation) }
-        }
-      }
-      group.addTask {
+    let timeoutTask = Task {
+      do {
         try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-        throw BridgeError.timeout
+        self.resumeInitContinuations(throwing: BridgeError.timeout)
+      } catch {
+        // Cancelled because init completed first.
       }
-      _ = try await group.next()
-      group.cancelAll()
+    }
+    defer { timeoutTask.cancel() }
+
+    try await withCheckedThrowingContinuation { continuation in
+      storeInitContinuation(continuation)
     }
   }
 

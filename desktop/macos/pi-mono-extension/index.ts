@@ -494,7 +494,13 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
         resolve(result);
       },
     });
-    omiPipeConnection!.write(JSON.stringify({ type: "tool_use", callId, name, input }) + "\n");
+    omiPipeConnection!.write(JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      adapterId: process.env.OMI_ADAPTER_ID,
+    }) + "\n");
   });
 }
 

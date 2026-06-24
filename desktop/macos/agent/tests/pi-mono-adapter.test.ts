@@ -171,7 +171,7 @@ describe("PiMonoAdapter restart lifecycle", () => {
     await adapter.start();
     await expect(adapter.setSystemPrompt("new prompt")).resolves.toBe(true);
 
-    expect(onRestart).toHaveBeenCalledWith("system_prompt");
+    expect(onRestart).toHaveBeenCalledWith("systemPrompt");
     expect(spawn).toHaveBeenCalledTimes(2);
   });
 });

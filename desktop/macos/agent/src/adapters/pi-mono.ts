@@ -277,6 +277,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
+    env.OMI_ADAPTER_ID = "pi-mono";
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
     // The shared runtime process sets the pipe in process.env before starting pi-mono.
@@ -536,7 +537,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
-    this.config.onRestart?.("system_prompt");
+    this.config.onRestart?.("systemPrompt");
     this.pendingSystemPromptRefresh = false;
     process.stderr.write(
       "[pi-mono] subprocess restarted with new system prompt\n"
