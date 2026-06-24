@@ -467,7 +467,10 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
-    data = json.loads(app_data)
+    try:
+        data = json.loads(app_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid app_data: must be valid JSON')
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
