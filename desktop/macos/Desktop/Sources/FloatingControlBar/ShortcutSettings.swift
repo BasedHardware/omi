@@ -268,11 +268,21 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
+    static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
+    static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
+    static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
+        keyCode: 36,
+        keyDisplay: "↩",
+        modifiers: [.command, .shift]
+    )
+    static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
+    static let defaultAskOmiShortcut = askOmiCommandOShortcut
+
     static let askOmiPresets: [KeyboardShortcut] = [
-        KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command),
-        KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: [.command, .shift]),
-        KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command),
-        KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command),
+        askOmiCommandOShortcut,
+        askOmiCommandReturnShortcut,
+        askOmiCommandShiftReturnShortcut,
+        askOmiCommandJShortcut,
     ]
 
     static let pttPresets: [KeyboardShortcut] = [
@@ -530,7 +540,7 @@ class ShortcutSettings: ObservableObject {
         self.askOmiShortcut = Self.loadShortcut(
             forKey: Self.askOmiShortcutDefaultsKey,
             legacyMapper: Self.legacyAskOmiShortcut
-        ) ?? Self.askOmiPresets[0]
+        ) ?? Self.defaultAskOmiShortcut
 
         self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
         self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
@@ -589,13 +599,13 @@ class ShortcutSettings: ObservableObject {
     private static func legacyAskOmiShortcut(_ value: String) -> KeyboardShortcut? {
         switch value {
         case "⌘ Enter":
-            return askOmiPresets[0]
+            return askOmiCommandReturnShortcut
         case "⌘⇧ Enter":
-            return askOmiPresets[1]
+            return askOmiCommandShiftReturnShortcut
         case "⌘J":
-            return askOmiPresets[2]
+            return askOmiCommandJShortcut
         case "⌘O":
-            return askOmiPresets[3]
+            return askOmiCommandOShortcut
         default:
             return nil
         }
