@@ -557,7 +557,10 @@ class MemoryDB(Memory):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.memory_id = self.conversation_id
+        # Deprecated alias for legacy clients: mirror `id` only. Do not copy
+        # `conversation_id` — that produces id/memory_id conflicts on desktop.
+        if self.memory_id is None:
+            self.memory_id = self.id
 
     @property
     def is_active(self) -> bool:
