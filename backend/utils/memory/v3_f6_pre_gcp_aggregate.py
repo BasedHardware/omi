@@ -1,18 +1,21 @@
-"""Canonical alias module for ``utils.memory.v17_v3_f6_pre_gcp_aggregate`` (WS-G).
+"""Canonical module for ``utils.memory.v3_f6_pre_gcp_aggregate`` (WS-G8b).
 
-New canonical-path code may import from here; the V17 module name remains valid
-until a later rename wave. No behavior change — re-exports only.
+Neutral ``v3_f6_pre_gcp_aggregate`` is the source of truth. Legacy ``v17_v3_f6_pre_gcp_aggregate`` remains an importable alias.
 """
 
-from utils.memory.v17_v3_f6_pre_gcp_aggregate import (
+from __future__ import annotations
+
+from utils.memory.v3_f6.aggregate import (
     F6_LOCAL_GATE_IDS,
     GCP_ACCESS_GATE_IDS,
     NON_CLAIMS,
+    build_pre_gcp_aggregate_report,
+)
+from utils.memory.v3_f6.local_smoke import (
     _concrete_registry,
     _hash64,
     _sample_run_record,
     _smoke_current_local_contracts,
-    build_pre_gcp_aggregate_report,
     build_report_from_current_local_contracts,
 )
 
@@ -27,3 +30,5 @@ __all__ = [
     "_sample_run_record",
     "_smoke_current_local_contracts",
 ]
+
+# Neutral symbol aliases (V17 names remain valid via shim)
