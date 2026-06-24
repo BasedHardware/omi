@@ -153,6 +153,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected && (sessionProvider == RealtimeHubSettings.shared.provider || sessionProvider == fallbackProvider)
   }
 
+  /// PTT cold-start grace: give an already-warming/reconnecting hub a short chance to
+  /// become ready before falling back to the slower transcript cascade.
+  func waitUntilActive(timeout: TimeInterval) async -> Bool {
+    ensureWarm()
+    if isActive { return true }
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      try? await Task.sleep(nanoseconds: 50_000_000)
+      if Task.isCancelled { return false }
+      if isActive { return true }
+    }
+    return isActive
+  }
+
   func setup(barState: FloatingControlBarState) {
     self.barState = barState
     // The hub provider follows the "Voice Model" picker, so re-warm when it changes —
@@ -385,6 +399,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     audioReceivedThisTurn = true
+    barState?.isVoiceResponseActive = true
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
@@ -395,7 +410,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
       // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
-      if !audioReceivedThisTurn, !reply.isEmpty { speak(reply) }
+      if !audioReceivedThisTurn, !reply.isEmpty {
+        barState?.isVoiceResponseActive = true
+        speak(reply)
+      }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
     }
   }
@@ -434,7 +452,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let query = arg("query")
       let context = (arguments["context"] as? String) ?? ""
       log(
-        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (claude-sonnet-4-6) query=\"\(query.prefix(80))\""
+        "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (\(ModelQoS.Claude.defaultSelection)) query=\"\(query.prefix(80))\""
       )
       Task { [weak self] in
         guard let self else { return }
@@ -593,7 +611,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let model = ShortcutSettings.shared.selectedModel.isEmpty
-        ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
       // own ChatProvider/AgentBridge. We don't await it on the voice loop.
       // fromVoice:false — the hub model speaks its own natural acknowledgment, so the pill
@@ -649,7 +667,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
-    let hasActiveTurn = responding || (barState?.isVoiceListening == true)
+    let hasActiveTurn = responding
+      || (barState?.isVoiceListening == true)
+      || (barState?.isVoiceResponseActive == true)
     responding = false
     let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     // Most "session error" closes are expected lifecycle events, not bugs: a socket
@@ -706,6 +726,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
+    barState.isVoiceResponseActive = false
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
@@ -750,7 +771,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let ms = Int(Date().timeIntervalSince(t0) * 1000)
       guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-        log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 HTTP \(code) in \(ms)ms (FAILED)")
+        log("RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) HTTP \(code) in \(ms)ms (FAILED)")
         return "The model is unavailable right now."
       }
       guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -762,7 +783,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return "I didn't get a usable answer."
       }
       let answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      log("RealtimeHub: ask_higher_model ← claude-sonnet-4-6 OK in \(ms)ms (\(answer.count) chars)")
+      log("RealtimeHub: ask_higher_model ← \(ModelQoS.Claude.defaultSelection) OK in \(ms)ms (\(answer.count) chars)")
       return answer
     } catch {
       log("RealtimeHub: ask_higher_model failed — \(error.localizedDescription)")

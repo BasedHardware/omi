@@ -4362,7 +4362,7 @@ struct TaskRow: View {
                     if !task.completed {
                         Button {
                             let model = ShortcutSettings.shared.selectedModel.isEmpty
-                                ? "claude-sonnet-4-6"
+                                ? ModelQoS.Claude.defaultSelection
                                 : ShortcutSettings.shared.selectedModel
                             AgentPillsManager.shared.spawn(query: task.description, model: model)
                         } label: {

@@ -93,6 +93,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceListening: Bool = false
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
+    @Published var isVoiceResponseActive: Bool = false
 
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false

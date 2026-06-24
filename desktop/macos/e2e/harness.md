@@ -63,6 +63,11 @@ traces, logs, timing, and AX text. The harness does not score screenshot quality
 the agent should open the PNGs listed in `summary.md` and judge layout, polish,
 clipping, empty states, and visual regressions directly.
 
+Bridge routes return as soon as the app has accepted the command. Prefer `wait:`
+for readiness checks so benchmark timing separates command latency from UI settle
+latency. If a flow genuinely needs a fixed pause, pass `settleMs:` on
+`bridge.navigate` payloads, `/conversation/open` payloads, or as an action param.
+
 Use `visual.action_sequence` for fast animations. It posts the bridge action and
 captures frames concurrently, which avoids missing transitions that finish before
 a normal action response returns:

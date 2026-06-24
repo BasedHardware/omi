@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -26,6 +27,7 @@ DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
 DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
 DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
+POLL_INTERVAL_SECONDS = 0.02
 
 
 @dataclass
@@ -156,7 +158,7 @@ def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], tim
         latest = state_snapshot(ctx)
         if expectation_matches({"state": latest}, expectations):
             return True, latest
-        time.sleep(0.15)
+        time.sleep(POLL_INTERVAL_SECONDS)
     return False, latest
 
 
@@ -167,7 +169,7 @@ def wait_for_trace(ctx: HarnessContext, expectations: dict[str, typing.Any], tim
         traces = recent_traces(ctx)
         if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
             return True, traces
-        time.sleep(0.15)
+        time.sleep(POLL_INTERVAL_SECONDS)
     return False, traces
 
 
@@ -488,24 +490,45 @@ def create_context(args: argparse.Namespace, flow_path: Path, run_dir: Path, lan
     )
 
 
-def run_flow(args: argparse.Namespace) -> int:
+def unique_run_dir(run_root: Path, timestamp: str, flow_name: str) -> Path:
+    run_root.mkdir(parents=True, exist_ok=True)
+    slugged_name = slug(flow_name)
+    for index in range(1, 1000):
+        suffix = "" if index == 1 else f"-{index}"
+        candidate = run_root / f"{timestamp}-{slugged_name}{suffix}"
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"unable to allocate run directory for {timestamp}-{slugged_name}")
+
+
+def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing.Any]]:
     flow_path = Path(args.flow).resolve()
     flow = read_yaml(flow_path)
     flow_name = str(flow.get("name") or flow_path.stem)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_root = Path(args.out).resolve()
-    run_dir = run_root / f"{timestamp}-{slug(flow_name)}"
+    run_dir = unique_run_dir(run_root, timestamp, flow_name)
     steps_dir = run_dir / "steps"
-    steps_dir.mkdir(parents=True, exist_ok=True)
+    steps_dir.mkdir()
 
     ctx = create_context(args, flow_path, run_dir, args.lane)
     started = time.perf_counter()
+    setup_errors: list[str] = []
     initial_state = request_json(ctx.base_url, "GET", "/state")
     capabilities = request_json(ctx.base_url, "GET", "/capabilities")
+    if initial_state.get("ok") and capabilities.get("ok"):
+        clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
+        if not clear_response.get("ok"):
+            setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
     write_json(run_dir / "initial-state.json", initial_state)
     write_json(run_dir / "capabilities.json", capabilities)
 
-    step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
+    step_results = []
+    if not setup_errors:
+        step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
     logs = collect_logs(ctx)
     final_state = request_json(ctx.base_url, "GET", "/state")
     traces = recent_traces(ctx)
@@ -534,15 +557,21 @@ def run_flow(args: argparse.Namespace) -> int:
             "bridge_trace_ms": [trace.get("durationMs") for trace in traces],
         },
         "steps": step_results,
+        "setup_errors": setup_errors,
         "logs": logs,
-        "ok": bridge_ready and all(step["ok"] for step in step_results),
+        "ok": bridge_ready and not setup_errors and all(step["ok"] for step in step_results),
         "bridge_ready": bridge_ready,
         "started_at": now_iso(),
     }
     write_json(run_dir / "metrics.json", metrics)
     write_summary(run_dir, metrics)
+    return (0 if metrics["ok"] else 1), run_dir, metrics
+
+
+def run_flow(args: argparse.Namespace) -> int:
+    exit_code, run_dir, _ = run_flow_once(args)
     print(str(run_dir))
-    return 0 if metrics["ok"] else 1
+    return exit_code
 
 
 def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
@@ -557,6 +586,8 @@ def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
         "",
         "## Steps",
     ]
+    for error in metrics.get("setup_errors", []):
+        lines.append(f"- FAIL setup {error}")
     for step in metrics["steps"]:
         status = "PASS" if step["ok"] else "FAIL"
         lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")
@@ -608,22 +639,163 @@ def latest_cmd(args: argparse.Namespace) -> int:
     return 0
 
 
+def repeat_flow(args: argparse.Namespace) -> int:
+    count = max(1, args.count)
+    runs: list[dict[str, typing.Any]] = []
+    exit_code = 0
+    for index in range(count):
+        code, run_dir, metrics = run_flow_once(args)
+        exit_code = exit_code or code
+        total_ms = float(metrics["timing"]["total_ms"])
+        runs.append({"path": str(run_dir), "metrics": metrics, "total_ms": total_ms})
+        print(f"{index + 1}/{count} {run_dir} total_ms={total_ms:.2f} ok={metrics.get('ok')}")
+
+    successful_runs = [run for run in runs if run["metrics"].get("ok")]
+    sample_runs = successful_runs or runs
+    totals = [run["total_ms"] for run in sample_runs]
+    best = min(sample_runs, key=lambda run: run["total_ms"])
+    worst = max(sample_runs, key=lambda run: run["total_ms"])
+    print("")
+    if successful_runs:
+        print(f"successful_runs={len(successful_runs)}/{len(runs)}")
+    else:
+        print(f"successful_runs=0/{len(runs)} (timing stats include failed runs)")
+    print(f"best_ms={best['total_ms']:.2f} path={best['path']}")
+    print(f"median_ms={statistics.median(totals):.2f}")
+    print(f"worst_ms={worst['total_ms']:.2f} path={worst['path']}")
+
+    step_ids = [str(step.get("id")) for step in sample_runs[0]["metrics"].get("steps", [])]
+    if step_ids:
+        print("")
+        print("| step | median | best | worst |")
+        print("| --- | ---: | ---: | ---: |")
+        for step_id in step_ids:
+            values = []
+            name = step_id
+            for run in sample_runs:
+                by_id = {str(step.get("id")): step for step in run["metrics"].get("steps", [])}
+                step = by_id.get(step_id)
+                if not step:
+                    continue
+                name = f"{step_id} {step.get('name', '')}".strip()
+                values.append(float(step.get("duration_ms") or 0))
+            if values:
+                print(
+                    f"| {name} | {statistics.median(values):.2f} ms | "
+                    f"{min(values):.2f} ms | {max(values):.2f} ms |"
+                )
+    return exit_code
+
+
+def percent_delta(before: float, after: float) -> float | None:
+    if before == 0:
+        return None
+    return (after - before) / before * 100
+
+
+def speedup(before: float, after: float) -> float | None:
+    if before <= 0 or after <= 0:
+        return None
+    return before / after
+
+
+def format_percent(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:+.1f}%"
+
+
+def format_speedup(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}x"
+
+
+def comparable_steps(left: dict[str, typing.Any], right: dict[str, typing.Any]) -> list[dict[str, typing.Any]]:
+    left_steps = {str(step.get("id")): step for step in left.get("steps", [])}
+    right_steps = {str(step.get("id")): step for step in right.get("steps", [])}
+    ordered_ids = [str(step.get("id")) for step in left.get("steps", [])]
+    ordered_ids.extend(step_id for step_id in right_steps if step_id not in left_steps)
+    rows = []
+    for step_id in ordered_ids:
+        before_step = left_steps.get(step_id)
+        after_step = right_steps.get(step_id)
+        if not before_step or not after_step:
+            rows.append(
+                {
+                    "id": step_id,
+                    "name": (before_step or after_step or {}).get("name", ""),
+                    "operation": (before_step or after_step or {}).get("operation", ""),
+                    "before_ms": None if not before_step else before_step.get("duration_ms"),
+                    "after_ms": None if not after_step else after_step.get("duration_ms"),
+                    "delta_ms": None,
+                    "delta_percent": None,
+                    "speedup": None,
+                    "ok": [before_step.get("ok") if before_step else None, after_step.get("ok") if after_step else None],
+                }
+            )
+            continue
+        before_ms = float(before_step.get("duration_ms") or 0)
+        after_ms = float(after_step.get("duration_ms") or 0)
+        rows.append(
+            {
+                "id": step_id,
+                "name": after_step.get("name") or before_step.get("name") or "",
+                "operation": after_step.get("operation") or before_step.get("operation") or "",
+                "before_ms": before_ms,
+                "after_ms": after_ms,
+                "delta_ms": round(after_ms - before_ms, 2),
+                "delta_percent": percent_delta(before_ms, after_ms),
+                "speedup": speedup(before_ms, after_ms),
+                "ok": [before_step.get("ok"), after_step.get("ok")],
+            }
+        )
+    return rows
+
+
 def compare_runs(args: argparse.Namespace) -> int:
     left = json.loads((Path(args.left) / "metrics.json").read_text(encoding="utf-8"))
     right = json.loads((Path(args.right) / "metrics.json").read_text(encoding="utf-8"))
+    total_before = float(left["timing"]["total_ms"])
+    total_after = float(right["timing"]["total_ms"])
     comparison = {
         "left": str(Path(args.left).resolve()),
         "right": str(Path(args.right).resolve()),
         "ok_changed": [left.get("ok"), right.get("ok")],
-        "total_ms_delta": round(right["timing"]["total_ms"] - left["timing"]["total_ms"], 2),
+        "total_before_ms": total_before,
+        "total_after_ms": total_after,
+        "total_ms_delta": round(total_after - total_before, 2),
+        "total_delta_percent": percent_delta(total_before, total_after),
+        "total_speedup": speedup(total_before, total_after),
         "log_error_count_delta": right["logs"].get("error_count", 0) - left["logs"].get("error_count", 0),
         "step_count_delta": len(right.get("steps", [])) - len(left.get("steps", [])),
+        "steps": comparable_steps(left, right),
     }
     if args.markdown:
         print("| metric | value |")
         print("| --- | --- |")
         for key, value in comparison.items():
+            if key == "steps":
+                continue
+            if key.endswith("_percent"):
+                value = format_percent(value)
+            elif key.endswith("_speedup"):
+                value = format_speedup(value)
             print(f"| {key} | `{value}` |")
+        print("")
+        print("| step | operation | before | after | delta | change | speedup | ok |")
+        print("| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |")
+        for row in comparison["steps"]:
+            before = "n/a" if row["before_ms"] is None else f"{row['before_ms']:.2f} ms"
+            after = "n/a" if row["after_ms"] is None else f"{row['after_ms']:.2f} ms"
+            delta = "n/a" if row["delta_ms"] is None else f"{row['delta_ms']:+.2f} ms"
+            print(
+                "| "
+                f"{row['id']} {row['name']} | "
+                f"{row['operation']} | "
+                f"{before} | "
+                f"{after} | "
+                f"{delta} | "
+                f"{format_percent(row['delta_percent'])} | "
+                f"{format_speedup(row['speedup'])} | "
+                f"{row['ok']} |"
+            )
     else:
         print(json.dumps(comparison, indent=2, sort_keys=True))
     return 0
@@ -666,6 +838,11 @@ def main() -> int:
     baseline = subparsers.add_parser("baseline", help="alias for run, intended for before/after comparisons")
     add_run_args(baseline)
     baseline.set_defaults(func=run_flow)
+
+    repeat = subparsers.add_parser("repeat", help="run a flow sequentially and summarize timing spread")
+    add_run_args(repeat)
+    repeat.add_argument("--count", type=int, default=3)
+    repeat.set_defaults(func=repeat_flow)
 
     compare = subparsers.add_parser("compare", help="compare two harness run directories")
     compare.add_argument("left")

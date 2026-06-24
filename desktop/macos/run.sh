@@ -112,7 +112,9 @@ export PORT="$BACKEND_PORT"
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 APP_NAME="${OMI_APP_NAME:-Omi Dev}"
 IS_NAMED_BUNDLE=false
-[ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
+if [ "$APP_NAME" != "Omi Dev" ]; then
+    IS_NAMED_BUNDLE=true
+fi
 
 slugify_identifier() {
     printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
