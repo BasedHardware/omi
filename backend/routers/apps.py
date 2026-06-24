@@ -500,7 +500,10 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
         if external_integration.get('triggers_on'):
-            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            webhook_url = external_integration.get('webhook_url')
+            if not webhook_url:
+                raise HTTPException(status_code=422, detail='webhook_url is required when triggers_on is set')
+            external_integration['webhook_url'] = webhook_url.strip()
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
                     'setup_instructions_file_path'
