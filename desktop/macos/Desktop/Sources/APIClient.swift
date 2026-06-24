@@ -29,8 +29,9 @@ actor APIClient {
   // Short-lived caches to deduplicate simultaneous calls from multiple services
   private var goalsCacheTime: Date?
   private var goalsCache: [Goal]?
-  private var conversationsCountCacheTime: Date?
-  private var conversationsCountCache: Int?
+  // Keyed by the query parameters so a cached total for one filter set is never
+  // returned for a different one (e.g. includeDiscarded / statuses).
+  private var conversationsCountCache: [String: (count: Int, time: Date)] = [:]
 
   init() {
     let config = URLSessionConfiguration.default
@@ -512,12 +513,6 @@ extension APIClient {
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing]
   ) async throws -> Int {
-    if let cache = conversationsCountCache, let time = conversationsCountCacheTime,
-      Date().timeIntervalSince(time) < 5
-    {
-      return cache
-    }
-
     var queryItems: [String] = [
       "include_discarded=\(includeDiscarded)"
     ]
@@ -529,13 +524,16 @@ extension APIClient {
 
     let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
 
+    if let cache = conversationsCountCache[endpoint], Date().timeIntervalSince(cache.time) < 5 {
+      return cache.count
+    }
+
     struct CountResponse: Decodable {
       let count: Int
     }
 
     let response: CountResponse = try await get(endpoint)
-    conversationsCountCache = response.count
-    conversationsCountCacheTime = Date()
+    conversationsCountCache[endpoint] = (count: response.count, time: Date())
     return response.count
   }
 
