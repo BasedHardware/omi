@@ -87,6 +87,7 @@ pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
+pytest tests/unit/test_scores_list_date_validation.py -v
 pytest tests/unit/test_translation_cost_optimization.py -v
 pytest tests/unit/test_translation_dedup_edge_cases.py -v
 pytest tests/unit/test_conversation_source_unknown.py -v
