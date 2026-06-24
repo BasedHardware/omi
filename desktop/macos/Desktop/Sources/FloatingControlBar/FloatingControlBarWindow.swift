@@ -601,6 +601,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated {
+            // Keep windowDidResize from persisting transient animation frames as
+            // the user's saved response size until the final frame lands.
             animateFrame(to: targetFrame, duration: animationDuration) { [weak self] in
                 self?.isResizingProgrammatically = false
             }

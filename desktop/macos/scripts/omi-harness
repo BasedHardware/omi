@@ -635,6 +635,9 @@ def cleanup_runs(args: argparse.Namespace) -> int:
     keep = max(0, args.keep)
     remove = runs[:-keep] if keep else runs
     for path in remove:
+        resolved = path.resolve()
+        if path.is_symlink() or path.parent.resolve() != root or root not in resolved.parents:
+            raise SystemExit(f"omi-harness: refusing unsafe cleanup path: {path}")
         shutil.rmtree(path)
         print(f"removed {path}")
     return 0
