@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 import firebase_admin
 from fastapi import FastAPI
