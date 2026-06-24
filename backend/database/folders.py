@@ -195,14 +195,24 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
 
 
 def reorder_folders(uid: str, folder_ids: List[str]) -> bool:
-    """Reorder folders by providing an ordered list of folder IDs."""
+    """Reorder folders by providing an ordered list of folder IDs.
+
+    Unknown/foreign folder IDs are skipped so a stale client id can't 500
+    the whole reorder (batch.update on a missing doc raises NotFound).
+    """
     user_ref = db.collection('users').document(uid)
     folders_ref = user_ref.collection('folders')
 
+    existing_ids = {f['id'] for f in get_folders(uid)}
+
     batch = db.batch()
-    for i, folder_id in enumerate(folder_ids):
+    order = 0
+    for folder_id in folder_ids:
+        if folder_id not in existing_ids:
+            continue
         folder_ref = folders_ref.document(folder_id)
-        batch.update(folder_ref, {'order': i, 'updated_at': datetime.now(timezone.utc)})
+        batch.update(folder_ref, {'order': order, 'updated_at': datetime.now(timezone.utc)})
+        order += 1
 
     batch.commit()
     return True
