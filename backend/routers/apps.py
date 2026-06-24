@@ -561,6 +561,8 @@ async def create_persona(
         data = json.loads(persona_data)
     except (json.JSONDecodeError, TypeError):
         raise HTTPException(status_code=400, detail='Invalid persona_data: must be valid JSON')
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail='Invalid persona_data: must be a JSON object')
     data['approved'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'

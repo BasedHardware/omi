@@ -116,3 +116,12 @@ def test_create_persona_invalid_json_returns_400_not_500():
     with pytest.raises(HTTPException) as e:
         asyncio.run(apps_mod.create_persona(persona_data='this is not json', file=MagicMock(), uid='uid1'))
     assert e.value.status_code == 400
+
+
+def test_create_persona_non_object_json_returns_400_not_500():
+    # Valid JSON that is not an object (array/scalar) must also be rejected with 400, not 500: the
+    # handler immediately does dict-style writes like data['approved'] = False.
+    for payload in ('[1, 2, 3]', '"a string"', '42'):
+        with pytest.raises(HTTPException) as e:
+            asyncio.run(apps_mod.create_persona(persona_data=payload, file=MagicMock(), uid='uid1'))
+        assert e.value.status_code == 400
