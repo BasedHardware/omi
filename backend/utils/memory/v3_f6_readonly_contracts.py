@@ -1,37 +1,44 @@
-"""Canonical alias module for ``utils.memory.v17_v3_f6_readonly_contracts`` (WS-G).
+"""Canonical module for ``utils.memory.v3_f6_readonly_contracts`` (WS-G8b).
 
-New canonical-path code may import from here; the V17 module name remains valid
-until a later rename wave. No behavior change — re-exports only.
+Neutral ``v3_f6_readonly_contracts`` is the source of truth. Legacy ``v17_v3_f6_readonly_contracts`` remains an importable alias.
 """
 
-from utils.memory.v17_v3_f6_readonly_contracts import (
+from __future__ import annotations
+
+from utils.memory.v3_f6.audit import (
+    WRITE_METHOD_MARKERS,
     AuditCorrelationResult,
     AuditLogClient,
     AuditLogEvent,
     AuditQuery,
-    EvidenceClientConfig,
+    _audit_method_is_write,
+    _method_family,
+    assess_audit_correlation,
+)
+from utils.memory.v3_f6.identity_iam import (
     FORBIDDEN_BROAD_ROLES,
     FORBIDDEN_WRITE_PERMISSIONS,
-    FakeAuditLogClient,
-    FakeIdentityIamSource,
-    FakeReadEvidenceTransport,
-    GENERIC_OR_RAW_METHODS,
+    REQUIRED_READ_PERMISSIONS,
     IdentityIamSource,
     IdentityIamTarget,
     IdentityIamVerificationResult,
+    verify_identity_iam,
+)
+from utils.memory.v3_f6.local_doubles import (
+    FakeAuditLogClient,
+    FakeIdentityIamSource,
+    FakeReadEvidenceTransport,
+)
+from utils.memory.v3_f6.read_evidence import (
+    GENERIC_OR_RAW_METHODS,
     MUTATOR_TOKENS,
-    REQUIRED_READ_PERMISSIONS,
+    EvidenceClientConfig,
     ReadEvidenceRequest,
     ReadEvidenceTransport,
     ReadOnlyEvidenceClient,
-    RunRecord,
-    WRITE_METHOD_MARKERS,
-    _audit_method_is_write,
-    _method_family,
     _method_is_forbidden,
-    assess_audit_correlation,
-    verify_identity_iam,
 )
+from utils.memory.v3_f6.run_context import RunRecord
 
 __all__ = [
     "AuditCorrelationResult",
@@ -61,3 +68,5 @@ __all__ = [
     "assess_audit_correlation",
     "verify_identity_iam",
 ]
+
+# Neutral symbol aliases (V17 names remain valid via shim)
