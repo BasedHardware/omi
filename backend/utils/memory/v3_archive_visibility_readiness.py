@@ -1,7 +1,4 @@
-"""Canonical module for ``utils.memory.v3_archive_visibility_readiness`` (WS-G8b).
-
-Neutral ``v3_archive_visibility_readiness`` is the source of truth. Legacy ``v17_v3_archive_visibility_readiness`` remains an importable alias.
-"""
+"""Canonical module for ``utils.memory.v3_archive_visibility_readiness`` (WS-G8b)."""
 
 from __future__ import annotations
 

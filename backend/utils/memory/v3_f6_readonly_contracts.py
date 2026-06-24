@@ -1,7 +1,4 @@
-"""Canonical module for ``utils.memory.v3_f6_readonly_contracts`` (WS-G8b).
-
-Neutral ``v3_f6_readonly_contracts`` is the source of truth. Legacy ``v17_v3_f6_readonly_contracts`` remains an importable alias.
-"""
+"""Canonical module for ``utils.memory.v3_f6_readonly_contracts`` (WS-G8b)."""
 
 from __future__ import annotations
 

@@ -1,7 +1,4 @@
-"""Canonical module for ``utils.memory.v3_gcp_evidence_config`` (WS-G8b).
-
-Neutral ``v3_gcp_evidence_config`` is the source of truth. Legacy ``v17_v3_gcp_evidence_config`` remains an importable alias.
-"""
+"""Canonical module for ``utils.memory.v3_gcp_evidence_config`` (WS-G8b)."""
 
 from __future__ import annotations
 

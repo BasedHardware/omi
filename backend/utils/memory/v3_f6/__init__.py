@@ -1,7 +1,4 @@
-"""Canonical package for ``utils.memory.v3_f6`` (WS-G8b).
-
-Neutral ``v3_f6`` is the source of truth. Legacy ``v17_v3_f6`` remains an importable alias.
-"""
+"""Canonical package for ``utils.memory.v3_f6`` (WS-G8b)."""
 
 from __future__ import annotations
 
