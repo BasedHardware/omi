@@ -9,10 +9,15 @@ from pinecone import Pinecone
 
 from database import projection_repair
 from database.v17_vector_metadata import (
+    build_archive_memory_vector_filter,
+    build_default_memory_vector_filter,
+    build_memory_vector_metadata,
     build_v17_archive_memory_vector_filter,
     build_v17_default_memory_vector_filter,
+    parse_memory_search_vector_hit,
     parse_v17_search_vector_hit,
 )
+from models.product_memory import V17MemoryItem
 from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 import logging
@@ -379,6 +384,79 @@ def query_v17_memory_vector_candidates(
     rejected_count = 0
     for match in response.get('matches', []):
         parsed = parse_v17_search_vector_hit(match)
+        if parsed.hit is None:
+            rejected_count += 1
+            continue
+        hits.append(parsed.hit)
+    return V17VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
+
+
+def upsert_canonical_memory_vector(
+    item: V17MemoryItem,
+    *,
+    projection_commit_id: str | None = None,
+) -> List[float] | None:
+    """Upsert one canonical-cohort memory vector using neutral id + neutral metadata."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector upsert')
+        return None
+
+    content = (item.content or "").strip()
+    if not content:
+        logger.warning('canonical memory vector upsert skipped: empty content memory_id=%s', item.memory_id)
+        return None
+
+    commit_id = projection_commit_id or item.ledger_commit_id
+    if not commit_id:
+        logger.warning(
+            'canonical memory vector upsert skipped: missing projection_commit_id memory_id=%s', item.memory_id
+        )
+        return None
+
+    vector = embeddings.embed_query(content)
+    vector_updated_at = datetime.now(timezone.utc)
+    metadata = build_memory_vector_metadata(
+        item,
+        projection_commit_id=commit_id,
+        vector_updated_at=vector_updated_at,
+    )
+    data = {
+        "id": item.memory_id,
+        "values": vector,
+        "metadata": metadata,
+    }
+    res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
+    logger.info('upsert_canonical_memory_vector %s %s', item.memory_id, res)
+    return vector
+
+
+def query_memory_vector_candidates(
+    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+) -> V17VectorCandidateQueryResult:
+    """Query ns2 for canonical neutral-metadata memory vector candidates."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
+        return V17VectorCandidateQueryResult()
+
+    vector = embeddings.embed_query(query)
+    filter_data = (
+        build_archive_memory_vector_filter(uid)
+        if mode == SearchMode.archive_explicit
+        else build_default_memory_vector_filter(uid)
+    )
+    response = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        include_values=False,
+        filter=filter_data,
+        namespace=MEMORIES_NAMESPACE,
+    )
+
+    hits: List[SearchVectorHit] = []
+    rejected_count = 0
+    for match in response.get('matches', []):
+        parsed = parse_memory_search_vector_hit(match)
         if parsed.hit is None:
             rejected_count += 1
             continue
