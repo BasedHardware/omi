@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
-WORKER_ENABLED_ENV = "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
+WORKER_ENABLED_ENV = "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
 DEFAULT_SERVICE = "v17-vector-repair-outbox-worker"
 DEFAULT_SCHEDULER_JOB = "v17-vector-repair-outbox-worker-tick"
 DEFAULT_TASKS_QUEUE = "v17-vector-repair-outbox-worker"
@@ -421,9 +421,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 def apply_env_defaults(args: argparse.Namespace, env: Mapping[str, str]) -> argparse.Namespace:
     if not args.project:
-        args.project = env.get("V17_VECTOR_REPAIR_PROOF_PROJECT", "")
+        args.project = env.get("MEMORY_VECTOR_REPAIR_PROOF_PROJECT", "")
     if not args.region:
-        args.region = env.get("V17_VECTOR_REPAIR_PROOF_REGION", "")
+        args.region = env.get("MEMORY_VECTOR_REPAIR_PROOF_REGION", "")
     return args
 
 
