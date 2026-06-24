@@ -113,6 +113,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("guard activeRequests.isEmpty else"))
     XCTAssertTrue(source.contains("isRestarting = true"))
     XCTAssertTrue(source.contains("guard !isRestarting else"))
+    XCTAssertTrue(source.contains("BridgeError.restarting"))
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
 

@@ -206,16 +206,21 @@ function startOmiToolsRelay(): Promise<string> {
               // Forward tool call to Swift via stdout
               const protocolVersion: ProtocolVersion | undefined =
                 msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
+              const resolvedCorrelation =
+                toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {};
+              const messageRequestIsActive = Boolean(
+                msg.requestId && resolvedCorrelation.requestId === msg.requestId
+              );
               const correlation = {
-                ...(toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {}),
-                ...(msg.requestId ? { requestId: msg.requestId } : {}),
-                ...(msg.clientId ? { clientId: msg.clientId } : {}),
-                ...(protocolVersion ? { protocolVersion } : {}),
-                ...(msg.sessionId ? { sessionId: msg.sessionId } : {}),
-                ...(msg.runId ? { runId: msg.runId } : {}),
-                ...(msg.attemptId ? { attemptId: msg.attemptId } : {}),
-                ...(msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
-                ...(msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
+                ...resolvedCorrelation,
+                ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
+                ...(messageRequestIsActive && msg.clientId ? { clientId: msg.clientId } : {}),
+                ...(messageRequestIsActive && protocolVersion ? { protocolVersion } : {}),
+                ...(messageRequestIsActive && msg.sessionId ? { sessionId: msg.sessionId } : {}),
+                ...(messageRequestIsActive && msg.runId ? { runId: msg.runId } : {}),
+                ...(messageRequestIsActive && msg.attemptId ? { attemptId: msg.attemptId } : {}),
+                ...(messageRequestIsActive && msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
+                ...(messageRequestIsActive && msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
               };
               send({
                 type: "tool_use",
@@ -667,7 +672,10 @@ async function main(): Promise<void> {
   });
   toolCallCorrelation = ({ requestId, adapterId }) => {
     if (requestId) {
-      return facade.toolCallCorrelationForRequest(requestId);
+      const requestCorrelation = facade.toolCallCorrelationForRequest(requestId);
+      if (requestCorrelation.requestId) {
+        return requestCorrelation;
+      }
     }
     if (adapterId) {
       return facade.toolCallCorrelationForAdapter(adapterId);

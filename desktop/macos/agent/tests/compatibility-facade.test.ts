@@ -650,6 +650,12 @@ describe("JsonlCompatibilityFacade", () => {
       runId: adapter.executed[0].runId,
       attemptId: adapter.executed[0].attemptId,
     });
+    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process")).toEqual({});
+    expect(facade.toolCallCorrelationForAdapter("fake")).toMatchObject({
+      requestId: "request-terminal-marker",
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+    });
 
     adapter.resolveDeferred({
       text: "done",

@@ -276,6 +276,7 @@ enum BridgeError: LocalizedError {
   case processExited
   case outOfMemory
   case stopped
+  case restarting
   case requestAlreadyActive
   case agentError(String)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
@@ -303,6 +304,8 @@ enum BridgeError: LocalizedError {
       return "Not enough memory for AI chat. Close some apps and try again."
     case .stopped:
       return "Response stopped."
+    case .restarting:
+      return "AI is restarting. Try sending your message again."
     case .requestAlreadyActive:
       return "A response is already running for this chat."
     case .authMissing:

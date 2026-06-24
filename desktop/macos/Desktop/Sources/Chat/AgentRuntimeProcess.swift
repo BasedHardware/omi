@@ -107,7 +107,7 @@ actor AgentRuntimeProcess {
 
   func registerClient(clientId: String, harnessMode: String) async throws {
     guard !isRestarting else {
-      throw BridgeError.requestAlreadyActive
+      throw BridgeError.restarting
     }
     var registration = clients[clientId] ?? ClientRegistration(harnessMode: harnessMode)
     registration.harnessMode = harnessMode
