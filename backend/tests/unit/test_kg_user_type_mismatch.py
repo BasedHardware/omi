@@ -43,33 +43,32 @@ def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
 
 
 # Stub database package and submodules
-database_mod = _stub_module("database")
-if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
-for submodule in [
-    "redis_db",
-    "memories",
-    "conversations",
-    "notifications",
-    "users",
-    "tasks",
-    "trends",
-    "action_items",
-    "folders",
-    "calendar_meetings",
-    "vector_db",
-    "apps",
-    "llm_usage",
-    "_client",
-    "auth",
-    "chat",
-    "short_term_memories",
-    "entities",
-]:
-    mod = _stub_module(f"database.{submodule}")
-    setattr(database_mod, submodule, mod)
+from tests.unit.memory_import_isolation import (
+    ensure_utils_memory_packages_importable,
+    install_canonical_write_runtime_stubs,
+    install_database_client_stub,
+    install_ws_i_heavy_import_stubs,
+)
 
+ensure_utils_memory_packages_importable(str(BACKEND_DIR))
+install_database_client_stub()
+install_canonical_write_runtime_stubs()
+install_ws_i_heavy_import_stubs()
+sys.modules.pop("utils.llm.usage_tracker", None)
+_llm_pkg = sys.modules.get("utils.llm")
+if isinstance(_llm_pkg, types.ModuleType):
+    _llm_pkg.__dict__.pop("usage_tracker", None)
+
+database_mod = sys.modules["database"]
 users_mod = sys.modules["database.users"]
+vector_db_mod = sys.modules["database.vector_db"]
+apps_mod = sys.modules["database.apps"]
+llm_usage_mod = sys.modules.setdefault("database.llm_usage", types.ModuleType("database.llm_usage"))
+client_mod = sys.modules["database._client"]
+auth_mod = sys.modules["database.auth"]
+redis_mod = sys.modules["database.redis_db"]
+memories_mod = sys.modules["database.memories"]
+entities_mod = sys.modules.setdefault("database.entities", types.ModuleType("database.entities"))
 users_mod.get_user_language_preference = MagicMock(return_value='en')
 users_mod.get_people_by_ids = MagicMock(return_value=[])
 
@@ -91,10 +90,11 @@ apps_mod = sys.modules["database.apps"]
 for attr in ["record_app_usage", "get_omi_personas_by_uid_db", "get_app_by_id_db"]:
     setattr(apps_mod, attr, MagicMock())
 
-llm_usage_mod = sys.modules["database.llm_usage"]
+llm_usage_mod = sys.modules.setdefault("database.llm_usage", types.ModuleType("database.llm_usage"))
 llm_usage_mod.record_llm_usage = MagicMock()
 
 client_mod = sys.modules["database._client"]
+client_mod.db = MagicMock()
 client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
 # Stub database.auth with get_user_name (the canonical user name function)
@@ -114,7 +114,7 @@ memories_mod.get_memory = MagicMock(return_value=None)
 memories_mod.save_memories = MagicMock()
 memories_mod.delete_memory = MagicMock()
 
-entities_mod = sys.modules["database.entities"]
+entities_mod = sys.modules.setdefault("database.entities", types.ModuleType("database.entities"))
 entities_mod.USER_ENTITY_ID = "entity:user"
 entities_mod.person_entity_id = MagicMock(side_effect=lambda person_id: f"entity:person:{person_id}")
 
@@ -301,7 +301,7 @@ class TestKnowledgeGraphUserLookup:
         """The KG extraction path must call get_user_name(), not get_user_store_recording_permission."""
         import inspect
 
-        source = inspect.getsource(process_conversation._extract_memories_inner)
+        source = inspect.getsource(process_conversation._extract_memories_legacy)
         # Must NOT call the bool-returning function
         assert (
             "get_user_store_recording_permission" not in source
