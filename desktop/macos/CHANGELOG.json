@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Local agent API now returns a clear reason and hint when a Rewind screenshot image can not be loaded (pending/orphaned/retained-out) instead of a generic error"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.519",
+      "date": "2026-06-24",
+      "changes": [
+        "Local agent API now returns a clear reason and hint when a Rewind screenshot image can not be loaded (pending/orphaned/retained-out) instead of a generic error"
+      ]
+    },
     {
       "version": "0.11.517",
       "date": "2026-06-24",
