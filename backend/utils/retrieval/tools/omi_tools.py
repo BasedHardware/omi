@@ -2,8 +2,12 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
+import logging
+
 from langchain_core.tools import tool
 from utils.app_integrations import get_github_docs_content
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -37,8 +41,15 @@ def get_omi_product_info_tool(query: str) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
-    # Get GitHub docs content
-    context = get_github_docs_content()
+    # Get GitHub docs content (fail soft like the sibling retrieval tools)
+    try:
+        context = get_github_docs_content()
+    except Exception as e:
+        logger.error(f"get_omi_product_info_tool - failed to load product docs: {e}")
+        return "Error: Could not load Omi/Friend product documentation right now. Please try again later."
+
+    if not isinstance(context, dict) or not context:
+        return "Error: Omi/Friend product documentation is currently unavailable. Please try again later."
 
     # Format context as a comprehensive documentation string
     context_str = 'Omi/Friend Product Documentation:\n\n'
