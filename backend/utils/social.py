@@ -17,6 +17,7 @@ import httpx
 
 from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
+from utils.executors import db_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -185,12 +186,12 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     persona['persona_prompt'] = persona_prompt
 
     # Save persona to database
-    upsert_app_to_db(persona)
+    await run_blocking(db_executor, upsert_app_to_db, persona)
     save_username(username, uid)
     delete_generic_cache('get_public_approved_apps_data')
 
     # Create memories from persona prompt and tweets
-    create_memories_from_twitter_tweets(uid, persona['id'], timeline.timeline)
+    await run_blocking(db_executor, create_memories_from_twitter_tweets, uid, persona['id'], timeline.timeline)
 
     return persona
 
