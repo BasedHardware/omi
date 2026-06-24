@@ -42,6 +42,23 @@ final class MemoriesViewModelObserverTests: XCTestCase {
         )
     }
 
+    func testConversationDeletedNotificationTriggersCascadeHandler() async {
+        let viewModel = MemoriesViewModel()
+
+        NotificationCenter.default.post(
+            name: .conversationDeleted,
+            object: nil,
+            userInfo: ["conversationId": "conv-cascade-test"]
+        )
+        await Task.yield()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(
+            viewModel.conversationDeleteInvocations, 1,
+            ".conversationDeleted must route to handleConversationDeleted() via the cascade subscriber"
+        )
+    }
+
     func testDeallocatedViewModelDoesNotLeakObservers() async {
         // Ensures the `[weak self]` capture in the Combine sinks lets the
         // view model deallocate cleanly — no crash when the notifications
