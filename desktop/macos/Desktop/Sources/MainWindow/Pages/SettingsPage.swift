@@ -2491,23 +2491,6 @@ struct SettingsContentView: View {
         }
       }
 
-      settingsCard(settingId: "floatingbar.voiceanswers") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Voice Questions")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-            Text("Speak answers aloud when you ask with push to talk.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
-          }
-          Spacer()
-          Toggle("", isOn: floatingBarVoiceAnswersBinding)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
-        }
-      }
-
       settingsCard(settingId: "floatingbar.typedvoiceanswers") {
         HStack(spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {
@@ -5715,20 +5698,6 @@ struct SettingsContentView: View {
     case .failed:
       Text("Invalid").scaledFont(size: 11, weight: .semibold).foregroundColor(OmiColors.warning)
     }
-  }
-
-  private var floatingBarVoiceAnswersBinding: Binding<Bool> {
-    Binding(
-      get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
-      set: { newValue in
-        shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
-        SettingsSyncManager.shared.pushPartialUpdate(
-          AssistantSettingsResponse(
-            floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
-          )
-        )
-      }
-    )
   }
 
   private var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
