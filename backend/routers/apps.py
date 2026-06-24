@@ -723,7 +723,10 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(app_data)
+    try:
+        data = json.loads(app_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid app_data: must be valid JSON')
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
