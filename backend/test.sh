@@ -172,6 +172,7 @@ pytest tests/unit/test_chat_quota.py -v
 pytest tests/unit/test_voice_message_filename_none.py -v
 pytest tests/unit/test_subscription_plans.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
+pytest tests/unit/test_action_items_main_list_malformed.py -v
 pytest tests/unit/test_payment_promotion_codes.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
