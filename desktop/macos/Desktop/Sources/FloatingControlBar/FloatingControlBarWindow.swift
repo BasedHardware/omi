@@ -8,6 +8,15 @@ private final class FloatingBarHostingView<Content: View>: NSHostingView<Content
     }
 }
 
+private extension Duration {
+    var millisecondsString: String {
+        let components = self.components
+        let milliseconds = Double(components.seconds) * 1000
+            + Double(components.attoseconds) / 1_000_000_000_000_000
+        return String(format: "%.1f", milliseconds)
+    }
+}
+
 /// NSPanel subclass for the floating control bar.
 ///
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
@@ -52,6 +61,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
+    private var frameAnimationToken: Int = 0
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -334,7 +344,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             PushToTalkManager.shared.cancelListening()
         }
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        withAnimation(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
@@ -371,29 +381,24 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Record the animation target so savePreChatCenterIfNeeded() can snap to it
         // if a new PTT query fires while this restore animation is still running.
         pendingRestoreOrigin = restoreOrigin
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.3
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
-        NSAnimationContext.endGrouping()
+        animateFrame(to: NSRect(origin: restoreOrigin, size: size), duration: 0.12)
         let targetFrame = NSRect(origin: restoreOrigin, size: size)
         preChatCenter = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
             guard let self = self else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
-            // Safety net: only snap if no new AI session was opened while the animation ran.
-            // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
+            // Safety net: only snap if no new AI session was opened while the close settled.
+            // Without this guard, a rapid PTT query that fires while close settles gets collapsed
             // back to the pill position by this stale completion block.
             guard !self.state.showingAIConversation else { return }
-            if self.frame != targetFrame {
+            if !NSEqualRects(self.frame, targetFrame) {
                 self.setFrame(targetFrame, display: true, animate: false)
             }
         }
 
         // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) { [weak self] in
             self?.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
@@ -424,6 +429,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func showAIConversation() {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
+        makeKeyAndOrderFront(nil)
 
         let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
         if !shouldRestoreVisibleConversation && state.hasVisibleConversation {
@@ -437,7 +443,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = true
                 state.isAILoading = false
@@ -447,9 +453,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-            resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: inputSize, makeResizable: false, animated: true,
+                animationDuration: 0.12, anchorTop: true)
 
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = false
                 state.isAILoading = false
@@ -461,16 +469,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             setupInputHeightObserver()
         }
 
-        // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
-        // The text editor itself handles focusing via updateNSView once it's in the window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.makeKeyAndOrderFront(nil)
-        }
-
         // Fallback: explicitly focus the input after SwiftUI layout settles.
         // The AutoFocusScrollView.viewDidMoveToWindow() fires once and can miss
         // if the window isn't yet key at that moment.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             self?.focusInputField()
         }
 
@@ -568,7 +570,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         )
     }
 
-    private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false, anchorTop: Bool = false) {
+    private func resizeAnchored(
+        to size: NSSize,
+        makeResizable: Bool,
+        animated: Bool = false,
+        animationDuration: TimeInterval = 0.3,
+        anchorTop: Bool = false
+    ) {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -591,18 +599,43 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         isResizingProgrammatically = true
 
-        // On macOS 26+ (Tahoe), animated setFrame triggers NSHostingView.updateAnimatedWindowSize
-        // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
-        // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
-        // during the resize to prevent the updateAnimatedWindowSize code path.
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = animated ? 0.3 : 0
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
-        NSAnimationContext.endGrouping()
+        let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
+        if animated {
+            // Keep windowDidResize from persisting transient animation frames as
+            // the user's saved response size until the final frame lands.
+            animateFrame(to: targetFrame, duration: animationDuration) { [weak self] in
+                self?.isResizingProgrammatically = false
+            }
+        } else {
+            self.setFrame(targetFrame, display: true, animate: false)
+            self.isResizingProgrammatically = false
+        }
+    }
 
-        self.isResizingProgrammatically = false
+    private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
+        frameAnimationToken += 1
+        let token = frameAnimationToken
+        let startFrame = self.frame
+        let steps = max(1, Int((duration * 120).rounded()))
+        for step in 1...steps {
+            let delay = duration * Double(step) / Double(steps)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.frameAnimationToken == token else { return }
+                let rawProgress = CGFloat(step) / CGFloat(steps)
+                let progress = 1 - pow(1 - rawProgress, 2)
+                let interpolated = NSRect(
+                    x: startFrame.origin.x + (frame.origin.x - startFrame.origin.x) * progress,
+                    y: startFrame.origin.y + (frame.origin.y - startFrame.origin.y) * progress,
+                    width: startFrame.width + (frame.width - startFrame.width) * progress,
+                    height: startFrame.height + (frame.height - startFrame.height) * progress
+                )
+                self.setFrame(interpolated, display: true, animate: false)
+                if step == steps {
+                    self.setFrame(frame, display: true, animate: false)
+                    completion?()
+                }
+            }
+        }
     }
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
@@ -1135,6 +1168,104 @@ class FloatingControlBarManager {
     /// Whether the floating bar window is currently visible.
     var isVisible: Bool {
         window?.isVisible ?? false
+    }
+
+    struct AutomationState {
+        let isVisible: Bool
+        let isAskOmiOpen: Bool
+        let isAskOmiFocused: Bool
+        let frame: String?
+    }
+
+    var automationState: AutomationState {
+        guard let window else {
+            return AutomationState(isVisible: false, isAskOmiOpen: false, isAskOmiFocused: false, frame: nil)
+        }
+        let focused = window.firstResponder is NSTextView
+        return AutomationState(
+            isVisible: window.isVisible,
+            isAskOmiOpen: window.state.showingAIConversation && !window.state.showingAIResponse,
+            isAskOmiFocused: focused,
+            frame: NSStringFromRect(window.frame)
+        )
+    }
+
+    func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        if reset, window.state.showingAIConversation {
+            window.closeAIConversation()
+            _ = await waitForAskOmiClosed(in: window)
+        }
+
+        let start = ContinuousClock.now
+        openAIInput()
+        guard wait else {
+            return [
+                "triggered": "true",
+                "frame": NSStringFromRect(window.frame),
+                "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+            ]
+        }
+        let openMs = await waitForAutomationCondition {
+            window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
+        }
+        let focusMs = await waitForAutomationCondition {
+            window.firstResponder is NSTextView
+        }
+        let elapsedMs = start.duration(to: .now).millisecondsString
+        return [
+            "openMs": openMs ?? "timeout",
+            "focusMs": focusMs ?? "timeout",
+            "elapsedMs": elapsedMs,
+            "frame": NSStringFromRect(window.frame),
+            "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+        ]
+    }
+
+    func closeAskOmiForAutomation(wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        let start = ContinuousClock.now
+        if window.state.showingAIConversation {
+            window.closeAIConversation()
+        }
+        guard wait else {
+            return [
+                "triggered": "true",
+                "visible": window.isVisible ? "true" : "false",
+                "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+                "frame": NSStringFromRect(window.frame),
+            ]
+        }
+        let closeMs = await waitForAskOmiClosed(in: window)
+        let elapsedMs = start.duration(to: .now).millisecondsString
+        return [
+            "closeMs": closeMs ?? "timeout",
+            "elapsedMs": elapsedMs,
+            "visible": window.isVisible ? "true" : "false",
+            "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+            "frame": NSStringFromRect(window.frame),
+        ]
+    }
+
+    private func waitForAutomationCondition(_ condition: @MainActor @escaping () -> Bool) async -> String? {
+        let start = ContinuousClock.now
+        while start.duration(to: .now) < .milliseconds(500) {
+            if condition() {
+                return start.duration(to: .now).millisecondsString
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return nil
+    }
+
+    private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
+        await waitForAutomationCondition {
+            !window.state.showingAIConversation && window.frame.size == NSSize(width: 40, height: 14)
+        }
     }
 
     /// Show the floating bar and persist the preference.

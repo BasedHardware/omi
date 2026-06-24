@@ -1,0 +1,695 @@
+#!/usr/bin/env python3
+"""Run Omi desktop experience flows through the local automation bridge."""
+
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+import typing
+
+
+SCHEMA_VERSION = 2
+SCRIPT_DIR = Path(__file__).resolve().parent
+DESKTOP_DIR = SCRIPT_DIR.parent
+DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
+DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
+DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
+
+
+@dataclass
+class HarnessContext:
+    base_url: str
+    flow_path: Path
+    run_dir: Path
+    steps_dir: Path
+    lane: str
+    log_path: Path
+    log_start: int
+    bundle_id: str | None
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def slug(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip().lower()).strip("-")
+    return cleaned or "flow"
+
+
+def read_yaml(path: Path) -> dict[str, typing.Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        print(
+            "omi-harness: PyYAML is required to run flow files; install it with `python3 -m pip install PyYAML`",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from exc
+
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def write_json(path: Path, data: typing.Any) -> None:
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
+    data = None
+    headers = {"Accept": "application/json"}
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(f"{base_url}{route}", data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        payload = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            parsed = {"ok": False, "error": payload}
+        parsed["http_status"] = exc.code
+        return parsed
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": f"connection_failed: {exc.reason}"}
+    except TimeoutError as exc:
+        return {"ok": False, "error": f"connection_timeout: {exc}"}
+
+
+def git_sha() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def tool_version(command: list[str]) -> str | None:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+    return result.stdout.strip().splitlines()[0] if result.stdout.strip() else None
+
+
+def nested_get(data: dict[str, typing.Any], dotted: str) -> typing.Any:
+    current: typing.Any = data
+    for part in dotted.split("."):
+        if isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current
+
+
+def normalize_state_response(response: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    result = response.get("result")
+    return result if isinstance(result, dict) else {}
+
+
+def state_snapshot(ctx: HarnessContext) -> dict[str, typing.Any]:
+    return normalize_state_response(request_json(ctx.base_url, "GET", "/state"))
+
+
+def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
+    response = request_json(ctx.base_url, "GET", "/traces/recent")
+    result = response.get("result")
+    return result if isinstance(result, list) else []
+
+
+def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> bool:
+    return all(nested_get(data, key) == value for key, value in expectations.items())
+
+
+def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
+    deadline = time.monotonic() + timeout
+    latest: dict[str, typing.Any] = {}
+    while time.monotonic() < deadline:
+        latest = state_snapshot(ctx)
+        if expectation_matches({"state": latest}, expectations):
+            return True, latest
+        time.sleep(0.15)
+    return False, latest
+
+
+def wait_for_trace(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, list[dict[str, typing.Any]]]:
+    deadline = time.monotonic() + timeout
+    traces: list[dict[str, typing.Any]] = []
+    while time.monotonic() < deadline:
+        traces = recent_traces(ctx)
+        if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+            return True, traces
+        time.sleep(0.15)
+    return False, traces
+
+
+def log_cursor(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def read_log_tail(ctx: HarnessContext) -> str:
+    if not ctx.log_path.exists():
+        return ""
+    with ctx.log_path.open("rb") as handle:
+        handle.seek(ctx.log_start)
+        raw = handle.read(256_000)
+    return raw.decode("utf-8", errors="replace")
+
+
+def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
+    text = read_log_tail(ctx)
+    out = ctx.run_dir / "logs.txt"
+    out.write_text(text, encoding="utf-8")
+    error_count = len(re.findall(r"\b(error|failed|exception|crash)\b", text, flags=re.IGNORECASE))
+    return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
+
+
+def step_prefix(index: int, step: dict[str, typing.Any]) -> str:
+    return f"{index:03d}-{slug(str(step.get('id') or step.get('name') or 'step'))}"
+
+
+def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.CompletedProcess[str]:
+    if not ctx.bundle_id:
+        raise RuntimeError("ax.expect requires --bundle-id")
+    connect = subprocess.run(
+        ["agent-swift", "connect", "--bundle-id", ctx.bundle_id],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=10,
+    )
+    if connect.returncode != 0:
+        return connect
+    return subprocess.run(["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
+
+
+def action_payload(spec: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    payload = dict(spec)
+    params = dict(payload.get("params") or {})
+    for key in list(payload.keys()):
+        if key not in {"name", "params"}:
+            params[key] = payload.pop(key)
+    if params:
+        payload["params"] = params
+    return payload
+
+
+def assert_state(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    state = state_snapshot(ctx)
+    write_json(path, state)
+    expectations = spec.get("equals") or spec
+    if not isinstance(expectations, dict):
+        return False, "state.expect requires a mapping"
+    if expectation_matches({"state": state}, expectations):
+        return True, None
+    return False, f"state assertions failed: {expectations}"
+
+
+def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    text = read_log_tail(ctx)
+    path.write_text(text, encoding="utf-8")
+    contains = spec.get("contains", [])
+    absent = spec.get("absent", [])
+    if isinstance(contains, str):
+        contains = [contains]
+    if isinstance(absent, str):
+        absent = [absent]
+    missing = [item for item in contains if item not in text]
+    present = [item for item in absent if item in text]
+    if missing:
+        return False, f"log missing expected text: {missing}"
+    if present:
+        return False, f"log contained forbidden text: {present}"
+    return True, None
+
+
+def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    traces = recent_traces(ctx)
+    write_json(path, traces)
+    expectations = spec.get("equals") or spec
+    if not isinstance(expectations, dict):
+        return False, "trace.expect requires a mapping"
+    if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+        return True, None
+    return False, f"no trace matched: {expectations}"
+
+
+def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    if ctx.lane != "ui":
+        return True, "skipped outside ui lane"
+    result = run_agent_swift(ctx, ["snapshot", "-i", "--json"])
+    path.write_text(result.stdout, encoding="utf-8")
+    if result.returncode != 0:
+        return False, "agent-swift snapshot failed"
+    text = result.stdout
+    visible = spec.get("text_visible", [])
+    if isinstance(visible, str):
+        visible = [visible]
+    missing = [item for item in visible if item not in text]
+    if missing:
+        return False, f"AX snapshot missing text: {missing}"
+    return True, None
+
+
+def export_visual(ctx: HarnessContext, path: Path, target: str | None = None) -> dict[str, typing.Any]:
+    payload = {"path": str(path)}
+    if target:
+        payload["target"] = target
+    return request_json(ctx.base_url, "POST", "/visual/export", payload)
+
+
+def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, result: dict[str, typing.Any]) -> None:
+    wait_spec = step.get("wait") or {}
+    if not result["ok"] or not isinstance(wait_spec, dict) or not wait_spec:
+        return
+    timeout = float(step.get("timeout_seconds", 5))
+    if "trace" in wait_spec:
+        waited_ok, traces = wait_for_trace(ctx, wait_spec["trace"], timeout)
+        trace_path = ctx.steps_dir / f"{prefix}-traces.json"
+        write_json(trace_path, traces)
+        result["artifacts"]["traces"] = str(trace_path)
+        if not waited_ok:
+            result["ok"] = False
+            result["error"] = f"trace wait timed out after {timeout}s"
+    else:
+        waited_ok, state = wait_for_state(ctx, wait_spec, timeout)
+        state_path = ctx.steps_dir / f"{prefix}-state.json"
+        write_json(state_path, state)
+        result["artifacts"]["state"] = str(state_path)
+        if not waited_ok:
+            result["ok"] = False
+            result["error"] = f"state wait timed out after {timeout}s"
+
+
+def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    prefix = step_prefix(index, step)
+    started = time.perf_counter()
+    result: dict[str, typing.Any] = {
+        "id": step.get("id", f"S{index}"),
+        "name": step.get("name", f"Step {index}"),
+        "started_at": now_iso(),
+        "ok": True,
+        "warnings": [],
+        "artifacts": {},
+    }
+
+    try:
+        if "bridge.navigate" in step:
+            payload = dict(step["bridge.navigate"] or {})
+            payload.setdefault("activateApp", False)
+            response = request_json(ctx.base_url, "POST", "/navigate", payload)
+            response_path = ctx.steps_dir / f"{prefix}-navigate.json"
+            write_json(response_path, response)
+            result.update(operation="bridge.navigate", response_path=str(response_path), ok=bool(response.get("ok")))
+            if not result["ok"]:
+                result["error"] = response.get("error")
+
+        elif "bridge.action" in step:
+            payload = action_payload(dict(step["bridge.action"] or {}))
+            response = request_json(ctx.base_url, "POST", "/action", payload)
+            response_path = ctx.steps_dir / f"{prefix}-action.json"
+            write_json(response_path, response)
+            result.update(operation="bridge.action", response_path=str(response_path), ok=bool(response.get("ok")))
+            if not result["ok"]:
+                result["error"] = response.get("error")
+
+        elif "visual.export" in step:
+            if ctx.lane not in {"visual", "ui"}:
+                result["operation"] = "visual.export"
+                result["warnings"].append(f"skipped in {ctx.lane} lane")
+            else:
+                options = dict(step["visual.export"] or {})
+                name = slug(str(options.get("name") or step.get("id") or f"step-{index}"))
+                png_path = ctx.steps_dir / f"{prefix}-{name}.png"
+                response = export_visual(ctx, png_path, str(options["target"]) if "target" in options else None)
+                response_path = ctx.steps_dir / f"{prefix}-visual.json"
+                write_json(response_path, response)
+                result.update(operation="visual.export", response_path=str(response_path), ok=bool(response.get("ok")))
+                result["artifacts"]["screenshot"] = str(png_path)
+                if not result["ok"]:
+                    result["error"] = response.get("error")
+
+        elif "visual.action_sequence" in step:
+            if ctx.lane not in {"visual", "ui"}:
+                result["operation"] = "visual.action_sequence"
+                result["warnings"].append(f"skipped in {ctx.lane} lane")
+            else:
+                options = dict(step["visual.action_sequence"] or {})
+                action_name = str(options.get("action") or "")
+                if not action_name:
+                    result.update(operation="visual.action_sequence", ok=False, error="visual.action_sequence requires action")
+                else:
+                    frames = max(1, int(options.get("frames", 8)))
+                    interval_ms = max(1, int(options.get("interval_ms", 16)))
+                    target = str(options.get("target") or "floating")
+                    params = dict(options.get("params") or {})
+                    action_path = ctx.steps_dir / f"{prefix}-action.json"
+                    frame_records = []
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        action_future = executor.submit(
+                            request_json,
+                            ctx.base_url,
+                            "POST",
+                            "/action",
+                            {"name": action_name, "params": params},
+                        )
+                        ok = True
+                        for frame_index in range(frames):
+                            frame_path = ctx.steps_dir / f"{prefix}-frame-{frame_index:02d}.png"
+                            captured_at = now_iso()
+                            response = export_visual(ctx, frame_path, target)
+                            frame_records.append(
+                                {
+                                    "index": frame_index,
+                                    "captured_at": captured_at,
+                                    "path": str(frame_path),
+                                    "ok": bool(response.get("ok")),
+                                    "response": response,
+                                }
+                            )
+                            ok = ok and bool(response.get("ok"))
+                            if frame_index < frames - 1:
+                                time.sleep(interval_ms / 1000)
+                        try:
+                            action_response = action_future.result(timeout=25)
+                        except FutureTimeoutError:
+                            action_response = {"ok": False, "error": "action request timed out after capture"}
+                    write_json(action_path, action_response)
+                    ok = ok and bool(action_response.get("ok"))
+                    manifest_path = ctx.steps_dir / f"{prefix}-sequence.json"
+                    write_json(
+                        manifest_path,
+                        {
+                            "action": action_name,
+                            "capture_mode": "concurrent",
+                            "params": params,
+                            "target": target,
+                            "frames": frame_records,
+                            "interval_ms": interval_ms,
+                            "action_response": str(action_path),
+                        },
+                    )
+                    result.update(operation="visual.action_sequence", ok=ok, response_path=str(action_path))
+                    result["artifacts"]["sequence"] = str(manifest_path)
+                    result["artifacts"]["frames"] = [record["path"] for record in frame_records]
+                    if not ok:
+                        result["error"] = "action sequence capture failed"
+
+        elif "state.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-state.json"
+            ok, error = assert_state(ctx, dict(step["state.expect"] or {}), path)
+            result.update(operation="state.expect", ok=ok)
+            result["artifacts"]["state"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "log.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-logs.txt"
+            ok, error = assert_log(ctx, dict(step["log.expect"] or {}), path)
+            result.update(operation="log.expect", ok=ok)
+            result["artifacts"]["logs"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "trace.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-traces.json"
+            ok, error = assert_trace(ctx, dict(step["trace.expect"] or {}), path)
+            result.update(operation="trace.expect", ok=ok)
+            result["artifacts"]["traces"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "ax.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-ax.json"
+            ok, error = assert_ax(ctx, dict(step["ax.expect"] or {}), path)
+            result.update(operation="ax.expect", ok=ok)
+            result["artifacts"]["ax"] = str(path)
+            if error and ok:
+                result["warnings"].append(error)
+            elif error:
+                result["error"] = error
+
+        else:
+            result.update(operation="unsupported", ok=False, error="step has no typed harness operation")
+
+        apply_wait(ctx, step, prefix, result)
+
+    except Exception as exc:  # noqa: BLE001 - runner records failures as artifacts.
+        result["ok"] = False
+        result["error"] = f"{type(exc).__name__}: {exc}"
+
+    result["duration_ms"] = round((time.perf_counter() - started) * 1000, 2)
+    result["finished_at"] = now_iso()
+    return result
+
+
+def create_context(args: argparse.Namespace, flow_path: Path, run_dir: Path, lane: str) -> HarnessContext:
+    return HarnessContext(
+        base_url=f"http://127.0.0.1:{args.port}",
+        flow_path=flow_path,
+        run_dir=run_dir,
+        steps_dir=run_dir / "steps",
+        lane=lane,
+        log_path=Path(args.log),
+        log_start=log_cursor(Path(args.log)),
+        bundle_id=getattr(args, "bundle_id", None),
+    )
+
+
+def run_flow(args: argparse.Namespace) -> int:
+    flow_path = Path(args.flow).resolve()
+    flow = read_yaml(flow_path)
+    flow_name = str(flow.get("name") or flow_path.stem)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_root = Path(args.out).resolve()
+    run_dir = run_root / f"{timestamp}-{slug(flow_name)}"
+    steps_dir = run_dir / "steps"
+    steps_dir.mkdir(parents=True, exist_ok=True)
+
+    ctx = create_context(args, flow_path, run_dir, args.lane)
+    started = time.perf_counter()
+    initial_state = request_json(ctx.base_url, "GET", "/state")
+    capabilities = request_json(ctx.base_url, "GET", "/capabilities")
+    write_json(run_dir / "initial-state.json", initial_state)
+    write_json(run_dir / "capabilities.json", capabilities)
+
+    step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
+    logs = collect_logs(ctx)
+    final_state = request_json(ctx.base_url, "GET", "/state")
+    traces = recent_traces(ctx)
+    write_json(run_dir / "final-state.json", final_state)
+    write_json(run_dir / "traces.json", traces)
+
+    bridge_ready = bool(initial_state.get("ok")) and bool(capabilities.get("ok"))
+    metrics = {
+        "schema_version": SCHEMA_VERSION,
+        "runner": "omi-harness",
+        "runner_version": 2,
+        "flow": {"name": flow_name, "path": str(flow_path), "version": flow.get("version")},
+        "environment": {
+            "git_sha": git_sha(),
+            "lane": args.lane,
+            "port": args.port,
+            "base_url": ctx.base_url,
+            "bundle_id": args.bundle_id,
+            "agent_swift_version": tool_version(["agent-swift", "--version"]),
+        },
+        "cursor_safety": {"coordinate_clicks": 0, "external_screenshot_tool": False},
+        "artifacts": {"captures_gitignored": True},
+        "timing": {
+            "total_ms": round((time.perf_counter() - started) * 1000, 2),
+            "step_ms": [step["duration_ms"] for step in step_results],
+            "bridge_trace_ms": [trace.get("durationMs") for trace in traces],
+        },
+        "steps": step_results,
+        "logs": logs,
+        "ok": bridge_ready and all(step["ok"] for step in step_results),
+        "bridge_ready": bridge_ready,
+        "started_at": now_iso(),
+    }
+    write_json(run_dir / "metrics.json", metrics)
+    write_summary(run_dir, metrics)
+    print(str(run_dir))
+    return 0 if metrics["ok"] else 1
+
+
+def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
+    lines = [
+        f"# {metrics['flow']['name']}",
+        "",
+        f"- status: {'PASS' if metrics['ok'] else 'FAIL'}",
+        f"- lane: {metrics['environment']['lane']}",
+        f"- total_ms: {metrics['timing']['total_ms']}",
+        f"- coordinate_clicks: {metrics['cursor_safety']['coordinate_clicks']}",
+        f"- log_error_count: {metrics['logs'].get('error_count', 0)}",
+        "",
+        "## Steps",
+    ]
+    for step in metrics["steps"]:
+        status = "PASS" if step["ok"] else "FAIL"
+        lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")
+        if step.get("error"):
+            lines.append(f"  error: {step['error']}")
+        for warning in step.get("warnings", []):
+            lines.append(f"  warning: {warning}")
+    screenshots = [
+        step["artifacts"]["screenshot"]
+        for step in metrics["steps"]
+        if isinstance(step.get("artifacts"), dict) and step["artifacts"].get("screenshot")
+    ]
+    if screenshots:
+        lines.extend(["", "## Visual Evidence"])
+        lines.extend(f"- {path}" for path in screenshots)
+    sequences = [
+        step["artifacts"]["sequence"]
+        for step in metrics["steps"]
+        if isinstance(step.get("artifacts"), dict) and step["artifacts"].get("sequence")
+    ]
+    if sequences:
+        lines.extend(["", "## Animation Evidence"])
+        lines.extend(f"- {path}" for path in sequences)
+    (run_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_root(path: str | None) -> Path:
+    return Path(path or DEFAULT_RUN_ROOT)
+
+
+def latest_run(root: Path) -> Path:
+    runs = sorted([path for path in root.glob("*") if path.is_dir()])
+    if not runs:
+        raise SystemExit(f"omi-harness: no runs under {root}")
+    return runs[-1]
+
+
+def summarize_run(args: argparse.Namespace) -> int:
+    run_dir = latest_run(run_root(args.out)).resolve() if args.run == "latest" else Path(args.run).resolve()
+    summary = run_dir / "summary.md"
+    if not summary.exists():
+        raise SystemExit(f"omi-harness: missing summary: {summary}")
+    print(summary.read_text(encoding="utf-8"), end="")
+    return 0
+
+
+def latest_cmd(args: argparse.Namespace) -> int:
+    print(str(latest_run(run_root(args.out)).resolve()))
+    return 0
+
+
+def compare_runs(args: argparse.Namespace) -> int:
+    left = json.loads((Path(args.left) / "metrics.json").read_text(encoding="utf-8"))
+    right = json.loads((Path(args.right) / "metrics.json").read_text(encoding="utf-8"))
+    comparison = {
+        "left": str(Path(args.left).resolve()),
+        "right": str(Path(args.right).resolve()),
+        "ok_changed": [left.get("ok"), right.get("ok")],
+        "total_ms_delta": round(right["timing"]["total_ms"] - left["timing"]["total_ms"], 2),
+        "log_error_count_delta": right["logs"].get("error_count", 0) - left["logs"].get("error_count", 0),
+        "step_count_delta": len(right.get("steps", [])) - len(left.get("steps", [])),
+    }
+    if args.markdown:
+        print("| metric | value |")
+        print("| --- | --- |")
+        for key, value in comparison.items():
+            print(f"| {key} | `{value}` |")
+    else:
+        print(json.dumps(comparison, indent=2, sort_keys=True))
+    return 0
+
+
+def cleanup_runs(args: argparse.Namespace) -> int:
+    root = run_root(args.out).resolve()
+    default_root = DEFAULT_RUN_ROOT.resolve()
+    if root != default_root and default_root not in root.parents:
+        raise SystemExit(f"omi-harness: refusing cleanup outside harness run storage: {root}")
+    runs = sorted([path for path in root.glob("*") if path.is_dir()])
+    keep = max(0, args.keep)
+    remove = runs[:-keep] if keep else runs
+    for path in remove:
+        resolved = path.resolve()
+        if path.is_symlink() or path.parent.resolve() != root or root not in resolved.parents:
+            raise SystemExit(f"omi-harness: refusing unsafe cleanup path: {path}")
+        shutil.rmtree(path)
+        print(f"removed {path}")
+    return 0
+
+
+def add_run_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("flow")
+    parser.add_argument("--lane", choices=["bridge", "visual", "ui"], default="bridge")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    parser.add_argument("--log", default=str(DEFAULT_LOG))
+    parser.add_argument("--bundle-id")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run = subparsers.add_parser("run", help="run a typed harness flow")
+    add_run_args(run)
+    run.set_defaults(func=run_flow)
+
+    baseline = subparsers.add_parser("baseline", help="alias for run, intended for before/after comparisons")
+    add_run_args(baseline)
+    baseline.set_defaults(func=run_flow)
+
+    compare = subparsers.add_parser("compare", help="compare two harness run directories")
+    compare.add_argument("left")
+    compare.add_argument("right")
+    compare.add_argument("--markdown", action="store_true")
+    compare.set_defaults(func=compare_runs)
+
+    summarize = subparsers.add_parser("summarize", help="print a run summary")
+    summarize.add_argument("run", nargs="?", default="latest")
+    summarize.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    summarize.set_defaults(func=summarize_run)
+
+    latest = subparsers.add_parser("latest", help="print the latest run directory")
+    latest.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    latest.set_defaults(func=latest_cmd)
+
+    cleanup = subparsers.add_parser("cleanup", help="delete old local run artifacts")
+    cleanup.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    cleanup.add_argument("--keep", type=int, default=10)
+    cleanup.set_defaults(func=cleanup_runs)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

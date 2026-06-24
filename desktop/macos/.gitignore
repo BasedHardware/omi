@@ -86,6 +86,7 @@ linkedin-*.md
 
 # Runtime log files
 *.log
+.harness/
 
 # Agent configs (user-local)
 .agents/
