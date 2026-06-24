@@ -547,10 +547,26 @@ def get_action_items(
         offset=offset,
     )
 
-    # Filter out locked action items
-    unlocked_action_items = [item for item in action_items if not item.get('is_locked', False)]
-
-    return unlocked_action_items
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
+    # already applied to GET /v1/dev/user/memories.
+    valid_action_items = []
+    for item in action_items:
+        if not isinstance(item, dict) or not item.get('id'):
+            logger.warning('Skipping malformed action item in Developer API action-item list')
+            continue
+        if item.get('is_locked', False):
+            continue
+        try:
+            valid_action_items.append(ActionItemResponse.model_validate(item))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_action_items
 
 
 @router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
