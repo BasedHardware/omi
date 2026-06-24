@@ -1,14 +1,17 @@
+import logging
 from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 import database.calendar_meetings as calendar_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.other import endpoints as auth
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 class StoreMeetingRequest(BaseModel):
@@ -100,4 +103,13 @@ def list_calendar_meetings(
 ):
     """List calendar meetings within a date range"""
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
-    return [CalendarMeetingContext(**m) for m in meetings]
+    # Build each response individually so one malformed/legacy meeting doc doesn't fail the whole list
+    # with a 500.
+    result = []
+    for m in meetings:
+        try:
+            result.append(CalendarMeetingContext(**m))
+        except (TypeError, ValidationError) as e:
+            logger.warning(f"Skipping malformed calendar meeting for uid {uid}: {e}")
+            continue
+    return result
