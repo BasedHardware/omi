@@ -53,7 +53,7 @@ def test_project_database_and_loopback_validation() -> None:
     with pytest.raises(safety.SafetyError, match="non-demo"):
         safety.validate_project_id("omi-prod")
     with pytest.raises(safety.SafetyError, match="demo-omi-local"):
-        safety.validate_project_id("demo-v17-memory", require_canonical=True)
+        safety.validate_project_id("demo-memory", require_canonical=True)
     with pytest.raises(safety.SafetyError, match="database"):
         safety.validate_database_id("customer-data")
     with pytest.raises(safety.SafetyError, match="loopback"):
@@ -97,7 +97,11 @@ def test_child_environment_strips_cloud_defaults_and_offline_provider_secrets() 
     env_with_backend_secret = safety.build_child_env(
         parent,
         provider_mode="offline",
-        extra={"ENCRYPTION_SECRET": "local-only-test-secret", "ADMIN_KEY": "local-admin", "TYPESENSE_API_KEY": "local-typesense"},
+        extra={
+            "ENCRYPTION_SECRET": "local-only-test-secret",
+            "ADMIN_KEY": "local-admin",
+            "TYPESENSE_API_KEY": "local-typesense",
+        },
     )
     assert env_with_backend_secret["ENCRYPTION_SECRET"] == "local-only-test-secret"
     assert env_with_backend_secret["ADMIN_KEY"] == "local-admin"
@@ -112,7 +116,10 @@ def test_destructive_path_guard_rejects_dangerous_paths(tmp_path: Path) -> None:
     layout = safety.create_state_layout(REPO_ROOT, "default", env)
     owned_child = layout.state_root / "services" / "firestore"
 
-    assert safety.validate_destructive_target(owned_child, state_root=layout.state_root, repo_root=REPO_ROOT) == owned_child.resolve()
+    assert (
+        safety.validate_destructive_target(owned_child, state_root=layout.state_root, repo_root=REPO_ROOT)
+        == owned_child.resolve()
+    )
 
     dangerous = [Path("/"), Path.home(), REPO_ROOT, tmp_path / "outside"]
     for target in dangerous:
@@ -144,14 +151,20 @@ def test_foreign_pid_and_port_are_rejected(tmp_path: Path) -> None:
             {"service": "backend", "port": 49152, "pid": proc.pid},
         )
 
-        assert safety.validate_owned_pid(proc.pid, process_manifest=layout.process_manifest, service="backend")["pid"] == proc.pid
-        assert safety.validate_port_owner(
-            49152,
-            pid=proc.pid,
-            port_manifest=layout.port_manifest,
-            process_manifest=layout.process_manifest,
-            service="backend",
-        )["port"] == 49152
+        assert (
+            safety.validate_owned_pid(proc.pid, process_manifest=layout.process_manifest, service="backend")["pid"]
+            == proc.pid
+        )
+        assert (
+            safety.validate_port_owner(
+                49152,
+                pid=proc.pid,
+                port_manifest=layout.port_manifest,
+                process_manifest=layout.process_manifest,
+                service="backend",
+            )["port"]
+            == 49152
+        )
 
         with pytest.raises(safety.SafetyError, match="foreign PID"):
             safety.validate_owned_pid(foreign_proc.pid, process_manifest=layout.process_manifest)
@@ -185,8 +198,12 @@ def test_redis_reset_guard_refuses_shared_redis(tmp_path: Path) -> None:
         == "redis://127.0.0.1:6379/0?omi_instance=default"
     )
     with pytest.raises(safety.SafetyError, match="shared Redis"):
-        safety.validate_redis_reset_target("redis://127.0.0.1:6379/0", state_root=layout.state_root, expected_instance="default")
+        safety.validate_redis_reset_target(
+            "redis://127.0.0.1:6379/0", state_root=layout.state_root, expected_instance="default"
+        )
     with pytest.raises(safety.SafetyError, match="loopback"):
         safety.validate_redis_reset_target(
-            "redis://redis.internal:6379/0?omi_instance=default", state_root=layout.state_root, expected_instance="default"
+            "redis://redis.internal:6379/0?omi_instance=default",
+            state_root=layout.state_root,
+            expected_instance="default",
         )
