@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Changed the default Ask Omi keyboard shortcut to Command-O"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.515",
+      "date": "2026-06-24",
+      "changes": [
+        "Changed the default Ask Omi keyboard shortcut to Command-O"
+      ]
+    },
     {
       "version": "0.11.513",
       "date": "2026-06-24",
