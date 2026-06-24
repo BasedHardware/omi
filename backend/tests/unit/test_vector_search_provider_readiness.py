@@ -39,7 +39,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_vector_search_provider_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("vector_search_provider_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -52,7 +52,7 @@ def test_provider_readiness_runner_exists_and_defaults_not_run_read_only():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "vector_search_provider_readiness.py"
 
-    assert script_path.exists(), "missing safe V17 vector search provider proof/readiness runner"
+    assert script_path.exists(), "missing safe memory vector search provider proof/readiness runner"
     script = script_path.read_text()
     for term in REQUIRED_ARTIFACT_TERMS:
         assert term in script
@@ -165,8 +165,8 @@ def test_provider_readiness_proof_cases_cover_oracle_p0_7_matrix_without_claimin
 
 def test_provider_readiness_docs_reference_non_claims_and_runner():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (root / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
         assert "vector_search_provider_readiness.py" in text

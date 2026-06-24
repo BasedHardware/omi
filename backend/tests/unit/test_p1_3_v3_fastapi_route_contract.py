@@ -6,8 +6,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / 'backend' / 'scripts' / 'p1_3_v3_fastapi_route_contract.py'
 TEST_SH = REPO_ROOT / 'backend' / 'test.sh'
-TICKET_DOC = REPO_ROOT / 'docs' / 'epics' / 'v17_memory_implementation_tickets.md'
-ORACLE_DOC = REPO_ROOT / 'docs' / 'epics' / 'v17_t20_oracle_milestone_review.md'
+TICKET_DOC = REPO_ROOT / 'docs' / 'epics' / 'memory_implementation_tickets.md'
+ORACLE_DOC = REPO_ROOT / 'docs' / 'epics' / 'memory_t20_oracle_milestone_review.md'
 VENV_PYTHON = REPO_ROOT / 'backend' / 'venv' / 'bin' / 'python'
 
 
@@ -16,7 +16,7 @@ def _proof_python() -> Path | str:
 
     The normal Hermes/backend pytest environment intentionally may not include
     FastAPI. The route contract proof is still valid and local, but it must not
-    make the full V17 unit glob uncollectable outside the venv.
+    make the full memory unit glob uncollectable outside the venv.
     """
     return VENV_PYTHON if VENV_PYTHON.exists() else sys.executable
 
@@ -69,7 +69,7 @@ def test_v3_fastapi_route_contract_executes_response_model_and_header_cases():
 
     header_case = cases['additive_headers_no_body_mutation']
     assert header_case['status_code'] == 200
-    assert header_case['headers']['x-omi-memory-source'] == 'v17-default-projection'
+    assert header_case['headers']['x-omi-memory-source'] == 'memory-default-projection'
     assert header_case['headers']['x-omi-memory-policy'] == 'default_memory'
     assert 'x-omi-memory-source' not in json.dumps(header_case['body'])
     assert header_case['body'][0]['id'] == 'mem-header-1'
@@ -90,10 +90,10 @@ def test_v3_fastapi_route_contract_pins_enabled_empty_denied_and_no_leakage_beha
     assert denied['legacy_fallback_marker_present'] is False
     assert denied['memory_body_data_present'] is False
 
-    no_leak = cases['v17_only_fields_filtered_from_memorydb_body']
+    no_leak = cases['memory_only_fields_filtered_from_memorydb_body']
     assert no_leak['status_code'] == 200
     body_text = json.dumps(no_leak['body'], sort_keys=True)
-    assert 'v17_source' not in body_text
+    assert 'memory_source' not in body_text
     assert 'account_generation' not in body_text
     assert 'projection_generation' not in body_text
     assert 'archive_default_visible' not in body_text

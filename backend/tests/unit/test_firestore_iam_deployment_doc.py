@@ -26,9 +26,9 @@ REQUIRED_TERMS = [
 ]
 
 
-def test_v17_firestore_iam_deployment_doc_covers_service_account_boundary_and_gate():
+def test_memory_firestore_iam_deployment_doc_covers_service_account_boundary_and_gate():
     root = Path(__file__).resolve().parents[2].parent
-    doc_path = root / "docs" / "epics" / "v17_firestore_iam_deployment.md"
+    doc_path = root / "docs" / "epics" / "memory_firestore_iam_deployment.md"
 
     assert doc_path.exists()
     doc = doc_path.read_text()
@@ -38,6 +38,6 @@ def test_v17_firestore_iam_deployment_doc_covers_service_account_boundary_and_ga
     for required_term in REQUIRED_TERMS:
         assert required_term in doc
 
-    assert "V17_MODE=off" in doc
-    assert "V17_MODE=write" in doc
-    assert "V17_MODE=read" in doc
+    assert "MEMORY_MODE=off" in doc
+    assert "MEMORY_MODE=write" in doc
+    assert "MEMORY_MODE=read" in doc

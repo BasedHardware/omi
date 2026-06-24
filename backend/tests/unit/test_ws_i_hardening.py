@@ -131,7 +131,7 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     _install_heavy_import_stubs()
@@ -195,7 +195,7 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     _install_heavy_import_stubs()
@@ -246,7 +246,7 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     _install_heavy_import_stubs()

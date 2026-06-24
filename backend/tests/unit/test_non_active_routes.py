@@ -12,10 +12,10 @@ os.environ.setdefault(
 
 from tests.unit.memory_import_isolation import ensure_non_active_routes_firestore_transactional_stub
 
-ensure_non_active_routes_firestore_transactional_stub()
 sys.modules["database._client"] = MagicMock()
+ensure_non_active_routes_firestore_transactional_stub()
 
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
@@ -91,7 +91,7 @@ def _outcome(**overrides):
         reason="low confidence needs user confirmation",
         run_id="run1",
         patch_id="patch1",
-        audit_metadata={"actor": "v17_l2", "score": 0.62},
+        audit_metadata={"actor": "l2", "score": 0.62},
         created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
     )
     data.update(overrides)
@@ -116,7 +116,7 @@ def test_persist_non_active_outcome_is_idempotent_and_uses_one_deterministic_doc
     assert stored["route"] == "review"
     assert stored["run_id"] == "run1"
     assert stored["patch_id"] == "patch1"
-    assert stored["audit_metadata"] == {"actor": "v17_l2", "score": 0.62}
+    assert stored["audit_metadata"] == {"actor": "l2", "score": 0.62}
 
 
 def test_same_idempotency_key_with_different_payload_fails_closed():
@@ -131,7 +131,7 @@ def test_same_idempotency_key_with_different_payload_fails_closed():
 
 def test_all_t17_non_active_routes_are_persistable_auditable_and_kept_out_of_default_memory_items():
     db = _FakeDb()
-    collections = V17Collections(uid="u1")
+    collections = MemoryCollections(uid="u1")
 
     for route in [
         NonActiveRoute.review,
@@ -152,7 +152,7 @@ def test_all_t17_non_active_routes_are_persistable_auditable_and_kept_out_of_def
         )
         assert persisted.route == route
         assert persisted.default_long_term_visible is False
-        assert persisted.audit_metadata["actor"] == "v17_l2"
+        assert persisted.audit_metadata["actor"] == "l2"
 
     assert len(db.docs) == 6
     assert all(path.startswith("users/u1/non_active_memory_routes/") for path in db.docs)

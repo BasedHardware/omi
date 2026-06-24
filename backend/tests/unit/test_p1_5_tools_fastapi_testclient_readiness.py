@@ -6,8 +6,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / 'backend' / 'scripts' / 'p1_5_tools_fastapi_testclient_readiness.py'
-TICKET_DOC = REPO_ROOT / 'docs' / 'epics' / 'v17_memory_implementation_tickets.md'
-ORACLE_DOC = REPO_ROOT / 'docs' / 'epics' / 'v17_t20_oracle_milestone_review.md'
+TICKET_DOC = REPO_ROOT / 'docs' / 'epics' / 'memory_implementation_tickets.md'
+ORACLE_DOC = REPO_ROOT / 'docs' / 'epics' / 'memory_t20_oracle_milestone_review.md'
 TEST_SH = REPO_ROOT / 'backend' / 'test.sh'
 
 

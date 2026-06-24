@@ -9,11 +9,11 @@ REQUIRED_STATIC_TERMS = [
     "firebase firestore:rules:get",
     "users/{uid}/memory_outbox/{record_id}",
     "users/{uid}/memory_control/state",
-    "users/{uid}/memory_control/v17_app_key_memory_grants",
+    "users/{uid}/memory_control/app_key_memory_grants",
     "mcp_api_keys/{key_id}",
     "vector_repair_outbox_enabled",
     "client_denial.memory_outbox",
-    "client_denial.v17_app_key_memory_grants",
+    "client_denial.app_key_memory_grants",
     "mcp_api_key_inventory",
     "worker_firestore_iam",
     "memory_control.server_owned",
@@ -39,7 +39,7 @@ FORBIDDEN_MUTATING_TERMS = [
 ]
 
 
-def test_v17_firestore_rules_iam_proof_runner_exists_and_is_read_only():
+def test_memory_firestore_rules_iam_proof_runner_exists_and_is_read_only():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "firestore_rules_iam_proof.py"
 
@@ -49,7 +49,7 @@ def test_v17_firestore_rules_iam_proof_runner_exists_and_is_read_only():
     for required in REQUIRED_STATIC_TERMS:
         assert required in script
 
-    spec = importlib.util.spec_from_file_location("v17_firestore_rules_iam_proof", script_path)
+    spec = importlib.util.spec_from_file_location("firestore_rules_iam_proof", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -68,15 +68,15 @@ def test_v17_firestore_rules_iam_proof_runner_exists_and_is_read_only():
         assert forbidden not in commands
 
 
-def test_v17_firestore_rules_iam_doc_references_proof_runner_and_pass_fail_gates():
+def test_memory_firestore_rules_iam_doc_references_proof_runner_and_pass_fail_gates():
     root = Path(__file__).resolve().parents[2].parent
-    doc_path = root / "docs" / "epics" / "v17_firestore_iam_deployment.md"
+    doc_path = root / "docs" / "epics" / "memory_firestore_iam_deployment.md"
     doc = doc_path.read_text()
 
     assert "python3 backend/scripts/firestore_rules_iam_proof.py" in doc
     assert "users/{uid}/memory_outbox/{record_id}" in doc
     assert "users/{uid}/memory_control/state" in doc
-    assert "users/{uid}/memory_control/v17_app_key_memory_grants" in doc
+    assert "users/{uid}/memory_control/app_key_memory_grants" in doc
     assert "mcp_api_keys/{key_id}" in doc
     assert "vector_repair_outbox_enabled" in doc
     assert "client denial" in doc

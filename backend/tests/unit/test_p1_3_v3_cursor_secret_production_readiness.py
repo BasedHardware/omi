@@ -6,11 +6,11 @@ from pathlib import Path
 
 SCRIPT_NAME = "p1_3_v3_cursor_secret_production_readiness.py"
 EXPECTED_ROUTE_SCOPE = "GET /v3/memories"
-EXPECTED_SECRET_ID = "v17-v3-get-memories-cursor-signing-secret"
+EXPECTED_SECRET_ID = "memory-v3-get-cursor-signing-secret"
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_cursor_secret_production_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_cursor_secret_production_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -28,7 +28,7 @@ def test_cursor_secret_production_runner_exists_and_is_fail_safe_not_run_by_defa
 
     report = _module().build_report(execute=False, env={})
 
-    assert report["artifact"] == "v17_p1_3_v3_cursor_secret_production_readiness"
+    assert report["artifact"] == "p1_3_v3_cursor_secret_production_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -89,14 +89,14 @@ def test_injected_metadata_read_proves_route_scoped_shape_but_never_reads_secret
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_ALLOW": "1",
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_PROJECT_ID": "omi-prod-example",
         "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/non-secret-sa.json",
-        "MEMORY_V3_CURSOR_SECRET_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_CURSOR_SECRET_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-memory-read@omi-prod-example.iam.gserviceaccount.com",
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_SECRET_ID": EXPECTED_SECRET_ID,
     }
     metadata = {
         "name": f"projects/omi-prod-example/secrets/{EXPECTED_SECRET_ID}",
         "labels": {
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_cursor_signing",
+            "purpose": "v3_cursor_signing",
             "owner": "memory_platform",
         },
         "replication": "automatic",
@@ -128,7 +128,7 @@ def test_injected_missing_or_invalid_metadata_fails_closed_without_production_fa
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_ALLOW": "1",
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_PROJECT_ID": "omi-prod-example",
         "SERVICE_ACCOUNT_JSON": "{}",
-        "MEMORY_V3_CURSOR_SECRET_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_CURSOR_SECRET_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-memory-read@omi-prod-example.iam.gserviceaccount.com",
         "MEMORY_V3_CURSOR_SECRET_PROD_READ_SECRET_ID": EXPECTED_SECRET_ID,
     }
 
@@ -185,14 +185,14 @@ def test_static_no_mutation_no_payload_access_no_route_import_no_secret_or_token
     report_json = json.dumps(_module().build_report(execute=False, env={}), sort_keys=True)
     assert "production_rollout_approved\": false" in report_json
     assert "approval_claimed\": false" in report_json
-    assert "fake-server-owned-v17-v3-cursor-secret" not in report_json
+    assert "fake-server-owned-memory-v3-cursor-secret" not in report_json
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
     cursor_readiness = (root / "scripts" / "p1_3_v3_cursor_secret_readiness.py").read_text(encoding="utf-8")
     runtime = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_cursor_secret_production_readiness.py" in test_sh
     assert SCRIPT_NAME in cursor_readiness

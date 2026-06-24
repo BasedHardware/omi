@@ -124,7 +124,7 @@ def test_pre_gcp_cli_emits_parseable_ready_json_when_socket_connections_fail(mon
     report = json.loads(captured.out)
 
     assert captured.err == ""
-    assert report["artifact_version"] == "V17-V3-F6H"
+    assert report["artifact_version"] == "memory-V3-F6H"
     assert report["status"] == "PRE_GCP_READY"
     assert report["decision"] == "BLOCKED_ON_GCP_ACCESS"
     assert report["remaining_blockers"] == ["gcp_access"]

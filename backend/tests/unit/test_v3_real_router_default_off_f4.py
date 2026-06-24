@@ -13,7 +13,7 @@ try:
 except Exception as exc:  # pragma: no cover - exercised by minimal system pytest env
     pytest.skip(f'real FastAPI/TestClient proof requires backend venv dependencies: {exc}', allow_module_level=True)
 
-from utils.memory.v3_composed_get_service import V17V3ComposedResponse
+from utils.memory.v3_composed_get_service import V3ComposedResponse
 
 SENSITIVE_SENTINELS = [
     "secret-uid-123",
@@ -151,7 +151,7 @@ def _client(monkeypatch, runtime=None):
     app = FastAPI()
     app.dependency_overrides[module.auth.get_current_user_uid] = lambda: "secret-uid-123"
     if runtime is not None:
-        app.dependency_overrides[module.get_v17_v3_get_runtime] = lambda: runtime
+        app.dependency_overrides[module.get_v3_get_runtime] = lambda: runtime
     app.include_router(module.router)
     return TestClient(app), counters, module
 
@@ -168,9 +168,9 @@ class RecordingService:
 
 def _runtime(module, *, enabled=True, response=None):
     service = RecordingService(
-        response or V17V3ComposedResponse.success(body=[], next_cursor=None, source="v17_compatibility_projection")
+        response or V3ComposedResponse.success(body=[], next_cursor=None, source="memory_compatibility_projection")
     )
-    return module.V17V3GetRuntime(enabled=enabled, source_decision="v17_read", service=service)
+    return module.V3GetRuntime(enabled=enabled, source_decision="memory_read", service=service)
 
 
 def test_production_default_dependency_is_disabled_and_preserves_legacy_get_behavior(monkeypatch):
@@ -187,18 +187,18 @@ def test_production_default_dependency_is_disabled_and_preserves_legacy_get_beha
         {"uid": "secret-uid-123", "limit": 5000, "offset": 0},
         {"uid": "secret-uid-123", "limit": 17, "offset": 3},
     ]
-    assert module.get_v17_v3_get_runtime().enabled is False
+    assert module.get_v3_get_runtime().enabled is False
     assert counters.mutation_calls == []
 
 
 def test_test_enabled_non_enrolled_legacy_primary_calls_legacy_once_and_projection_zero(monkeypatch):
     client, counters, module = _client(monkeypatch)
-    runtime = module.V17V3GetRuntime(
+    runtime = module.V3GetRuntime(
         enabled=True,
         source_decision="legacy_primary",
-        service=RecordingService(V17V3ComposedResponse.error(503, "adapter_exception")),
+        service=RecordingService(V3ComposedResponse.error(503, "adapter_exception")),
     )
-    client.app.dependency_overrides[module.get_v17_v3_get_runtime] = lambda: runtime
+    client.app.dependency_overrides[module.get_v3_get_runtime] = lambda: runtime
 
     response = client.get("/v3/memories?limit=22&offset=0")
 
@@ -212,26 +212,26 @@ def test_test_enabled_non_enrolled_legacy_primary_calls_legacy_once_and_projecti
     "response,status",
     [
         (
-            V17V3ComposedResponse.success(
-                body=[_memory_item("v17-id", "v17 body", v17_only="strip-me")],
+            V3ComposedResponse.success(
+                body=[_memory_item("memory-id", "memory body", memory_only="strip-me")],
                 next_cursor="cursor-token-signature",
-                source="v17_compatibility_projection",
+                source="memory_compatibility_projection",
             ),
             200,
         ),
-        (V17V3ComposedResponse.error(403, "grant_denied"), 403),
-        (V17V3ComposedResponse.error(400, "offset_invalid"), 400),
-        (V17V3ComposedResponse.error(400, "cursor_invalid"), 400),
-        (V17V3ComposedResponse.error(503, "adapter_contract"), 503),
-        (V17V3ComposedResponse.error(503, "partial_projection"), 503),
-        (V17V3ComposedResponse.error(504, "deadline_exhausted"), 504),
-        (V17V3ComposedResponse.success(body=[], next_cursor=None, source="v17_compatibility_projection"), 200),
+        (V3ComposedResponse.error(403, "grant_denied"), 403),
+        (V3ComposedResponse.error(400, "offset_invalid"), 400),
+        (V3ComposedResponse.error(400, "cursor_invalid"), 400),
+        (V3ComposedResponse.error(503, "adapter_contract"), 503),
+        (V3ComposedResponse.error(503, "partial_projection"), 503),
+        (V3ComposedResponse.error(504, "deadline_exhausted"), 504),
+        (V3ComposedResponse.success(body=[], next_cursor=None, source="memory_compatibility_projection"), 200),
     ],
 )
-def test_enrolled_v17_never_calls_legacy_for_success_or_fail_closed_cases(monkeypatch, response, status):
+def test_enrolled_memory_never_calls_legacy_for_success_or_fail_closed_cases(monkeypatch, response, status):
     client, counters, module = _client(monkeypatch)
     runtime = _runtime(module, response=response)
-    client.app.dependency_overrides[module.get_v17_v3_get_runtime] = lambda: runtime
+    client.app.dependency_overrides[module.get_v3_get_runtime] = lambda: runtime
 
     result = client.get("/v3/memories?limit=100&offset=0&cursor=cursor-token-signature")
 
@@ -240,7 +240,7 @@ def test_enrolled_v17_never_calls_legacy_for_success_or_fail_closed_cases(monkey
     assert len(runtime.service.calls) == 1
     if status == 200:
         for item in result.json():
-            assert "v17_only" not in item
+            assert "memory_only" not in item
         assert "X-Omi-Memory-Read-Source" in result.headers
         assert "X-Omi-Memory-Read-Decision" in result.headers
         assert result.headers["Cache-Control"] == "no-store"
@@ -248,10 +248,10 @@ def test_enrolled_v17_never_calls_legacy_for_success_or_fail_closed_cases(monkey
 
 
 @pytest.mark.parametrize("query", ["limit=0", "limit=-1", "limit=501", "limit=5000", "offset=1"])
-def test_v17_pagination_rejections_happen_without_legacy_reads(monkeypatch, query):
+def test_memory_pagination_rejections_happen_without_legacy_reads(monkeypatch, query):
     client, counters, module = _client(monkeypatch)
-    runtime = _runtime(module, response=V17V3ComposedResponse.error(400, "bad_request"))
-    client.app.dependency_overrides[module.get_v17_v3_get_runtime] = lambda: runtime
+    runtime = _runtime(module, response=V3ComposedResponse.error(400, "bad_request"))
+    client.app.dependency_overrides[module.get_v3_get_runtime] = lambda: runtime
 
     result = client.get(f"/v3/memories?{query}")
 
@@ -262,8 +262,8 @@ def test_v17_pagination_rejections_happen_without_legacy_reads(monkeypatch, quer
 
 def test_router_logs_are_sanitized_and_mutating_route_dependencies_unchanged(monkeypatch, caplog):
     client, counters, module = _client(monkeypatch)
-    runtime = _runtime(module, response=V17V3ComposedResponse.error(503, "adapter_exception"))
-    client.app.dependency_overrides[module.get_v17_v3_get_runtime] = lambda: runtime
+    runtime = _runtime(module, response=V3ComposedResponse.error(503, "adapter_exception"))
+    client.app.dependency_overrides[module.get_v3_get_runtime] = lambda: runtime
 
     with caplog.at_level(logging.INFO):
         response = client.get("/v3/memories?cursor=cursor-token-signature")
@@ -276,5 +276,5 @@ def test_router_logs_are_sanitized_and_mutating_route_dependencies_unchanged(mon
         assert sentinel not in logs
 
     route_by_name = {route.name: route for route in module.router.routes if hasattr(route, "name")}
-    assert "get_v17_v3_get_runtime" not in repr(route_by_name["create_memory"].dependant.dependencies)
-    assert "get_v17_v3_get_runtime" not in repr(route_by_name["delete_memory"].dependant.dependencies)
+    assert "get_v3_get_runtime" not in repr(route_by_name["create_memory"].dependant.dependencies)
+    assert "get_v3_get_runtime" not in repr(route_by_name["delete_memory"].dependant.dependencies)

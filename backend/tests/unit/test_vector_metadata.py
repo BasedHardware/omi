@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta, timezone
 
 from database.memory_vector_metadata import (
-    build_v17_archive_memory_vector_filter,
-    build_v17_default_memory_vector_filter,
-    build_v17_memory_vector_metadata,
-    deterministic_v17_memory_vector_id,
-    parse_v17_search_vector_hit,
+    build_archive_memory_vector_filter,
+    build_default_memory_vector_filter,
+    build_memory_vector_metadata,
+    deterministic_memory_vector_id,
+    parse_search_vector_hit,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_search_gateway import SearchDecision
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 
 def _item(
@@ -22,7 +22,7 @@ def _item(
     sensitive=False,
 ):
     now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid="uid-1",
         version=2,
@@ -55,28 +55,28 @@ def _item(
     )
 
 
-def test_deterministic_v17_vector_ids_are_prefixed_and_tier_revision_scoped():
-    short_id = deterministic_v17_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
-    archive_id = deterministic_v17_memory_vector_id("uid-1", "same-memory", MemoryTier.archive, 3)
-    next_revision_id = deterministic_v17_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 4)
+def test_deterministic_memory_vector_ids_are_prefixed_and_tier_revision_scoped():
+    short_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
+    archive_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.archive, 3)
+    next_revision_id = deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 4)
 
-    assert short_id == deterministic_v17_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
-    assert short_id.startswith("v17mem:")
+    assert short_id == deterministic_memory_vector_id("uid-1", "same-memory", MemoryTier.short_term, 3)
+    assert short_id.startswith("memvec:")
     assert len({short_id, archive_id, next_revision_id, "uid-1-same-memory"}) == 4
 
 
-def test_v17_vector_metadata_carries_required_hydration_and_filter_fields():
+def test_memory_vector_metadata_carries_required_hydration_and_filter_fields():
     item = _item(tier=MemoryTier.long_term, processing_state=ProcessingState.processed)
-    metadata = build_v17_memory_vector_metadata(
+    metadata = build_memory_vector_metadata(
         item,
         projection_commit_id="projection-commit-1",
         vector_updated_at=datetime(2026, 6, 19, 12, 5, tzinfo=timezone.utc),
     )
 
-    assert metadata["v17_schema_version"] == 1
+    assert metadata["memory_schema_version"] == 1
     assert metadata["uid"] == "uid-1"
     assert metadata["memory_id"] == "mem1"
-    assert metadata["memory_tier"] == "long_term"
+    assert metadata["memory_layer"] == "long_term"
     assert metadata["status"] == "active"
     assert metadata["processing_state"] == "processed"
     assert metadata["source_state"] == "active"
@@ -91,28 +91,28 @@ def test_v17_vector_metadata_carries_required_hydration_and_filter_fields():
 
 
 def test_default_and_archive_filters_are_explicit_tier_safe_and_exclude_hidden_tombstoned_sensitive_records():
-    default_filter = build_v17_default_memory_vector_filter("uid-1")
-    archive_filter = build_v17_archive_memory_vector_filter("uid-1")
+    default_filter = build_default_memory_vector_filter("uid-1")
+    archive_filter = build_archive_memory_vector_filter("uid-1")
 
-    assert {"memory_tier": {"$in": ["short_term", "long_term"]}} in default_filter["$and"]
-    assert {"memory_tier": {"$eq": "archive"}} in archive_filter["$and"]
+    assert {"memory_layer": {"$in": ["short_term", "long_term"]}} in default_filter["$and"]
+    assert {"memory_layer": {"$eq": "archive"}} in archive_filter["$and"]
     for pinecone_filter in (default_filter, archive_filter):
         assert {"uid": {"$eq": "uid-1"}} in pinecone_filter["$and"]
-        assert {"v17_schema_version": {"$eq": 1}} in pinecone_filter["$and"]
+        assert {"memory_schema_version": {"$eq": 1}} in pinecone_filter["$and"]
         assert {"status": {"$eq": "active"}} in pinecone_filter["$and"]
         assert {"source_state": {"$eq": "active"}} in pinecone_filter["$and"]
         assert {"restricted_sensitivity": {"$eq": False}} in pinecone_filter["$and"]
 
 
-def test_parse_v17_vector_hit_fails_closed_when_required_metadata_is_missing_or_malformed():
+def test_parse_memory_vector_hit_fails_closed_when_required_metadata_is_missing_or_malformed():
     item = _item()
-    metadata = build_v17_memory_vector_metadata(
+    metadata = build_memory_vector_metadata(
         item,
         projection_commit_id="projection-commit-1",
         vector_updated_at=datetime(2026, 6, 19, 12, 5, tzinfo=timezone.utc),
     )
 
-    parsed = parse_v17_search_vector_hit({"score": 0.91, "metadata": metadata})
+    parsed = parse_search_vector_hit({"score": 0.91, "metadata": metadata})
 
     assert parsed.decision == SearchDecision.allowed
     assert parsed.hit is not None
@@ -126,12 +126,12 @@ def test_parse_v17_vector_hit_fails_closed_when_required_metadata_is_missing_or_
 
     missing_projection = dict(metadata)
     missing_projection.pop("projection_commit_id")
-    rejected = parse_v17_search_vector_hit({"score": 0.5, "metadata": missing_projection})
+    rejected = parse_search_vector_hit({"score": 0.5, "metadata": missing_projection})
     assert rejected.decision == SearchDecision.stale_vector
     assert rejected.hit is None
 
     malformed_timestamp = dict(metadata)
     malformed_timestamp["vector_updated_at"] = "not-a-time"
-    rejected = parse_v17_search_vector_hit({"score": 0.5, "metadata": malformed_timestamp})
+    rejected = parse_search_vector_hit({"score": 0.5, "metadata": malformed_timestamp})
     assert rejected.decision == SearchDecision.stale_vector
     assert rejected.hit is None

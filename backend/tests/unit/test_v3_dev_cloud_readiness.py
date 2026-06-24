@@ -14,22 +14,22 @@ from utils.memory.v3_dev_cloud_proof import (
 
 def _complete_env():
     return {
-        'MEMORY_DEV_CLOUD_PROJECT_ID': 'omi-v17-dev',
+        'MEMORY_DEV_CLOUD_PROJECT_ID': 'omi-memory-dev',
         'MEMORY_DEV_CLOUD_PROJECT_NUMBER': '1234567890',
         'MEMORY_DEV_CLOUD_DATABASE_ID': '(default)',
         'MEMORY_DEV_CLOUD_REGION': 'us-central1',
-        'MEMORY_DEV_CLOUD_BACKEND_URL': 'https://v17-dev.example.test',
-        'MEMORY_DEV_CLOUD_DEPLOYED_REVISION': 'v17-dev-rev-1',
+        'MEMORY_DEV_CLOUD_BACKEND_URL': 'https://memory-dev.example.test',
+        'MEMORY_DEV_CLOUD_DEPLOYED_REVISION': 'memory-dev-rev-1',
         'MEMORY_DEV_CLOUD_IMAGE_DIGEST': 'sha256:' + 'a' * 64,
-        'MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT': 'runtime@omi-v17-dev.iam.gserviceaccount.com',
-        'MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL': 'fixture-writer@omi-v17-dev.iam.gserviceaccount.com',
-        'GOOGLE_CLOUD_PROJECT': 'omi-v17-dev',
+        'MEMORY_DEV_CLOUD_RUNTIME_SERVICE_ACCOUNT': 'runtime@omi-memory-dev.iam.gserviceaccount.com',
+        'MEMORY_DEV_CLOUD_FIXTURE_WRITER_PRINCIPAL': 'fixture-writer@omi-memory-dev.iam.gserviceaccount.com',
+        'GOOGLE_CLOUD_PROJECT': 'omi-memory-dev',
         'GOOGLE_CLOUD_PROJECT_NUMBER': '1234567890',
         'MEMORY_PRODUCTION_PROJECT_IDS': 'omi-prod,basedhardware-prod',
         'MEMORY_PRODUCTION_PROJECT_NUMBERS': '999,888',
         'MEMORY_V3_GET_ENABLED': 'true',
         'MEMORY_MODE': 'read',
-        'MEMORY_ENABLED_USERS': 'v17-dev-synthetic-user-a,v17-dev-synthetic-user-b',
+        'MEMORY_ENABLED_USERS': 'memory-dev-synthetic-user-a,memory-dev-synthetic-user-b',
         'MEMORY_V3_CURSOR_SECRET': 'do-not-emit-this-secret',
         'MEMORY_V3_CURSOR_SECRET_VERSION': 'dev-v1',
     }
@@ -49,7 +49,7 @@ def test_complete_non_prod_preflight_is_ready_to_execute_but_not_gate_go():
 
     assert report['status'] == GATE_STATUS_READY_TO_EXECUTE
     assert report['blockers'] == []
-    assert report['target']['actual_project_id'] == 'omi-v17-dev'
+    assert report['target']['actual_project_id'] == 'omi-memory-dev'
     assert report['target']['runtime_service_account'] != report['target']['fixture_writer_principal']
     assert 'READY_TO_EXECUTE_DEV_CLOUD_PROOF is not Gate 2 GO.' in report['non_claims']
 
@@ -87,13 +87,13 @@ def test_fixture_bundle_uses_two_synthetic_users_and_no_firestore_writes():
     assert bundle['status'] == 'NOT_RUN'
     assert bundle['synthetic_uids'] == ['dev-a', 'dev-b']
     assert bundle['document_count'] == len(bundle['documents'])
-    assert 'memory_control/v17_global_read_gate' in bundle['documents']
-    assert 'memory_control/v17_write_convergence_gate' in bundle['documents']
+    assert 'memory_control/global_read_gate' in bundle['documents']
+    assert 'memory_control/write_convergence_gate' in bundle['documents']
     assert 'users/dev-a/memory_state/head' in bundle['documents']
     assert 'users/dev-b/memory_state/head' in bundle['documents']
     assert bundle['documents']['users/dev-a/memory_control/state']['mode'] == 'read'
     assert bundle['documents']['users/dev-a/memory_control/state']['grants']['omi_chat']['default_memory'] is True
-    assert bundle['documents']['users/dev-a/memory_state/head']['source'] == 'v17_memory_state_head'
+    assert bundle['documents']['users/dev-a/memory_state/head']['source'] == 'memory_state_head'
     assert any('does not write Firestore' in claim for claim in bundle['non_claims'])
 
 
@@ -105,7 +105,7 @@ def test_proof_matrix_contains_required_security_and_rollback_cases():
     assert matrix['required_case_count'] >= 20
     assert 'user_a_references_user_b' in case_ids
     assert 'runtime_firestore_read_permission_denied' in case_ids
-    assert 'every_get_case_zero_v17_writes' in case_ids
+    assert 'every_get_case_zero_memory_writes' in case_ids
     assert 'kill_switch_rollback' in case_ids
 
 

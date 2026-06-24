@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_real_router_fail_closed_matrix", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_real_router_fail_closed_matrix", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -18,7 +18,7 @@ def _report(execute=True):
 def test_fail_closed_matrix_runner_is_safe_and_honest_about_current_real_router_behavior():
     report = _report(execute=True)
 
-    assert report["artifact"] == "v17_p1_3_v3_real_router_fail_closed_matrix"
+    assert report["artifact"] == "p1_3_v3_real_router_fail_closed_matrix"
     assert report["status"] == "BLOCKED"
     assert report["read_only"] is True
     assert report["mutation_allowed"] is False
@@ -37,7 +37,7 @@ def test_fail_closed_matrix_runner_is_safe_and_honest_about_current_real_router_
     assert report["future_dispatcher_matrix_proof"]["runtime_behavior_changed"] is False
 
 
-def test_current_real_router_still_preserves_legacy_limit_offset_and_does_not_invoke_v17_adapters():
+def test_current_real_router_still_preserves_legacy_limit_offset_and_does_not_invoke_memory_adapters():
     report = _report(execute=True)
     baseline = report["current_real_router_baseline"]
 
@@ -45,7 +45,7 @@ def test_current_real_router_still_preserves_legacy_limit_offset_and_does_not_in
         {"uid": "stubbed-test-uid", "limit": 5000, "offset": 0},
         {"uid": "stubbed-test-uid", "limit": 17, "offset": 3},
     ]
-    assert baseline["v17_adapters_invoked"] is False
+    assert baseline["memory_adapters_invoked"] is False
     assert baseline["stubbed_legacy_get_memories_call_count"] == 2
     assert baseline["mutation_flags_clear"] is True
 
@@ -119,9 +119,7 @@ def test_fail_closed_matrix_is_linked_from_readiness_test_runner_and_docs():
         "approval_claimed": False,
     }
 
-    external = _load_module(root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").build_report(
-        execute=True
-    )
+    external = _load_module(root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").build_report(execute=True)
     runtime = _load_module(root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").build_report(execute=True)
     assert external["real_router_fail_closed_matrix_proof"]["service"] == (
         "backend/scripts/p1_3_v3_real_router_fail_closed_matrix.py"
@@ -130,8 +128,8 @@ def test_fail_closed_matrix_is_linked_from_readiness_test_runner_and_docs():
     assert "real_router_fail_closed_matrix_proof" in runtime["existing_local_proof_artifacts"]
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "test_p1_3_v3_real_router_fail_closed_matrix.py" in test_sh
     assert "p1_3_v3_real_router_fail_closed_matrix.py" in ticket_doc
     assert "p1_3_v3_real_router_fail_closed_matrix.py" in oracle_doc

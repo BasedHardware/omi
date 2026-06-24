@@ -11,7 +11,7 @@ REQUIRED_CASE_KEYS = {
     "duplicate_vector_detection",
     "repair_outbox_enqueue_dead_letter_backlog",
     "repair_worker_convergence",
-    "shared_ns2_legacy_v17_isolation_under_stale_candidates",
+    "shared_ns2_legacy_memory_isolation_under_stale_candidates",
     "no_silent_data_loss",
 }
 
@@ -19,7 +19,7 @@ REQUIRED_REFERENCE_TERMS = [
     "vector_search_provider_readiness.py",
     "shared_ns2_legacy_isolation_readiness.py",
     "pinecone_repair_validation_readiness.py",
-    "v17_vector_repair_outbox_telemetry.py",
+    "memory_vector_repair_outbox_telemetry.py",
     "projection_commit_id",
     "account_generation",
     "item_revision",
@@ -47,7 +47,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_t20_repair_projection_consistency_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("t20_repair_projection_consistency_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -120,12 +120,12 @@ def test_t20_execute_remains_read_only_and_not_run_without_provider_calls():
 
 def test_t20_readiness_is_linked_from_cutover_oracle_docs_and_ticket():
     repo = Path(__file__).resolve().parents[2].parent
-    oracle = (repo / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (repo / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (repo / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (repo / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     cutover = (repo / "backend" / "scripts" / "cutover_evidence_readiness.py").read_text()
 
     for text in (oracle, tickets, cutover):
         assert "t20_repair_projection_consistency_readiness.py" in text
         assert "projection_commit_id/account_generation/item_revision/source_commit_id/content_hash" in text
         assert "repair outbox enqueue/dead-letter/backlog" in text
-        assert "shared ns2 legacy/V17 isolation under stale candidates" in text
+        assert "shared ns2 legacy/memory isolation under stale candidates" in text

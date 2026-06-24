@@ -6,7 +6,7 @@ import pytest
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_cursor_secret_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_cursor_secret_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -21,7 +21,7 @@ def test_cursor_secret_readiness_runner_exists_and_is_safe_by_default():
     module = _module()
     report = module.build_report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_cursor_secret_readiness"
+    assert report["artifact"] == "p1_3_v3_cursor_secret_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -52,7 +52,9 @@ def test_cursor_secret_readiness_blocks_without_server_owned_secret_source_and_n
     assert secret_source["client_supplied_secret_trusted"] is False
     assert secret_source["invented_secret_material"] is False
     assert secret_source["env_secret_read_attempted"] is False
-    assert secret_source["blocker"] == "No existing runtime-owned V17 /v3 cursor signing secret/config source is wired."
+    assert (
+        secret_source["blocker"] == "No existing runtime-owned memory /v3 cursor signing secret/config source is wired."
+    )
 
     trust_boundary = {item["requirement_id"]: item for item in report["trust_boundary_requirements"]}
     assert trust_boundary["server_owned_secret_only"]["client_controlled"] is False
@@ -92,7 +94,7 @@ def test_cursor_secret_readiness_proves_pure_fake_cursor_cases_fail_closed():
     assert cases["server_owned_secret_signed_cursor_round_trip"]["preserved_claims"] == {
         "account_generation": 7,
         "projection_generation": 11,
-        "source": "v17_compatibility_projection",
+        "source": "memory_compatibility_projection",
         "keyset": {"created_at_ms": 1799999123456, "memory_id": "memory-9"},
     }
     for case_id in [
@@ -126,8 +128,8 @@ def test_cursor_secret_readiness_json_summary_and_docs_registration_are_stable()
 
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_script = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external_script = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 

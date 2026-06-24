@@ -54,7 +54,7 @@ def _ws_n_import_isolation():
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.kg_graph_traversal import (
     MAX_EDGES_PER_NODE,
     MAX_TRAVERSAL_HOPS,
@@ -82,9 +82,9 @@ def _evidence() -> MemoryEvidence:
     )
 
 
-def _long_term_item(memory_id: str, content: str) -> V17MemoryItem:
+def _long_term_item(memory_id: str, content: str) -> MemoryItem:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid=CANONICAL_UID,
         version=1,

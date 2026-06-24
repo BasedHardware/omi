@@ -5,7 +5,7 @@ from jobs.short_term_lifecycle_worker import (
     process_short_term_lifecycle_items,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS, ShortTermDisposition
 
 NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
@@ -26,7 +26,7 @@ def _evidence(evidence_id='ev1', source_id='conv1', source_state=SourceState.act
     )
 
 
-def _short_term_item(memory_id: str, **overrides) -> V17MemoryItem:
+def _short_term_item(memory_id: str, **overrides) -> MemoryItem:
     captured_at = overrides.pop('captured_at', NOW - timedelta(days=1))
     source_state = overrides.get('source_state', SourceState.active)
     data = {
@@ -47,7 +47,7 @@ def _short_term_item(memory_id: str, **overrides) -> V17MemoryItem:
         'expires_at': captured_at + timedelta(days=DEFAULT_SHORT_TERM_TTL_DAYS),
     }
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def test_worker_persists_stale_l2_and_tombstoned_lifecycle_transitions_idempotently():

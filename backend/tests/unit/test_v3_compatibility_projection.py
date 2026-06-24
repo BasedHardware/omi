@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from database.memory_collections import V17Collections
-from database.memory_compatibility_projection import read_v17_v3_compatibility_projection_page
+from database.memory_collections import MemoryCollections
+from database.memory_compatibility_projection import read_v3_compatibility_projection_page
 from utils.memory.v3_projection_reader_contract import (
-    V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-    V17V3ProjectionCursor,
-    V17V3ProjectionFailureReason,
-    V17V3ProjectionReadError,
-    V17V3ProjectionReadRequest,
+    V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+    V3ProjectionCursor,
+    V3ProjectionFailureReason,
+    V3ProjectionReadError,
+    V3ProjectionReadRequest,
 )
 
 
@@ -106,13 +106,13 @@ NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 def _state(**overrides):
     doc = {
         'uid': UID,
-        'schema_version': V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-        'source': 'v17_memory_items_projection',
+        'schema_version': V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+        'source': 'memory_items_projection',
         'ready': True,
         'account_generation': ACCOUNT_GENERATION,
         'projection_generation': PROJECTION_GENERATION,
         'source_commit_id': SOURCE_COMMIT_ID,
-        'source_version': 'v17',
+        'source_version': 'memory',
         'projection_commit_id': PROJECTION_COMMIT_ID,
         'projection_version': 'v3_memorydb_compatibility',
         'source_evidence_fence': FENCE,
@@ -133,8 +133,8 @@ def _payload(memory_id, *, created_at=NOW, content=None, **overrides):
     doc = {
         'uid': UID,
         'memory_id': memory_id,
-        'schema_version': V17_V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
-        'source': 'v17_memory_items_projection',
+        'schema_version': V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION,
+        'source': 'memory_items_projection',
         'account_generation': ACCOUNT_GENERATION,
         'projection_generation': PROJECTION_GENERATION,
         'source_commit_id': SOURCE_COMMIT_ID,
@@ -175,7 +175,7 @@ _DEFAULT_STATE = object()
 
 
 def _db(*items, state=_DEFAULT_STATE):
-    paths = V17Collections(uid=UID)
+    paths = MemoryCollections(uid=UID)
     docs = {}
     if state is _DEFAULT_STATE:
         docs[paths.v3_compatibility_projection_state] = _state()
@@ -196,26 +196,26 @@ def _request(**overrides):
         'include_archive': False,
     }
     params.update(overrides)
-    return V17V3ProjectionReadRequest(**params)
+    return V3ProjectionReadRequest(**params)
 
 
 def _reason_for(db, request=None):
-    with pytest.raises(V17V3ProjectionReadError) as exc:
-        read_v17_v3_compatibility_projection_page(db_client=db, request=request or _request())
+    with pytest.raises(V3ProjectionReadError) as exc:
+        read_v3_compatibility_projection_page(db_client=db, request=request or _request())
     return exc.value.reason
 
 
-def test_ready_projection_returns_memorydb_compatible_dicts_without_v17_body_fields_and_no_legacy_fallback():
+def test_ready_projection_returns_memorydb_compatible_dicts_without_memory_body_fields_and_no_legacy_fallback():
     db = _db(('mem-a', _payload('mem-a')))
 
-    page = read_v17_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
 
     assert [item['id'] for item in page.items] == ['mem-a']
     assert page.items[0]['content'] == 'content mem-a'
     assert 'projection_generation' not in page.items[0]
     assert page.next_cursor is None
     assert page.projection_generation == PROJECTION_GENERATION
-    assert db.collection_reads == [V17Collections(uid=UID).v3_compatibility_projection_items]
+    assert db.collection_reads == [MemoryCollections(uid=UID).v3_compatibility_projection_items]
     assert db.query_limits == [3]
     assert db.legacy_reader_called is False
     assert db.writes == []
@@ -224,7 +224,7 @@ def test_ready_projection_returns_memorydb_compatible_dicts_without_v17_body_fie
 def test_ready_empty_projection_returns_empty_list():
     db = _db(state=_state(empty_projection=True))
 
-    page = read_v17_v3_compatibility_projection_page(db_client=db, request=_request())
+    page = read_v3_compatibility_projection_page(db_client=db, request=_request())
 
     assert page.items == []
     assert page.empty_projection is True
@@ -234,17 +234,17 @@ def test_ready_empty_projection_returns_empty_list():
 @pytest.mark.parametrize(
     ('state', 'reason'),
     [
-        (None, V17V3ProjectionFailureReason.MISSING_PROJECTION_STATE),
-        ({'uid': UID}, V17V3ProjectionFailureReason.UNSUPPORTED_PROJECTION_SCHEMA),
-        (_state(uid=OTHER_UID), V17V3ProjectionFailureReason.UID_MISMATCH),
-        (_state(source='unexpected'), V17V3ProjectionFailureReason.SOURCE_MISMATCH),
-        (_state(account_generation=ACCOUNT_GENERATION + 1), V17V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH),
-        (_state(projection_generation=PROJECTION_GENERATION + 1), V17V3ProjectionFailureReason.FENCE_MISMATCH),
-        (_state(projection_commit_id='other'), V17V3ProjectionFailureReason.FENCE_MISMATCH),
-        (_state(write_convergence_complete=False), V17V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
-        (_state(delete_convergence_complete=False), V17V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
-        (_state(tombstone_convergence_complete=False), V17V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
-        (_state(ready=False), V17V3ProjectionFailureReason.PROJECTION_NOT_READY),
+        (None, V3ProjectionFailureReason.MISSING_PROJECTION_STATE),
+        ({'uid': UID}, V3ProjectionFailureReason.UNSUPPORTED_PROJECTION_SCHEMA),
+        (_state(uid=OTHER_UID), V3ProjectionFailureReason.UID_MISMATCH),
+        (_state(source='unexpected'), V3ProjectionFailureReason.SOURCE_MISMATCH),
+        (_state(account_generation=ACCOUNT_GENERATION + 1), V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH),
+        (_state(projection_generation=PROJECTION_GENERATION + 1), V3ProjectionFailureReason.FENCE_MISMATCH),
+        (_state(projection_commit_id='other'), V3ProjectionFailureReason.FENCE_MISMATCH),
+        (_state(write_convergence_complete=False), V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
+        (_state(delete_convergence_complete=False), V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
+        (_state(tombstone_convergence_complete=False), V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
+        (_state(ready=False), V3ProjectionFailureReason.PROJECTION_NOT_READY),
     ],
 )
 def test_missing_malformed_or_unfenced_projection_state_fails_closed(state, reason):
@@ -255,19 +255,19 @@ def test_caller_supplied_expected_generation_is_not_copied_from_projection_state
     db = _db(('mem-a', _payload('mem-a')), state=_state(account_generation=ACCOUNT_GENERATION))
 
     assert _reason_for(db, _request(expected_account_generation=ACCOUNT_GENERATION + 1)) == (
-        V17V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH
+        V3ProjectionFailureReason.ACCOUNT_GENERATION_MISMATCH
     )
 
 
 @pytest.mark.parametrize(
     ('item', 'reason'),
     [
-        (_payload('mem-a', uid=OTHER_UID), V17V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
-        (_payload('mem-a', projection_generation=99), V17V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
-        (_payload('mem-a', projection_commit_id='old'), V17V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
-        (_payload('mem-a', write_convergence_complete=False), V17V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
-        (_payload('mem-a', tombstone_convergence_complete=False), V17V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
-        (_payload('mem-a', memorydb={'id': 'mem-a'}), V17V3ProjectionFailureReason.INVALID_PROJECTION_PAYLOAD),
+        (_payload('mem-a', uid=OTHER_UID), V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
+        (_payload('mem-a', projection_generation=99), V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
+        (_payload('mem-a', projection_commit_id='old'), V3ProjectionFailureReason.ITEM_FENCE_MISMATCH),
+        (_payload('mem-a', write_convergence_complete=False), V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
+        (_payload('mem-a', tombstone_convergence_complete=False), V3ProjectionFailureReason.INCOMPLETE_CONVERGENCE),
+        (_payload('mem-a', memorydb={'id': 'mem-a'}), V3ProjectionFailureReason.INVALID_PROJECTION_PAYLOAD),
     ],
 )
 def test_invalid_projection_item_fails_whole_page(item, reason):
@@ -284,7 +284,7 @@ def test_archive_tombstone_deleted_and_stale_short_term_items_are_not_returned_b
         ('visible', visible), ('archived', archived), ('deleted', deleted), ('tombstoned', tombstoned), ('stale', stale)
     )
 
-    page = read_v17_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
+    page = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=10))
 
     assert [item['id'] for item in page.items] == ['visible']
 
@@ -300,18 +300,16 @@ def test_stable_keyset_pagination_by_created_at_desc_then_memory_id_desc_reads_l
         ('d', _payload('d', created_at=t3)),
     )
 
-    first = read_v17_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
-    second = read_v17_v3_compatibility_projection_page(
-        db_client=db, request=_request(limit=2, cursor=first.next_cursor)
-    )
+    first = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2))
+    second = read_v3_compatibility_projection_page(db_client=db, request=_request(limit=2, cursor=first.next_cursor))
 
     assert [item['id'] for item in first.items] == ['d', 'c']
-    assert isinstance(first.next_cursor, V17V3ProjectionCursor)
+    assert isinstance(first.next_cursor, V3ProjectionCursor)
     assert [item['id'] for item in second.items] == ['b', 'a']
     assert second.next_cursor is None
     assert db.query_limits == [3, 3]
     assert db.query_start_after == [{'created_at': t2, '__name__': 'c'}]
 
 
-def test_offset_is_unsupported_in_v17_projection_reader_even_for_legacy_zero_override():
-    assert _reason_for(_db(), _request(offset=0, limit=5000)) == V17V3ProjectionFailureReason.OFFSET_UNSUPPORTED
+def test_offset_is_unsupported_in_memory_projection_reader_even_for_legacy_zero_override():
+    assert _reason_for(_db(), _request(offset=0, limit=5000)) == V3ProjectionFailureReason.OFFSET_UNSUPPORTED

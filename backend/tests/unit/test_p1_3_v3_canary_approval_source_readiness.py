@@ -14,7 +14,7 @@ EXPECTED_REQUIRED_PROOF_IDS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_canary_approval_source_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_canary_approval_source_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -33,7 +33,7 @@ def test_canary_approval_source_readiness_runner_exists_and_is_safe_by_default()
 
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_canary_approval_source_readiness"
+    assert report["artifact"] == "p1_3_v3_canary_approval_source_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -55,7 +55,7 @@ def test_canary_approval_source_contract_pins_server_owned_path_owners_and_route
     assert report["proof_status"] == "BLOCKED"
     contract = report["source_selection_contract"]
     assert contract["route_scope"] == "GET /v3/memories"
-    assert contract["future_artifact_source"] == "firestore:system/v17_v3_canary_approvals/routes/get_v3_memories"
+    assert contract["future_artifact_source"] == "firestore:system/v3_canary_approvals/routes/get_v3_memories"
     assert contract["server_owned_only"] is True
     assert contract["client_supplied_artifact_trusted"] is False
     assert contract["bounded_owner_groups"] == EXPECTED_OWNER_GROUPS
@@ -69,7 +69,7 @@ def test_canary_approval_source_contract_pins_server_owned_path_owners_and_route
     assert all(fragment not in source_lower for fragment in forbidden)
 
     static_proof = report["static_iam_rules_emulator_readiness_proof"]
-    assert static_proof["artifact_document_path"] == "system/v17_v3_canary_approvals/routes/get_v3_memories"
+    assert static_proof["artifact_document_path"] == "system/v3_canary_approvals/routes/get_v3_memories"
     assert static_proof["route_scope"] == "GET /v3/memories"
     assert static_proof["status"] == "STATIC_RULES_EMULATOR_HARNESS_READY_RUNTIME_BLOCKED"
     assert static_proof["direct_signed_in_client_read_denied"] is True
@@ -78,7 +78,7 @@ def test_canary_approval_source_contract_pins_server_owned_path_owners_and_route
     assert static_proof["backend_admin_or_service_principal_read_static_contract_present"] is True
     assert static_proof["client_supplied_artifact_trusted"] is False
     assert static_proof["production_firestore_read_executed"] is False
-    assert static_proof["emulator_command"] == "npm run test:v17-v3-canary-approval-source:emulator"
+    assert static_proof["emulator_command"] == "npm run test:memory-v3-canary-approval-source:emulator"
 
 
 def test_canary_approval_source_contract_requires_iam_rules_privacy_readiness_before_wiring():
@@ -129,8 +129,8 @@ def test_canary_approval_source_failure_semantics_and_non_claims_are_fail_closed
     report = _report(execute=True)
 
     semantics = {item["state"]: item for item in report["failure_semantics"]}
-    assert semantics["source_missing"]["future_route_behavior"] == "fail_closed_before_v17_read"
-    assert semantics["iam_denied_or_timeout"]["future_route_behavior"] == "fail_closed_before_v17_read"
+    assert semantics["source_missing"]["future_route_behavior"] == "fail_closed_before_memory_read"
+    assert semantics["iam_denied_or_timeout"]["future_route_behavior"] == "fail_closed_before_memory_read"
     assert (
         semantics["client_supplied_artifact_present"]["future_route_behavior"]
         == "ignore_and_fail_closed_if_server_source_unavailable"
@@ -169,15 +169,13 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
 
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     observability_readiness = (root / "scripts" / "p1_3_v3_observability_approval_readiness.py").read_text(
         encoding="utf-8"
     )
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
     rules_emulator_test = (root.parent / "backend" / "scripts" / "firestore_rules_emulator_test.mjs").read_text(
         encoding="utf-8"
     )
@@ -193,4 +191,4 @@ def test_canary_approval_source_readiness_json_summary_and_parent_links_are_stab
     assert "canary_approval_source_readiness_proof" in external_readiness
     assert "assertClientDeniedForV3CanaryApprovalSource" in rules_emulator_test
     assert "assertAdminCanReadV3CanaryApprovalSource" in rules_emulator_test
-    assert "test:v17-v3-canary-approval-source:emulator" in package_json
+    assert "test:memory-v3-canary-approval-source:emulator" in package_json

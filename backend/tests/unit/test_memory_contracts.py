@@ -54,7 +54,7 @@ def test_durable_memory_patch_requires_target_for_merge_update_and_add_evidence(
             DurableMemoryPatch(
                 patch_id="patch_1",
                 packet_id="pkt_1",
-                run_id="v17_test",
+                run_id="memory_test",
                 observed_head_commit_id="head_1",
                 idempotency_key="idem_1",
                 decision=decision,

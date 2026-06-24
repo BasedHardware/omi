@@ -75,7 +75,7 @@ def test_concrete_target_allows_real_execution_only_on_exact_project_and_princip
             **DEFAULT_EVIDENCE_TARGETS["dev"],
             "project_id": "omi-memory-dev-123",
             "project_number": "111222333444",
-            "evidence_principal": "serviceAccount:v17-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
+            "evidence_principal": "serviceAccount:memory-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
         }
     }
     target = EvidenceTargetRegistry.from_dict(concrete).get("dev")
@@ -83,12 +83,12 @@ def test_concrete_target_allows_real_execution_only_on_exact_project_and_princip
     target.validate_for_real_execution(
         project_id="omi-memory-dev-123",
         project_number="111222333444",
-        evidence_principal="serviceAccount:v17-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
+        evidence_principal="serviceAccount:memory-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
     )
 
     with pytest.raises(ValidationError, match="project_id"):
         target.validate_for_real_execution(
             project_id="wrong-project",
             project_number="111222333444",
-            evidence_principal="serviceAccount:v17-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
+            evidence_principal="serviceAccount:memory-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
         )

@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_developer_api_auth_keeps_uid_dependencies_while_carrying_v17_app_key_context():
+def test_developer_api_auth_keeps_uid_dependencies_while_carrying_memory_app_key_context():
     dependencies_source = (ROOT / 'dependencies.py').read_text()
 
     assert 'class ApiKeyAuth' in dependencies_source
@@ -12,14 +12,14 @@ def test_developer_api_auth_keeps_uid_dependencies_while_carrying_v17_app_key_co
     assert 'self.app_id = app_id' in dependencies_source
     assert 'self.key_id = key_id' in dependencies_source
     assert 'return auth.uid' in dependencies_source
-    assert 'def get_developer_v17_default_memory_read_context' in dependencies_source
-    assert 'V17ProductAuthorizationContext' in dependencies_source
+    assert 'def get_developer_memory_default_memory_read_context' in dependencies_source
+    assert 'ProductAuthorizationContext' in dependencies_source
     assert "consumer='developer_api'" in dependencies_source
     assert "surface='developer_default_memory_read'" in dependencies_source
     assert "Scopes.MEMORIES_READ: 'memories.read'" in dependencies_source
 
 
-def test_developer_api_key_lookup_returns_key_id_and_stable_app_id_for_v17_context():
+def test_developer_api_key_lookup_returns_key_id_and_stable_app_id_for_memory_context():
     source = (ROOT / 'database' / 'dev_api_key.py').read_text()
 
     assert '"key_id": key_id' in source

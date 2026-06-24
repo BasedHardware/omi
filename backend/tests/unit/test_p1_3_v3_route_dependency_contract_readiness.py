@@ -6,7 +6,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
     "authenticated_subject_binding_required_before_any_read",
     "legacy_token_api_key_mcp_auth_behavior_inventory_required",
     "client_uid_override_rejected_before_read_source_selection",
-    "non_enrolled_legacy_boundary_and_enrolled_v17_boundary_required",
+    "non_enrolled_legacy_boundary_and_enrolled_memory_boundary_required",
     "rate_limit_or_backpressure_dependency_hook_required_for_get",
     "missing_invalid_auth_control_cursor_config_fail_closed_required",
     "real_testclient_scenarios_blocked_until_runtime_route_wiring_exists",
@@ -14,7 +14,7 @@ REQUIRED_CONTRACT_EVIDENCE = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_route_dependency_contract_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_route_dependency_contract_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -29,7 +29,7 @@ def _report(execute=False):
 def test_route_dependency_contract_runner_exists_and_is_safe_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_route_dependency_contract_readiness"
+    assert report["artifact"] == "p1_3_v3_route_dependency_contract_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -121,8 +121,8 @@ def test_route_dependency_contract_is_static_readiness_only_and_registered():
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
     external_script = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
     runtime_script = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "backend.routers.memories" not in source
     assert "routers.memories" not in source

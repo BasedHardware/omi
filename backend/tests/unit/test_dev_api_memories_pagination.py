@@ -173,8 +173,8 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
-from dependencies import get_developer_v17_default_memory_read_context  # noqa: E402
-from utils.memory.product_authorization import V17ProductAuthorizationDecision  # noqa: E402
+from dependencies import get_developer_memory_default_memory_read_context  # noqa: E402
+from utils.memory.product_authorization import ProductAuthorizationDecision  # noqa: E402
 
 _VALID_CATEGORY = next(iter(MemoryCategory)).value
 
@@ -220,26 +220,26 @@ def _legacy_memory(mid):
 
 
 def _build():
-    auth_context = developer_module.V17ProductAuthorizationContext(
+    auth_context = developer_module.ProductAuthorizationContext(
         uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
     )
-    developer_module.authorize_v17_external_default_memory_read = MagicMock(
-        return_value=V17ProductAuthorizationDecision(
+    developer_module.authorize_memory_external_default_memory_read = MagicMock(
+        return_value=ProductAuthorizationDecision(
             allowed=True,
             context=auth_context,
             db_client=None,
-            read_decision=developer_module.V17ReadDecision.USE_LEGACY_SAFE,
+            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
             reason='test_legacy_safe',
             observability={'enabled': True},
             status_code=200,
         )
     )
-    developer_module.search_v17_default_developer_memories = MagicMock(
+    developer_module.search_memory_default_developer_memories = MagicMock(
         return_value=type(
-            'LegacySafeV17Result',
+            'LegacySafeMemoryResult',
             (),
             {
-                'read_decision': developer_module.V17ReadDecision.USE_LEGACY_SAFE,
+                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
                 'memories': [],
                 'fallback_reason': 'test_legacy_safe',
                 'should_use_legacy_fallback': True,
@@ -248,7 +248,7 @@ def _build():
     )
     app = FastAPI()
     app.include_router(developer_router)
-    app.dependency_overrides[get_developer_v17_default_memory_read_context] = lambda: auth_context
+    app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
     return TestClient(app, raise_server_exceptions=False)
 
 

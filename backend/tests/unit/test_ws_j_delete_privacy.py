@@ -246,8 +246,8 @@ def canonical_db():
     )
 
 
-def test_neutral_vector_id_is_deterministic_and_distinct_from_legacy_and_v17():
-    from database.memory_vector_metadata import deterministic_v17_memory_vector_id
+def test_neutral_vector_id_is_deterministic_and_distinct_from_legacy_and_memory():
+    from database.memory_vector_metadata import deterministic_memory_vector_id
     from models.product_memory import MemoryTier
 
     uid = "uid-1"
@@ -260,13 +260,13 @@ def test_neutral_vector_id_is_deterministic_and_distinct_from_legacy_and_v17():
     assert neutral_once == neutral_twice
     assert neutral_once == memory_id
     assert memory_id.startswith("mem_")
-    assert not neutral_once.startswith("v17mem:")
+    assert not neutral_once.startswith("memvec:")
 
     legacy_vector_id = f"{uid}-{memory_id}"
-    v17_vector_id = deterministic_v17_memory_vector_id(uid, memory_id, MemoryTier.long_term, 1)
+    memory_vector_id = deterministic_memory_vector_id(uid, memory_id, MemoryTier.long_term, 1)
     assert neutral_once != legacy_vector_id
-    assert neutral_once != v17_vector_id
-    assert v17_vector_id.startswith("v17mem:")
+    assert neutral_once != memory_vector_id
+    assert memory_vector_id.startswith("memvec:")
 
 
 def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch, canonical_db):
@@ -276,7 +276,7 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     monkeypatch.setattr(
@@ -389,7 +389,7 @@ def test_conversation_delete_cascade_tombstones_canonical_and_emits_vector_purge
     memory_id = payload["id"]
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
 
@@ -417,7 +417,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content="KG defer hook")
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     kg_calls = []

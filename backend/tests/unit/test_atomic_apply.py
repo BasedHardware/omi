@@ -11,7 +11,7 @@ from models.memory_apply import (
 )
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationStatus, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem, new_memory_id
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem, new_memory_id
 
 
 def _evidence():
@@ -241,7 +241,7 @@ def _short_term_existing(**overrides):
         account_generation=1,
     )
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def test_update_without_target_tier_preserves_existing_short_term_tier():

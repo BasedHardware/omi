@@ -8,7 +8,7 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    V17MemoryItem,
+    MemoryItem,
 )
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 from utils.memory.product_memory_read_service import (
@@ -88,7 +88,7 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
     }
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def _stored_item(item):

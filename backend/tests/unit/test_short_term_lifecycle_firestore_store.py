@@ -9,7 +9,7 @@ from jobs.short_term_lifecycle_worker import (
     run_short_term_lifecycle_firestore,
 )
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
 
@@ -151,7 +151,7 @@ def _evidence(source_id='conv1'):
     )
 
 
-def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, captured_at=None, **overrides) -> V17MemoryItem:
+def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, captured_at=None, **overrides) -> MemoryItem:
     captured_at = captured_at or datetime(2026, 6, 18, 12, 0, tzinfo=timezone.utc)
     data = {
         'memory_id': memory_id,
@@ -175,10 +175,10 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, captured_at=None
         'ledger_sequence': 1 if tier == MemoryTier.long_term else None,
     }
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
-def _stored_item(item: V17MemoryItem):
+def _stored_item(item: MemoryItem):
     return item.model_dump(mode='json')
 
 

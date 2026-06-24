@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_account_generation_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_account_generation_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -19,7 +19,7 @@ def _report(execute=False):
 def test_account_generation_readiness_is_safe_and_blocked_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_account_generation_readiness"
+    assert report["artifact"] == "p1_3_v3_account_generation_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -38,9 +38,9 @@ def test_account_generation_readiness_identifies_independent_state_head_and_rema
     assert report["proof_status"] == "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED"
     source = report["trusted_account_generation_source"]
     assert source["canonical_path"] == "users/{uid}/memory_state/head"
-    assert source["reader_contract"] == "backend/utils/memory/v17_v3_account_generation_source.py"
-    assert source["writer"] == "backend/database/v17_memory_apply_store.py"
-    assert source["npm_emulator_command"] == "npm run test:v17-v3-state-head:emulator"
+    assert source["reader_contract"] == "backend/utils/memory/v3_account_generation_source.py"
+    assert source["writer"] == "backend/database/memory_apply_store.py"
+    assert source["npm_emulator_command"] == "npm run test:memory-v3-state-head:emulator"
     assert source["server_owned"] is True
     assert source["independent_from_control_doc"] is True
     assert source["independent_from_projection_doc"] is True
@@ -60,14 +60,12 @@ def test_account_generation_readiness_records_state_head_writer_and_emulator_evi
     evidence = report["state_head_writer_emulator_evidence"]
 
     assert evidence["status"] == "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED"
-    assert evidence["writer_path"] == "backend/database/v17_memory_apply_store.py"
+    assert evidence["writer_path"] == "backend/database/memory_apply_store.py"
     assert evidence["writer_function"] == "_write_apply_result"
     assert evidence["server_owned"] is True
     assert evidence["client_rules_denial_proof"] == "backend/scripts/firestore_rules_emulator_test.mjs"
-    assert (
-        evidence["admin_emulator_writer_reader_proof"] == "backend/scripts/firestore_python_apply_emulator_test.py"
-    )
-    assert evidence["npm_emulator_command"] == "npm run test:v17-v3-state-head:emulator"
+    assert evidence["admin_emulator_writer_reader_proof"] == "backend/scripts/firestore_python_apply_emulator_test.py"
+    assert evidence["npm_emulator_command"] == "npm run test:memory-v3-state-head:emulator"
     assert evidence["runtime_wired"] is False
 
 
@@ -115,8 +113,8 @@ def test_account_generation_readiness_json_summary_and_docs_registration_are_sta
 
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert "test_v3_account_generation_source.py" in test_sh

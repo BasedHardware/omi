@@ -20,11 +20,11 @@ from database.memory_vector_metadata import (
     build_memory_vector_metadata,
     parse_memory_search_vector_hit,
 )
-from database.memory_vector_metadata import build_v17_memory_vector_metadata
+from database.memory_vector_metadata import build_memory_vector_metadata
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_search_gateway import SearchDecision, SearchMode
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 
 def _item(
@@ -37,7 +37,7 @@ def _item(
     sensitive=False,
 ):
     now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid="uid-canonical",
         version=2,
@@ -164,7 +164,7 @@ def _install_recording_vector_db(monkeypatch):
     return vector_db, fake_index
 
 
-def test_build_memory_vector_metadata_uses_neutral_keys_not_v17():
+def test_build_memory_vector_metadata_uses_neutral_keys_not_memory():
     item = _item(tier=MemoryTier.long_term)
     metadata = build_memory_vector_metadata(
         item,
@@ -174,7 +174,7 @@ def test_build_memory_vector_metadata_uses_neutral_keys_not_v17():
 
     assert metadata["memory_schema_version"] == MEMORY_VECTOR_SCHEMA_VERSION
     assert metadata["memory_layer"] == "long_term"
-    assert "v17_schema_version" not in metadata
+    assert "memory_schema_version" not in metadata
     assert "memory_tier" not in metadata
     assert metadata["memory_id"] == "mem_abc123"
     assert metadata["uid"] == "uid-canonical"
@@ -188,16 +188,16 @@ def test_neutral_filters_use_memory_layer_and_schema_version():
     assert {"memory_layer": {"$eq": "archive"}} in archive_filter["$and"]
     for pinecone_filter in (default_filter, archive_filter):
         assert {"memory_schema_version": {"$eq": MEMORY_VECTOR_SCHEMA_VERSION}} in pinecone_filter["$and"]
-        assert {"v17_schema_version": {"$eq": 1}} not in pinecone_filter["$and"]
+        assert {"memory_schema_version": {"$eq": 1}} not in pinecone_filter["$and"]
 
 
-def test_parse_memory_search_vector_hit_rejects_v17_metadata():
-    v17_metadata = build_v17_memory_vector_metadata(
+def test_parse_memory_search_vector_hit_rejects_memory_metadata():
+    memory_metadata = build_memory_vector_metadata(
         _item(),
         projection_commit_id="commit-ledger",
         vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
     )
-    parsed = parse_memory_search_vector_hit({"score": 0.9, "metadata": v17_metadata})
+    parsed = parse_memory_search_vector_hit({"score": 0.9, "metadata": memory_metadata})
     assert parsed.hit is None
     assert parsed.decision == SearchDecision.stale_vector
 
@@ -211,7 +211,7 @@ def test_upsert_canonical_memory_vector_writes_neutral_id_and_metadata(monkeypat
     assert len(fake_index.upserts) == 1
     payload = fake_index.upserts[0]["vectors"][0]
     assert payload["id"] == "mem_hash001"
-    assert not payload["id"].startswith("v17mem:")
+    assert not payload["id"].startswith("memvec:")
     assert payload["metadata"]["memory_schema_version"] == MEMORY_VECTOR_SCHEMA_VERSION
     assert payload["metadata"]["memory_layer"] == "short_term"
     assert fake_index.upserts[0]["namespace"] == "ns2"
@@ -247,7 +247,7 @@ def test_legacy_upsert_memory_vector_unchanged(monkeypatch):
     assert payload["metadata"]["uid"] == "legacy-uid"
     assert payload["metadata"]["memory_id"] == "legacy-mem-1"
     assert "memory_schema_version" not in payload["metadata"]
-    assert "v17_schema_version" not in payload["metadata"]
+    assert "memory_schema_version" not in payload["metadata"]
 
 
 def test_canonical_write_search_round_trip_short_term_and_long_term(monkeypatch):
@@ -349,7 +349,7 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
         return_value=apply_result,
     ), patch(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         return_value=_trusted_account_generation(),
     ), patch(
         "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",

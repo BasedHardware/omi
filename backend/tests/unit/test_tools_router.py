@@ -134,15 +134,15 @@ _stub_package("utils.other")
 _stub_package("utils.memory")
 
 memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
-memory_adapter_stub.list_v17_default_chat_memories_decision_text = MagicMock(
+memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
     return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
 )
-memory_adapter_stub.search_v17_default_chat_memories_vector_decision_text = MagicMock(
+memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
     return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
 )
 read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
-read_rollout_stub.V17ReadDecision = types.SimpleNamespace(
-    USE_V17="use_v17",
+read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
+    USE_MEMORY="use_memory",
     USE_LEGACY_SAFE="use_legacy_safe",
 )
 

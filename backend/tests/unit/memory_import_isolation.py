@@ -635,7 +635,7 @@ def ensure_utils_memory_packages_importable(backend_dir: str | None = None) -> N
     ensure_test_import_packages_importable(backend_dir)
 
 
-def install_v17_product_router_stubs(
+def install_memory_product_router_stubs(
     fastapi_stub: ModuleType,
     auth_stub: ModuleType,
 ) -> list[str]:

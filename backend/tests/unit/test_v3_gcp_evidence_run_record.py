@@ -13,13 +13,13 @@ def _concrete_registry():
                 **DEFAULT_EVIDENCE_TARGETS["dev"],
                 "project_id": "omi-memory-dev-123",
                 "project_number": "111222333444",
-                "evidence_principal": "serviceAccount:v17-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
+                "evidence_principal": "serviceAccount:memory-evidence@omi-memory-dev-123.iam.gserviceaccount.com",
             },
             "prod": {
                 **DEFAULT_EVIDENCE_TARGETS["prod"],
                 "project_id": "omi-memory-prod-456",
                 "project_number": "555666777888",
-                "evidence_principal": "serviceAccount:v17-evidence@omi-memory-prod-456.iam.gserviceaccount.com",
+                "evidence_principal": "serviceAccount:memory-evidence@omi-memory-prod-456.iam.gserviceaccount.com",
             },
         }
     )
@@ -27,16 +27,16 @@ def _concrete_registry():
 
 def _record(target="dev", **overrides):
     base = {
-        "artifact_version": "V17-V3-F6B",
+        "artifact_version": "memory-V3-F6B",
         "run_id": "run-20260620-0001",
         "one_run_scope": True,
         "target": target,
         "project_id": f"omi-memory-{target}-123" if target == "dev" else "omi-memory-prod-456",
         "project_number": "111222333444" if target == "dev" else "555666777888",
         "evidence_principal": (
-            "serviceAccount:v17-evidence@omi-memory-dev-123.iam.gserviceaccount.com"
+            "serviceAccount:memory-evidence@omi-memory-dev-123.iam.gserviceaccount.com"
             if target == "dev"
-            else "serviceAccount:v17-evidence@omi-memory-prod-456.iam.gserviceaccount.com"
+            else "serviceAccount:memory-evidence@omi-memory-prod-456.iam.gserviceaccount.com"
         ),
         "approved_metadata_paths": ["control/config metadata", "cursor secret metadata"],
         "commit": "abcdef1234567890abcdef1234567890abcdef12",

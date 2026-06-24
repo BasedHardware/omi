@@ -3,12 +3,12 @@ import inspect
 import pytest
 
 from utils.memory.v3_memory_read_service import (
-    V17V3CompatibilityReadPath,
-    V17V3MemoryReadServiceResult,
+    V3CompatibilityReadPath,
+    V3MemoryReadServiceResult,
 )
 from utils.memory.v3_response_adapter import (
-    V17V3ResponseShapeError,
-    adapt_v17_v3_memory_response,
+    V3ResponseShapeError,
+    adapt_v3_memory_response,
 )
 
 ALLOWED_HEADERS = {
@@ -22,19 +22,19 @@ ALLOWED_HEADERS = {
 def _envelope(**overrides):
     values = {
         'http_status': 200,
-        'read_plan': 'v17_compatibility_projection',
-        'read_path': V17V3CompatibilityReadPath.V17_COMPATIBILITY_PROJECTION,
-        'read_decision': 'v17_compatibility_projection_primary',
+        'read_plan': 'memory_compatibility_projection',
+        'read_path': V3CompatibilityReadPath.MEMORY_COMPATIBILITY_PROJECTION,
+        'read_decision': 'memory_compatibility_projection_primary',
         'headers': {
-            'X-Omi-Memory-Read-Source': 'v17_compatibility_projection',
-            'X-Omi-Memory-Read-Decision': 'v17_compatibility_projection_primary',
+            'X-Omi-Memory-Read-Source': 'memory_compatibility_projection',
+            'X-Omi-Memory-Read-Decision': 'memory_compatibility_projection_primary',
         },
         'body': [{'id': 'memory-1', 'uid': 'uid-a', 'content': 'legacy MemoryDB body only'}],
         'archive_default_available': False,
         'stale_short_term_default_visible': False,
     }
     values.update(overrides)
-    return V17V3MemoryReadServiceResult(**values)
+    return V3MemoryReadServiceResult(**values)
 
 
 def test_projection_ready_response_preserves_exact_list_memorydb_body_and_adds_only_allowed_headers():
@@ -42,24 +42,24 @@ def test_projection_ready_response_preserves_exact_list_memorydb_body_and_adds_o
     envelope = _envelope(
         body=body,
         headers={
-            'X-Omi-Memory-Read-Source': 'v17_compatibility_projection',
-            'X-Omi-Memory-Read-Decision': 'v17_compatibility_projection_primary',
-            'X-Omi-Memory-Next-Cursor': 'v17v3.next',
-            'Link': '<v17v3.next>; rel="next"',
+            'X-Omi-Memory-Read-Source': 'memory_compatibility_projection',
+            'X-Omi-Memory-Read-Decision': 'memory_compatibility_projection_primary',
+            'X-Omi-Memory-Next-Cursor': 'v3.next',
+            'Link': '<v3.next>; rel="next"',
             'X-Unsafe-Debug': 'must-not-leak',
         },
     )
 
-    response = adapt_v17_v3_memory_response(envelope, memorydb_items=body)
+    response = adapt_v3_memory_response(envelope, memorydb_items=body)
 
     assert response.http_status == 200
     assert response.body is body
     assert response.body == body
     assert set(response.headers) == ALLOWED_HEADERS
-    assert response.headers['X-Omi-Memory-Read-Source'] == 'v17_compatibility_projection'
-    assert response.headers['X-Omi-Memory-Read-Decision'] == 'v17_compatibility_projection_primary'
-    assert response.headers['X-Omi-Memory-Next-Cursor'] == 'v17v3.next'
-    assert response.headers['Link'] == '<v17v3.next>; rel="next"'
+    assert response.headers['X-Omi-Memory-Read-Source'] == 'memory_compatibility_projection'
+    assert response.headers['X-Omi-Memory-Read-Decision'] == 'memory_compatibility_projection_primary'
+    assert response.headers['X-Omi-Memory-Next-Cursor'] == 'v3.next'
+    assert response.headers['Link'] == '<v3.next>; rel="next"'
     assert response.legacy_fallback_marker_present is False
     assert response.archive_default_available is False
     assert response.stale_short_term_default_visible is False
@@ -68,23 +68,23 @@ def test_projection_ready_response_preserves_exact_list_memorydb_body_and_adds_o
     assert 'cursor' not in response.body[0]
 
 
-def test_enabled_empty_response_is_empty_list_with_v17_headers_and_no_fallback_marker():
+def test_enabled_empty_response_is_empty_list_with_memory_headers_and_no_fallback_marker():
     envelope = _envelope(
-        read_decision='v17_projection_empty_no_legacy_fallback',
+        read_decision='memory_projection_empty_no_legacy_fallback',
         headers={
-            'X-Omi-Memory-Read-Source': 'v17_compatibility_projection',
-            'X-Omi-Memory-Read-Decision': 'v17_projection_empty_no_legacy_fallback',
+            'X-Omi-Memory-Read-Source': 'memory_compatibility_projection',
+            'X-Omi-Memory-Read-Decision': 'memory_projection_empty_no_legacy_fallback',
         },
         body=[],
     )
 
-    response = adapt_v17_v3_memory_response(envelope, memorydb_items=[])
+    response = adapt_v3_memory_response(envelope, memorydb_items=[])
 
     assert response.http_status == 200
     assert response.body == []
     assert response.headers == {
-        'X-Omi-Memory-Read-Source': 'v17_compatibility_projection',
-        'X-Omi-Memory-Read-Decision': 'v17_projection_empty_no_legacy_fallback',
+        'X-Omi-Memory-Read-Source': 'memory_compatibility_projection',
+        'X-Omi-Memory-Read-Decision': 'memory_projection_empty_no_legacy_fallback',
     }
     assert response.legacy_fallback_marker_present is False
     assert response.archive_default_available is False
@@ -96,7 +96,7 @@ def test_fail_closed_and_denied_responses_have_no_body_data_and_no_legacy_fallba
         _envelope(
             http_status=503,
             read_plan='fail_closed',
-            read_path=V17V3CompatibilityReadPath.FAIL_CLOSED,
+            read_path=V3CompatibilityReadPath.FAIL_CLOSED,
             read_decision='enrolled_missing_fail_closed',
             headers={
                 'X-Omi-Memory-Read-Source': 'none',
@@ -107,7 +107,7 @@ def test_fail_closed_and_denied_responses_have_no_body_data_and_no_legacy_fallba
         _envelope(
             http_status=403,
             read_plan='deny',
-            read_path=V17V3CompatibilityReadPath.DENY,
+            read_path=V3CompatibilityReadPath.DENY,
             read_decision='no_default_memory_grant_privacy_consent_deny',
             headers={
                 'X-Omi-Memory-Read-Source': 'none',
@@ -118,7 +118,7 @@ def test_fail_closed_and_denied_responses_have_no_body_data_and_no_legacy_fallba
     ]
 
     for envelope in cases:
-        response = adapt_v17_v3_memory_response(envelope, memorydb_items=[{'id': 'must-not-leak'}])
+        response = adapt_v3_memory_response(envelope, memorydb_items=[{'id': 'must-not-leak'}])
 
         assert response.http_status == envelope.http_status
         assert response.body is None
@@ -128,26 +128,26 @@ def test_fail_closed_and_denied_responses_have_no_body_data_and_no_legacy_fallba
         assert response.stale_short_term_default_visible is False
 
 
-def test_adapter_rejects_v17_only_fields_that_would_leak_through_list_memorydb_body():
+def test_adapter_rejects_memory_only_fields_that_would_leak_through_list_memorydb_body():
     forbidden_items = [
-        {'id': 'memory-1', 'content': 'x', 'source': 'v17_memory_items'},
+        {'id': 'memory-1', 'content': 'x', 'source': 'memory_items'},
         {'id': 'memory-1', 'content': 'x', 'policy': {'tier': 'short_term'}},
-        {'id': 'memory-1', 'content': 'x', 'read_decision': 'v17_projection'},
-        {'id': 'memory-1', 'content': 'x', 'cursor': 'v17v3.next'},
-        {'id': 'memory-1', 'content': 'x', 'v17_policy': 'default'},
+        {'id': 'memory-1', 'content': 'x', 'read_decision': 'memory_projection'},
+        {'id': 'memory-1', 'content': 'x', 'cursor': 'v3.next'},
+        {'id': 'memory-1', 'content': 'x', 'memory_policy': 'default'},
         {'id': 'memory-1', 'content': 'x', 'archive_default_available': False},
         {'id': 'memory-1', 'content': 'x', 'stale_short_term_default_visible': False},
     ]
 
     for item in forbidden_items:
-        with pytest.raises(V17V3ResponseShapeError) as exc:
-            adapt_v17_v3_memory_response(_envelope(body=[item]), memorydb_items=[item])
-        assert exc.value.reason == 'v17_only_body_field_forbidden'
+        with pytest.raises(V3ResponseShapeError) as exc:
+            adapt_v3_memory_response(_envelope(body=[item]), memorydb_items=[item])
+        assert exc.value.reason == 'memory_only_body_field_forbidden'
 
 
 def test_archive_default_unavailable_and_stale_short_term_are_explicit_proof_fields_not_body_fields():
     body = [{'id': 'memory-1', 'content': 'legacy MemoryDB body only'}]
-    response = adapt_v17_v3_memory_response(_envelope(body=body), memorydb_items=body)
+    response = adapt_v3_memory_response(_envelope(body=body), memorydb_items=body)
 
     assert response.archive_default_available is False
     assert response.stale_short_term_default_visible is False

@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _load_script():
     path = ROOT / "scripts" / "v3_f5_real_service_evidence_readiness.py"
-    spec = importlib.util.spec_from_file_location("v17_v3_f5_real_service_evidence_readiness", path)
+    spec = importlib.util.spec_from_file_location("v3_f5_real_service_evidence_readiness", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -34,11 +34,11 @@ def _approved_config(module, **overrides):
     kwargs = dict(
         execute=True,
         environment="shared-nonprod",
-        project_id="omi-v17-evidence-nonprod",
+        project_id="omi-memory-evidence-nonprod",
         project_number="123456789012",
-        expected_principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
-        approval_subject="V17-V3-F5 real-service read-only evidence shared-nonprod 2026-06-20",
-        approval_artifact_path="docs/approvals/v17-v3-f5-shared-nonprod-oracle-review.md",
+        expected_principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
+        approval_subject="memory-V3-F5 real-service read-only evidence shared-nonprod 2026-06-20",
+        approval_artifact_path="docs/approvals/memory-v3-f5-shared-nonprod-oracle-review.md",
         approved_paths=(
             "control/config metadata",
             "cursor secret metadata",
@@ -48,7 +48,7 @@ def _approved_config(module, **overrides):
             "firestore index state",
             "audit read log metadata",
         ),
-        oracle_review_artifact="docs/epics/v17_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20",
+        oracle_review_artifact="docs/epics/memory_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20",
     )
     kwargs.update(overrides)
     return module.EvidenceRunConfig(**kwargs)
@@ -90,7 +90,7 @@ def test_execute_blocks_on_any_exact_gate_mismatch_without_constructing_client(f
 def test_identity_iam_contract_rejects_broad_roles_and_write_permissions():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS | {"datastore.entities.create"},
         roles={"roles/viewer", "roles/editor"},
     )
@@ -104,9 +104,9 @@ def test_identity_iam_contract_rejects_broad_roles_and_write_permissions():
 def test_fake_execute_uses_only_bounded_metadata_reads_and_no_route_or_app_imports():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
     assert report["status"] == "INCONCLUSIVE"
@@ -131,9 +131,9 @@ def test_fake_execute_uses_only_bounded_metadata_reads_and_no_route_or_app_impor
 def test_missing_audit_zero_write_proof_is_inconclusive_not_pass():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         audit_zero_write_methods=None,
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
@@ -144,9 +144,9 @@ def test_missing_audit_zero_write_proof_is_inconclusive_not_pass():
 def test_deadline_timeout_or_partial_failure_blocks_without_fallback():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         fail_call="projection_state_metadata",
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
@@ -159,9 +159,9 @@ def test_deadline_timeout_or_partial_failure_blocks_without_fallback():
 def test_index_and_schema_validation_blocks_missing_required_index():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         indexes=[],
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
@@ -172,16 +172,16 @@ def test_index_and_schema_validation_blocks_missing_required_index():
 def test_redaction_fail_closed_allowlist_and_sensitive_sentinel_removal():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         inject_sensitive=True,
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
     rendered = utils.render_redacted_json(report)
     for sentinel in [
-        "omi-v17-evidence-nonprod",
-        "v17-v3-f5-evidence@",
+        "omi-memory-evidence-nonprod",
+        "memory-v3-f5-evidence@",
         "secret-name",
         "secret-value",
         "cursor-token",
@@ -200,7 +200,7 @@ def test_static_mutation_guard_and_runtime_readonly_wrapper_raise_before_rpc(tmp
     bad.write_text("client.collection('x').document('y').set({'a': 1})\n", encoding="utf-8")
     assert utils.static_mutation_guard([bad])["status"] == "BLOCKED"
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
     )
     wrapped = utils.ReadOnlyEvidenceClient(client)
@@ -212,9 +212,9 @@ def test_static_mutation_guard_and_runtime_readonly_wrapper_raise_before_rpc(tmp
 def test_f4_risk_confirmations_are_required_before_any_real_read():
     utils = _load_utils()
     client = utils.FakeEvidenceClient(
-        principal="serviceAccount:v17-v3-f5-evidence@omi-v17-evidence-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-v3-f5-evidence@omi-memory-evidence-nonprod.iam.gserviceaccount.com",
         permissions=utils.REQUIRED_READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         structural_disable=False,
     )
     report = utils.build_evidence_report(_approved_config(utils), client_factory=RecordingFactory(client))
@@ -233,7 +233,7 @@ def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     assert "f5_real_service_evidence_preparation_proof" in (
         ROOT / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py"
     ).read_text(encoding="utf-8")
-    ticket = (root / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
-    assert "V17-V3-F5 real-service read-only evidence preparation" in ticket
-    assert "V17-V3-F5 real-service read-only evidence preparation" in oracle
+    ticket = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    assert "memory-V3-F5 real-service read-only evidence preparation" in ticket
+    assert "memory-V3-F5 real-service read-only evidence preparation" in oracle

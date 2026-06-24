@@ -45,7 +45,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_cutover_evidence_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("cutover_evidence_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -64,7 +64,7 @@ def test_cutover_evidence_runner_exists_and_defaults_blocked_without_approval():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "cutover_evidence_readiness.py"
 
-    assert script_path.exists(), "missing safe V17 cutover evidence readiness/checklist runner"
+    assert script_path.exists(), "missing safe memory cutover evidence readiness/checklist runner"
     script = script_path.read_text()
     for term in REQUIRED_SCRIPT_TERMS:
         assert term in script
@@ -114,8 +114,8 @@ def test_cutover_evidence_execute_does_not_change_state_or_run_network_calls():
 
 def test_cutover_evidence_docs_and_ticket_reference_runner_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (root / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
         assert "cutover_evidence_readiness.py" in text

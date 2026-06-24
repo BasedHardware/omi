@@ -1,17 +1,17 @@
 from datetime import datetime, timezone
 
 from database.memory_vector_repair_pinecone_adapter import (
-    MEMORY_VECTOR_REPAIR_PINECONE_NAMESPACE,
-    V17VectorRepairNotReady,
-    make_v17_pinecone_vector_deleter,
-    make_v17_pinecone_vector_repairer,
+    VECTOR_REPAIR_PINECONE_NAMESPACE,
+    VectorRepairNotReady,
+    make_pinecone_vector_deleter,
+    make_pinecone_vector_repairer,
 )
 from database.memory_vector_repair_outbox_worker import (
-    V17VectorRepairOutboxWorkerTickConfig,
-    ack_v17_vector_repair_purge_outbox_record,
-    lease_v17_vector_repair_purge_outbox_records,
-    process_v17_vector_repair_purge_outbox_records,
-    run_v17_vector_repair_outbox_worker_tick,
+    VectorRepairOutboxWorkerTickConfig,
+    ack_vector_repair_purge_outbox_record,
+    lease_vector_repair_purge_outbox_records,
+    process_vector_repair_purge_outbox_records,
+    run_vector_repair_outbox_worker_tick,
 )
 
 
@@ -178,10 +178,10 @@ def test_worker_tick_disabled_config_does_not_lease_or_call_side_effects():
         }
     )
 
-    result = run_v17_vector_repair_outbox_worker_tick(
+    result = run_vector_repair_outbox_worker_tick(
         db_client=db,
         uid="u1",
-        config=V17VectorRepairOutboxWorkerTickConfig(enabled=False, worker_id="worker-disabled"),
+        config=VectorRepairOutboxWorkerTickConfig(enabled=False, worker_id="worker-disabled"),
         authoritative_item_loader=lambda record: calls.append("loader"),
         vector_deleter=lambda record: calls.append("delete"),
         vector_repairer=lambda record, item: calls.append("repair"),
@@ -229,10 +229,10 @@ def test_worker_tick_enabled_leases_processes_and_acks_delete_or_repair():
     deleted = []
     repaired = []
 
-    result = run_v17_vector_repair_outbox_worker_tick(
+    result = run_vector_repair_outbox_worker_tick(
         db_client=db,
         uid="u1",
-        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
+        config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
         authoritative_item_loader=lambda record: _live_item(memory_id=record["memory_id"]),
         vector_deleter=lambda record: deleted.append(record["vector_id"]),
         vector_repairer=lambda record, item: repaired.append((record["vector_id"], item["memory_id"])),
@@ -265,10 +265,10 @@ def test_worker_tick_lease_failure_returns_deterministic_error_before_actions():
 
     calls = []
 
-    result = run_v17_vector_repair_outbox_worker_tick(
+    result = run_vector_repair_outbox_worker_tick(
         db_client=_FailingLeaseFirestore(),
         uid="u1",
-        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a"),
+        config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a"),
         authoritative_item_loader=lambda record: calls.append("loader"),
         vector_deleter=lambda record: calls.append("delete"),
         vector_repairer=lambda record, item: calls.append("repair"),
@@ -314,10 +314,10 @@ def test_worker_tick_ack_failure_is_counted_after_single_adapter_side_effect():
     )
     repaired = []
 
-    result = run_v17_vector_repair_outbox_worker_tick(
+    result = run_vector_repair_outbox_worker_tick(
         db_client=db,
         uid="u1",
-        config=V17VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
+        config=VectorRepairOutboxWorkerTickConfig(enabled=True, worker_id="worker-a", limit=10),
         authoritative_item_loader=lambda record: _live_item(),
         vector_deleter=lambda record: None,
         vector_repairer=lambda record, item: repaired.append(record["record_id"]),
@@ -358,7 +358,7 @@ def test_firestore_reader_leases_only_available_pending_vector_repair_records_an
         }
     )
 
-    leased = lease_v17_vector_repair_purge_outbox_records(
+    leased = lease_vector_repair_purge_outbox_records(
         db_client=db,
         uid="u1",
         worker_id="worker-a",
@@ -372,7 +372,7 @@ def test_firestore_reader_leases_only_available_pending_vector_repair_records_an
     assert db.store["users/u1/memory_outbox/available"]["status"] == "in_progress"
     assert db.store["users/u1/memory_outbox/available"]["lease_owner"] == "worker-a"
 
-    ack_v17_vector_repair_purge_outbox_record(
+    ack_vector_repair_purge_outbox_record(
         db_client=db,
         record=leased[0],
         patch={"status": "completed", "action": "repair"},
@@ -391,7 +391,7 @@ def test_firestore_reader_claim_uses_transaction_when_client_supports_it():
         {path: _record(record_id="transactional", outbox_path=path, available_at=now.isoformat())}
     )
 
-    leased = lease_v17_vector_repair_purge_outbox_records(
+    leased = lease_vector_repair_purge_outbox_records(
         db_client=db,
         uid="u1",
         worker_id="worker-txn",
@@ -414,7 +414,7 @@ def test_duplicate_lease_after_claim_does_not_duplicate_worker_action():
     db = _FakeFirestore({path: _record(record_id="dup", outbox_path=path, available_at=now.isoformat())})
     deleted = []
 
-    first_lease = lease_v17_vector_repair_purge_outbox_records(
+    first_lease = lease_vector_repair_purge_outbox_records(
         db_client=db,
         uid="u1",
         worker_id="worker-a",
@@ -422,7 +422,7 @@ def test_duplicate_lease_after_claim_does_not_duplicate_worker_action():
         lease_seconds=30,
         now=now,
     )
-    second_lease = lease_v17_vector_repair_purge_outbox_records(
+    second_lease = lease_vector_repair_purge_outbox_records(
         db_client=db,
         uid="u1",
         worker_id="worker-b",
@@ -431,7 +431,7 @@ def test_duplicate_lease_after_claim_does_not_duplicate_worker_action():
         now=now,
     )
 
-    result = process_v17_vector_repair_purge_outbox_records(
+    result = process_vector_repair_purge_outbox_records(
         first_lease + second_lease,
         authoritative_item_loader=lambda record: None,
         vector_deleter=lambda record: deleted.append(record["vector_id"]),
@@ -451,7 +451,7 @@ def test_ack_writer_failure_propagates_deterministically():
             raise RuntimeError(f"write failed for {path}")
 
     try:
-        ack_v17_vector_repair_purge_outbox_record(
+        ack_vector_repair_purge_outbox_record(
             db_client=_FailingFirestore(),
             record=_record(record_id="bad", outbox_path="users/u1/memory_outbox/bad"),
             patch={"status": "dead_letter"},
@@ -467,7 +467,7 @@ def test_worker_deletes_stale_vector_when_authoritative_item_is_missing():
     repaired = []
     updates = _Updates()
 
-    result = process_v17_vector_repair_purge_outbox_records(
+    result = process_vector_repair_purge_outbox_records(
         [_record(reason="missing_authoritative_item")],
         authoritative_item_loader=lambda record: None,
         vector_deleter=lambda record: deleted.append(record["vector_id"]),
@@ -488,7 +488,7 @@ def test_worker_repairs_stale_live_authoritative_item():
     repaired = []
     updates = _Updates()
 
-    result = process_v17_vector_repair_purge_outbox_records(
+    result = process_vector_repair_purge_outbox_records(
         [_record(reason="stale_item_revision")],
         authoritative_item_loader=lambda record: _live_item(),
         vector_deleter=lambda record: deleted.append(record["vector_id"]),
@@ -507,7 +507,7 @@ def test_worker_tombstone_precedence_deletes_even_when_stale_record_could_repair
     deleted = []
     repaired = []
 
-    process_v17_vector_repair_purge_outbox_records(
+    process_vector_repair_purge_outbox_records(
         [_record(reason="stale_projection_commit")],
         authoritative_item_loader=lambda record: _live_item(status="tombstoned"),
         vector_deleter=lambda record: deleted.append(record["vector_id"]),
@@ -530,7 +530,7 @@ def test_worker_skips_terminal_in_progress_and_duplicate_pending_idempotency_key
         _record(record_id="dup-b", idempotency_key="dup-key"),
     ]
 
-    result = process_v17_vector_repair_purge_outbox_records(
+    result = process_vector_repair_purge_outbox_records(
         records,
         authoritative_item_loader=lambda record: None,
         vector_deleter=lambda record: deleted.append(record["record_id"]),
@@ -551,7 +551,7 @@ def test_worker_records_retry_and_dead_letter_failure_deterministically():
     def failing_delete(record):
         raise RuntimeError("pinecone unavailable")
 
-    retry_result = process_v17_vector_repair_purge_outbox_records(
+    retry_result = process_vector_repair_purge_outbox_records(
         [_record(record_id="retry", idempotency_key="retry-key", attempt_count=0)],
         authoritative_item_loader=lambda record: None,
         vector_deleter=failing_delete,
@@ -559,7 +559,7 @@ def test_worker_records_retry_and_dead_letter_failure_deterministically():
         outbox_updater=retry_updates,
         max_attempts=3,
     )
-    dead_result = process_v17_vector_repair_purge_outbox_records(
+    dead_result = process_vector_repair_purge_outbox_records(
         [_record(record_id="dead", idempotency_key="dead-key", attempt_count=2)],
         authoritative_item_loader=lambda record: None,
         vector_deleter=failing_delete,
@@ -580,23 +580,23 @@ def test_worker_records_retry_and_dead_letter_failure_deterministically():
 
 def test_pinecone_adapter_delete_passes_vector_id_and_ns2_namespace_to_injected_deleter():
     calls = []
-    deleter = make_v17_pinecone_vector_deleter(
+    deleter = make_pinecone_vector_deleter(
         delete_vectors=lambda *, ids, namespace: calls.append({"ids": list(ids), "namespace": namespace})
         or {"ok": True}
     )
 
-    result = deleter(_record(vector_id="v17mem:stale"))
+    result = deleter(_record(vector_id="memvec:stale"))
 
-    assert MEMORY_VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
-    assert calls == [{"ids": ["v17mem:stale"], "namespace": "ns2"}]
+    assert VECTOR_REPAIR_PINECONE_NAMESPACE == "ns2"
+    assert calls == [{"ids": ["memvec:stale"], "namespace": "ns2"}]
     assert result["action"] == "delete"
-    assert result["vector_ids"] == ["v17mem:stale"]
+    assert result["vector_ids"] == ["memvec:stale"]
     assert result["namespace"] == "ns2"
 
 
-def test_pinecone_adapter_repair_upserts_authoritative_v17_vector_with_ns2_metadata_and_embedding():
+def test_pinecone_adapter_repair_upserts_authoritative_memory_vector_with_ns2_metadata_and_embedding():
     upserts = []
-    repairer = make_v17_pinecone_vector_repairer(
+    repairer = make_pinecone_vector_repairer(
         embed_text=lambda content: [0.1, 0.2, 0.3],
         upsert_vectors=lambda *, vectors, namespace: upserts.append({"vectors": vectors, "namespace": namespace})
         or {"count": 1},
@@ -608,7 +608,7 @@ def test_pinecone_adapter_repair_upserts_authoritative_v17_vector_with_ns2_metad
     assert len(upserts) == 1
     assert upserts[0]["namespace"] == "ns2"
     vector = upserts[0]["vectors"][0]
-    assert vector["id"].startswith("v17mem:")
+    assert vector["id"].startswith("memvec:")
     assert vector["values"] == [0.1, 0.2, 0.3]
     assert vector["metadata"]["uid"] == "u1"
     assert vector["metadata"]["memory_id"] == "mem-1"
@@ -625,7 +625,7 @@ def test_pinecone_adapter_repair_upserts_authoritative_v17_vector_with_ns2_metad
 
 def test_pinecone_adapter_repair_not_ready_without_content_or_required_fences_and_has_no_side_effects():
     upserts = []
-    repairer = make_v17_pinecone_vector_repairer(
+    repairer = make_pinecone_vector_repairer(
         embed_text=lambda content: [0.1],
         upsert_vectors=lambda *, vectors, namespace: upserts.append(vectors),
     )
@@ -638,7 +638,7 @@ def test_pinecone_adapter_repair_not_ready_without_content_or_required_fences_an
     ]:
         try:
             repairer(record, item)
-        except V17VectorRepairNotReady as exc:
+        except VectorRepairNotReady as exc:
             assert str(exc)
         else:
             raise AssertionError("expected repair not-ready failure")
@@ -654,9 +654,9 @@ def test_worker_failure_path_records_adapter_failure_and_duplicate_batch_has_one
         calls.append((tuple(ids), namespace))
         raise RuntimeError("pinecone delete failed")
 
-    deleter = make_v17_pinecone_vector_deleter(delete_vectors=failing_delete)
+    deleter = make_pinecone_vector_deleter(delete_vectors=failing_delete)
 
-    result = process_v17_vector_repair_purge_outbox_records(
+    result = process_vector_repair_purge_outbox_records(
         [
             _record(record_id="dup-a", idempotency_key="dup-key", reason="missing_authoritative_item"),
             _record(record_id="dup-b", idempotency_key="dup-key", reason="missing_authoritative_item"),

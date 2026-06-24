@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from utils.memory.v3_get_runtime_snapshot import (
     LOW_CARDINALITY_RUNTIME_SNAPSHOT_REASONS,
-    V17V3GetRuntimeSnapshotInput,
-    build_v17_v3_get_runtime_snapshot,
+    V3GetRuntimeSnapshotInput,
+    build_v3_get_runtime_snapshot,
 )
 
 
@@ -14,7 +14,7 @@ def _input(**overrides):
         'grant_subject_uid': 'server-uid',
         'projection_subject_uid': 'server-uid',
         'cursor_subject_uid': 'server-uid',
-        'cohort': 'v17_enrolled',
+        'cohort': 'memory_enrolled',
         'control_generation': 7,
         'default_memory_grant': True,
         'runtime_config_version': 'cfg-2026-06-20',
@@ -37,11 +37,11 @@ def _input(**overrides):
         'read_timestamp_max_future_skew_ms': 1000,
     }
     values.update(overrides)
-    return V17V3GetRuntimeSnapshotInput(**values)
+    return V3GetRuntimeSnapshotInput(**values)
 
 
 def test_runtime_snapshot_coherent_contract_is_ready_and_sanitized():
-    result = build_v17_v3_get_runtime_snapshot(_input())
+    result = build_v3_get_runtime_snapshot(_input())
 
     assert result.status == 'READY'
     assert result.reason == 'snapshot_coherent'
@@ -58,7 +58,7 @@ def test_runtime_snapshot_coherent_contract_is_ready_and_sanitized():
         'route': 'GET /v3/memories',
         'status': 'READY',
         'reason': 'snapshot_coherent',
-        'cohort': 'v17_enrolled',
+        'cohort': 'memory_enrolled',
         'archive_requested': 'false',
         'archive_capability': 'false',
     }
@@ -91,7 +91,7 @@ def test_runtime_snapshot_fail_closed_reason_matrix():
     ]
 
     for overrides, reason, status in cases:
-        result = build_v17_v3_get_runtime_snapshot(_input(**overrides))
+        result = build_v3_get_runtime_snapshot(_input(**overrides))
         assert result.status == 'BLOCKED', overrides
         assert result.reason == reason
         assert result.http_status == status
@@ -126,14 +126,14 @@ def test_runtime_snapshot_rejects_client_owned_or_malformed_sources():
     ]
 
     for overrides in cases:
-        result = build_v17_v3_get_runtime_snapshot(_input(**overrides))
+        result = build_v3_get_runtime_snapshot(_input(**overrides))
         assert result.status == 'BLOCKED', overrides
         assert result.reason == 'malformed_source_output'
         assert result.snapshot is None
 
 
 def test_runtime_snapshot_allows_archive_request_only_with_separate_capability():
-    result = build_v17_v3_get_runtime_snapshot(_input(archive_requested=True, archive_capability=True))
+    result = build_v3_get_runtime_snapshot(_input(archive_requested=True, archive_capability=True))
 
     assert result.status == 'READY'
     assert result.snapshot is not None

@@ -70,7 +70,7 @@ def test_f6_fingerprint_known_vector_is_stable_characterization():
     assert fingerprint("known-vector-input", key_id="project") == "hmac:project:6aa41691c2dc485103d0652f24c303ff"
     assert (
         fingerprint(
-            "serviceAccount:PLACEHOLDER-v17-evidence@PLACEHOLDER-dev-project-id.iam.gserviceaccount.com",
+            "serviceAccount:PLACEHOLDER-memory-evidence@PLACEHOLDER-dev-project-id.iam.gserviceaccount.com",
             key_id="principal",
         )
         == "hmac:principal:d4b425000d609f503e45e2ca7ba09507"
@@ -79,7 +79,7 @@ def test_f6_fingerprint_known_vector_is_stable_characterization():
 
 def test_redacted_evidence_json_rendering_is_byte_for_byte_stable():
     report = {
-        "artifact_version": "V17-V3-F6F",
+        "artifact_version": "memory-V3-F6F",
         "status": "PASS",
         "target": "dev",
         "project_fingerprint": "hmac:project:60957b7e8c7186dae0dabea5c9989e2a",
@@ -100,7 +100,7 @@ def test_redacted_evidence_json_rendering_is_byte_for_byte_stable():
     "control/config metadata",
     "iam policy"
   ],
-  "artifact_version": "V17-V3-F6F",
+  "artifact_version": "memory-V3-F6F",
   "audit": {
     "enabled": true,
     "zero_write_methods": true

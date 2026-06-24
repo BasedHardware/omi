@@ -33,7 +33,7 @@ FORBIDDEN_STATIC_TOKENS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_projection_write_convergence_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_projection_write_convergence_readiness", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {script_path}")
     module = importlib.util.module_from_spec(spec)
@@ -53,7 +53,7 @@ def _report(execute=False, env=None, reader=None):
 def test_projection_write_convergence_readiness_is_safe_blocked_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_projection_write_convergence_readiness"
+    assert report["artifact"] == "p1_3_v3_projection_write_convergence_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -79,11 +79,11 @@ def test_projection_write_convergence_contract_inventories_required_evidence_sha
 
     assert list(requirements) == REQUIRED_REQUIREMENT_IDS
     assert contract["route_scope"] == "GET /v3/memories"
-    assert contract["source_type"] == "firestore_v17_projection_write_convergence_state"
-    assert contract["state_path_template"] == "memory_control/v17_projection_write_convergence"
+    assert contract["source_type"] == "firestore_projection_write_convergence_state"
+    assert contract["state_path_template"] == "memory_control/projection_write_convergence"
     assert (
         contract["route_state_path_template"]
-        == "memory_control/v17_projection_write_convergence/routes/{route_scope_label}"
+        == "memory_control/projection_write_convergence/routes/{route_scope_label}"
     )
     assert contract["server_owned"] is True
     assert contract["client_override_allowed"] is False
@@ -93,7 +93,7 @@ def test_projection_write_convergence_contract_inventories_required_evidence_sha
     assert contract["idempotency_key_required"] is True
     assert contract["fail_closed_on_missing_stale_malformed_evidence"] is True
     assert contract["legacy_fallback_allowed"] is False
-    assert contract["merge_legacy_and_v17_allowed"] is False
+    assert contract["merge_legacy_and_memory_allowed"] is False
     assert contract["required_fence_fields"] == [
         "account_generation",
         "projection_generation",
@@ -106,7 +106,7 @@ def test_projection_write_convergence_contract_inventories_required_evidence_sha
     assert requirements["dual_write_projection_writer_ready"]["projection_writer_ready"] is True
     assert requirements["delete_tombstone_convergence_complete"]["delete_tombstone_convergence_complete"] is True
     assert requirements["idempotency_key_contract"]["idempotency_key_required"] is True
-    assert requirements["rollback_behavior_fail_closed"]["rollback_to_legacy_after_v17_write_allowed"] is False
+    assert requirements["rollback_behavior_fail_closed"]["rollback_to_legacy_after_memory_write_allowed"] is False
 
 
 def test_projection_write_convergence_missing_env_execute_is_blocked_without_reads():
@@ -201,14 +201,14 @@ def test_projection_write_convergence_static_script_has_no_mutating_paths_route_
     assert "telemetry_safe_labels" in script_text
     assert "client_override_allowed" in script_text
     assert "legacy_fallback_allowed" in script_text
-    assert "rollback_to_legacy_after_v17_write_allowed" in script_text
+    assert "rollback_to_legacy_after_memory_write_allowed" in script_text
 
 
 def test_projection_write_convergence_readiness_is_registered_in_test_runner_docs_and_parent_readiness():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 

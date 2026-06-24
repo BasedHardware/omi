@@ -1,15 +1,15 @@
 import inspect
 
-from utils.memory.v3_cursor import V17V3CursorContext, V17V3Keyset, create_v17_v3_cursor
+from utils.memory.v3_cursor import V3CursorContext, V3Keyset, create_v3_cursor
 from utils.memory.v3_memory_read_service import (
-    V17V3MemoryReadRequest,
-    V17V3MemoryReadServiceInput,
-    V17V3MemoryReadServiceResult,
-    plan_v17_v3_memory_read,
+    V3MemoryReadRequest,
+    V3MemoryReadServiceInput,
+    V3MemoryReadServiceResult,
+    plan_v3_memory_read,
 )
-from utils.memory.v3_projection_readiness import V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
 
-SECRET = b'unit-test-v17-v3-read-service-secret'
+SECRET = b'unit-test-memory-v3-read-service-secret'
 
 
 def _projection_context(**overrides):
@@ -21,7 +21,7 @@ def _projection_context(**overrides):
         'create_converged': True,
         'update_converged': True,
         'delete_converged': True,
-        'projection_source': V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
+        'projection_source': DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
         'tombstone_fence_present': True,
         'tombstone_fence_generation': 7,
         'source_commit_id': 'source-commit-7',
@@ -42,12 +42,12 @@ def _cursor_context(**overrides):
         'account_generation': 7,
         'projection_generation': 7,
         'filter_hash': 'default-memory-v1',
-        'source': 'v17_compatibility_projection',
+        'source': 'memory_compatibility_projection',
         'read_mode': 'default_memory',
         'now_epoch_seconds': 1_800_000_000,
     }
     values.update(overrides)
-    return V17V3CursorContext(**values)
+    return V3CursorContext(**values)
 
 
 def _service_input(**overrides):
@@ -57,23 +57,23 @@ def _service_input(**overrides):
         'control_state': 'valid',
         'default_memory_grant': True,
         'projection_readiness_context': _projection_context(),
-        'request': V17V3MemoryReadRequest(limit=100, offset=None, cursor=None, v17_cursor_mode=True),
+        'request': V3MemoryReadRequest(limit=100, offset=None, cursor=None, v3_cursor_mode=True),
         'page_body': [{'id': 'memory-1', 'content': 'MemoryDB-compatible placeholder'}],
         'cursor_context': _cursor_context(),
         'cursor_secret': SECRET,
         'next_keyset': None,
     }
     values.update(overrides)
-    return V17V3MemoryReadServiceInput(**values)
+    return V3MemoryReadServiceInput(**values)
 
 
 def test_non_enrolled_returns_explicit_legacy_primary_plan_marker_only_and_preserves_offset_5000_compatibility():
-    result = plan_v17_v3_memory_read(
+    result = plan_v3_memory_read(
         _service_input(
             enrolled=False,
             control_state='missing',
             projection_readiness_context=None,
-            request=V17V3MemoryReadRequest(limit=5000, offset=0, cursor=None, v17_cursor_mode=False),
+            request=V3MemoryReadRequest(limit=5000, offset=0, cursor=None, v3_cursor_mode=False),
             page_body=[{'id': 'must-not-be-read'}],
             cursor_context=None,
             cursor_secret=None,
@@ -84,7 +84,7 @@ def test_non_enrolled_returns_explicit_legacy_primary_plan_marker_only_and_prese
     assert result.read_plan == 'legacy_primary_plan_only'
     assert result.body is None
     assert result.should_fetch_legacy is False
-    assert result.should_fetch_v17_projection is False
+    assert result.should_fetch_memory_projection is False
     assert result.read_decision == 'non_enrolled_legacy_primary'
     assert result.headers == {
         'X-Omi-Memory-Read-Source': 'legacy_primary',
@@ -105,94 +105,94 @@ def test_enrolled_missing_malformed_no_grant_and_projection_not_ready_fail_close
         (
             _service_input(projection_readiness_context=_projection_context(freshness_fence_present=False)),
             503,
-            'v17_projection_not_ready',
+            'memory_projection_not_ready',
         ),
     ]
 
     for service_input, status, reason in cases:
-        result = plan_v17_v3_memory_read(service_input)
+        result = plan_v3_memory_read(service_input)
 
         assert result.http_status == status
         assert result.read_decision == reason
         assert result.should_fetch_legacy is False
-        assert result.should_fetch_v17_projection is False
+        assert result.should_fetch_memory_projection is False
         assert result.legacy_fallback_allowed is False
         assert result.body is None
 
 
 def test_projection_ready_empty_returns_200_empty_list_no_legacy_fallback_and_header_only_metadata():
-    result = plan_v17_v3_memory_read(
+    result = plan_v3_memory_read(
         _service_input(
             projection_readiness_context=_projection_context(projection_empty=True), page_body=[{'id': 'legacy'}]
         )
     )
 
     assert result.http_status == 200
-    assert result.read_plan == 'v17_compatibility_projection'
+    assert result.read_plan == 'memory_compatibility_projection'
     assert result.body == []
     assert result.should_fetch_legacy is False
-    assert result.should_fetch_v17_projection is False
+    assert result.should_fetch_memory_projection is False
     assert result.legacy_fallback_allowed is False
-    assert result.headers['X-Omi-Memory-Read-Source'] == 'v17_compatibility_projection'
-    assert result.headers['X-Omi-Memory-Read-Decision'] == 'v17_projection_empty_no_legacy_fallback'
+    assert result.headers['X-Omi-Memory-Read-Source'] == 'memory_compatibility_projection'
+    assert result.headers['X-Omi-Memory-Read-Decision'] == 'memory_projection_empty_no_legacy_fallback'
     assert 'X-Omi-Memory-Next-Cursor' not in result.headers
     assert 'Link' not in result.headers
 
 
 def test_projection_ready_page_passes_memorydb_compatible_body_and_adds_next_cursor_headers_only():
     body = [{'id': 'memory-1', 'content': 'caller supplied MemoryDB-compatible body'}]
-    result = plan_v17_v3_memory_read(
-        _service_input(page_body=body, next_keyset=V17V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'))
+    result = plan_v3_memory_read(
+        _service_input(page_body=body, next_keyset=V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'))
     )
 
     assert result.http_status == 200
     assert result.body == body
     assert result.body is body
-    assert result.should_fetch_v17_projection is False
-    assert result.read_plan == 'v17_compatibility_projection'
-    assert result.headers['X-Omi-Memory-Read-Source'] == 'v17_compatibility_projection'
-    assert result.headers['X-Omi-Memory-Read-Decision'] == 'v17_compatibility_projection_primary'
-    assert result.headers['X-Omi-Memory-Next-Cursor'].startswith('v17v3.')
+    assert result.should_fetch_memory_projection is False
+    assert result.read_plan == 'memory_compatibility_projection'
+    assert result.headers['X-Omi-Memory-Read-Source'] == 'memory_compatibility_projection'
+    assert result.headers['X-Omi-Memory-Read-Decision'] == 'memory_compatibility_projection_primary'
+    assert result.headers['X-Omi-Memory-Next-Cursor'].startswith('v3.')
     assert result.headers['Link'] == f'<{result.headers["X-Omi-Memory-Next-Cursor"]}>; rel="next"'
     assert 'source' not in body[0]
     assert 'read_decision' not in body[0]
 
 
-def test_cursor_validation_is_required_in_v17_mode_and_invalid_cursor_never_downgrades_to_offset_or_legacy():
-    valid_cursor = create_v17_v3_cursor(
-        V17V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),
+def test_cursor_validation_is_required_in_memory_mode_and_invalid_cursor_never_downgrades_to_offset_or_legacy():
+    valid_cursor = create_v3_cursor(
+        V3Keyset(created_at_ms=1_799_999_123_456, memory_id='memory-9'),
         _cursor_context(),
         SECRET,
         ttl_seconds=300,
     )
 
-    valid = plan_v17_v3_memory_read(_service_input(request=V17V3MemoryReadRequest(limit=100, cursor=valid_cursor)))
+    valid = plan_v3_memory_read(_service_input(request=V3MemoryReadRequest(limit=100, cursor=valid_cursor)))
     assert valid.http_status == 200
 
     invalid_cases = [
-        V17V3MemoryReadRequest(limit=100, offset=0, cursor=None, v17_cursor_mode=True),
-        V17V3MemoryReadRequest(limit=5000, offset=None, cursor=None, v17_cursor_mode=True),
-        V17V3MemoryReadRequest(limit=100, offset=None, cursor='legacy-offset-25', v17_cursor_mode=True),
+        V3MemoryReadRequest(limit=100, offset=0, cursor=None, v3_cursor_mode=True),
+        V3MemoryReadRequest(limit=5000, offset=None, cursor=None, v3_cursor_mode=True),
+        V3MemoryReadRequest(limit=100, offset=None, cursor='legacy-offset-25', v3_cursor_mode=True),
     ]
     for request in invalid_cases:
-        result = plan_v17_v3_memory_read(_service_input(request=request))
+        result = plan_v3_memory_read(_service_input(request=request))
 
         assert result.http_status == 400
         assert result.read_plan == 'fail_closed'
         assert result.should_fetch_legacy is False
-        assert result.should_fetch_v17_projection is False
+        assert result.should_fetch_memory_projection is False
         assert result.legacy_fallback_allowed is False
         assert result.headers['X-Omi-Memory-Read-Source'] == 'none'
         assert result.read_decision in {
-            'offset_not_allowed_in_v17_cursor_mode',
-            'legacy_first_page_5000_not_allowed_in_v17_cursor_mode',
+            'offset_not_allowed_in_v3_cursor_mode',
+            'legacy_first_page_5000_not_allowed_in_v3_cursor_mode',
             'malformed_cursor',
             'invalid_signature',
         }
 
 
 def test_archive_default_unavailable_and_stale_short_term_default_visible_are_explicit_non_capabilities():
-    result = plan_v17_v3_memory_read(_service_input(requested_archive=True))
+    result = plan_v3_memory_read(_service_input(requested_archive=True))
 
     assert result.http_status == 404
     assert result.read_decision == 'archive_default_unavailable'
@@ -200,11 +200,11 @@ def test_archive_default_unavailable_and_stale_short_term_default_visible_are_ex
     assert result.stale_short_term_default_visible is False
     assert result.body is None
     assert result.should_fetch_legacy is False
-    assert result.should_fetch_v17_projection is False
+    assert result.should_fetch_memory_projection is False
 
 
 def test_read_service_is_pure_local_and_does_not_import_routers_database_or_network_clients():
-    result_fields = set(V17V3MemoryReadServiceResult.__dataclass_fields__)
+    result_fields = set(V3MemoryReadServiceResult.__dataclass_fields__)
     assert 'fallback_to_legacy' not in result_fields
     assert 'use_legacy_on_error' not in result_fields
     assert 'include_archive_by_default' not in result_fields

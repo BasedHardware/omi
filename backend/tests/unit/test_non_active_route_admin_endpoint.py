@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from config.memory_rollout import PASSED, V17Mode, V17StageGate
+from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
 from tests.unit.memory_import_isolation import (
-    install_v17_product_router_stubs,
+    install_memory_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
@@ -61,38 +61,38 @@ _ADMIN_ROUTER_STUB_NAMES = (
     "database._client",
     "utils.other.endpoints",
     "routers.memory_admin",
-    "routers.v17_memory_admin",
+    "routers.memory_admin",
 )
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _v17_admin_router_import_isolation():
+def _memory_admin_router_import_isolation():
     saved = snapshot_sys_modules(_ADMIN_ROUTER_STUB_NAMES)
-    for name in ("routers.memory_admin", "routers.v17_memory_admin"):
+    for name in ("routers.memory_admin", "routers.memory_admin"):
         sys.modules.pop(name, None)
-    install_v17_product_router_stubs(fastapi_stub, types.ModuleType("utils.other.endpoints"))
+    install_memory_product_router_stubs(fastapi_stub, types.ModuleType("utils.other.endpoints"))
     from database.memory_non_active_routes import NonActiveRoute
     from utils.memory.non_active_route_audit import NonActiveRouteAuditReport
 
     import routers.memory_admin as memory_admin
-    import routers.memory_admin as v17_memory_admin
+    import routers.memory_admin as memory_admin
 
     globals()["NonActiveRoute"] = NonActiveRoute
     globals()["NonActiveRouteAuditReport"] = NonActiveRouteAuditReport
     globals()["memory_admin"] = memory_admin
-    globals()["v17_memory_admin"] = v17_memory_admin
+    globals()["memory_admin"] = memory_admin
     yield
     restore_sys_modules(saved)
-    for name in ("routers.memory_admin", "routers.v17_memory_admin"):
+    for name in ("routers.memory_admin", "routers.memory_admin"):
         sys.modules.pop(name, None)
     globals()["memory_admin"] = None
-    globals()["v17_memory_admin"] = None
+    globals()["memory_admin"] = None
 
 
 NonActiveRoute = None
 NonActiveRouteAuditReport = None
 memory_admin = None
-v17_memory_admin = None
+memory_admin = None
 
 
 def _report(uid="u1"):
@@ -148,17 +148,17 @@ def _enabled_rollout_doc(uid="u1"):
     return {
         "schema_version": 1,
         "uid": uid,
-        "mode": V17Mode.read.value,
+        "mode": MemoryRolloutMode.read.value,
         "mode_epoch": 7,
         "cutover_epoch": 7,
         "account_generation": 3,
         "fallback_projection_ready": True,
-        "persistent_v17_writes_started": True,
+        "persistent_memory_writes_started": True,
         "writes_blocked": False,
         "stage_gates": {
-            V17StageGate.shadow.value: PASSED,
-            V17StageGate.write.value: PASSED,
-            V17StageGate.read.value: PASSED,
+            MemoryRolloutStageGate.shadow.value: PASSED,
+            MemoryRolloutStageGate.write.value: PASSED,
+            MemoryRolloutStageGate.read.value: PASSED,
         },
         "grants": {
             "mcp": {"default_memory": True, "archive": True},
@@ -169,11 +169,12 @@ def _enabled_rollout_doc(uid="u1"):
 
 
 def test_admin_router_registers_memory_admin_routes():
-    routes = {(method, path) for method, path, _kwargs, _func in v17_memory_admin.router.routes}
+    routes = {(method, path) for method, path, _kwargs, _func in memory_admin.router.routes}
     assert ("GET", "/memory/admin/users/{uid}/non-active-route-report") in routes
     assert ("GET", "/memory/admin/users/{uid}/read-rollout-decision") in routes
     assert ("POST", "/memory/admin/users/{uid}/short-term-lifecycle/run") in routes
-    assert not any(isinstance(path, str) and path.startswith("/v17/") for _method, path in routes)
+    legacy_prefix = "/" + "v" + "17/"
+    assert not any(isinstance(path, str) and path.startswith(legacy_prefix) for _method, path in routes)
 
 
 def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_without_memory_item_reads(monkeypatch):
@@ -181,7 +182,7 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
     db_client = _FirestoreFake({"users/u1/memory_control/state": _enabled_rollout_doc()})
     monkeypatch.setattr(memory_admin, "db", db_client)
 
-    response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
+    response = memory_admin.get_memory_read_rollout_decision("u1", secret_key="secret")
 
     assert db_client.document_get_paths == ["users/u1/memory_control/state"]
     assert db_client.collection_paths == []
@@ -204,10 +205,10 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
             "consumer": "mcp",
             "enabled": True,
             "outcome": "enabled",
-            "read_decision": "USE_V17",
+            "read_decision": "USE_MEMORY",
             "fallback_reason": None,
             "default_memory_grant": True,
-            "v17_reads_enabled": True,
+            "memory_reads_enabled": True,
             "archive_default_visible": False,
             "archive_capability": False,
         },
@@ -217,10 +218,10 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
             "consumer": "developer_api",
             "enabled": True,
             "outcome": "enabled",
-            "read_decision": "USE_V17",
+            "read_decision": "USE_MEMORY",
             "fallback_reason": None,
             "default_memory_grant": True,
-            "v17_reads_enabled": True,
+            "memory_reads_enabled": True,
             "archive_default_visible": False,
             "archive_capability": False,
         },
@@ -230,10 +231,10 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
             "consumer": "omi_chat",
             "enabled": True,
             "outcome": "enabled",
-            "read_decision": "USE_V17",
+            "read_decision": "USE_MEMORY",
             "fallback_reason": None,
             "default_memory_grant": True,
-            "v17_reads_enabled": True,
+            "memory_reads_enabled": True,
             "archive_default_visible": False,
             "archive_capability": False,
         },
@@ -245,9 +246,9 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
             "consumer": consumer,
             "enabled": True,
             "reason": "ok",
-            "read_decision": "USE_V17",
+            "read_decision": "USE_MEMORY",
             "mode": "read",
-            "v17_reads_enabled": True,
+            "memory_reads_enabled": True,
             "legacy_reads_authoritative": False,
             "default_memory_grant": True,
             "archive_default_visible": False,
@@ -256,8 +257,8 @@ def test_admin_read_rollout_decision_endpoint_reports_all_enabled_consumers_with
             "capabilities": {
                 "legacy_only": False,
                 "shadow_artifacts_enabled": True,
-                "v17_writes_enabled": True,
-                "v17_reads_enabled": True,
+                "memory_writes_enabled": True,
+                "memory_reads_enabled": True,
                 "legacy_reads_authoritative": False,
             },
         }
@@ -305,7 +306,7 @@ def test_admin_read_rollout_decision_endpoint_reports_disabled_consumers_for_mis
         db_client = _FirestoreFake(docs)
         monkeypatch.setattr(memory_admin, "db", db_client)
 
-        response = v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="secret")
+        response = memory_admin.get_memory_read_rollout_decision("u1", secret_key="secret")
 
         for consumer, reason in expected_reasons.items():
             decision = response["consumers"][consumer]
@@ -327,7 +328,7 @@ def test_admin_read_rollout_decision_endpoint_rejects_invalid_admin_key(monkeypa
     monkeypatch.setattr(memory_admin, "db", db_client)
 
     try:
-        v17_memory_admin.get_v17_read_rollout_decision("u1", secret_key="wrong")
+        memory_admin.get_memory_read_rollout_decision("u1", secret_key="wrong")
     except _HTTPException as exc:
         assert exc.status_code == 403
     else:
@@ -347,7 +348,7 @@ def test_admin_endpoint_surfaces_non_active_route_report_counts_without_memory_i
 
     monkeypatch.setattr(memory_admin, "fetch_non_active_route_audit_report", fake_fetch)
 
-    response = v17_memory_admin.get_v17_non_active_route_report(
+    response = memory_admin.get_non_active_route_report(
         "u1",
         run_id="run-1",
         expected_source_ids=" src-review,src-archive ,, src-hidden ",
@@ -372,7 +373,7 @@ def test_admin_endpoint_rejects_missing_or_invalid_admin_key(monkeypatch):
     monkeypatch.setattr(memory_admin, "fetch_non_active_route_audit_report", MagicMock(return_value=_report()))
 
     try:
-        v17_memory_admin.get_v17_non_active_route_report("u1", secret_key="wrong")
+        memory_admin.get_non_active_route_report("u1", secret_key="wrong")
     except _HTTPException as exc:
         assert exc.status_code == 403
         assert exc.detail == "You are not authorized to perform this action"
@@ -400,7 +401,7 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
 
     monkeypatch.setattr(memory_admin, "run_short_term_lifecycle_firestore", fake_run)
 
-    response = v17_memory_admin.post_v17_short_term_lifecycle_run(
+    response = memory_admin.post_short_term_lifecycle_run(
         "u1",
         run_id="manual-run-1",
         evaluated_at="2026-06-19T12:00:00+00:00",
@@ -411,7 +412,7 @@ def test_admin_endpoint_runs_short_term_lifecycle_with_bounded_inputs(monkeypatc
     assert calls == [
         (
             "u1",
-            v17_memory_admin.db,
+            memory_admin.db,
             "manual-run-1",
             datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc),
             25,
@@ -445,7 +446,7 @@ def test_admin_endpoint_rejects_invalid_short_term_lifecycle_inputs(monkeypatch)
         {"run_id": "run-1", "limit": 25, "evaluated_at": "not-a-date"},
     ):
         try:
-            v17_memory_admin.post_v17_short_term_lifecycle_run("u1", secret_key="secret", **kwargs)
+            memory_admin.post_short_term_lifecycle_run("u1", secret_key="secret", **kwargs)
         except _HTTPException as exc:
             assert exc.status_code == 400
         else:

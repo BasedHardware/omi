@@ -16,7 +16,7 @@ def test_python_apply_adapter_emulator_harness_is_wired_to_real_adapter():
     assert "memory_outbox" in script
 
     package = json.loads(PACKAGE_JSON.read_text())
-    assert package["scripts"]["test:v17-firestore-python-apply:emulator"] == (
-        "firebase emulators:exec --only firestore --project demo-v17-memory "
+    assert package["scripts"]["test:memory-firestore-python-apply:emulator"] == (
+        "firebase emulators:exec --only firestore --project demo-memory "
         '"python3 backend/scripts/firestore_python_apply_emulator_test.py"'
     )

@@ -39,9 +39,9 @@ setattr(_fake_client, 'db', SimpleNamespace())
 sys.modules['database._client'] = _fake_client
 
 import database.mcp_api_key as mcp_api_key_db
-from dependencies import get_mcp_api_key_auth, get_mcp_v17_default_memory_read_context
-from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
-from utils.memory.product_authorization import authorize_v17_external_default_memory_read
+from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
+from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
+from utils.memory.product_authorization import authorize_memory_external_default_memory_read
 
 
 class _FakeDoc:
@@ -102,7 +102,7 @@ class _GrantStateRead:
     def __init__(self, state):
         self.state = state
         self.reason = 'ok'
-        self.source_path = 'users/u1/memory_control/v17_app_key_memory_grants'
+        self.source_path = 'users/u1/memory_control/app_key_memory_grants'
 
 
 def _grant_reader(*, uid, db_client):
@@ -146,19 +146,19 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
         {'hashed_key': 'hashed', 'user_id': 'u1', 'scopes': None, 'key_id': 'legacy-key', 'app_id': None}
     ]
 
-    context = build_mcp_v17_default_memory_read_context(
-        McpV17VerifiedAuth(
+    context = build_mcp_default_memory_read_context(
+        McpVerifiedAuth(
             uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes'] or ())
         )
     )
-    decision = authorize_v17_external_default_memory_read(
+    decision = authorize_memory_external_default_memory_read(
         context, db_client='fake-db', read_app_key_grants_state=_grant_reader
     )
     assert decision.allowed is False
     assert decision.reason == 'missing_app_or_key_identity'
 
 
-def test_persisted_mcp_app_key_scopes_build_verified_v17_context_without_archive(monkeypatch):
+def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_archive(monkeypatch):
     fake_doc = _FakeDoc(
         {
             'id': 'key-1',
@@ -175,12 +175,10 @@ def test_persisted_mcp_app_key_scopes_build_verified_v17_context_without_archive
     auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
     assert auth == {'user_id': 'u1', 'scopes': ['memories.read', 'goals.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'}
 
-    context = build_mcp_v17_default_memory_read_context(
-        McpV17VerifiedAuth(
-            uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes'])
-        )
+    context = build_mcp_default_memory_read_context(
+        McpVerifiedAuth(uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes']))
     )
-    decision = authorize_v17_external_default_memory_read(
+    decision = authorize_memory_external_default_memory_read(
         context, db_client='fake-db', read_app_key_grants_state=_grant_reader
     )
 
@@ -198,7 +196,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
     )
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
-    context = asyncio.run(get_mcp_v17_default_memory_read_context(auth))
+    context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))
 
     assert auth.uid == 'u1'
     assert auth.scopes == ['memories.read']
@@ -211,7 +209,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
     assert context.scopes == ('memories.read',)
 
 
-def test_mcp_v17_dependency_fails_closed_without_persisted_memories_read_scope(monkeypatch):
+def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scope(monkeypatch):
     monkeypatch.setattr(
         mcp_api_key_db,
         'get_user_and_scopes_by_api_key',
@@ -220,7 +218,7 @@ def test_mcp_v17_dependency_fails_closed_without_persisted_memories_read_scope(m
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(get_mcp_v17_default_memory_read_context(auth))
+        asyncio.run(get_mcp_memory_default_memory_read_context(auth))
 
     assert exc.value.status_code == 403
     assert 'memories.read' in exc.value.detail

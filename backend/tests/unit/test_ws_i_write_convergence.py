@@ -82,7 +82,7 @@ from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecor
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import Memory, MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
     read_canonical_memories,
@@ -205,11 +205,11 @@ def _sample_memory_payload(*, uid: str, conversation_id: str, content: str) -> d
     }
 
 
-def _stored_item(item: V17MemoryItem) -> dict:
+def _stored_item(item: MemoryItem) -> dict:
     return item.model_dump(mode="json")
 
 
-def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, content: str) -> V17MemoryItem:
+def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, content: str) -> MemoryItem:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     evidence = MemoryEvidence(
         evidence_id="ev1",
@@ -219,7 +219,7 @@ def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, co
         conversation_id=conversation_id,
         artifact_preservation=ArtifactPreservationState.preserved,
     )
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid=uid,
         version=1,
@@ -401,7 +401,7 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
 
@@ -516,14 +516,14 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
     monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
 
-    runtime = memories_router.V17V3GetRuntime(enabled=True, source_decision="v17_read")
+    runtime = memories_router.V3GetRuntime(enabled=True, source_decision="memory_read")
     result = memories_router.get_memories(
         response=MagicMock(),
         limit=10,
         offset=0,
         cursor=None,
         uid="uid-canonical",
-        v17_runtime=runtime,
+        memory_runtime=runtime,
     )
 
     assert result == canonical_memories
@@ -551,14 +551,14 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
     monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
 
-    runtime = memories_router.V17V3GetRuntime(enabled=False, source_decision="disabled")
+    runtime = memories_router.V3GetRuntime(enabled=False, source_decision="disabled")
     result = memories_router.get_memories(
         response=MagicMock(),
         limit=10,
         offset=0,
         cursor=None,
         uid="uid-legacy",
-        v17_runtime=runtime,
+        memory_runtime=runtime,
     )
 
     assert result == legacy_memories

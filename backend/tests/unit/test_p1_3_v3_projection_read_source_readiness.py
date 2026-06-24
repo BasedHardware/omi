@@ -32,7 +32,7 @@ FORBIDDEN_STATIC_TOKENS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_projection_read_source_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_projection_read_source_readiness", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {script_path}")
     module = importlib.util.module_from_spec(spec)
@@ -52,7 +52,7 @@ def _report(execute=False, env=None, reader=None):
 def test_projection_read_source_readiness_is_safe_blocked_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_projection_read_source_readiness"
+    assert report["artifact"] == "p1_3_v3_projection_read_source_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -79,7 +79,7 @@ def test_projection_read_source_contract_inventories_required_source_shape():
 
     assert list(requirements) == REQUIRED_REQUIREMENT_IDS
     assert contract["route_scope"] == "GET /v3/memories"
-    assert contract["source_type"] == "firestore_v17_compatibility_projection"
+    assert contract["source_type"] == "firestore_compatibility_projection"
     assert contract["state_path_template"] == "users/{uid}/v3_compatibility_projection/state"
     assert contract["items_path_template"] == "users/{uid}/v3_compatibility_projection_items/{memory_id}"
     assert contract["client_override_allowed"] is False
@@ -98,13 +98,13 @@ def test_projection_read_source_contract_inventories_required_source_shape():
         "projection_commit_id",
     }
     assert contract["legacy_fallback_allowed"] is False
-    assert contract["merge_legacy_and_v17_allowed"] is False
+    assert contract["merge_legacy_and_memory_allowed"] is False
     assert contract["fail_closed_on_missing_stale_malformed_metadata"] is True
 
     assert requirements["route_scoped_server_owned_projection_source"]["server_owned"] is True
     assert requirements["authenticated_subject_selector_only"]["uid_as_config_dimension_allowed"] is False
     assert requirements["bounded_page_size_limit_contract"]["max_limit"] == 500
-    assert requirements["deterministic_keyset_ordering_contract"]["offset_supported_for_v17"] is False
+    assert requirements["deterministic_keyset_ordering_contract"]["offset_supported_for_memory"] is False
     assert requirements["projection_metadata_freshness_fail_closed"]["fail_closed"] is True
     assert requirements["privacy_safe_telemetry_dimensions"]["telemetry_sink_calls_executed"] is False
     assert requirements["no_client_controlled_source_or_path"]["client_source_path_override_allowed"] is False
@@ -195,8 +195,8 @@ def test_projection_read_source_static_script_has_no_mutating_paths_route_import
 def test_projection_read_source_readiness_is_registered_in_test_runner_docs_and_parent_readiness():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 

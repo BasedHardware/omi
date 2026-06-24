@@ -18,7 +18,7 @@ sys.modules['database._client'] = client_stub
 from database.memory_ledger import HeadConflict
 from models.memory_contracts import DurableMemoryPatch
 from utils.memory.patch_adapter import (
-    apply_v17_patch_to_ledger_state,
+    apply_memory_patch_to_ledger_state,
     patch_to_ledger_mutations,
     persist_non_active_route_for_patch,
 )
@@ -28,7 +28,7 @@ def _patch(decision, **overrides):
     payload = {
         "patch_id": f"patch_{decision}",
         "packet_id": "pkt_1",
-        "run_id": "v17_test",
+        "run_id": "memory_test",
         "observed_head_commit_id": "head_0",
         "idempotency_key": f"idem_{decision}",
         "decision": decision,
@@ -45,7 +45,7 @@ def _patch(decision, **overrides):
     return DurableMemoryPatch(**payload)
 
 
-def test_v17_patch_adapter_adds_fact_with_deterministic_fact_and_evidence_ids():
+def test_memory_patch_adapter_adds_fact_with_deterministic_fact_and_evidence_ids():
     patch = _patch("add")
 
     mutations = patch_to_ledger_mutations(patch)
@@ -59,7 +59,7 @@ def test_v17_patch_adapter_adds_fact_with_deterministic_fact_and_evidence_ids():
     assert fact["idempotency_key"] == "idem_add"
 
 
-def test_v17_patch_adapter_add_evidence_dedupes_by_evidence_id():
+def test_memory_patch_adapter_add_evidence_dedupes_by_evidence_id():
     patch = _patch(
         "add_evidence",
         evidence_ids=["ev_1", "ev_1"],
@@ -77,7 +77,7 @@ def test_v17_patch_adapter_add_evidence_dedupes_by_evidence_id():
     assert mutations[0]["evidence"]["evidence_id"] == "ev_1"
 
 
-def test_v17_patch_adapter_update_adds_new_fact_and_supersedes_target():
+def test_memory_patch_adapter_update_adds_new_fact_and_supersedes_target():
     patch = _patch("update", target_memory_id="mem_old", new_memory_id="mem_new")
 
     mutations = patch_to_ledger_mutations(patch)
@@ -88,11 +88,11 @@ def test_v17_patch_adapter_update_adds_new_fact_and_supersedes_target():
     assert mutations[1]["by"] == "mem_new"
 
 
-def test_v17_patch_adapter_skip_duplicate_has_no_ledger_mutations():
+def test_memory_patch_adapter_skip_duplicate_has_no_ledger_mutations():
     assert patch_to_ledger_mutations(_patch("skip_duplicate", target_memory_id="mem_1")) == []
 
 
-def test_v17_patch_adapter_persists_non_active_patch_decisions_through_route_store(monkeypatch):
+def test_memory_patch_adapter_persists_non_active_patch_decisions_through_route_store(monkeypatch):
     captured = []
 
     def fake_persist(outcome, *, db_client=None):
@@ -121,18 +121,18 @@ def test_v17_patch_adapter_persists_non_active_patch_decisions_through_route_sto
     assert used_db is fake_db
     assert outcome.uid == "u1"
     assert outcome.route == "review"
-    assert outcome.idempotency_key == "v17_patch:idem_review"
+    assert outcome.idempotency_key == "memory_patch:idem_review"
     assert outcome.source_ids == ["conv_1", "ev_1", "ev_2", "pkt_1"]
     assert outcome.reason == "low confidence conflict needs human review"
-    assert outcome.run_id == "v17_test"
+    assert outcome.run_id == "memory_test"
     assert outcome.patch_id == "patch_review"
     assert outcome.audit_metadata["actor"] == "unit"
     assert outcome.audit_metadata["decision"] == "review"
     assert outcome.audit_metadata["result_status"] == "review"
-    assert outcome.audit_metadata["route_store_source"] == "v17_patch_adapter"
+    assert outcome.audit_metadata["route_store_source"] == "memory_patch_adapter"
 
 
-def test_v17_patch_adapter_does_not_persist_active_patch_decisions(monkeypatch):
+def test_memory_patch_adapter_does_not_persist_active_patch_decisions(monkeypatch):
     import utils.memory.patch_adapter as adapter
 
     persist_mock = MagicMock()
@@ -142,22 +142,22 @@ def test_v17_patch_adapter_does_not_persist_active_patch_decisions(monkeypatch):
     persist_mock.assert_not_called()
 
 
-def test_v17_patch_adapter_repeat_apply_is_idempotent_and_checks_head():
+def test_memory_patch_adapter_repeat_apply_is_idempotent_and_checks_head():
     patch = _patch("add")
     state = {"current_head_commit_id": "head_0"}
     commits = {}
 
-    first = apply_v17_patch_to_ledger_state(state, commits, patch)
-    second = apply_v17_patch_to_ledger_state(state, commits, patch)
+    first = apply_memory_patch_to_ledger_state(state, commits, patch)
+    second = apply_memory_patch_to_ledger_state(state, commits, patch)
 
     assert first["applied"] is True
     assert second["applied"] is False
     assert len(commits) == 1
 
 
-def test_v17_patch_adapter_rejects_stale_head():
+def test_memory_patch_adapter_rejects_stale_head():
     patch = _patch("add", observed_head_commit_id="stale_head")
     state = {"current_head_commit_id": "head_0"}
 
     with pytest.raises(HeadConflict):
-        apply_v17_patch_to_ledger_state(state, {}, patch)
+        apply_memory_patch_to_ledger_state(state, {}, patch)

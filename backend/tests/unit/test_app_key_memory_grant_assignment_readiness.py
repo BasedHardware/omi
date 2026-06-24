@@ -31,7 +31,7 @@ class FakeDb:
 def load_module():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "app_key_memory_grant_assignment_readiness.py"
-    spec = importlib.util.spec_from_file_location("v17_app_key_memory_grant_assignment_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("app_key_memory_grant_assignment_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -43,7 +43,7 @@ def load_module():
 def test_default_cli_is_not_run_and_performs_no_firestore_read_or_write():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "app_key_memory_grant_assignment_readiness.py"
-    assert script_path.exists(), "missing V17 app/key memory grant assignment readiness runner"
+    assert script_path.exists(), "missing memory app/key memory grant assignment readiness runner"
 
     completed = subprocess.run([sys.executable, str(script_path)], text=True, capture_output=True, check=False)
 
@@ -80,7 +80,7 @@ def test_writes_unreachable_without_execute_allow_write_and_assignment_file():
     assert dry_run["status"] == "DRY_RUN"
     assert dry_run["read_only"] is True
     assert dry_run["mutation_allowed"] is False
-    assert dry_run["planned_writes"][0]["document_path"] == "users/u1/memory_control/v17_app_key_memory_grants"
+    assert dry_run["planned_writes"][0]["document_path"] == "users/u1/memory_control/app_key_memory_grants"
     assert dry_run["planned_writes"][0]["grant_path"] == "grants.mcp.apps.mcp-api.keys.key-1"
     assert db.writes == []
 
@@ -140,7 +140,7 @@ def test_valid_write_targets_only_server_owned_grant_path_and_keeps_archive_not_
     assert applied["read_only"] is False
     assert db.writes == [
         (
-            "users/u1/memory_control/v17_app_key_memory_grants",
+            "users/u1/memory_control/app_key_memory_grants",
             {
                 "grants": {
                     "developer_api": {
@@ -169,8 +169,8 @@ def test_valid_write_targets_only_server_owned_grant_path_and_keeps_archive_not_
 
 def test_docs_reference_runner_non_claims_and_no_archive_default():
     root = Path(__file__).resolve().parents[2].parent
-    readiness = (root / "docs" / "epics" / "v17_app_key_memory_grants_readiness.md").read_text()
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
+    readiness = (root / "docs" / "epics" / "memory_app_key_memory_grants_readiness.md").read_text()
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
 
     assert "app_key_memory_grant_assignment_readiness.py" in readiness
     assert "--execute --allow-write" in readiness

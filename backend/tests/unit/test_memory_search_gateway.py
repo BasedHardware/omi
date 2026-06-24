@@ -7,13 +7,13 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    V17MemoryItem,
+    MemoryItem,
 )
 
 
 def _item(memory_id, *, tier=MemoryTier.short_term, status=MemoryItemStatus.active, expires_at=None, sensitive=False):
     now = datetime.now(timezone.utc)
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid="u1",
         version=1,

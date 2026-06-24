@@ -14,7 +14,7 @@ import pytest
 from tests.unit.memory_import_isolation import (
     ensure_utils_memory_packages_importable,
     install_database_client_stub,
-    install_v17_product_router_stubs,
+    install_memory_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
@@ -160,13 +160,13 @@ def test_memory_contracts_durable_patch_fact_source_aliases():
     from models import memory_contracts
 
     assert memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE == "durable_memory_patch"
-    assert memory_contracts.V17_DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
+    assert memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE is memory_contracts.DURABLE_MEMORY_PATCH_FACT_SOURCE
 
 
 def test_memory_collections_neutral_symbols_are_canonical():
     from database import memory_collections
 
-    assert memory_collections.V17Collections is memory_collections.MemoryCollections
+    assert memory_collections.MemoryCollections is memory_collections.MemoryCollections
 
 
 def test_memory_collections_frozen_path_strings_unchanged():
@@ -192,49 +192,49 @@ def test_memory_collections_frozen_path_strings_unchanged():
 def test_memory_rollout_neutral_symbols_are_canonical():
     from config import memory_rollout
 
-    assert memory_rollout.V17Mode is memory_rollout.MemoryRolloutMode
-    assert memory_rollout.V17RolloutConfig is memory_rollout.MemoryRolloutConfig
-    assert memory_rollout.V17RolloutState is memory_rollout.MemoryRolloutState
-    assert memory_rollout.V17Capabilities is memory_rollout.MemoryRolloutCapabilities
-    assert memory_rollout.V17StageGate is memory_rollout.MemoryRolloutStageGate
+    assert memory_rollout.MemoryRolloutMode is memory_rollout.MemoryRolloutMode
+    assert memory_rollout.MemoryRolloutConfig is memory_rollout.MemoryRolloutConfig
+    assert memory_rollout.MemoryRolloutState is memory_rollout.MemoryRolloutState
+    assert memory_rollout.MemoryRolloutCapabilities is memory_rollout.MemoryRolloutCapabilities
+    assert memory_rollout.MemoryRolloutStageGate is memory_rollout.MemoryRolloutStageGate
 
 
 def test_rollout_mode_env_dual_read_legacy_only():
-    from config.memory_rollout import V17Mode, rollout_mode_env_value
+    from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 
     assert rollout_mode_env_value({"MEMORY_MODE": "read"}) == "read"
-    assert V17Mode(rollout_mode_env_value({"MEMORY_MODE": "read"})) == V17Mode.read
+    assert MemoryRolloutMode(rollout_mode_env_value({"MEMORY_MODE": "read"})) == MemoryRolloutMode.read
 
 
 def test_rollout_mode_env_dual_read_neutral_precedence(monkeypatch):
-    from config.memory_rollout import V17Mode, V17RolloutConfig, rollout_mode_env_value
+    from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig, rollout_mode_env_value
 
     monkeypatch.setenv("MEMORY_MODE", "shadow")
     monkeypatch.setenv("MEMORY_MODE", "read")
     assert rollout_mode_env_value() == "read"
-    assert V17RolloutConfig.from_env().mode == V17Mode.read
+    assert MemoryRolloutConfig.from_env().mode == MemoryRolloutMode.read
 
 
 def test_rollout_enabled_users_env_dual_read_legacy_only(monkeypatch):
-    from config.memory_rollout import V17RolloutConfig, rollout_enabled_users_env_raw
+    from config.memory_rollout import MemoryRolloutConfig, rollout_enabled_users_env_raw
 
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-a,uid-b")
     assert rollout_enabled_users_env_raw() == "uid-a,uid-b"
-    assert V17RolloutConfig.from_env().enabled_users == {"uid-a", "uid-b"}
+    assert MemoryRolloutConfig.from_env().enabled_users == {"uid-a", "uid-b"}
 
 
 def test_rollout_enabled_users_env_dual_read_neutral_precedence(monkeypatch):
-    from config.memory_rollout import V17RolloutConfig, rollout_enabled_users_env_raw
+    from config.memory_rollout import MemoryRolloutConfig, rollout_enabled_users_env_raw
 
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "legacy-only")
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "neutral-only")
     assert rollout_enabled_users_env_raw() == "neutral-only"
-    assert V17RolloutConfig.from_env().enabled_users == {"neutral-only"}
+    assert MemoryRolloutConfig.from_env().enabled_users == {"neutral-only"}
 
 
 def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
-    from config.memory_rollout import V17RolloutConfig
+    from config.memory_rollout import MemoryRolloutConfig
     from utils.memory.memory_system import resolve_memory_system, MemorySystem
 
     monkeypatch.delenv("MEMORY_MODE", raising=False)
@@ -245,20 +245,20 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
     monkeypatch.setenv("MEMORY_MODE", "read")
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
 
-    assert V17RolloutConfig.from_env().enabled_users == {"rollout-user"}
+    assert MemoryRolloutConfig.from_env().enabled_users == {"rollout-user"}
     assert resolve_memory_system("cohort-user") == MemorySystem.CANONICAL
     assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
 
 
 def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
-    from config.memory_rollout import V17Mode, V17RolloutConfig
+    from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
     from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
     monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
-    monkeypatch.setenv("MEMORY_MODE", V17Mode.read.value)
+    monkeypatch.setenv("MEMORY_MODE", MemoryRolloutMode.read.value)
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-only-user")
 
-    assert V17RolloutConfig.from_env().mode == V17Mode.read
+    assert MemoryRolloutConfig.from_env().mode == MemoryRolloutMode.read
     assert resolve_memory_system("rollout-only-user") == MemorySystem.LEGACY
 
 
@@ -348,7 +348,7 @@ def test_rollout_extended_env_dual_read_unset_defaults(neutral_key, legacy_key, 
 
 
 def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
-    from config.memory_rollout import V17RolloutConfig
+    from config.memory_rollout import MemoryRolloutConfig
 
     monkeypatch.delenv("MEMORY_BACKFILL_ENABLED", raising=False)
     monkeypatch.delenv("MEMORY_BACKFILL_DAILY_LIMIT", raising=False)
@@ -357,7 +357,7 @@ def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
     monkeypatch.setenv("MEMORY_BACKFILL_DAILY_LIMIT", "12")
     monkeypatch.setenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", "true")
 
-    config = V17RolloutConfig.from_env()
+    config = MemoryRolloutConfig.from_env()
     assert config.backfill_enabled is True
     assert config.backfill_daily_limit == 12
     assert config.archive_opt_in_enabled is True
@@ -416,7 +416,7 @@ def _import_memory_router_modules_under_stubs():
     saved = snapshot_sys_modules(["fastapi", "database._client", "utils.other.endpoints", *router_module_names])
     for name in router_module_names:
         sys.modules.pop(name, None)
-    install_v17_product_router_stubs(fastapi_stub, auth_stub)
+    install_memory_product_router_stubs(fastapi_stub, auth_stub)
     from routers import memory_admin, memory_product
 
     return saved, memory_product, memory_admin
@@ -428,13 +428,15 @@ def test_main_registers_memory_product_and_admin_routes():
         product_routes = _router_method_path_pairs(memory_product.router)
         admin_routes = _router_method_path_pairs(memory_admin.router)
 
-        assert ("GET", "/memory/search") in product_routes
-        assert ("GET", "/memory/vector/search") in product_routes
-        assert ("GET", "/memory/archive/search") in product_routes
-        assert ("GET", "/memory/admin/users/{uid}/read-rollout-decision") in admin_routes
-        assert ("GET", "/memory/admin/users/{uid}/non-active-route-report") in admin_routes
-        assert ("POST", "/memory/admin/users/{uid}/short-term-lifecycle/run") in admin_routes
-        assert not any(path.startswith("/v17/") for _method, path in product_routes)
-        assert not any(path.startswith("/v17/") for _method, path in admin_routes)
+        assert set(path for _method, path in product_routes) == {
+            "/memory/search",
+            "/memory/vector/search",
+            "/memory/archive/search",
+        }
+        assert set(path for _method, path in admin_routes) == {
+            "/memory/admin/users/{uid}/read-rollout-decision",
+            "/memory/admin/users/{uid}/non-active-route-report",
+            "/memory/admin/users/{uid}/short-term-lifecycle/run",
+        }
     finally:
         restore_sys_modules(saved)

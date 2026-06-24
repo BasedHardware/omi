@@ -19,7 +19,7 @@ def test_entrypoint_absent_enabled_env_fails_closed_without_tick_or_side_effects
     calls = []
     printer = _Printer()
 
-    exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
+    exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
         env={},
         db_client=object(),
         authoritative_item_loader=lambda record: calls.append("load"),
@@ -50,7 +50,7 @@ def test_entrypoint_malformed_enabled_env_is_denied_without_tick():
     calls = []
     printer = _Printer()
 
-    exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
+    exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
         env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "yes"},
         db_client=object(),
         authoritative_item_loader=lambda record: calls.append("load"),
@@ -74,7 +74,7 @@ def test_entrypoint_enabled_requires_explicit_uid_and_stable_worker_id():
     calls = []
     printer = _Printer()
 
-    exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
+    exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
         env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true", "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1"},
         db_client=object(),
         authoritative_item_loader=lambda record: calls.append("load"),
@@ -116,7 +116,7 @@ def test_entrypoint_enabled_invokes_injected_tick_and_prints_deterministic_summa
     loader = object()
     deleter = object()
     repairer = object()
-    exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
+    exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
         env={
             "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
             "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
@@ -164,7 +164,7 @@ def test_entrypoint_dependency_or_action_failure_is_summarized_and_nonzero():
             "errors": [{"stage": "process", "record_id": "rec-1", "error": "pinecone unavailable"}],
         }
 
-    exit_code = entrypoint.run_v17_vector_repair_outbox_worker_entrypoint(
+    exit_code = entrypoint.run_vector_repair_outbox_worker_entrypoint(
         env={
             "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
             "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u1",
@@ -197,7 +197,7 @@ def test_main_disabled_path_does_not_initialize_production_dependencies(monkeypa
     calls = []
 
     monkeypatch.setattr(
-        entrypoint, "build_v17_vector_repair_outbox_production_dependencies", lambda env: calls.append("deps")
+        entrypoint, "build_vector_repair_outbox_production_dependencies", lambda env: calls.append("deps")
     )
 
     exit_code = entrypoint.main(env={}, print_json=printer)
@@ -210,7 +210,7 @@ def test_main_disabled_path_does_not_initialize_production_dependencies(monkeypa
 def test_main_enabled_calls_production_dependency_resolver_once(monkeypatch):
     printer = _Printer()
     calls = []
-    deps = entrypoint.V17VectorRepairOutboxProductionDependencies(
+    deps = entrypoint.VectorRepairOutboxProductionDependencies(
         db_client=object(),
         authoritative_item_loader=object(),
         vector_deleter=object(),
@@ -235,7 +235,7 @@ def test_main_enabled_calls_production_dependency_resolver_once(monkeypatch):
             "errors": [],
         }
 
-    monkeypatch.setattr(entrypoint, "build_v17_vector_repair_outbox_production_dependencies", fake_resolver)
+    monkeypatch.setattr(entrypoint, "build_vector_repair_outbox_production_dependencies", fake_resolver)
 
     exit_code = entrypoint.main(
         env={
@@ -278,20 +278,20 @@ def test_main_enabled_missing_production_dependency_config_fails_before_lease(mo
     assert payload["errors"] == [
         {
             "stage": "dependencies",
-            "error": "PINECONE_API_KEY is required when V17 vector repair worker is enabled",
+            "error": "PINECONE_API_KEY is required when memory vector repair worker is enabled",
         }
     ]
 
 
 def test_http_shim_disabled_post_fails_closed_without_dependency_initialization():
     calls = []
-    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+    app = entrypoint.create_vector_repair_outbox_worker_app(
         env={},
         dependency_builder=lambda env: calls.append("deps"),
         tick_runner=lambda **kwargs: calls.append("tick"),
     )
 
-    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+    response = app.routes_by_path["/memory-vector-repair-outbox-worker/tick"]()
 
     assert calls == []
     assert response == {
@@ -311,13 +311,13 @@ def test_http_shim_disabled_post_fails_closed_without_dependency_initialization(
 
 def test_http_shim_enabled_malformed_config_denies_before_dependencies():
     calls = []
-    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+    app = entrypoint.create_vector_repair_outbox_worker_app(
         env={"MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true"},
         dependency_builder=lambda env: calls.append("deps"),
         tick_runner=lambda **kwargs: calls.append("tick"),
     )
 
-    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+    response = app.routes_by_path["/memory-vector-repair-outbox-worker/tick"]()
 
     assert calls == []
     assert response["config_valid"] is False
@@ -328,7 +328,7 @@ def test_http_shim_enabled_malformed_config_denies_before_dependencies():
 
 def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
     calls = []
-    deps = entrypoint.V17VectorRepairOutboxProductionDependencies(
+    deps = entrypoint.VectorRepairOutboxProductionDependencies(
         db_client=object(),
         authoritative_item_loader=object(),
         vector_deleter=object(),
@@ -354,7 +354,7 @@ def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
             "errors": [],
         }
 
-    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+    app = entrypoint.create_vector_repair_outbox_worker_app(
         env={
             "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
             "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u-http",
@@ -364,7 +364,7 @@ def test_http_shim_enabled_uses_fake_dependencies_for_one_tick_summary():
         tick_runner=fake_tick_runner,
     )
 
-    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+    response = app.routes_by_path["/memory-vector-repair-outbox-worker/tick"]()
 
     assert calls[0][0] == "deps"
     assert calls[1][0] == "tick"
@@ -378,9 +378,9 @@ def test_http_shim_dependency_failure_is_deterministic_summary_before_tick():
 
     def failing_dependency_builder(env):
         calls.append(("deps", dict(env)))
-        raise ValueError("PINECONE_API_KEY is required when V17 vector repair worker is enabled")
+        raise ValueError("PINECONE_API_KEY is required when memory vector repair worker is enabled")
 
-    app = entrypoint.create_v17_vector_repair_outbox_worker_app(
+    app = entrypoint.create_vector_repair_outbox_worker_app(
         env={
             "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED": "true",
             "MEMORY_VECTOR_REPAIR_OUTBOX_UID": "u-http",
@@ -390,14 +390,14 @@ def test_http_shim_dependency_failure_is_deterministic_summary_before_tick():
         tick_runner=lambda **kwargs: calls.append(("tick", kwargs)),
     )
 
-    response = app.routes_by_path["/v17-vector-repair-outbox-worker/tick"]()
+    response = app.routes_by_path["/memory-vector-repair-outbox-worker/tick"]()
 
     assert [call[0] for call in calls] == ["deps"]
     assert response["config_valid"] is False
     assert response["errors"] == [
         {
             "stage": "dependencies",
-            "error": "PINECONE_API_KEY is required when V17 vector repair worker is enabled",
+            "error": "PINECONE_API_KEY is required when memory vector repair worker is enabled",
         }
     ]
 
@@ -508,7 +508,7 @@ def test_production_dependency_resolver_builds_lazy_clients_and_loader_from_env(
             return LlmClientsModule
         raise AssertionError(name)
 
-    deps = entrypoint.build_v17_vector_repair_outbox_production_dependencies(
+    deps = entrypoint.build_vector_repair_outbox_production_dependencies(
         {
             "PINECONE_API_KEY": "pc-key",
             "PINECONE_INDEX_NAME": "memory-index",

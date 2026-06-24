@@ -75,7 +75,7 @@ def _ws_m_import_isolation():
 
 ensure_utils_memory_packages_importable(str(BACKEND_DIR))
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import (
     AtomKeywordRebuildReport,
     build_atom_keyword_document,
@@ -117,11 +117,11 @@ def _long_term_item(
     tier: MemoryTier = MemoryTier.long_term,
     status: MemoryItemStatus = MemoryItemStatus.active,
     processing_state: ProcessingState = ProcessingState.processed,
-) -> V17MemoryItem:
+) -> MemoryItem:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     expires_at = now + timedelta(days=30) if tier == MemoryTier.short_term else None
     ledger_commit_id = "commit_ws_m" if tier == MemoryTier.long_term and status == MemoryItemStatus.active else None
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid=uid,
         version=1,
@@ -336,7 +336,7 @@ class TestPurgeAndRebuild:
             lambda ids: len(ids),
         )
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+            "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
             lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
         )
 
@@ -357,7 +357,7 @@ class TestPurgeAndRebuild:
             lambda uid, db_client=None: [item],
         )
         monkeypatch.setattr(
-            "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+            "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
             lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
         )
         monkeypatch.setattr(

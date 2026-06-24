@@ -4,13 +4,13 @@ import pytest
 from pydantic import ValidationError
 
 from config.memory_rollout import (
-    V17Mode,
-    V17RolloutConfig,
-    V17RolloutState,
-    V17StageGate,
-    decide_v17_capabilities,
+    MemoryRolloutMode,
+    MemoryRolloutConfig,
+    MemoryRolloutState,
+    MemoryRolloutStageGate,
+    decide_memory_rollout_capabilities,
 )
-from database.memory_collections import V17Collections
+from database.memory_collections import MemoryCollections
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from models.product_memory import (
     MemoryAccessPolicy,
@@ -18,8 +18,8 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    V17MemoryItem,
-    V17MemoryItemAlias,
+    MemoryItem,
+    MemoryItemAlias,
     derived_default_access_allowed,
     is_archive_access_eligible,
     is_default_access_eligible,
@@ -61,118 +61,118 @@ def _item(**overrides):
         "expires_at": now + timedelta(days=30),
     }
     base.update(overrides)
-    return V17MemoryItem(**base)
+    return MemoryItem(**base)
 
 
 def test_rollout_modes_are_explicit_and_read_is_superset_of_write_after_gates_pass():
-    state = V17RolloutState(
+    state = MemoryRolloutState(
         uid="u1",
-        mode=V17Mode.read,
+        mode=MemoryRolloutMode.read,
         mode_epoch=2,
         fallback_projection_ready=True,
         stage_gates={
-            V17StageGate.shadow: "passed",
-            V17StageGate.write: "passed",
-            V17StageGate.read: "passed",
+            MemoryRolloutStageGate.shadow: "passed",
+            MemoryRolloutStageGate.write: "passed",
+            MemoryRolloutStageGate.read: "passed",
         },
     )
-    non_allowlisted = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read).for_user("u2")
-    assert non_allowlisted.mode == V17Mode.off
+    non_allowlisted = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read).for_user("u2")
+    assert non_allowlisted.mode == MemoryRolloutMode.off
     assert non_allowlisted.legacy_only is True
-    assert non_allowlisted.v17_writes_enabled is False
-    assert non_allowlisted.v17_reads_enabled is False
+    assert non_allowlisted.memory_writes_enabled is False
+    assert non_allowlisted.memory_reads_enabled is False
 
-    shadow = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.shadow).for_user("u1", state)
+    shadow = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.shadow).for_user("u1", state)
     assert shadow.shadow_artifacts_enabled is True
-    assert shadow.v17_writes_enabled is False
-    assert shadow.v17_reads_enabled is False
+    assert shadow.memory_writes_enabled is False
+    assert shadow.memory_reads_enabled is False
 
-    write = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.write).for_user("u1", state)
-    assert write.v17_writes_enabled is True
-    assert write.v17_reads_enabled is False
+    write = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.write).for_user("u1", state)
+    assert write.memory_writes_enabled is True
+    assert write.memory_reads_enabled is False
     assert write.legacy_reads_authoritative is True
 
-    read = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read).for_user("u1", state)
-    assert read.v17_writes_enabled is True
-    assert read.v17_reads_enabled is True
+    read = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read).for_user("u1", state)
+    assert read.memory_writes_enabled is True
+    assert read.memory_reads_enabled is True
     assert read.legacy_reads_authoritative is False
 
 
 def test_rollout_capabilities_fail_closed_without_required_state_and_gates():
-    cfg = V17RolloutConfig(enabled_users={"u1"}, mode=V17Mode.read)
+    cfg = MemoryRolloutConfig(enabled_users={"u1"}, mode=MemoryRolloutMode.read)
 
     no_state = cfg.for_user("u1")
-    assert no_state.v17_writes_enabled is False
-    assert no_state.v17_reads_enabled is False
+    assert no_state.memory_writes_enabled is False
+    assert no_state.memory_reads_enabled is False
     assert no_state.shadow_artifacts_enabled is True
 
     gates_missing = cfg.for_user(
         "u1",
-        V17RolloutState(uid="u1", mode=V17Mode.read, fallback_projection_ready=True, stage_gates={}),
+        MemoryRolloutState(uid="u1", mode=MemoryRolloutMode.read, fallback_projection_ready=True, stage_gates={}),
     )
-    assert gates_missing.v17_writes_enabled is False
-    assert gates_missing.v17_reads_enabled is False
+    assert gates_missing.memory_writes_enabled is False
+    assert gates_missing.memory_reads_enabled is False
 
     no_fallback = cfg.for_user(
         "u1",
-        V17RolloutState(
+        MemoryRolloutState(
             uid="u1",
-            mode=V17Mode.read,
+            mode=MemoryRolloutMode.read,
             fallback_projection_ready=False,
             stage_gates={
-                V17StageGate.shadow: "passed",
-                V17StageGate.write: "passed",
-                V17StageGate.read: "passed",
+                MemoryRolloutStageGate.shadow: "passed",
+                MemoryRolloutStageGate.write: "passed",
+                MemoryRolloutStageGate.read: "passed",
             },
         ),
     )
-    assert no_fallback.v17_writes_enabled is True
-    assert no_fallback.v17_reads_enabled is False
+    assert no_fallback.memory_writes_enabled is True
+    assert no_fallback.memory_reads_enabled is False
 
     writes_blocked = cfg.for_user(
         "u1",
-        V17RolloutState(
+        MemoryRolloutState(
             uid="u1",
-            mode=V17Mode.read,
+            mode=MemoryRolloutMode.read,
             fallback_projection_ready=True,
             writes_blocked=True,
             stage_gates={
-                V17StageGate.shadow: "passed",
-                V17StageGate.write: "passed",
-                V17StageGate.read: "passed",
+                MemoryRolloutStageGate.shadow: "passed",
+                MemoryRolloutStageGate.write: "passed",
+                MemoryRolloutStageGate.read: "passed",
             },
         ),
     )
-    assert writes_blocked.v17_writes_enabled is False
-    assert writes_blocked.v17_reads_enabled is False
+    assert writes_blocked.memory_writes_enabled is False
+    assert writes_blocked.memory_reads_enabled is False
 
 
 def test_rollout_state_transitions_increment_epoch_and_protect_legacy_authoritative_downgrades():
-    state = V17RolloutState(
+    state = MemoryRolloutState(
         uid="u1",
-        mode=V17Mode.read,
+        mode=MemoryRolloutMode.read,
         mode_epoch=2,
-        persistent_v17_writes_started=True,
+        persistent_memory_writes_started=True,
         fallback_projection_ready=False,
         decommission_reconciled=False,
     )
 
-    assert state.can_transition_to(V17Mode.write) is False
-    assert state.can_transition_to(V17Mode.shadow) is False
-    assert state.can_transition_to(V17Mode.off) is False
+    assert state.can_transition_to(MemoryRolloutMode.write) is False
+    assert state.can_transition_to(MemoryRolloutMode.shadow) is False
+    assert state.can_transition_to(MemoryRolloutMode.off) is False
 
     state.fallback_projection_ready = True
-    next_state = state.transition_to(V17Mode.write)
-    assert next_state.mode == V17Mode.write
+    next_state = state.transition_to(MemoryRolloutMode.write)
+    assert next_state.mode == MemoryRolloutMode.write
     assert next_state.mode_epoch == 3
 
-    assert next_state.can_transition_to(V17Mode.off) is False
+    assert next_state.can_transition_to(MemoryRolloutMode.off) is False
     next_state.decommission_reconciled = True
-    assert next_state.can_transition_to(V17Mode.off) is True
+    assert next_state.can_transition_to(MemoryRolloutMode.off) is True
 
 
-def test_v17_collections_define_unified_memory_items_and_no_separate_short_term_archive_store():
-    paths = V17Collections(uid="u1")
+def test_memory_collections_define_unified_memory_items_and_no_separate_short_term_archive_store():
+    paths = MemoryCollections(uid="u1")
 
     assert paths.memory_items == "users/u1/memory_items"
     assert paths.memory_operations == "users/u1/memory_operations"
@@ -233,18 +233,18 @@ def test_persisted_memory_item_metadata_is_required_and_timestamps_are_valid():
         broken = dict(payload)
         broken.pop(field)
         with pytest.raises(ValidationError):
-            V17MemoryItem(**broken)
+            MemoryItem(**broken)
 
     naive = dict(payload)
     naive["captured_at"] = datetime(2026, 1, 1)
     with pytest.raises(ValidationError, match="timezone"):
-        V17MemoryItem(**naive)
+        MemoryItem(**naive)
 
     backwards = dict(payload)
     backwards["updated_at"] = now - timedelta(days=1)
     backwards["captured_at"] = now
     with pytest.raises(ValidationError, match="updated_at"):
-        V17MemoryItem(**backwards)
+        MemoryItem(**backwards)
 
 
 def test_access_policy_fails_closed_for_unknown_consumers_expiry_blocked_and_archive_default():
@@ -292,7 +292,7 @@ def test_archive_transition_preserves_user_asserted_provenance_and_identity():
 
 def test_memory_item_alias_rejects_self_aliases():
     with pytest.raises(ValidationError, match="self"):
-        V17MemoryItemAlias(
+        MemoryItemAlias(
             old_memory_id="mem_same",
             canonical_memory_id="mem_same",
             uid="u1",
@@ -300,7 +300,7 @@ def test_memory_item_alias_rejects_self_aliases():
             created_at=datetime.now(timezone.utc),
         )
 
-    alias = V17MemoryItemAlias(
+    alias = MemoryItemAlias(
         old_memory_id="mem_old",
         canonical_memory_id="mem_new",
         uid="u1",

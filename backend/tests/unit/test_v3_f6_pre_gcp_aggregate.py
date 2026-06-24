@@ -41,7 +41,7 @@ def test_f6h_aggregate_requires_every_local_f6_gate_before_pre_gcp_ready():
 
     report = build_pre_gcp_aggregate_report(local_proofs=proofs)
 
-    assert report["artifact_version"] == "V17-V3-F6H"
+    assert report["artifact_version"] == "memory-V3-F6H"
     assert report["status"] == "BLOCKED"
     assert report["decision"] == "NO_GO"
     assert report["missing_local_gates"] == ["f6d_read_rpc_allowlist_client"]
@@ -80,7 +80,7 @@ def test_f6h_aggregate_rejects_unknown_or_failing_local_proofs():
 def test_f6h_aggregate_can_build_from_current_local_contract_smoke():
     report = build_report_from_current_local_contracts()
 
-    assert report["artifact_version"] == "V17-V3-F6H"
+    assert report["artifact_version"] == "memory-V3-F6H"
     assert report["status"] == "PRE_GCP_READY"
     assert report["decision"] == "BLOCKED_ON_GCP_ACCESS"
     assert report["remaining_blockers"] == ["gcp_access"]

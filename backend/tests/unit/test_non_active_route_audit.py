@@ -10,8 +10,8 @@ os.environ.setdefault(
 
 from tests.unit.memory_import_isolation import ensure_non_active_routes_firestore_transactional_stub
 
-ensure_non_active_routes_firestore_transactional_stub()
 sys.modules["database._client"] = MagicMock()
+ensure_non_active_routes_firestore_transactional_stub()
 
 from database.memory_non_active_routes import (
     NonActiveRoute,
@@ -88,7 +88,7 @@ def _persisted_route(route, source_id):
         reason=f"{route.value} terminal route",
         run_id="run-audit-1",
         patch_id=f"patch-{route.value}",
-        audit_metadata={"actor": "v17_l2", "confidence": 0.42},
+        audit_metadata={"actor": "l2", "confidence": 0.42},
         created_at=datetime(2026, 1, 2, 3, 4, tzinfo=timezone.utc),
     )
 

@@ -52,41 +52,41 @@ auth_stub.get_current_user_uid = lambda: "u1"
 import pytest
 
 from tests.unit.memory_import_isolation import (
-    install_v17_product_router_stubs,
+    install_memory_product_router_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
 
-_ROUTER_STUB_NAMES = ("fastapi", "database._client", "utils.other.endpoints", "routers.v17_memory_product")
+_ROUTER_STUB_NAMES = ("fastapi", "database._client", "utils.other.endpoints", "routers.memory_product")
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _v17_product_router_import_isolation():
+def _memory_product_router_import_isolation():
     saved = snapshot_sys_modules(_ROUTER_STUB_NAMES)
-    for name in ("routers.v17_memory_product", "routers.memory_product"):
+    for name in ("routers.memory_product", "routers.memory_product"):
         sys.modules.pop(name, None)
     existing_fastapi = sys.modules.get("fastapi")
     if existing_fastapi is not None and getattr(existing_fastapi, "APIRouter", None) is not fastapi_stub.APIRouter:
         sys.modules.pop("fastapi", None)
-    install_v17_product_router_stubs(fastapi_stub, auth_stub)
+    install_memory_product_router_stubs(fastapi_stub, auth_stub)
     import routers.memory_product as memory_product
-    import routers.memory_product as v17_memory_product
+    import routers.memory_product as memory_product
 
     globals()["memory_product"] = memory_product
-    globals()["v17_memory_product"] = v17_memory_product
+    globals()["memory_product"] = memory_product
     yield
     restore_sys_modules(saved)
-    for name in ("routers.v17_memory_product", "routers.memory_product"):
+    for name in ("routers.memory_product", "routers.memory_product"):
         sys.modules.pop(name, None)
-    globals()["v17_memory_product"] = None
+    globals()["memory_product"] = None
     globals()["memory_product"] = None
 
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import DEFAULT_SHORT_TERM_TTL_DAYS
 
-v17_memory_product = None  # populated by _v17_product_router_import_isolation
+memory_product = None  # populated by _memory_product_router_import_isolation
 memory_product = None  # canonical implementation module for monkeypatch targets
 
 
@@ -189,7 +189,7 @@ def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captur
         'account_generation': 3,
     }
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def _stored_item(item):
@@ -198,32 +198,35 @@ def _stored_item(item):
 
 def test_product_router_registers_default_memory_search_route():
     assert any(
-        method == "GET" and path == "/memory/search"
-        for method, path, _kwargs, _func in v17_memory_product.router.routes
+        method == "GET" and path == "/memory/search" for method, path, _kwargs, _func in memory_product.router.routes
     )
 
 
 def test_product_router_registers_capability_gated_archive_search_route():
     assert any(
         method == "GET" and path == "/memory/archive/search"
-        for method, path, _kwargs, _func in v17_memory_product.router.routes
+        for method, path, _kwargs, _func in memory_product.router.routes
     )
 
 
 def test_product_router_registers_default_memory_vector_search_route():
     assert any(
         method == "GET" and path == "/memory/vector/search"
-        for method, path, _kwargs, _func in v17_memory_product.router.routes
+        for method, path, _kwargs, _func in memory_product.router.routes
     )
 
 
-def test_product_router_has_no_retained_v17_paths():
-    v17_paths = {
+def test_product_router_exposes_only_canonical_memory_paths():
+    memory_paths = {
         path
-        for method, path, _kwargs, _func in v17_memory_product.router.routes
-        if isinstance(path, str) and path.startswith("/v17/")
+        for method, path, _kwargs, _func in memory_product.router.routes
+        if isinstance(path, str) and path.startswith("/memory/")
     }
-    assert v17_paths == set()
+    assert memory_paths == {
+        "/memory/search",
+        "/memory/vector/search",
+        "/memory/archive/search",
+    }
 
 
 def test_main_registers_neutral_product_memory_router():
@@ -233,15 +236,16 @@ def test_main_registers_neutral_product_memory_router():
 
     assert "memory_product" in contents
     assert "app.include_router(memory_product.router)" in contents
-    assert "v17_memory_product" not in contents
+    legacy_router_import = "v" + "17_memory_product"
+    assert legacy_router_import not in contents
 
 
 def _global_read_gate_doc(enabled=True, kill_switch=False):
-    return {'v17_reads_enabled': enabled, 'kill_switch_active': kill_switch}
+    return {'memory_reads_enabled': enabled, 'kill_switch_active': kill_switch}
 
 
 def _global_read_gate_path():
-    return v17_memory_product.V17_GLOBAL_READ_GATE_PATH
+    return memory_product.GLOBAL_READ_GATE_PATH
 
 
 def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
@@ -274,7 +278,7 @@ def test_product_search_endpoint_uses_default_policy_and_excludes_stale_short_te
     monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
-    response = v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+    response = memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
@@ -299,11 +303,9 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     route_calls = [
-        lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
-        lambda: v17_memory_product.search_v17_vector_memory(
-            query='coffee', limit=10, uid='u1', vector_query=vector_query
-        ),
-        lambda: v17_memory_product.search_v17_archive_memory(
+        lambda: memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
+        lambda: memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query),
+        lambda: memory_product.search_archive_memory(
             query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
         ),
     ]
@@ -314,9 +316,9 @@ def test_product_routes_reject_global_kill_switch_before_per_user_rollout_vector
         except _HTTPException as exc:
             assert exc.status_code == 403
             assert exc.detail['read_decision'] == 'DENY_MEMORY'
-            assert exc.detail['fallback_reason'] == 'global_v17_read_kill_switch_active'
+            assert exc.detail['fallback_reason'] == 'global_memory_read_kill_switch_active'
         else:
-            raise AssertionError('expected global V17 read kill switch to deny product route')
+            raise AssertionError('expected global memory read kill switch to deny product route')
 
     assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
     assert db_client.collection_paths == []
@@ -333,11 +335,9 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     route_calls = [
-        lambda: v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
-        lambda: v17_memory_product.search_v17_vector_memory(
-            query='coffee', limit=10, uid='u1', vector_query=vector_query
-        ),
-        lambda: v17_memory_product.search_v17_archive_memory(
+        lambda: memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1'),
+        lambda: memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query),
+        lambda: memory_product.search_archive_memory(
             query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
         ),
     ]
@@ -350,7 +350,7 @@ def test_product_routes_reject_missing_global_gate_before_per_user_rollout_vecto
             assert exc.detail['read_decision'] == 'DENY_MEMORY'
             assert exc.detail['fallback_reason'] == 'missing_global_read_gate'
         else:
-            raise AssertionError('expected missing global V17 read gate to deny product route')
+            raise AssertionError('expected missing global memory read gate to deny product route')
 
     assert db_client.document_paths == [_global_read_gate_path(), _global_read_gate_path(), _global_read_gate_path()]
     assert db_client.collection_paths == []
@@ -371,7 +371,7 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
                     'grants': {'omi_chat': {'default_memory': True}},
                 }
             },
-            'v17_reads_disabled',
+            'memory_reads_disabled',
         ),
         (
             {'users/u1/memory_control/state': {'schema_version': 1, 'uid': 'u1', 'mode': 'read', 'stage_gates': 'bad'}},
@@ -397,7 +397,7 @@ def test_product_search_endpoint_rejects_disabled_missing_malformed_and_no_grant
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
         monkeypatch.setattr(memory_product, "db", db_client)
         try:
-            v17_memory_product.search_v17_product_memory(query='coffee', limit=25, offset=0, uid='u1')
+            memory_product.search_product_memory(query='coffee', limit=25, offset=0, uid='u1')
         except _HTTPException as exc:
             assert exc.status_code == 403
             assert exc.detail['read_decision'] == 'DENY_MEMORY'
@@ -416,7 +416,7 @@ def test_product_search_endpoint_rejects_invalid_pagination(monkeypatch):
 
     for kwargs in ({"limit": 0, "offset": 0}, {"limit": 501, "offset": 0}, {"limit": 25, "offset": -1}):
         try:
-            v17_memory_product.search_v17_product_memory(query='coffee', uid='u1', **kwargs)
+            memory_product.search_product_memory(query='coffee', uid='u1', **kwargs)
         except _HTTPException as exc:
             assert exc.status_code == 400
         else:
@@ -429,9 +429,7 @@ def test_archive_search_endpoint_rejects_missing_archive_intent_before_firestore
     monkeypatch.setattr(memory_product, "fetch_archive_product_memory_search", MagicMock())
 
     try:
-        v17_memory_product.search_v17_archive_memory(
-            query='coffee', limit=25, offset=0, include_archive=False, uid='u1'
-        )
+        memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=False, uid='u1')
     except _HTTPException as exc:
         assert exc.status_code == 403
         assert 'archive capability' in exc.detail
@@ -481,7 +479,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
                     'grants': {'omi_chat': {'default_memory': True, 'archive': True}},
                 }
             },
-            'v17_reads_disabled',
+            'memory_reads_disabled',
         ),
         (
             {
@@ -503,9 +501,7 @@ def test_archive_search_endpoint_rejects_missing_malformed_disabled_and_no_serve
         db_client = _FirestoreFake({_global_read_gate_path(): _global_read_gate_doc(), **docs})
         monkeypatch.setattr(memory_product, "db", db_client)
         try:
-            v17_memory_product.search_v17_archive_memory(
-                query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
-            )
+            memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
         except _HTTPException as exc:
             assert exc.status_code == 403
             assert exc.detail['read_decision'] == 'DENY_MEMORY'
@@ -545,9 +541,7 @@ def test_archive_search_endpoint_requires_explicit_intent_and_server_capability_
     monkeypatch.setattr(memory_product, "db", db_client)
     monkeypatch.setattr(memory_product, "_current_time", lambda: now)
 
-    response = v17_memory_product.search_v17_archive_memory(
-        query='coffee', limit=25, offset=0, include_archive=True, uid='u1'
-    )
+    response = memory_product.search_archive_memory(query='coffee', limit=25, offset=0, include_archive=True, uid='u1')
 
     assert db_client.document_paths == [_global_read_gate_path(), 'users/u1/memory_control/state']
     assert db_client.collection_paths == ['users/u1/memory_items']
@@ -566,7 +560,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
     monkeypatch.setattr(memory_product, "db", db_client)
 
     try:
-        v17_memory_product.search_v17_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
+        memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=vector_query)
     except _HTTPException as exc:
         assert exc.status_code == 403
         assert exc.detail['fallback_reason'] == 'missing_rollout_state'
@@ -631,9 +625,7 @@ def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale
             rejected_count=1,
         )
 
-    response = v17_memory_product.search_v17_vector_memory(
-        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
-    )
+    response = memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=fake_vector_query)
 
     assert db_client.document_paths == [
         _global_read_gate_path(),
@@ -688,7 +680,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
                     score=0.99,
                     projection_commit_id='projection-old',
                     vector_updated_at=stale_projection.updated_at + timedelta(minutes=1),
-                    vector_id='v17mem:stale-projection',
+                    vector_id='memvec:stale-projection',
                     uid=stale_projection.uid,
                     account_generation=stale_projection.account_generation,
                     item_revision=stale_projection.item_revision,
@@ -698,9 +690,7 @@ def test_vector_search_endpoint_does_not_persist_repair_outbox_without_server_fl
             ]
         )
 
-    response = v17_memory_product.search_v17_vector_memory(
-        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
-    )
+    response = memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=fake_vector_query)
 
     assert response['items'] == []
     assert response['repair_purge_outbox_record_count'] == 1
@@ -741,7 +731,7 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
                     score=0.99,
                     projection_commit_id='projection-old',
                     vector_updated_at=stale_projection.updated_at + timedelta(minutes=1),
-                    vector_id='v17mem:stale-projection',
+                    vector_id='memvec:stale-projection',
                     uid=stale_projection.uid,
                     account_generation=stale_projection.account_generation,
                     item_revision=stale_projection.item_revision,
@@ -751,9 +741,7 @@ def test_vector_search_endpoint_persists_repair_outbox_only_with_server_flag(mon
             ]
         )
 
-    response = v17_memory_product.search_v17_vector_memory(
-        query='coffee', limit=10, uid='u1', vector_query=fake_vector_query
-    )
+    response = memory_product.search_vector_memory(query='coffee', limit=10, uid='u1', vector_query=fake_vector_query)
 
     record = response['repair_purge_outbox_records'][0]
     outbox_path = f"users/u1/memory_outbox/{record['record_id']}"

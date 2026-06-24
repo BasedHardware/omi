@@ -6,11 +6,11 @@ from pathlib import Path
 
 SCRIPT_NAME = "p1_3_v3_runtime_config_source_readiness.py"
 EXPECTED_ROUTE_SCOPE = "GET /v3/memories"
-EXPECTED_CONFIG_PATHS = ["memory_control/v17_global_read_gate", "memory_control/v17_write_convergence_gate"]
+EXPECTED_CONFIG_PATHS = ["memory_control/global_read_gate", "memory_control/write_convergence_gate"]
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_runtime_config_source_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_runtime_config_source_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -28,7 +28,7 @@ def test_runtime_config_source_runner_exists_and_is_fail_safe_not_run_by_default
 
     report = _module().build_report(execute=False, env={})
 
-    assert report["artifact"] == "v17_p1_3_v3_runtime_config_source_readiness"
+    assert report["artifact"] == "p1_3_v3_runtime_config_source_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -89,22 +89,22 @@ def test_injected_config_read_proves_route_scoped_source_selection_but_does_not_
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
         "GOOGLE_APPLICATION_CREDENTIALS": "/tmp/non-secret-sa.json",
-        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-memory-read@omi-prod-example.iam.gserviceaccount.com",
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
     }
     docs = {
-        "memory_control/v17_global_read_gate": {
+        "memory_control/global_read_gate": {
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_runtime_enablement",
+            "purpose": "v3_runtime_enablement",
             "owner": "memory_platform",
             "config_schema_version": 1,
             "max_staleness_seconds": 300,
-            "v17_reads_enabled": False,
+            "memory_reads_enabled": False,
             "kill_switch_active": True,
         },
-        "memory_control/v17_write_convergence_gate": {
+        "memory_control/write_convergence_gate": {
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_write_convergence_gate",
+            "purpose": "v3_write_convergence_gate",
             "owner": "memory_platform",
             "config_schema_version": 1,
             "max_staleness_seconds": 300,
@@ -140,7 +140,7 @@ def test_injected_missing_stale_or_invalid_config_fails_closed_without_runtime_c
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW": "1",
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID": "omi-prod-example",
         "SERVICE_ACCOUNT_JSON": "{}",
-        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-v17-read@omi-prod-example.iam.gserviceaccount.com",
+        "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL": "backend-memory-read@omi-prod-example.iam.gserviceaccount.com",
         "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS": ",".join(EXPECTED_CONFIG_PATHS),
     }
 
@@ -155,7 +155,7 @@ def test_injected_missing_stale_or_invalid_config_fails_closed_without_runtime_c
         env=env,
         reader=lambda path: {
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_runtime_enablement",
+            "purpose": "v3_runtime_enablement",
             "owner": "memory_platform",
             "uid": "user-scoped-overrides-are-forbidden",
             "config_schema_version": 1,
@@ -173,7 +173,7 @@ def test_injected_missing_stale_or_invalid_config_fails_closed_without_runtime_c
         env=env,
         reader=lambda path: {
             "route_scope": "get_v3_memories",
-            "purpose": "v17_v3_runtime_enablement",
+            "purpose": "v3_runtime_enablement",
             "owner": "memory_platform",
             "config_schema_version": 1,
             "max_staleness_seconds": 3600,
@@ -221,8 +221,8 @@ def test_static_no_mutation_no_route_import_no_secret_cursor_user_content_loggin
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
     runtime = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_runtime_config_source_readiness.py" in test_sh
     assert "runtime_config_source_readiness_proof" in runtime

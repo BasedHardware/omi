@@ -17,7 +17,7 @@ REQUIRED_TELEMETRY_FIELD_IDS = [
     "projection_source",
     "request_limit",
     "request_cursor_present",
-    "request_offset_disallowed_in_v17",
+    "request_offset_disallowed_in_v3",
     "archive_default_visibility_decision",
     "short_term_default_visibility_decision",
     "rollback_read_disable_gate",
@@ -46,7 +46,7 @@ REQUIRED_BLOCKER_IDS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_observability_approval_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_observability_approval_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -65,7 +65,7 @@ def test_observability_approval_readiness_runner_exists_and_is_safe_by_default()
 
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_observability_approval_readiness"
+    assert report["artifact"] == "p1_3_v3_observability_approval_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -101,11 +101,15 @@ def test_observability_approval_readiness_inventories_required_low_cardinality_f
         assert field["logs_secret_or_cursor_token"] is False
         assert field["cardinality"] in {"low", "bounded_integer", "boolean", "owner_identifier"}
 
-    assert fields["read_source"]["allowed_values"] == ["legacy_primary", "v17_compatibility_projection", "fail_closed"]
+    assert fields["read_source"]["allowed_values"] == [
+        "legacy_primary",
+        "memory_compatibility_projection",
+        "fail_closed",
+    ]
     assert "control_timeout" in fields["failure_reason"]["allowed_values"]
     assert "cursor_tampered" in fields["cursor_validation_reason"]["allowed_values"]
     assert fields["no_legacy_fallback"]["allowed_values"] == [True]
-    assert fields["request_offset_disallowed_in_v17"]["allowed_values"] == [True]
+    assert fields["request_offset_disallowed_in_v3"]["allowed_values"] == [True]
     assert fields["rollback_read_disable_gate"]["allowed_values"] == ["not_wired", "disabled", "enabled"]
     assert fields["approval_status"]["allowed_values"] == ["missing", "pending", "approved", "rejected"]
 
@@ -121,39 +125,39 @@ def test_observability_approval_readiness_links_existing_mechanisms_and_exact_bl
     assert mechanisms["prometheus_metrics_endpoint"]["production_call_executed"] is False
     assert mechanisms["log_sanitizer"]["source"] == "backend/utils/log_sanitizer.py"
     assert mechanisms["log_sanitizer"]["status"] == "EXISTS_REQUIRED_FOR_FUTURE_WIRING"
-    assert mechanisms["v17_read_decision_model"]["source"] == "backend/utils/memory/v17_default_read_rollout.py"
-    assert mechanisms["v17_read_decision_model"]["status"] == "EXISTS_NOT_V3_GET_WIRED"
-    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["source"] == (
-        "backend/utils/memory/v17_v3_local_telemetry.py"
+    assert mechanisms["memory_read_decision_model"]["source"] == "backend/utils/memory/default_read_rollout.py"
+    assert mechanisms["memory_read_decision_model"]["status"] == "EXISTS_NOT_V3_GET_WIRED"
+    assert mechanisms["v3_local_telemetry_and_rollback_seam"]["source"] == (
+        "backend/utils/memory/v3_local_telemetry.py"
     )
-    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["test"] == (
+    assert mechanisms["v3_local_telemetry_and_rollback_seam"]["test"] == (
         "backend/tests/unit/test_v3_local_telemetry.py"
     )
-    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["status"] == ("LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED")
-    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["production_call_executed"] is False
-    assert mechanisms["v17_v3_local_telemetry_and_rollback_seam"]["runtime_wired_to_v3_get"] is False
-    assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["source"] == (
-        "backend/utils/memory/v17_v3_canary_approval.py"
+    assert mechanisms["v3_local_telemetry_and_rollback_seam"]["status"] == ("LOCAL_SEAM_PROVED_NOT_V3_GET_WIRED")
+    assert mechanisms["v3_local_telemetry_and_rollback_seam"]["production_call_executed"] is False
+    assert mechanisms["v3_local_telemetry_and_rollback_seam"]["runtime_wired_to_v3_get"] is False
+    assert mechanisms["v3_canary_approval_artifact_schema_seam"]["source"] == (
+        "backend/utils/memory/v3_canary_approval.py"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["test"] == (
+    assert mechanisms["v3_canary_approval_artifact_schema_seam"]["test"] == (
         "backend/tests/unit/test_v3_canary_approval_artifact.py"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["status"] == (
+    assert mechanisms["v3_canary_approval_artifact_schema_seam"]["status"] == (
         "LOCAL_SCHEMA_SEAM_PROVED_NOT_V3_GET_WIRED"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["production_call_executed"] is False
-    assert mechanisms["v17_v3_canary_approval_artifact_schema_seam"]["runtime_wired_to_v3_get"] is False
-    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["source"] == (
-        "backend/utils/memory/v17_v3_canary_approval.py"
+    assert mechanisms["v3_canary_approval_artifact_schema_seam"]["production_call_executed"] is False
+    assert mechanisms["v3_canary_approval_artifact_schema_seam"]["runtime_wired_to_v3_get"] is False
+    assert mechanisms["v3_canary_approval_artifact_reader_seam"]["source"] == (
+        "backend/utils/memory/v3_canary_approval.py"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["test"] == (
+    assert mechanisms["v3_canary_approval_artifact_reader_seam"]["test"] == (
         "backend/tests/unit/test_v3_canary_approval_artifact.py"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["status"] == (
+    assert mechanisms["v3_canary_approval_artifact_reader_seam"]["status"] == (
         "LOCAL_READER_SEAM_PROVED_NOT_V3_GET_WIRED"
     )
-    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["production_call_executed"] is False
-    assert mechanisms["v17_v3_canary_approval_artifact_reader_seam"]["runtime_wired_to_v3_get"] is False
+    assert mechanisms["v3_canary_approval_artifact_reader_seam"]["production_call_executed"] is False
+    assert mechanisms["v3_canary_approval_artifact_reader_seam"]["runtime_wired_to_v3_get"] is False
 
     blockers = {blocker["blocker_id"]: blocker for blocker in report["blockers"]}
     assert set(blockers) == REQUIRED_BLOCKER_IDS
@@ -205,18 +209,16 @@ def test_observability_approval_readiness_json_summary_is_stable():
 def test_observability_approval_readiness_registered_in_test_runner_docs_and_parent_readiness():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_observability_approval_readiness.py" in test_sh
     assert "test_v3_local_telemetry.py" in test_sh
     assert "test_v3_canary_approval_artifact.py" in test_sh
     assert "p1_3_v3_observability_approval_readiness.py" in ticket_doc
-    assert "backend/utils/memory/v17_v3_canary_approval.py" in ticket_doc
+    assert "backend/utils/memory/v3_canary_approval.py" in ticket_doc
     assert "observability/telemetry approval readiness" in ticket_doc
     assert "p1_3_v3_observability_approval_readiness.py" in oracle_doc
     assert "observability/telemetry approval readiness" in oracle_doc

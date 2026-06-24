@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_real_router_dependency_map", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_real_router_dependency_map", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -93,15 +93,15 @@ def test_real_router_dependency_map_pins_v3_routes_and_future_get_seam_without_c
 
     assert report["future_get_wiring_seam"] == [
         "GET /v3/memories query params",
-        "adapt_v17_v3_request_parameters(...) request adapter",
-        "plan_v17_v3_memory_route(...) route planner",
-        "adapt_v17_v3_memory_response(...) response adapter",
+        "adapt_v3_request_parameters(...) request adapter",
+        "plan_v3_memory_route(...) route planner",
+        "adapt_v3_memory_response(...) response adapter",
     ]
     assert report["runtime_cutover_claimed"] is False
     assert report["blocked_before_real_testclient"] == [
-        "Replace import stubs with explicit FastAPI dependency_overrides and route-local V17 control/projection/write evidence seams.",
-        "Prove GET does not call memories_db.get_memories for enrolled V17 projection-ready accounts before including the real router in TestClient.",
-        "Prove POST/DELETE write convergence or keep enrolled V17 writes blocked before exercising mutating routes.",
+        "Replace import stubs with explicit FastAPI dependency_overrides and route-local memory control/projection/write evidence seams.",
+        "Prove GET does not call memories_db.get_memories for enrolled memory projection-ready accounts before including the real router in TestClient.",
+        "Prove POST/DELETE write convergence or keep enrolled memory writes blocked before exercising mutating routes.",
     ]
 
 
@@ -120,8 +120,8 @@ def test_real_router_dependency_map_is_linked_from_readiness_test_runner_and_doc
     assert readiness["summary"]["real_router_dependency_map_proof_present"] is True
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "test_p1_3_v3_real_router_dependency_map.py" in test_sh
     assert "p1_3_v3_real_router_dependency_map.py" in ticket_doc
     assert "p1_3_v3_real_router_dependency_map.py" in oracle_doc

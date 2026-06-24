@@ -2,12 +2,12 @@ import importlib.util
 import sys
 from pathlib import Path
 
-from config.memory_rollout import PASSED, V17Mode, V17StageGate
+from config.memory_rollout import PASSED, MemoryRolloutMode, MemoryRolloutStageGate
 from utils.memory.default_read_rollout import (
-    V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
-    V17ReadDecision,
-    normalize_v17_archive_read_rollout_decision,
-    normalize_v17_default_read_rollout_decision,
+    DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+    MemoryReadDecision,
+    normalize_archive_read_rollout_decision,
+    normalize_default_read_rollout_decision,
 )
 
 CANONICAL_CONSUMERS = {"mcp", "developer_api", "omi_chat"}
@@ -21,7 +21,7 @@ FORBIDDEN_LEGACY_ALIASES = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_rollout_schema_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("rollout_schema_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -33,18 +33,18 @@ def _load_module(script_path: Path):
 def _valid_schema_v1_rollout_doc(uid="u1"):
     return {
         "uid": uid,
-        "schema_version": V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
-        "mode": V17Mode.read.value,
+        "schema_version": DEFAULT_READ_ROLLOUT_SCHEMA_VERSION,
+        "mode": MemoryRolloutMode.read.value,
         "mode_epoch": 7,
         "cutover_epoch": 7,
         "account_generation": 3,
         "fallback_projection_ready": True,
-        "persistent_v17_writes_started": True,
+        "persistent_memory_writes_started": True,
         "writes_blocked": False,
         "stage_gates": {
-            V17StageGate.shadow.value: PASSED,
-            V17StageGate.write.value: PASSED,
-            V17StageGate.read.value: PASSED,
+            MemoryRolloutStageGate.shadow.value: PASSED,
+            MemoryRolloutStageGate.write.value: PASSED,
+            MemoryRolloutStageGate.read.value: PASSED,
         },
         "grants": {
             "mcp": {"default_memory": True},
@@ -64,7 +64,7 @@ def test_rollout_schema_readiness_runner_exists_and_is_safe_by_default():
     script = script_path.read_text()
     for term in [
         "schema_version",
-        "V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION",
+        "DEFAULT_READ_ROLLOUT_SCHEMA_VERSION",
         "grants.mcp.default_memory",
         "grants.developer_api.default_memory",
         "grants.omi_chat.default_memory",
@@ -81,10 +81,10 @@ def test_rollout_schema_readiness_runner_exists_and_is_safe_by_default():
     assert artifact["read_only"] is True
     assert artifact["mutation_allowed"] is False
     assert artifact["network_or_provider_calls_executed"] is False
-    assert artifact["canonical_schema_version"] == V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+    assert artifact["canonical_schema_version"] == DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
     assert set(artifact["canonical_consumers"]) == CANONICAL_CONSUMERS
     assert artifact["canonical_shape"]["required"] == ["uid", "schema_version", "grants"]
-    assert all(shape["expected_decision"] == "USE_V17" for shape in artifact["valid_examples"])
+    assert all(shape["expected_decision"] == "USE_MEMORY" for shape in artifact["valid_examples"])
     assert {shape["reason"] for shape in artifact["rejected_legacy_shapes"]} >= {
         "unsupported_rollout_schema",
         "uid_mismatch",
@@ -100,25 +100,25 @@ def test_rollout_schema_readiness_examples_parse_with_shared_rollout_normalizer(
     artifact = module.build_readiness_artifact(module.RolloutSchemaReadinessConfig(execute=False))
 
     for example in artifact["valid_examples"]:
-        decision = normalize_v17_default_read_rollout_decision(
+        decision = normalize_default_read_rollout_decision(
             uid=example["uid"],
             source_path=f"users/{example['uid']}/memory_control/state",
             consumer=example["consumer"],
             data=example["document"],
         )
-        assert decision.read_decision == V17ReadDecision.USE_V17
+        assert decision.read_decision == MemoryReadDecision.USE_MEMORY
         assert decision.app_has_default_memory_grant is True
         assert decision.archive_capability is False
         assert decision.vector_projection_commit_id == "projection-commit-1"
 
     chat_archive_example = next(example for example in artifact["valid_examples"] if example["consumer"] == "omi_chat")
-    archive_decision = normalize_v17_archive_read_rollout_decision(
+    archive_decision = normalize_archive_read_rollout_decision(
         uid=chat_archive_example["uid"],
         source_path=f"users/{chat_archive_example['uid']}/memory_control/state",
         consumer="omi_chat",
         data=chat_archive_example["document"],
     )
-    assert archive_decision.read_decision == V17ReadDecision.USE_V17
+    assert archive_decision.read_decision == MemoryReadDecision.USE_MEMORY
     assert archive_decision.archive_capability is True
 
 
@@ -128,19 +128,19 @@ def test_rollout_schema_readiness_rejected_legacy_shapes_fail_closed():
     artifact = module.build_readiness_artifact(module.RolloutSchemaReadinessConfig(execute=False))
 
     for shape in artifact["rejected_legacy_shapes"]:
-        decision = normalize_v17_default_read_rollout_decision(
+        decision = normalize_default_read_rollout_decision(
             uid=shape["uid"],
             source_path=f"users/{shape['uid']}/memory_control/state",
             consumer=shape["consumer"],
             data=shape["document"],
         )
-        assert decision.read_decision == V17ReadDecision.DENY_MEMORY
+        assert decision.read_decision == MemoryReadDecision.DENY_MEMORY
         assert decision.fallback_reason == shape["reason"]
 
 
 def test_rollout_schema_docs_use_canonical_v1_shape_and_label_legacy_aliases_as_rejected():
     root = Path(__file__).resolve().parents[2].parent
-    rollout_doc = root / "docs" / "epics" / "v17_rollout_schema_migration.md"
+    rollout_doc = root / "docs" / "epics" / "memory_rollout_schema_migration.md"
     assert rollout_doc.exists(), "missing rollout schema migration/compatibility note"
     text = rollout_doc.read_text()
 
@@ -161,8 +161,8 @@ def test_rollout_schema_docs_use_canonical_v1_shape_and_label_legacy_aliases_as_
     for legacy_alias in FORBIDDEN_LEGACY_ALIASES:
         assert legacy_alias not in canonical_section
 
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (root / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     for doc_text in (oracle, tickets):
         assert "rollout_schema_readiness.py" in doc_text
         assert "schema_version=1" in doc_text

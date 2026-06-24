@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_write_convergence_tombstone_matrix", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_write_convergence_tombstone_matrix", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -18,7 +18,7 @@ def _report(execute=True):
 def test_write_convergence_tombstone_matrix_is_safe_pre_runtime_only():
     report = _report(execute=True)
 
-    assert report["artifact"] == "v17_p1_3_v3_write_convergence_tombstone_matrix"
+    assert report["artifact"] == "p1_3_v3_write_convergence_tombstone_matrix"
     assert report["status"] == "BLOCKED"
     assert report["read_only"] is True
     assert report["mutation_allowed"] is False
@@ -43,8 +43,8 @@ def test_matrix_ready_case_requires_create_update_delete_and_all_projection_tomb
     ready = cases["ready_create_update_delete_tombstone_projection_fences"]
 
     assert ready["http_status"] == 200
-    assert ready["plan_kind"] == "v17_response_envelope"
-    assert ready["read_decision"] == "v17_projection_ready"
+    assert ready["plan_kind"] == "memory_response_envelope"
+    assert ready["read_decision"] == "memory_projection_ready"
     assert ready["legacy_calls"] == []
     assert ready["projection_calls"] == [{"uid": "uid-write-tombstone", "limit": 100, "cursor": None}]
     assert ready["body"] == [{"id": "projection-write-ready", "content": "projection memory"}]
@@ -87,7 +87,7 @@ def test_matrix_fail_closed_convergence_and_tombstone_delete_cases_never_fallbac
         assert case["projection_calls"] == [], case_id
         assert case["body"] is None, case_id
         assert case["legacy_fallback_allowed"] is False, case_id
-        assert case["v17_legacy_merge_allowed"] is False, case_id
+        assert case["memory_legacy_merge_allowed"] is False, case_id
         assert case["archive_default_available"] is False, case_id
         assert case["stale_short_term_default_visible"] is False, case_id
 
@@ -98,7 +98,7 @@ def test_matrix_enabled_empty_only_when_all_write_projection_tombstone_fences_ar
 
     allowed = cases["enabled_empty_all_fences_ready_allowed"]
     assert allowed["http_status"] == 200
-    assert allowed["plan_kind"] == "v17_response_envelope"
+    assert allowed["plan_kind"] == "memory_response_envelope"
     assert allowed["body"] == []
     assert allowed["legacy_calls"] == []
     assert allowed["projection_calls"] == []
@@ -152,9 +152,7 @@ def test_write_convergence_tombstone_matrix_is_linked_from_readiness_and_docs():
         "approval_claimed": False,
     }
 
-    external = _load_module(root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").build_report(
-        execute=True
-    )
+    external = _load_module(root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").build_report(execute=True)
     runtime = _load_module(root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").build_report(execute=True)
     assert external["write_convergence_tombstone_matrix_proof"]["service"] == (
         "backend/scripts/p1_3_v3_write_convergence_tombstone_matrix.py"
@@ -165,8 +163,8 @@ def test_write_convergence_tombstone_matrix_is_linked_from_readiness_and_docs():
     assert "write_convergence_tombstone_matrix_proof" in runtime["remaining_gates"][8]["existing_local_proofs"]
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "test_p1_3_v3_write_convergence_tombstone_matrix.py" in test_sh
     assert "p1_3_v3_write_convergence_tombstone_matrix.py" in ticket_doc
     assert "p1_3_v3_write_convergence_tombstone_matrix.py" in oracle_doc

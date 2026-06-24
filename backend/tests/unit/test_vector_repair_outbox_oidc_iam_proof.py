@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_v17_vector_repair_outbox_oidc_iam_proof_runner_exists_and_is_read_only():
+def test_memory_vector_repair_outbox_oidc_iam_proof_runner_exists_and_is_read_only():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "vector_repair_outbox_oidc_iam_proof.py"
 
@@ -46,9 +46,9 @@ def test_v17_vector_repair_outbox_oidc_iam_proof_runner_exists_and_is_read_only(
         assert forbidden not in script
 
 
-def test_v17_vector_repair_outbox_deployment_contract_references_oidc_iam_proof_runner():
+def test_memory_vector_repair_outbox_deployment_contract_references_oidc_iam_proof_runner():
     root = Path(__file__).resolve().parents[2].parent
-    contract_path = root / "docs" / "epics" / "v17_vector_repair_outbox_cloud_deployment_contract.yaml"
+    contract_path = root / "docs" / "epics" / "memory_vector_repair_outbox_cloud_deployment_contract.yaml"
     contract = contract_path.read_text()
 
     assert "python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py" in contract

@@ -51,14 +51,14 @@ READ_PERMISSIONS = frozenset(
 
 def test_f6c_verifier_accepts_exact_identity_read_permissions_and_metadata_only_secret_access():
     target = IdentityIamTarget(
-        project_id="omi-nonprod", principal="serviceAccount:v17-reader@omi-nonprod.iam.gserviceaccount.com"
+        project_id="omi-nonprod", principal="serviceAccount:memory-reader@omi-nonprod.iam.gserviceaccount.com"
     )
     run = RunRecord(run_id="run-f6", project_id="omi-nonprod", principal=target.principal)
     source = FakeIdentityIamSource(
         project_id="omi-nonprod",
         principal=target.principal,
         permissions=READ_PERMISSIONS,
-        roles={"roles/omi.v17EvidenceReader"},
+        roles={"roles/omi.MemoryEvidenceReader"},
         secret_payload_access_attempted=False,
     )
 
@@ -90,13 +90,13 @@ def test_f6c_verifier_fails_closed_on_mismatch_broad_roles_write_permissions_and
     source_kwargs, run_kwargs, expected_failure
 ):
     target = IdentityIamTarget(
-        project_id="omi-nonprod", principal="serviceAccount:v17-reader@omi-nonprod.iam.gserviceaccount.com"
+        project_id="omi-nonprod", principal="serviceAccount:memory-reader@omi-nonprod.iam.gserviceaccount.com"
     )
     base_source = {
         "project_id": "omi-nonprod",
         "principal": target.principal,
         "permissions": READ_PERMISSIONS,
-        "roles": {"roles/omi.v17EvidenceReader"},
+        "roles": {"roles/omi.MemoryEvidenceReader"},
         "secret_payload_access_attempted": False,
     }
     base_source.update(source_kwargs)
@@ -180,7 +180,7 @@ def test_f6d_evidence_client_rejects_invalid_timeout_retry_and_item_limits_local
 def _event(
     method,
     seconds=0,
-    principal="serviceAccount:v17-reader@omi-nonprod.iam.gserviceaccount.com",
+    principal="serviceAccount:memory-reader@omi-nonprod.iam.gserviceaccount.com",
     project_id="omi-nonprod",
 ):
     return AuditLogEvent(
@@ -197,7 +197,7 @@ def test_f6e_audit_correlation_passes_when_run_window_identity_and_method_famili
     query = AuditQuery(
         run_id="run-f6",
         project_id="omi-nonprod",
-        principal="serviceAccount:v17-reader@omi-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-reader@omi-nonprod.iam.gserviceaccount.com",
         started_at=datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc),
         ended_at=datetime(2026, 6, 20, 12, 5, tzinfo=timezone.utc),
         expected_method_families=frozenset({"firestore.read", "secretmanager.metadata", "logging.read"}),
@@ -251,7 +251,7 @@ def test_f6e_audit_correlation_inconclusive_for_missing_delayed_incomplete_and_f
     query = AuditQuery(
         run_id="run-f6",
         project_id="omi-nonprod",
-        principal="serviceAccount:v17-reader@omi-nonprod.iam.gserviceaccount.com",
+        principal="serviceAccount:memory-reader@omi-nonprod.iam.gserviceaccount.com",
         started_at=datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc),
         ended_at=datetime(2026, 6, 20, 12, 5, tzinfo=timezone.utc),
         expected_method_families=frozenset({"firestore.read", "logging.read"}),

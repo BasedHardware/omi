@@ -43,7 +43,7 @@ FORBIDDEN_EVIDENCE_FRAGMENTS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_canary_approval_lifecycle_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_canary_approval_lifecycle_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -65,7 +65,7 @@ def test_canary_approval_lifecycle_runner_exists_and_is_safe_by_default():
 
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_canary_approval_lifecycle_readiness"
+    assert report["artifact"] == "p1_3_v3_canary_approval_lifecycle_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -86,7 +86,7 @@ def test_lifecycle_contract_defines_required_metadata_only_evidence_bundle():
 
     contract = report["approval_lifecycle_contract"]
     assert contract["route_scope"] == EXPECTED_ROUTE_SCOPE
-    assert contract["artifact_source"] == "firestore:system/v17_v3_canary_approvals/routes/get_v3_memories"
+    assert contract["artifact_source"] == "firestore:system/v3_canary_approvals/routes/get_v3_memories"
     assert contract["evidence_bundle_required_before_production_use"] is True
     assert contract["approval_ids_and_timestamps_are_metadata_only"] is True
     assert contract["max_lifetime_hours"] == 24
@@ -138,12 +138,12 @@ def test_lifecycle_fail_closed_semantics_inventory_missing_stale_route_and_proof
 
     assert list(semantics) == EXPECTED_FAILURE_STATES
     for state in EXPECTED_FAILURE_STATES:
-        assert semantics[state]["future_route_behavior"] == "fail_closed_before_v17_read"
+        assert semantics[state]["future_route_behavior"] == "fail_closed_before_memory_read"
         assert semantics[state]["legacy_fallback_allowed"] is False
         assert semantics[state]["required_before_runtime_change"] is True
         assert semantics[state]["approval_claimed"] is False
 
-    assert semantics["route_scope_mismatch"]["future_route_behavior"] == "fail_closed_before_v17_read"
+    assert semantics["route_scope_mismatch"]["future_route_behavior"] == "fail_closed_before_memory_read"
     assert report["summary"]["fail_closed_semantics_count"] == len(EXPECTED_FAILURE_STATES)
     assert report["summary"]["blocked_required_evidence_count"] == len(EXPECTED_EVIDENCE_IDS)
 
@@ -205,17 +205,15 @@ def test_lifecycle_readiness_links_into_ci_docs_and_parent_readiness():
 
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    source_readiness = (root / "scripts" / "p1_3_v3_canary_approval_source_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    source_readiness = (root / "scripts" / "p1_3_v3_canary_approval_source_readiness.py").read_text(encoding="utf-8")
     production_readiness = (root / "scripts" / "p1_3_v3_canary_approval_production_readiness.py").read_text(
         encoding="utf-8"
     )
     observability = (root / "scripts" / "p1_3_v3_observability_approval_readiness.py").read_text(encoding="utf-8")
     runtime = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_canary_approval_lifecycle_readiness.py" in test_sh
     assert "canary_approval_lifecycle_readiness_proof" in source_readiness

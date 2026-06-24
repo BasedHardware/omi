@@ -3,9 +3,9 @@ import json
 from pathlib import Path
 
 REQUIRED_GATE_IDS = [
-    "real_v17_control_read_fail_closed",
+    "real_memory_control_read_fail_closed",
     "real_trusted_account_generation_source",
-    "real_v17_compatibility_projection_read_api_store",
+    "real_memory_compatibility_projection_read_api_store",
     "real_external_write_convergence_source_of_truth",
     "real_cursor_secret_validation_integration",
     "real_route_dependency_auth_rate_limit_testclient",
@@ -54,7 +54,7 @@ REQUIRED_EXISTING_PROOF_KEYS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_get_runtime_wiring_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_get_runtime_wiring_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -69,7 +69,7 @@ def _report(execute=False):
 def test_get_runtime_wiring_readiness_runner_exists_and_is_safe_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_get_runtime_wiring_readiness"
+    assert report["artifact"] == "p1_3_v3_get_runtime_wiring_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] in {"NOT_RUN", "BLOCKED"}
     assert report["read_only"] is True
@@ -103,15 +103,17 @@ def test_get_runtime_wiring_readiness_inventories_exact_remaining_gates():
         assert gate["existing_local_proofs"], gate_id
         assert set(gate["existing_local_proofs"]).issubset(REQUIRED_EXISTING_PROOF_KEYS)
 
-    assert "server-side" in gates["real_v17_control_read_fail_closed"]["required_evidence"]
-    assert "without client-side direct control reads" in gates["real_v17_control_read_fail_closed"]["required_evidence"]
+    assert "server-side" in gates["real_memory_control_read_fail_closed"]["required_evidence"]
+    assert (
+        "without client-side direct control reads" in gates["real_memory_control_read_fail_closed"]["required_evidence"]
+    )
     assert "expected_account_generation" in gates["real_trusted_account_generation_source"]["required_evidence"]
     assert (
         "trusted == control == projection == cursor"
         in gates["real_trusted_account_generation_source"]["required_evidence"]
     )
-    assert "MemoryDB-compatible" in gates["real_v17_compatibility_projection_read_api_store"]["required_evidence"]
-    assert "empty projection state" in gates["real_v17_compatibility_projection_read_api_store"]["required_evidence"]
+    assert "MemoryDB-compatible" in gates["real_memory_compatibility_projection_read_api_store"]["required_evidence"]
+    assert "empty projection state" in gates["real_memory_compatibility_projection_read_api_store"]["required_evidence"]
     assert "create/update/delete" in gates["real_external_write_convergence_source_of_truth"]["required_evidence"]
     assert "signing secret" in gates["real_cursor_secret_validation_integration"]["required_evidence"]
     assert "auth/rate-limit" in gates["real_route_dependency_auth_rate_limit_testclient"]["required_evidence"]
@@ -210,8 +212,8 @@ def test_get_runtime_wiring_readiness_json_summary_is_stable():
 def test_get_runtime_wiring_readiness_is_registered_in_test_runner_and_docs():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_get_runtime_wiring_readiness.py" in test_sh
     assert "test_p1_3_v3_get_dependency_auth_readiness.py" in test_sh

@@ -146,7 +146,7 @@ class TestUpsertMemoryVectorsBatch:
         assert fake_index.query.call_args.kwargs['filter'] == {
             '$and': [
                 {'uid': {'$eq': 'uid-abc'}},
-                {'v17_schema_version': {'$exists': False}},
+                {'memory_schema_version': {'$exists': False}},
                 {'subject_entity_id': {'$eq': 'user'}},
             ]
         }

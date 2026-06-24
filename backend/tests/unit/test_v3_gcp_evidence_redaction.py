@@ -12,12 +12,12 @@ from utils.memory.v3_gcp_evidence_redaction import (
 
 def _safe_report():
     return {
-        "artifact_version": "V17-V3-F6F",
+        "artifact_version": "memory-V3-F6F",
         "status": "INCONCLUSIVE",
         "target": "dev",
         "project_fingerprint": fingerprint("omi-memory-dev-123", key_id="project"),
         "principal_fingerprint": fingerprint(
-            "serviceAccount:v17-evidence@example.iam.gserviceaccount.com", key_id="principal"
+            "serviceAccount:memory-evidence@example.iam.gserviceaccount.com", key_id="principal"
         ),
         "run_fingerprint": fingerprint("run-20260620-0001", key_id="run"),
         "approved_metadata_paths": ["control/config metadata"],

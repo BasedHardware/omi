@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from utils.mcp_memories import McpV17VerifiedAuth, build_mcp_v17_default_memory_read_context
-from utils.memory.product_authorization import authorize_v17_external_default_memory_read
+from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
+from utils.memory.product_authorization import authorize_memory_external_default_memory_read
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -10,7 +10,7 @@ class _GrantStateRead:
     def __init__(self, state):
         self.state = state
         self.reason = 'ok'
-        self.source_path = 'users/u1/memory_control/v17_app_key_memory_grants'
+        self.source_path = 'users/u1/memory_control/app_key_memory_grants'
 
 
 def _grant_reader(*, uid, db_client):
@@ -46,11 +46,11 @@ def test_existing_mcp_uid_only_dependency_remains_available():
     assert 'return user_id' in dependencies_source
 
 
-def test_mcp_v17_context_fails_closed_without_app_or_key_identity():
-    auth = McpV17VerifiedAuth(uid='u1', scopes=('memories.read',))
+def test_mcp_memory_context_fails_closed_without_app_or_key_identity():
+    auth = McpVerifiedAuth(uid='u1', scopes=('memories.read',))
 
-    context = build_mcp_v17_default_memory_read_context(auth)
-    decision = authorize_v17_external_default_memory_read(
+    context = build_mcp_default_memory_read_context(auth)
+    decision = authorize_memory_external_default_memory_read(
         context,
         db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
@@ -60,11 +60,11 @@ def test_mcp_v17_context_fails_closed_without_app_or_key_identity():
     assert decision.reason == 'missing_app_or_key_identity'
 
 
-def test_mcp_v17_context_fails_closed_without_verified_memories_read_scope():
-    auth = McpV17VerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=())
+def test_mcp_memory_context_fails_closed_without_verified_memories_read_scope():
+    auth = McpVerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=())
 
-    context = build_mcp_v17_default_memory_read_context(auth)
-    decision = authorize_v17_external_default_memory_read(
+    context = build_mcp_default_memory_read_context(auth)
+    decision = authorize_memory_external_default_memory_read(
         context,
         db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
@@ -75,10 +75,10 @@ def test_mcp_v17_context_fails_closed_without_verified_memories_read_scope():
 
 
 def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_without_archive():
-    auth = McpV17VerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=('memories.read',))
-    context = build_mcp_v17_default_memory_read_context(auth)
+    auth = McpVerifiedAuth(uid='u1', app_id='mcp-app-1', key_id='mcp-key-1', scopes=('memories.read',))
+    context = build_mcp_default_memory_read_context(auth)
 
-    decision = authorize_v17_external_default_memory_read(
+    decision = authorize_memory_external_default_memory_read(
         context,
         db_client='fake-db',
         read_app_key_grants_state=_grant_reader,
@@ -93,14 +93,14 @@ def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_with
     assert decision.reason == 'ok'
 
 
-def test_mcp_routes_advertise_memories_read_and_wire_v17_context_only_on_memory_search_paths():
+def test_mcp_routes_advertise_memories_read_and_wire_memory_context_only_on_memory_search_paths():
     rest_source = (ROOT / 'routers' / 'mcp.py').read_text()
     sse_source = (ROOT / 'routers' / 'mcp_sse.py').read_text()
 
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in rest_source
     assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in sse_source
-    assert 'auth_context: Optional[V17ProductAuthorizationContext] = None' in sse_source
+    assert 'auth_context: Optional[ProductAuthorizationContext] = None' in sse_source
     assert 'authenticate_api_key_auth_context' in sse_source
-    assert 'authorize_v17_external_default_memory_read(auth_context, db_client=db)' in sse_source
-    assert 'get_mcp_v17_default_memory_read_context' in rest_source
-    assert 'build_mcp_v17_default_memory_read_context' in sse_source
+    assert 'authorize_memory_external_default_memory_read(auth_context, db_client=db)' in sse_source
+    assert 'get_mcp_memory_default_memory_read_context' in rest_source
+    assert 'build_mcp_default_memory_read_context' in sse_source

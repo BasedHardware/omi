@@ -50,7 +50,7 @@ class FakeDb:
 def load_module():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "mcp_api_key_scope_readiness.py"
-    spec = importlib.util.spec_from_file_location("v17_mcp_api_key_scope_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("mcp_api_key_scope_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -145,8 +145,8 @@ def test_write_plan_requires_execute_and_allow_write_and_rejects_unknown_scopes(
 
 def test_docs_reference_non_claims_and_server_owned_scope_assignment():
     root = Path(__file__).resolve().parents[2].parent
-    readiness_doc = root / "docs" / "epics" / "v17_mcp_app_key_scope_readiness.md"
-    oracle_doc = root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md"
+    readiness_doc = root / "docs" / "epics" / "memory_mcp_app_key_scope_readiness.md"
+    oracle_doc = root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md"
     readiness = readiness_doc.read_text()
     oracle = oracle_doc.read_text()
 

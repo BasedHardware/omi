@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_route_signature_integration", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_route_signature_integration", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -58,10 +58,10 @@ def test_route_signature_integration_pins_current_v3_route_signatures_and_body_m
             "kind": "dependency",
         },
         {
-            "name": "v17_runtime",
-            "annotation": "V17V3GetRuntime",
-            "default": "Depends(get_v17_v3_get_runtime)",
-            "dependency": "get_v17_v3_get_runtime",
+            "name": "memory_runtime",
+            "annotation": "V3GetRuntime",
+            "default": "Depends(get_v3_get_runtime)",
+            "dependency": "get_v3_get_runtime",
             "kind": "dependency",
         },
     ]
@@ -101,9 +101,9 @@ def test_route_signature_integration_pins_legacy_runtime_calls_and_no_cutover_cl
     ]
     assert report["runtime_cutover_claimed"] is False
     assert report["current_runtime_summary"] == (
-        "GET /v3/memories now has a hard default-off V17 dependency branch: production/default and "
+        "GET /v3/memories now has a hard default-off memory dependency branch: production/default and "
         "non-enrolled legacy-primary reads preserve legacy memories_db semantics, while TestClient-only "
-        "V17 read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
+        "memory read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths."
     )
 
 
@@ -115,10 +115,11 @@ def test_route_signature_integration_maps_get_params_to_adapter_contract_and_blo
     mapping = {item["route_param"]: item for item in report["get_param_contract_mapping"]}
     assert mapping["limit"]["request_adapter_field"] == "limit"
     assert mapping["limit"]["safe_to_map"] is True
-    assert mapping["limit"]["v17_constraint"] == "bounded V17 limit; never expanded to 5000 in V17 cursor mode"
+    assert mapping["limit"]["memory_constraint"] == "bounded memory limit; never expanded to 5000 in memory cursor mode"
     assert mapping["offset"]["safe_to_map"] is False
     assert (
-        mapping["offset"]["blocked_reason"] == "offset is legacy-primary only; V17 cohort requires signed cursor mode"
+        mapping["offset"]["blocked_reason"]
+        == "offset is legacy-primary only; memory cohort requires signed cursor mode"
     )
     assert mapping["cursor"]["current_route_param_present"] is True
     assert mapping["cursor"]["future_only"] is False
@@ -126,13 +127,13 @@ def test_route_signature_integration_maps_get_params_to_adapter_contract_and_blo
     assert mapping["include_archive"]["blocked_reason"] == "Archive default-unavailable for /v3 default reads"
 
     assert report["future_wiring_seam"] == [
-        "GET route query params -> adapt_v17_v3_request_parameters(...) without FastAPI-specific coupling",
-        "adapted request + server-owned control/grant/projection/write evidence -> plan_v17_v3_memory_route(...) pure planner",
-        "planner read envelope -> adapt_v17_v3_memory_response(...) List[MemoryDB] body plus additive headers",
+        "GET route query params -> adapt_v3_request_parameters(...) without FastAPI-specific coupling",
+        "adapted request + server-owned control/grant/projection/write evidence -> plan_v3_memory_route(...) pure planner",
+        "planner read envelope -> adapt_v3_memory_response(...) List[MemoryDB] body plus additive headers",
     ]
     assert report["runtime_blockers"] == [
-        "Do not wire while GET still lacks route-local server-owned V17 control/grant/projection evidence inputs.",
-        "Do not wire while POST/DELETE still execute direct legacy DB/vector mutation paths for enrolled V17 accounts.",
+        "Do not wire while GET still lacks route-local server-owned memory control/grant/projection evidence inputs.",
+        "Do not wire while POST/DELETE still execute direct legacy DB/vector mutation paths for enrolled memory accounts.",
         "Do not wire until FastAPI dependency/response-model behavior is proven with controlled stubs or production deps.",
     ]
 
@@ -151,8 +152,8 @@ def test_route_signature_integration_is_linked_from_readiness_test_runner_and_do
     assert readiness["summary"]["route_signature_integration_proof_present"] is True
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "test_p1_3_v3_route_signature_integration.py" in test_sh
     assert "p1_3_v3_route_signature_integration.py" in ticket_doc
     assert "p1_3_v3_route_signature_integration.py" in oracle_doc

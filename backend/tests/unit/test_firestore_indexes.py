@@ -10,7 +10,7 @@ def _index_signature(index):
     )
 
 
-def test_v17_firestore_indexes_are_checked_in_for_unified_memory_store():
+def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
     root = Path(__file__).resolve().parents[2]
     index_path = root.parent / "firestore.indexes.json"
     assert index_path.exists()

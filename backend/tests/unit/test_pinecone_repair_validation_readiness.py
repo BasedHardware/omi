@@ -33,7 +33,7 @@ FORBIDDEN_BROAD_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_pinecone_repair_validation_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("pinecone_repair_validation_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -42,7 +42,7 @@ def _load_module(script_path: Path):
     return module
 
 
-def test_v17_pinecone_validation_readiness_runner_exists_and_is_safe_by_default():
+def test_memory_pinecone_validation_readiness_runner_exists_and_is_safe_by_default():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "pinecone_repair_validation_readiness.py"
 
@@ -77,7 +77,7 @@ def test_v17_pinecone_validation_readiness_runner_exists_and_is_safe_by_default(
     assert artifact["non_claims"]
 
 
-def test_v17_pinecone_validation_execute_requires_namespace_prefix_and_confirmation():
+def test_memory_pinecone_validation_execute_requires_namespace_prefix_and_confirmation():
     root = Path(__file__).resolve().parents[2]
     module = _load_module(root / "scripts" / "pinecone_repair_validation_readiness.py")
 
@@ -104,8 +104,8 @@ def test_v17_pinecone_validation_execute_requires_namespace_prefix_and_confirmat
         index_name="idx",
         index_host="host",
         test_namespace="ns2",
-        throwaway_prefix="v17-proof-test-",
-        confirm_throwaway_prefix="v17-proof-test-",
+        throwaway_prefix="memory-proof-test-",
+        confirm_throwaway_prefix="memory-proof-test-",
         shared_ns2_readonly=False,
     )
     assert "execute mode cannot mutate shared production namespace ns2" in module.evaluate_prerequisites(ns2_mutation)
@@ -116,22 +116,22 @@ def test_v17_pinecone_validation_execute_requires_namespace_prefix_and_confirmat
         api_key="key",
         index_name="idx",
         index_host="host",
-        test_namespace="v17-proof-ns",
-        throwaway_prefix="v17-proof-test-",
-        confirm_throwaway_prefix="v17-proof-test-",
+        test_namespace="memory-proof-ns",
+        throwaway_prefix="memory-proof-test-",
+        confirm_throwaway_prefix="memory-proof-test-",
         shared_ns2_readonly=True,
     )
     assert module.evaluate_prerequisites(ready) == []
     artifact = module.build_readiness_artifact(ready)
     assert artifact["mutation_allowed"] is True
     assert artifact["read_only"] is False
-    assert artifact["namespace"] == "v17-proof-ns"
+    assert artifact["namespace"] == "memory-proof-ns"
     assert artifact["shared_ns2_mode"] == "read_only_inventory_only"
 
 
-def test_v17_pinecone_validation_docs_reference_commands_and_non_claims():
+def test_memory_pinecone_validation_docs_reference_commands_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
-    doc = (root / "docs" / "epics" / "v17_firestore_iam_deployment.md").read_text()
+    doc = (root / "docs" / "epics" / "memory_firestore_iam_deployment.md").read_text()
 
     assert "python3 backend/scripts/pinecone_repair_validation_readiness.py" in doc
     assert "--allow-throwaway-mutation" in doc

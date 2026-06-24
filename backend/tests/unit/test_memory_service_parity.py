@@ -72,23 +72,23 @@ def _clear_canonical_env(monkeypatch):
 
 
 class TestResolveMemorySystem:
-    @pytest.mark.parametrize("uid", ["", "uid-a", "uid-b", "v17-dogfood-user"])
+    @pytest.mark.parametrize("uid", ["", "uid-a", "uid-b", "memory-dogfood-user"])
     def test_defaults_to_legacy_for_arbitrary_uids(self, uid):
         assert resolve_memory_system(uid, db_client=_FirestoreFake()) == MemorySystem.LEGACY
 
-    def test_v17_control_state_read_mode_still_resolves_legacy(self, monkeypatch):
+    def test_memory_control_state_read_mode_still_resolves_legacy(self, monkeypatch):
         monkeypatch.setenv("MEMORY_MODE", "read")
-        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-v17")
+        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-memory")
         db = _FirestoreFake(
             {
-                "users/uid-v17/memory_control/state": {
+                "users/uid-memory/memory_control/state": {
                     "mode": "read",
                     "fallback_projection_ready": True,
                     "stage_gates": {"shadow": "passed", "write": "passed", "read": "passed"},
                 }
             }
         )
-        assert resolve_memory_system("uid-v17", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
 
     def test_explicit_canonical_env_assignment(self, monkeypatch):
         monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical,uid-other")

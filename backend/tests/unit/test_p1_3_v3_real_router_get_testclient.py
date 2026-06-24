@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_real_router_get_testclient", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_real_router_get_testclient", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -92,24 +92,24 @@ def test_real_router_get_testclient_pins_current_legacy_get_runtime_behavior():
     assert default_item["evidence"] == []
     assert default_item["arguments"] == {}
     assert default_item["subject_attribution"] == "legacy_assumed"
-    assert "v17_source" not in default_item
+    assert "memory_source" not in default_item
     assert "projection_generation" not in default_item
     assert "archive_default_visible" not in default_item
 
 
-def test_real_router_get_testclient_confirms_v17_adapters_not_invoked_and_links_readiness():
+def test_real_router_get_testclient_confirms_memory_adapters_not_invoked_and_links_readiness():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "p1_3_v3_real_router_get_testclient.py"
     module = _load_module(script_path)
     report = module.build_report(execute=True)
 
-    assert report["v17_adapters_invoked"] is False
-    assert report["probe"]["v17_adapter_modules_loaded"] == []
+    assert report["memory_adapters_invoked"] is False
+    assert report["probe"]["memory_adapter_modules_loaded"] == []
     assert report["future_get_wiring_seam"] == [
         "GET /v3/memories query params",
-        "adapt_v17_v3_request_parameters(...) request adapter",
-        "plan_v17_v3_memory_route(...) route planner",
-        "adapt_v17_v3_memory_response(...) response adapter",
+        "adapt_v3_request_parameters(...) request adapter",
+        "plan_v3_memory_route(...) route planner",
+        "adapt_v3_memory_response(...) response adapter",
     ]
 
     readiness = _load_module(root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").build_report(
@@ -126,8 +126,8 @@ def test_real_router_get_testclient_confirms_v17_adapters_not_invoked_and_links_
     assert readiness["summary"]["real_router_get_testclient_proof_present"] is True
 
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "test_p1_3_v3_real_router_get_testclient.py" in test_sh
     assert "p1_3_v3_real_router_get_testclient.py" in ticket_doc
     assert "p1_3_v3_real_router_get_testclient.py" in oracle_doc

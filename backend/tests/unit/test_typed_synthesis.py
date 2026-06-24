@@ -27,7 +27,7 @@ class FakeLLM:
 def _packet():
     return {
         "packet_id": "pkt_auto_memory",
-        "run_id": "v17_test_run",
+        "run_id": "memory_test_run",
         "evidence_ids": ["ev_1", "ev_2"],
         "source_refs": [{"evidence_id": "ev_1", "quote": "I want automatic memory capture."}],
         "observations": [

@@ -47,7 +47,7 @@ REQUIRED_PROOF_KEYS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_control_reader_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_control_reader_readiness", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {script_path}")
     module = importlib.util.module_from_spec(spec)
@@ -64,7 +64,7 @@ def _report(execute=False):
 def test_control_reader_readiness_runner_exists_and_is_safe_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_control_reader_readiness"
+    assert report["artifact"] == "p1_3_v3_control_reader_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] in {"NOT_RUN", "BLOCKED"}
     assert report["execute"] is False
@@ -124,8 +124,8 @@ def test_control_reader_readiness_defines_fake_injectable_interface_without_rout
     interface = report["fake_injectable_control_reader_interface"]
 
     assert interface == {
-        "interface_name": "V17V3ControlReader",
-        "method": "read_v17_v3_control",
+        "interface_name": "V3ControlReader",
+        "method": "read_v3_control",
         "input_fields": ["uid", "db_client", "rollout_config", "consumer"],
         "output_fields": [
             "cohort_enrolled",
@@ -171,7 +171,7 @@ def test_control_reader_readiness_pins_fail_closed_semantics_and_legacy_boundari
     assert legacy["non_enrolled_read_path"] == "legacy_primary"
     assert legacy["non_enrolled_offset_zero_limit_5000_preserved"] is True
     assert legacy["enrolled_gate_failure_legacy_fallback_allowed"] is False
-    assert legacy["legacy_v17_result_merge_allowed"] is False
+    assert legacy["legacy_memory_result_merge_allowed"] is False
 
 
 def test_control_reader_readiness_links_required_local_proofs_and_marks_real_evidence_missing():
@@ -236,12 +236,10 @@ def test_control_reader_readiness_json_summary_is_stable():
 def test_control_reader_readiness_is_registered_in_test_runner_docs_and_parent_readiness():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_control_reader_readiness.py" in test_sh
     assert "p1_3_v3_control_reader_readiness.py" in ticket_doc

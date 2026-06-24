@@ -11,9 +11,9 @@ REQUIRED_CASE_KEYS = {
     "mcp_rest_write_read_list_search_paths",
     "mcp_sse_tool_write_read_list_search_paths",
     "chat_tool_agent_caller_coverage",
-    "dual_write_outbox_or_v17_write_convergence_plan",
+    "dual_write_outbox_or_memory_write_convergence_plan",
     "delete_review_import_compatibility",
-    "no_legacy_unsafe_fallback_after_v17_writes",
+    "no_legacy_unsafe_fallback_after_memory_writes",
     "app_key_scope_grant_enforcement",
     "archive_default_unavailable",
     "response_shape_compatibility",
@@ -28,9 +28,9 @@ REQUIRED_REFERENCE_TERMS = [
     "backend/routers/tools.py /v1/tools/memories list/search",
     "backend/routers/agent_tools.py /v1/agent/execute-tool",
     "backend/database/memories.py create_memory/edit_memory/delete_memory/save_memories/get_memories",
-    "backend/utils/memory/v17_default_read_rollout.py assert_legacy_memory_write_allowed_for_default_read_decision",
-    "backend/utils/memory/v17_product_authorization.py authorize_v17_external_default_memory_read",
-    "docs/epics/v17_memory_implementation_tickets.md T22/T23",
+    "backend/utils/memory/default_read_rollout.py assert_legacy_memory_write_allowed_for_default_read_decision",
+    "backend/utils/memory/product_authorization.py authorize_memory_external_default_memory_read",
+    "docs/epics/memory_implementation_tickets.md T22/T23",
     "cutover_evidence_readiness.py",
 ]
 
@@ -39,9 +39,9 @@ REQUIRED_SCOPE_TERMS = [
     "Developer API write/read paths",
     "MCP REST/SSE write/read/list/search paths",
     "chat/tool/agent caller coverage",
-    "dual-write/outbox or V17-write convergence plan",
+    "dual-write/outbox or memory-write convergence plan",
     "delete/review/import compatibility",
-    "no legacy unsafe fallback after V17 writes",
+    "no legacy unsafe fallback after memory writes",
     "app/key/scope grant enforcement",
     "Archive default-unavailable",
     "response-shape compatibility",
@@ -67,7 +67,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_t22_t23_external_writes_caller_coverage_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("t22_t23_external_writes_caller_coverage_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -140,8 +140,8 @@ def test_t22_t23_execute_remains_read_only_blocked_and_not_run_without_calls():
 
 def test_t22_t23_readiness_is_linked_from_cutover_oracle_docs_and_ticket():
     repo = Path(__file__).resolve().parents[2].parent
-    oracle = (repo / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (repo / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (repo / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (repo / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     cutover = (repo / "backend" / "scripts" / "cutover_evidence_readiness.py").read_text()
 
     for text in (oracle, tickets, cutover):

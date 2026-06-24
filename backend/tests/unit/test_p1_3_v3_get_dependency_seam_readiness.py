@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location('v17_p1_3_v3_get_dependency_seam_readiness', script_path)
+    spec = importlib.util.spec_from_file_location('p1_3_v3_get_dependency_seam_readiness', script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -19,7 +19,7 @@ def _report(execute=False):
 def test_get_dependency_seam_readiness_is_blocked_read_only_and_safe():
     report = _report(execute=False)
 
-    assert report['artifact'] == 'v17_p1_3_v3_get_dependency_seam_readiness'
+    assert report['artifact'] == 'p1_3_v3_get_dependency_seam_readiness'
     assert report['status'] == 'BLOCKED'
     assert report['proof_status'] == 'NOT_RUN'
     assert report['read_only'] is True
@@ -59,7 +59,7 @@ def test_get_dependency_seam_readiness_cases_are_fail_closed_without_route_claim
     assert cases['happy_enrolled_ready']['status'] == 'READY'
     assert cases['client_uid_override']['decision_code'] == 'client_uid_override_rejected'
     assert cases['non_enrolled']['status'] == 'LEGACY_PRIMARY_ONLY'
-    assert cases['non_enrolled']['v17_legacy_merge_allowed'] is False
+    assert cases['non_enrolled']['memory_legacy_merge_allowed'] is False
     for case_id in [
         'control_missing',
         'config_missing',
@@ -68,7 +68,7 @@ def test_get_dependency_seam_readiness_cases_are_fail_closed_without_route_claim
         'backpressure_denied',
     ]:
         assert cases[case_id]['status'] == 'BLOCKED'
-        assert cases[case_id]['should_fetch_v17_projection'] is False
+        assert cases[case_id]['should_fetch_memory_projection'] is False
         assert cases[case_id]['should_fetch_legacy'] is False
     assert report['summary']['blocked_case_count'] == 6
     assert report['summary']['legacy_primary_only_case_count'] == 1
@@ -81,8 +81,8 @@ def test_get_dependency_seam_readiness_is_registered_and_does_not_import_routes(
     test_sh = (root / 'test.sh').read_text(encoding='utf-8')
     external_script = (root / 'scripts' / 'p1_3_v3_external_compatibility_readiness.py').read_text(encoding='utf-8')
     runtime_script = (root / 'scripts' / 'p1_3_v3_get_runtime_wiring_readiness.py').read_text(encoding='utf-8')
-    ticket_doc = (root.parent / 'docs' / 'epics' / 'v17_memory_implementation_tickets.md').read_text(encoding='utf-8')
-    oracle_doc = (root.parent / 'docs' / 'epics' / 'v17_t20_oracle_milestone_review.md').read_text(encoding='utf-8')
+    ticket_doc = (root.parent / 'docs' / 'epics' / 'memory_implementation_tickets.md').read_text(encoding='utf-8')
+    oracle_doc = (root.parent / 'docs' / 'epics' / 'memory_t20_oracle_milestone_review.md').read_text(encoding='utf-8')
 
     assert 'backend.routers.memories' not in source
     assert 'routers.memories' not in source

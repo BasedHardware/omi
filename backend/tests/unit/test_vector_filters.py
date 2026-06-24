@@ -23,10 +23,10 @@ class _FakeIndex:
                 {
                     "score": 0.91,
                     "metadata": {
-                        "v17_schema_version": 1,
+                        "memory_schema_version": 1,
                         "uid": "uid-1",
                         "memory_id": "mem-short",
-                        "memory_tier": "short_term",
+                        "memory_layer": "short_term",
                         "status": "active",
                         "source_state": "active",
                         "restricted_sensitivity": False,
@@ -39,7 +39,7 @@ class _FakeIndex:
                 {
                     "score": 0.4,
                     "metadata": {
-                        "v17_schema_version": 1,
+                        "memory_schema_version": 1,
                         "uid": "uid-1",
                         "memory_id": "bad-missing-projection",
                     },
@@ -59,36 +59,36 @@ def _load_vector_db_with_stubs():
     setattr(projection_repair_module, "projection_metadata_for_fact", lambda memory, source_commit_id=None: {})
     sys.modules["database.projection_repair"] = projection_repair_module
     vector_db_path = os.path.join(os.path.dirname(__file__), "..", "..", "database", "vector_db.py")
-    spec = importlib.util.spec_from_file_location("v17_vector_filter_vector_db", vector_db_path)
+    spec = importlib.util.spec_from_file_location("vector_filter_vector_db", vector_db_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-def test_query_v17_memory_vector_candidates_uses_ns2_strict_default_filter_and_parses_hits(monkeypatch):
+def test_query_memory_vector_candidates_uses_ns2_strict_default_filter_and_parses_hits(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
     monkeypatch.setattr(vector_db, "index", fake_index)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
-    parsed = vector_db.query_v17_memory_vector_candidates("uid-1", "query text", mode=SearchMode.default, limit=20)
+    parsed = vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.default, limit=20)
 
     assert [hit.memory_id for hit in parsed.hits] == ["mem-short"]
     assert parsed.rejected_count == 1
     assert fake_index.queries[0]["namespace"] == "ns2"
     assert fake_index.queries[0]["top_k"] == 20
     assert fake_index.queries[0]["include_metadata"] is True
-    assert {"memory_tier": {"$in": ["short_term", "long_term"]}} in fake_index.queries[0]["filter"]["$and"]
+    assert {"memory_layer": {"$in": ["short_term", "long_term"]}} in fake_index.queries[0]["filter"]["$and"]
     assert {"restricted_sensitivity": {"$eq": False}} in fake_index.queries[0]["filter"]["$and"]
 
 
-def test_query_v17_memory_vector_candidates_requires_explicit_archive_mode_for_archive_filter(monkeypatch):
+def test_query_memory_vector_candidates_requires_explicit_archive_mode_for_archive_filter(monkeypatch):
     vector_db = _load_vector_db_with_stubs()
     fake_index = _FakeIndex()
     monkeypatch.setattr(vector_db, "index", fake_index)
     monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
 
-    vector_db.query_v17_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)
+    vector_db.query_memory_vector_candidates("uid-1", "query text", mode=SearchMode.archive_explicit)
 
-    assert {"memory_tier": {"$eq": "archive"}} in fake_index.queries[0]["filter"]["$and"]
+    assert {"memory_layer": {"$eq": "archive"}} in fake_index.queries[0]["filter"]["$and"]

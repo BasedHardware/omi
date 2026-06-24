@@ -39,7 +39,7 @@ FORBIDDEN_LABEL_FRAGMENTS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_canary_approval_aggregate_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_canary_approval_aggregate_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -61,7 +61,7 @@ def test_aggregate_runner_exists_and_is_no_go_safe_by_default():
 
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_canary_approval_aggregate_readiness"
+    assert report["artifact"] == "p1_3_v3_canary_approval_aggregate_readiness"
     assert report["status"] == "BLOCKED"
     assert report["decision"] == "NO_GO"
     assert report["proof_status"] == "NOT_RUN"
@@ -125,9 +125,7 @@ def test_aggregate_gate_rows_consolidate_schema_source_production_lifecycle_obse
 
     assert list(gates) == EXPECTED_GATE_IDS
     assert gates["local_schema_validator_present"]["status"] == "READY_LOCAL_CONTRACT"
-    assert (
-        gates["local_schema_validator_present"]["source_artifact"] == "backend/utils/memory/v17_v3_canary_approval.py"
-    )
+    assert gates["local_schema_validator_present"]["source_artifact"] == "backend/utils/memory/v3_canary_approval.py"
     assert gates["source_iam_emulator_client_deny_readiness_present"]["status"] == "READY_LOCAL_CONTRACT"
     assert gates["source_iam_emulator_client_deny_readiness_present"]["direct_client_access_proven_denied"] is True
     assert gates["production_read_proof_missing_not_run"]["status"] == "BLOCKED"
@@ -171,7 +169,7 @@ def test_aggregate_remaining_blockers_and_non_claims_preserve_no_go_boundaries()
     assert "No telemetry sink production call." in non_claims
     assert "No PII/raw memory content telemetry." in non_claims
     assert "No secret/cursor token logging." in non_claims
-    assert "No legacy fallback/merge for V17 failures." in non_claims
+    assert "No legacy fallback/merge for memory failures." in non_claims
     assert "No Archive default visibility or stale Short-term default visibility." in non_claims
 
 
@@ -214,8 +212,8 @@ def test_aggregate_links_into_ci_and_readiness_docs_without_claiming_go():
     observability = (root / "scripts" / "p1_3_v3_observability_approval_readiness.py").read_text(encoding="utf-8")
     runtime = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
     external = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_canary_approval_aggregate_readiness.py" in test_sh
     assert "canary_approval_aggregate_readiness_proof" in observability

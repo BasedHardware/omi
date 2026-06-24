@@ -1,4 +1,4 @@
-"""WS-L surface routing: cohort pinning, shared canonical filter, V17≠cohort guard."""
+"""WS-L surface routing: cohort pinning, shared canonical filter, memory≠cohort guard."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from models.product_memory import (
     MemoryItemStatus,
     MemoryTier,
     ProcessingState,
-    V17MemoryItem,
+    MemoryItem,
 )
 
 from tests.unit.memory_import_isolation import ensure_utils_memory_packages_importable
@@ -121,11 +121,11 @@ class _FirestoreFake:
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
     monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
-    monkeypatch.delenv("V17_MODE", raising=False)
-    monkeypatch.delenv("V17_MEMORY_ENABLED_USERS", raising=False)
+    monkeypatch.delenv("MEMORY_MODE", raising=False)
+    monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
 
 
-def _processed_short_term_item(*, memory_id: str = "mem-st") -> V17MemoryItem:
+def _processed_short_term_item(*, memory_id: str = "mem-st") -> MemoryItem:
     now = datetime(2026, 6, 1, tzinfo=timezone.utc)
     evidence = MemoryEvidence(
         evidence_id="ev1",
@@ -135,7 +135,7 @@ def _processed_short_term_item(*, memory_id: str = "mem-st") -> V17MemoryItem:
         conversation_id="conv-1",
         artifact_preservation=ArtifactPreservationState.preserved,
     )
-    return V17MemoryItem(
+    return MemoryItem(
         memory_id=memory_id,
         uid="uid-canonical",
         version=1,
@@ -171,21 +171,21 @@ class TestSharedCanonicalVisibilityFilter:
         assert visible[0].memory_id == "mem-st"
 
 
-class TestResolveMemorySystemIgnoresV17Flags:
-    def test_v17_read_dogfood_stays_legacy_cohort(self, monkeypatch):
+class TestResolveMemorySystemIgnoresMemoryFlags:
+    def test_memory_read_dogfood_stays_legacy_cohort(self, monkeypatch):
         monkeypatch.setenv("MEMORY_MODE", "read")
-        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-v17")
+        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-memory")
         db = _FirestoreFake(
             {
-                "users/uid-v17/memory_control/state": {
+                "users/uid-memory/memory_control/state": {
                     "mode": "read",
                     "fallback_projection_ready": True,
                 }
             }
         )
-        assert resolve_memory_system("uid-v17", db_client=db) == MemorySystem.LEGACY
+        assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
 
-    def test_canonical_env_pins_cohort_without_v17_flags(self, monkeypatch):
+    def test_canonical_env_pins_cohort_without_memory_flags(self, monkeypatch):
         monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical")
         assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
         assert resolve_memory_system("uid-legacy", db_client=_FirestoreFake()) == MemorySystem.LEGACY
@@ -221,23 +221,23 @@ class TestMcpSseLegacySearchParity:
 
         assert resolve_memory_system(LEGACY_SSE_UID, db_client=firestore_fake) == MemorySystem.LEGACY
 
-        legacy_rollout = rollout.legacy_safe_v17_default_read_rollout_decision(
+        legacy_rollout = rollout.legacy_safe_default_read_rollout_decision(
             uid=LEGACY_SSE_UID,
             source_path="test/ws-l",
             consumer="mcp",
             reason="ws_l_sse_legacy_parity",
         )
         legacy_vector = SimpleNamespace(
-            read_decision=rollout.V17ReadDecision.USE_LEGACY_SAFE,
+            read_decision=rollout.MemoryReadDecision.USE_LEGACY_SAFE,
             memories=[],
             fallback_reason="ws_l_sse_legacy_parity",
         )
         allowed_auth = SimpleNamespace(allowed=True, observability={})
 
         monkeypatch.setattr(mcp_sse, "db", firestore_fake)
-        monkeypatch.setattr(mcp_sse, "read_v17_mcp_default_memory_rollout", lambda **_: legacy_rollout)
-        monkeypatch.setattr(mcp_sse, "search_v17_default_mcp_memories_vector", lambda **_: legacy_vector)
-        monkeypatch.setattr(mcp_sse, "authorize_v17_external_default_memory_read", lambda *_, **__: allowed_auth)
+        monkeypatch.setattr(mcp_sse, "read_mcp_default_memory_rollout", lambda **_: legacy_rollout)
+        monkeypatch.setattr(mcp_sse, "search_default_mcp_memories_vector", lambda **_: legacy_vector)
+        monkeypatch.setattr(mcp_sse, "authorize_memory_external_default_memory_read", lambda *_, **__: allowed_auth)
 
         rrf_mock = MagicMock(side_effect=lambda _query, candidates, _limit, k=60: list(reversed(candidates)))
         monkeypatch.setattr("utils.retrieval.hybrid.rrf_rerank", rrf_mock)
@@ -259,7 +259,7 @@ class TestMcpSseLegacySearchParity:
             ),
         )
 
-        auth_context = mcp_sse.V17ProductAuthorizationContext(
+        auth_context = mcp_sse.ProductAuthorizationContext(
             uid=LEGACY_SSE_UID,
             consumer="mcp",
             surface="mcp_sse",

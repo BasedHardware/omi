@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.short_term_lifecycle import (
     DEFAULT_SHORT_TERM_TTL_DAYS,
     ShortTermDisposition,
@@ -33,7 +33,7 @@ def _evidence(source_state: SourceState = SourceState.active) -> MemoryEvidence:
     return MemoryEvidence(**data)
 
 
-def _short_term_item(**overrides) -> V17MemoryItem:
+def _short_term_item(**overrides) -> MemoryItem:
     captured_at = overrides.pop('captured_at', CAPTURED_AT)
     source_state = overrides.get('source_state', SourceState.active)
     data = {
@@ -54,7 +54,7 @@ def _short_term_item(**overrides) -> V17MemoryItem:
         'expires_at': captured_at + timedelta(days=DEFAULT_SHORT_TERM_TTL_DAYS),
     }
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def test_fresh_short_term_remains_default_accessible_until_expiry():

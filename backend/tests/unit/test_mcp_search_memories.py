@@ -91,21 +91,21 @@ def _mcp_search_import_isolation():
     from routers.mcp import delete_memory as delete_memory_fn
     from routers.mcp import edit_memory as edit_memory_fn
 
-    def _allow_v17_auth(_auth_context, db_client=None):
+    def _allow_memory_auth(_auth_context, db_client=None):
         return SimpleNamespace(allowed=True, status_code=200, observability={})
 
     def _legacy_safe_vector_result(*_args, **_kwargs):
-        return SimpleNamespace(read_decision=mcp_router_mod.V17ReadDecision.USE_LEGACY_SAFE, memories=[])
+        return SimpleNamespace(read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE, memories=[])
 
     def _allow_legacy_write(*_args, **_kwargs):
         return SimpleNamespace(allowed=True, status_code=200, detail={})
 
-    mcp_router_mod.authorize_v17_external_default_memory_read = _allow_v17_auth
-    mcp_router_mod.read_v17_mcp_default_memory_rollout = MagicMock(
-        return_value=SimpleNamespace(read_decision=mcp_router_mod.V17ReadDecision.USE_LEGACY_SAFE)
+    mcp_router_mod.authorize_memory_external_default_memory_read = _allow_memory_auth
+    mcp_router_mod.read_mcp_default_memory_rollout = MagicMock(
+        return_value=SimpleNamespace(read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE)
     )
-    mcp_router_mod.search_v17_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
-    mcp_router_mod.read_v17_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
+    mcp_router_mod.search_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
+    mcp_router_mod.read_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
     mcp_router_mod.assert_legacy_memory_write_allowed_for_default_read_decision = MagicMock(
         side_effect=_allow_legacy_write
     )
@@ -124,7 +124,7 @@ def _mcp_search_import_isolation():
 
 
 def _auth_context(uid: str = "user-1"):
-    return mcp_router.V17ProductAuthorizationContext(
+    return mcp_router.ProductAuthorizationContext(
         uid=uid,
         consumer="mcp",
         surface="unit_test",

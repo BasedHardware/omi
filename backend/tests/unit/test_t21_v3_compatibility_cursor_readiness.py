@@ -17,14 +17,14 @@ REQUIRED_CASE_KEYS = {
 REQUIRED_REFERENCE_TERMS = [
     "backend/routers/memories.py GET /v3/memories",
     "backend/database/memories.py get_memories",
-    "backend/utils/memory/v17_product_memory_read_service.py",
-    "backend/utils/memory/v17_developer_memory_adapter.py",
-    "backend/utils/memory/v17_mcp_memory_adapter.py",
-    "backend/utils/memory/v17_chat_memory_adapter.py",
+    "backend/utils/memory/product_memory_read_service.py",
+    "backend/utils/memory/developer_memory_adapter.py",
+    "backend/utils/memory/mcp_memories.py",
+    "backend/utils/memory/chat_memory_adapter.py",
     "backend/routers/mcp.py",
     "backend/routers/mcp_sse.py",
     "backend/routers/developer.py",
-    "docs/epics/v17_memory_implementation_tickets.md T21",
+    "docs/epics/memory_implementation_tickets.md T21",
     "cutover_evidence_readiness.py",
 ]
 
@@ -62,7 +62,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_t21_v3_compatibility_cursor_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("t21_v3_compatibility_cursor_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -135,8 +135,8 @@ def test_t21_execute_remains_read_only_blocked_and_not_run_without_calls():
 
 def test_t21_readiness_is_linked_from_cutover_oracle_docs_and_ticket():
     repo = Path(__file__).resolve().parents[2].parent
-    oracle = (repo / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (repo / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (repo / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (repo / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     cutover = (repo / "backend" / "scripts" / "cutover_evidence_readiness.py").read_text()
 
     for text in (oracle, tickets, cutover):

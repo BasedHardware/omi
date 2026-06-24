@@ -81,7 +81,7 @@ ensure_utils_memory_packages_importable()
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import read_canonical_memories
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from tests.unit.test_ws_b_short_term_lifecycle import (
@@ -171,7 +171,7 @@ def _clear_canonical_env(monkeypatch):
 @pytest.fixture
 def _trusted_account(monkeypatch):
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
 
@@ -319,7 +319,7 @@ def test_archive_hidden_long_term_visible_in_canonical_read(monkeypatch, _truste
     promoted["tier"] = MemoryTier.long_term.value
     db.docs[f"users/{uid}/memory_items/{long_term_id}"] = promoted
 
-    archive_item = V17MemoryItem(
+    archive_item = MemoryItem(
         memory_id="mem_archive_hidden",
         uid=uid,
         version=1,

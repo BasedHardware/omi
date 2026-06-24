@@ -10,7 +10,7 @@ REQUIRED_SCHEMA_FIELDS = [
     "cutover_epoch",
     "account_generation",
     "fallback_projection_ready",
-    "persistent_v17_writes_started",
+    "persistent_memory_writes_started",
     "writes_blocked",
     "stage_gates",
     "grants",
@@ -18,7 +18,7 @@ REQUIRED_SCHEMA_FIELDS = [
 
 REQUIRED_PROOF_CASES = [
     "non_enrolled_legacy_allowed",
-    "v17_projection_allowed",
+    "memory_projection_allowed",
     "missing_control_doc",
     "stale_generation",
     "no_default_memory_grant",
@@ -37,7 +37,7 @@ REQUIRED_LINKED_PROOFS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_control_reader_emulator_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_control_reader_emulator_readiness", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {script_path}")
     module = importlib.util.module_from_spec(spec)
@@ -54,7 +54,7 @@ def _report(*, execute=False, env=None):
 def test_control_reader_emulator_readiness_is_safe_by_default_and_does_not_execute_services():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_control_reader_emulator_readiness"
+    assert report["artifact"] == "p1_3_v3_control_reader_emulator_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] == "NOT_RUN"
     assert report["execute"] is False
@@ -143,8 +143,8 @@ def test_control_reader_emulator_readiness_maps_contract_decision_cases_and_boun
     assert list(cases) == REQUIRED_PROOF_CASES
     assert cases["non_enrolled_legacy_allowed"]["expected_route_family"] == "legacy_primary"
     assert cases["non_enrolled_legacy_allowed"]["legacy_fallback_allowed"] is True
-    assert cases["v17_projection_allowed"]["expected_route_family"] == "v17_projection"
-    assert cases["v17_projection_allowed"]["legacy_fallback_allowed"] is False
+    assert cases["memory_projection_allowed"]["expected_route_family"] == "memory_projection"
+    assert cases["memory_projection_allowed"]["legacy_fallback_allowed"] is False
     for case_id in REQUIRED_PROOF_CASES[2:]:
         assert cases[case_id]["expected_route_family"] == "fail_closed", case_id
         assert cases[case_id]["legacy_fallback_allowed"] is False, case_id
@@ -157,13 +157,11 @@ def test_control_reader_emulator_readiness_links_readiness_chain_docs_and_summar
     report = _report(execute=True)
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     control_readiness = (root / "scripts" / "p1_3_v3_control_reader_readiness.py").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert set(report["linked_readiness_proofs"]) == REQUIRED_LINKED_PROOFS
     assert "test_p1_3_v3_control_reader_emulator_readiness.py" in test_sh

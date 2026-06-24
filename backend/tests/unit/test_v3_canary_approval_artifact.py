@@ -6,10 +6,10 @@ from utils.memory.v3_canary_approval import (
     ROUTE_SCOPE,
     APPROVAL_STATUSES,
     CANARY_COHORTS,
-    V17V3CanaryApprovalArtifact,
-    build_v17_v3_canary_approval_telemetry_labels,
-    read_v17_v3_canary_approval_artifact_decision,
-    validate_v17_v3_canary_approval_artifact,
+    V3CanaryApprovalArtifact,
+    build_v3_canary_approval_telemetry_labels,
+    read_memory_v3_canary_approval_artifact_decision,
+    validate_memory_v3_canary_approval_artifact,
 )
 
 NOW = datetime(2026, 6, 20, 12, 0, 0, tzinfo=timezone.utc)
@@ -18,7 +18,7 @@ NOW = datetime(2026, 6, 20, 12, 0, 0, tzinfo=timezone.utc)
 def _artifact(**overrides):
     data = {
         'schema_version': 1,
-        'artifact_id': 'v17-v3-get-canary-approval-2026-06-20',
+        'artifact_id': 'memory-v3-get-canary-approval-2026-06-20',
         'route_scope': 'GET /v3/memories',
         'owner': 'product_privacy_ops',
         'status': 'approved',
@@ -26,7 +26,7 @@ def _artifact(**overrides):
         'issued_at': '2026-06-20T10:00:00+00:00',
         'expires_at': '2026-06-21T10:00:00+00:00',
         'approval': {
-            'approval_id': 'apr_v17_v3_get_001',
+            'approval_id': 'apr_v3_get_001',
             'approved_at': '2026-06-20T10:30:00+00:00',
             'approved_by': 'product_privacy_ops',
         },
@@ -37,8 +37,8 @@ def _artifact(**overrides):
             'steps': ['set_server_owned_read_disable', 'verify_v3_get_fail_closed', 'notify_product_privacy_ops'],
         },
         'monitoring_gates': [
-            {'gate_id': 'fail_closed_rate', 'metric': 'v17_v3_fail_closed_rate', 'max_threshold': 0.01},
-            {'gate_id': 'p95_latency_ms', 'metric': 'v17_v3_get_p95_latency_ms', 'max_threshold': 500},
+            {'gate_id': 'fail_closed_rate', 'metric': 'v3_fail_closed_rate', 'max_threshold': 0.01},
+            {'gate_id': 'p95_latency_ms', 'metric': 'v3_get_p95_latency_ms', 'max_threshold': 500},
         ],
         'metadata': {'change_ticket': 'MEM-17-V3-CANARY-001'},
     }
@@ -51,13 +51,13 @@ def test_artifact_schema_pins_bounded_route_cohort_status_and_metadata_only_appr
     assert CANARY_COHORTS == {'shadow', 'canary_1', 'canary_5', 'canary_25'}
     assert APPROVAL_STATUSES == {'pending', 'approved', 'rejected'}
 
-    parsed = V17V3CanaryApprovalArtifact.from_dict(_artifact())
+    parsed = V3CanaryApprovalArtifact.from_dict(_artifact())
 
     assert parsed.route_scope == 'GET /v3/memories'
     assert parsed.owner == 'product_privacy_ops'
     assert parsed.status == 'approved'
     assert parsed.cohort == 'canary_1'
-    assert parsed.approval_id == 'apr_v17_v3_get_001'
+    assert parsed.approval_id == 'apr_v3_get_001'
     assert parsed.approved_at == '2026-06-20T10:30:00+00:00'
     assert parsed.rollback_owner == 'memory_platform_oncall'
     assert parsed.monitoring_gate_ids == ('fail_closed_rate', 'p95_latency_ms')
@@ -79,7 +79,7 @@ def test_artifact_schema_pins_bounded_route_cohort_status_and_metadata_only_appr
     ],
 )
 def test_validation_fails_closed_for_missing_malformed_unapproved_stale_or_route_mismatched_artifacts(artifact, reason):
-    decision = validate_v17_v3_canary_approval_artifact(
+    decision = validate_memory_v3_canary_approval_artifact(
         artifact,
         requested_route_scope='GET /v3/memories',
         requested_cohort='canary_1',
@@ -114,7 +114,7 @@ def test_validation_rejects_user_session_cohort_high_cardinality_and_sensitive_m
         target = target[part]
     target[parts[-1]] = value
 
-    decision = validate_v17_v3_canary_approval_artifact(
+    decision = validate_memory_v3_canary_approval_artifact(
         artifact,
         requested_route_scope='GET /v3/memories',
         requested_cohort='canary_1',
@@ -127,7 +127,7 @@ def test_validation_rejects_user_session_cohort_high_cardinality_and_sensitive_m
 
 
 def test_approved_artifact_allows_requested_cohort_and_builds_bounded_telemetry_labels_only():
-    decision = validate_v17_v3_canary_approval_artifact(
+    decision = validate_memory_v3_canary_approval_artifact(
         _artifact(),
         requested_route_scope='GET /v3/memories',
         requested_cohort='canary_1',
@@ -137,7 +137,7 @@ def test_approved_artifact_allows_requested_cohort_and_builds_bounded_telemetry_
     assert decision.approved is True
     assert decision.fail_closed is False
     assert decision.reason == 'approved'
-    labels = build_v17_v3_canary_approval_telemetry_labels(decision)
+    labels = build_v3_canary_approval_telemetry_labels(decision)
     assert labels == {
         'canary_cohort': 'canary_1',
         'canary_enrollment': 'enrolled',
@@ -160,7 +160,7 @@ def test_approved_artifact_allows_requested_cohort_and_builds_bounded_telemetry_
 
 
 def test_requested_unsupported_or_mismatched_cohort_fails_closed_before_runtime_wiring():
-    unsupported = validate_v17_v3_canary_approval_artifact(
+    unsupported = validate_memory_v3_canary_approval_artifact(
         _artifact(cohort='canary_1'),
         requested_route_scope='GET /v3/memories',
         requested_cohort='general_availability',
@@ -169,7 +169,7 @@ def test_requested_unsupported_or_mismatched_cohort_fails_closed_before_runtime_
     assert unsupported.approved is False
     assert unsupported.reason == 'unsupported_cohort'
 
-    mismatch = validate_v17_v3_canary_approval_artifact(
+    mismatch = validate_memory_v3_canary_approval_artifact(
         _artifact(cohort='canary_5'), requested_route_scope='GET /v3/memories', requested_cohort='canary_1', now=NOW
     )
     assert mismatch.approved is False
@@ -215,7 +215,7 @@ class _FakeApprovalArtifactReader:
 def test_injected_server_owned_artifact_reader_fails_closed_for_missing_exceptions_and_invalid_artifacts(
     reader, reason
 ):
-    decision = read_v17_v3_canary_approval_artifact_decision(
+    decision = read_memory_v3_canary_approval_artifact_decision(
         reader=reader,
         requested_route_scope='GET /v3/memories',
         requested_cohort='canary_1',
@@ -233,7 +233,7 @@ def test_injected_server_owned_artifact_reader_fails_closed_for_missing_exceptio
 def test_injected_server_owned_artifact_reader_validates_fake_artifact_and_exposes_bounded_labels_only():
     reader = _FakeApprovalArtifactReader(artifact=_artifact())
 
-    decision = read_v17_v3_canary_approval_artifact_decision(
+    decision = read_memory_v3_canary_approval_artifact_decision(
         reader=reader,
         requested_route_scope='GET /v3/memories',
         requested_cohort='canary_1',
@@ -246,7 +246,7 @@ def test_injected_server_owned_artifact_reader_validates_fake_artifact_and_expos
     assert decision.reason == 'approved'
     assert decision.runtime_wired is False
     assert decision.production_rollout_approved is False
-    labels = build_v17_v3_canary_approval_telemetry_labels(decision)
+    labels = build_v3_canary_approval_telemetry_labels(decision)
     assert labels == {
         'canary_cohort': 'canary_1',
         'canary_enrollment': 'enrolled',

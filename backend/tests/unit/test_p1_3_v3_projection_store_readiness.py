@@ -28,7 +28,7 @@ REQUIRED_PROOF_KEYS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_projection_store_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_projection_store_readiness", script_path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {script_path}")
     module = importlib.util.module_from_spec(spec)
@@ -45,7 +45,7 @@ def _report(execute=False):
 def test_projection_store_readiness_runner_exists_and_is_safe_by_default():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_projection_store_readiness"
+    assert report["artifact"] == "p1_3_v3_projection_store_readiness"
     assert report["status"] == "BLOCKED"
     assert report["proof_status"] in {"NOT_RUN", "BLOCKED"}
     assert report["execute"] is False
@@ -90,7 +90,7 @@ def test_projection_store_readiness_inventories_exact_store_api_requirements():
     )
     assert requirements["canonical_projection_path_api"]["explicit_blocker"] is None
     assert "List[MemoryDB]" in requirements["memorydb_materialization_fields"]["required_contract"]
-    assert requirements["memorydb_materialization_fields"]["v17_only_body_fields_forbidden"] == [
+    assert requirements["memorydb_materialization_fields"]["memory_only_body_fields_forbidden"] == [
         "memory_item_id",
         "generation",
         "source_commit_id",
@@ -107,7 +107,7 @@ def test_projection_store_readiness_inventories_exact_store_api_requirements():
     assert requirements["archive_and_short_term_defaults"]["archive_default_available"] is False
     assert requirements["archive_and_short_term_defaults"]["stale_short_term_default_visible"] is False
     assert requirements["pagination_cursor_compatibility"]["legacy_non_enrolled_offset_behavior_preserved"] is True
-    assert requirements["pagination_cursor_compatibility"]["v17_cursor_required_before_cutover"] is True
+    assert requirements["pagination_cursor_compatibility"]["v3_cursor_required_before_cutover"] is True
     assert requirements["fake_injectable_read_interface"]["runtime_route_wiring_now"] is False
 
 
@@ -116,7 +116,7 @@ def test_projection_store_readiness_defines_fake_injectable_read_interface_witho
     interface = report["fake_injectable_read_interface"]
 
     assert interface == {
-        "interface_name": "V17V3CompatibilityProjectionReader",
+        "interface_name": "V3CompatibilityProjectionReader",
         "method": "read_projection_page",
         "input_fields": [
             "uid",
@@ -143,8 +143,8 @@ def test_projection_store_readiness_defines_fake_injectable_read_interface_witho
         ],
         "fake_injectable": True,
         "production_firestore_reader_implemented": True,
-        "implementation": "backend/database/v17_v3_compatibility_projection.py",
-        "contract": "backend/utils/memory/v17_v3_projection_reader_contract.py",
+        "implementation": "backend/database/v3_compatibility_projection.py",
+        "contract": "backend/utils/memory/v3_projection_reader_contract.py",
         "emulator_proof": "backend/scripts/p1_3_v3_projection_reader_emulator_test.py",
         "runtime_route_wiring_now": False,
     }
@@ -161,11 +161,11 @@ def test_projection_store_readiness_links_existing_local_proofs_and_marks_real_e
         assert proof["external_calls"] == []
         assert proof["missing_real_firestore_or_api_evidence"] is True
 
-    assert proofs["projection_readiness_proof"]["service"] == "backend/utils/memory/v17_v3_projection_readiness.py"
-    assert proofs["memory_read_service_proof"]["service"] == "backend/utils/memory/v17_v3_memory_read_service.py"
-    assert proofs["request_adapter_proof"]["service"] == "backend/utils/memory/v17_v3_request_adapter.py"
-    assert proofs["response_adapter_proof"]["service"] == "backend/utils/memory/v17_v3_response_adapter.py"
-    assert proofs["route_planner_proof"]["service"] == "backend/utils/memory/v17_v3_route_planner.py"
+    assert proofs["projection_readiness_proof"]["service"] == "backend/utils/memory/v3_projection_readiness.py"
+    assert proofs["memory_read_service_proof"]["service"] == "backend/utils/memory/v3_memory_read_service.py"
+    assert proofs["request_adapter_proof"]["service"] == "backend/utils/memory/v3_request_adapter.py"
+    assert proofs["response_adapter_proof"]["service"] == "backend/utils/memory/v3_response_adapter.py"
+    assert proofs["route_planner_proof"]["service"] == "backend/utils/memory/v3_route_planner.py"
 
 
 def test_projection_store_readiness_records_safe_next_steps_and_non_claims():
@@ -182,12 +182,12 @@ def test_projection_store_readiness_records_safe_next_steps_and_non_claims():
     assert all(step["implements_production_writes_now"] is False for step in report["proposed_next_safe_steps"])
     assert "No production compatibility projection store writes implemented." in report["non_claims"]
     assert (
-        "Local Firestore emulator evidence collected only by npm run test:v17-v3-projection-reader:emulator; no production cloud evidence collected."
+        "Local Firestore emulator evidence collected only by npm run test:memory-v3-projection-reader:emulator; no production cloud evidence collected."
         in report["non_claims"]
     )
     assert "No `/v3` route wiring changed." in report["non_claims"]
-    assert report["local_implementation_evidence"]["reader"] == "backend/database/v17_v3_compatibility_projection.py"
-    assert report["local_implementation_evidence"]["npm_command"] == "npm run test:v17-v3-projection-reader:emulator"
+    assert report["local_implementation_evidence"]["reader"] == "backend/database/v3_compatibility_projection.py"
+    assert report["local_implementation_evidence"]["npm_command"] == "npm run test:memory-v3-projection-reader:emulator"
 
 
 def test_projection_store_readiness_json_summary_is_stable():
@@ -213,12 +213,10 @@ def test_projection_store_readiness_json_summary_is_stable():
 def test_projection_store_readiness_is_registered_in_test_runner_docs_and_parent_readiness():
     root = Path(__file__).resolve().parents[2]
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     runtime_readiness = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(
-        encoding="utf-8"
-    )
+    external_readiness = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_projection_store_readiness.py" in test_sh
     assert "test_v3_compatibility_projection.py" in test_sh
@@ -226,7 +224,7 @@ def test_projection_store_readiness_is_registered_in_test_runner_docs_and_parent
     assert "p1_3_v3_projection_reader_emulator_test.py" in ticket_doc
     assert "projection store/API readiness" in ticket_doc
     assert "p1_3_v3_projection_store_readiness.py" in oracle_doc
-    assert "test:v17-v3-projection-reader:emulator" in oracle_doc
+    assert "test:memory-v3-projection-reader:emulator" in oracle_doc
     assert "projection store/API readiness" in oracle_doc
     assert "projection_store_readiness_proof" in runtime_readiness
     assert "projection_store_readiness_proof" in external_readiness

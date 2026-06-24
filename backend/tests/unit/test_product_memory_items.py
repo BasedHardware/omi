@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from database.product_memory_items import filter_default_product_memory_items
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 NOW = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
 
@@ -22,7 +22,7 @@ def _evidence(source_state=SourceState.active):
     )
 
 
-def _item(memory_id: str, **overrides) -> V17MemoryItem:
+def _item(memory_id: str, **overrides) -> MemoryItem:
     base = {
         'memory_id': memory_id,
         'uid': 'u1',
@@ -43,7 +43,7 @@ def _item(memory_id: str, **overrides) -> V17MemoryItem:
     base.update(overrides)
     if base['source_state'] != SourceState.active:
         base['evidence'] = [_evidence(base['source_state'])]
-    return V17MemoryItem(**base)
+    return MemoryItem(**base)
 
 
 def test_default_product_memory_reads_include_fresh_short_term_and_exclude_stale_with_lifecycle_audit():

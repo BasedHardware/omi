@@ -20,11 +20,11 @@ install_firestore_transactional_stub()
 
 from database.memory_apply_store import apply_long_term_patch_firestore
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
-from utils.memory.v3_account_generation_source import read_v17_v3_trusted_account_generation
+from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 
 
 class _FakeSnapshot:
@@ -180,7 +180,7 @@ def _target_item(**overrides):
         account_generation=1,
     )
     data.update(overrides)
-    return V17MemoryItem(**data)
+    return MemoryItem(**data)
 
 
 def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_operation_and_outbox_atomically():
@@ -207,14 +207,14 @@ def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_o
     assert state_head == {
         "schema_version": 1,
         "uid": "u1",
-        "source": "v17_memory_state_head",
+        "source": "memory_state_head",
         "account_generation": result.control_state.account_generation,
         "head_commit_id": result.control_state.head_commit_id,
         "commit_sequence": result.control_state.commit_sequence,
         "updated_at": result.control_state.updated_at,
     }
 
-    trusted = read_v17_v3_trusted_account_generation(uid="u1", db_client=db)
+    trusted = read_memory_v3_trusted_account_generation(uid="u1", db_client=db)
     assert trusted.read_error_reason is None
     assert trusted.account_generation == result.control_state.account_generation
     assert trusted.head_commit_id == result.control_state.head_commit_id

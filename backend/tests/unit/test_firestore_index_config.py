@@ -11,7 +11,7 @@ def _fields(index):
     return [(field.get('fieldPath'), field.get('order')) for field in index['fields']]
 
 
-def test_firestore_config_declares_v17_memory_items_canary_read_index():
+def test_firestore_config_declares_memory_items_canary_read_index():
     required_fields = [
         ('uid', 'ASCENDING'),
         ('generation', 'ASCENDING'),
@@ -27,7 +27,7 @@ def test_firestore_config_declares_v17_memory_items_canary_read_index():
     )
 
 
-def test_firestore_config_declares_v17_v3_compatibility_projection_index():
+def test_firestore_config_declares_v3_compatibility_projection_index():
     required_fields = [
         ('created_at', 'DESCENDING'),
         ('__name__', 'DESCENDING'),

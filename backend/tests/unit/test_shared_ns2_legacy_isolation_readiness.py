@@ -10,7 +10,7 @@ REQUIRED_ARTIFACT_TERMS = [
     "ns2",
     "find_similar_memories",
     "search_memories_by_vector",
-    "v17_schema_version",
+    "memory_schema_version",
     "memory_tier",
     "source_state",
     "restricted_sensitivity",
@@ -29,7 +29,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_shared_ns2_legacy_isolation_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("shared_ns2_legacy_isolation_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -42,7 +42,7 @@ def test_shared_ns2_readiness_runner_exists_and_defaults_not_run_read_only():
     root = Path(__file__).resolve().parents[2]
     script_path = root / "scripts" / "shared_ns2_legacy_isolation_readiness.py"
 
-    assert script_path.exists(), "missing safe shared ns2 legacy/V17 isolation readiness runner"
+    assert script_path.exists(), "missing safe shared ns2 legacy/memory isolation readiness runner"
     script = script_path.read_text()
     for term in REQUIRED_ARTIFACT_TERMS:
         assert term in script
@@ -59,7 +59,7 @@ def test_shared_ns2_readiness_runner_exists_and_defaults_not_run_read_only():
     assert artifact["shared_namespace"] == "ns2"
     assert "PINECONE_API_KEY is required" in artifact["prerequisites"]
     assert artifact["legacy_search_inventory"]
-    assert artifact["required_barriers"]["legacy_queries_exclude_v17_schema"]
+    assert artifact["required_barriers"]["legacy_queries_exclude_memory_schema"]
     assert artifact["non_claims"]
 
 
@@ -86,7 +86,7 @@ def test_shared_ns2_readiness_execute_is_read_only_and_requires_provider_config(
     assert ready_artifact["mutation_allowed"] is False
 
 
-def test_legacy_memory_vector_filters_exclude_v17_schema_records():
+def test_legacy_memory_vector_filters_exclude_memory_schema_records():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
     sys.modules["pinecone"] = pinecone_module
@@ -103,16 +103,16 @@ def test_legacy_memory_vector_filters_exclude_v17_schema_records():
     subject_filter = vector_db.build_legacy_memory_vector_filter("uid-1", subject_entity_id="person-1")
 
     assert {"uid": {"$eq": "uid-1"}} in legacy_filter["$and"]
-    assert {"v17_schema_version": {"$exists": False}} in legacy_filter["$and"]
+    assert {"memory_schema_version": {"$exists": False}} in legacy_filter["$and"]
     assert {"subject_entity_id": {"$eq": "person-1"}} in subject_filter["$and"]
 
 
 def test_shared_ns2_docs_reference_non_claims_and_remaining_provider_proof():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (root / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
         assert "shared_ns2_legacy_isolation_readiness.py" in text
-        assert "legacy queries exclude V17 schema" in text
+        assert "legacy queries exclude memory schema" in text
         assert "No real Pinecone shared `ns2` proof" in text

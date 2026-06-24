@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState, SourceStateReason
 from models.memory_contracts import L1MemoryArchiveItem, LifecycleState, WorkingMemoryObservation
-from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.memory_read_api import (
     query_archive_product_memory_items,
     query_default_product_memory_items,
@@ -54,7 +54,7 @@ def _evidence(source_state=SourceState.active):
     )
 
 
-def _product_item(memory_id: str, content: str, **overrides) -> V17MemoryItem:
+def _product_item(memory_id: str, content: str, **overrides) -> MemoryItem:
     base = {
         "memory_id": memory_id,
         "uid": "user_1",
@@ -75,7 +75,7 @@ def _product_item(memory_id: str, content: str, **overrides) -> V17MemoryItem:
     base.update(overrides)
     if base["source_state"] != SourceState.active:
         base["evidence"] = [_evidence(base["source_state"])]
-    return V17MemoryItem(**base)
+    return MemoryItem(**base)
 
 
 def test_query_working_memory_returns_labeled_non_stable_records():

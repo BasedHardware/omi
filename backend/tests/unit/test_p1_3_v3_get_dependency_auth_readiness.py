@@ -8,13 +8,13 @@ REQUIRED_COVERED_DEFAULTS = [
     "get_without_auth_override_is_blocked_in_controlled_testclient_probe",
     "current_get_route_has_no_rate_limit_dependency",
     "get_with_auth_override_calls_stubbed_legacy_get_memories_for_non_enrolled_baseline",
-    "no_v17_cohort_control_dependency_present_or_invoked",
+    "no_memory_cohort_control_dependency_present_or_invoked",
     "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover",
 ]
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_v3_get_dependency_auth_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_v3_get_dependency_auth_readiness", script_path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -29,7 +29,7 @@ def _report(execute=True):
 def test_get_dependency_auth_readiness_runner_exists_and_is_safe():
     report = _report(execute=False)
 
-    assert report["artifact"] == "v17_p1_3_v3_get_dependency_auth_readiness"
+    assert report["artifact"] == "p1_3_v3_get_dependency_auth_readiness"
     assert report["status"] in {"PARTIAL", "BLOCKED"}
     assert report["proof_status"] == "NOT_RUN"
     assert report["read_only"] is True
@@ -84,18 +84,18 @@ def test_get_dependency_auth_probe_pins_route_dependencies_and_no_rate_limit():
     assert probe["dependency_calls"] == ["auth.get_current_user_uid"]
 
 
-def test_get_dependency_auth_probe_preserves_non_enrolled_legacy_and_no_v17_control():
+def test_get_dependency_auth_probe_preserves_non_enrolled_legacy_and_no_memory_control():
     report = _report(execute=True)
     probe = report["probe"]
 
     assert probe["with_auth_override"]["body"][0]["id"] == "legacy-auth-proof"
     assert probe["with_auth_override"]["body"][0]["uid"] == "stubbed-auth-uid"
     assert probe["with_auth_override"]["body"][0]["content"] == "legacy dependency/auth proof memory"
-    assert probe["v17_control_dependency_present"] is False
-    assert probe["v17_control_dependency_invoked"] is False
-    assert probe["v17_adapter_modules_loaded"] == []
-    assert report["v17_cohort_control_dependency_present"] is False
-    assert report["v17_cohort_control_dependency_invoked"] is False
+    assert probe["memory_control_dependency_present"] is False
+    assert probe["memory_control_dependency_invoked"] is False
+    assert probe["memory_adapter_modules_loaded"] == []
+    assert report["memory_cohort_control_dependency_present"] is False
+    assert report["memory_cohort_control_dependency_invoked"] is False
     assert report["stubbed_legacy_get_memories_executed"] is True
     assert report["non_enrolled_legacy_behavior_preserved_under_auth_override"] is True
 
@@ -112,14 +112,15 @@ def test_get_dependency_auth_non_claims_summary_and_json_are_stable():
         "without_auth_override_blocked": True,
         "has_rate_limit_dependency": False,
         "stubbed_legacy_get_memories_call_count": 1,
-        "v17_cohort_control_dependency_present": False,
-        "v17_cohort_control_dependency_invoked": False,
+        "memory_cohort_control_dependency_present": False,
+        "memory_cohort_control_dependency_invoked": False,
         "runtime_cutover_claimed": False,
     }
     assert decoded["proof"]["covered_defaults"] == REQUIRED_COVERED_DEFAULTS
     assert "No backend/routers/memories.py runtime wiring changed." in decoded["non_claims"]
     assert (
-        "No V17 cohort/control dependency is currently present or invoked by GET /v3/memories." in decoded["non_claims"]
+        "No memory cohort/control dependency is currently present or invoked by GET /v3/memories."
+        in decoded["non_claims"]
     )
 
 
@@ -128,8 +129,8 @@ def test_get_dependency_auth_readiness_is_registered_and_linked():
     test_sh = (root / "test.sh").read_text(encoding="utf-8")
     external_script = (root / "scripts" / "p1_3_v3_external_compatibility_readiness.py").read_text(encoding="utf-8")
     runtime_script = (root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py").read_text(encoding="utf-8")
-    ticket_doc = (root.parent / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle_doc = (root.parent / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    ticket_doc = (root.parent / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
+    oracle_doc = (root.parent / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
 
     assert "test_p1_3_v3_get_dependency_auth_readiness.py" in test_sh
     assert "get_dependency_auth_readiness_proof" in external_script

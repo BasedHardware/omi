@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 REQUIRED_SURFACES = {
-    "product_v17_routes",
+    "product_memory_routes",
     "v3_legacy_external_api",
     "developer_api_default_list",
     "developer_api_category_filter",
@@ -48,7 +48,7 @@ REQUIRED_REFERENCE_TERMS = [
     "backend/routers/tools.py GET /v1/tools/memories",
     "backend/routers/tools.py POST /v1/tools/memories/search",
     "backend/routers/agent_tools.py POST /v1/agent/execute-tool",
-    "backend/utils/memory/v17_developer_memory_adapter.py",
+    "backend/utils/memory/developer_memory_adapter.py",
     "backend/utils/mcp_memories.py",
 ]
 
@@ -83,7 +83,7 @@ FORBIDDEN_MUTATION_TERMS = [
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("v17_p1_3_caller_api_compatibility_readiness", script_path)
+    spec = importlib.util.spec_from_file_location("p1_3_caller_api_compatibility_readiness", script_path)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -168,8 +168,8 @@ def test_p1_3_execute_remains_read_only_blocked_without_evidence_or_calls():
 
 def test_p1_3_readiness_is_linked_from_oracle_ticket_and_test_runner():
     repo = Path(__file__).resolve().parents[2].parent
-    oracle = (repo / "docs" / "epics" / "v17_t20_oracle_milestone_review.md").read_text()
-    tickets = (repo / "docs" / "epics" / "v17_memory_implementation_tickets.md").read_text()
+    oracle = (repo / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    tickets = (repo / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     test_sh = (repo / "backend" / "test.sh").read_text()
 
     for text in (oracle, tickets):

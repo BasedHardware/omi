@@ -62,7 +62,7 @@ ensure_utils_memory_packages_importable()
 from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecordStatus
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import MemoryControlState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, V17MemoryItem
+from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_promotion import (
@@ -208,7 +208,7 @@ def _seed_canonical_short_term(
         artifact_preservation=ArtifactPreservationState.preserved,
     ).model_dump(mode="json")
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_v17_v3_trusted_account_generation",
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
     )
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)

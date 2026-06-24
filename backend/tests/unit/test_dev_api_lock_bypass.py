@@ -85,29 +85,29 @@ sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetc
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
 
-def _install_legacy_safe_v17_developer_defaults(monkeypatch):
-    """Keep dev API lock tests focused on lock checks rather than V17 write gating."""
+def _install_legacy_safe_memory_developer_defaults(monkeypatch):
+    """Keep dev API lock tests focused on lock checks rather than memory write gating."""
     import utils.memory.default_read_rollout as rollout
     import utils.memory.developer_memory_adapter as developer_adapter
 
     def _legacy_rollout(uid='test-uid', **_kwargs):
-        return rollout.legacy_safe_v17_default_read_rollout_decision(
+        return rollout.legacy_safe_default_read_rollout_decision(
             uid=uid,
             source_path='test/dev-legacy-safe',
             consumer='developer_api',
             reason='dev_api_lock_fixture_legacy_safe',
         )
 
-    allowed_write = rollout.V17LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
-    ready_gate = rollout.V17WriteConvergencePolicy(source_path='test/dev-convergence', ready=True)
+    allowed_write = rollout.LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
+    ready_gate = rollout.WriteConvergencePolicy(source_path='test/dev-convergence', ready=True)
 
     monkeypatch.setattr(
         developer_adapter,
-        'read_v17_developer_default_memory_rollout',
+        'read_developer_default_memory_rollout',
         MagicMock(side_effect=_legacy_rollout),
         raising=False,
     )
-    monkeypatch.setattr(rollout, 'read_v17_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False)
+    monkeypatch.setattr(rollout, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False)
     monkeypatch.setattr(
         rollout,
         'assert_legacy_memory_write_allowed_for_default_read_decision',
@@ -119,12 +119,12 @@ def _install_legacy_safe_v17_developer_defaults(monkeypatch):
     if developer_module is not None:
         monkeypatch.setattr(
             developer_module,
-            'read_v17_developer_default_memory_rollout',
+            'read_developer_default_memory_rollout',
             MagicMock(side_effect=_legacy_rollout),
             raising=False,
         )
         monkeypatch.setattr(
-            developer_module, 'read_v17_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False
+            developer_module, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False
         )
         monkeypatch.setattr(
             developer_module,
@@ -135,8 +135,8 @@ def _install_legacy_safe_v17_developer_defaults(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _legacy_safe_v17_developer_for_lock_tests(monkeypatch):
-    _install_legacy_safe_v17_developer_defaults(monkeypatch)
+def _legacy_safe_memory_developer_for_lock_tests(monkeypatch):
+    _install_legacy_safe_memory_developer_defaults(monkeypatch)
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
