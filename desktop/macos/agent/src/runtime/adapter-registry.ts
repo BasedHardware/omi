@@ -27,6 +27,10 @@ export class AdapterRegistry {
     return pool;
   }
 
+  capacity(adapterId: string): number {
+    return this.get(adapterId).capacity;
+  }
+
   has(adapterId: string): boolean {
     return this.pools.has(adapterId);
   }

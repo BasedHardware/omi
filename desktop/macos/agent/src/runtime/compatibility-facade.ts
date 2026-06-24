@@ -49,12 +49,49 @@ interface ActiveRequestContext {
   attemptId?: string;
   adapterSessionId?: string;
   legacyAdapterSessionId?: string;
+  isRunning?: boolean;
+}
+
+export interface UnscopedToolCallContext {
+  protocolVersion?: ProtocolVersion;
+  requestId: string;
+  clientId: string;
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  adapterSessionId?: string;
+  legacyAdapterSessionId?: string;
+  isRunning?: boolean;
 }
 
 interface WarmupHint {
   cwd?: string;
   model?: string;
   systemPrompt?: string;
+}
+
+export function selectUnscopedToolCallCorrelation(
+  contexts: Iterable<UnscopedToolCallContext>
+): Partial<QueryScopedOutbound> {
+  const v2Contexts = Array.from(contexts).filter((context) => context.protocolVersion === 2);
+  const runningContexts = v2Contexts.filter((context) => context.isRunning);
+  const selected =
+    runningContexts.length === 1
+      ? runningContexts[0]
+      : v2Contexts.length === 1
+        ? v2Contexts[0]
+        : undefined;
+  if (!selected) return {};
+  return {
+    protocolVersion: 2,
+    requestId: selected.requestId,
+    clientId: selected.clientId,
+    sessionId: selected.sessionId,
+    runId: selected.runId,
+    attemptId: selected.attemptId,
+    adapterSessionId: selected.adapterSessionId,
+    legacyAdapterSessionId: selected.legacyAdapterSessionId,
+  };
 }
 
 export class JsonlCompatibilityFacade {
@@ -272,19 +309,7 @@ export class JsonlCompatibilityFacade {
   }
 
   unscopedToolCallCorrelation(): Partial<QueryScopedOutbound> {
-    if (this.activeByRequest.size !== 1) return {};
-    const context = this.activeByRequest.values().next().value as ActiveRequestContext | undefined;
-    if (!context || context.protocolVersion !== 2) return {};
-    return {
-      protocolVersion: 2,
-      requestId: context.requestId,
-      clientId: context.clientId,
-      sessionId: context.sessionId,
-      runId: context.runId,
-      attemptId: context.attemptId,
-      adapterSessionId: context.adapterSessionId,
-      legacyAdapterSessionId: context.legacyAdapterSessionId,
-    };
+    return selectUnscopedToolCallCorrelation(this.activeByRequest.values());
   }
 
   private promptBlocks(message: QueryMessage): PromptBlock[] {
@@ -320,6 +345,9 @@ export class JsonlCompatibilityFacade {
     if (!context) return;
     if (event.attemptId) {
       context.attemptId = event.attemptId;
+    }
+    if (event.type === "attempt.started" || event.type === "run.running") {
+      context.isRunning = true;
     }
     if (!event.type.startsWith("adapter.")) return;
 

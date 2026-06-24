@@ -37,6 +37,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextExecutionError: unknown;
   failNextResume = false;
   failNextExecutionAsStale = false;
+  deferOnlyPromptIncludes: string | undefined;
   pendingResult:
     | {
         promise: Promise<AdapterAttemptResult>;
@@ -108,7 +109,11 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       this.failNextExecutionError = undefined;
       throw error;
     }
-    if (this.pendingResult) {
+    const promptText = context.prompt
+      .filter((block): block is Extract<(typeof context.prompt)[number], { type: "text" }> => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    if (this.pendingResult && (!this.deferOnlyPromptIncludes || promptText.includes(this.deferOnlyPromptIncludes))) {
       return this.pendingResult.promise;
     }
     return {

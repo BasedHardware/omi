@@ -425,11 +425,12 @@ const omiPendingCalls = new Map<string, { resolve: (result: string) => void }>()
 
 function connectOmiPipe(pipePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    omiPipeConnection = createConnection(pipePath, () => {
+    const connection = createConnection(pipePath, () => {
       process.stderr.write(`[omi-tools] Connected to bridge pipe\n`);
       resolve();
     });
-    omiPipeConnection.on("data", (data: Buffer) => {
+    omiPipeConnection = connection;
+    connection.on("data", (data: Buffer) => {
       omiPipeBuffer += data.toString();
       let idx;
       while ((idx = omiPipeBuffer.indexOf("\n")) >= 0) {
@@ -449,15 +450,17 @@ function connectOmiPipe(pipePath: string): Promise<void> {
         }
       }
     });
-    omiPipeConnection.on("error", (err) => {
+    connection.on("error", (err) => {
       process.stderr.write(`[omi-tools] Pipe error: ${err.message}\n`);
       reject(err);
     });
     // Handle pipe close — resolve all pending tool calls with an error
     // so they don't hang forever if the bridge disconnects mid-call.
-    omiPipeConnection.on("close", () => {
+    connection.on("close", () => {
       process.stderr.write("[omi-tools] Pipe disconnected\n");
-      omiPipeConnection = null;
+      if (omiPipeConnection === connection) {
+        omiPipeConnection = null;
+      }
       for (const [, pending] of omiPendingCalls) {
         pending.resolve("Error: Omi bridge disconnected");
       }

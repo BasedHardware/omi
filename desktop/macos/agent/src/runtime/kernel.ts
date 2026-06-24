@@ -648,6 +648,22 @@ export class AgentRuntimeKernel {
     return false;
   }
 
+  hasActiveExecutionForSessionAdapter(sessionId: string, adapterId: string): boolean {
+    for (const active of this.activeExecutions.values()) {
+      if (active.sessionId === sessionId && active.adapter.adapterId === adapterId) return true;
+    }
+    return false;
+  }
+
+  hasExecutionCapacityForAdapter(adapterId: string): boolean {
+    if (!this.registry.has(adapterId)) return false;
+    let activeCount = 0;
+    for (const active of this.activeExecutions.values()) {
+      if (active.adapter.adapterId === adapterId) activeCount += 1;
+    }
+    return activeCount < this.registry.capacity(adapterId);
+  }
+
   defaultAdapterIdForSession(sessionId: string): string {
     return this.readSession(sessionId).defaultAdapterId;
   }

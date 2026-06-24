@@ -274,7 +274,8 @@ export async function handleAgentControlToolCall(
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        rejectSynchronousNestedRun(context, parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId));
+        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
+        rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
           ownerId: parsed.ownerId ?? controlToolOwnerId(context),
@@ -294,7 +295,8 @@ export async function handleAgentControlToolCall(
         if (parsed.mode !== "spawn") {
           rejectSynchronousNestedRun(
             context,
-            parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId)
+            parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId),
+            parsed.mode === "continue" ? parsed.childSessionId : undefined
           );
         }
         const result = await context.kernel.delegateAgent({
@@ -334,8 +336,11 @@ function controlToolOwnerId(context: AgentControlToolContext): string {
   return ownerId || "desktop-local-user";
 }
 
-function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string): void {
-  if (context.kernel.hasActiveExecutionForAdapter(adapterId)) {
+function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string, sessionId?: string): void {
+  if (
+    (sessionId && context.kernel.hasActiveExecutionForSessionAdapter(sessionId, adapterId)) ||
+    !context.kernel.hasExecutionCapacityForAdapter(adapterId)
+  ) {
     throw new Error(
       `Synchronous ${adapterId} control-tool runs are unavailable while that adapter is already executing; use spawn mode or retry after the current run finishes.`
     );

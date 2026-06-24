@@ -14,7 +14,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile, unlink } from "node:fs/promises
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join as pathJoin } from "node:path";
+import { basename, join as pathJoin } from "node:path";
 import {
   classifyBash,
   classifyFileWrite,
@@ -1100,16 +1100,17 @@ test("load_skill: rejects traversal and path-like names", () => {
 test("load_skill: refuses symlink escapes from the skills root", async () => {
   const root = await mkdtemp(pathJoin(tmpdir(), "omi-skill-root-"));
   const outside = await mkdtemp(pathJoin(tmpdir(), "omi-skill-outside-"));
+  const skillName = `secret-skill-${basename(root).replace(/^omi-skill-root-/, "")}`;
   const previousWorkspace = process.env.OMI_WORKSPACE;
   try {
     await mkdir(pathJoin(root, ".claude", "skills"), { recursive: true });
-    await mkdir(pathJoin(outside, "secret-skill"), { recursive: true });
-    await writeFile(pathJoin(outside, "secret-skill", "SKILL.md"), "secret instructions");
-    await symlink(pathJoin(outside, "secret-skill"), pathJoin(root, ".claude", "skills", "secret-skill"));
+    await mkdir(pathJoin(outside, skillName), { recursive: true });
+    await writeFile(pathJoin(outside, skillName, "SKILL.md"), "secret instructions");
+    await symlink(pathJoin(outside, skillName), pathJoin(root, ".claude", "skills", skillName));
     process.env.OMI_WORKSPACE = root;
 
     const tool = OMI_TOOLS.find((candidate) => candidate.name === "load_skill")!;
-    const result = await tool.execute("call-1", { name: "secret-skill" }, new AbortController().signal);
+    const result = await tool.execute("call-1", { name: skillName }, new AbortController().signal);
 
     assert.equal(result.content[0].type, "text");
     assert.match(result.content[0].text, /not found/i);

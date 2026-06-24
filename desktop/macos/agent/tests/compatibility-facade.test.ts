@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
-import { JsonlCompatibilityFacade } from "../src/runtime/compatibility-facade.js";
+import {
+  JsonlCompatibilityFacade,
+  selectUnscopedToolCallCorrelation,
+} from "../src/runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
@@ -18,6 +21,55 @@ afterEach(() => {
 });
 
 describe("JsonlCompatibilityFacade", () => {
+  it("selects the sole running request for unscoped tool-call correlation", () => {
+    expect(
+      selectUnscopedToolCallCorrelation([
+        {
+          protocolVersion: 2,
+          requestId: "request-running",
+          clientId: "client-running",
+          sessionId: "session-running",
+          runId: "run-running",
+          attemptId: "attempt-running",
+          isRunning: true,
+        },
+        {
+          protocolVersion: 2,
+          requestId: "request-queued",
+          clientId: "client-queued",
+        },
+      ]),
+    ).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-running",
+      clientId: "client-running",
+      sessionId: "session-running",
+      runId: "run-running",
+      attemptId: "attempt-running",
+    });
+
+    expect(
+      selectUnscopedToolCallCorrelation([
+        {
+          protocolVersion: 2,
+          requestId: "request-a",
+          clientId: "client-a",
+          runId: "run-a",
+          attemptId: "attempt-a",
+          isRunning: true,
+        },
+        {
+          protocolVersion: 2,
+          requestId: "request-b",
+          clientId: "client-b",
+          runId: "run-b",
+          attemptId: "attempt-b",
+          isRunning: true,
+        },
+      ]),
+    ).toEqual({});
+  });
+
   it("maps v1 sessionKey to a legacy alias and returns adapter-native sessionId compatibility", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];
@@ -290,6 +342,13 @@ describe("JsonlCompatibilityFacade", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(adapter.executed).toHaveLength(1);
     expect(sent.some((message) => message.type === "error")).toBe(false);
+    expect(facade.unscopedToolCallCorrelation()).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-one",
+      clientId: "client-one",
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+    });
 
     adapter.resolveDeferred({
       text: "first done",

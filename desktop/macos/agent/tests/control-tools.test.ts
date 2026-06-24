@@ -270,6 +270,51 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("allows synchronous control runs for a different session when adapter capacity remains", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "multi", 2);
+    const idleSession = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "multi",
+      defaultAdapterId: "multi",
+      externalRefId: "idle-task",
+      requestId: "idle-request",
+    });
+
+    adapter.deferResult();
+    adapter.deferOnlyPromptIncludes = "busy";
+    const running = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "multi",
+      defaultAdapterId: "multi",
+      prompt: "busy prompt",
+      externalRefId: "busy-task",
+      requestId: "busy-request",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    const sent = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "send_agent_message", {
+        ownerId: "owner",
+        sessionId: idleSession.session.sessionId,
+        prompt: "follow up on idle session",
+        requestId: "nested-send-multi",
+      }),
+    );
+
+    expect(sent.ok).toBe(true);
+    expect(sent.run.omiSessionId).toBe(idleSession.session.sessionId);
+    expect(adapter.executed).toHaveLength(3);
+
+    adapter.resolveDeferred({
+      text: "done",
+      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+    store.close();
+  });
+
   it("falls back when the active owner getter returns an empty string", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "desktop-local-user" });
