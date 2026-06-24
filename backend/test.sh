@@ -174,6 +174,7 @@ pytest tests/unit/test_phone_calls.py -v
 pytest tests/unit/test_twilio_service.py -v
 pytest tests/unit/test_twilio_account_deletion.py -v
 pytest tests/unit/test_conversation_search_date_validation.py -v
+pytest tests/unit/test_conversation_events_bounds.py -v
 pytest tests/unit/test_conversation_hybrid_search.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v
 pytest tests/unit/test_delete_account_purge_storage.py -v
