@@ -181,6 +181,7 @@ pytest tests/unit/test_async_app_integrations.py -v
 pytest tests/unit/test_async_realtime_integrations_offload.py -v
 pytest tests/unit/test_async_geocoding.py -v
 pytest tests/unit/test_geocoding_cache.py -v
+pytest tests/unit/test_announcements_naive_datetime.py -v
 pytest tests/unit/test_realtime_integrations_usage_tracking.py -v
 pytest tests/unit/test_async_auth.py -v
 pytest tests/unit/test_thread_join_elimination.py -v
