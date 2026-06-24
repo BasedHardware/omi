@@ -12,8 +12,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from config.v17_memory import PASSED, V17Mode, V17StageGate
-from utils.memory.v17_default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
+from config.memory_rollout import PASSED, V17Mode, V17StageGate
+from utils.memory.default_read_rollout import V17_DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
 
 ROLLLOUT_READINESS_STATUS_NOT_RUN = "NOT_RUN"
 CANONICAL_CONSUMERS = ["mcp", "developer_api", "omi_chat"]

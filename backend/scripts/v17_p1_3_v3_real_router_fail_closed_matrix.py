@@ -26,8 +26,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v17_v3_projection_readiness import V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE
-from utils.memory.v17_v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
+from utils.memory.v3_projection_readiness import V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE
+from utils.memory.v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
 
 REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_real_router_fail_closed_matrix.py",

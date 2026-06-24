@@ -15,7 +15,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 import google.cloud.firestore as firestore
 
-from database.v17_vector_repair_outbox import (
+from database.memory_vector_repair_outbox import (
     build_v17_vector_repair_purge_outbox_records,
     write_v17_vector_repair_purge_outbox_records,
 )

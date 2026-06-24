@@ -19,7 +19,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from utils.memory.v17_v3_get_runtime_snapshot import (  # noqa: E402
+from utils.memory.v3_get_runtime_snapshot import (  # noqa: E402
     LOW_CARDINALITY_RUNTIME_SNAPSHOT_REASONS,
     V17V3GetRuntimeSnapshotInput,
     build_v17_v3_get_runtime_snapshot,

@@ -18,7 +18,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v17_v3_f5_evidence import EvidenceRunConfig, build_evidence_report, render_redacted_json
+from utils.memory.v3_f5_evidence import EvidenceRunConfig, build_evidence_report, render_redacted_json
 
 
 def _parser() -> argparse.ArgumentParser:

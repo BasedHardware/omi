@@ -27,7 +27,7 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from utils.memory.v17_v3_canary_approval import ROUTE_SCOPE, validate_v17_v3_canary_approval_artifact
+from utils.memory.v3_canary_approval import ROUTE_SCOPE, validate_v17_v3_canary_approval_artifact
 
 ARTIFACT_DOCUMENT_PATH = "system/v17_v3_canary_approvals/routes/get_v3_memories"
 ARTIFACT_SOURCE = f"firestore:{ARTIFACT_DOCUMENT_PATH}"

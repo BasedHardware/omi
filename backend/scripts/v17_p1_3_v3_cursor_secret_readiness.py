@@ -19,7 +19,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.memory.v17_v3_cursor import (
+from utils.memory.v3_cursor import (
     V17V3CursorContext,
     V17V3CursorError,
     V17V3Keyset,

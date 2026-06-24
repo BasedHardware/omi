@@ -20,13 +20,13 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v17_v3_projection_readiness import (
+from utils.memory.v3_projection_readiness import (
     V17_DERIVED_COMPATIBILITY_PROJECTION_SOURCE,
     V17V3ProjectionReadinessContext,
     decide_v17_v3_projection_readiness,
 )
-from utils.memory.v17_v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
-from utils.memory.v17_v3_write_convergence import V17V3ExternalWriteOperation, V17V3WriteConvergenceStatus
+from utils.memory.v3_route_planner import V17V3RouteExecutionPlan, V17V3RoutePlanInput, plan_v17_v3_memory_route
+from utils.memory.v3_write_convergence import V17V3ExternalWriteOperation, V17V3WriteConvergenceStatus
 
 WRITE_CONVERGENCE_TOMBSTONE_MATRIX_PROOF = {
     "service": "backend/scripts/v17_p1_3_v3_write_convergence_tombstone_matrix.py",

@@ -17,7 +17,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from utils.memory.v17_v3_f6.local_smoke import build_report_from_current_local_contracts
+from utils.memory.v3_f6.local_smoke import build_report_from_current_local_contracts
 
 
 def main() -> dict:

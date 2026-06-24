@@ -17,15 +17,15 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.v17_memory import V17Mode, V17RolloutConfig
-from database.v17_collections import V17Collections
-from utils.memory.v17_v3_control_reader_contract import (
+from config.memory_rollout import V17Mode, V17RolloutConfig
+from database.memory_collections import V17Collections
+from utils.memory.v3_control_reader_contract import (
     V17V3ControlDecisionReason,
     V17V3ControlReaderRequest,
     V17V3ControlRouteFamily,
     decide_v17_v3_control_route,
 )
-from utils.memory.v17_v3_control_state_adapter import read_v17_v3_control
+from utils.memory.v3_control_state_adapter import read_v17_v3_control
 
 PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-v17-memory"
 UID = "v17-v3-control-reader-emulator-user"

@@ -28,17 +28,17 @@ _BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
-from database.v17_collections import V17Collections
-from database.v17_vector_repair_outbox_worker import (
+from database.memory_collections import V17Collections
+from database.memory_vector_repair_outbox_worker import (
     V17VectorRepairOutboxWorkerTickConfig,
     run_v17_vector_repair_outbox_worker_tick,
 )
-from database.v17_vector_repair_pinecone_adapter import (
+from database.memory_vector_repair_pinecone_adapter import (
     V17_VECTOR_REPAIR_PINECONE_NAMESPACE,
     make_v17_pinecone_vector_deleter,
     make_v17_pinecone_vector_repairer,
 )
-from models.v17_product_memory import V17MemoryItem
+from models.product_memory import V17MemoryItem
 
 V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED_ENV = "V17_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED"
 V17_VECTOR_REPAIR_OUTBOX_UID_ENV = "V17_VECTOR_REPAIR_OUTBOX_UID"
