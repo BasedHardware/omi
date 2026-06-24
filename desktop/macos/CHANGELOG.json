@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Local agent API now returns a clear reason and hint when a Rewind screenshot image can not be loaded (pending/orphaned/retained-out) instead of a generic error"
+  ],
   "releases": [
     {
       "version": "0.11.507",
