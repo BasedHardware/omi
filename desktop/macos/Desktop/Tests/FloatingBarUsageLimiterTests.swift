@@ -162,6 +162,20 @@ final class FloatingBarUsageLimiterTests: XCTestCase {
     XCTAssertTrue(limiter.hasPaidPlan)
   }
 
+  func testApplyPaidPlanClearsStaleFreeQuota() throws {
+    let limiter = FloatingBarUsageLimiter()
+    let quota = try makeQuota(plan: "Free", used: 30, limit: 30, percent: 100, allowed: false)
+    limiter.applyQuota(quota)
+    XCTAssertTrue(limiter.isLimitReached)
+
+    limiter.applyPlan(plan: .operator, status: .active)
+
+    XCTAssertTrue(limiter.hasPaidPlan)
+    XCTAssertNil(limiter.serverQuota)
+    XCTAssertEqual(limiter.optimisticDelta, 0)
+    XCTAssertFalse(limiter.isLimitReached)
+  }
+
   func testApplyPlanInactiveIsNotPaid() {
     let limiter = FloatingBarUsageLimiter()
     limiter.applyPlan(plan: .operator, status: .inactive)
