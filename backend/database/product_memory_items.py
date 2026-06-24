@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Iterable, List, Optional
 
-from models.v17_product_memory import (
+from models.product_memory import (
     AccessDecision,
     MemoryAccessPolicy,
     MemoryTier,
