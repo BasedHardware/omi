@@ -13,11 +13,11 @@ import database.memories as memory_db
 import database.vector_db as vector_db
 from database._client import db as firestore_db
 from models.memories import MemoryDB
-from utils.memory.v17_chat_memory_adapter import (
+from utils.memory.chat_memory_adapter import (
     list_v17_default_chat_memories_decision_text,
     search_v17_default_chat_memories_vector_decision_text,
 )
-from utils.memory.v17_default_read_rollout import V17ReadDecision
+from utils.memory.default_read_rollout import V17ReadDecision
 from utils.retrieval.hybrid import rrf_rerank
 import logging
 
