@@ -688,10 +688,10 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
         try:
             timestamp = get_timestamp_from_path(filename)
-        except ValueError:
+            time = datetime.fromtimestamp(timestamp)
+        except (ValueError, OSError, OverflowError):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
-        time = datetime.fromtimestamp(timestamp)
         if time > datetime.now() or time < datetime(2024, 1, 1):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
@@ -1645,10 +1645,10 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, missing timestamp")
         try:
             timestamp = get_timestamp_from_path(filename)
-        except ValueError:
+            time_val = datetime.fromtimestamp(timestamp)
+        except (ValueError, OSError, OverflowError):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
-        time_val = datetime.fromtimestamp(timestamp)
         if time_val > datetime.now() or time_val < datetime(2024, 1, 1):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
