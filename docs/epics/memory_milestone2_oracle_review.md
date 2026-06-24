@@ -1,5 +1,7 @@
 # memory Milestone 2 Oracle Review — Typed Synthesis and Operation Journal
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Date:** 2026-06-19  
 **Milestone:** Typed synthesis outcomes, source-backed candidate contract, server-owned operation journal.  
 **Initial verdict:** BLOCKED.  
