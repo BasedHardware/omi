@@ -186,6 +186,8 @@ def get_goal_history(
     goal_id: str, days: int = Query(default=30, le=365), uid: str = Depends(auth.get_current_user_uid)
 ) -> List[dict]:
     """Get progress history for a goal."""
+    # Clamp days to a safe range so a negative value cannot reach the Firestore .limit() call and 500.
+    days = max(1, min(days, 365))
     history = goals_db.get_goal_history(uid, goal_id, days)
 
     # Convert datetime objects
