@@ -77,8 +77,8 @@ class TestResolveMemorySystem:
         assert resolve_memory_system(uid, db_client=_FirestoreFake()) == MemorySystem.LEGACY
 
     def test_v17_control_state_read_mode_still_resolves_legacy(self, monkeypatch):
-        monkeypatch.setenv("V17_MODE", "read")
-        monkeypatch.setenv("V17_MEMORY_ENABLED_USERS", "uid-v17")
+        monkeypatch.setenv("MEMORY_MODE", "read")
+        monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-v17")
         db = _FirestoreFake(
             {
                 "users/uid-v17/memory_control/state": {
