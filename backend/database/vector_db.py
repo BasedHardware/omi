@@ -8,7 +8,7 @@ from typing import List
 from pinecone import Pinecone
 
 from database import projection_repair
-from database.v17_vector_metadata import (
+from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_default_memory_vector_filter,
     build_memory_vector_metadata,
@@ -18,7 +18,7 @@ from database.v17_vector_metadata import (
     parse_v17_search_vector_hit,
 )
 from models.product_memory import V17MemoryItem
-from models.v17_memory_search_gateway import SearchMode, SearchVectorHit
+from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
 import logging
 
