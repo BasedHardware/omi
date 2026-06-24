@@ -125,7 +125,7 @@ def query_vectors_by_metadata(
             if entity in metadata.get('entities', []):
                 conversation_id_to_matches[conversation_id] += 1
         for person in people:
-            if person in metadata.get('people_mentioned', []):
+            if person in metadata.get('people', []):
                 conversation_id_to_matches[conversation_id] += 1
 
     conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
