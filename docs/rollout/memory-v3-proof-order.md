@@ -68,8 +68,6 @@ The canonical memory path is selected only when the server observes all of:
 2. `MEMORY_MODE=read` exactly;
 3. a valid authenticated UID present in the server-side allowlist.
 
-(`V17_*` env names are retained as compatibility fallbacks; neutral rollout config is primary in code.)
-
 Failures before canonical memory selection retain the documented legacy/off behavior and must not invoke the canonical-memory Firestore adapter.
 
 After canonical memory selection, failure of any global gate, kill switch, user grant, write-convergence prerequisite, authoritative head, generation check, projection read, cursor validation, IAM read, or other rollout prerequisite must fail closed and must not invoke the legacy path.
