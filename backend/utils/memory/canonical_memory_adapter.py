@@ -385,6 +385,11 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         committed_id = result.operation.committed_memory_item_ids[0]
 
     item = result.memory_items[0] if result.memory_items else None
+    if item is None and result.status == ApplyStatus.idempotent_skip:
+        snapshot = client.document(f"{V17Collections(uid=uid).memory_items}/{committed_id}").get()
+        if getattr(snapshot, "exists", False):
+            item = V17MemoryItem(**(snapshot.to_dict() or {}))
+
     if item is not None:
         assert_legal_state(
             DomainMemoryLayer(item.tier.value),
