@@ -51,6 +51,17 @@ struct OnboardingWelcomeStepView: View {
           }
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+
+        // Dev-only shortcut to skip the whole onboarding flow — same as the
+        // hidden logo long-press. Never shown on production builds.
+        if AnalyticsManager.isDevBuild {
+          Button("Skip onboarding") {
+            onForceComplete?()
+          }
+          .buttonStyle(.plain)
+          .font(.system(size: 12, weight: .medium))
+          .foregroundColor(OmiColors.textTertiary)
+        }
       }
       .frame(maxWidth: .infinity, alignment: .center)
       .onAppear {

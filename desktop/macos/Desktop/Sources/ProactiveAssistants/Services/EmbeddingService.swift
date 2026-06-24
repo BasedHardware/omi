@@ -326,11 +326,53 @@ actor EmbeddingService {
     case invalidResponse
     case serverError(statusCode: Int, body: String)
 
+    var reasonCode: String {
+      switch self {
+      case .missingAPIKey:
+        return "missing_api_key"
+      case .invalidResponse:
+        return "malformed_response"
+      case .serverError(let statusCode, let body):
+        let lower = body.lowercased()
+        if statusCode == 402 || lower.contains("trial_expired") || lower.contains("trial expired")
+          || lower.contains("payment required") || lower.contains("byok")
+          || lower.contains("bring your own key") || lower.contains("usage limit")
+        {
+          return "product_gate"
+        }
+        if statusCode == 429 || lower.contains("rate limit") || lower.contains("resource exhausted") {
+          return "rate_limited"
+        }
+        if (500...599).contains(statusCode) || lower.contains("temporarily unavailable")
+          || lower.contains("service unavailable") || lower.contains("overloaded")
+        {
+          return "temporarily_unavailable"
+        }
+        return "http_\(statusCode)"
+      }
+    }
+
+    var isExpectedProductState: Bool { reasonCode == "product_gate" }
+    var isTransient: Bool { reasonCode == "rate_limited" || reasonCode == "temporarily_unavailable" }
+    var isNonActionableForSentry: Bool { isExpectedProductState || isTransient }
+
     var errorDescription: String? {
       switch self {
-      case .missingAPIKey: return "AI features are not configured. Please update the app."
-      case .invalidResponse: return "AI service returned an unexpected response. Please try again."
-      case .serverError(let statusCode, let body): return "Embedding API error (HTTP \(statusCode)): \(body)"
+      case .missingAPIKey:
+        return "AI features are not configured. Please update the app."
+      case .invalidResponse:
+        return "Embedding API returned an unexpected response."
+      case .serverError:
+        switch reasonCode {
+        case "product_gate":
+          return "Embedding API unavailable: active plan or BYOK keys required."
+        case "rate_limited":
+          return "Embedding API rate limited. Will retry later."
+        case "temporarily_unavailable":
+          return "Embedding API temporarily unavailable. Will retry later."
+        default:
+          return "Embedding API error (\(reasonCode))."
+        }
       }
     }
 

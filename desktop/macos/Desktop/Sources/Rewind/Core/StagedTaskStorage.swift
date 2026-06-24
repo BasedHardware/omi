@@ -84,9 +84,37 @@ actor StagedTaskStorage {
     func markSynced(id: Int64, backendId: String) async throws {
         let db = try await ensureInitialized()
 
-        try await db.write { database in
+        enum MarkSyncedResult {
+            case updated
+            case mergedDuplicate(existingId: Int64)
+        }
+
+        let result: MarkSyncedResult = try await db.write { database in
             guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
                 throw ActionItemStorageError.recordNotFound
+            }
+
+            // Sentry has seen UNIQUE constraint failures here when the same backend
+            // task already exists locally (for example, from an API refresh racing a
+            // local sync retry). Treat that as an idempotent sync completion: keep the
+            // canonical backend row and remove the duplicate local row instead of
+            // throwing and retrying forever.
+            if let existing = try StagedTaskRecord
+                .filter(Column("backendId") == backendId)
+                .filter(Column("id") != id)
+                .fetchOne(database),
+               let existingId = existing.id {
+                let now = Date()
+                try database.execute(
+                    sql: """
+                        UPDATE staged_tasks
+                        SET backendSynced = 1, updatedAt = ?
+                        WHERE id = ?
+                    """,
+                    arguments: [now, existingId]
+                )
+                try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
+                return .mergedDuplicate(existingId: existingId)
             }
 
             record.backendId = backendId
@@ -94,16 +122,28 @@ actor StagedTaskStorage {
             record.updatedAt = Date()
             do {
                 try record.update(database)
-                log("StagedTaskStorage: Marked staged task \(id) as synced (backendId: \(backendId))")
+                return .updated
             } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
                 // Another local staged row already holds this backendId (duplicate sync, or
                 // backend dedup returned an existing task's id). The UNIQUE index on
                 // staged_tasks.backendId would otherwise crash the sync-status update.
                 // Make it idempotent: drop this freshly-extracted duplicate and keep the
                 // existing canonical row that already represents the backend task.
+                let existingId = try StagedTaskRecord
+                    .filter(Column("backendId") == backendId)
+                    .filter(Column("id") != id)
+                    .fetchOne(database)?
+                    .id ?? id
                 try database.execute(sql: "DELETE FROM staged_tasks WHERE id = ?", arguments: [id])
-                log("StagedTaskStorage: backendId \(backendId) already present; removed duplicate staged task \(id)")
+                return .mergedDuplicate(existingId: existingId)
             }
+        }
+
+        switch result {
+        case .updated:
+            log("StagedTaskStorage: Marked staged task \(id) as synced (backendId: \(backendId))")
+        case .mergedDuplicate(let existingId):
+            log("StagedTaskStorage: Marked staged task sync idempotent by merging local duplicate \(id) into existing row \(existingId)")
         }
     }
 
