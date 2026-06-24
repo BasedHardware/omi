@@ -146,9 +146,11 @@ class TestUpsertPersonaAsyncOffload:
         assert upsert_mock in captured, "upsert_app_to_db was not offloaded via run_blocking"
         assert memories_mock in captured, "create_memories_from_twitter_tweets was not offloaded via run_blocking"
 
-        # db_executor pool used for the upsert offload.
+        # db_executor pool used for the Firestore-CRUD upsert offload; the memory-extraction offload
+        # (LLM/post-processing) uses postprocess_executor so it does not starve the DB pool.
         executors_used = [call.args[0] for call in run_blocking_mock.call_args_list]
         assert mod.db_executor in executors_used
+        assert mod.postprocess_executor in executors_used
 
         # The functions still ran exactly once (offload, not skipped).
         upsert_mock.assert_called_once()

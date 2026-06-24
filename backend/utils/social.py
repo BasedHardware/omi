@@ -17,7 +17,7 @@ import httpx
 
 from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -190,8 +190,10 @@ async def upsert_persona_from_twitter_profile(username: str, handle: str, uid: s
     save_username(username, uid)
     delete_generic_cache('get_public_approved_apps_data')
 
-    # Create memories from persona prompt and tweets
-    await run_blocking(db_executor, create_memories_from_twitter_tweets, uid, persona['id'], timeline.timeline)
+    # Create memories from persona prompt and tweets. This includes memory extraction (LLM and
+    # post-processing), so it runs on postprocess_executor rather than db_executor to avoid starving
+    # the Firestore/Redis CRUD pool under load.
+    await run_blocking(postprocess_executor, create_memories_from_twitter_tweets, uid, persona['id'], timeline.timeline)
 
     return persona
 
