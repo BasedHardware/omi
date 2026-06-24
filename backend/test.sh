@@ -13,6 +13,7 @@ pytest tests/unit/test_text_containment.py -v
 pytest tests/unit/test_speaker_sample.py -v
 pytest tests/unit/test_speaker_sample_migration.py -v
 pytest tests/unit/test_short_audio_embedding.py -v
+pytest tests/unit/test_chat_metadata_entities_source.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_users_webhook_url_validation.py -v
 pytest tests/unit/test_voice_message_language.py -v
