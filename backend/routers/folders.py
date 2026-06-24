@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
+from pydantic import ValidationError
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -14,6 +17,8 @@ from models.folder import (
 from models.conversation import Conversation
 from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -113,7 +118,17 @@ def get_folder_conversations(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
     redact_conversations_for_list(conversations)
-    return conversations
+    # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
+    # with a 500.
+    valid_conversations = []
+    for conv in conversations:
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid conversation in folder {folder_id} for uid {uid}: {invalid_fields}")
+            continue
+    return valid_conversations
 
 
 @router.patch('/v1/conversations/{conversation_id}/folder', tags=['folders'])
