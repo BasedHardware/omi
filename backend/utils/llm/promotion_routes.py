@@ -31,7 +31,7 @@ class PromotionRouteResponse(BaseModel):
 L2MemoryRouteResponse = PromotionRouteResponse
 
 
-l2_memory_route_prompt = ChatPromptTemplate.from_messages(
+promotion_route_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
@@ -74,6 +74,9 @@ Custom search replay artifact:
     ]
 )
 
+# Backward-compatible alias for callers/tests that still use the L2 name.
+l2_memory_route_prompt = promotion_route_prompt
+
 
 def _content_from_response(response) -> str:
     content = getattr(response, "content", response)
@@ -100,7 +103,7 @@ def classify_l2_memory_route(
     llm=None,
 ) -> Optional[PromotionRoute]:
     parser = PydanticOutputParser(pydantic_object=PromotionRouteResponse)
-    messages = l2_memory_route_prompt.format_messages(
+    messages = promotion_route_prompt.format_messages(
         observed_head_commit_id=observed_head_commit_id or "unknown",
         packet_json=_canonical_json(packet),
         custom_search_json=_canonical_json(custom_search_artifact),
