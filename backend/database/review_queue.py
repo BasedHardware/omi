@@ -6,7 +6,7 @@ from config.memory_confidence import CONFIDENCE_BANDS
 from database import memories as memories_db
 from database import memory_ledger
 from database import short_term_memories as short_term_db
-from database.v17_non_active_memory_routes import (
+from database.memory_non_active_routes import (
     NonActiveRoute,
     NonActiveRouteOutcome,
     persist_non_active_route_outcome,
