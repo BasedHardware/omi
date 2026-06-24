@@ -99,5 +99,6 @@ def list_calendar_meetings(
     limit: int = 50,
 ):
     """List calendar meetings within a date range"""
+    limit = max(1, min(limit, 1000))
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
     return [CalendarMeetingContext(**m) for m in meetings]
