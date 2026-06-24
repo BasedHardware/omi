@@ -611,8 +611,11 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         start_date = arguments.get("start_date")
         end_date = arguments.get("end_date")
         categories = arguments.get("categories", [])
-        limit = arguments.get("limit", 20)
-        offset = arguments.get("offset", 0)
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=20, minimum=1, maximum=500)
+            offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
 
         # Parse dates
         start_dt = None
