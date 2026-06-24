@@ -133,18 +133,27 @@ _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
 _stub_package("utils.memory")
 
-memory_adapter_stub = _stub_module("utils.memory.v17_chat_memory_adapter")
+memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
 memory_adapter_stub.list_v17_default_chat_memories_decision_text = MagicMock(
     return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
 )
 memory_adapter_stub.search_v17_default_chat_memories_vector_decision_text = MagicMock(
     return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
 )
-read_rollout_stub = _stub_module("utils.memory.v17_default_read_rollout")
+read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
 read_rollout_stub.V17ReadDecision = types.SimpleNamespace(
     USE_V17="use_v17",
     USE_LEGACY_SAFE="use_legacy_safe",
 )
+
+memory_system_stub = _stub_module("utils.memory.memory_system")
+memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
+
+memory_service_stub = _stub_module("utils.memory.memory_service")
+memory_service_stub.MemoryService = MagicMock
+
+surface_routing_stub = _stub_module("utils.memory.surface_routing")
+surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
 boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
 boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
 
