@@ -474,7 +474,13 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
         for i, person in enumerate(people):
             stored_paths = person.get('speech_samples', [])
             people[i]['speech_samples'] = get_speech_sample_signed_urls(stored_paths)
-    return people
+    valid_people = []
+    for person in people:
+        try:
+            valid_people.append(Person.model_validate(person))
+        except Exception as e:  # noqa: BLE001 - one malformed person must not 500 the whole list
+            logger.warning(f"Skipping malformed person doc {person.get('id', 'unknown')}: {e}")
+    return valid_people
 
 
 @router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
