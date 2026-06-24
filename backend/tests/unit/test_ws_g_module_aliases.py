@@ -90,6 +90,17 @@ def test_memory_vector_metadata_alias_reexports_match_v17():
         is v17_vector_metadata.build_v17_archive_memory_vector_filter
     )
     assert memory_vector_metadata.parse_v17_search_vector_hit is v17_vector_metadata.parse_v17_search_vector_hit
+    assert memory_vector_metadata.MEMORY_VECTOR_SCHEMA_VERSION is v17_vector_metadata.MEMORY_VECTOR_SCHEMA_VERSION
+    assert memory_vector_metadata.build_memory_vector_metadata is v17_vector_metadata.build_memory_vector_metadata
+    assert (
+        memory_vector_metadata.build_default_memory_vector_filter
+        is v17_vector_metadata.build_default_memory_vector_filter
+    )
+    assert (
+        memory_vector_metadata.build_archive_memory_vector_filter
+        is v17_vector_metadata.build_archive_memory_vector_filter
+    )
+    assert memory_vector_metadata.parse_memory_search_vector_hit is v17_vector_metadata.parse_memory_search_vector_hit
 
 
 def test_memory_rollout_alias_reexports_match_v17():

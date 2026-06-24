@@ -73,7 +73,7 @@ def _install_heavy_import_stubs():
 
     vector_db_mod = _AutoMockModule("database.vector_db")
     vector_db_mod.find_similar_memories = MagicMock(return_value=[])
-    vector_db_mod.query_v17_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
+    vector_db_mod.query_memory_vector_candidates = MagicMock(return_value=_EmptyVectorResult())
     vector_db_mod.delete_pinecone_memory_vectors_by_id = MagicMock(return_value=0)
     sys.modules["database.vector_db"] = vector_db_mod
     import database
@@ -313,7 +313,7 @@ class TestKeywordSearchAndHybrid:
         def _empty_vector(*args, **kwargs):
             return _EmptyVectorResult()
 
-        with patch("database.vector_db.query_v17_memory_vector_candidates", side_effect=_empty_vector):
+        with patch("database.vector_db.query_memory_vector_candidates", side_effect=_empty_vector):
             matches = MemoryService().search(CANONICAL_UID, NEEDLE, limit=5)
 
         assert len(matches) == 1
