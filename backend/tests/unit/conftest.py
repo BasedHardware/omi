@@ -5,6 +5,13 @@ import importlib.util
 import sys
 import types
 
+from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
+    AutoMockModule as _AutoMockModule,
+    install_database_client_stub,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
 
 def _install_prometheus_client_stub():
     if 'prometheus_client' in sys.modules:
