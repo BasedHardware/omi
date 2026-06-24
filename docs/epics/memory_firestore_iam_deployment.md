@@ -144,11 +144,11 @@ Proposed env contract (not yet enabled):
 
 ```text
 MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=false        # default/fail-closed; only literal true enables
-V17_VECTOR_REPAIR_OUTBOX_UID=<server-owned uid shard> # required only when enabled; no unbounded scan
-V17_VECTOR_REPAIR_OUTBOX_WORKER_ID=<stable service/region/revision lease owner> # required only when enabled
-V17_VECTOR_REPAIR_OUTBOX_LIMIT=<small positive int, default 25>
-V17_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<positive int, default 300>
-V17_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<positive int, default 3>
+MEMORY_VECTOR_REPAIR_OUTBOX_UID=<server-owned uid shard> # required only when enabled; no unbounded scan
+MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID=<stable service/region/revision lease owner> # required only when enabled
+MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT=<small positive int, default 25>
+MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS=<positive int, default 300>
+MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS=<positive int, default 3>
 PINECONE_API_KEY=<worker secret; required only when enabled>
 PINECONE_INDEX_NAME=<worker index; required only when enabled>
 OPENAI_API_KEY=<embedding provider key; required only when enabled>
