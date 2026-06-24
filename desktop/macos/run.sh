@@ -182,11 +182,16 @@ if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
 fi
 if [ "$LOCAL_PROFILE" = true ]; then
     if [ "$IS_NAMED_BUNDLE" = true ]; then
-        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use default Omi Dev (unset OMI_APP_NAME; got OMI_APP_NAME='$APP_NAME')"
-        exit 1
-    fi
-    if [ "$APP_NAME" != "Omi Dev" ]; then
-        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use Omi Dev (got '$APP_NAME')"
+        case "$APP_NAME" in
+            omi-*|Omi-*) ;;
+            *)
+                echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 with OMI_APP_NAME requires an omi- prefixed bundle (got OMI_APP_NAME='$APP_NAME')"
+                exit 1
+                ;;
+        esac
+        export OMI_LOCAL_PROFILE_STORAGE_NAME="${OMI_LOCAL_PROFILE_STORAGE_NAME:-$APP_NAME}"
+    elif [ "$APP_NAME" != "Omi Dev" ]; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use Omi Dev or an omi- prefixed OMI_APP_NAME (got '$APP_NAME')"
         exit 1
     fi
     if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then

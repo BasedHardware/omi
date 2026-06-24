@@ -1,7 +1,7 @@
 PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bin/python; else printf python3; fi)
 DESKTOP_USER ?= alice
 
-.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local
+.PHONY: dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh
@@ -47,4 +47,7 @@ reset-memory-scenario:
 	$(PYTHON) scripts/dev-harness/reset-memory-scenario.py $(SCENARIO)
 
 desktop-run-local:
-	PYTHON="$(PYTHON)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
+	PYTHON="$(PYTHON)" OMI_APP_NAME="$(DESKTOP_APP_NAME)" bash scripts/dev-harness/desktop-run-local.sh "$(DESKTOP_USER)"
+
+run-canonical-promotion:
+	PYTHON="$(PYTHON)" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" $(PYTHON) scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"

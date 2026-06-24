@@ -306,10 +306,13 @@ def _control(uid: str, *, read: bool = True, default_grant: bool = True, archive
         data={
             "uid": uid,
             "schema_version": 1,
+            "head_commit_id": "ledger_commit_local_030",
+            "account_generation": 7,
+            "source_generation": 1,
+            "commit_sequence": 1,
             "mode": "read" if read else "off",
             "mode_epoch": 1,
             "cutover_epoch": 1 if read else 0,
-            "account_generation": 7,
             "fallback_projection_ready": read,
             "persistent_memory_writes_started": False,
             "decommission_reconciled": False,
@@ -443,9 +446,6 @@ def _alice_default_memory_ids(ctx: DeterministicContext) -> tuple[str, ...]:
         "alice_short_grocery",
         "alice_short_call_mom",
         "alice_short_pr_review",
-        "alice_short_yoga",
-        "alice_short_presentation",
-        "alice_short_flights",
     )
     long_keys = (
         "alice_long",
@@ -463,6 +463,9 @@ def _alice_default_memory_ids(ctx: DeterministicContext) -> tuple[str, ...]:
         "alice_long_pet",
         "alice_long_goal_marathon",
         "alice_long_edu",
+        "alice_short_yoga",
+        "alice_short_presentation",
+        "alice_short_flights",
     )
     return tuple(ctx.ids[key] for key in (*short_keys, *long_keys))
 
@@ -527,38 +530,58 @@ def _base_firestore(
         (
             "alice_short_demo",
             "Alice is presenting the memory platform demo to the team on Friday at 14:00.",
-            "2026-06-18T16:00:00Z",
+            "2026-01-15T10:45:00Z",
         ),
         (
             "alice_short_dentist",
             "Alice has a dentist appointment on Thursday at 14:30 downtown.",
-            "2026-06-19T09:15:00Z",
+            "2026-01-15T09:15:00Z",
         ),
         (
             "alice_short_grocery",
             "Alice needs to pick up oat milk and espresso beans after work.",
-            "2026-06-20T18:45:00Z",
+            "2026-01-15T08:45:00Z",
         ),
         (
             "alice_short_call_mom",
             "Alice promised to call her mom this weekend about summer travel plans.",
-            "2026-06-21T10:00:00Z",
+            "2026-01-14T18:00:00Z",
         ),
         (
             "alice_short_pr_review",
             "Alice needs to review PR #482 for the canonical memory adapter before end of day.",
-            "2026-06-22T11:00:00Z",
+            "2026-01-14T16:00:00Z",
         ),
-        ("alice_short_yoga", "Alice has yoga class Wednesday at 07:00 at Mission Yoga Studio.", "2026-06-16T06:30:00Z"),
+        ("alice_short_yoga", "Alice has yoga class Wednesday at 07:00 at Mission Yoga Studio.", "2026-01-13T06:30:00Z"),
         (
             "alice_short_presentation",
             "Alice is preparing slides for next week's product review on Brain Map UX.",
-            "2026-06-17T13:20:00Z",
+            "2026-01-12T13:20:00Z",
         ),
         (
             "alice_short_flights",
             "Alice should check her SFO to Seattle flight status before Friday's trip to visit Mia.",
-            "2026-06-23T08:00:00Z",
+            "2026-01-11T08:00:00Z",
+        ),
+    )
+    promoted_short_to_long: tuple[tuple[str, str, str, str], ...] = (
+        (
+            "alice_short_yoga",
+            "Alice has yoga class Wednesday at 07:00 at Mission Yoga Studio.",
+            "2026-01-13T06:30:00Z",
+            "commitments",
+        ),
+        (
+            "alice_short_presentation",
+            "Alice is preparing slides for next week's product review on Brain Map UX.",
+            "2026-01-12T13:20:00Z",
+            "work",
+        ),
+        (
+            "alice_short_flights",
+            "Alice should check her SFO to Seattle flight status before Friday's trip to visit Mia.",
+            "2026-01-11T08:00:00Z",
+            "travel",
         ),
     )
     long_memories: tuple[tuple[str, str, str, str], ...] = (
@@ -676,9 +699,15 @@ def _base_firestore(
         _projection_item(BOB_USER_ID, ctx.ids["bob_long"], bob_long, "2026-01-11T09:00:00Z", category="work"),
     ]
     for key, content, captured in short_memories:
+        if any(key == promoted[0] for promoted in promoted_short_to_long):
+            continue
         memory_id = ctx.ids[key]
         seeds.append(_memory_doc(uid, memory_id, "short_term", content, captured, SHORT_TERM_EXPIRES_AT))
         seeds.append(_projection_item(uid, memory_id, content, captured, category="commitments"))
+    for key, content, captured, category in promoted_short_to_long:
+        memory_id = ctx.ids[key]
+        seeds.append(_memory_doc(uid, memory_id, "long_term", content, captured))
+        seeds.append(_projection_item(uid, memory_id, content, captured, category=category))
     for key, content, captured, category in long_memories:
         memory_id = ctx.ids[key]
         seeds.append(_memory_doc(uid, memory_id, "long_term", content, captured))

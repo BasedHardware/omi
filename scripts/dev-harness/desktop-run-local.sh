@@ -57,7 +57,7 @@ if not run_sh.is_file():
     print(f"Cannot launch desktop local profile: missing {run_sh}")
     raise SystemExit(1)
 
-profile = desktop_profile.resolve_profile(cfg, user=user, seeded_users=users)
+profile = desktop_profile.resolve_profile(cfg, user=user, seeded_users=users, env=os.environ)
 errors = desktop_profile.validate_profile(profile)
 if errors:
     print("Static local desktop profile safety scan failed:")

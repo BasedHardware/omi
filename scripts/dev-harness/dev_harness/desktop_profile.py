@@ -10,6 +10,7 @@ path is unavailable.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -23,12 +24,47 @@ LOCAL_DISPLAY_NAME = "Omi Dev"
 LOCAL_BUNDLE_ID = "com.omi.desktop-dev"
 LOCAL_URL_SCHEME = "omi-computer-dev"
 LOCAL_STORAGE_NAME = "Omi"
+LOCAL_NAMED_BUNDLE_PREFIX = "omi-"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 LOCAL_FIREBASE_APP_ID = "1:000000000000:ios:omi-dev-local"
 LOCAL_FIREBASE_CLIENT_ID = "local-omi-dev-local.apps.localhost"
 LOCAL_FIREBASE_GCM_SENDER_ID = "000000000000"
 LOCAL_FIREBASE_PLIST = "GoogleService-Info-Local.plist"
 LOCAL_ACCESS_GROUP = "com.omi.desktop-dev.local-auth"
+
+
+def _slugify_identifier(value: str) -> str:
+    lowered = value.lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", lowered).strip("-")
+    return re.sub(r"-+", "-", slug)
+
+
+def _resolve_local_app_name(env: Mapping[str, str] | None = None) -> str:
+    source = os.environ if env is None else env
+    raw = str(source.get("OMI_APP_NAME", "") or source.get("DESKTOP_APP_NAME", "")).strip()
+    return raw or LOCAL_APP_NAME
+
+
+def _local_bundle_id(app_name: str) -> str:
+    if app_name == LOCAL_APP_NAME:
+        return LOCAL_BUNDLE_ID
+    slug = _slugify_identifier(app_name)
+    if not slug:
+        raise ValueError(f"OMI_APP_NAME {app_name!r} must contain at least one letter or number")
+    return f"com.omi.{slug}"
+
+
+def _local_url_scheme(app_name: str) -> str:
+    if app_name == LOCAL_APP_NAME:
+        return LOCAL_URL_SCHEME
+    return f"omi-{_slugify_identifier(app_name)}"
+
+
+def _local_storage_name(app_name: str) -> str:
+    if app_name == LOCAL_APP_NAME:
+        return LOCAL_STORAGE_NAME
+    return app_name
+
 
 PROHIBITED_ENDPOINT_PATTERNS = (
     re.compile(r"https://api\.omi\.me", re.IGNORECASE),
@@ -114,7 +150,13 @@ def _user_payload_from_seed_manifest(cfg: config.HarnessConfig, user: str) -> di
     return {}
 
 
-def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Iterable[str]) -> DesktopLocalProfile:
+def resolve_profile(
+    cfg: config.HarnessConfig,
+    *,
+    user: str,
+    seeded_users: Iterable[str],
+    env: Mapping[str, str] | None = None,
+) -> DesktopLocalProfile:
     users = tuple(sorted(set(str(item) for item in seeded_users)))
     payload = _user_payload_from_seed_manifest(cfg, user)
     email = payload.get("email", f"{user}@local.omi.invalid")
@@ -122,6 +164,10 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
     password = payload.get("password", f"{user}-local-password-030")
     python_api_url = cfg.backend_url
     desktop_api_url = cfg.desktop_backend_url
+    app_name = _resolve_local_app_name(env)
+    bundle_id = _local_bundle_id(app_name)
+    url_scheme = _local_url_scheme(app_name)
+    storage_name = _local_storage_name(app_name)
     env = {
         "OMI_DESKTOP_LOCAL_PROFILE": "1",
         "OMI_HARNESS_INSTANCE": cfg.instance,
@@ -129,7 +175,7 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,
         "OMI_PYTHON_API_URL": python_api_url,
-        "OMI_LOCAL_PROFILE_STORAGE_NAME": LOCAL_STORAGE_NAME,
+        "OMI_LOCAL_PROFILE_STORAGE_NAME": storage_name,
         "OMI_LOCAL_AUTH_USER": user,
         "OMI_LOCAL_AUTH_EMAIL": email,
         "OMI_LOCAL_AUTH_PASSWORD": password,
@@ -140,15 +186,20 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
         "FIRESTORE_DATABASE_ID": cfg.database_id,
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
     }
+    if app_name != LOCAL_APP_NAME:
+        env["OMI_APP_NAME"] = app_name
+        env["OMI_ENABLE_LOCAL_AUTOMATION"] = os.environ.get("OMI_ENABLE_LOCAL_AUTOMATION", "1")
+        if os.environ.get("OMI_AUTOMATION_PORT"):
+            env["OMI_AUTOMATION_PORT"] = os.environ["OMI_AUTOMATION_PORT"]
     return DesktopLocalProfile(
-        app_name=LOCAL_APP_NAME,
-        display_name=LOCAL_DISPLAY_NAME,
-        bundle_id=LOCAL_BUNDLE_ID,
-        url_scheme=LOCAL_URL_SCHEME,
-        preferences_domain=LOCAL_BUNDLE_ID,
+        app_name=app_name,
+        display_name=app_name if app_name != LOCAL_APP_NAME else LOCAL_DISPLAY_NAME,
+        bundle_id=bundle_id,
+        url_scheme=url_scheme,
+        preferences_domain=bundle_id,
         keychain_access_group=LOCAL_ACCESS_GROUP,
-        application_support_dir=f"~/Library/Application Support/{LOCAL_STORAGE_NAME}",
-        caches_dir=f"~/Library/Caches/{LOCAL_STORAGE_NAME}",
+        application_support_dir=f"~/Library/Application Support/{storage_name}",
+        caches_dir=f"~/Library/Caches/{storage_name}",
         firebase_project_id=cfg.project_id,
         firebase_database_id=cfg.database_id,
         firebase_auth_emulator_host=cfg.auth_host,
@@ -173,16 +224,24 @@ def resolve_profile(cfg: config.HarnessConfig, *, user: str, seeded_users: Itera
 
 def validate_profile(profile: DesktopLocalProfile) -> list[str]:
     errors: list[str] = []
-    if profile.app_name != LOCAL_APP_NAME or profile.bundle_id != LOCAL_BUNDLE_ID:
-        errors.append("local profile app/bundle identity drifted")
     if profile.bundle_id == "com.omi.computer-macos":
         errors.append("local profile must not use production bundle")
     if profile.bundle_id == "com.omi.omi-local-memory" or profile.app_name == "omi-local-memory":
-        errors.append("legacy omi-local-memory bundle is disabled; use default Omi Dev")
-    if "OMI_APP_NAME" in profile.env:
-        errors.append("OMI_APP_NAME must not be set for harness local profile (use default Omi Dev)")
-    if profile.url_scheme != LOCAL_URL_SCHEME:
-        errors.append("local URL scheme drifted")
+        errors.append("legacy omi-local-memory bundle is disabled; use omi-memory or default Omi Dev")
+    if profile.app_name == LOCAL_APP_NAME:
+        if profile.bundle_id != LOCAL_BUNDLE_ID:
+            errors.append("local profile app/bundle identity drifted")
+        if profile.url_scheme != LOCAL_URL_SCHEME:
+            errors.append("local URL scheme drifted")
+    else:
+        if not profile.app_name.lower().startswith(LOCAL_NAMED_BUNDLE_PREFIX):
+            errors.append("named local harness bundles must use an omi- prefix")
+        expected_bundle = _local_bundle_id(profile.app_name)
+        if profile.bundle_id != expected_bundle:
+            errors.append(f"named bundle id must be {expected_bundle}")
+        expected_scheme = _local_url_scheme(profile.app_name)
+        if profile.url_scheme != expected_scheme:
+            errors.append(f"named bundle URL scheme must be {expected_scheme}")
     if profile.firebase_project_id != safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID:
         errors.append("local profile must use demo-omi-local only")
     if profile.firebase_database_id != safety.DEFAULT_FIRESTORE_DATABASE_ID:
