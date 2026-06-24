@@ -72,6 +72,8 @@ def _install_module(name):
 _ensure_package("database", BACKEND_DIR / "database")
 _ensure_package("utils", BACKEND_DIR / "utils")
 
+firebase_admin_stub = _install_module("firebase_admin")
+firebase_admin_stub.__path__ = []
 firebase_auth_stub = _install_module("firebase_admin.auth")
 firebase_auth_stub.verify_id_token = MagicMock()
 
@@ -87,6 +89,16 @@ http_client_stub.get_auth_client = MagicMock()
 
 log_sanitizer_stub = _install_module("utils.log_sanitizer")
 log_sanitizer_stub.sanitize = MagicMock(side_effect=lambda value: value)
+
+jwt_stub = _install_module("jwt")
+jwt_stub.__path__ = []
+jwt_stub.encode = MagicMock(return_value="test-client-secret")
+jwt_stub.decode = MagicMock(return_value={})
+jwt_stub.get_unverified_header = MagicMock(return_value={"kid": "test-key"})
+
+jwt_algorithms_stub = _install_module("jwt.algorithms")
+jwt_algorithms_stub.RSAAlgorithm = MagicMock()
+jwt_algorithms_stub.RSAAlgorithm.from_jwk = MagicMock(return_value="test-public-key")
 
 try:
     import jinja2  # noqa: F401
