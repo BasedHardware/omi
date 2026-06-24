@@ -1,5 +1,7 @@
 # memory Memory Product Integration — Oracle Review
 
+> **Historical:** 'v17' was the internal codename for the canonical memory system; fully renamed to neutral vocabulary on 2026-06-24.
+
 **Date:** 2026-06-18  
 **Reviewer:** Oracle (`oracle` CLI, browser-backed `gemini-3.5-flash`; model-selection evidence reported by Oracle as unresolved/unverified, but a complete response was returned)  
 **Inputs:**
