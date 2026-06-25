@@ -514,12 +514,16 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
         limit=10,
         offset=0,
         cursor=None,
+        device_scope="all",
+        client_device_id=None,
         uid="uid-canonical",
         memory_runtime=runtime,
+        x_app_platform=None,
+        x_device_id_hash=None,
     )
 
     assert result == canonical_memories
-    service_read.assert_called_once_with("uid-canonical", limit=10, offset=0)
+    service_read.assert_called_once_with("uid-canonical", limit=10, offset=0, device_scope="all", client_device_id=None)
     legacy_get.assert_not_called()
 
 
@@ -549,8 +553,12 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
         limit=10,
         offset=0,
         cursor=None,
+        device_scope="all",
+        client_device_id=None,
         uid="uid-legacy",
         memory_runtime=runtime,
+        x_app_platform=None,
+        x_device_id_hash=None,
     )
 
     assert result == legacy_memories
