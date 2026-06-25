@@ -1987,8 +1987,7 @@ private struct MemoryCardView: View {
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textSecondary)
 
-          // Only badge memories the backend actually tiered; legacy/untiered
-          // records carry no real tier, so we show no badge for them.
+          // Badge when the server sent an authoritative layer (canonical cohort always does).
           if memory.tierIsExplicit {
             MemoryLayerBadge(layer: memory.tier)
           }

@@ -1276,9 +1276,8 @@ struct ServerMemory: Decodable, Identifiable {
   let capturedAt: Date?
   let expiresAt: Date?
   let tier: MemoryLayer
-  // True only when the backend actually sent a tier (`tier`/`memory_tier`). Legacy
-  // records carry no tier, so `tier` falls back to `.longTerm` for filtering but we
-  // suppress the tier badge for them (tierIsExplicit == false).
+  // Canonical API responses always include `layer`/`memory_tier`; legacy rows omit
+  // them and default to `.longTerm` for filtering only (no badge).
   let tierIsExplicit: Bool
   let conversationId: String?
   let reviewed: Bool
