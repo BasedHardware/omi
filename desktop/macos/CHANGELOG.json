@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Connect your AI: centered the omi title together with the What-omi-knows cards"
+    "Connect your AI: centered the omi title together with the What-omi-knows cards",
+    "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons"
   ],
   "releases": [
     {
