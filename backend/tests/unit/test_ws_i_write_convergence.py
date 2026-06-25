@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import ast
-import hashlib
 import importlib
-import uuid
 import os
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -23,17 +20,6 @@ os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
-
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-
-
-def _document_id_from_seed(seed: str) -> str:
-    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-
-_db_client_mod.document_id_from_seed = _document_id_from_seed
 
 from tests.unit.memory_import_isolation import (
     AutoMockModule as _AutoMockModule,
