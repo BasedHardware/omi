@@ -146,6 +146,10 @@ class AppState: ObservableObject {
   // Access via RecordingTimer.shared.duration
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
+  private var hasActiveConversationFilters: Bool {
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+  }
+
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
   // Access via LiveTranscriptMonitor.shared.segments
   var liveSpeakerSegments: [SpeakerSegment] { LiveTranscriptMonitor.shared.segments }
@@ -154,7 +158,8 @@ class AppState: ObservableObject {
   @Published var conversations: [ServerConversation] = []
   @Published var isLoadingConversations: Bool = false
   @Published var conversationsError: String? = nil
-  @Published var totalConversationsCount: Int? = nil  // Total count (fetched separately)
+  @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
+  @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -2655,6 +2660,21 @@ class AppState: ObservableObject {
 
   // MARK: - Conversations
 
+  private func updateConversationCount(_ count: Int, filtered: Bool) {
+    if filtered {
+      if filteredConversationsCount != count {
+        filteredConversationsCount = count
+      }
+    } else {
+      if totalConversationsCount != count {
+        totalConversationsCount = count
+      }
+      if filteredConversationsCount != nil {
+        filteredConversationsCount = nil
+      }
+    }
+  }
+
   /// Load conversations - first from local cache (instant), then from API (background refresh)
   func loadConversations() async {
     guard !isLoadingConversations else { return }
@@ -2662,51 +2682,69 @@ class AppState: ObservableObject {
     isLoadingConversations = true
     conversationsError = nil
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Step 1: Load from local cache first (instant display)
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
-    do {
-      let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) {
-        group in
-        group.addTask {
-          try await TranscriptionStorage.shared.getLocalConversations(
-            limit: 50,
-            starredOnly: self.showStarredOnly,
-            folderId: self.selectedFolderId
-          )
+    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
+    // The local cache currently supports starred/folder filters but not server date ranges;
+    // skip it for date-filtered views so the visible list and total count share semantics.
+    if requestSelectedDateFilter == nil {
+      do {
+        let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) { group in
+          group.addTask {
+            try await TranscriptionStorage.shared.getLocalConversations(
+              limit: 50,
+              starredOnly: requestShowStarredOnly,
+              folderId: requestSelectedFolderId
+            )
+          }
+          group.addTask {
+            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
+            throw CancellationError()
+          }
+          let result = try await group.next()!
+          group.cancelAll()
+          return result
         }
-        group.addTask {
-          try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-          throw CancellationError()
+
+        if !cachedConversations.isEmpty && requestFiltersAreCurrent() {
+          conversations = cachedConversations
+          log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
+
+          // Get local count
+          let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
+            starredOnly: requestShowStarredOnly,
+            folderId: requestSelectedFolderId)
+          updateConversationCount(localCount, filtered: requestHasActiveFilters)
+
+          // Stop loading state so UI shows cached data immediately
+          isLoadingConversations = false
+          // Notify sidebar immediately so loading indicator clears with cached data
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
         }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
+      } catch {
+        log("Conversations: Local cache unavailable, falling back to API")
+        // Continue to API fetch even if local fails
       }
-
-      if !cachedConversations.isEmpty {
-        conversations = cachedConversations
-        log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
-
-        // Get local count
-        let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
-          starredOnly: showStarredOnly)
-        totalConversationsCount = localCount
-
-        // Stop loading state so UI shows cached data immediately
-        isLoadingConversations = false
-        // Notify sidebar immediately so loading indicator clears with cached data
-        NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-      }
-    } catch {
-      log("Conversations: Local cache unavailable, falling back to API")
-      // Continue to API fetch even if local fails
+    } else {
+      conversations = []
+      filteredConversationsCount = 0
     }
 
     // Step 2: Fetch from API in background to get fresh data
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2723,16 +2761,27 @@ class AppState: ObservableObject {
       includeDiscarded: false,
       startDate: startDate,
       endDate: endDate,
-      folderId: selectedFolderId,
-      starred: showStarredOnly ? true : nil
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
     )
-    async let countTask = APIClient.shared.getConversationsCount(includeDiscarded: false)
+    async let countTask = APIClient.shared.getConversationsCount(
+      includeDiscarded: false,
+      statuses: [.completed, .processing],
+      startDate: startDate,
+      endDate: endDate,
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
+    )
 
     do {
       let fetchedConversations = try await conversationsTask
-      conversations = fetchedConversations
+      if requestFiltersAreCurrent() {
+        conversations = fetchedConversations
+      } else {
+        log("Conversations: Ignoring stale response for superseded filters")
+      }
       log(
-        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(showStarredOnly), date=\(selectedDateFilter?.description ?? "nil"))"
+        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(requestShowStarredOnly), date=\(requestSelectedDateFilter?.description ?? "nil"))"
       )
 
       // DEBUG: Log any conversations with empty titles
@@ -2770,8 +2819,12 @@ class AppState: ObservableObject {
     // Update total count from API (more accurate than local)
     do {
       let count = try await countTask
-      totalConversationsCount = count
-      log("Conversations: Total count from API = \(count)")
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
+        log("Conversations: Count from API = \(count) (filtered=\(requestHasActiveFilters))")
+      } else {
+        log("Conversations: Ignoring stale count for superseded filters")
+      }
     } catch {
       logError("Conversations: Failed to get count from API", error: error)
       // Keep local count if API fails
@@ -2779,6 +2832,9 @@ class AppState: ObservableObject {
 
     isLoadingConversations = false
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
+    if !requestFiltersAreCurrent() {
+      await loadConversations()
+    }
   }
 
   /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
@@ -2791,10 +2847,21 @@ class AppState: ObservableObject {
     // Skip if currently doing a full load
     guard !isLoadingConversations else { return }
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2811,15 +2878,19 @@ class AppState: ObservableObject {
         includeDiscarded: false,
         startDate: startDate,
         endDate: endDate,
-        folderId: selectedFolderId,
-        starred: showStarredOnly ? true : nil
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
       )
 
-      // Merge in-place: update existing, add new, remove gone
-      let merged = mergeConversations(source: fetchedConversations, current: conversations)
-      if merged != conversations {
-        conversations = merged
-        log("Conversations: Auto-refresh updated (\(merged.count) items)")
+      if requestFiltersAreCurrent() {
+        // Merge in-place: update existing, add new, remove gone
+        let merged = mergeConversations(source: fetchedConversations, current: conversations)
+        if merged != conversations {
+          conversations = merged
+          log("Conversations: Auto-refresh updated (\(merged.count) items)")
+        }
+      } else {
+        log("Conversations: Ignoring stale auto-refresh response for superseded filters")
       }
 
       // Sync to local database in background
@@ -2844,9 +2915,16 @@ class AppState: ObservableObject {
     }
 
     do {
-      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
-      if totalConversationsCount != count {
-        totalConversationsCount = count
+      let count = try await APIClient.shared.getConversationsCount(
+        includeDiscarded: false,
+        statuses: [.completed, .processing],
+        startDate: startDate,
+        endDate: endDate,
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
+      )
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
       }
     } catch {
       // Keep existing count

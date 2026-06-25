@@ -213,10 +213,22 @@ def get_conversations(
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
+    starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    count = conversations_db.get_conversations_count(
+        uid,
+        include_discarded=include_discarded,
+        statuses=status_list,
+        start_date=start_date,
+        end_date=end_date,
+        folder_id=folder_id,
+        starred=starred,
+    )
     return {'count': count}
 
 

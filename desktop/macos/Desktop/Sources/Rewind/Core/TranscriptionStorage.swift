@@ -841,7 +841,7 @@ actor TranscriptionStorage {
     }
 
     /// Get count of local conversations
-    func getLocalConversationsCount(starredOnly: Bool = false) async throws -> Int {
+    func getLocalConversationsCount(starredOnly: Bool = false, folderId: String? = nil) async throws -> Int {
         let db = try await ensureInitialized()
 
         return try await db.read { database in
@@ -852,6 +852,10 @@ actor TranscriptionStorage {
 
             if starredOnly {
                 query = query.filter(Column("starred") == true)
+            }
+
+            if let folderId = folderId {
+                query = query.filter(Column("folderId") == folderId)
             }
 
             return try query.fetchCount(database)
