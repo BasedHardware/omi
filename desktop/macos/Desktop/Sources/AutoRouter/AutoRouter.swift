@@ -115,6 +115,11 @@ final class AutoRouter {
                 store(raw, for: task)
             } else {
                 UserDefaults.standard.removeObject(forKey: pickKey(for: task))
+                // Update the refresh date even on null model so that
+                // refreshIfStale respects the 24h TTL (without this,
+                // every subsequent call would re-fire because currentPick
+                // is nil — potential backend flooding).
+                UserDefaults.standard.set(Date(), forKey: pickDateKey(for: task))
                 log("AutoRouter: no model available for \(task.rawValue) (cleared stale cache)")
             }
         } catch {

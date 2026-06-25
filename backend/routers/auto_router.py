@@ -271,9 +271,9 @@ async def auto_router_pick(
         "scores": {model.id: s for model, s in scored},
         "detail": {
             "weights": {
-                "quality": task_spec.quality_weight,
-                "latency": task_spec.latency_weight,
-                "cost": task_spec.cost_weight,
+                "quality": effective_task_spec.quality_weight,
+                "latency": effective_task_spec.latency_weight,
+                "cost": effective_task_spec.cost_weight,
             },
             "candidates": [
                 {
@@ -303,16 +303,17 @@ async def auto_router_pick(
     }
 
     # Record this pick in the metrics history (process-local, in-memory).
-    # v3 may persist this to Redis/DB.
+    # v3 may persist this to Redis/DB. Use effective weights (which may differ
+    # from task_spec defaults if user prefs or ?weights= override is active).
     if winner is not None and winner_score is not None:
         _metrics_collector.record_pick(
             task=task_spec.name,
             model=winner.id,
             score=winner_score,
             weights_used={
-                "quality": task_spec.quality_weight,
-                "latency": task_spec.latency_weight,
-                "cost": task_spec.cost_weight,
+                "quality": effective_task_spec.quality_weight,
+                "latency": effective_task_spec.latency_weight,
+                "cost": effective_task_spec.cost_weight,
             },
         )
 

@@ -905,3 +905,69 @@ class TestMetricsBenchmarksSource:
         body = r.json()
         assert body["benchmarks_source"] == "example"
         assert body["benchmarks_last_refresh"] is None
+
+
+# ---------------------------------------------------------------------------
+# AC: /pick response + metrics use EFFECTIVE weights (cubic P1, v3 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestPickUsesEffectiveWeights:
+    """detail.weights + pick_history must reflect EFFECTIVE weights
+    (query_param override > user_prefs > task_default), not the
+    task_spec defaults. cubic flagged these as P1 on v3."""
+
+    def test_detail_weights_reflect_user_prefs(self, client):
+        """When user prefs are set, detail.weights should reflect them, not defaults."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        # detail.weights must be the EFFECTIVE weights (user prefs), not task defaults
+        assert body["detail"]["weights"] == {"quality": 1.0, "latency": 0.0, "cost": 0.0}
+
+    def test_detail_weights_reflect_query_param_override(self, client):
+        """When weights=... query param is set, detail.weights should reflect it."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.0, "latency": 0.0, "cost": 1.0}')
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["detail"]["weights"] == {"quality": 0.0, "latency": 0.0, "cost": 1.0}
+
+    def test_pick_history_records_effective_weights(self, client):
+        """When user prefs are set, pick_history should record the EFFECTIVE weights."""
+        from routers.auto_router import (
+            reset_user_prefs_store_for_endpoint_testing,
+            reset_metrics_collector_for_testing,
+        )
+
+        reset_metrics_collector_for_testing()
+        reset_user_prefs_store_for_endpoint_testing()
+        # Set quality-biased prefs
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.8, "latency": 0.1, "cost": 0.1}}},
+        )
+        # Make a pick
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        # Verify metrics recorded the EFFECTIVE weights
+        r = client.get("/v1/auto-router/metrics")
+        body = r.json()
+        pick_history = body["pick_history"]
+        assert len(pick_history) >= 1
+        # The most recent ptt_response pick should have effective weights, not defaults
+        ptt_picks = [p for p in pick_history if p["task"] == "ptt_response"]
+        assert len(ptt_picks) >= 1
+        latest_ptt = ptt_picks[-1]
+        assert latest_ptt["weights_used"] == {"quality": 0.8, "latency": 0.1, "cost": 0.1}
