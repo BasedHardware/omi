@@ -32,7 +32,7 @@ from models.memory_evidence import (
     SourceState,
     SourceStateReason,
 )
-from models.memories import MemoryDB, MemoryCategory
+from models.memories import Evidence, MemoryDB, MemoryCategory, decide_initial_memory_tier
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
@@ -307,14 +307,65 @@ def _bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
     return atomic_bump_source_generation(uid, db_client=db_client)
 
 
+def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
+    raw_tier = data.get("memory_tier")
+    if raw_tier is not None:
+        if hasattr(raw_tier, "value"):
+            return raw_tier.value
+        return str(raw_tier)
+    return decide_initial_memory_tier(bool(data.get("manually_added")), data.get("durability")).value
+
+
+def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
+    conversation_id = data.get("conversation_id")
+    evidence_items: List[MemoryEvidence] = []
+    for raw in data.get("evidence") or []:
+        if isinstance(raw, dict) and raw.get("evidence_id"):
+            evidence_items.append(_legacy_evidence_to_memory(raw, conversation_id=conversation_id))
+    if evidence_items:
+        return evidence_items
+
+    memory_id = data.get("id") or "pending"
+    source_id = conversation_id or data.get("app_id") or f"external:{memory_id}"
+    manually_added = bool(data.get("manually_added"))
+    if conversation_id:
+        source_type = "conversation"
+    elif data.get("app_id"):
+        source_type = f"integration:{data['app_id']}"
+    else:
+        source_type = "api"
+    source_signal = "manual" if manually_added else "api"
+    evidence = Evidence.from_source(
+        source_id=source_id,
+        source_type=source_type,
+        source_signal=source_signal,
+        extractor_id=data.get("extractor_id") or ("manual_note" if manually_added else "external_write"),
+        extractor_version="v1",
+        artifact_ref=data.get("artifact_ref") or {},
+        independence_group=source_id,
+    )
+    return [_legacy_evidence_to_memory(evidence.model_dump(), conversation_id=conversation_id)]
+
+
+def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client) -> Optional[MemoryItem]:
+    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    snapshot = db_client.document(path).get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    item = MemoryItem(**(snapshot.to_dict() or {}))
+    if item.status != MemoryItemStatus.active:
+        return None
+    return item
+
+
 def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client=None) -> str:
-    """Persist one extracted memory to memory_items + ledger at short_term/active/processed."""
+    """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     client = db_client if db_client is not None else default_db_client
     content = (data.get("content") or "").strip()
     if not content:
         raise ValueError("canonical write requires non-empty content")
 
-    conversation_id = data.get("conversation_id") or data.get("memory_id")
+    conversation_id = data.get("conversation_id")
     source_id = conversation_id or data.get("id") or "unknown"
     memory_id = data.get("id") or extraction_memory_id(uid=uid, source_id=source_id, content=content)
     idempotency_key = deterministic_contract_id(
@@ -322,12 +373,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         {"uid": uid, "source_id": source_id, "content": content},
     )
 
-    evidence_items: List[MemoryEvidence] = []
-    for raw in data.get("evidence") or []:
-        if isinstance(raw, dict) and raw.get("evidence_id"):
-            evidence_items.append(_legacy_evidence_to_memory(raw, conversation_id=conversation_id))
-    if not evidence_items:
-        raise ValueError("canonical write requires at least one evidence record")
+    evidence_items = _evidence_items_from_payload(data)
 
     control = _ensure_control_state(uid, db_client=client)
     for evidence in evidence_items:
@@ -366,7 +412,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "memory_text": content,
         "confidence": "medium",
         "relationship_to_user": "self",
-        "initial_tier": MemoryLayer.short_term.value,
+        "initial_tier": _resolve_initial_tier_value(data),
     }
 
     result = apply_long_term_patch_firestore(
@@ -400,6 +446,38 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         sync_canonical_memory_vector(item)
 
     return committed_id
+
+
+def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client=None) -> str:
+    """Persist a manual/API/integration memory via the canonical apply path."""
+    return write_canonical_extraction_memory(uid, data, db_client=db_client)
+
+
+def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    trimmed = (content or "").strip()
+    if not trimmed:
+        raise ValueError("canonical update requires non-empty content")
+    now = datetime.now(timezone.utc)
+    updated = item.model_copy(update={"content": trimmed, "updated_at": now, "user_asserted": True})
+    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    sync_atom_keyword_index_for_item(updated, db_client=client)
+    sync_canonical_memory_vector(updated)
+    return updated
+
+
+def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    now = datetime.now(timezone.utc)
+    updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
+    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    return updated
 
 
 def _item_sourced_from_conversation(item: MemoryItem, conversation_id: str) -> bool:
