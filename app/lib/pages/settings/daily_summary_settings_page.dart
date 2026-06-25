@@ -56,7 +56,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     if (!mounted) return;
     if (success) {
       PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
-    } else {
+    } else if (_enabled == value) {
       setState(() => _enabled = previous);
       AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     }
@@ -69,7 +69,7 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
     if (!mounted) return;
     if (success) {
       PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
-    } else {
+    } else if (_selectedHour == hour) {
       setState(() => _selectedHour = previous);
       AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     }
