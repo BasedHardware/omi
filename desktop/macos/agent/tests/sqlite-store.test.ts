@@ -162,7 +162,48 @@ describe("SqliteAgentStore", () => {
       surfaceKind: "main",
       defaultAdapterId: "acp",
     });
+    const replacementBinding = store.insertAdapterBinding({
+      sessionId: secondSession.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "native",
+      status: "stale",
+    });
+    expect(replacementBinding.sessionId).toBe(secondSession.sessionId);
+    const nativeRows = store.allRows(
+      "SELECT session_id, status FROM adapter_bindings WHERE adapter_id = ? AND adapter_native_session_id = ? ORDER BY created_at_ms ASC",
+      ["acp", "native-1"],
+    );
+    expect(nativeRows.map((row) => row.status)).toEqual(["closed", "stale"]);
+
+    store.close();
+  });
+
+  it("keeps native binding replacement atomic when insert fails", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const existingBinding = store.insertAdapterBinding({
+      sessionId: session.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "native-1",
+      adapterInstanceId: "worker-1",
+      resumeFidelity: "native",
+      status: "active",
+    });
+    const secondSession = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+
     expect(() => store.insertAdapterBinding({
+      bindingId: existingBinding.bindingId,
       sessionId: secondSession.sessionId,
       adapterId: "acp",
       bindingGeneration: 1,
@@ -171,6 +212,10 @@ describe("SqliteAgentStore", () => {
       status: "stale",
     })).toThrow();
 
+    expect(store.getRow("SELECT status, adapter_instance_id FROM adapter_bindings WHERE binding_id = ?", [existingBinding.bindingId])).toMatchObject({
+      status: "active",
+      adapter_instance_id: "worker-1",
+    });
     store.close();
   });
 

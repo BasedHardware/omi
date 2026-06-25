@@ -1,9 +1,11 @@
+import AppKit
 import SwiftUI
 
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
     @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+    @ObservedObject private var agentPills = AgentPillsManager.shared
     weak var window: NSWindow?
     var onPlayPause: () -> Void
     var onAskAI: () -> Void
@@ -17,25 +19,213 @@ struct FloatingControlBarView: View {
 
     @State private var isHovering = false
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
+    private var notchSideWidth: CGFloat {
+        if agentPills.pills.isEmpty && !state.isVoiceListening {
+            return FloatingControlBarWindow.notchCompactSideWidth
+        }
+        return FloatingControlBarWindow.notchActiveSideWidth
+    }
+    private var notchChromeWidth: CGFloat {
+        FloatingControlBarWindow.notchHiddenCenterWidth + notchSideWidth * 2
+    }
+    private var notchChromeLayoutWidth: CGFloat {
+        state.showingAIConversation
+            ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
+            : notchChromeWidth
+    }
 
     var body: some View {
-        VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
-            barChrome
+        Group {
+            if state.usesNotchIsland {
+                notchModeBody
+            } else {
+                VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
+                    barChrome
 
-            if let notification = state.currentNotification, !state.showingAIConversation {
-                notificationView(notification)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    if let notification = state.currentNotification, !state.showingAIConversation {
+                        notificationView(notification)
+                            .padding(.horizontal, 8)
+                            .padding(.bottom, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: state.usesNotchIsland ? .top : .center)
+        .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
     }
 
     /// Whether the bar chrome should stretch to fill the window width
     private var barNeedsFullWidth: Bool {
         isHovering || state.showingAIConversation || state.isVoiceListening
+    }
+
+    private var notchModeBody: some View {
+        VStack(spacing: 0) {
+            notchChrome
+
+            if state.showingAIConversation {
+                conversationView
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                    )
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.025))
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.top, 4)
+                    .padding(.bottom, 9)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+
+            if let notification = state.currentNotification, !state.showingAIConversation {
+                notificationView(notification)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                if state.isVoiceResponseActive {
+                    NotchResponseGlowView(
+                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
+                    )
+                }
+
+                if state.showingAIConversation || state.currentNotification != nil {
+                    NotchDockShape(bottomRadius: 22)
+                        .fill(Color.black)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    NotchDockShape(bottomRadius: 18)
+                        .fill(Color.black)
+                        .frame(height: notchChromeHeight)
+                }
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
+            }
+        }
+        .scaleEffect(
+            x: max(0.001, state.notchRevealProgress),
+            y: max(0.001, state.notchRevealProgress),
+            anchor: .top
+        )
+        .opacity(min(1, max(0, state.notchRevealProgress * 1.4)))
+        .contextMenu { barContextMenu }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.showingAIConversation)
+    }
+
+    private var notchChrome: some View {
+        ZStack {
+            HStack(spacing: 0) {
+                notchAgentLobe
+                    .frame(width: notchSideWidth, height: notchChromeHeight)
+
+                Spacer(minLength: FloatingControlBarWindow.notchHiddenCenterWidth)
+
+                notchControlLobe
+                    .frame(width: notchSideWidth, height: notchChromeHeight)
+            }
+
+            Color.clear
+                .frame(width: FloatingControlBarWindow.notchHiddenCenterWidth, height: notchChromeHeight)
+                .allowsHitTesting(false)
+        }
+        .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
+    }
+
+    private var notchAgentLobe: some View {
+        HStack(spacing: 0) {
+            if agentPills.pills.isEmpty {
+                Color.clear
+                    .allowsHitTesting(false)
+            } else {
+                AgentPillsRowView(manager: agentPills)
+                    .frame(maxWidth: notchSideWidth - 12, alignment: .trailing)
+                    .clipped()
+                    .padding(.leading, 6)
+                    .padding(.trailing, 6)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+
+    private var notchControlLobe: some View {
+        HStack(spacing: 10) {
+            Button {
+                if isHovering && !state.isVoiceListening {
+                    openFloatingBarSettings()
+                } else {
+                    onAskAI()
+                }
+            } label: {
+                ZStack {
+                    if state.isVoiceListening && !state.isVoiceFollowUp {
+                        HStack(spacing: 4) {
+                            VoiceWaveformBars(isActive: true)
+                                .scaleEffect(0.76)
+                                .frame(width: 26, height: 15)
+                            Image(systemName: "mic.fill")
+                                .scaledFont(size: 10, weight: .semibold)
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        ZStack {
+                            notchOmiLogo
+                                .opacity(isHovering ? 0 : 1)
+                                .scaleEffect(isHovering ? 0.78 : 1)
+                                .rotationEffect(.degrees(isHovering ? -35 : 0))
+
+                            Image(systemName: "gearshape.fill")
+                                .scaledFont(size: 15, weight: .semibold)
+                                .foregroundColor(.white.opacity(0.86))
+                                .opacity(isHovering ? 1 : 0)
+                                .scaleEffect(isHovering ? 1 : 0.55)
+                                .rotationEffect(.degrees(isHovering ? 0 : 70))
+                        }
+                        .frame(width: 22, height: 22)
+                        .shadow(
+                            color: state.isVoiceResponseActive ? OmiColors.purpleAccent.opacity(0.85) : .clear,
+                            radius: 10
+                        )
+                    }
+                }
+                .frame(width: state.isVoiceListening ? 58 : 40, height: 27)
+            }
+            .buttonStyle(.plain)
+            .help(state.isVoiceListening ? "Listening" : (isHovering ? "Floating Bar Settings" : "Ask Omi"))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        .padding(.trailing, 6)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isHovering = hovering
+            }
+        }
+    }
+
+    private var notchChromeHeight: CGFloat {
+        FloatingControlBarWindow.notchChromeHeight
+    }
+
+    private var notchOmiLogo: some View {
+        NotchOmiMark()
+            .frame(width: 18.5, height: 18.5)
     }
 
     private var barChrome: some View {
@@ -268,13 +458,46 @@ struct FloatingControlBarView: View {
     }
 
     private func openFloatingBarSettings() {
-        // Bring main window to front and navigate to floating bar settings
-        NSApp.activate()
-        for window in NSApp.windows where window.title.hasPrefix("Omi") {
-            window.makeKeyAndOrderFront(nil)
-            break
+        activateMainAppWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
         }
-        NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+    }
+
+    private func activateMainAppWindow() {
+        NSApp.activate()
+
+        if !revealMainAppWindow() {
+            AppDelegate.openMainWindow?()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NSApp.activate()
+                _ = revealMainAppWindow()
+            }
+        }
+    }
+
+    @discardableResult
+    private func revealMainAppWindow() -> Bool {
+        guard let window = NSApp.windows.first(where: { window in
+            let isRealAppWindow = !(window is NSPanel)
+                && window.frame.width > 300
+                && window.frame.height > 200
+            let isMenuBarPopover = window.title.hasPrefix("Item-")
+            return isRealAppWindow && !isMenuBarPopover && !window.isMiniaturized
+        }) ?? NSApp.windows.first(where: { window in
+            let isRealAppWindow = !(window is NSPanel)
+                && window.frame.width > 300
+                && window.frame.height > 200
+            let isMenuBarPopover = window.title.hasPrefix("Item-")
+            return isRealAppWindow && !isMenuBarPopover
+        }) else {
+            return false
+        }
+
+        window.deminiaturize(nil)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        return true
     }
 
     private var controlBarView: some View {
@@ -313,16 +536,34 @@ struct FloatingControlBarView: View {
             .fill(compactPillFill)
             .frame(width: 28, height: 6)
             .shadow(
-                color: state.isVoiceResponseActive ? OmiColors.purpleAccent.opacity(0.75) : .clear,
-                radius: state.isVoiceResponseActive ? 10 : 0,
+                color: state.isVoiceResponseActive ? OmiColors.purpleAccent.opacity(0.95) : .clear,
+                radius: state.isVoiceResponseActive ? 16 : 0,
+                x: 0,
+                y: 0
+            )
+            .shadow(
+                color: state.isVoiceResponseActive ? OmiColors.purplePrimary.opacity(0.72) : .clear,
+                radius: state.isVoiceResponseActive ? 28 : 0,
                 x: 0,
                 y: 0
             )
             .overlay {
                 if state.isVoiceResponseActive {
                     RoundedRectangle(cornerRadius: 3)
-                        .stroke(OmiColors.purplePrimary.opacity(0.65), lineWidth: 0.8)
-                        .blur(radius: 0.2)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    OmiColors.purpleAccent,
+                                    Color(red: 0.25, green: 0.75, blue: 1.0),
+                                    OmiColors.purplePrimary
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: 1.4
+                        )
+                        .padding(-2.2)
+                        .blur(radius: 0.25)
                 }
             }
             .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
@@ -331,7 +572,11 @@ struct FloatingControlBarView: View {
     private var compactPillFill: LinearGradient {
         if state.isVoiceResponseActive {
             return LinearGradient(
-                colors: [OmiColors.purpleAccent, OmiColors.purplePrimary],
+                colors: [
+                    OmiColors.purpleAccent,
+                    Color(red: 0.50, green: 0.33, blue: 1.0),
+                    OmiColors.purplePrimary
+                ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
@@ -429,9 +674,11 @@ struct FloatingControlBarView: View {
             onEscape: onEscape,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-                let totalHeight = 50 + height + 24
-                state.inputViewHeight = totalHeight
-            }
+            let totalHeight = state.usesNotchIsland
+                ? notchChromeHeight + height + 22
+                : 50 + height + 24
+            state.inputViewHeight = totalHeight
+        }
         )
         .transition(
             .asymmetric(
@@ -496,4 +743,145 @@ struct FloatingControlBarView: View {
         )
     }
 
+}
+
+private struct NotchDockShape: Shape {
+    let bottomRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(bottomRadius, rect.height / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct NotchLowerEdgeShape: Shape {
+    let bottomRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(bottomRadius, rect.height / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + 1))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.maxY),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        return path
+    }
+}
+
+private struct NotchResponseGlowView: View {
+    let bottomRadius: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            let phase = time.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let sweepStart = UnitPoint(x: -0.35 + phase * 1.7, y: 0.0)
+            let sweepEnd = UnitPoint(x: 0.35 + phase * 1.7, y: 1.0)
+            let edge = NotchLowerEdgeShape(bottomRadius: bottomRadius)
+
+            ZStack {
+                edge
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.45, green: 0.18, blue: 1.0).opacity(1.0),
+                                Color(red: 0.88, green: 0.22, blue: 1.0).opacity(1.0),
+                                Color(red: 0.22, green: 0.72, blue: 1.0).opacity(1.0),
+                                Color(red: 0.72, green: 0.16, blue: 1.0).opacity(1.0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        style: StrokeStyle(lineWidth: 3.2, lineCap: .round, lineJoin: .round)
+                    )
+
+                edge
+                    .stroke(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: OmiColors.purpleAccent.opacity(0.55), location: 0.28),
+                                .init(color: Color(red: 0.22, green: 0.88, blue: 1.0).opacity(1.0), location: 0.45),
+                                .init(color: .white.opacity(1.0), location: 0.53),
+                                .init(color: Color(red: 1.0, green: 0.34, blue: 0.95).opacity(0.95), location: 0.70),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: sweepStart,
+                            endPoint: sweepEnd
+                        ),
+                        style: StrokeStyle(lineWidth: 4.8, lineCap: .round, lineJoin: .round)
+                    )
+            }
+            .animation(.linear(duration: 0.12), value: phase)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct NotchOmiMark: View {
+    private struct Dot: Identifiable {
+        let id: Int
+        let x: CGFloat
+        let y: CGFloat
+        let radius: CGFloat
+    }
+
+    private static let viewBox = CGRect(x: 237.360, y: 237.338, width: 549.318, height: 549.322)
+    private static let dots: [Dot] = [
+        Dot(id: 0, x: 282.523, y: 511.982, radius: 45.163),
+        Dot(id: 1, x: 339.909, y: 339.890, radius: 45.107),
+        Dot(id: 2, x: 512.014, y: 282.495, radius: 45.156),
+        Dot(id: 3, x: 684.096, y: 339.880, radius: 45.103),
+        Dot(id: 4, x: 741.511, y: 512.003, radius: 45.167),
+        Dot(id: 5, x: 684.096, y: 684.094, radius: 45.103),
+        Dot(id: 6, x: 511.981, y: 741.500, radius: 45.160),
+        Dot(id: 7, x: 339.902, y: 684.107, radius: 45.103)
+    ]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = min(geometry.size.width, geometry.size.height)
+            let origin = CGPoint(
+                x: (geometry.size.width - size) / 2,
+                y: (geometry.size.height - size) / 2
+            )
+
+            ZStack {
+                ForEach(Self.dots) { dot in
+                    let x = origin.x + ((dot.x - Self.viewBox.minX) / Self.viewBox.width) * size
+                    let y = origin.y + ((dot.y - Self.viewBox.minY) / Self.viewBox.height) * size
+                    let radius = (dot.radius / Self.viewBox.width) * size
+                    Circle()
+                        .fill(Color.white.opacity(0.96))
+                        .frame(width: radius * 2, height: radius * 2)
+                        .position(x: x, y: y)
+                }
+            }
+        }
+        .drawingGroup(opaque: false, colorMode: .linear)
+        .accessibilityHidden(true)
+    }
 }

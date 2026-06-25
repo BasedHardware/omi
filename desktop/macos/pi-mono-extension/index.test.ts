@@ -1011,21 +1011,13 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
-  const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
-
-  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+test("OMI_TOOLS: top-level schemas stay provider-compatible", () => {
+  for (const tool of OMI_TOOLS) {
+    const parameters = tool.parameters as any;
+    assert.equal(parameters.oneOf, undefined, `${tool.name} parameters must not use top-level oneOf`);
+    assert.equal(parameters.anyOf, undefined, `${tool.name} parameters must not use top-level anyOf`);
+    assert.equal(parameters.allOf, undefined, `${tool.name} parameters must not use top-level allOf`);
+  }
 });
 
 test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfaces", () => {

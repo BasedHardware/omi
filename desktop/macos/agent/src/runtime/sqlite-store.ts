@@ -582,13 +582,22 @@ export class SqliteAgentStore implements AgentStore {
       lastUsedAtMs: input.lastUsedAtMs ?? null,
       invalidatedAtMs: input.invalidatedAtMs ?? null,
     };
-    this.db.prepare(
-      `INSERT INTO adapter_bindings (
-        binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
-        adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
-        metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(...bindingValues(binding));
+    this.withTransaction(() => {
+      if (binding.adapterNativeSessionId) {
+        this.db.prepare(
+          `UPDATE adapter_bindings
+           SET status = ?, adapter_instance_id = NULL, invalidated_at_ms = COALESCE(invalidated_at_ms, ?), updated_at_ms = ?
+           WHERE adapter_id = ? AND adapter_native_session_id = ? AND status != ?`,
+        ).run("closed", now, now, binding.adapterId, binding.adapterNativeSessionId, "closed");
+      }
+      this.db.prepare(
+        `INSERT INTO adapter_bindings (
+          binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
+          adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
+          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(...bindingValues(binding));
+    });
     return binding;
   }
 

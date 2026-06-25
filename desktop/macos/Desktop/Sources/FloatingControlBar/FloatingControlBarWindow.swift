@@ -26,16 +26,35 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let sizeKey = "FloatingControlBarSize"
     private static let defaultSize = NSSize(width: 40, height: 14)
     private static let minBarSize = NSSize(width: 40, height: 14)
+    /// Physical notch dead zone. Do not place controls here; it is hidden by the MacBook camera housing.
+    static let notchHiddenCenterWidth: CGFloat = 172
+    static let notchCompactSideWidth: CGFloat = 48
+    static let notchActiveSideWidth: CGFloat = 76
+    static let notchChromeHeight: CGFloat = 34
+    static let notchGlowOutsetX: CGFloat = 24
+    static let notchGlowOutsetBottom: CGFloat = 24
+    private static let legacyPillGlowOutsetX: CGFloat = 22
+    private static let legacyPillGlowOutsetY: CGFloat = 18
+    static let notchCompactSize = NSSize(
+        width: notchHiddenCenterWidth + notchCompactSideWidth * 2,
+        height: notchChromeHeight
+    )
+    static let notchActiveSize = NSSize(
+        width: notchHiddenCenterWidth + notchActiveSideWidth * 2,
+        height: notchChromeHeight
+    )
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
+    static let notchExpandedWidth: CGFloat = 382
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.08
     private static let askOmiSettleDelay: TimeInterval = 0.10
     private static let topInset: CGFloat = 40
+    private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -54,6 +73,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var responseHeightCancellable: AnyCancellable?
+    private var agentPillsCancellable: AnyCancellable?
+    private var voiceResponseGlowCancellable: AnyCancellable?
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
     private var preChatCenter: NSPoint?
@@ -67,6 +88,50 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
 
+    private var notchModeEnabled: Bool {
+        ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screenForPlacement)
+    }
+    var usesNotchIslandForCurrentScreen: Bool { notchModeEnabled }
+    private var screenForPlacement: NSScreen? {
+        self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+    }
+    private var notchSideWidth: CGFloat {
+        if AgentPillsManager.shared.pills.isEmpty && !state.isVoiceListening {
+            return Self.notchCompactSideWidth
+        }
+        return Self.notchActiveSideWidth
+    }
+    private func notchSize(active: Bool) -> NSSize {
+        let sideWidth = active ? Self.notchActiveSideWidth : Self.notchCompactSideWidth
+        return NSSize(width: Self.notchHiddenCenterWidth + sideWidth * 2, height: Self.notchChromeHeight)
+    }
+    private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
+        guard state.isVoiceResponseActive else { return size }
+        if usesNotchIsland {
+            return NSSize(
+                width: size.width + Self.notchGlowOutsetX * 2,
+                height: size.height + Self.notchGlowOutsetBottom
+            )
+        }
+        guard size.width <= Self.minBarSize.width + 0.5,
+              size.height <= Self.minBarSize.height + 0.5
+        else { return size }
+        return NSSize(
+            width: size.width + Self.legacyPillGlowOutsetX * 2,
+            height: size.height + Self.legacyPillGlowOutsetY * 2
+        )
+    }
+    private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
+        responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
+    }
+    private var notchCollapsedSize: NSSize {
+        NSSize(width: Self.notchHiddenCenterWidth + notchSideWidth * 2, height: Self.notchChromeHeight)
+    }
+    private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
+    private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
+    private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
+    private var inputPanelHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight + 62 : 120 }
+
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
     var onHide: (() -> Void)?
@@ -78,7 +143,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialRect = NSRect(origin: .zero, size: FloatingControlBarWindow.minBarSize)
+        let initialSize = ShortcutSettings.shared.notchModeEnabled
+            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+            ? FloatingControlBarWindow.notchCompactSize
+            : FloatingControlBarWindow.minBarSize
+        let initialRect = NSRect(origin: .zero, size: initialSize)
 
         super.init(
             contentRect: initialRect,
@@ -91,16 +160,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = .floating
+        self.level = ShortcutSettings.shared.notchModeEnabled
+            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first) ? .statusBar : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.delegate = self
-        self.minSize = FloatingControlBarWindow.minBarSize
+        self.minSize = initialSize
         self.maxSize = FloatingControlBarWindow.maxBarSize
 
         setupViews()
+        updateNotchIslandState()
 
         if ShortcutSettings.shared.draggableBarEnabled,
+           !notchModeEnabled,
            let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey) {
             let origin = NSPointFromString(savedPosition)
             // Validate that the full bar frame (not just a 14pt inset) fits inside
@@ -132,6 +204,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let maxY = max(visible.minY, visible.maxY - r.height)
         r.origin.y = min(max(r.origin.y, visible.minY), maxY)
         return r
+    }
+
+    static func screenHasCameraHousing(_ screen: NSScreen?) -> Bool {
+        guard let screen else { return false }
+        if #available(macOS 12.0, *) {
+            if let leftArea = screen.auxiliaryTopLeftArea,
+               let rightArea = screen.auxiliaryTopRightArea,
+               !leftArea.isEmpty,
+               !rightArea.isEmpty {
+                return true
+            }
+            return screen.safeAreaInsets.top > 0
+        }
+        return false
+    }
+
+    private func updateNotchIslandState() {
+        let usesNotch = notchModeEnabled
+        if state.usesNotchIsland != usesNotch {
+            state.usesNotchIsland = usesNotch
+        }
+        if !usesNotch {
+            state.notchRevealProgress = 1
+        }
+        level = usesNotch ? .statusBar : .floating
     }
 
     override var canBecomeKey: Bool { true }
@@ -193,10 +290,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Setting [] removes ALL sizing info (broken). Default includes .intrinsicContentSize
         // which pins the view to its ideal size (prevents expansion). [.minSize, .maxSize] is correct.
         let container = NSView()
+        container.wantsLayer = true
+        container.layer?.backgroundColor = NSColor.clear.cgColor
         self.contentView = container
 
         if let hosting = hostingView {
             hosting.sizingOptions = [.minSize, .maxSize]
+            hosting.wantsLayer = true
+            hosting.layer?.backgroundColor = NSColor.clear.cgColor
             hosting.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(hosting)
             NSLayoutConstraint.activate([
@@ -234,8 +335,156 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             }
         }
 
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.performSpacesTransitionGrowIn()
+            }
+        }
+
         // Follow cursor across monitors — poll mouse position to move bar instantly
         startCursorScreenTracking()
+        observeNotchAgentPills()
+        observeVoiceResponseGlow()
+    }
+
+    private func performSpacesTransitionGrowIn() {
+        updateNotchIslandState()
+        guard notchModeEnabled, isVisible else { return }
+        let targetFrame = defaultFrameForCurrentState()
+        animateGrowOutFromNotch(to: targetFrame)
+    }
+
+    private func defaultFrameForCurrentState() -> NSRect {
+        let size: NSSize
+        if state.showingAIConversation {
+            size = NSSize(width: expandedContentWidth, height: max(inputPanelHeight, frame.height))
+        } else if state.isVoiceListening {
+            size = notchSize(active: true)
+        } else if state.currentNotification != nil {
+            size = NSSize(width: Self.notificationWidth, height: Self.notchChromeHeight + Self.notificationSpacing + Self.notificationHeight)
+        } else {
+            size = collapsedBarSize
+        }
+        let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
+        return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
+    }
+
+    private func currentNotchSurfaceSize() -> NSSize {
+        if state.showingAIConversation {
+            let glowOutsetBottom = state.usesNotchIsland && state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0
+            return NSSize(width: expandedContentWidth, height: max(inputPanelHeight, frame.height - glowOutsetBottom))
+        }
+        if state.isVoiceListening {
+            return state.usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
+        }
+        if state.currentNotification != nil {
+            return NSSize(width: Self.notificationWidth, height: Self.notchChromeHeight + Self.notificationSpacing + Self.notificationHeight)
+        }
+        return state.usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+    }
+
+    private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
+        let size: NSSize
+        if state.showingAIConversation {
+            let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
+            let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
+            size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
+        } else if state.isVoiceListening {
+            size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
+        } else if state.currentNotification != nil {
+            let barHeight = usesNotchIsland
+                ? Self.notchChromeHeight
+                : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
+            size = NSSize(
+                width: Self.notificationWidth,
+                height: barHeight + Self.notificationSpacing + Self.notificationHeight
+            )
+        } else {
+            size = usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+        }
+        let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
+        return NSRect(
+            origin: topCenteredOrigin(for: windowSize, on: screen, usesNotchIsland: usesNotchIsland),
+            size: windowSize
+        )
+    }
+
+    private func topCenteredOrigin(for size: NSSize, on screen: NSScreen, usesNotchIsland: Bool) -> NSPoint {
+        let anchorFrame = usesNotchIsland ? screen.frame : screen.visibleFrame
+        let x = (anchorFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
+        let y = usesNotchIsland
+            ? anchorFrame.maxY - size.height
+            : anchorFrame.maxY - size.height - topInsetForPillFallback
+        return NSPoint(x: x, y: y)
+    }
+
+    private func growOutFromNotch(on targetScreen: NSScreen) {
+        state.usesNotchIsland = true
+        level = .statusBar
+        styleMask.remove(.resizable)
+
+        let targetFrame = frameForCurrentState(on: targetScreen, usesNotchIsland: true)
+        animateGrowOutFromNotch(to: targetFrame)
+    }
+
+    private func animateGrowOutFromNotch(to targetFrame: NSRect, duration: TimeInterval = 0.24) {
+        resizeWorkItem?.cancel()
+        resizeWorkItem = nil
+        frameAnimationToken += 1
+        let token = frameAnimationToken
+        let steps = max(1, Int((duration * 120).rounded()))
+        isResizingProgrammatically = true
+        alphaValue = 1
+        state.notchRevealProgress = 0.001
+        setFrame(targetFrame, display: true, animate: false)
+
+        for step in 1...steps {
+            let delay = duration * Double(step) / Double(steps)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.frameAnimationToken == token else { return }
+                self.state.notchRevealProgress = FloatingBarNotchTransition.revealProgress(
+                    CGFloat(step) / CGFloat(steps)
+                )
+                if step == steps {
+                    self.setFrame(targetFrame, display: true, animate: false)
+                    self.state.notchRevealProgress = 1
+                    self.alphaValue = 1
+                    self.isResizingProgrammatically = false
+                }
+            }
+        }
+    }
+
+    private func observeNotchAgentPills() {
+        agentPillsCancellable = AgentPillsManager.shared.$pills
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self,
+                      self.notchModeEnabled,
+                      !self.state.showingAIConversation,
+                      self.state.currentNotification == nil
+                else { return }
+                self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+            }
+    }
+
+    private func observeVoiceResponseGlow() {
+        voiceResponseGlowCancellable = state.$isVoiceResponseActive
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.resizeAnchored(
+                    to: self.currentNotchSurfaceSize(),
+                    makeResizable: self.styleMask.contains(.resizable),
+                    animated: true,
+                    animationDuration: 0.18,
+                    anchorTop: true
+                )
+            }
     }
 
     private var cursorTrackingTimer: DispatchSourceTimer?
@@ -252,6 +501,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func checkCursorScreen() {
+        let wasUsingNotchIsland = notchModeEnabled
         // Only follow when there are multiple screens
         guard NSScreen.screens.count > 1 else { return }
 
@@ -267,7 +517,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let currentVisible = currentScreen?.visibleFrame ?? .zero
         let targetVisible = targetScreen.visibleFrame
 
-        if ShortcutSettings.shared.draggableBarEnabled {
+        let targetUsesNotchIsland = ShortcutSettings.shared.notchModeEnabled
+            && Self.screenHasCameraHousing(targetScreen)
+
+        if targetUsesNotchIsland {
+            growOutFromNotch(on: targetScreen)
+            log("FloatingControlBarWindow: grew out from notch on screen \(targetScreen.localizedName)")
+            return
+        }
+
+        if ShortcutSettings.shared.draggableBarEnabled && !targetUsesNotchIsland {
             // Translate position proportionally
             let relX = currentVisible.width > 0 ? (frame.origin.x - currentVisible.origin.x) / currentVisible.width : 0.5
             let relY = currentVisible.height > 0 ? (frame.origin.y - currentVisible.origin.y) / currentVisible.height : 1.0
@@ -283,15 +542,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
         } else {
             // Non-draggable: center on new screen
-            let x = targetVisible.midX - frame.width / 2
-            let y = targetVisible.maxY - frame.height - 20
+            let anchorFrame = targetUsesNotchIsland ? targetScreen.frame : targetVisible
+            let x = anchorFrame.midX - frame.width / 2
+            let y = targetUsesNotchIsland
+                ? anchorFrame.maxY - frame.height
+                : targetVisible.maxY - frame.height - topInsetForPillFallback
             let clamped = FloatingControlBarWindow.clamp(
                 NSRect(origin: NSPoint(x: x, y: y), size: frame.size),
-                to: targetVisible
+                to: targetUsesNotchIsland ? targetScreen.frame : targetVisible
             )
             setFrameOrigin(clamped.origin)
         }
 
+        updateNotchIslandState()
+        if wasUsingNotchIsland != notchModeEnabled {
+            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+        }
         log("FloatingControlBarWindow: followed cursor to screen \(targetScreen.localizedName)")
     }
 
@@ -370,9 +636,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // so the window center shifts — anchoring from center would land in the wrong spot).
         // Draggable + preChatCenter set: restore to where the bar was before chat opened.
         // Draggable + no preChatCenter: fall back to current center-anchor (best effort).
-        let size = FloatingControlBarWindow.minBarSize
+        let size = collapsedBarSize
         let restoreOrigin: NSPoint
-        if !ShortcutSettings.shared.draggableBarEnabled {
+        if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
             restoreOrigin = defaultPillOrigin()
         } else if let center = preChatCenter {
             restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
@@ -461,10 +727,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             resizeToResponseHeight(animated: true)
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
-            let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-            resizeAnchored(
-                to: inputSize, makeResizable: false, animated: true,
-                animationDuration: Self.askOmiAnimationDuration, anchorTop: true)
+            let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
+            if notchModeEnabled {
+                let revealStartSize = frame.size
+                resizeAnchored(to: inputSize, makeResizable: false, animated: false, anchorTop: true)
+                animateNotchReveal(from: revealStartSize, to: inputSize, duration: 0.22)
+            } else {
+                resizeAnchored(
+                    to: inputSize, makeResizable: false, animated: true,
+                    animationDuration: Self.askOmiAnimationDuration, anchorTop: true)
+            }
 
             withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.showingAIConversation = true
@@ -473,7 +745,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 state.aiInputText = ""
                 state.currentAIMessage = nil
                 // Match the explicit resize height so the observer doesn't immediately override it
-                state.inputViewHeight = 120
+                state.inputViewHeight = inputPanelHeight
             }
             setupInputHeightObserver()
         }
@@ -485,6 +757,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self?.focusInputField()
         }
 
+    }
+
+    private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
+        let startWidth = max(Self.notchCompactSize.width, min(sourceSize.width, targetSize.width))
+        let startHeight = max(Self.notchChromeHeight, min(sourceSize.height, targetSize.height))
+        let widthProgress = targetSize.width > 0 ? startWidth / targetSize.width : 1
+        let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
+        let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
+
+        frameAnimationToken += 1
+        let token = frameAnimationToken
+        let steps = max(1, Int((duration * 120).rounded()))
+        state.notchRevealProgress = startProgress
+
+        for step in 1...steps {
+            let delay = duration * Double(step) / Double(steps)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.frameAnimationToken == token else { return }
+                let progress = FloatingBarNotchTransition.revealProgress(CGFloat(step) / CGFloat(steps))
+                self.state.notchRevealProgress = startProgress + (1 - startProgress) * progress
+                if step == steps {
+                    self.state.notchRevealProgress = 1
+                }
+            }
+        }
     }
 
     func clearVisibleConversationFromUI() {
@@ -499,10 +796,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.88)) {
             state.clearVisibleConversation()
             state.showingAIConversation = true
-            state.inputViewHeight = 120
+            state.inputViewHeight = inputPanelHeight
         }
 
-        let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
+        let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
         resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
         setupInputHeightObserver()
 
@@ -569,6 +866,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
+        if notchModeEnabled {
+            return defaultTopCenteredOrigin(for: newSize)
+        }
         FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
@@ -582,10 +882,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
+        updateNotchIslandState()
+        self.level = notchModeEnabled ? .statusBar : .floating
 
+        let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
         let constrainedSize = NSSize(
-            width: max(size.width, FloatingControlBarWindow.minBarSize.width),
-            height: max(size.height, FloatingControlBarWindow.minBarSize.height)
+            width: max(windowSize.width, FloatingControlBarWindow.minBarSize.width),
+            height: max(windowSize.height, FloatingControlBarWindow.minBarSize.height)
         )
         let newOrigin = anchorTop
             ? originForTopCenterAnchor(newSize: constrainedSize)
@@ -656,7 +959,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
         resizeWorkItem?.cancel()
-        let width = FloatingControlBarWindow.expandedWidth
+        let width = expandedContentWidth
         let size = NSSize(width: width, height: height)
         resizeWorkItem = DispatchWorkItem { [weak self] in
             self?.resizeAnchored(to: size, makeResizable: false, animated: animated, anchorTop: true)
@@ -669,6 +972,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !notchModeEnabled else {
+            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
+            return
+        }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -710,6 +1017,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
+        if notchModeEnabled {
+            resizeAnchored(to: notchSize(active: expanded), makeResizable: false, animated: true, anchorTop: true)
+            return
+        }
         let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
             currentFrame: frame,
             expanded: expanded,
@@ -725,7 +1036,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
-        let barHeight = state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height
+        let barHeight = notchModeEnabled
+            ? Self.notchChromeHeight
+            : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
         let targetSize = NSSize(
             width: Self.notificationWidth,
             height: barHeight + Self.notificationSpacing + Self.notificationHeight
@@ -738,10 +1051,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         state.currentNotification = nil
 
         let targetSize: NSSize
-        if state.isVoiceListening {
+        if state.isVoiceListening && !notchModeEnabled {
             targetSize = Self.voiceBarSize
         } else {
-            targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
+            targetSize = state.isHoveringBar && !notchModeEnabled ? Self.expandedBarSize : collapsedBarSize
         }
         resizeAnchored(to: targetSize, makeResizable: false, animated: animated, anchorTop: true)
     }
@@ -750,14 +1063,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// of an active hover, notification, voice session, or AI conversation.
     func normalizeForTemporaryShow() {
         guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
-        resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
+        resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
     }
 
     var hasSettledClosedForAutomation: Bool {
         !state.showingAIConversation
             && !suppressHoverResize
             && pendingRestoreOrigin == nil
-            && NSEqualSizes(frame.size, Self.minBarSize)
+            && NSEqualSizes(frame.size, collapsedBarSize)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -770,7 +1083,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Start at the larger of minResponseHeight or current frame height so we never
         // shrink the window (e.g. during follow-up exchanges where it's already expanded).
         let startHeight = max(Self.minResponseHeight, frame.height)
-        let initialSize = NSSize(width: Self.expandedWidth, height: startHeight)
+        let initialSize = NSSize(width: expandedContentWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
         setupResponseHeightObserver(maxHeight: maxHeight)
     }
@@ -793,7 +1106,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 // Only expand, never auto-shrink.
                 guard clampedHeight > self.frame.height + 2 else { return }
                 self.resizeAnchored(
-                    to: NSSize(width: Self.expandedWidth, height: clampedHeight),
+                    to: NSSize(width: self.expandedContentWidth, height: clampedHeight),
                     makeResizable: true,
                     animated: true,
                     anchorTop: true
@@ -804,20 +1117,36 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Compute the default origin for the collapsed pill (top-center of the key screen).
     /// Used by closeAIConversation in non-draggable mode and centerOnMainScreen.
     private func defaultPillOrigin() -> NSPoint {
-        defaultTopCenteredFrame(for: FloatingControlBarWindow.minBarSize).origin
+        defaultTopCenteredFrame(for: collapsedBarSize).origin
     }
 
     private func defaultTopCenteredFrame(for size: NSSize) -> NSRect {
+        if notchModeEnabled, let screen = screenForPlacement {
+            return NSRect(
+                origin: topCenteredOrigin(for: size, on: screen, usesNotchIsland: true),
+                size: size
+            )
+        }
         FloatingControlBarGeometry.defaultPillFrame(
             size: size,
             visibleFrame: geometryScreenVisibleFrame(),
-            topInset: Self.topInset
+            topInset: topInsetForPillFallback
         )
+    }
+
+    private func defaultTopCenteredOrigin(for size: NSSize) -> NSPoint {
+        defaultTopCenteredFrame(for: size).origin
     }
 
     private func geometryScreenVisibleFrame() -> NSRect {
         let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
         return targetScreen?.visibleFrame ?? .zero
+    }
+
+    private var topInsetForPillFallback: CGFloat {
+        ShortcutSettings.shared.notchModeEnabled
+            ? Self.topInsetWhenNotchModeFallsBackToPill
+            : Self.topInset
     }
 
     /// Center the bar near the top of the main screen.
@@ -845,8 +1174,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
     /// fully visible on any screen.
     private func validatePositionOnScreenChange() {
+        updateNotchIslandState()
         // Non-draggable mode: always restore to default position on screen change
-        if !ShortcutSettings.shared.draggableBarEnabled {
+        if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
             log("FloatingControlBarWindow: non-draggable mode, re-centering after monitor change")
             centerOnMainScreen()
             return
@@ -906,15 +1236,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
         let minimumWidth: CGFloat
         if state.showingAIConversation {
-            minimumWidth = FloatingControlBarWindow.expandedWidth
+            minimumWidth = expandedContentWidth
         } else if state.currentNotification != nil {
             minimumWidth = FloatingControlBarWindow.notificationWidth
-        } else if state.isVoiceListening {
+        } else if state.isVoiceListening && !notchModeEnabled {
             minimumWidth = FloatingControlBarWindow.voiceBarSize.width
         } else if state.isHoveringBar {
             minimumWidth = FloatingControlBarWindow.expandedBarSize.width
         } else {
-            minimumWidth = FloatingControlBarWindow.minBarSize.width
+            minimumWidth = collapsedBarSize.width
         }
 
         return NSSize(
@@ -1337,6 +1667,7 @@ class FloatingControlBarManager {
             log("FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
             return
         }
+        window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
@@ -2412,8 +2743,8 @@ extension FloatingControlBarWindow {
     /// center is always the canonical top-center default, never a drifted value.
     func savePreChatCenterIfNeeded() {
         guard preChatCenter == nil else { return }
-        let size = FloatingControlBarWindow.minBarSize
-        if !ShortcutSettings.shared.draggableBarEnabled {
+        let size = collapsedBarSize
+        if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
             // Non-draggable: always snap to the default pill position before saving.
             // This ensures preChatCenter is always the canonical default, not a
             // mid-animation frame or drifted position from a previous session.

@@ -51,7 +51,7 @@ enum RealtimeHubCloseClassifier {
 }
 
 @MainActor
-final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
+final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeechSynthesizerDelegate {
   static let shared = RealtimeHubController()
 
   private weak var barState: FloatingControlBarState?
@@ -109,10 +109,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// spawn creates its own provider; warming this one primes node/auth caches.
   private var warmProvider: ChatProvider?
 
-  private override init() {
-    super.init()
-  }
-
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
 
@@ -120,6 +116,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
+
+  private override init() {
+    super.init()
+    speech.delegate = self
+  }
 
   /// The realtime provider to actually connect: the failover pick if we've switched to
   /// it, otherwise the user/Auto-selected one.
@@ -276,7 +277,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil {
-      pcmPlayer = StreamingPCMPlayer(sampleRate: 24000)
+      pcmPlayer = makePCMPlayer()
     }
     s.start()
     log(
@@ -292,6 +293,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     session = nil
     sessionProvider = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
+  }
+
+  private func makePCMPlayer() -> StreamingPCMPlayer {
+    let player = StreamingPCMPlayer(sampleRate: 24000)
+    player.onPlaybackIdle = { [weak self] in
+      Task { @MainActor in
+        self?.clearResponseGlowIfRealtimeAudioIdle()
+      }
+    }
+    return player
   }
 
   // MARK: - PTT integration
@@ -726,7 +737,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
-    barState.isVoiceResponseActive = false
+    if !audioReceivedThisTurn {
+      barState.isVoiceResponseActive = false
+    }
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
@@ -738,6 +751,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     else { return }
     FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+  }
+
+  private func clearResponseGlowIfRealtimeAudioIdle() {
+    guard let barState, audioReceivedThisTurn else { return }
+    barState.isVoiceResponseActive = false
   }
 
   // MARK: - Tools
@@ -804,6 +822,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
     speech.speak(utterance)
+  }
+
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      self?.barState?.isVoiceResponseActive = false
+    }
   }
 
   /// Local synthetic mouse click (point_click tool).

@@ -651,28 +651,37 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
-        // Get new default input device
-        var newDeviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
+        // Preserve an explicit input override across route/sample-rate churn. The realtime
+        // hub pins capture to the built-in mic when output is Bluetooth; reopening the
+        // default input here can silently switch back to a dead Bluetooth mic mid-turn.
+        let newDeviceID: AudioDeviceID
+        if let override = overrideDeviceID {
+            newDeviceID = override
+            log("AudioCapture: Reconfiguring override device ID \(override)")
+        } else {
+            var defaultDeviceID: AudioDeviceID = kAudioObjectUnknown
+            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+            var address = AudioObjectPropertyAddress(
+                mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
 
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &newDeviceID
-        )
+            let status = AudioObjectGetPropertyData(
+                AudioObjectID(kAudioObjectSystemObject),
+                &address,
+                0,
+                nil,
+                &size,
+                &defaultDeviceID
+            )
 
-        guard status == noErr, newDeviceID != kAudioObjectUnknown else {
-            log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
-            retryOrGiveUp(retryCount: retryCount)
-            return
+            guard status == noErr, defaultDeviceID != kAudioObjectUnknown else {
+                log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
+                retryOrGiveUp(retryCount: retryCount)
+                return
+            }
+            newDeviceID = defaultDeviceID
         }
 
         self.deviceID = newDeviceID

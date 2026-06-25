@@ -105,7 +105,7 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
     }
 
     private func updateVisibility(pillCount: Int) {
-        if pillCount == 0 {
+        if anchorUsesNotchIsland || pillCount == 0 {
             self.orderOut(nil)
         } else if !self.isVisible, let anchor = anchorWindow, anchor.isVisible {
             self.orderFront(nil)
@@ -118,7 +118,7 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
         guard let anchor = anchorWindow else { return }
 
         let pillCount = manager.pills.count
-        guard pillCount > 0 else {
+        guard !anchorUsesNotchIsland, pillCount > 0 else {
             self.orderOut(nil)
             return
         }
@@ -150,6 +150,10 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
         if !self.isVisible, let anchor = anchorWindow, anchor.isVisible {
             self.orderFront(nil)
         }
+    }
+
+    private var anchorUsesNotchIsland: Bool {
+        (anchorWindow as? FloatingControlBarWindow)?.usesNotchIslandForCurrentScreen ?? false
     }
 
     private func computeRowWidth(pillCount: Int) -> CGFloat {

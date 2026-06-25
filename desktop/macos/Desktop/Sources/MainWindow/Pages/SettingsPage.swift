@@ -2475,6 +2475,26 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "floatingbar.notch") {
+        HStack(spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Notch Mode")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Anchor the floating bar around the MacBook notch with agents on the left and voice controls on the right.")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: $shortcutSettings.notchModeEnabled)
+            .toggleStyle(.switch)
+            .tint(OmiColors.purplePrimary)
+            .onChange(of: shortcutSettings.notchModeEnabled) { _, _ in
+              FloatingControlBarManager.shared.show()
+            }
+        }
+      }
+
       settingsCard(settingId: "floatingbar.draggable") {
         HStack(spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {

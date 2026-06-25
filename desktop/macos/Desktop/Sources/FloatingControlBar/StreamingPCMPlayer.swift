@@ -53,6 +53,7 @@ final class StreamingPCMPlayer {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
+  var onPlaybackIdle: (() -> Void)?
 
   init(sampleRate: Double = 24000) {
     // Float32 mono at the source rate; the mixer resamples to the device rate.
@@ -137,6 +138,9 @@ final class StreamingPCMPlayer {
       DispatchQueue.main.async {
         guard let self, let buffer else { return }
         self.playbackQueue.markPlayed(buffer, generation: generation)
+        if self.playbackQueue.isEmpty {
+          self.onPlaybackIdle?()
+        }
       }
     }
   }

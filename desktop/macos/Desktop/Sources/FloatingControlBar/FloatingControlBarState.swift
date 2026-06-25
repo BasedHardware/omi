@@ -94,6 +94,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
     @Published var isVoiceResponseActive: Bool = false
+    /// True only when the notch-mode setting is enabled and the current display
+    /// exposes a real camera housing safe area. External displays keep old pill UI.
+    @Published var usesNotchIsland: Bool = false
+    @Published var notchRevealProgress: CGFloat = 1
 
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
