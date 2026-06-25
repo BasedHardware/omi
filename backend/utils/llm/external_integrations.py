@@ -270,6 +270,9 @@ RULES:
 
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
+    # Initialise before the try so the broadened except can log it even when the LLM call
+    # itself raises (e.g. TypeError/AttributeError) before `response` is assigned.
+    response = None
     try:
         with track_usage(uid, Features.DAILY_SUMMARY):
             response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(prompt).content

@@ -118,6 +118,19 @@ def _drive(llm_content: str):
     return mod.generate_comprehensive_daily_summary("uid1", [], "2026-06-24")
 
 
+def _drive_raising(exc: Exception):
+    """Invoke the summary with the LLM call itself raising before `response` is assigned."""
+    mod.users_db.get_user_profile = MagicMock(return_value={"time_zone": "UTC", "language": "en"})
+    mod.get_prompt_memories = MagicMock(return_value=("TestUser", "mem"))
+    mod.conversations_to_string = MagicMock(return_value="convo text")
+
+    fake_llm = MagicMock()
+    fake_llm.invoke.side_effect = exc
+    mod.get_llm = MagicMock(return_value=fake_llm)
+
+    return mod.generate_comprehensive_daily_summary("uid1", [], "2026-06-24")
+
+
 class TestNonObjectJsonDegrades:
     """A non-object (but valid) JSON LLM response must degrade, not raise."""
 
@@ -149,6 +162,27 @@ class TestNonObjectJsonDegrades:
         result = _drive('{"headline": "Custom Headline", "highlights": []}')
         assert isinstance(result, dict)
         assert result["headline"] == "Custom Headline"
+
+
+class TestLlmCallFailureDegrades:
+    """When the LLM call raises before `response` is assigned, the broadened except must
+    still degrade to the basic summary, not blow up with UnboundLocalError while logging
+    `response`."""
+
+    def test_llm_invoke_attributeerror_returns_basic_summary(self):
+        # Mirrors get_llm(...).invoke(...).content failing (e.g. a misbehaving client)
+        # with an AttributeError caught by the broadened except. `response` is never
+        # assigned, so without `response = None` the except's `logger.info(... response)`
+        # raises UnboundLocalError instead of returning the fallback.
+        result = _drive_raising(AttributeError("'NoneType' object has no attribute 'content'"))
+        assert isinstance(result, dict)
+        assert result["headline"] == "Your Day in Review"
+        assert result["stats"]["total_conversations"] == 0
+
+    def test_llm_invoke_typeerror_returns_basic_summary(self):
+        result = _drive_raising(TypeError("bad call"))
+        assert isinstance(result, dict)
+        assert result["headline"] == "Your Day in Review"
 
 
 if __name__ == "__main__":
