@@ -128,19 +128,32 @@ actor RewindDatabase {
         guard let queue = dbQueue else {
             throw DatabaseError(resultCode: .SQLITE_MISUSE, message: "database is not initialized")
         }
+        try await repairActionItemsFTS(in: queue, reason: reason)
+    }
 
+    /// Rebuild action_items_fts on a specific database queue. Callers that caught an FTS-trigger
+    /// write failure should pass the same queue they will retry on, avoiding stale queue races.
+    func repairActionItemsFTS(in queue: DatabasePool, reason: String) async throws {
         try await queue.write { db in
             try Self.recreateActionItemsFTS(in: db)
         }
         log("RewindDatabase: Rebuilt action_items_fts after \(reason)")
     }
 
-    private static func recreateActionItemsFTS(in db: Database) throws {
-        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ai")
-        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ad")
-        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_au")
-        try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
+    private static let actionItemsFTSShadowTables = [
+        "action_items_fts_data",
+        "action_items_fts_idx",
+        "action_items_fts_content",
+        "action_items_fts_docsize",
+        "action_items_fts_config",
+    ]
 
+    private static func recreateActionItemsFTS(in db: Database) throws {
+        try dropActionItemsFTSIfPresent(in: db)
+        try installActionItemsFTS(in: db, populateExistingRows: true)
+    }
+
+    private static func installActionItemsFTS(in db: Database, populateExistingRows: Bool) throws {
         try db.execute(sql: """
             CREATE VIRTUAL TABLE action_items_fts USING fts5(
                 description,
@@ -173,10 +186,40 @@ actor RewindDatabase {
             END
             """)
 
+        guard populateExistingRows else { return }
         try db.execute(sql: """
             INSERT INTO action_items_fts(rowid, description)
             SELECT id, description FROM action_items
             """)
+    }
+
+    private static func dropActionItemsFTSIfPresent(in db: Database) throws {
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ai")
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ad")
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_au")
+
+        do {
+            try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
+        } catch {
+            try forceRemoveBrokenActionItemsFTSMetadata(in: db)
+        }
+    }
+
+    private static func forceRemoveBrokenActionItemsFTSMetadata(in db: Database) throws {
+        try db.execute(sql: "PRAGMA writable_schema = ON")
+        defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
+
+        try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts'")
+        for table in actionItemsFTSShadowTables {
+            do {
+                try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
+            } catch {
+                try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = '\(table)'")
+            }
+        }
+
+        let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
+        try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
     }
 
     /// Configure the database for a specific user.
@@ -1499,44 +1542,7 @@ actor RewindDatabase {
 
         // Migration 19: Create FTS5 virtual table on action_items.description for keyword search
         migrator.registerMigration("createActionItemsFTS") { db in
-            try db.execute(sql: """
-                CREATE VIRTUAL TABLE action_items_fts USING fts5(
-                    description,
-                    content='action_items',
-                    content_rowid='id',
-                    tokenize='unicode61'
-                )
-                """)
-
-            // Sync triggers
-            try db.execute(sql: """
-                CREATE TRIGGER action_items_fts_ai AFTER INSERT ON action_items BEGIN
-                    INSERT INTO action_items_fts(rowid, description)
-                    VALUES (new.id, new.description);
-                END
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER action_items_fts_ad AFTER DELETE ON action_items BEGIN
-                    INSERT INTO action_items_fts(action_items_fts, rowid, description)
-                    VALUES ('delete', old.id, old.description);
-                END
-                """)
-
-            try db.execute(sql: """
-                CREATE TRIGGER action_items_fts_au AFTER UPDATE ON action_items BEGIN
-                    INSERT INTO action_items_fts(action_items_fts, rowid, description)
-                    VALUES ('delete', old.id, old.description);
-                    INSERT INTO action_items_fts(rowid, description)
-                    VALUES (new.id, new.description);
-                END
-                """)
-
-            // Populate with existing data
-            try db.execute(sql: """
-                INSERT INTO action_items_fts(rowid, description)
-                SELECT id, description FROM action_items
-                """)
+            try Self.installActionItemsFTS(in: db, populateExistingRows: true)
         }
 
         // Migration 20: Create ai_user_profiles table for daily AI-generated user profile history

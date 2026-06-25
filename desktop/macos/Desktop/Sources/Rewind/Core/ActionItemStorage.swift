@@ -736,7 +736,7 @@ actor ActionItemStorage {
             }
 
             logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
-            try await RewindDatabase.shared.repairActionItemsFTS(reason: "insertLocalActionItem")
+            try await RewindDatabase.shared.repairActionItemsFTS(in: db, reason: "insertLocalActionItem")
 
             let inserted = try await db.write { database in
                 try recordToInsert.inserted(database)
