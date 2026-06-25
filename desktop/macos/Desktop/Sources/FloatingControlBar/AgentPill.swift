@@ -49,9 +49,6 @@ final class AgentPill: ObservableObject, Identifiable {
             }
         }
 
-        var indicatorColor: Color {
-            tintColor
-        }
     }
 
     let id = UUID()

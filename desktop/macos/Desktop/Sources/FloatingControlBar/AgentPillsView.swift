@@ -130,7 +130,7 @@ struct AgentPillView: View {
                     .fill(Color(nsColor: NSColor(white: 0.05, alpha: 1.0)))
                     .frame(width: 10, height: 10)
                 Circle()
-                    .fill(pill.status.indicatorColor)
+                    .fill(pill.status.tintColor)
                     .frame(width: 8, height: 8)
             }
             .offset(x: 3, y: -3)
