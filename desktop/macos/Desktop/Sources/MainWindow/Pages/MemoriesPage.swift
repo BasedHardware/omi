@@ -329,6 +329,53 @@ class MemoriesViewModel: ObservableObject {
 
     // Re-fetch from backend (source of truth after cascade retract).
     if hasLoadedInitially {
+      await refreshMemoriesAfterConversationCascade()
+    }
+  }
+
+  /// Paginated server pull + orphan prune after conversation cascade delete.
+  /// Catches promoted memories whose projection dropped `conversation_id`.
+  private func refreshMemoriesAfterConversationCascade() async {
+    let token = currentScopeToken
+    var offset = 0
+    let batchSize = 500
+    var backendIds = Set<String>()
+    var allFetched: [ServerMemory] = []
+
+    do {
+      while true {
+        let batch = try await APIClient.shared.getMemories(limit: batchSize, offset: offset)
+        if batch.isEmpty { break }
+        allFetched.append(contentsOf: batch)
+        for memory in batch { backendIds.insert(memory.id) }
+        offset += batch.count
+        if batch.count < batchSize { break }
+      }
+
+      if !backendIds.isEmpty {
+        let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
+          allFetched,
+          within: .defaultAccess
+        )
+        if pruned > 0 {
+          log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
+        }
+      }
+
+      let reloadLimit = max(pageSize, memories.count)
+      let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
+        limit: reloadLimit,
+        offset: 0,
+        tiers: layers(for: token)
+      )
+      guard isCurrentScope(token) else { return }
+      memories = mergedMemories
+      currentOffset = mergedMemories.count
+      hasMoreMemories = mergedMemories.count >= reloadLimit
+      recomputeFilteredMemories()
+      await loadTagCountsFromDatabase()
+    } catch {
+      logError("MemoriesViewModel: Failed to refresh after conversation delete", error: error)
       await loadMemories()
     }
   }
