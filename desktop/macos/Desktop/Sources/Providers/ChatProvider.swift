@@ -985,9 +985,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let promptContext = formatMemoriesSection()
             let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
-            let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-                ? ModelQoS.Claude.defaultSelection
-                : ShortcutSettings.shared.selectedModel
+            // v2 wiring: consult the auto-router when the user has "Auto" or
+            // no specific model selected. Falls back to the previous default
+            // behavior if the router has no cached pick yet.
+            let routerPick = AutoRouter.shared.currentPick(for: .generalAssistant)
+            let floatingModelDecision = ChatModelRouter.decide(
+                selectedModel: ShortcutSettings.shared.selectedModel,
+                routerPick: routerPick
+            )
+            let floatingModel = floatingModelDecision.model
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
