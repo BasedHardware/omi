@@ -973,6 +973,15 @@ test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
   }
 });
 
+test("OMI_TOOLS: provider schemas do not use top-level composite keywords", () => {
+  for (const tool of OMI_TOOLS) {
+    const parameters = tool.parameters as any;
+    assert.equal(parameters.oneOf, undefined, `${tool.name} has top-level oneOf`);
+    assert.equal(parameters.anyOf, undefined, `${tool.name} has top-level anyOf`);
+    assert.equal(parameters.allOf, undefined, `${tool.name} has top-level allOf`);
+  }
+});
+
 test("OMI_TOOLS: required fields match expected per tool", () => {
   const expected: Record<string, string[]> = {
     execute_sql: ["query"],
@@ -1011,21 +1020,18 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
+test("OMI_TOOLS: agent control schemas avoid top-level composite preconditions", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
+  assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
+  assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
 
   const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
+  assert.ok(
+    delegateAgent?.promptGuidelines?.some((guideline) =>
+      guideline.includes("Use call for a structured child result")
+    ),
+  );
 });
 
 test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfaces", () => {
@@ -1068,8 +1074,8 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       [...manifestTool.required].sort(),
       `${manifestTool.name} required fields drifted`
     );
-    assert.deepEqual((tool!.parameters as any).anyOf, (manifestTool.jsonSchemaOptions as any)?.anyOf, `${manifestTool.name} anyOf drifted`);
-    assert.deepEqual((tool!.parameters as any).allOf, (manifestTool.jsonSchemaOptions as any)?.allOf, `${manifestTool.name} allOf drifted`);
+    assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} anyOf should not be emitted`);
+    assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} allOf should not be emitted`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];
