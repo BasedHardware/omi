@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -68,6 +70,14 @@ void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall call) async {
+        if (call.method == 'getApplicationDocumentsDirectory') return Directory.systemTemp.path;
+        return null;
+      },
+    );
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
     try {
       await ServiceManager.init();
@@ -652,6 +662,8 @@ void main() {
 
   group('setBackgroundModeEnabled', () {
     setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      await SharedPreferencesUtil.init();
       SharedPreferencesUtil().batchModeEnabled = false;
       SharedPreferencesUtil().backgroundModeEnabled = false;
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
