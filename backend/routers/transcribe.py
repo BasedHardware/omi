@@ -3136,6 +3136,8 @@ async def web_listen_handler(
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
 
+    device_ctx = resolve_client_device_from_headers(websocket.headers)
+
     await _stream_handler(
         websocket,
         uid,
@@ -3150,5 +3152,7 @@ async def web_listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         call_id=call_id,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
     )
     logger.info(f"web_listen_handler ended {uid}")
