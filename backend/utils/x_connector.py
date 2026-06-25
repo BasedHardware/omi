@@ -347,6 +347,7 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
             # (and cleanly removable on disconnect / re-import).
             mdb.app_id = INTEGRATION_KEY
             memory_dbs.append(mdb)
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
         if resolve_memory_system(uid) == MemorySystem.CANONICAL:
             memory_service = MemoryService()
             for mdb in memory_dbs:
