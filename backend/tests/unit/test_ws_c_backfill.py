@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import copy
 from typing import Callable
-import hashlib
 import os
 import sys
-import types
-import uuid
 from datetime import datetime, timedelta, timezone
 from types import ModuleType
 from unittest.mock import MagicMock, patch
@@ -20,21 +17,10 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-
-
-def _document_id_from_seed(seed: str) -> str:
-    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-
-_db_client_mod.document_id_from_seed = _document_id_from_seed
-
 from tests.unit.memory_import_isolation import (
+    WS_C_STUB_MODULE_NAMES,
     ensure_utils_memory_packages_importable,
-    install_database_client_stub,
-    install_ws_c_backfill_stubs,
+    install_ws_c_import_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
@@ -42,20 +28,9 @@ from tests.unit.memory_import_isolation import (
 
 @pytest.fixture(scope="module", autouse=True)
 def _ws_c_import_isolation():
-    saved = snapshot_sys_modules(
-        [
-            "database._client",
-            "firebase_admin",
-            "utils.subscription",
-            "database.users",
-            "stripe",
-            "pinecone",
-            "database.vector_db",
-            "database.memories",
-        ]
-    )
-    install_database_client_stub()
-    install_ws_c_backfill_stubs()
+    saved = snapshot_sys_modules(WS_C_STUB_MODULE_NAMES)
+    touched = install_ws_c_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
     from utils.memory.legacy_backfill import (
         _fetch_active_legacy_memories,
         backfill_user,
