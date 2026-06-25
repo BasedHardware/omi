@@ -2054,6 +2054,7 @@ workflows:
           # by using `npx tsx` as a version-agnostic TypeScript loader that
           # still delegates to node:test.
           cd pi-mono-extension
+          npm ci --no-fund --no-audit
           if node --experimental-strip-types --test index.test.ts; then
             echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
           else
