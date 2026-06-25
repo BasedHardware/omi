@@ -16,7 +16,7 @@ from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
@@ -376,8 +376,13 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "knowledge_nuggets": knowledge_nuggets,
             "locations": locations,
         }
-    except (json.JSONDecodeError, ValidationError) as e:
-        logger.error("Failed to parse daily summary payload: %s", sanitize(str(e)))
+    except json.JSONDecodeError as e:
+        logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))
+        return _basic_daily_summary(
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+        )
+    except ValidationError as e:
+        logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(e))
         return _basic_daily_summary(
             date_str, total_conversations, total_duration_minutes, actual_action_items, locations
         )
