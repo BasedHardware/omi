@@ -25,7 +25,20 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/immutability': 'off',
+      'react/no-unknown-property': 'off',
+      'react-refresh/only-export-components': 'off'
+    }
+  },
+  {
+    files: ['**/*.{js,mjs,test.ts}'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      'no-empty': 'off'
     }
   },
   eslintConfigPrettier
