@@ -1172,6 +1172,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
+        if notchModeEnabled {
+            let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
+            self.setFrame(targetFrame, display: true, animate: false)
+            log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")
+            return
+        }
         let origin = FloatingControlBarGeometry.defaultPillFrame(
             size: frame.size,
             visibleFrame: screen.visibleFrame,
