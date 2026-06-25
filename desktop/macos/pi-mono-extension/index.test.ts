@@ -1028,6 +1028,25 @@ test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
   ]);
 });
 
+test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfaces", () => {
+  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
+  assert.match(delegateAgent?.description ?? "", /canonical child handles/);
+  assert.match(delegateAgent?.description ?? "", /does not create or manage floating pill UI/);
+  assert.ok(
+    delegateAgent?.promptGuidelines?.includes(
+      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+    ),
+  );
+
+  const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
+  assert.match(spawnAgent?.description ?? "", /legacy floating-bar UI workflow/);
+  assert.ok(
+    spawnAgent?.promptGuidelines?.includes(
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+    ),
+  );
+});
+
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
   const controlTools = OMI_TOOLS.filter((tool) =>
     agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)

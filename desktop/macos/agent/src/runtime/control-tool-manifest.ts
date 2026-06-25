@@ -38,7 +38,7 @@ Use when the user asks what Omi agents/subagents are active, recent, failed, or 
 Returns canonical Omi session IDs, latest/active run summaries, and adapter binding metadata.`,
     promptSnippet: "list_agent_sessions - List Omi-managed agent sessions and active runs",
     promptGuidelines: [
-      "Use for current or recent Omi agents/subagents across main chat, task chat, and floating pills.",
+      "Use for current or recent kernel-backed Omi agents/subagents across main chat, task chat, and any future migrated floating-pill sessions.",
       "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata.",
     ],
     latency: "fast local",
@@ -164,10 +164,11 @@ Creates a new run in that session through the runtime kernel. Use this for multi
     label: "Delegate Agent",
     description: `Create or continue a distinct delegated child agent session linked to a parent run.
 
-Supports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns child handles immediately; call and continue return a structured child result without the full transcript.`,
-    promptSnippet: "delegate_agent - Create, spawn, or continue an Omi child agent",
+Supports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns canonical child handles immediately; call and continue return a structured child result without the full transcript. This does not create or manage floating pill UI.`,
+    promptSnippet: "delegate_agent - Create or continue a canonical Omi child agent",
     promptGuidelines: [
-      "Use call for a structured child result, spawn for immediate child handles, and continue for another run in an existing child session.",
+      "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
+      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
       "Pass a concise objective and optional short context; do not pass full transcripts by default.",
     ],
     latency: "async background",
@@ -175,7 +176,7 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
     runtimePreconditions: [
       "Requires childSessionId when mode is continue.",
       "Rejects synchronous nested call/continue runs when the selected adapter is already executing for the child session or has no capacity.",
-      "Spawn mode returns child handles immediately and does not wait for completion.",
+      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
     ],
     timeoutClass: "long",
     properties: {

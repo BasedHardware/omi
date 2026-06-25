@@ -129,6 +129,14 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("circular floating agent pills"))
     }
 
+    func testDesktopPromptDistinguishesDelegationFromFloatingPills() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**delegate_agent**"))
+        XCTAssertTrue(prompt.contains("Use spawn_agent instead when the user wants a visible floating-bar background agent pill."))
+        XCTAssertTrue(prompt.contains("Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."))
+        XCTAssertTrue(prompt.contains("Do not treat one as an alias for the other."))
+    }
+
     func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("Do not guess when you can look it up"))

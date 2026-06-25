@@ -58,6 +58,19 @@ describe("agent control tools", () => {
     );
   });
 
+  it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
+    const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
+    expect(delegateAgent?.description).toContain("canonical child handles");
+    expect(delegateAgent?.description).toContain("does not create or manage floating pill UI");
+    expect(delegateAgent?.promptSnippet).toContain("canonical Omi child agent");
+    expect(delegateAgent?.promptGuidelines).toContain(
+      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+    );
+    expect(delegateAgent?.runtimePreconditions).toContain(
+      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
+    );
+  });
+
   it("lists sessions and inspects runs using canonical runtime ids", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = await kernel.executeRun(baseRunInput);

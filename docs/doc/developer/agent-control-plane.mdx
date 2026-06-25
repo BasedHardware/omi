@@ -958,10 +958,29 @@ session linked to a parent run and records the delegation through kernel-owned s
 ### 16.3 Delegation semantics
 
 - `call`: create a child session/run and suspend the parent until a structured result is available.
-- `spawn`: create an asynchronous child session/run and immediately return handles.
+- `spawn`: create an asynchronous canonical child session/run and immediately return handles. This is not the
+  legacy floating-pill `spawn_agent` tool and does not create or manage floating UI.
 - `continue`: create another run in an existing child session.
 
 A child result returns a summary, artifacts, verified effects, usage, and open questions. The parent does not receive the entire child transcript by default.
+
+### 16.4 Delegation versus floating-pill tools
+
+`delegate_agent` is the canonical control-plane delegation path. It creates or continues an Omi child
+`AgentSession`, `AgentRun`, and `Delegation` through kernel-owned state.
+
+The existing `spawn_agent` and `manage_agent_pills` tools remain the floating-bar UI workflow for now. They start and
+manage circular floating agent pills and MUST NOT be documented as aliases for canonical delegation. Conversely,
+`delegate_agent` spawn mode returns canonical child handles and MUST NOT imply that a floating pill appears.
+
+Until a later UX migration, models should choose explicitly:
+
+- use `delegate_agent` for canonical child runs that need durable session/run/delegation tracking;
+- use `spawn_agent` for the legacy floating-pill product surface and other-app/background UI workflow;
+- use `manage_agent_pills` only to list, dismiss, or clear floating pill UI state.
+
+Any status bridge between these surfaces is projection-only. Kernel sessions, runs, attempts, artifacts, and
+delegations remain the source of truth for control-plane state.
 
 ## 17. Phase 0 permission policy
 
@@ -1255,12 +1274,15 @@ Phase 2 may accept local consolidation that reuses Phase 1 authority without cha
 
 - local capability-manifest consolidation for the existing Omi control tools from one canonical source;
 - artifact write/lifecycle APIs over the existing `artifacts` table;
-- a minimal desktop artifact projection that exposes references and metadata already owned by the kernel.
+- a minimal desktop artifact projection that exposes references and metadata already owned by the kernel;
+- prompt and discoverability alignment that keeps canonical `delegate_agent` delegation distinct from the existing
+  floating-pill tools.
 
 Still deferred beyond that local consolidation:
 
 - broad capability generation across cloud directories, remote runtimes, and future standards;
 - full artifact browser UX, arbitrary artifact-content browsing, cloud artifact sync, and cross-device artifact leases.
+- migrating floating pills into canonical child-session projections or replacing the legacy floating-pill tool UX.
 
 ## 25. Long-term direction
 
