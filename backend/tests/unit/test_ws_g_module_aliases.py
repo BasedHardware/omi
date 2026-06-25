@@ -215,22 +215,21 @@ def test_rollout_mode_env_dual_read_neutral_precedence(monkeypatch):
     assert MemoryRolloutConfig.from_env().mode == MemoryRolloutMode.read
 
 
-def test_rollout_enabled_users_env_dual_read_legacy_only(monkeypatch):
+@pytest.mark.parametrize(
+    ("set_sequence", "expected_raw", "expected_enabled_users"),
+    [
+        (["uid-a,uid-b"], "uid-a,uid-b", {"uid-a", "uid-b"}),
+        (["legacy-only", "neutral-only"], "neutral-only", {"neutral-only"}),
+    ],
+)
+def test_rollout_enabled_users_env_dual_read(monkeypatch, set_sequence, expected_raw, expected_enabled_users):
     from config.memory_rollout import MemoryRolloutConfig, rollout_enabled_users_env_raw
 
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    monkeypatch.setenv("MEMORY_ENABLED_USERS", "uid-a,uid-b")
-    assert rollout_enabled_users_env_raw() == "uid-a,uid-b"
-    assert MemoryRolloutConfig.from_env().enabled_users == {"uid-a", "uid-b"}
-
-
-def test_rollout_enabled_users_env_dual_read_neutral_precedence(monkeypatch):
-    from config.memory_rollout import MemoryRolloutConfig, rollout_enabled_users_env_raw
-
-    monkeypatch.setenv("MEMORY_ENABLED_USERS", "legacy-only")
-    monkeypatch.setenv("MEMORY_ENABLED_USERS", "neutral-only")
-    assert rollout_enabled_users_env_raw() == "neutral-only"
-    assert MemoryRolloutConfig.from_env().enabled_users == {"neutral-only"}
+    for value in set_sequence:
+        monkeypatch.setenv("MEMORY_ENABLED_USERS", value)
+    assert rollout_enabled_users_env_raw() == expected_raw
+    assert MemoryRolloutConfig.from_env().enabled_users == expected_enabled_users
 
 
 def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
