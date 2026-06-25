@@ -9253,6 +9253,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
 
   @override
+  String get backgroundModeUnavailable =>
+      'โหมดพื้นหลังไม่พร้อมใช้งานเนื่องจากไม่มีอุปกรณ์ที่รองรับเชื่อมต่ออยู่ เชื่อมต่ออุปกรณ์ Omi, OpenGlass หรือ Friend Pendant เพื่อใช้ฟีเจอร์นี้';
+
+  @override
   String get regenerateRecap => 'สร้างสรุปใหม่';
 
   @override

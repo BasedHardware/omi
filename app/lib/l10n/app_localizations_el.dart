@@ -9369,6 +9369,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία.';
+
+  @override
   String get regenerateRecap => 'Αναδημιουργία ανακεφαλαίωσης';
 
   @override
