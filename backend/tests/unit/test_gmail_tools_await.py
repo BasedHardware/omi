@@ -185,3 +185,58 @@ def test_get_gmail_messages_does_not_return_coroutine_items():
     assert len(result) == 1
     assert not asyncio.iscoroutine(result[0])
     assert result[0]['id'] == 'only'
+
+
+def _run_tool_with_refresh_retry(retry_error):
+    """Drive get_gmail_messages_tool through the auth-error -> refresh -> retry path.
+
+    The first get_gmail_messages call raises a 401 GoogleAPIError (auth), the token
+    refresh succeeds, and the retried call raises `retry_error`. Returns the tool's
+    string result so callers can assert how the post-refresh failure is reported.
+    """
+    calls = {'n': 0}
+
+    async def fake_get_gmail_messages(access_token, query=None, max_results=10, label_ids=None):
+        calls['n'] += 1
+        if calls['n'] == 1:
+            # First attempt: token expired.
+            raise GoogleAPIError(401, "invalid_credentials")
+        # Retry attempt (after refresh): fails again.
+        raise retry_error
+
+    async def fake_refresh(uid, integration):
+        return 'new-token'
+
+    # Bypass the DB-backed connection check; supply a known uid/integration/token.
+    with patch.object(mod, 'prepare_access', return_value=('uid-1', {'refresh_token': 'r'}, 'old-token', None)):
+        with patch.object(mod, 'refresh_google_token', side_effect=fake_refresh):
+            with patch.object(mod, 'get_gmail_messages', side_effect=fake_get_gmail_messages):
+                result = asyncio.run(mod.get_gmail_messages_tool.coroutine(query='hi', config={}))
+    return result, calls['n']
+
+
+def test_post_refresh_permission_error_is_structured_not_generic():
+    """A 403 on the retried call must surface the actionable 'access denied' message.
+
+    Red before the fix: the retry call sat directly inside `except GoogleAPIError`,
+    so a second GoogleAPIError escaped to the outer `except Exception` and was
+    returned as 'Unexpected error fetching Gmail messages: ...'.
+    """
+    result, attempts = _run_tool_with_refresh_retry(GoogleAPIError(403, "insufficient_permissions"))
+
+    assert attempts == 2  # original call + one retry after refresh
+    # Must NOT fall through to the generic outer handler.
+    assert not result.startswith("Unexpected error fetching Gmail messages")
+    # Permission errors keep their actionable reconnect guidance.
+    assert "access denied" in result.lower()
+
+
+def test_post_refresh_server_error_is_structured_not_generic():
+    """A 500 on the retried call is reported via the structured Gmail message."""
+    result, attempts = _run_tool_with_refresh_retry(GoogleAPIError(500, "backend_error"))
+
+    assert attempts == 2
+    assert not result.startswith("Unexpected error fetching Gmail messages")
+    assert result.startswith("Error fetching Gmail messages")
+    # The structured message carries the underlying detail, not a coroutine/AttributeError.
+    assert "backend_error" in result

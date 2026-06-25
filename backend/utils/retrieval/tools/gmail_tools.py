@@ -249,12 +249,21 @@ async def get_gmail_messages_tool(
                 new_token = await refresh_google_token(uid, integration)
                 if not new_token:
                     return "Google authentication expired. Please reconnect your Google account from settings."
-                messages = await get_gmail_messages(
-                    access_token=new_token,
-                    query=query,
-                    max_results=max_results,
-                    label_ids=label_ids,
-                )
+                try:
+                    messages = await get_gmail_messages(
+                        access_token=new_token,
+                        query=query,
+                        max_results=max_results,
+                        label_ids=label_ids,
+                    )
+                except GoogleAPIError as retry_error:
+                    logger.error(
+                        f"❌ Google API error after token refresh: "
+                        f"status={retry_error.status_code}, msg={retry_error.message}"
+                    )
+                    if retry_error.is_permission_error:
+                        return "Gmail access denied. Please reconnect your Google account from settings with proper permissions."
+                    return f"Error fetching Gmail messages: {retry_error.message}"
             elif e.is_permission_error:
                 return (
                     "Gmail access denied. Please reconnect your Google account from settings with proper permissions."
