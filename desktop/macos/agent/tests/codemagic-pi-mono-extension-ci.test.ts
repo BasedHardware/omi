@@ -14,4 +14,17 @@ describe("macOS release CI", () => {
       step.indexOf("node --experimental-strip-types --test index.test.ts")
     );
   });
+
+  it("bundles pi-mono-extension dependencies into release and local app resources", () => {
+    const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
+    const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
+
+    expect(codemagic).toContain(
+      'cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
+    );
+    expect(runScript).toContain('(cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)');
+    expect(runScript).toContain(
+      'cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
+    );
+  });
 });

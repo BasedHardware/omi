@@ -2385,6 +2385,8 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1
