@@ -63,7 +63,7 @@ describe('mergeChatMessages', () => {
 
   it('appends incoming messages that have no id (legacy/edge)', () => {
     const stored = [msg('1', 'user', 'a')]
-    const incoming = [fromPartial<ChatMsg>({ role: 'assistant', content: 'no-id' })]
+    const incoming: ChatMsg[] = [fromPartial({ role: 'assistant', content: 'no-id' })]
     const out = mergeChatMessages(stored, incoming)
     expect(out).toHaveLength(2)
     expect(out[1].content).toBe('no-id')
