@@ -24,11 +24,25 @@ struct WeightSlider: View {
     /// should update `weights` in response (e.g., to `defaults`).
     let onReset: () -> Void
 
+    // v6: ModelPicker embedding. The picker sits below the weight sliders
+    // and writes through `onModelSelect` (which calls `setModelOverride` on
+    // the parent view model).
+    @Binding var modelId: String?
+    let candidates: [Candidate]
+    let onModelSelect: (String?) -> Void
+
     /// True when `weights` differ from `defaults` by more than 1% on any axis.
     /// Used to show/hide the "Reset to default" button.
     private var isCustomized: Bool {
         guard let defaults = defaults else { return false }
         return !weights.approximatelyEquals(defaults)
+    }
+
+    /// True when the user has pinned a specific model (modelId is non-nil).
+    /// Used to show a hint in the "Reset to default" button label.
+    private var hasModelOverride: Bool {
+        guard let id = modelId else { return false }
+        return !id.isEmpty
     }
 
     var body: some View {
@@ -47,6 +61,16 @@ struct WeightSlider: View {
                 set: { newValue in updateCost(newValue) }
             ))
             sumRow
+            // v6: model picker sits below the weights. Empty candidates
+            // array is fine — the picker just shows "Auto (recommended)"
+            // as the only option (the candidates fetch hasn't returned yet).
+            ModelPicker(
+                task: task,
+                modelId: $modelId,
+                candidates: candidates,
+                onSelect: onModelSelect
+            )
+            .padding(.top, 4)
         }
         .padding(16)
         .background(
@@ -69,14 +93,14 @@ struct WeightSlider: View {
                 .scaledFont(size: 15, weight: .semibold)
                 .foregroundColor(OmiColors.textPrimary)
             Spacer()
-            if isCustomized {
+            if isCustomized || hasModelOverride {
                 Button(action: onReset) {
                     Text("Reset to default")
                         .scaledFont(size: 12)
                         .foregroundColor(OmiColors.purplePrimary)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Reset \(task.displayName) weights to default")
+                .accessibilityLabel("Reset \(task.displayName) to defaults (weights + model)")
             }
         }
     }

@@ -92,6 +92,69 @@ final class UserPrefsClient {
         }
     }
 
+    // MARK: - Candidates (v6) — list all models for a task with scores
+
+    /// Fetch the list of candidate models for `task` with their scores +
+    /// default weights. Used by the Settings UI's model picker so users
+    /// can see "what could the auto-router pick?" with full transparency.
+    /// Throws `PrefsError` on auth/transport/decoding failures.
+    func fetchCandidates(for task: AutoRouterTask) async throws -> CandidatesResponse {
+        let base = DesktopBackendEnvironment.pythonBaseURL()
+        guard let url = Self.candidatesURL(base: base, task: task) else {
+            throw PrefsError.invalidURL(base: base)
+        }
+
+        var req = URLRequest(url: url)
+        req.timeoutInterval = Self.requestTimeoutSeconds
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let auth = try? await AuthService.shared.getAuthHeader() {
+            req.setValue(auth, forHTTPHeaderField: "Authorization")
+        }
+
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            guard let http = resp as? HTTPURLResponse else {
+                throw PrefsError.invalidResponse
+            }
+            switch http.statusCode {
+            case 200..<300:
+                do {
+                    return try JSONDecoder().decode(CandidatesResponse.self, from: data)
+                } catch {
+                    throw PrefsError.decodingFailed
+                }
+            case 401, 403:
+                throw PrefsError.unauthorized
+            case 503:
+                throw PrefsError.unavailable
+            default:
+                throw PrefsError.serverError(status: http.statusCode)
+            }
+        } catch let err as PrefsError {
+            throw err
+        } catch {
+            throw PrefsError.transport(underlying: error.localizedDescription)
+        }
+    }
+
+    /// Build the candidates endpoint URL for `task`. Returns nil if the URL
+    /// is malformed. Kept as a static so tests can build URLs without
+    /// instantiating the singleton.
+    static func candidatesURL(base: String, task: AutoRouterTask) -> URL? {
+        guard let baseURL = endpointURL(base: base, path: candidatesEndpointPath) else {
+            return nil
+        }
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "task", value: task.rawValue)]
+        return components?.url
+    }
+
+    /// Candidates endpoint path. Kept separate from `endpointPath` because
+    /// it's a different endpoint with different request semantics.
+    static let candidatesEndpointPath = "/v1/auto-router/candidates"
+
+    // MARK: - Save
+
     /// Save the user's per-task weight overrides. An empty `prefs` clears
     /// all overrides (server treats empty prefs as "use defaults").
     /// Throws `PrefsError` on auth/transport/server-validation failures.
@@ -361,5 +424,51 @@ enum PrefsError: Error, Equatable {
         case .serverError(let status):
             return "Server error (\(status)). Please try again."
         }
+    }
+}
+
+
+// MARK: - Candidate (v6) — model picker data type
+
+/// A single model candidate for a task (v6, returned by `/candidates`).
+/// Mirrors the backend's `{id, provider, scores: {quality, latency, cost},
+/// total: float}` response shape.
+struct Candidate: Equatable, Sendable, Codable, Identifiable {
+    let id: String
+    let provider: String
+    let scores: Scores
+    /// Composite score using the task's default weights (matches what
+    /// the auto-router would pick with no overrides).
+    let total: Double
+
+    struct Scores: Equatable, Sendable, Codable {
+        let quality: Double
+        let latency: Double
+        let cost: Double
+    }
+}
+
+/// Response from `GET /v1/auto-router/candidates?task=X`.
+/// Includes the task's default weights so the UI can show what the
+/// auto-router would use (transparency for the model picker).
+struct CandidatesResponse: Equatable, Sendable, Codable {
+    let task: String
+    let candidates: [Candidate]
+    let defaultWeights: Weights
+
+    enum CodingKeys: String, CodingKey {
+        case task
+        case candidates
+        case defaultWeights = "default_weights"
+    }
+
+    /// Mirrors `TaskWeights.quality/latency/cost` for the default-weights
+    /// response field. Separate type because the API field shape differs
+    /// from UserPrefs.TaskWeights (this one is just the 3 numbers, no
+    /// validation/methods).
+    struct Weights: Equatable, Sendable, Codable {
+        let quality: Double
+        let latency: Double
+        let cost: Double
     }
 }

@@ -20,7 +20,16 @@ final class WeightSliderTests: XCTestCase {
     func testRebalance_qualityMove_keepsSumAtOne() throws {
         let initial = try TaskWeights(quality: 0.5, latency: 0.3, cost: 0.2)
         let binding = Binding(get: { initial }, set: { _ in })
-        let _ = WeightSlider(task: .pttResponse, weights: binding, defaults: nil, onReset: {})
+        let _ = WeightSlider(
+            task: .pttResponse,
+            weights: binding,
+            defaults: nil,
+            onReset: {},
+            // v6: model picker state — nil = Auto (recommended).
+            modelId: .constant(nil),
+            candidates: [],
+            onModelSelect: { _ in }
+        )
 
         // Verify the model: moving quality to 0.7 should redistribute 0.3
         // between latency and cost proportionally (currently 0.3:0.2 = 3:2,
@@ -119,7 +128,15 @@ final class WeightSliderTests: XCTestCase {
         for task in AutoRouterTask.allCases {
             let weights = try TaskWeights(quality: 0.4, latency: 0.5, cost: 0.1)
             let binding = Binding(get: { weights }, set: { _ in })
-            let slider = WeightSlider(task: task, weights: binding, defaults: nil, onReset: {})
+            let slider = WeightSlider(
+                task: task,
+                weights: binding,
+                defaults: nil,
+                onReset: {},
+                modelId: .constant(nil),
+                candidates: [],
+                onModelSelect: { _ in }
+            )
             // If this compiles + doesn't crash, the task type is well-formed.
             XCTAssertFalse(task.displayName.isEmpty, "\(task) should have a display name")
             _ = slider  // silence unused warning

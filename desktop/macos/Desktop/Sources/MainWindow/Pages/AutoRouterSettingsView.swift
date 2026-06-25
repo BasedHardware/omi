@@ -90,8 +90,23 @@ struct AutoRouterSettingsView: View {
                     task: task,
                     weights: viewModel.binding(for: task),
                     defaults: viewModel.taskDefaults[task],
-                    onReset: { viewModel.resetToDefaults(for: task) }
+                    onReset: {
+                        // v6: "Reset to default" resets BOTH weight overrides
+                        // AND model overrides for this task.
+                        viewModel.resetToDefaults(for: task)
+                        viewModel.setModelOverride(nil, for: task)
+                    },
+                    // v6: model picker state — bound to viewModel's modelOverrides.
+                    modelId: viewModel.bindingForModelOverride(for: task),
+                    candidates: viewModel.candidatesByTask[task] ?? [],
+                    onModelSelect: { modelId in
+                        viewModel.setModelOverride(modelId, for: task)
+                    }
                 )
+                // Lazy-load candidates when this card appears (v6).
+                .task {
+                    await viewModel.loadCandidates(for: task)
+                }
             }
         }
     }
@@ -99,18 +114,29 @@ struct AutoRouterSettingsView: View {
     // MARK: - Reset all
 
     private var resetAllSection: some View {
-        // The "Reset all overrides" button is enabled only when at least
-        // one task has a custom override. Otherwise it's a no-op.
-        let hasAnyOverride = AutoRouterTask.allCases.contains { viewModel.isCustomized(for: $0) }
-        return HStack {
+        // v6: Two reset buttons side-by-side.
+        //   - "Reset all overrides" clears every weight override
+        //   - "Reset all model overrides" clears every model override
+        // Both are independent (clearing weights doesn't touch models and vice versa).
+        let hasAnyWeightOverride = AutoRouterTask.allCases.contains { viewModel.isCustomized(for: $0) }
+        let hasAnyModelOverride = AutoRouterTask.allCases.contains { viewModel.hasModelOverride(for: $0) }
+        return HStack(spacing: 12) {
             Spacer()
+            Button(action: { viewModel.clearAllModelOverrides() }) {
+                Text("Reset all model overrides")
+                    .scaledFont(size: 13, weight: .medium)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!hasAnyModelOverride)
+            .opacity(hasAnyModelOverride ? 1.0 : 0.5)
+
             Button(action: { viewModel.resetAllToDefaults() }) {
                 Text("Reset all overrides")
                     .scaledFont(size: 13, weight: .medium)
             }
             .buttonStyle(.bordered)
-            .disabled(!hasAnyOverride)
-            .opacity(hasAnyOverride ? 1.0 : 0.5)
+            .disabled(!hasAnyWeightOverride)
+            .opacity(hasAnyWeightOverride ? 1.0 : 0.5)
         }
         .padding(.top, 8)
     }

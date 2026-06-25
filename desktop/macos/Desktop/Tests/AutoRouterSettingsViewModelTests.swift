@@ -227,3 +227,126 @@ final class AutoRouterSettingsViewModelTests: XCTestCase {
         }
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// MARK: - Model overrides (v6) — per-task model pinning
+// ---------------------------------------------------------------------------
+
+
+@MainActor
+class TestModelOverrides: XCTestCase {
+    // v6: per-task model pinning lets users lock the auto-router to a
+    // specific model for a specific task (instead of trusting the pick).
+
+    var viewModel: AutoRouterSettingsViewModel!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        viewModel = AutoRouterSettingsViewModel()
+        viewModel._setTaskDefaultsForTesting([
+            .pttResponse: try TaskWeights(quality: 0.4, latency: 0.5, cost: 0.1),
+            .screenshotUnderstanding: try TaskWeights(quality: 0.6, latency: 0.2, cost: 0.2),
+            .screenshotEmbedding: try TaskWeights(quality: 0.2, latency: 0.3, cost: 0.5),
+            .generalAssistant: try TaskWeights(quality: 0.5, latency: 0.3, cost: 0.2),
+            .transcription: try TaskWeights(quality: 0.3, latency: 0.6, cost: 0.1),
+        ])
+    }
+
+    override func tearDown() async throws {
+        viewModel = nil
+        try await super.tearDown()
+    }
+
+    func testModelOverride_defaultNil() {
+        // Without any override, modelOverride returns nil (Auto).
+        XCTAssertNil(viewModel.modelOverride(for: .pttResponse))
+        XCTAssertFalse(viewModel.hasModelOverride(for: .pttResponse))
+    }
+
+    func testSetModelOverride_writesToPrefs() {
+        viewModel.setModelOverride("gpt-realtime-2", for: .pttResponse)
+        XCTAssertEqual(viewModel.prefs.modelOverrides["ptt_response"], "gpt-realtime-2")
+        XCTAssertEqual(viewModel.modelOverride(for: .pttResponse), "gpt-realtime-2")
+        XCTAssertTrue(viewModel.hasModelOverride(for: .pttResponse))
+    }
+
+    func testSetModelOverride_nil_removesOverride() {
+        // Set then clear.
+        viewModel.setModelOverride("whisper", for: .transcription)
+        XCTAssertNotNil(viewModel.modelOverride(for: .transcription))
+        viewModel.setModelOverride(nil, for: .transcription)
+        XCTAssertNil(viewModel.modelOverride(for: .transcription))
+        XCTAssertNil(viewModel.prefs.modelOverrides["transcription"])
+    }
+
+    func testSetModelOverride_emptyString_removesOverride() {
+        // Empty string treated as "no override" (defensive — UI shouldn't
+        // produce this, but handle gracefully).
+        viewModel.setModelOverride("", for: .transcription)
+        XCTAssertNil(viewModel.modelOverride(for: .transcription))
+    }
+
+    func testSetModelOverride_preservesWeightOverrides() {
+        // Setting a model override should NOT touch weight overrides.
+        viewModel.setWeights(try! TaskWeights(quality: 0.7, latency: 0.2, cost: 0.1), for: .pttResponse)
+        let beforeWeights = viewModel.prefs.overrides
+        viewModel.setModelOverride("haiku-4-5", for: .pttResponse)
+        // Weights unchanged.
+        XCTAssertEqual(viewModel.prefs.overrides, beforeWeights)
+        XCTAssertEqual(viewModel.prefs.overrides["ptt_response"], try! TaskWeights(quality: 0.7, latency: 0.2, cost: 0.1))
+        // Model override added.
+        XCTAssertEqual(viewModel.prefs.modelOverrides["ptt_response"], "haiku-4-5")
+    }
+
+    func testClearAllModelOverrides_clearsAllButPreservesWeights() {
+        // Set both weight + model overrides on two tasks.
+        viewModel.setWeights(try! TaskWeights(quality: 0.7, latency: 0.2, cost: 0.1), for: .pttResponse)
+        viewModel.setModelOverride("gpt-realtime-2", for: .pttResponse)
+        viewModel.setModelOverride("whisper", for: .transcription)
+
+        viewModel.clearAllModelOverrides()
+
+        // Model overrides cleared.
+        XCTAssertTrue(viewModel.prefs.modelOverrides.isEmpty)
+        XCTAssertFalse(viewModel.hasModelOverride(for: .pttResponse))
+        XCTAssertFalse(viewModel.hasModelOverride(for: .transcription))
+        // Weight overrides preserved.
+        XCTAssertNotNil(viewModel.prefs.overrides["ptt_response"])
+    }
+
+    func testResetToDefaults_alsoClearsModelOverride() throws {
+        // The view's onReset for a single task clears BOTH weight and model.
+        // The ViewModel's resetToDefaults only clears weights. The view calls
+        // both resetToDefaults + setModelOverride(nil).
+        let weights = try TaskWeights(quality: 0.7, latency: 0.2, cost: 0.1)
+        viewModel.setWeights(weights, for: .pttResponse)
+        viewModel.setModelOverride("haiku-4-5", for: .pttResponse)
+        XCTAssertTrue(viewModel.hasModelOverride(for: .pttResponse))
+
+        // Simulate the view's combined onReset action.
+        viewModel.resetToDefaults(for: .pttResponse)
+        viewModel.setModelOverride(nil, for: .pttResponse)
+
+        XCTAssertNil(viewModel.prefs.overrides["ptt_response"])
+        XCTAssertFalse(viewModel.hasModelOverride(for: .pttResponse))
+    }
+
+    func testBindingForModelOverride_writesThrough() {
+        let binding = viewModel.bindingForModelOverride(for: .transcription)
+        // Simulate the SwiftUI Picker writing to the binding.
+        binding.wrappedValue = "assemblyai-universal"
+        XCTAssertEqual(viewModel.prefs.modelOverrides["transcription"], "assemblyai-universal")
+        // Setting to nil clears.
+        binding.wrappedValue = nil
+        XCTAssertNil(viewModel.prefs.modelOverrides["transcription"])
+    }
+
+    func testHasModelOverride_reflectsModelOverrideState() {
+        XCTAssertFalse(viewModel.hasModelOverride(for: .screenshotUnderstanding))
+        viewModel.setModelOverride("claude-sonnet-4-6", for: .screenshotUnderstanding)
+        XCTAssertTrue(viewModel.hasModelOverride(for: .screenshotUnderstanding))
+        viewModel.setModelOverride(nil, for: .screenshotUnderstanding)
+        XCTAssertFalse(viewModel.hasModelOverride(for: .screenshotUnderstanding))
+    }
+}

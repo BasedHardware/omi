@@ -44,11 +44,24 @@ final class AutoRouterSettingsViewModel: ObservableObject {
     /// Nil if `loadTaskDefaults()` hasn't completed yet.
     private(set) var taskDefaults: [AutoRouterTask: TaskWeights] = [:]
 
+    /// v6: per-task model candidates (loaded lazily on demand via
+    /// `/v1/auto-router/candidates`). Empty until `loadCandidates(for:)`
+    /// is called for the task. The Settings UI calls this on view appear
+    /// for each task so the model picker has data.
+    private(set) var candidatesByTask: [AutoRouterTask: [Candidate]] = [:]
+
     /// Test-only setter for `taskDefaults`. Used by `setUp` in unit tests
     /// to skip the network roundtrip (production code uses `loadTaskDefaults`).
     #if DEBUG
     func _setTaskDefaultsForTesting(_ defaults: [AutoRouterTask: TaskWeights]) {
         self.taskDefaults = defaults
+    }
+    #endif
+
+    /// Test-only setter for `candidatesByTask`. Same rationale as above.
+    #if DEBUG
+    func _setCandidatesForTesting(_ candidates: [AutoRouterTask: [Candidate]]) {
+        self.candidatesByTask = candidates
     }
     #endif
 
@@ -191,6 +204,61 @@ final class AutoRouterSettingsViewModel: ObservableObject {
         scheduleSave()
     }
 
+    // MARK: - Model overrides (v6) — per-task model pinning
+
+    /// Update the model override for `task` (writes through + debounced save).
+    /// `modelId == nil` means Auto (recommended) — removes the override.
+    /// `modelId == some string` pins the model — sets the override.
+    /// The ModelPicker's onSelect callback uses this method.
+    func setModelOverride(_ modelId: String?, for task: AutoRouterTask) {
+        var updated = prefs.modelOverrides
+        if let modelId = modelId, !modelId.isEmpty {
+            updated[task.rawValue] = modelId
+        } else {
+            updated.removeValue(forKey: task.rawValue)
+        }
+        // Preserve the existing overrides (weights).
+        var mergedOverrides = prefs.overrides
+        // No-op for weights — we only changed model_overrides here.
+        _ = mergedOverrides  // silence unused warning in some compilers
+        prefs = UserPrefs(overrides: prefs.overrides, modelOverrides: updated)
+        scheduleSave()
+    }
+
+    /// Reset all model overrides (clears every task's model pin).
+    /// Weights overrides are preserved (separate concern).
+    func clearAllModelOverrides() {
+        prefs = UserPrefs(overrides: prefs.overrides, modelOverrides: [:])
+        scheduleSave()
+    }
+
+    /// Effective model override for `task` (nil if Auto / no override).
+    func modelOverride(for task: AutoRouterTask) -> String? {
+        prefs.modelOverrides[task.rawValue]
+    }
+
+    /// True when the user has pinned a specific model for `task`.
+    func hasModelOverride(for task: AutoRouterTask) -> Bool {
+        modelOverride(for: task) != nil
+    }
+
+    /// Load candidates for `task` lazily (idempotent — returns cached if
+    /// already loaded). Called by the view when the WeightSlider card appears.
+    func loadCandidates(for task: AutoRouterTask) async {
+        // Skip if already loaded (or in flight).
+        if candidatesByTask[task] != nil { return }
+        do {
+            let response = try await client.fetchCandidates(for: task)
+            candidatesByTask[task] = response.candidates
+        } catch {
+            NSLog("[AutoRouterSettingsViewModel] candidates fetch failed for \(task.rawValue): \(error.localizedDescription)")
+            // Leave as nil — the picker shows just "Auto" so the user has
+            // something to interact with. The error is logged but not surfaced
+            // (the auto-router pick still works; this is a UI affordance).
+            candidatesByTask[task] = []
+        }
+    }
+
     /// Retry the last failed save (called by the retry button in error state).
     func retrySave() {
         scheduleSave()
@@ -248,6 +316,16 @@ extension AutoRouterSettingsViewModel {
         Binding(
             get: { [weak self] in self?.weights(for: task) ?? .balanced },
             set: { [weak self] newValue in self?.setWeights(newValue, for: task) }
+        )
+    }
+
+    /// v6: Get a SwiftUI Binding<String?> for the model's model-override state.
+    /// nil = Auto (recommended); non-nil = user's pinned model ID.
+    /// Writes through `setModelOverride(_:for:)` (debounced save).
+    func bindingForModelOverride(for task: AutoRouterTask) -> Binding<String?> {
+        Binding(
+            get: { [weak self] in self?.modelOverride(for: task) },
+            set: { [weak self] newValue in self?.setModelOverride(newValue, for: task) }
         )
     }
 }
