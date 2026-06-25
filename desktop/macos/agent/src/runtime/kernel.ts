@@ -182,6 +182,7 @@ export interface SendAgentMessageInput {
   adapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
 }
 
@@ -201,6 +202,7 @@ export interface DelegateAgentInput {
   defaultAdapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   runMode?: RunMode;
   context?: string;
   maxDepth?: number;
@@ -294,6 +296,7 @@ export class AgentRuntimeKernel {
       adapterId: input.adapterId ?? session.defaultAdapterId,
       cwd: input.cwd ?? session.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       metadata: input.metadata,
     });
   }
@@ -322,6 +325,7 @@ export class AgentRuntimeKernel {
       mode: input.runMode ?? "ask",
       cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       parentRunId: parentRun.runId,
       metadata: {
         ...(input.metadata ?? {}),

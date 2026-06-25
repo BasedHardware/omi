@@ -77,6 +77,15 @@ export interface UnscopedToolCallContext {
   isRunning?: boolean;
 }
 
+export interface ExternalRequestContextInput {
+  protocolVersion?: ProtocolVersion;
+  requestId: string;
+  clientId: string;
+  ownerId: string;
+  adapterId: string;
+  sessionId?: string;
+}
+
 interface WarmupHint {
   cwd?: string;
   model?: string;
@@ -160,6 +169,26 @@ export class JsonlCompatibilityFacade {
     this.onRecoverableError = options.onRecoverableError;
     this.maxRecoverableRetries = Math.max(0, options.maxRecoverableRetries ?? 0);
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
+  }
+
+  registerExternalRequestContext(input: ExternalRequestContextInput): void {
+    const context: ActiveRequestContext = {
+      protocolVersion: input.protocolVersion,
+      requestId: input.requestId,
+      clientId: input.clientId,
+      ownerId: input.ownerId,
+      adapterId: input.adapterId,
+      sessionId: input.sessionId,
+    };
+    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
+  }
+
+  releaseExternalRequestContext(requestId: string, clientId: string): void {
+    const key = this.activeRequestKey(requestId, clientId);
+    const context = this.activeByRequest.get(key);
+    if (context && !context.runId) {
+      this.activeByRequest.delete(key);
+    }
   }
 
   async handleQuery(message: QueryMessage): Promise<void> {
@@ -439,6 +468,15 @@ export class JsonlCompatibilityFacade {
       TERMINAL_RUN_EVENT_STATUSES.has(event.type.slice("run.".length))
     ) {
       context.isRunning = false;
+      this.activeByRun.delete(event.runId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
+      const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
+      if (this.latestRunByClient.get(clientKey) === event.runId) {
+        this.latestRunByClient.delete(clientKey);
+      }
+      if (this.latestRunByOwner.get(context.ownerId) === event.runId) {
+        this.latestRunByOwner.delete(context.ownerId);
+      }
     }
     if (!event.type.startsWith("adapter.")) return;
 

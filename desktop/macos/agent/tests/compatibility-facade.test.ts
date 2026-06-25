@@ -11,7 +11,7 @@ import {
 } from "../src/runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
-import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
 
@@ -69,6 +69,64 @@ describe("JsonlCompatibilityFacade", () => {
         },
       ]),
     ).toEqual({});
+  });
+
+  it("tracks externally-created control runs for Swift-backed tool routing", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      suppressToolUseEvents: false,
+    });
+    adapter.deferResult();
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "control-run-1",
+      clientId: "control-client",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    const running = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "control-run-1",
+      clientId: "control-client",
+      prompt: "control-created child",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    const attemptId = adapter.executed[0].attemptId;
+
+    adapter.emitLate(attemptId, {
+      type: "tool_use",
+      callId: "tool-control-1",
+      name: "execute_sql",
+      input: { query: "select 1" },
+    });
+
+    expect(sent.find((message) => message.type === "tool_use")).toMatchObject({
+      type: "tool_use",
+      requestId: "control-run-1",
+      clientId: "control-client",
+      runId: adapter.executed[0].runId,
+      attemptId,
+    });
+    expect(facade.toolCallCorrelationForRequest("control-run-1")).toMatchObject({
+      requestId: "control-run-1",
+      clientId: "control-client",
+      attemptId,
+    });
+
+    adapter.resolveDeferred({
+      text: "done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+    expect(facade.toolCallCorrelationForRequest("control-run-1")).toEqual({});
+    store.close();
   });
 
   it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   activeControlToolOwnerId,
   agentControlToolDefinitions,
@@ -1019,6 +1019,37 @@ describe("agent control tools", () => {
       }),
     );
     expect(childInspect.childDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
+    store.close();
+  });
+
+  it("passes MCP tool routing into delegated child bindings", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    const buildMcpServers = vi.fn(() => [{ name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] }]);
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
+        mode: "call",
+        parentRunId: parent.run.runId,
+        objective: "use Omi tools if needed",
+        requestId: "delegate-tools-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+        cwd: "/tmp/delegate-cwd",
+        runMode: "act",
+      }),
+    );
+
+    expect(delegated.ok).toBe(true);
+    expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/delegate-cwd", undefined, {
+      ownerId: "owner",
+      requestId: "delegate-tools-1",
+      clientId: "delegate-client",
+      protocolVersion: 2,
+    });
+    expect(adapter.opened.at(-1)?.mcpServers).toEqual([
+      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+    ]);
     store.close();
   });
 

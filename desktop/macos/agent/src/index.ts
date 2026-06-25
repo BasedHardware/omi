@@ -191,11 +191,14 @@ function startOmiToolsRelay(): Promise<string> {
             };
 
             if (msg.type === "tool_use") {
+              const protocolVersion: ProtocolVersion | undefined =
+                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
                   const controlToolContext = agentControlToolContext
                     ? {
                         ...agentControlToolContext,
+                        getProtocolVersion: () => protocolVersion,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
                             requestKey: controlRequestKey(msg),
@@ -226,8 +229,6 @@ function startOmiToolsRelay(): Promise<string> {
               }
 
               // Forward tool call to Swift via stdout
-              const protocolVersion: ProtocolVersion | undefined =
-                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
               const resolvedCorrelation =
                 toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {};
               const messageRequestIsActive = Boolean(
@@ -534,6 +535,40 @@ function buildMcpServers(
   return servers;
 }
 
+function withControlRunCorrelation(
+  name: string,
+  input: Record<string, unknown>,
+  fallbackRequestId: string | undefined,
+  fallbackClientId: string | undefined
+): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
+    return { input };
+  }
+  const inputRequestId = typeof input.requestId === "string" && input.requestId.trim() ? input.requestId.trim() : undefined;
+  const inputClientId = typeof input.clientId === "string" && input.clientId.trim() ? input.clientId.trim() : undefined;
+  const requestId = inputRequestId ?? fallbackRequestId ?? randomUUID();
+  const clientId = inputClientId ?? fallbackClientId ?? "omi-control-tools";
+  return {
+    input: {
+      ...input,
+      requestId,
+      clientId,
+    },
+    requestId,
+    clientId,
+  };
+}
+
+function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
+    return undefined;
+  }
+  const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
+  const defaultFromInput =
+    typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
+  return adapterId ?? defaultFromInput ?? defaultAdapterId;
+}
+
 // --- Error handling ---
 
 /**
@@ -678,7 +713,11 @@ async function main(): Promise<void> {
     send({ type: "error", message: msg });
     process.exit(1);
   }
-  agentControlToolContext = { kernel, getOwnerId: () => currentOwnerId };
+  agentControlToolContext = {
+    kernel,
+    getOwnerId: () => currentOwnerId,
+    buildMcpServers,
+  };
   const facade = new JsonlCompatibilityFacade({
     kernel,
     send,
@@ -801,8 +840,22 @@ async function main(): Promise<void> {
         }
         const controlOwnerKey = controlContext.requestKey;
         let controlInput;
+        let controlRunCorrelation: { requestId?: string; clientId?: string } = {};
         try {
           controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+          const correlated = withControlRunCorrelation(control.name, controlInput, requestId, control.clientId);
+          controlInput = correlated.input;
+          controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
+          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
+          if (adapterId && correlated.requestId && correlated.clientId) {
+            facade.registerExternalRequestContext({
+              protocolVersion: control.protocolVersion,
+              requestId: correlated.requestId,
+              clientId: correlated.clientId,
+              ownerId: controlContext.activeOwnerId,
+              adapterId,
+            });
+          }
         } catch (error) {
           send({
             type: "control_tool_result",
@@ -829,6 +882,7 @@ async function main(): Promise<void> {
                 return await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
+                    getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
                         requestKey: controlOwnerKey,
@@ -843,11 +897,17 @@ async function main(): Promise<void> {
                 if (controlOwnerKey) {
                   activeControlToolOwnersByRequest.delete(controlOwnerKey);
                 }
+                if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                  facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                }
               }
             })()
           : (() => {
               if (controlOwnerKey) {
                 activeControlToolOwnersByRequest.delete(controlOwnerKey);
+              }
+              if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
               return JSON.stringify({
                 ok: false,

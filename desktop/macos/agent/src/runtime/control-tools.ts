@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
 import { AgentRuntimeKernel } from "./kernel.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
+import type { McpServerBuildContext } from "./compatibility-facade.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
@@ -130,6 +131,13 @@ export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentCo
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
   getOwnerId?: () => string;
+  buildMcpServers?: (
+    mode: "ask" | "act",
+    cwd: string | undefined,
+    sessionKey: string | undefined,
+    context: McpServerBuildContext
+  ) => Record<string, unknown>[];
+  getProtocolVersion?: () => McpServerBuildContext["protocolVersion"];
 }
 
 export interface ActiveControlToolOwnerInput {
@@ -262,10 +270,19 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
-          requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          ownerId,
+          requestId,
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.mode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+          }),
         });
         return stringifyToolResult({
           session: serializeSession(result.session),
@@ -285,10 +302,19 @@ export async function handleAgentControlToolCall(
             parsed.mode === "continue" ? parsed.childSessionId : undefined
           );
         }
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await context.kernel.delegateAgent({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
-          requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          ownerId,
+          requestId,
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.runMode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+          }),
         });
         return stringifyToolResult({
           delegation: serializeDelegation(result.delegation),
@@ -315,6 +341,27 @@ export async function handleAgentControlToolCall(
       },
     });
   }
+}
+
+function buildControlRunMcpServers(
+  context: AgentControlToolContext,
+  input: {
+    mode: "ask" | "act";
+    cwd?: string;
+    ownerId: string;
+    requestId: string;
+    clientId: string;
+  }
+): Record<string, unknown>[] | undefined {
+  if (!context.buildMcpServers) {
+    return undefined;
+  }
+  return context.buildMcpServers(input.mode, input.cwd, undefined, {
+    ownerId: input.ownerId,
+    requestId: input.requestId,
+    clientId: input.clientId,
+    protocolVersion: context.getProtocolVersion?.(),
+  });
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {
