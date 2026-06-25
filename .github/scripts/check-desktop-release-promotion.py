@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Validate that a macOS GitHub Release is safe to promote to stable."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+from pathlib import Path
+
+
+REQUIRED_ASSETS = {"Omi.zip"}
+DMG_ASSETS = {"omi.dmg", "Omi.dmg"}
+TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?\+\d+)-macos$")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"FAIL: {message}")
+
+
+def normalize_metadata_line(line: str) -> str:
+    stripped = line.strip()
+    if stripped.startswith("<!--"):
+        stripped = stripped[4:].strip()
+    if stripped.endswith("-->"):
+        stripped = stripped[:-3].strip()
+    return stripped
+
+
+def parse_metadata(body: str) -> dict[str, str]:
+    in_block = False
+    metadata: dict[str, str] = {}
+
+    for line in body.splitlines():
+        stripped = normalize_metadata_line(line)
+        if stripped == "KEY_VALUE_START":
+            in_block = True
+            continue
+        if stripped == "KEY_VALUE_END":
+            return metadata
+        if not in_block or not stripped or stripped.startswith("#"):
+            continue
+        if ":" not in stripped:
+            fail(f"invalid release metadata line: {stripped}")
+        key, value = stripped.split(":", 1)
+        metadata[key.strip()] = value.strip()
+
+    fail("release body is missing KEY_VALUE_START/KEY_VALUE_END metadata block")
+
+
+def write_github_output(path: str | None, values: dict[str, str]) -> None:
+    if not path:
+        return
+
+    with Path(path).open("a") as f:
+        for key, value in values.items():
+            print(f"{key}={value}", file=f)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--release-json", required=True)
+    parser.add_argument("--release-tag", required=True)
+    parser.add_argument("--github-output")
+    args = parser.parse_args()
+
+    release = json.loads(Path(args.release_json).read_text())
+    tag_name = release.get("tagName")
+    if tag_name != args.release_tag:
+        fail(f"release tag mismatch: expected {args.release_tag}, got {tag_name}")
+    tag_match = TAG_RE.match(tag_name or "")
+    if not tag_match:
+        fail(f"{tag_name!r} is not a v*-macos release tag")
+    if release.get("isDraft"):
+        fail(f"{tag_name} is still a draft release")
+    if release.get("isPrerelease"):
+        fail(f"{tag_name} is marked as a GitHub prerelease")
+
+    metadata = parse_metadata(release.get("body") or "")
+    channel = metadata.get("channel")
+    if channel not in {"beta", "stable"}:
+        fail(f"{tag_name} must be channel: beta or channel: stable before prod promotion, got {channel!r}")
+    if not metadata.get("edSignature"):
+        fail(f"{tag_name} is missing edSignature metadata")
+
+    asset_names = {asset.get("name") for asset in release.get("assets", [])}
+    missing_assets = sorted(REQUIRED_ASSETS - asset_names)
+    if missing_assets:
+        fail(f"{tag_name} is missing required release asset(s): {', '.join(missing_assets)}")
+    if not (asset_names & DMG_ASSETS):
+        fail(f"{tag_name} is missing a DMG release asset")
+
+    write_github_output(
+        args.github_output,
+        {
+            "release_channel": channel,
+            "firestore_doc_id": f"v{tag_match.group('version')}",
+        },
+    )
+    print(f"desktop release promotion sanity OK: {tag_name} ({channel})")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
