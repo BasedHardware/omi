@@ -24,6 +24,7 @@ SERVICE_PORTS = {
     "firestore": config.FIRESTORE_PORT,
     "auth": config.AUTH_PORT,
     "redis": config.REDIS_PORT,
+    "typesense": config.TYPESENSE_PORT,
     "backend": config.BACKEND_PORT,
     "desktop-backend": config.DESKTOP_BACKEND_PORT,
 }
@@ -114,9 +115,10 @@ def _require_port_available_or_owned(cfg: config.HarnessConfig, service: str, po
     )
 
 
-def _http_ok(url: str, timeout: float = 1.0) -> tuple[bool, str]:
+def _http_ok(url: str, timeout: float = 1.0, headers: dict[str, str] | None = None) -> tuple[bool, str]:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        request = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.status < 500, f"HTTP {response.status}"
     except urllib.error.HTTPError as exc:
         return exc.code < 500, f"HTTP {exc.code}"
@@ -150,6 +152,8 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
         missing.append("java runtime (required by Firestore emulator)")
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
+    if not _which("docker"):
+        missing.append("docker (required for local Typesense on loopback)")
     if not (cfg.repo_root / "firebase.json").is_file():
         missing.append("firebase.json at repo root")
     if not (cfg.repo_root / "firestore.rules").is_file():
@@ -181,6 +185,7 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"firestore_emulator: {cfg.firestore_host}")
     print(f"firebase_auth_emulator: {cfg.auth_host}")
     print(f"redis: {cfg.redis_host}:{cfg.redis_port}")
+    print(f"typesense: 127.0.0.1:{config.TYPESENSE_PORT}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
 
@@ -256,6 +261,7 @@ def build_session_summary(cfg: config.HarnessConfig, provider_report: providers.
         "firestore": cfg.firestore_host,
         "firebase_auth": cfg.auth_host,
         "redis": f"{cfg.redis_host}:{cfg.redis_port}",
+        "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
         "backend": cfg.backend_url,
         "desktop_backend": cfg.desktop_backend_url,
     }
@@ -447,6 +453,42 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     ]
 
 
+def _typesense_container_name(cfg: config.HarnessConfig) -> str:
+    return f"{OWNERSHIP_PREFIX}-{cfg.instance}-typesense"
+
+
+def _remove_stale_typesense_container(cfg: config.HarnessConfig) -> None:
+    container = _typesense_container_name(cfg)
+    subprocess.run(
+        ["docker", "rm", "-f", container],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def _typesense_command(cfg: config.HarnessConfig) -> list[str]:
+    typesense_dir = cfg.layout.services_dir / "typesense"
+    typesense_dir.mkdir(parents=True, exist_ok=True)
+    return [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        _typesense_container_name(cfg),
+        "-p",
+        f"127.0.0.1:{config.TYPESENSE_PORT}:{config.TYPESENSE_PORT}",
+        "-v",
+        f"{typesense_dir}:/data",
+        "typesense/typesense:27.1",
+        "--data-dir",
+        "/data",
+        "--api-key",
+        config.LOCAL_TYPESENSE_API_KEY,
+        "--enable-cors",
+    ]
+
+
 def _start_services(cfg: config.HarnessConfig) -> None:
     cfg.layout.logs_dir.mkdir(parents=True, exist_ok=True)
     _start_process(
@@ -479,6 +521,15 @@ def _start_services(cfg: config.HarnessConfig) -> None:
         log_name="redis.log",
         port=cfg.redis_port,
     )
+    _remove_stale_typesense_container(cfg)
+    _start_process(
+        cfg,
+        "typesense",
+        _typesense_command(cfg),
+        cwd=cfg.repo_root,
+        log_name="typesense.log",
+        port=config.TYPESENSE_PORT,
+    )
     _start_process(
         cfg,
         "backend",
@@ -500,18 +551,20 @@ def _start_services(cfg: config.HarnessConfig) -> None:
 
 
 def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[str]:
+    typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
     checks = {
-        "firestore": f"http://{cfg.firestore_host}/",
-        "auth": f"http://{cfg.auth_host}/",
-        "backend": f"{cfg.backend_url}/docs",
-        "desktop-backend": f"{cfg.desktop_backend_url}/health",
+        "firestore": (f"http://{cfg.firestore_host}/", None),
+        "auth": (f"http://{cfg.auth_host}/", None),
+        "typesense": (f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections", typesense_headers),
+        "backend": (f"{cfg.backend_url}/docs", None),
+        "desktop-backend": (f"{cfg.desktop_backend_url}/health", None),
     }
     pending = dict(checks)
     deadline = time.time() + timeout
     failures: dict[str, str] = {}
     while pending and time.time() < deadline:
-        for service, url in list(pending.items()):
-            ok, detail = _http_ok(url)
+        for service, (url, headers) in list(pending.items()):
+            ok, detail = _http_ok(url, headers=headers)
             if ok:
                 print(f"{service}: healthy ({detail})")
                 pending.pop(service)
@@ -519,7 +572,7 @@ def _wait_health(cfg: config.HarnessConfig, *, timeout: float = 25.0) -> list[st
                 failures[service] = detail
         if pending:
             time.sleep(0.75)
-    for service, url in pending.items():
+    for service, (url, _) in pending.items():
         failures.setdefault(service, f"not healthy at {url}")
     return [f"{service}: {failures.get(service, 'unknown failure')}" for service in pending]
 
@@ -562,6 +615,7 @@ def cmd_up(args: argparse.Namespace) -> int:
                 "firestore": cfg.firestore_host,
                 "auth": cfg.auth_host,
                 "redis": f"{cfg.redis_host}:{cfg.redis_port}",
+                "typesense": f"127.0.0.1:{config.TYPESENSE_PORT}",
                 "backend": cfg.backend_url,
                 "desktop_backend": cfg.desktop_backend_url,
             },
