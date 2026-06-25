@@ -63,7 +63,7 @@ def _shared_memory_vector_metadata_fields(
     if vector_updated_at.tzinfo is None or vector_updated_at.utcoffset() is None:
         raise ValueError("vector_updated_at must be timezone-aware")
     labels = sorted({label.strip().lower() for label in item.sensitivity_labels if label and label.strip()})
-    return {
+    shared = {
         "uid": item.uid,
         "memory_id": item.memory_id,
         "status": item.status.value,
@@ -79,6 +79,12 @@ def _shared_memory_vector_metadata_fields(
         "projection_commit_id": projection_commit_id,
         "vector_updated_at": vector_updated_at.isoformat(),
     }
+    device_ids = sorted({d for d in (item.capture_device_ids or []) if d})
+    if not device_ids and item.primary_capture_device:
+        device_ids = [item.primary_capture_device]
+    if device_ids:
+        shared["capture_device_ids"] = device_ids
+    return shared
 
 
 def build_memory_vector_metadata(
