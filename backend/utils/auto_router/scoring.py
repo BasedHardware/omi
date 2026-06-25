@@ -97,8 +97,15 @@ class TaskSpec:
 
 
 def _clamp_0_1(value: Optional[float]) -> float:
-    """Clamp a score to [0.0, 1.0]. None → 0.0."""
-    if value is None:
+    """Clamp a score to [0.0, 1.0]. None / NaN → 0.0; ±inf → clamped range.
+
+    NaN handling: `float('nan') < 0.0` and `float('nan') > 1.0` both return
+    False (IEEE 754), so without the explicit `math.isnan` check, NaN would
+    propagate through the score formula and surface in the API response as
+    `NaN` — invalid JSON. We treat NaN like None: a missing/unknown score
+    contributes 0 to the weighted total.
+    """
+    if value is None or math.isnan(value):
         return 0.0
     if value < 0.0:
         return 0.0

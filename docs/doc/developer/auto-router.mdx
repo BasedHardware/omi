@@ -89,14 +89,16 @@ backend/utils/auto_router/
 backend/routers/auto_router.py   # FastAPI router, GET /v1/auto-router/pick
 
 backend/tests/unit/
-├── test_auto_router_scoring.py            # 31 tests
-├── test_auto_router_task_registry.py      # 21 tests
-├── test_auto_router_model_registry.py     # 16 tests
-├── test_auto_router_daily_refresh.py      # 13 tests
-└── test_auto_router_endpoint.py           # 17 tests
+├── test_auto_router_scoring.py            # NaN clamping + invariants
+├── test_auto_router_task_registry.py
+├── test_auto_router_model_registry.py
+├── test_auto_router_daily_refresh.py
+├── test_auto_router_endpoint.py           # pick endpoint + auth + metrics
+├── test_auto_router_metrics.py            # PickHistory + MetricsCollector
+└── test_auto_router_demo.py               # demo script runs + outputs
 ```
 
-Total: 98 backend tests, all passing.
+Total: see `cd backend && PYENV_VERSION=3.12.8 python -m pytest tests/unit/test_auto_router_*.py --collect-only -q | tail -1` for the current count.
 
 ## Desktop module layout
 
@@ -136,7 +138,7 @@ The desktop module mirrors `RealtimeOmni/AutoModelSelector.swift` (singleton + U
 ```
 
 HTTP errors:
-- `400` if `task` query parameter is not a known task name (response body lists known tasks in `detail`)
+- `400` if `task` query parameter is not a known task name (response body has `code: "unknown_task"`, `message: "unknown task: <name>"`, and a `docs` pointer — does NOT list known tasks, to keep the response surface small)
 - `422` if `task` query parameter is missing entirely
 
 ## Daily refresh mechanism

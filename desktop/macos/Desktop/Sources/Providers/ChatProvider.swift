@@ -986,8 +986,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
             // v2 wiring: consult the auto-router when the user has "Auto" or
-            // no specific model selected. Falls back to the previous default
-            // behavior if the router has no cached pick yet.
+            // no specific model selected. Triggers a background refresh if the
+            // cache is empty or stale so that subsequent calls in the same
+            // session can use the router pick (rather than always falling back).
+            // The first call still falls back to the default if the cache is
+            // empty and there's no network — `refreshIfStale` returns immediately
+            // and spawns a Task to refresh in the background.
+            AutoRouter.shared.refreshIfStale(for: .generalAssistant)
             let routerPick = AutoRouter.shared.currentPick(for: .generalAssistant)
             let floatingModelDecision = ChatModelRouter.decide(
                 selectedModel: ShortcutSettings.shared.selectedModel,

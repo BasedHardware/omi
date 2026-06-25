@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from utils.auto_router.daily_refresh import DailyRefreshCache
 from utils.auto_router.metrics import MetricsCollector
@@ -60,7 +60,7 @@ _metrics_collector = MetricsCollector()
 _DEFAULT_TEST_UID = "test-uid"
 
 
-def auth_dependency(authorization: str = None) -> str:  # type: ignore[assignment]
+def auth_dependency(authorization: Optional[str] = Header(None)) -> str:
     """FastAPI dependency for the auto-router endpoints.
 
     Lazy-imports the upstream `get_current_user_uid` so the unit tests don't
@@ -68,6 +68,12 @@ def auth_dependency(authorization: str = None) -> str:  # type: ignore[assignmen
     function (which validates the Firebase token, records the user's platform,
     and validates BYOK headers). In tests, the dependency is overridden with
     a lambda that returns a test uid.
+
+    The `Header(None)` annotation is required: without it, FastAPI would treat
+    `authorization` as a query parameter (not the Authorization header), which
+    would break parity with upstream endpoints. The upstream function
+    `get_current_user_uid` itself declares `authorization: str = Header(None)`,
+    so we must mirror that.
     """
     from utils.other.endpoints import get_current_user_uid  # lazy
 

@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-"""Auto-router v1 demo: show how different per-task weights change the pick.
+"""Auto-router demo: show how different per-task weights change the pick.
 
 Run: cd backend && PYENV_VERSION=3.12.8 python -m utils.auto_router.demo.run
 
-Demonstrates 3 scenarios from the user's brief:
+Demonstrates 4 scenarios:
   1. Low-cost mode for general assistant → picks cheap model
   2. High-quality mode for screenshot understanding → picks strong model
   3. Low-latency mode for PTT → picks fast model
+  4. Hit the live endpoint + check metrics (v2)
 
-Each scenario:
+Demos 1-3 use the scoring function directly with overridden weights
+(no HTTP). Demo 4 uses FastAPI's TestClient to hit the live endpoint,
+proving the v2 wiring works end-to-end (auth + metrics recording).
+
+Each weighted scenario:
   - Shows the original weights for the task
   - Overrides weights to bias toward the named dimension
   - Re-scores all candidates
   - Prints the top 3 picks (so you can see the scoring change, not just the winner)
   - Shows the winner's score delta vs the original-weight winner (if different)
 
-This script does NOT call the HTTP endpoint — it uses the scoring function
-directly with overridden weights. Use it to validate the framework's
-behavior under different weight scenarios.
+Use this script to validate the framework's behavior under different
+weight scenarios AND to verify the live endpoint + metrics.
 """
 
 import sys

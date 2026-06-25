@@ -241,17 +241,35 @@ class TestAuth:
         assert resp.status_code == 200
 
     def test_uid_is_captured_in_endpoint_signature(self, client):
-        # Verify the endpoint accepts the auth dependency by checking the
-        # OpenAPI schema. FastAPI exposes `Depends()` parameters in the
-        # parameters list (here, `authorization` is the auth header).
+        # Verify the endpoint accepts the auth dependency AND that FastAPI
+        # treats `authorization` as a HEADER (not a query parameter).
+        # Without the `Header(None)` annotation in `auth_dependency`, FastAPI
+        # would interpret `authorization: str = None` as a query parameter —
+        # which would silently break the documented `Authorization: Bearer
+        # <token>` contract (the upstream auth function reads from the header).
         resp = client.get("/openapi.json")
         assert resp.status_code == 200
         schema = resp.json()
         path = schema["paths"]["/v1/auto-router/pick"]["get"]
-        # The auth dependency shows up as the `authorization` query parameter
-        # (because our thin `auth_dependency` accepts it as a default arg).
-        param_names = {p["name"] for p in path.get("parameters", [])}
-        assert "authorization" in param_names, f"auth dependency should be in OpenAPI parameters, got: {param_names}"
+        param_by_name = {p["name"]: p for p in path.get("parameters", [])}
+        assert (
+            "authorization" in param_by_name
+        ), f"auth dependency should be in OpenAPI parameters, got: {list(param_by_name)}"
+        auth_param = param_by_name["authorization"]
+        assert auth_param["in"] == "header", (
+            f"`authorization` must be a header (not a query param); "
+            f"got `in: {auth_param['in']}`. This means `auth_dependency` is "
+            f"missing the `Header(None)` annotation — upstream auth would receive "
+            f"the wrong value in production."
+        )
+
+    def test_metrics_uid_is_also_a_header(self, client):
+        # Same Header-annotation check applies to the metrics endpoint.
+        resp = client.get("/openapi.json")
+        schema = resp.json()
+        path = schema["paths"]["/v1/auto-router/metrics"]["get"]
+        param_by_name = {p["name"]: p for p in path.get("parameters", [])}
+        assert param_by_name["authorization"]["in"] == "header"
 
 
 # ---------------------------------------------------------------------------

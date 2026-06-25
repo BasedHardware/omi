@@ -4,6 +4,8 @@ The scoring function is the heart of the framework — these tests pin the
 formula and its defensive behaviors (clamping, None handling, determinism).
 """
 
+import math
+
 import pytest
 
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score, _clamp_0_1
@@ -255,6 +257,47 @@ class TestNoneHandling:
         result = score(m, _task())
         assert isinstance(result, float)
         assert result == 0.0
+
+    def test_nan_quality_treated_as_zero(self):
+        # NaN in benchmark scores must not propagate through the formula
+        # (would surface as `NaN` in the API response, which is invalid JSON).
+        m = ModelSpec(id="x", quality_score=float("nan"), latency_score=1.0, cost_score=1.0)
+        t = _task(qw=1.0, lw=0.0, cw=0.0)
+        result = score(m, t)
+        assert not math.isnan(result)
+        assert result == pytest.approx(0.0)
+
+    def test_nan_latency_treated_as_zero(self):
+        m = ModelSpec(id="x", quality_score=1.0, latency_score=float("nan"), cost_score=1.0)
+        t = _task(qw=0.0, lw=1.0, cw=0.0)
+        result = score(m, t)
+        assert not math.isnan(result)
+        assert result == pytest.approx(0.0)
+
+    def test_nan_cost_treated_as_zero(self):
+        m = ModelSpec(id="x", quality_score=1.0, latency_score=1.0, cost_score=float("nan"))
+        t = _task(qw=0.0, lw=0.0, cw=1.0)
+        result = score(m, t)
+        assert not math.isnan(result)
+        assert result == pytest.approx(0.0)
+
+    def test_all_nan_returns_zero(self):
+        m = ModelSpec(id="x", quality_score=float("nan"), latency_score=float("nan"), cost_score=float("nan"))
+        t = _task()
+        result = score(m, t)
+        assert not math.isnan(result)
+        assert result == pytest.approx(0.0)
+
+    def test_positive_infinity_clamped_to_one(self):
+        # ±inf is not NaN; it should clamp normally (inf > 1.0 → 1.0).
+        m = ModelSpec(id="x", quality_score=float("inf"), latency_score=1.0, cost_score=1.0)
+        t = _task(qw=1.0, lw=0.0, cw=0.0)
+        assert score(m, t) == pytest.approx(1.0)
+
+    def test_negative_infinity_clamped_to_zero(self):
+        m = ModelSpec(id="x", quality_score=float("-inf"), latency_score=1.0, cost_score=1.0)
+        t = _task(qw=1.0, lw=0.0, cw=0.0)
+        assert score(m, t) == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------
