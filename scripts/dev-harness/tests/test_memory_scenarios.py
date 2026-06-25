@@ -142,16 +142,52 @@ def test_happy_path_has_rich_default_memory_fixture_set() -> None:
     assert ctx.ids["alice_archive"] not in default_ids
 
 
-def test_happy_path_short_term_seeds_include_authoritative_evidence() -> None:
+def test_happy_path_sourced_seeds_include_synthetic_local_qa_evidence() -> None:
+    """Every sourced happy_path memory has matching synthetic local-QA evidence docs."""
     happy = memory_scenarios.get_scenario("happy_path")
-    short_active_path = f"users/{memory_scenarios.ALICE_USER_ID}/memory_items/mem_alice_short_active_030"
-    evidence_path = f"users/{memory_scenarios.ALICE_USER_ID}/memory_evidence/ev_local_alice_short_active_030"
-    memory_seed = next(seed for seed in happy.firestore_seed if seed.path == short_active_path)
-    evidence_seed = next(seed for seed in happy.firestore_seed if seed.path == evidence_path)
-    assert memory_seed.data["evidence"]
-    assert memory_seed.data["evidence"][0]["evidence_id"] == "ev_local_alice_short_active_030"
-    assert memory_seed.data["evidence"][0]["source_id"] == "conv_local_alice_short_active_030"
-    assert evidence_seed.data["quote_refs"][0]["quote"] == memory_seed.data["content"]
+    uid = memory_scenarios.ALICE_USER_ID
+    evidence_by_path = {
+        seed.path: seed for seed in happy.firestore_seed if seed.path.startswith(f"users/{uid}/memory_evidence/")
+    }
+
+    memory_seeds = [
+        seed
+        for seed in happy.firestore_seed
+        if seed.path.startswith(f"users/{uid}/memory_items/") and seed.data.get("evidence")
+    ]
+    assert memory_seeds, "expected sourced memory fixtures with embedded evidence"
+
+    short_term_ids: list[str] = []
+    long_term_ids: list[str] = []
+    for memory_seed in memory_seeds:
+        tier = memory_seed.data.get("tier")
+        embedded = memory_seed.data["evidence"]
+        assert isinstance(embedded, list) and embedded, f"missing embedded evidence on {memory_seed.path}"
+        ev = embedded[0]
+        evidence_id = ev["evidence_id"]
+        source_id = ev["source_id"]
+        content = memory_seed.data["content"]
+
+        evidence_path = f"users/{uid}/memory_evidence/{evidence_id}"
+        evidence_seed = evidence_by_path.get(evidence_path)
+        assert evidence_seed is not None, f"missing memory_evidence doc for {memory_seed.path}"
+        assert evidence_seed.data["evidence_id"] == evidence_id
+        assert evidence_seed.data["source_id"] == source_id
+        assert evidence_seed.data["quote_refs"][0]["quote"] == content
+        assert evidence_seed.data["quote_refs"][0]["source_id"] == source_id
+
+        memory_id = memory_seed.path.rsplit("/", 1)[-1]
+        if tier == "short_term":
+            short_term_ids.append(memory_id)
+        elif tier == "long_term":
+            long_term_ids.append(memory_id)
+
+    assert "mem_alice_short_active_030" in short_term_ids
+    assert "mem_alice_short_demo_030" in short_term_ids
+    assert "mem_alice_long_030" in long_term_ids
+    assert "mem_alice_long_edu_030" in long_term_ids
+    assert len(short_term_ids) >= 6
+    assert len(long_term_ids) >= 15
 
 
 def test_remap_firestore_seed_to_auth_uid() -> None:
