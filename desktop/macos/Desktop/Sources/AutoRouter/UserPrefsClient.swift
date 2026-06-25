@@ -30,8 +30,11 @@ final class UserPrefsClient {
     /// instantiating the singleton.
     static let endpointPath = "/v1/auto-router/prefs"
 
-    /// HTTP request timeout, in seconds.
-    private static let requestTimeout: TimeInterval = 15
+    /// HTTP request timeout, in seconds. Exposed as `internal` so other
+    /// parts of the app (e.g., the Settings view model's `loadTaskDefaults`)
+    /// can reuse the same timeout when hitting the `/pick` endpoint.
+    static let requestTimeoutSeconds: TimeInterval = 15
+    private static var requestTimeout: TimeInterval { requestTimeoutSeconds }
 
     private init() {}
 
@@ -245,6 +248,24 @@ struct TaskWeights: Equatable, Codable, Sendable {
 
     func toRawDict() -> [String: Double] {
         ["quality": quality, "latency": latency, "cost": cost]
+    }
+
+    /// Construct `TaskWeights` without validation, normalizing so the sum is
+    /// exactly 1.0. Used by the auto-rebalance math in `WeightSlider`, which
+    /// is guaranteed-correct by construction (it computes the new value of
+    /// the OTHER two axes from the changed axis and the original total, so
+    /// the sum is always 1.0 modulo floating-point error). The normalize
+    /// step here absorbs that error.
+    ///
+    /// Do NOT use this from untrusted input — prefer the throwing `init`.
+    static func fromUnchecked(quality: Double, latency: Double, cost: Double) -> TaskWeights {
+        let sum = quality + latency + cost
+        if abs(sum - 1.0) < 1e-9 {
+            return TaskWeights(unchecked: quality, latency: latency, cost: cost)
+        }
+        // Normalize: scale all three so sum = 1.0 exactly.
+        let scale = sum > 1e-9 ? 1.0 / sum : 1.0 / 3.0
+        return TaskWeights(unchecked: quality * scale, latency: latency * scale, cost: cost * scale)
     }
 }
 

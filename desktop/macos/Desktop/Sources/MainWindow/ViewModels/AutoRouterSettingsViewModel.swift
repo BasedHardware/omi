@@ -66,8 +66,12 @@ final class AutoRouterSettingsViewModel: ObservableObject {
 
     // MARK: - Init
 
-    init(client: UserPrefsClient = .shared) {
-        self.client = client
+    init(client: UserPrefsClient? = nil) {
+        // Resolve `.shared` lazily here (not in the default arg) to avoid a
+        // Swift 6 actor-isolation warning when the default value is read
+        // from a nonisolated context. The init itself is @MainActor (the
+        // whole class is), so resolving `.shared` here is safe.
+        self.client = client ?? .shared
     }
 
     // MARK: - Load
@@ -102,9 +106,21 @@ final class AutoRouterSettingsViewModel: ObservableObject {
         // the weights from the `detail.weights` field.
         // Fallback: if the fetch fails, fall back to balanced weights for
         // every task (1/3 each).
-        var defaults: [AutoRouterTask: TaskWeights] = [:]
-        for task in AutoRouterTask.allCases {
-            defaults[task] = await fetchDefaultWeights(for: task) ?? .balanced
+        //
+        // Parallelized via `withTaskGroup` so all 5 task fetches fire
+        // concurrently (sequential fetches would add ~5 round-trips of
+        // latency on a flaky network). Each fetch is independent.
+        let defaults: [AutoRouterTask: TaskWeights] = await withTaskGroup(
+            of: (AutoRouterTask, TaskWeights?).self
+        ) { group in
+            for task in AutoRouterTask.allCases {
+                group.addTask { (task, await self.fetchDefaultWeights(for: task)) }
+            }
+            var result: [AutoRouterTask: TaskWeights] = [:]
+            for await (task, weights) in group {
+                result[task] = weights ?? .balanced
+            }
+            return result
         }
         self.taskDefaults = defaults
     }
@@ -118,7 +134,7 @@ final class AutoRouterSettingsViewModel: ObservableObject {
             return nil
         }
         var req = URLRequest(url: url)
-        req.timeoutInterval = 10
+        req.timeoutInterval = UserPrefsClient.requestTimeoutSeconds
         if let auth = try? await AuthService.shared.getAuthHeader() {
             req.setValue(auth, forHTTPHeaderField: "Authorization")
         }

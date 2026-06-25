@@ -212,20 +212,3 @@ struct WeightSlider: View {
         }
     }
 }
-
-// MARK: - TaskWeights unchecked initializer (used by WeightSlider's
-// auto-rebalance, which is guaranteed-correct by construction — see
-// `WeightSlider.rebalanced` above).
-extension TaskWeights {
-    /// Construct TaskWeights without validation, normalizing so the sum is
-    /// exactly 1.0. Used by the auto-rebalance math in WeightSlider.
-    static func fromUnchecked(quality: Double, latency: Double, cost: Double) -> TaskWeights {
-        let sum = quality + latency + cost
-        if abs(sum - 1.0) < 1e-9 {
-            return TaskWeights(unchecked: quality, latency: latency, cost: cost)
-        }
-        // Normalize: scale all three so sum = 1.0 exactly.
-        let scale = sum > 1e-9 ? 1.0 / sum : 1.0 / 3.0
-        return TaskWeights(unchecked: quality * scale, latency: latency * scale, cost: cost * scale)
-    }
-}
