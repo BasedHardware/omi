@@ -93,16 +93,26 @@ final class UserPrefsClientTests: XCTestCase {
     }
 
     func testUserPrefs_toRawDictRoundtrip() {
-        let raw: [String: [String: Double]] = [
+        // v6: legacy flat input is normalized to the new nested format
+        // on output (single round-trip normalizes the shape).
+        let raw: [String: Any] = [
             "transcription": ["quality": 0.3, "latency": 0.6, "cost": 0.1]
         ]
         let prefs = UserPrefs.from(raw)
-        XCTAssertEqual(prefs.toRawDict(), raw)
+        // Output is the new nested format with both keys (even when empty).
+        let expected: [String: Any] = [
+            "overrides": ["transcription": ["quality": 0.3, "latency": 0.6, "cost": 0.1]],
+            "model_overrides": [:],
+        ]
+        XCTAssertEqual(
+            prefs.toRawDict() as NSDictionary,
+            expected as NSDictionary
+        )
     }
 
     func testUserPrefs_fromDropsInvalidWeights() {
         // Sum != 1.0 → invalid → dropped.
-        let raw: [String: [String: Double]] = [
+        let raw: [String: Any] = [
             "ptt_response": ["quality": 0.5, "latency": 0.5, "cost": 0.5],  // sum 1.5
             "transcription": ["quality": 0.3, "latency": 0.6, "cost": 0.1],  // valid
         ]
@@ -230,5 +240,138 @@ final class UserPrefsClientTests: XCTestCase {
         // report it when filing a bug.
         let msg = PrefsError.serverError(status: 503).userMessage
         XCTAssertTrue(msg.contains("503"), "server message should include status: \(msg)")
+    }
+
+    // MARK: - UserPrefs.modelOverrides (v6) — per-task model pinning
+
+    func testUserPrefs_defaultModelOverridesEmpty() {
+        // Backward-compat: old callers using UserPrefs(overrides: [:]) get empty modelOverrides.
+        let prefs = UserPrefs()
+        XCTAssertTrue(prefs.modelOverrides.isEmpty)
+        XCTAssertTrue(prefs.overrides.isEmpty)
+
+        let empty = UserPrefs.empty
+        XCTAssertTrue(empty.modelOverrides.isEmpty)
+        XCTAssertTrue(empty.overrides.isEmpty)
+    }
+
+    func testUserPrefs_initWithModelOverrides() {
+        let prefs = UserPrefs(modelOverrides: ["ptt_response": "gpt-realtime-2"])
+        XCTAssertEqual(prefs.modelOverrides, ["ptt_response": "gpt-realtime-2"])
+        XCTAssertTrue(prefs.overrides.isEmpty)
+    }
+
+    func testUserPrefs_initWithBothFields() {
+        let prefs = UserPrefs(
+            overrides: ["ptt_response": TaskWeights.balanced],
+            modelOverrides: ["ptt_response": "whisper"]
+        )
+        XCTAssertEqual(prefs.modelOverrides, ["ptt_response": "whisper"])
+        XCTAssertEqual(prefs.overrides["ptt_response"], TaskWeights.balanced)
+    }
+
+    func testUserPrefs_fromNewNestedFormat() {
+        // v6 wire format: {"overrides": {...}, "model_overrides": {...}}
+        let raw: [String: Any] = [
+            "overrides": ["ptt_response": ["quality": 0.4, "latency": 0.5, "cost": 0.1]],
+            "model_overrides": ["ptt_response": "gpt-realtime-2"],
+        ]
+        let prefs = UserPrefs.from(raw)
+        let weights = prefs.overrides["ptt_response"]!
+        XCTAssertEqual(weights.quality, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(weights.latency, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(weights.cost, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(prefs.modelOverrides, ["ptt_response": "gpt-realtime-2"])
+    }
+
+    func testUserPrefs_fromPartialNestedFormat() {
+        // Only overrides key — model_overrides defaults to empty.
+        let raw: [String: Any] = [
+            "overrides": ["ptt_response": ["quality": 0.4, "latency": 0.5, "cost": 0.1]],
+        ]
+        let prefs = UserPrefs.from(raw)
+        let weights = prefs.overrides["ptt_response"]!
+        XCTAssertEqual(weights.quality, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(weights.latency, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(weights.cost, 0.1, accuracy: 1e-9)
+        XCTAssertTrue(prefs.modelOverrides.isEmpty)
+
+        // Only model_overrides key — overrides defaults to empty.
+        let raw2: [String: Any] = [
+            "model_overrides": ["transcription": "whisper"],
+        ]
+        let prefs2 = UserPrefs.from(raw2)
+        XCTAssertTrue(prefs2.overrides.isEmpty)
+        XCTAssertEqual(prefs2.modelOverrides, ["transcription": "whisper"])
+    }
+
+    func testUserPrefs_fromLegacyFlatFormatBackwardCompat() {
+        // v3 wire format (top-level IS the overrides dict) — still accepted.
+        let raw: [String: Any] = [
+            "ptt_response": ["quality": 0.4, "latency": 0.5, "cost": 0.1],
+        ]
+        let prefs = UserPrefs.from(raw)
+        let weights = prefs.overrides["ptt_response"]!
+        XCTAssertEqual(weights.quality, 0.4, accuracy: 1e-9)
+        XCTAssertEqual(weights.latency, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(weights.cost, 0.1, accuracy: 1e-9)
+        XCTAssertTrue(prefs.modelOverrides.isEmpty, "Legacy format → empty model_overrides")
+    }
+
+    func testUserPrefs_toRawDictIncludesBothFields() throws {
+        let weights = try TaskWeights(quality: 0.4, latency: 0.5, cost: 0.1)
+        let prefs = UserPrefs(
+            overrides: ["ptt_response": weights],
+            modelOverrides: ["transcription": "whisper"]
+        )
+        let dict = prefs.toRawDict()
+        // Both keys always present (forward-compat).
+        XCTAssertNotNil(dict["overrides"])
+        XCTAssertNotNil(dict["model_overrides"])
+        let overridesDict = dict["overrides"] as? [String: [String: Double]]
+        XCTAssertNotNil(overridesDict)
+        XCTAssertNotNil(overridesDict?["ptt_response"])
+        XCTAssertEqual(
+            dict["model_overrides"] as? [String: String],
+            ["transcription": "whisper"]
+        )
+    }
+
+    func testUserPrefs_toRawDictEmptyModelOverridesSerializesAsEmpty() throws {
+        let weights = try TaskWeights(quality: 0.4, latency: 0.5, cost: 0.1)
+        let prefs = UserPrefs(overrides: ["ptt_response": weights])
+        let dict = prefs.toRawDict()
+        XCTAssertNotNil(dict["model_overrides"])
+        XCTAssertEqual(dict["model_overrides"] as? [String: String], [:])
+    }
+
+    func testUserPrefs_roundtripBothFields() throws {
+        let weights = try TaskWeights(quality: 0.4, latency: 0.5, cost: 0.1)
+        let original = UserPrefs(
+            overrides: ["ptt_response": weights],
+            modelOverrides: ["transcription": "whisper", "ptt_response": "gpt-realtime-2"]
+        )
+        let restored = UserPrefs.from(original.toRawDict())
+        XCTAssertEqual(restored, original)
+    }
+
+    func testUserPrefs_equalityIncludesModelOverrides() {
+        let a = UserPrefs(modelOverrides: ["ptt_response": "whisper"])
+        let b = UserPrefs(modelOverrides: ["ptt_response": "claude"])
+        XCTAssertNotEqual(a, b, "Different model overrides should produce non-equal UserPrefs")
+
+        let c = UserPrefs(modelOverrides: ["ptt_response": "whisper"])
+        XCTAssertEqual(a, c, "Same model overrides should produce equal UserPrefs")
+    }
+
+    func testUserPrefs_fromDropsInvalidModelOverridesSilently() {
+        // If model_overrides has a non-string value, the whole field is dropped
+        // (defensive — backend validates). UserPrefs modelOverrides ends up empty.
+        let raw: [String: Any] = [
+            "overrides": [:],
+            "model_overrides": ["ptt_response": 123],  // not a string
+        ]
+        let prefs = UserPrefs.from(raw)
+        XCTAssertTrue(prefs.modelOverrides.isEmpty)
     }
 }

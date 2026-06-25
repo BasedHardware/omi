@@ -92,8 +92,6 @@ final class UserPrefsClient {
         }
     }
 
-    // MARK: - Save
-
     /// Save the user's per-task weight overrides. An empty `prefs` clears
     /// all overrides (server treats empty prefs as "use defaults").
     /// Throws `PrefsError` on auth/transport/server-validation failures.
@@ -146,36 +144,82 @@ final class UserPrefsClient {
 
 /// Per-task weight overrides. Empty `overrides` means "use task defaults
 /// for everything". Mirrors the backend's `UserPrefs` (frozen dataclass).
+/// Per-task weight overrides + per-task model pins.
+///
+/// v3 introduced `overrides` (per-task weights). v6 added `modelOverrides`
+/// (per-task model pinning — user can lock to a specific model instead of
+/// trusting the auto-router's pick). Both default to empty — no behavior
+/// change for users who haven't set anything.
+///
+/// Mirrors the backend's `UserPrefs` dataclass. Wire format (v6):
+/// `{overrides: {task: {quality, latency, cost}, ...},
+///   model_overrides: {task: model_id, ...}}`
 struct UserPrefs: Equatable, Codable, Sendable {
     /// Keyed by task rawValue (e.g. "ptt_response"), value is the weights.
     var overrides: [String: TaskWeights]
+    /// Keyed by task rawValue, value is the pinned model ID (v6).
+    /// Empty means "let the auto-router choose".
+    var modelOverrides: [String: String]
 
-    init(overrides: [String: TaskWeights] = [:]) {
+    init(overrides: [String: TaskWeights] = [:], modelOverrides: [String: String] = [:]) {
         self.overrides = overrides
+        self.modelOverrides = modelOverrides
     }
 
-    static let empty = UserPrefs(overrides: [:])
+    static let empty = UserPrefs(overrides: [:], modelOverrides: [:])
 
-    /// Decode from the backend's wire format: `{task: {quality, latency, cost}}`.
+    /// Decode from the backend's wire format (v6 nested).
+    /// Backward-compat: accepts the legacy v3 flat format
+    /// (`{task: {quality, latency, cost}}` — top-level IS overrides)
+    /// when no wrapper keys are present.
+    ///
     /// Unknown / non-numeric fields are dropped (defensive — backend validates).
-    static func from(_ raw: [String: [String: Double]]) -> UserPrefs {
-        var result: [String: TaskWeights] = [:]
-        for (task, fields) in raw {
-            if let weights = TaskWeights.fromRaw(fields) {
-                result[task] = weights
+    static func from(_ raw: [String: Any]) -> UserPrefs {
+        let isLegacyFormat = !raw.keys.contains("overrides")
+            && !raw.keys.contains("model_overrides")
+
+        if isLegacyFormat {
+            // Legacy: top-level IS the overrides dict.
+            var overrides: [String: TaskWeights] = [:]
+            for (task, value) in raw {
+                guard let fields = value as? [String: Double] else { continue }
+                if let weights = TaskWeights.fromRaw(fields) {
+                    overrides[task] = weights
+                }
+            }
+            return UserPrefs(overrides: overrides, modelOverrides: [:])
+        }
+
+        // New v6 format. Each field is optional (sparse / partial).
+        var overrides: [String: TaskWeights] = [:]
+        var modelOverrides: [String: String] = [:]
+
+        if let rawOverrides = raw["overrides"] as? [String: [String: Double]] {
+            for (task, fields) in rawOverrides {
+                if let weights = TaskWeights.fromRaw(fields) {
+                    overrides[task] = weights
+                }
             }
         }
-        return UserPrefs(overrides: result)
+        if let rawModelOverrides = raw["model_overrides"] as? [String: String] {
+            modelOverrides = rawModelOverrides
+        }
+
+        return UserPrefs(overrides: overrides, modelOverrides: modelOverrides)
     }
 
-    /// Encode to the backend's wire format: `{task: {quality, latency, cost}}`.
-    /// Only includes valid weights (skipping any that fail validation).
-    func toRawDict() -> [String: [String: Double]] {
-        var result: [String: [String: Double]] = [:]
-        for (task, weights) in overrides {
-            result[task] = weights.toRawDict()
-        }
-        return result
+    /// Encode to the backend's wire format (v6 nested). Always includes both
+    /// keys (even when empty) for forward-compat.
+    ///
+    /// Return type is `[String: Any]` because the inner values are mixed
+    /// (`[String: Double]` for overrides, `String` for model IDs). The single
+    /// caller (`save(prefs:)`) feeds the result directly to `JSONSerialization`,
+    /// which accepts the loose `Any` shape.
+    func toRawDict() -> [String: Any] {
+        return [
+            "overrides": overrides.mapValues { $0.toRawDict() },
+            "model_overrides": modelOverrides,
+        ]
     }
 }
 
