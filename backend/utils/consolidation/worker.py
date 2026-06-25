@@ -8,6 +8,8 @@ from database import short_term_memories as short_term_db
 from database.vector_db import find_similar_memories
 from models.memories import Memory, MemoryDB, ShortTermMemory
 from utils.llm.memories import TypedMemoryResolution
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.consolidation.typed_resolver import (
     fact_from_short_term,
     mutations_for_typed_resolution,
@@ -35,6 +37,8 @@ class ConsolidationResult:
 
 
 def retrieve_candidates(uid: str, short_term: Dict, *, limit: int = 8) -> List[Dict]:
+    # WS-I.2 deferral: consolidation candidate reads still use legacy `memories` for similarity
+    # pairing — converging this requires a canonical short-term ↔ long-term retrieval wave.
     matches = find_similar_memories(
         uid,
         short_term.get('content', ''),
@@ -127,8 +131,16 @@ def consolidate_pending_window(
         for short_term in active_short_terms
     ]
     if memory_dbs:
-        commit_result = memories_db.save_memories(uid, [memory_db.model_dump() for memory_db in memory_dbs])
-        commit_id = (commit_result or {}).get('commit', {}).get('commit_id')
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
+        # Functionally equivalent today but keep an eye on divergence if pin semantics change.
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            memory_service = MemoryService()
+            for memory_db in memory_dbs:
+                memory_service.write(uid, memory_db.model_dump())
+            commit_id = f"canonical_consolidation_{len(memory_dbs)}"
+        else:
+            commit_result = memories_db.save_memories(uid, [memory_db.model_dump() for memory_db in memory_dbs])
+            commit_id = (commit_result or {}).get('commit', {}).get('commit_id')
         if commit_id:
             result.commit_ids.append(commit_id)
             active_ids = {short_term.get('id') for short_term in active_short_terms}
@@ -148,6 +160,7 @@ def consolidate_pending_window(
         if not resolution:
             continue
         if resolution.relationship == 'refine' and resolution.candidate_id:
+            # WS-I.2 deferral: refine_memory still mutates legacy store — consolidation wave follow-up.
             commit_result = memories_db.refine_memory(uid, resolution.candidate_id, resolution.arg_changes)
             commit_id = (commit_result or {}).get('commit', {}).get('commit_id')
             if commit_id:
@@ -156,6 +169,7 @@ def consolidate_pending_window(
         elif resolution.relationship == 'duplicate':
             short_term_db.mark_consolidated(uid, short_term['id'], None)
         elif resolution.relationship == 'contradict':
+            # WS-I.2 deferral: merge_contradict_memory still mutates legacy store — consolidation wave follow-up.
             commit_result = memories_db.merge_contradict_memory(
                 uid,
                 fact_from_short_term(uid, short_term, extractor_id='rolling_consolidation'),

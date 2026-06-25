@@ -467,6 +467,8 @@ class DurableMemoryPatch(BaseModel):
     aboutness: Literal["primary_user", "user_owned_project", "user_relationship", "third_party", "unclear"] = "unclear"
     initial_tier: MemoryTier = MemoryTier.long_term
     target_tier: Optional[MemoryTier] = None
+    visibility: str = "private"
+    user_asserted: bool = False
 
     @model_validator(mode="after")
     def validate_decision_contract(self):

@@ -14,6 +14,7 @@ from utils.memory.atom_keyword_index import (
     purge_user_atom_keyword_index,
     sync_atom_keyword_index_for_item,
 )
+from utils.memory.device_scope_filter import filter_items_by_device_scope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
@@ -32,7 +33,7 @@ from models.memory_evidence import (
     SourceState,
     SourceStateReason,
 )
-from models.memories import MemoryDB, MemoryCategory
+from models.memories import Evidence, MemoryDB, MemoryCategory, decide_initial_memory_tier
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
@@ -122,26 +123,40 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
                 "independence_group": evidence.source_id or evidence.source_type,
                 "redaction_status": evidence.redaction_status.value,
                 "created_at": item.captured_at,
+                "client_device_id": evidence.client_device_id,
             }
         )
         if evidence.source_type == "conversation" and evidence.source_id:
             conversation_id = evidence.source_id
 
+    promotion = item.promotion or {}
+    category_raw = promotion.get("category", MemoryCategory.interesting.value)
+    try:
+        category = MemoryCategory(category_raw)
+    except ValueError:
+        category = MemoryCategory.interesting
+    tags = list(promotion.get("tags") or [])
+    reviewed = bool(promotion.get("reviewed", False))
+    user_review = promotion.get("user_review")
+
     return MemoryDB(
         id=item.memory_id,
         uid=item.uid,
         content=item.content or "",
-        category=MemoryCategory.interesting,
-        tags=[],
+        category=category,
+        tags=tags,
         created_at=item.captured_at,
         updated_at=item.updated_at,
         conversation_id=conversation_id,
         manually_added=item.user_asserted,
-        reviewed=False,
+        reviewed=reviewed,
+        user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
         memory_tier=item.tier,
         valid_at=item.captured_at,
+        primary_capture_device=item.primary_capture_device,
+        capture_device_ids=item.capture_device_ids or [],
     )
 
 
@@ -151,6 +166,8 @@ def read_canonical_memories(
     limit: int = 100,
     offset: int = 0,
     db_client=None,
+    device_scope: str = "all",
+    client_device_id: Optional[str] = None,
 ) -> List[MemoryDB]:
     """Read default-visible canonical items using the shared product-memory filter."""
     client = db_client if db_client is not None else default_db_client
@@ -158,6 +175,11 @@ def read_canonical_memories(
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
+    visible = filter_items_by_device_scope(
+        visible,
+        device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+        client_device_id=client_device_id,
+    )
     paged = visible[offset : offset + limit]
     return [memory_item_to_memorydb(item) for item in paged]
 
@@ -169,6 +191,8 @@ def search_canonical_memories(
     limit: int = 5,
     db_client=None,
     vector_query=None,
+    device_scope: str = "all",
+    client_device_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid keyword (Typesense) + vector search over canonical long-term atoms."""
     client = db_client if db_client is not None else default_db_client
@@ -212,6 +236,13 @@ def search_canonical_memories(
             continue
         if item.tier != MemoryLayer.long_term or item.status != MemoryItemStatus.active:
             continue
+        scoped = filter_items_by_device_scope(
+            [item],
+            device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+            client_device_id=client_device_id,
+        )
+        if not scoped:
+            continue
         candidates.append(
             {
                 "id": item.memory_id,
@@ -250,8 +281,50 @@ def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
     return control
 
 
+def _ordered_capture_devices_from_evidence(raw_evidence: list) -> tuple[List[str], Optional[str]]:
+    """Unique capture device ids ordered by earliest evidence created_at, then list order."""
+    keyed: list[tuple[tuple, str]] = []
+    for index, raw in enumerate(raw_evidence or []):
+        if not isinstance(raw, dict):
+            continue
+        device_id = raw.get("client_device_id")
+        if not device_id:
+            device_id = (raw.get("artifact_ref") or {}).get("client_device_id")
+        if not device_id:
+            continue
+        created_at = raw.get("created_at")
+        if isinstance(created_at, datetime):
+            sort_key = (0, created_at)
+        elif isinstance(created_at, str) and created_at.strip():
+            try:
+                sort_key = (0, datetime.fromisoformat(created_at.replace("Z", "+00:00")))
+            except ValueError:
+                sort_key = (1, index)
+        else:
+            sort_key = (1, index)
+        keyed.append((sort_key, device_id))
+
+    keyed.sort(key=lambda item: item[0])
+    device_ids: List[str] = []
+    seen: set[str] = set()
+    for _, device_id in keyed:
+        if device_id in seen:
+            continue
+        seen.add(device_id)
+        device_ids.append(device_id)
+    return device_ids, (device_ids[0] if device_ids else None)
+
+
 def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
-    source_id = evidence_data.get("source_id") or conversation_id
+    source_id = (
+        evidence_data.get("source_id")
+        or conversation_id
+        or (f"external:{evidence_data['evidence_id']}" if evidence_data.get("evidence_id") else None)
+    )
+    client_device_id = evidence_data.get("client_device_id")
+    if not client_device_id:
+        artifact_ref = evidence_data.get("artifact_ref") or {}
+        client_device_id = artifact_ref.get("client_device_id")
     return MemoryEvidence(
         evidence_id=evidence_data["evidence_id"],
         source_type=evidence_data.get("source_type") or "conversation",
@@ -261,6 +334,7 @@ def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id
             conversation_id if (evidence_data.get("source_type") or "conversation") == "conversation" else None
         ),
         artifact_preservation=ArtifactPreservationState.preserved,
+        client_device_id=client_device_id,
     )
 
 
@@ -307,14 +381,100 @@ def _bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
     return atomic_bump_source_generation(uid, db_client=db_client)
 
 
+def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
+    raw_tier = data.get("memory_tier")
+    if raw_tier is not None:
+        if hasattr(raw_tier, "value"):
+            return raw_tier.value
+        return str(raw_tier)
+    return decide_initial_memory_tier(bool(data.get("manually_added")), data.get("durability")).value
+
+
+def _visibility_from_payload(data: Dict[str, Any]) -> str:
+    visibility = (data.get("visibility") or "private").strip()
+    return visibility if visibility in {"public", "private"} else "private"
+
+
+def _user_asserted_from_payload(data: Dict[str, Any]) -> bool:
+    if "manually_added" in data:
+        return bool(data.get("manually_added"))
+    return bool(data.get("user_asserted"))
+
+
+def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+    category = data.get("category")
+    if category is not None:
+        metadata["category"] = category.value if hasattr(category, "value") else str(category)
+    tags = data.get("tags")
+    if tags:
+        metadata["tags"] = list(tags)
+    return metadata
+
+
+def _apply_product_metadata(item: MemoryItem, metadata: Dict[str, Any]) -> MemoryItem:
+    if not metadata:
+        return item
+    promotion = dict(item.promotion or {})
+    promotion.update(metadata)
+    return item.model_copy(update={"promotion": promotion})
+
+
+def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
+    path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
+    db_client.document(path).set(item.model_dump(mode="json"))
+
+
+def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
+    conversation_id = data.get("conversation_id")
+    evidence_items: List[MemoryEvidence] = []
+    for raw in data.get("evidence") or []:
+        if isinstance(raw, dict) and raw.get("evidence_id"):
+            evidence_items.append(_legacy_evidence_to_memory(raw, conversation_id=conversation_id))
+    if evidence_items:
+        return evidence_items
+
+    memory_id = data.get("id") or "pending"
+    source_id = conversation_id or data.get("app_id") or f"external:{memory_id}"
+    manually_added = bool(data.get("manually_added"))
+    if conversation_id:
+        source_type = "conversation"
+    elif data.get("app_id"):
+        source_type = f"integration:{data['app_id']}"
+    else:
+        source_type = "api"
+    source_signal = "manual" if manually_added else "api"
+    evidence = Evidence.from_source(
+        source_id=source_id,
+        source_type=source_type,
+        source_signal=source_signal,
+        extractor_id=data.get("extractor_id") or ("manual_note" if manually_added else "external_write"),
+        extractor_version="v1",
+        artifact_ref=data.get("artifact_ref") or {},
+        independence_group=source_id,
+    )
+    return [_legacy_evidence_to_memory(evidence.model_dump(), conversation_id=conversation_id)]
+
+
+def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client) -> Optional[MemoryItem]:
+    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    snapshot = db_client.document(path).get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    item = MemoryItem(**(snapshot.to_dict() or {}))
+    if item.status != MemoryItemStatus.active:
+        return None
+    return item
+
+
 def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_client=None) -> str:
-    """Persist one extracted memory to memory_items + ledger at short_term/active/processed."""
+    """Persist one memory to memory_items + ledger (extraction or external/manual writes)."""
     client = db_client if db_client is not None else default_db_client
     content = (data.get("content") or "").strip()
     if not content:
         raise ValueError("canonical write requires non-empty content")
 
-    conversation_id = data.get("conversation_id") or data.get("memory_id")
+    conversation_id = data.get("conversation_id")
     source_id = conversation_id or data.get("id") or "unknown"
     memory_id = data.get("id") or extraction_memory_id(uid=uid, source_id=source_id, content=content)
     idempotency_key = deterministic_contract_id(
@@ -322,12 +482,7 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         {"uid": uid, "source_id": source_id, "content": content},
     )
 
-    evidence_items: List[MemoryEvidence] = []
-    for raw in data.get("evidence") or []:
-        if isinstance(raw, dict) and raw.get("evidence_id"):
-            evidence_items.append(_legacy_evidence_to_memory(raw, conversation_id=conversation_id))
-    if not evidence_items:
-        raise ValueError("canonical write requires at least one evidence record")
+    evidence_items = _evidence_items_from_payload(data)
 
     control = _ensure_control_state(uid, db_client=client)
     for evidence in evidence_items:
@@ -366,7 +521,9 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "memory_text": content,
         "confidence": "medium",
         "relationship_to_user": "self",
-        "initial_tier": MemoryLayer.short_term.value,
+        "initial_tier": _resolve_initial_tier_value(data),
+        "visibility": _visibility_from_payload(data),
+        "user_asserted": _user_asserted_from_payload(data),
     }
 
     result = apply_long_term_patch_firestore(
@@ -391,15 +548,106 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             item = MemoryItem(**(snapshot.to_dict() or {}))
 
     if item is not None:
+        product_metadata = _product_metadata_from_payload(data)
+        if product_metadata:
+            item = _apply_product_metadata(item, product_metadata)
+            _persist_memory_item(uid, item, db_client=client)
         assert_legal_state(
             DomainMemoryLayer(item.tier.value),
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+        device_ids, primary_device = _ordered_capture_devices_from_evidence(data.get("evidence") or [])
+        if device_ids:
+            item_ref = client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
+            item_ref.set(
+                {
+                    "capture_device_ids": device_ids,
+                    "primary_capture_device": primary_device,
+                },
+                merge=True,
+            )
+            item = item.model_copy(
+                update={
+                    "capture_device_ids": device_ids,
+                    "primary_capture_device": primary_device,
+                }
+            )
         sync_atom_keyword_index_for_item(item, db_client=client)
         sync_canonical_memory_vector(item)
 
     return committed_id
+
+
+def write_canonical_external_memory(uid: str, data: Dict[str, Any], *, db_client=None) -> str:
+    """Persist a manual/API/integration memory via the canonical apply path."""
+    return write_canonical_extraction_memory(uid, data, db_client=db_client)
+
+
+def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    trimmed = (content or "").strip()
+    if not trimmed:
+        raise ValueError("canonical update requires non-empty content")
+    now = datetime.now(timezone.utc)
+    updated = item.model_copy(update={"content": trimmed, "updated_at": now, "user_asserted": True})
+    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    sync_atom_keyword_index_for_item(updated, db_client=client)
+    sync_canonical_memory_vector(updated)
+    return updated
+
+
+def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    now = datetime.now(timezone.utc)
+    updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
+    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    return updated
+
+
+def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    now = datetime.now(timezone.utc)
+    promotion = dict(item.promotion or {})
+    promotion["reviewed"] = True
+    promotion["user_review"] = value
+    updated = item.model_copy(update={"promotion": promotion, "updated_at": now})
+    _persist_memory_item(uid, updated, db_client=client)
+    return updated
+
+
+def update_canonical_memory_product_fields(
+    uid: str,
+    memory_id: str,
+    *,
+    tags: Optional[List[str]] = None,
+    category: Optional[str] = None,
+    db_client=None,
+) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    metadata: Dict[str, Any] = {}
+    if tags is not None:
+        metadata["tags"] = list(tags)
+    if category is not None:
+        metadata["category"] = category
+    if not metadata:
+        return item
+    now = datetime.now(timezone.utc)
+    updated = _apply_product_metadata(item, metadata).model_copy(update={"updated_at": now})
+    _persist_memory_item(uid, updated, db_client=client)
+    return updated
 
 
 def _item_sourced_from_conversation(item: MemoryItem, conversation_id: str) -> bool:

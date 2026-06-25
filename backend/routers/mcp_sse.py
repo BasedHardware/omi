@@ -45,6 +45,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -653,6 +654,16 @@ def execute_tool(
         if not content:
             raise ToolExecutionError("Content is required")
 
+        if memory_system == MemorySystem.CANONICAL:
+            category = identify_category_for_memory(content)
+            memory = Memory(content=content, category=category)
+            memory_db = MemoryDB.from_memory(memory, user_id, None, True)
+            committed_id = MemoryService(db_client=db).write(user_id, memory_db.model_dump())
+            item = _read_canonical_memory_item(user_id, committed_id or memory_db.id, db_client=db)
+            if item is not None:
+                memory_db = memory_item_to_memorydb(item)
+            return {"success": True, "memory": memory_db.model_dump()}
+
         memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
         memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
             memory_rollout,
@@ -702,6 +713,10 @@ def execute_tool(
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db).update_content(user_id, memory_id, content)
+            return {"success": True}
 
         memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
         memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(

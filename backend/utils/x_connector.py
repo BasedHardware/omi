@@ -35,6 +35,8 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils import social
 
 logger = logging.getLogger(__name__)
@@ -345,19 +347,25 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
             # (and cleanly removable on disconnect / re-import).
             mdb.app_id = INTEGRATION_KEY
             memory_dbs.append(mdb)
-        memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
-        upsert_memory_vectors_batch(
-            uid,
-            [
-                {
-                    'memory_id': m.id,
-                    'content': m.content,
-                    'category': m.category.value,
-                    'subject_entity_id': m.subject_entity_id,
-                }
-                for m in memory_dbs
-            ],
-        )
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            memory_service = MemoryService()
+            for mdb in memory_dbs:
+                memory_service.write(uid, mdb.dict())
+        else:
+            memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
+            upsert_memory_vectors_batch(
+                uid,
+                [
+                    {
+                        'memory_id': m.id,
+                        'content': m.content,
+                        'category': m.category.value,
+                        'subject_entity_id': m.subject_entity_id,
+                    }
+                    for m in memory_dbs
+                ],
+            )
         total += len(memory_dbs)
     return total
 

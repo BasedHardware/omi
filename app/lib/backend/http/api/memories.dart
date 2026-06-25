@@ -32,9 +32,13 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   return response.statusCode == 200;
 }
 
-Future<List<Memory>> getMemories({int limit = 100, int offset = 0}) async {
+Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+  var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
+  if (thisDeviceOnly) {
+    url += '&device_scope=current';
+  }
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset',
+    url: url,
     headers: {},
     method: 'GET',
     body: '',

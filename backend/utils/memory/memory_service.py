@@ -12,17 +12,32 @@ from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
     delete_all_canonical_memories,
     delete_canonical_memory,
+    memory_item_to_memorydb,
     read_canonical_memories,
     retract_conversation_sourced_memories,
     search_canonical_memories,
     search_result_to_memorydb,
+    update_canonical_memory_content,
+    update_canonical_memory_visibility,
+    update_canonical_memory_product_fields,
+    update_canonical_memory_review,
     write_canonical_extraction_memory,
+    write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import resolve_pinned_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
+
+
+class DeviceScopeNotSupportedError(ValueError):
+    """device_scope filtering is only supported on the canonical memory backend."""
+
+
+def _reject_legacy_device_scope(device_scope: str) -> None:
+    if device_scope and device_scope != "all":
+        raise DeviceScopeNotSupportedError("device_scope filtering is only supported for canonical memory users")
 
 
 @dataclass(frozen=True)
@@ -142,14 +157,66 @@ def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5, db_c
 
 
 class LegacyMemoryBackend:
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
+    def search(
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 5,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemorySearchMatch]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_search_memories(uid, query, limit=limit)
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
         memories_db.create_memory(uid, data)
+        return str(data.get("id") or "")
+
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        memories_db.review_memory(uid, memory_id, value)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        update_data: Dict[str, Any] = {}
+        if tags is not None:
+            update_data["tags"] = tags
+        if category is not None:
+            update_data["category"] = category
+        if update_data:
+            memories_db.update_memory_fields(uid, memory_id, update_data)
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        memories_db.save_memories(uid, items)
+        return [str(item.get("id") or "") for item in items]
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        memories_db.edit_memory(uid, memory_id, content)
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        memories_db.change_memory_visibility(uid, memory_id, visibility)
 
     def delete(self, uid: str, memory_id: str) -> None:
         memories_db.delete_memory(uid, memory_id)
@@ -162,11 +229,35 @@ class CanonicalMemoryBackend:
     def __init__(self, *, db_client=None):
         self._db_client = db_client
 
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-        return read_canonical_memories(uid, limit=limit, offset=offset, db_client=self._db_client)
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        return read_canonical_memories(
+            uid,
+            limit=limit,
+            offset=offset,
+            db_client=self._db_client,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
-        items = search_canonical_memories(uid, query, limit=limit, db_client=self._db_client)
+    def search(
+        self, uid: str, query: str, *, limit: int = 5, device_scope: str = "all", client_device_id: Optional[str] = None
+    ) -> List[MemorySearchMatch]:
+        items = search_canonical_memories(
+            uid,
+            query,
+            limit=limit,
+            db_client=self._db_client,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
         results: List[MemorySearchMatch] = []
         for item in items:
             if not item.get("memory_id"):
@@ -175,8 +266,38 @@ class CanonicalMemoryBackend:
             results.append(MemorySearchMatch(memory=memory_obj, score=1.0))
         return results
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
-        write_canonical_extraction_memory(uid, data, db_client=self._db_client)
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
+        return write_canonical_external_memory(uid, data, db_client=self._db_client)
+
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        update_canonical_memory_review(uid, memory_id, value, db_client=self._db_client)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        item = update_canonical_memory_product_fields(
+            uid,
+            memory_id,
+            tags=tags,
+            category=category,
+            db_client=self._db_client,
+        )
+        return memory_item_to_memorydb(item)
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        return [self.write(uid, item) for item in items]
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)
+        return memory_item_to_memorydb(item)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        update_canonical_memory_visibility(uid, memory_id, visibility, db_client=self._db_client)
 
     def delete(self, uid: str, memory_id: str) -> None:
         delete_canonical_memory(uid, memory_id, db_client=self._db_client)
@@ -197,11 +318,39 @@ class MemoryService:
             return self._canonical
         return self._legacy
 
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-        return self._resolve_backend(uid).read(uid, limit=limit, offset=offset)
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        return self._resolve_backend(uid).read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
-        return self._resolve_backend(uid).search(uid, query, limit=limit)
+    def search(
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 5,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemorySearchMatch]:
+        return self._resolve_backend(uid).search(
+            uid,
+            query,
+            limit=limit,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[dict]:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
@@ -209,8 +358,30 @@ class MemoryService:
             return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
-        self._resolve_backend(uid).write(uid, data)
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
+        return self._resolve_backend(uid).write(uid, data)
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        return self._resolve_backend(uid).write_batch(uid, items)
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        return self._resolve_backend(uid).update_content(uid, memory_id, content)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        self._resolve_backend(uid).update_visibility(uid, memory_id, visibility)
+
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        self._resolve_backend(uid).review(uid, memory_id, value)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        return self._resolve_backend(uid).update_product_fields(uid, memory_id, tags=tags, category=category)
 
     def delete(self, uid: str, memory_id: str) -> None:
         self._resolve_backend(uid).delete(uid, memory_id)

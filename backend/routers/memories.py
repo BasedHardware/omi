@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
@@ -20,7 +20,10 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
+from utils.client_device import resolve_client_device
+from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
@@ -40,6 +43,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Read-Source',
         'X-Omi-Memory-Read-Decision',
         'X-Omi-Memory-Next-Cursor',
+        'X-Omi-Memory-Device-Scope-Supported',
         'Link',
         'Cache-Control',
     }
@@ -154,7 +158,52 @@ def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
     )
 
 
+def _normalize_device_scope(device_scope: str) -> str:
+    scope = (device_scope or 'all').strip().lower()
+    if scope not in ('all', 'current', 'explicit'):
+        raise HTTPException(status_code=400, detail='device_scope must be one of: all, current, explicit')
+    return scope
+
+
+def _resolve_get_memories_device_scope(
+    device_scope: str,
+    client_device_id: Optional[str],
+    *,
+    x_app_platform: Optional[str],
+    x_device_id_hash: Optional[str],
+) -> tuple[str, Optional[str]]:
+    scope = _normalize_device_scope(device_scope)
+    resolved_device_id = client_device_id
+    if scope == 'current':
+        resolved_device_id = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+        ).client_device_id
+    return scope, resolved_device_id
+
+
+def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
+    """Fail closed at the HTTP boundary when scoped filtering lacks a device id.
+
+    Agents and API clients get an explicit 400 (not silent unfiltered data) so they
+    can supply X-App-Platform / X-Device-Id-Hash or client_device_id as needed.
+    """
+    detail = device_scope_validation_error(device_scope, resolved_device_id)  # type: ignore[arg-type]
+    if detail:
+        raise HTTPException(status_code=400, detail=detail)
+
+
+def _set_device_scope_capability_header(http_response: Response, *, supported: bool) -> None:
+    http_response.headers['X-Omi-Memory-Device-Scope-Supported'] = 'true' if supported else 'false'
+
+
 def _validate_memory(uid: str, memory_id: str) -> dict:
+    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
+        item = _read_canonical_memory_item(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
+
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -182,6 +231,25 @@ async def create_memory(
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
     payload = memory_db.dict()
+
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        try:
+            memory_service = MemoryService(db_client=db_client)
+            committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
+            item = await run_blocking(
+                db_executor,
+                _read_canonical_memory_item,
+                uid,
+                committed_id or memory_db.id,
+                db_client=db_client,
+            )
+            if item is not None:
+                return memory_item_to_memorydb(item)
+            return memory_db
+        except Exception:
+            logger.exception("Canonical create_memory failed uid=%s", uid)
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
         await run_blocking(db_executor, memories_db.create_memory, uid, payload)
@@ -244,6 +312,24 @@ async def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        memory_service = MemoryService(db_client=db_client)
+        committed_ids: List[str] = []
+        for memory_db in memory_dbs:
+            committed_id = await run_blocking(db_executor, memory_service.write, uid, memory_db.dict())
+            committed_ids.append(committed_id or memory_db.id)
+        if has_public:
+            submit_with_context(postprocess_executor, update_personas_async, uid)
+        server_memories: List[MemoryDB] = []
+        for memory_id in committed_ids:
+            item = await run_blocking(db_executor, _read_canonical_memory_item, uid, memory_id, db_client=db_client)
+            if item is not None:
+                server_memories.append(memory_item_to_memorydb(item))
+            else:
+                server_memories.append(next(m for m in memory_dbs if m.id == memory_id))
+        return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
+
     await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
 
     try:
@@ -278,11 +364,39 @@ def get_memories(
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
+    device_scope: str = Query('all'),
+    client_device_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
     memory_runtime: V3GetRuntime = Depends(get_v3_get_runtime),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
-    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
-        return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(uid, limit=limit, offset=offset)
+    scope, resolved_device_id = _resolve_get_memories_device_scope(
+        device_scope,
+        client_device_id,
+        x_app_platform=x_app_platform,
+        x_device_id_hash=x_device_id_hash,
+    )
+    is_canonical = pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL
+
+    if scope != 'all' and not is_canonical:
+        raise HTTPException(
+            status_code=400,
+            detail='device_scope filtering is only supported for canonical memory users',
+        )
+
+    if is_canonical:
+        _validate_device_scope_request(scope, resolved_device_id)
+        _set_device_scope_capability_header(response, supported=True)
+        return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope=scope,
+            client_device_id=resolved_device_id,
+        )
+
+    _set_device_scope_capability_header(response, supported=False)
 
     if not memory_runtime.enabled or memory_runtime.source_decision == 'disabled':
         return _legacy_get_memories(uid, limit, offset)
@@ -347,6 +461,11 @@ def delete_memory(
     memory_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).delete(uid, memory_id)
+        return {'status': 'ok'}
+
     _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     try:
@@ -360,6 +479,11 @@ def delete_memory(
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).delete_all(uid)
+        return {'status': 'ok'}
+
     # Collect all memory IDs before Firestore delete so we can also purge
     # their Pinecone vectors — otherwise orphaned vectors become search
     # noise that never gets cleaned up.
@@ -388,7 +512,11 @@ def review_memory(
     value: bool,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
     _validate_memory(uid, memory_id)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).review(uid, memory_id, value)
+        return {'status': 'ok'}
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
@@ -399,6 +527,12 @@ def edit_memory(
     value: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        _validate_memory(uid, memory_id)
+        MemoryService(db_client=db_client).update_content(uid, memory_id, value)
+        return {'status': 'ok'}
+
     memory = _validate_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
@@ -422,6 +556,11 @@ def update_memory_visibility(
     _validate_memory(uid, memory_id)
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
+        postprocess_executor.submit(update_personas_async, uid)
+        return {'status': 'ok'}
     memories_db.change_memory_visibility(uid, memory_id, value)
     postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

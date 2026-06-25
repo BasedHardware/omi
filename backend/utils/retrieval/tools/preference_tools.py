@@ -13,6 +13,8 @@ import database.memories as memory_db
 import database.vector_db as vector_db
 import logging
 from models.memories import MemoryDB
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,10 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
     memory_data['scoring'] = MemoryDB.calculate_score(MemoryDB.model_validate(memory_data))
 
     try:
-        memory_db.create_memory(uid, memory_data)
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            MemoryService().write(uid, memory_data)
+        else:
+            memory_db.create_memory(uid, memory_data)
         logger.info(f"Saved user preference: {preference[:80]}")
         return f"Preference saved: {preference}"
     except Exception as e:

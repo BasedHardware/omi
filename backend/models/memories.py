@@ -338,6 +338,7 @@ class Evidence(BaseModel):
     independence_group: str
     redaction_status: str = "active"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    client_device_id: Optional[str] = None
 
     @staticmethod
     def from_source(
@@ -351,6 +352,7 @@ class Evidence(BaseModel):
         capture_confidence: Optional[float] = None,
         independence_group: Optional[str] = None,
         created_at: Optional[datetime] = None,
+        client_device_id: Optional[str] = None,
     ) -> 'Evidence':
         now = created_at or datetime.now(timezone.utc)
         group = independence_group or source_id or f"{source_type}:unknown"
@@ -383,6 +385,7 @@ class Evidence(BaseModel):
             capture_confidence=resolved_capture,
             independence_group=group,
             created_at=now,
+            client_device_id=client_device_id,
         )
 
 
@@ -555,6 +558,9 @@ class MemoryDB(Memory):
     invalid_at: Optional[datetime] = None
     superseded_by: Optional[str] = None
 
+    primary_capture_device: Optional[str] = None
+    capture_device_ids: List[str] = Field(default_factory=list)
+
     def __init__(self, **data):
         super().__init__(**data)
         # Deprecated alias for legacy clients: mirror `id` only. Do not copy
@@ -594,6 +600,7 @@ class MemoryDB(Memory):
         independence_group: Optional[str] = None,
         subject_entity_id: Optional[str] = None,
         subject_attribution: Optional[SubjectAttribution] = None,
+        client_device_id: Optional[str] = None,
     ) -> 'MemoryDB':
         now = datetime.now(timezone.utc)
         proposition = _coerce_proposition(memory)
@@ -603,7 +610,10 @@ class MemoryDB(Memory):
         )
         if resolved_subject == 'user' and resolved_attribution == SubjectAttribution.unknown:
             resolved_attribution = SubjectAttribution.user
+        memory_id = document_id_from_seed(memory.content)
         evidence_source_id = source_id if source_id is not None else conversation_id
+        if not evidence_source_id:
+            evidence_source_id = f"external:{memory_id}"
         evidence_source_type = source_type or ("conversation" if conversation_id else "developer_api")
         evidence_source_signal = source_signal or ("manual" if manually_added else "transcription")
         evidence = Evidence.from_source(
@@ -616,10 +626,11 @@ class MemoryDB(Memory):
             capture_confidence=capture_confidence,
             independence_group=independence_group,
             created_at=now,
+            client_device_id=client_device_id,
         )
         confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
         memory_db = MemoryDB(
-            id=document_id_from_seed(memory.content),
+            id=memory_id,
             uid=uid,
             content=memory.content,
             category=memory.category,

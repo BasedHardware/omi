@@ -5,7 +5,7 @@ from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -19,6 +19,7 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
+from utils.client_device import resolve_client_device_from_request
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
 from models.conversation_enums import (
@@ -48,6 +49,7 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -468,10 +470,34 @@ def create_memory(
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
-    # Auto-categorize if no category provided
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    # Create Memory object
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        memory = Memory(
+            content=request.content.strip(),
+            category=category,
+            visibility=request.visibility,
+            tags=request.tags,
+        )
+        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        committed_id = MemoryService(db_client=db).write(uid, memory_db.dict())
+        item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db)
+        if item is not None:
+            memory_db = memory_item_to_memorydb(item)
+        if memory.visibility == 'public':
+            postprocess_executor.submit(update_personas_async, uid)
+        return MemoryResponse(
+            id=memory_db.id,
+            content=memory_db.content,
+            category=memory_db.category,
+            visibility=memory_db.visibility,
+            tags=memory_db.tags,
+            created_at=memory_db.created_at,
+            updated_at=memory_db.updated_at,
+            manually_added=memory_db.manually_added,
+            scoring=memory_db.scoring,
+        )
+
     memory = Memory(
         content=request.content.strip(),
         category=category,
@@ -526,9 +552,49 @@ def create_memories_batch(
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
-    # Prepare memories
     memory_dbs = []
     has_public = False
+
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        memory_service = MemoryService(db_client=db)
+        for mem_req in request.memories:
+            if not mem_req.content or len(mem_req.content.strip()) == 0:
+                raise HTTPException(status_code=422, detail="All memories must have non-empty content")
+            category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
+            memory = Memory(
+                content=mem_req.content.strip(),
+                category=category,
+                visibility=mem_req.visibility,
+                tags=mem_req.tags,
+            )
+            memory_db = MemoryDB.from_memory(memory, uid, None, True)
+            memory_dbs.append(memory_db)
+            if memory.visibility == 'public':
+                has_public = True
+        committed_ids = memory_service.write_batch(uid, [mem.dict() for mem in memory_dbs])
+        if has_public:
+            postprocess_executor.submit(update_personas_async, uid)
+        created_memories = []
+        for memory_id in committed_ids:
+            item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+            if item is not None:
+                mem = memory_item_to_memorydb(item)
+            else:
+                mem = next(m for m in memory_dbs if m.id == memory_id)
+            created_memories.append(
+                MemoryResponse(
+                    id=mem.id,
+                    content=mem.content,
+                    category=mem.category,
+                    visibility=mem.visibility,
+                    tags=mem.tags,
+                    created_at=mem.created_at,
+                    updated_at=mem.updated_at,
+                    manually_added=mem.manually_added,
+                    scoring=mem.scoring,
+                )
+            )
+        return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
     for mem_req in request.memories:
         if not mem_req.content or len(mem_req.content.strip()) == 0:
@@ -654,6 +720,26 @@ def update_memory(
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
+
+    memory_service = MemoryService(db_client=db)
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        if request.content is not None:
+            memory_service.update_content(uid, memory_id, request.content.strip())
+        if request.visibility is not None:
+            if request.visibility not in ['public', 'private']:
+                raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
+            memory_service.update_visibility(uid, memory_id, request.visibility)
+        if request.tags is not None or request.category is not None:
+            memory_service.update_product_fields(
+                uid,
+                memory_id,
+                tags=request.tags,
+                category=request.category.value if request.category is not None else None,
+            )
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
 
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
@@ -1054,6 +1140,8 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
+    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
 
 
 @router.get("/v1/dev/user/folders", response_model=List[Folder], tags=["developer"])
@@ -1259,7 +1347,11 @@ def get_conversation_endpoint(
 
 
 def _create_conversation_from_segments(
-    uid: str, request: CreateConversationFromTranscriptRequest
+    uid: str,
+    request: CreateConversationFromTranscriptRequest,
+    *,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1335,6 +1427,8 @@ def _create_conversation_from_segments(
         language=language_code,
         geolocation=geolocation,
         source=source,
+        client_device_id=client_device_id or request.client_device_id,
+        client_platform=client_platform or request.client_platform,
     )
 
     # Process conversation
@@ -1350,6 +1444,7 @@ def _create_conversation_from_segments(
 @router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
+    http_request: Request,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
@@ -1357,12 +1452,19 @@ def create_conversation_from_segments_user(
     Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
     the conversation persisted, processed (memories/summaries), and synced across devices — exactly
     like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
+    http_request: Request,
     uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
@@ -1412,7 +1514,13 @@ def create_conversation_from_segments(
     }
     ```
     """
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])

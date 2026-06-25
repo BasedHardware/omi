@@ -80,6 +80,7 @@ actor APIClient {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
     ]
 
@@ -1276,9 +1277,8 @@ struct ServerMemory: Decodable, Identifiable {
   let capturedAt: Date?
   let expiresAt: Date?
   let tier: MemoryLayer
-  // True only when the backend actually sent a tier (`tier`/`memory_tier`). Legacy
-  // records carry no tier, so `tier` falls back to `.longTerm` for filtering but we
-  // suppress the tier badge for them (tierIsExplicit == false).
+  // Canonical API responses always include `layer`/`memory_tier`; legacy rows omit
+  // them and default to `.longTerm` for filtering only (no badge).
   let tierIsExplicit: Bool
   let conversationId: String?
   let reviewed: Bool
@@ -1303,6 +1303,9 @@ struct ServerMemory: Decodable, Identifiable {
   let inputDeviceName: String?
   // Window title when memory was extracted
   let windowTitle: String?
+  // Capture-device provenance (optional; absent on legacy memories)
+  let primaryCaptureDevice: String?
+  let captureDeviceIds: [String]
   // Short headline for notification preview (advice/tips only)
   let headline: String?
 
@@ -1325,6 +1328,8 @@ struct ServerMemory: Decodable, Identifiable {
     case currentActivity = "current_activity"
     case inputDeviceName = "input_device_name"
     case windowTitle = "window_title"
+    case primaryCaptureDevice = "primary_capture_device"
+    case captureDeviceIds = "capture_device_ids"
   }
 
   init(from decoder: Decoder) throws {
@@ -1402,6 +1407,8 @@ struct ServerMemory: Decodable, Identifiable {
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
+    primaryCaptureDevice = try container.decodeIfPresent(String.self, forKey: .primaryCaptureDevice)
+    captureDeviceIds = try container.decodeIfPresent([String].self, forKey: .captureDeviceIds) ?? []
     headline = try container.decodeIfPresent(String.self, forKey: .headline)
   }
 
@@ -1534,6 +1541,24 @@ extension APIClient {
     let started_at: String?  // ISO8601
     let finished_at: String?  // ISO8601
     let language: String
+    let client_device_id: String?
+    let client_platform: String?
+
+    init(
+      transcript_segments: [UploadSegment],
+      source: String,
+      started_at: String?,
+      finished_at: String?,
+      language: String
+    ) {
+      self.transcript_segments = transcript_segments
+      self.source = source
+      self.started_at = started_at
+      self.finished_at = finished_at
+      self.language = language
+      self.client_device_id = ClientDeviceService.shared.clientDeviceId
+      self.client_platform = "macos"
+    }
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {
@@ -1563,7 +1588,8 @@ extension APIClient {
     offset: Int = 0,
     category: String? = nil,
     tags: [String]? = nil,
-    includeDismissed: Bool = false
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
   ) async throws -> [ServerMemory] {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -1574,6 +1600,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope, !deviceScope.isEmpty {
+      endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
   }

@@ -6,6 +6,8 @@ import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
 
 logger = logging.getLogger(__name__)
@@ -115,7 +117,13 @@ def process_external_integration_memory(
 
     # Save all memories to the database if any were created
     if saved_memories:
-        memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_memories])
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            memory_service = MemoryService()
+            for memory_db in saved_memories:
+                memory_service.write(uid, memory_db.dict())
+        else:
+            memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_memories])
 
     return saved_memories
 
@@ -149,6 +157,13 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
         saved_memories.append(memory_db)
 
     # Save all memories in batch
-    memories_db.save_memories(uid, [memory_db.dict() for memory_db in saved_memories])
+    if saved_memories:
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            memory_service = MemoryService()
+            for memory_db in saved_memories:
+                memory_service.write(uid, memory_db.dict())
+        else:
+            memories_db.save_memories(uid, [memory_db.dict() for memory_db in saved_memories])
 
     return saved_memories
