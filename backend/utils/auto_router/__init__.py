@@ -7,10 +7,12 @@ Public API:
     ModelSpec        — a candidate model with quality/latency/cost scores (0..1).
     TaskSpec         — a task type with per-dimension weights summing to 1.0.
     score(model, task) — weighted scoring function: total = qw*q + lw*l + cw*c.
+    TaskRegistry     — registry of task definitions, loads from JSON or defaults.
+    ModelRegistry    — registry of candidate models per task, loads from JSON.
+    DailyRefreshCache — TTL + asyncio.Lock + stale-fallback cache wrapper.
 
-The registries (TaskRegistry, ModelRegistry), daily refresh cache, FastAPI
-router, and desktop client are added in subsequent AIDLC tasks. See
-`backend/utils/auto_router/README.md` for the full architecture.
+The FastAPI router and desktop client are added in subsequent AIDLC tasks.
+See `backend/utils/auto_router/README.md` for the full architecture.
 
 Relationship to upstream `/v1/auto/model-pick`:
     The maintainer's narrow realtime-voice auto-router (see
@@ -21,6 +23,29 @@ Relationship to upstream `/v1/auto/model-pick`:
     or extend the upstream auto-router.
 """
 
+from utils.auto_router.daily_refresh import DailyRefreshCache
+from utils.auto_router.model_registry import (
+    ModelRegistry,
+    ModelValidationError,
+)
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
+from utils.auto_router.task_registry import (
+    TaskRegistry,
+    TaskValidationError,
+    UnknownTaskError,
+)
 
-__all__ = ["ModelSpec", "TaskSpec", "score"]
+__all__ = [
+    # Scoring (T-001)
+    "ModelSpec",
+    "TaskSpec",
+    "score",
+    # Registries (T-002)
+    "TaskRegistry",
+    "ModelRegistry",
+    "UnknownTaskError",
+    "TaskValidationError",
+    "ModelValidationError",
+    # Daily refresh (T-003)
+    "DailyRefreshCache",
+]
