@@ -5,7 +5,7 @@ import { summarizeActivity } from './insightActivity'
 import type { RewindFrame } from '../../../shared/types'
 
 const f = (app: string, windowTitle: string, ocrText: string): RewindFrame =>
-  fromPartial({ id: 0, ts: 0, app, windowTitle, processName: app.toLowerCase(), ocrText, imagePath: '', width: 0, height: 0, indexed: 1 })
+  fromPartial({ app, windowTitle, ocrText })
 
 describe('summarizeActivity', () => {
   it('groups by app/window, dedupes identical OCR, and budgets length', () => {
