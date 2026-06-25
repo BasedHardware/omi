@@ -1,40 +1,25 @@
-import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
+from tests.unit.readiness._harness import (
+    assert_readiness_safe_by_default,
+    build_readiness_report,
+    load_readiness_script,
+)
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_cursor_secret_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+_ARTIFACT = "p1_3_v3_cursor_secret_readiness"
+_SCRIPT = "p1_3_v3_cursor_secret_readiness.py"
 
 
 def _module():
-    root = Path(__file__).resolve().parents[2]
-    return _load_module(root / "scripts" / "p1_3_v3_cursor_secret_readiness.py")
+    return load_readiness_script(_SCRIPT)
 
 
 def test_cursor_secret_readiness_runner_exists_and_is_safe_by_default():
-    module = _module()
-    report = module.build_report(execute=False)
-
-    assert report["artifact"] == "p1_3_v3_cursor_secret_readiness"
-    assert report["status"] == "BLOCKED"
-    assert report["proof_status"] == "NOT_RUN"
-    assert report["read_only"] is True
-    assert report["mutation_allowed"] is False
-    assert report["runtime_wiring_changed"] is False
-    assert report["routers_memories_modified"] is False
-    assert report["network_or_provider_calls_executed"] is False
-    assert report["provider_calls_executed"] is False
-    assert report["firestore_reads_executed"] is False
-    assert report["firestore_writes_executed"] is False
-    assert report["production_rollout_approved"] is False
-    assert report["approval_claimed"] is False
-    assert report["execute"] is False
+    report = build_readiness_report(_SCRIPT, execute=False)
+    assert_readiness_safe_by_default(report, artifact=_ARTIFACT)
 
 
 def test_cursor_secret_readiness_blocks_without_server_owned_secret_source_and_never_uses_client_secret():
