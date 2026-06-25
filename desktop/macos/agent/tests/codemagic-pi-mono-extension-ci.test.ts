@@ -27,4 +27,23 @@ describe("macOS release CI", () => {
       'cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
     );
   });
+
+  it("signs bundled pi-mono-extension native dependencies before app signing", () => {
+    const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
+
+    const bundleStart = codemagic.indexOf(
+      'PI_MONO_EXTENSION_BUNDLE="$APP_BUNDLE/Contents/Resources/pi-mono-extension"'
+    );
+    const appSignStart = codemagic.indexOf("# Sign the main app bundle with release entitlements");
+
+    expect(bundleStart).toBeGreaterThanOrEqual(0);
+    expect(appSignStart).toBeGreaterThan(bundleStart);
+    expect(codemagic.slice(bundleStart, appSignStart)).toContain(
+      'find "$PI_MONO_EXTENSION_BUNDLE/node_modules" -type f'
+    );
+    expect(codemagic.slice(bundleStart, appSignStart)).toContain('grep -q "Mach-O"');
+    expect(codemagic.slice(bundleStart, appSignStart)).toContain(
+      "codesign --force --options runtime --timestamp"
+    );
+  });
 });

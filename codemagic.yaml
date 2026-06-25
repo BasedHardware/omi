@@ -2474,6 +2474,31 @@ workflows:
             done
           fi
 
+          # Sign pi-mono-extension native binaries, if any dependency adds Mach-O payloads.
+          PI_MONO_EXTENSION_BUNDLE="$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+          if [ -d "$PI_MONO_EXTENSION_BUNDLE/node_modules" ]; then
+            # Primary pass: sign known native binary extensions
+            find "$PI_MONO_EXTENSION_BUNDLE/node_modules" -type f \
+              \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
+              2>/dev/null | while read native_bin; do
+              file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+            done
+
+            # Catch-all pass: any remaining unsigned Mach-O binaries
+            find "$PI_MONO_EXTENSION_BUNDLE/node_modules" -type f \
+              ! -name "*.js"   ! -name "*.json" ! -name "*.ts"   ! -name "*.map" \
+              ! -name "*.md"   ! -name "*.txt"  ! -name "*.yml"  ! -name "*.yaml" \
+              ! -name "*.css"  ! -name "*.html" ! -name "*.jar"  ! -name "*.d.ts" \
+              ! -name "*.node" ! -name "*.dylib" ! -name "*.jnilib" ! -name "*.so" ! -name "rg" \
+              2>/dev/null | while read candidate; do
+              file "$candidate" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$candidate"
+            done
+          fi
+
           # Sign Sparkle components — innermost first (required order)
           SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
           codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
