@@ -135,9 +135,10 @@ def _real_create_meeting_transaction(transaction, doc_ref, meeting_data, now):
     implementation to exercise the read-conditional-set logic.
     """
     snapshot = doc_ref.get(transaction=transaction)
+    payload = dict(meeting_data)
     if not snapshot.exists:
-        meeting_data['created_at'] = now
-    transaction.set(doc_ref, meeting_data, merge=True)
+        payload['created_at'] = now
+    transaction.set(doc_ref, payload, merge=True)
 
 
 class _FakeCollection:
@@ -230,6 +231,23 @@ def test_created_at_not_overwritten_on_second_create():
     assert 'created_at' not in second_data, "racing create overwrote created_at"
     # And the racing write merges into the existing doc.
     assert second_merge is True
+
+
+def test_created_at_not_leaked_across_transaction_retry():
+    """A Firestore transaction can retry, re-running the body with the SAME meeting_data. The helper
+    must build a fresh payload per attempt and never mutate the caller's dict, so a created_at stamped
+    on a first attempt cannot leak onto an existing doc on a retry."""
+    doc = _FakeDoc('m1')
+    txn = _FakeTransaction()
+    meeting_data = dict(_MEETING)
+    # Attempt 1: doc does not exist -> created_at is stamped. Attempt 2 (retry): doc now exists.
+    _real_create_meeting_transaction(txn, doc, meeting_data, 'TS')
+    _real_create_meeting_transaction(txn, doc, meeting_data, 'TS')
+    first_payload, _, _ = doc.set_calls[0]
+    second_payload, _, _ = doc.set_calls[1]
+    assert 'created_at' in first_payload
+    assert 'created_at' not in second_payload, "created_at leaked onto the existing doc on the retry"
+    assert 'created_at' not in meeting_data, "the caller's meeting_data dict was mutated across attempts"
 
 
 def test_created_at_check_and_write_are_transactional():

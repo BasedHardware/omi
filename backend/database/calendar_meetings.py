@@ -22,9 +22,13 @@ def _create_meeting_transaction(transaction, doc_ref, meeting_data: Dict, now: d
     once and a racing write can never reset it.
     """
     snapshot = doc_ref.get(transaction=transaction)
+    # Build a fresh payload per attempt and never mutate the caller's dict: a Firestore transaction can
+    # retry, and a leaked created_at from a prior attempt would overwrite an existing doc's original
+    # timestamp. created_at is included only when the doc does not exist at read time.
+    payload = dict(meeting_data)
     if not snapshot.exists:
-        meeting_data['created_at'] = now
-    transaction.set(doc_ref, meeting_data, merge=True)
+        payload['created_at'] = now
+    transaction.set(doc_ref, payload, merge=True)
 
 
 def create_meeting(uid: str, meeting_data: Dict) -> str:
