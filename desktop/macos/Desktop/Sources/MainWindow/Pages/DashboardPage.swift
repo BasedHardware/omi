@@ -448,15 +448,13 @@ struct DashboardPage: View {
                 }
                 .frame(width: 320)
 
-                VStack(spacing: 12) {
+                VStack(spacing: 18) {
                     centerMemoryHeader
-                    // Center the metric block in an area exactly as tall as the six
-                    // side-list rows (6×48 + 5×12 spacing) so the column matches the
-                    // side columns' height and the block lines up with their center.
                     homeMetricsStrip
-                        .frame(height: CGFloat(6 * 48 + 5 * 12))
                 }
-                .frame(width: 340)
+                // Group the title directly above the cards and center the unit in a
+                // column the same height as the side lists.
+                .frame(width: 340, height: CGFloat(62 + 12 + (6 * 48 + 5 * 12)), alignment: .center)
 
                 destinationStack
                     .frame(width: 300)
