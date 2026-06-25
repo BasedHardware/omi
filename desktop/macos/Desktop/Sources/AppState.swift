@@ -2545,10 +2545,16 @@ class AppState: ObservableObject {
 
   private func updateConversationCount(_ count: Int, filtered: Bool) {
     if filtered {
-      filteredConversationsCount = count
+      if filteredConversationsCount != count {
+        filteredConversationsCount = count
+      }
     } else {
-      totalConversationsCount = count
-      filteredConversationsCount = nil
+      if totalConversationsCount != count {
+        totalConversationsCount = count
+      }
+      if filteredConversationsCount != nil {
+        filteredConversationsCount = nil
+      }
     }
   }
 
