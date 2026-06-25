@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional, Tuple, TypedDict
+from typing import cast
 
 from google.cloud import firestore
 
@@ -15,7 +16,7 @@ class McpApiKeyAuth(TypedDict):
     scopes: Optional[List[str]]
 
 
-def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
+def create_mcp_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, McpApiKey]:
     """
     Creates a new MCP API key for a user.
     Returns the raw key and the key's metadata.
@@ -32,6 +33,7 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         "key_prefix": key_prefix,
         "created_at": now,
         "last_used_at": None,
+        "scopes": scopes,
     }
     db.collection("mcp_api_keys").document(key_id).set(api_key_doc)
 
@@ -41,6 +43,7 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         key_prefix=key_prefix,
         created_at=now,
         last_used_at=None,
+        scopes=scopes,
     )
     return raw_key, api_key_data
 
@@ -119,6 +122,10 @@ def get_auth_by_api_key(api_key: str) -> Optional[McpApiKeyAuth]:
     secret_part = api_key.replace("omi_mcp_", "", 1)
     hashed_key = hash_api_key(secret_part)
 
+    cached_auth = redis_db.get_cached_mcp_api_key_auth(hashed_key)
+    if cached_auth:
+        return cast(McpApiKeyAuth, cached_auth)
+
     keys_ref = db.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
     docs = list(keys_ref.stream())
     if not docs:
@@ -130,5 +137,7 @@ def get_auth_by_api_key(api_key: str) -> Optional[McpApiKeyAuth]:
     if not user_id:
         return None
 
+    scopes = key_data.get("scopes")
     key_doc.reference.update({"last_used_at": datetime.utcnow()})
-    return {"user_id": user_id, "scopes": key_data.get("scopes")}
+    redis_db.cache_mcp_api_key_auth(hashed_key, user_id, scopes)
+    return {"user_id": user_id, "scopes": scopes}

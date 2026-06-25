@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,6 +10,7 @@ class McpApiKey(BaseModel):
     key_prefix: str
     created_at: datetime
     last_used_at: Optional[datetime] = None
+    scopes: Optional[List[str]] = None
 
 
 class McpApiKeyDB(McpApiKey):
@@ -19,6 +20,7 @@ class McpApiKeyDB(McpApiKey):
 
 class McpApiKeyCreate(BaseModel):
     name: str
+    scopes: Optional[List[str]] = None
 
 
 class McpApiKeyCreated(McpApiKey):

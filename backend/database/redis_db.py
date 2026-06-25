@@ -484,6 +484,13 @@ def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
 
 
 @try_catch_decorator
+def cache_mcp_api_key_auth(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
+    """Caches the user_id and explicit scopes for a given MCP API key."""
+    cache_data = {"user_id": user_id, "scopes": scopes}
+    r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
+
+
+@try_catch_decorator
 def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed MCP API key from cache."""
     user_id = r.get(f'mcp_api_key:{hashed_key}')
@@ -491,9 +498,17 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
 
 
 @try_catch_decorator
+def get_cached_mcp_api_key_auth(hashed_key: str) -> Optional[dict]:
+    """Retrieves the user_id and explicit scopes for a given MCP API key from cache."""
+    cached = r.get(f'mcp_api_key_auth:{hashed_key}')
+    return json.loads(cached) if cached else None
+
+
+@try_catch_decorator
 def delete_cached_mcp_api_key(hashed_key: str):
     """Deletes a cached MCP API key."""
     r.delete(f'mcp_api_key:{hashed_key}')
+    r.delete(f'mcp_api_key_auth:{hashed_key}')
 
 
 # ******************************************************

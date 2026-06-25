@@ -146,6 +146,45 @@ NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
 
 
+class TestMcpKeys:
+    @patch('routers.mcp.mcp_api_key_db')
+    def test_create_key_defaults_to_people_write_scope(self, mock_db):
+        api_key_data = MagicMock()
+        api_key_data.model_dump.return_value = {
+            'id': 'key-1',
+            'name': 'Agent',
+            'key_prefix': 'omi_mcp_test',
+            'created_at': NOW,
+            'last_used_at': None,
+            'scopes': ['people.write'],
+        }
+        mock_db.create_mcp_key.return_value = ('omi_mcp_secret', api_key_data)
+
+        result = rest.create_key(rest.McpApiKeyCreate(name=' Agent '), uid=UID)
+
+        _, _, scopes = mock_db.create_mcp_key.call_args.args
+        assert 'people.write' in scopes
+        assert 'people.read' in scopes
+        assert result.scopes == ['people.write']
+
+    @patch('routers.mcp.mcp_api_key_db')
+    def test_create_key_preserves_explicit_scope_subset(self, mock_db):
+        api_key_data = MagicMock()
+        api_key_data.model_dump.return_value = {
+            'id': 'key-1',
+            'name': 'Agent',
+            'key_prefix': 'omi_mcp_test',
+            'created_at': NOW,
+            'last_used_at': None,
+            'scopes': ['people.read'],
+        }
+        mock_db.create_mcp_key.return_value = ('omi_mcp_secret', api_key_data)
+
+        rest.create_key(rest.McpApiKeyCreate(name='Agent', scopes=['people.read']), uid=UID)
+
+        mock_db.create_mcp_key.assert_called_once_with(UID, 'Agent', ['people.read'])
+
+
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):
     return {
         'id': item_id,
