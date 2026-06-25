@@ -653,12 +653,21 @@ enum ConversationSource: String, Codable {
   }
 }
 
+enum TranscriptPresenceState: Equatable {
+  case omittedFromResponse
+  case lockedOrRedacted
+  case includedEmpty
+  case includedNonEmpty
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId && lhs.source == rhs.source
+      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.source == rhs.source
+      && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
   }
 
   let id: String
@@ -668,6 +677,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   var structured: Structured
   var transcriptSegments: [TranscriptSegment]
+  var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
   let photos: [ConversationPhoto]
 
@@ -716,6 +726,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
     finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
     structured = try container.decode(Structured.self, forKey: .structured)
+    transcriptSegmentsIncluded = container.contains(.transcriptSegments)
     transcriptSegments =
       try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments) ?? []
     geolocation = try container.decodeIfPresent(Geolocation.self, forKey: .geolocation)
@@ -741,6 +752,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     finishedAt: Date?,
     structured: Structured,
     transcriptSegments: [TranscriptSegment],
+    transcriptSegmentsIncluded: Bool,
     geolocation: Geolocation?,
     photos: [ConversationPhoto],
     appsResults: [AppResponse],
@@ -761,6 +773,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.finishedAt = finishedAt
     self.structured = structured
     self.transcriptSegments = transcriptSegments
+    self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
     self.photos = photos
     self.appsResults = appsResults
@@ -813,6 +826,23 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
       return "\(speaker): \(segment.text)"
     }.joined(separator: "\n\n")
+  }
+
+  var transcriptPresenceState: TranscriptPresenceState {
+    if isLocked {
+      return .lockedOrRedacted
+    }
+    if !transcriptSegmentsIncluded {
+      return .omittedFromResponse
+    }
+    if transcriptSegments.isEmpty {
+      return .includedEmpty
+    }
+    return .includedNonEmpty
+  }
+
+  var shouldFetchDetailForTranscript: Bool {
+    transcriptPresenceState == .omittedFromResponse
   }
 }
 

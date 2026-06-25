@@ -168,7 +168,15 @@ def reprocess_conversation(
     return processed_conversation
 
 
-@router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
+@router.get(
+    '/v1/conversations',
+    response_model=List[Conversation],
+    tags=['conversations'],
+    description=(
+        "List responses may omit detail-only fields such as transcript_segments. "
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+    ),
+)
 def get_conversations(
     limit: int = 100,
     offset: int = 0,
@@ -212,7 +220,15 @@ def get_conversations_count(
     return {'count': count}
 
 
-@router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Detail responses include transcript fields when available. Locked or redacted conversations "
+        "may include an empty transcript_segments array even though transcript data exists."
+    ),
+)
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
