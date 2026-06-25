@@ -376,7 +376,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
             let glowOutsetBottom = usesNotchIsland && state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0
-            return NSSize(width: width, height: max(panelHeight, frame.height - glowOutsetBottom))
+            // Subtract any *previous* glow outset baked into the current frame so the
+            // surface height is based on content, not on the stale inflated window size.
+            let previousGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
+            let contentHeight = max(panelHeight, frame.height - previousGlowOutset)
+            return NSSize(width: width, height: max(panelHeight, contentHeight - glowOutsetBottom))
         }
         if state.isVoiceListening {
             return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -1172,7 +1176,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if notchModeEnabled {
+        if ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screen) {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")

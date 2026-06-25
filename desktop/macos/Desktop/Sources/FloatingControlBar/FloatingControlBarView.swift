@@ -157,7 +157,7 @@ struct FloatingControlBarView: View {
                 Color.clear
                     .allowsHitTesting(false)
             } else {
-                NotchAgentPillsRowView(manager: agentPills)
+                NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                     .frame(width: notchSideWidth - 12, height: notchChromeHeight, alignment: .trailing)
                     .padding(.leading, 6)
                     .padding(.trailing, 6)
@@ -916,18 +916,31 @@ private struct NotchOmiMark: View {
 
 private struct NotchAgentPillsRowView: View {
     @ObservedObject var manager: AgentPillsManager
+    weak var barWindow: NSWindow?
 
     private var visiblePills: ArraySlice<AgentPill> {
-        manager.pills.prefix(3)
+        manager.pills.suffix(3)
     }
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(visiblePills) { pill in
                 NotchAgentPillIcon(pill: pill)
+                    .onTapGesture {
+                        openPillInChat(pill)
+                    }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+
+    private func openPillInChat(_ pill: AgentPill) {
+        barWindow?.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(
+            name: .agentPillRequestedChat,
+            object: nil,
+            userInfo: ["query": pill.query]
+        )
     }
 }
 
@@ -948,7 +961,7 @@ private struct NotchAgentPillIcon: View {
                 )
 
             Circle()
-                .fill(statusColor)
+                .fill(pill.status.tintColor)
                 .frame(width: 4, height: 4)
                 .offset(x: 1.5, y: -1.5)
         }
@@ -956,14 +969,4 @@ private struct NotchAgentPillIcon: View {
         .accessibilityLabel("\(pill.title) - \(pill.status.displayLabel)")
     }
 
-    private var statusColor: Color {
-        switch pill.status {
-        case .queued:
-            return Color(red: 0.85, green: 0.78, blue: 0.30)
-        case .starting, .running, .done:
-            return Color(red: 0.27, green: 0.92, blue: 0.46)
-        case .failed:
-            return Color(red: 1.0, green: 0.42, blue: 0.42)
-        }
-    }
 }

@@ -148,12 +148,7 @@ struct AgentPillView: View {
     }
 
     private var statusColor: Color {
-        switch pill.status {
-        case .queued: return Color(red: 0.85, green: 0.78, blue: 0.30)
-        case .starting, .running: return Color(red: 0.27, green: 0.92, blue: 0.46)
-        case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)  // green
-        case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
-        }
+        pill.status.tintColor
     }
 
     private func startRotationIfRunning() {
