@@ -1,0 +1,162 @@
+# Agent Cloud Directory and Relay
+
+TICKET-004 defines the long-term cloud directory and relay for the Omi agent control plane. It extends the local runtime kernel described in [agent-control-plane](/doc/developer/agent-control-plane), especially sections 19, 24, and 25.
+
+This document covers only cloud runtime directory, relay, lease, status, and artifact synchronization design. It does not change local runtime code, artifact lifecycle APIs, grant approval UX, Swift surfaces, or TypeScript tests.
+
+## Principles
+
+- Omi remains the authority for `AgentSession`, `AgentRun`, `RunAttempt`, `Grant`, and `Artifact` identity.
+- The local TypeScript daemon remains a runtime node, not a legacy bypass.
+- AgentVM is another runtime node and placement target, not a separate control plane.
+- Cloud routing, leases, status, and artifact sync are scoped by active Omi owner and tenant.
+- The cloud directory never replaces the local kernel as session authority.
+- Failover creates a new `RunAttempt` from checkpoint artifacts. It never moves a live process invisibly.
+
+## Ownership Scope
+
+Every cloud record is keyed by:
+
+```text
+owner_id
+tenant_id
+session_id
+```
+
+`owner_id` is the active Omi owner account. `tenant_id` is the active workspace, organization, or personal tenant. Runtime nodes, routes, leases, compact status, and artifact manifests are invisible across this boundary.
+
+The directory rejects registration, lease renewal, relay attachment, status publish, and artifact sync when the caller's active owner or tenant does not match the scoped record.
+
+## Runtime Directory
+
+The directory stores runtime node registration and reachability. It does not store full transcripts or replace local durable event storage.
+
+Runtime nodes include:
+
+- `desktop_typescript_daemon`: the local TypeScript runtime kernel.
+- `agent_vm`: cloud or remote AgentVM workers.
+- Future adapters from section 19, such as Hermes, OpenClaw, or A2A-backed nodes.
+
+Each registration contains:
+
+- `runtime_node_id`
+- `owner_id`
+- `tenant_id`
+- `node_kind`
+- supported adapter IDs and model profiles
+- capabilities, including native resume fidelity and artifact sync support
+- relay endpoint metadata
+- heartbeat timestamp
+- draining flag
+
+Registration is separate from session routing. A node may be healthy and registered without owning any active run attempt.
+
+## Routing and Relay
+
+The relay maps a scoped session or run to the runtime node that currently owns the active attempt. It forwards control messages and event projections but does not reinterpret them.
+
+Relay responsibilities:
+
+- route user input, cancellation, and attachment requests to the leased runtime node;
+- route compact event/status projections back to subscribed Omi surfaces;
+- enforce owner and tenant scope on every hop;
+- reject writes when no valid lease exists;
+- expose explicit unavailable, orphaned, or retryable states instead of hiding node loss.
+
+The relay is not allowed to:
+
+- mint canonical Omi IDs;
+- mutate local kernel state directly;
+- approve grants;
+- rewrite attempt history;
+- replay full transcripts as cloud authority.
+
+## Leases and Failover
+
+Only one runtime node may hold the writer lease for a non-terminal `RunAttempt`.
+
+A lease contains:
+
+- `lease_id`
+- `owner_id`
+- `tenant_id`
+- `session_id`
+- `run_id`
+- `attempt_id`
+- `runtime_node_id`
+- monotonically increasing `lease_generation`
+- expiration timestamp
+
+The current holder renews the lease while the attempt is alive. If the lease expires, the relay marks the attempt unreachable and stops accepting writes for that attempt.
+
+Failover is explicit:
+
+1. Mark the old attempt `orphaned`, `failed`, or `timed_out` according to observed evidence.
+2. Select a checkpoint artifact visible to the same owner and tenant.
+3. Create a new `RunAttempt` under the same `AgentRun`.
+4. Set `resume_from_attempt_id` and `checkpoint_artifact_id`.
+5. Acquire a new lease for the selected runtime node.
+6. Resume from canonical state and checkpoint artifacts.
+
+Failover never teleports an in-memory process, reuses an attempt ID on another node, or claims that a live local process has moved to AgentVM.
+
+## Compact Status Sync
+
+Cloud status sync is a compact projection for cross-device visibility. It is not the event log.
+
+Status records include:
+
+- canonical session, run, and attempt IDs;
+- owner and tenant scope;
+- current run and attempt status;
+- active runtime node ID;
+- latest durable event cursor;
+- short progress text;
+- waiting input or approval flags;
+- terminal result summary metadata.
+
+Runtime nodes publish status deltas through the relay. Clients use the latest cursor to request local or cloud-backed event replay from the authoritative kernel path when available.
+
+Status projection loss is acceptable. Canonical event loss is not.
+
+## Artifact Sync and Retention
+
+Artifact sync copies artifact metadata and selected content between runtime nodes and cloud storage under the same owner and tenant. It supports failover and cross-device inspection without turning cloud storage into a hidden execution authority.
+
+Synchronized artifact metadata includes:
+
+- `artifact_id`
+- `session_id`
+- `run_id`
+- `attempt_id`
+- `role`
+- `kind`
+- content hash
+- size
+- storage URI
+- retention class
+- created timestamp
+
+Checkpoint artifacts are the only artifacts required for failover. Result, log, screenshot, and tool-output artifacts may sync according to retention policy and node capability.
+
+Retention rules:
+
+- checkpoint artifacts are retained while any retryable run depends on them;
+- result artifacts follow the session retention policy;
+- transient logs and progress artifacts may expire early;
+- deletes are scoped by owner and tenant and must not remove another tenant's copy;
+- cloud expiry never rewrites local attempt history.
+
+## Authority Boundaries
+
+The cloud directory and relay add reachability, placement, lease coordination, compact status, and optional artifact movement.
+
+They do not add:
+
+- a new cloud session authority replacing the local kernel;
+- hidden migration of live processes between nodes;
+- cross-tenant routing or shared leases;
+- grant approval semantics;
+- a separate AgentVM identity model.
+
+The durable abstraction remains the one from section 25: globally addressable Omi sessions, durable runs, explicit attempts, Omi-owned grants, ordered events, and concrete artifacts.

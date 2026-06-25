@@ -134,9 +134,18 @@ jobs:
 
                         set +e
                         DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
+                        DER_RESULTS_PATH=/tmp/parakeet-gpu-artifacts/der-benchmark-results.json \
                         python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
                           --tb=short 2>&1
                         BENCH_EXIT=$?
+                        echo "--- DER Diagnostics Artifact ---"
+                        if [ -f /tmp/parakeet-gpu-artifacts/der-benchmark-results.json ]; then
+                          echo "DER_DIAGNOSTICS_JSON_BEGIN"
+                          cat /tmp/parakeet-gpu-artifacts/der-benchmark-results.json
+                          echo "DER_DIAGNOSTICS_JSON_END"
+                        else
+                          echo "DER diagnostics artifact was not produced"
+                        fi
                         set -e
 
                         if [ $BENCH_EXIT -ne 0 ]; then
@@ -255,12 +264,43 @@ jobs:
       - name: Collect test logs
         if: always()
         run: |
+          mkdir -p artifacts/parakeet
           echo "=== GPU Test Job Logs ==="
-          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} --tail=200 2>&1 || true
+          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} 2>&1 | tee artifacts/parakeet/gpu-test.log || true
           echo ""
           echo "=== Job/Pod Details ==="
           kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
           kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
+
+      - name: Extract DER diagnostics artifact
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          log_path = Path("artifacts/parakeet/gpu-test.log")
+          output_path = Path("artifacts/parakeet/der-benchmark-results.json")
+          text = log_path.read_text() if log_path.exists() else ""
+          start = "DER_DIAGNOSTICS_JSON_BEGIN"
+          end = "DER_DIAGNOSTICS_JSON_END"
+          start_index = text.find(start)
+          end_index = text.find(end, start_index + len(start)) if start_index != -1 else -1
+          if start_index == -1 or end_index == -1:
+              print("DER diagnostics JSON markers not found in order; skipping artifact extraction")
+              raise SystemExit(0)
+          json_text = text[start_index + len(start) : end_index].strip()
+          output_path.write_text(json_text + "\n")
+          print(f"Wrote {output_path}")
+          PY
+
+      - name: Upload DER diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parakeet-der-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/parakeet/der-benchmark-results.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Check job result
         run: |

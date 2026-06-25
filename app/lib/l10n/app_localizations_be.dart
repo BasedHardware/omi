@@ -9331,6 +9331,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фонавы рэжым недаступны, бо не падключана сумяшчальная прылада. Падключыце Omi, OpenGlass або Friend Pendant, каб выкарыстоўваць гэту функцыю.';
+
+  @override
   String get regenerateRecap => 'Згенераваць рэзюмэ паўторна';
 
   @override

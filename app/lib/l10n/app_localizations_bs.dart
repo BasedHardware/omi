@@ -9328,6 +9328,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get backgroundModeNote => 'Zasad radi samo s Omi uređajima i kontinuirano se poboljšava.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Pozadinski način rada nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da koristite ovu funkciju.';
+
+  @override
   String get regenerateRecap => 'Ponovo generiši rezime';
 
   @override

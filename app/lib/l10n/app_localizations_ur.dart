@@ -9317,6 +9317,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get backgroundModeNote => 'فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔';
 
   @override
+  String get backgroundModeUnavailable =>
+      'پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔';
+
+  @override
   String get regenerateRecap => 'خلاصہ دوبارہ بنائیں';
 
   @override

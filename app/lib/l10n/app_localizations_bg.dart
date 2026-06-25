@@ -9338,6 +9338,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фоновият режим не е наличен, защото няма свързано съвместимо устройство. Свържете устройство Omi, OpenGlass или Friend Pendant, за да използвате тази функция.';
+
+  @override
   String get regenerateRecap => 'Регенерирай резюмето';
 
   @override

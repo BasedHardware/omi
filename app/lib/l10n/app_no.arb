@@ -3061,5 +3061,6 @@
     "recordingMode": "Opptaksmodus",
     "captureModeLater": "Senere",
     "captureModeLiveDescription": "Transkriber i sanntid mens du snakker.",
-    "captureModeLaterDescription": "Lagre lyden nå og transkriber når du vil."
+    "captureModeLaterDescription": "Lagre lyden nå og transkriber når du vil.",
+    "backgroundModeUnavailable": "Bakgrunnsmodus er ikke tilgjengelig fordi ingen kompatibel enhet er tilkoblet. Koble til en Omi-, OpenGlass- eller Friend Pendant-enhet for å bruke denne funksjonen."
 }

@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -259,6 +259,219 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     });
     expect(adapter.opened).toHaveLength(2);
     expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
+  it("marks an evicted pi-mono binding stale even when replacement open fails", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [first.session.sessionId, "pi-mono"],
+    );
+    adapter.failNextOpenError = new Error("replacement open failed");
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-replacement-open-fails",
+      externalRefId: "task-replacement-open-fails",
+      maxAttempts: 1,
+    });
+
+    expect(failed.run.status).toBe("failed");
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'", ["pi-mono"]).count).toBe(0);
+    const staleEvent = store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1");
+    expect(JSON.parse(staleEvent.payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      reason: "pinned_worker_reassigned",
+    });
+    store.close();
+  });
+
+  it("queues a new pi-mono binding while the only pinned worker is busy", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+    adapter.deferOnlyPromptIncludes = "hold worker";
+    adapter.deferResult();
+
+    const firstRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-hold-worker",
+      prompt: "hold worker",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'",
+      ["pi-mono"],
+    );
+
+    const secondRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-queued-saturation",
+      externalRefId: "task-queued-saturation",
+      prompt: "queued after saturation",
+    });
+    await Promise.resolve();
+    expect(adapter.opened).toHaveLength(1);
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "first done" });
+    const [first, second] = await Promise.all([firstRun, secondRun]);
+
+    expect(first.run.status).toBe("succeeded");
+    expect(second.run.status).toBe("succeeded");
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(2);
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    const staleEvent = store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1");
+    expect(JSON.parse(staleEvent.payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      reason: "pinned_worker_reassigned",
+    });
+    store.close();
+  });
+
+  it("does not evict a newly opened pi-mono binding before its execution lease", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+    adapter.deferOnlyPromptIncludes = "first concurrent";
+    adapter.deferResult();
+
+    const firstRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-first-concurrent",
+      externalRefId: "task-first-concurrent",
+      prompt: "first concurrent",
+    });
+    const secondRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-second-concurrent",
+      externalRefId: "task-second-concurrent",
+      prompt: "second concurrent",
+    });
+
+    await waitUntil(() => adapter.executed.length === 1);
+    expect(adapter.opened).toHaveLength(1);
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "first done" });
+    const [first, second] = await Promise.all([firstRun, secondRun]);
+
+    expect(first.run.status).toBe("succeeded");
+    expect(second.run.status).toBe("succeeded");
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
+  it("does not evict an existing pi-mono binding before its execution lease", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const initial = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    adapter.deferOnlyPromptIncludes = "existing concurrent";
+    adapter.deferResult();
+
+    const existingBindingRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      sessionId: initial.session.sessionId,
+      requestId: "request-existing-concurrent",
+      externalRefId: "task-existing-concurrent",
+      prompt: "existing concurrent",
+    });
+    const newBindingRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-new-during-existing",
+      externalRefId: "task-new-during-existing",
+      prompt: "new during existing",
+    });
+
+    await waitUntil(() => adapter.executed.length === 2);
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "existing done" });
+    const [existing, next] = await Promise.all([existingBindingRun, newBindingRun]);
+
+    expect(existing.run.status).toBe("succeeded");
+    expect(next.run.status).toBe("succeeded");
+    expect(adapter.executed.map((execution) => execution.prompt[0]?.text)).toEqual([
+      "hello",
+      "existing concurrent",
+      "new during existing",
+    ]);
+    store.close();
+  });
+
+  it("does not leak pinned protection when existing pi-mono resume is stale", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "native",
+      supportsNativeResume: true,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const initial = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    adapter.failNextResume = true;
+
+    const retried = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      sessionId: initial.session.sessionId,
+      requestId: "request-stale-resume-retry",
+      externalRefId: "task-stale-resume-retry",
+      prompt: "retry stale resume",
+    });
+
+    expect(retried.run.status).toBe("succeeded");
+    expect(adapter.resumed).toHaveLength(1);
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed.map((execution) => execution.prompt[0]?.text)).toEqual(["hello", "retry stale resume"]);
     store.close();
   });
 
