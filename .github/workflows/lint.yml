@@ -147,7 +147,7 @@ jobs:
           if [ -n "$FILES" ]; then
             (
               cd desktop/macos/Backend-Rust
-              echo "$FILES" | xargs rustfmt --edition 2021 --check
+              printf '%s\n' "$FILES" | xargs -d '\n' rustfmt --edition 2021 --check
             )
           fi
           cd desktop/macos/Backend-Rust
