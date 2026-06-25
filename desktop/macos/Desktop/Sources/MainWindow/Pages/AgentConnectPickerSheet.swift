@@ -91,6 +91,7 @@ private struct ConnectOptionCard: View {
   @State private var isRunning = false
   @State private var resultMessage: String?
   @State private var mcpKey: String?
+  @State private var showManual = false
 
   private var optionLabel: String {
     switch destination {
@@ -135,18 +136,28 @@ private struct ConnectOptionCard: View {
         .buttonStyle(.plain)
         .disabled(isRunning)
 
-        // Secondary — the manual route, a quiet link.
-        if let copyText = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY")?.copyText {
-          Button {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(copyText, forType: .string)
-            resultMessage = "Command copied."
+        // Secondary — full manual instructions in a quiet dropdown.
+        if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
+          DisclosureGroup(isExpanded: $showManual) {
+            VStack(alignment: .leading, spacing: 8) {
+              ForEach(Array(setup.steps.enumerated()), id: \.offset) { idx, step in
+                Text("\(idx + 1). \(step)")
+                  .scaledFont(size: 11)
+                  .foregroundColor(OmiColors.textTertiary)
+                  .fixedSize(horizontal: false, vertical: true)
+                  .frame(maxWidth: .infinity, alignment: .leading)
+              }
+              manualBlock(
+                setup.copyText
+                  ?? "Server URL: \(setup.serverURL)\nKey: \(mcpKey ?? "YOUR_OMI_KEY")")
+            }
+            .padding(.top, 8)
           } label: {
-            Text("Copy command")
+            Text("Manual installation")
               .scaledFont(size: 12, weight: .medium)
               .foregroundColor(OmiColors.textTertiary)
           }
-          .buttonStyle(.plain)
+          .tint(OmiColors.textTertiary)
         }
       }
 
@@ -189,5 +200,33 @@ private struct ConnectOptionCard: View {
       }
       isRunning = false
     }
+  }
+
+  private func manualBlock(_ text: String) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      Text(text)
+        .font(.system(size: 11, design: .monospaced))
+        .foregroundColor(OmiColors.textSecondary)
+        .textSelection(.enabled)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      Button {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        resultMessage = "Copied."
+      } label: {
+        Text("Copy")
+          .scaledFont(size: 11, weight: .semibold)
+          .foregroundColor(.black)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
+          .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 8, style: .continuous).fill(OmiColors.backgroundTertiary))
   }
 }
