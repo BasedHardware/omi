@@ -9330,6 +9330,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get backgroundModeNote => 'Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Način v ozadju ni na voljo, ker ni povezana nobena združljiva naprava. Za uporabo te funkcije povežite napravo Omi, OpenGlass ali Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Ponovno ustvari povzetek';
 
   @override

@@ -674,9 +674,8 @@ void main() {
       provider.dispose();
     });
 
-    test('disable keeps native config when batch mode still needs it', () async {
+    test('disable keeps native config when batch mode still needs it without a live route', () async {
       final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
       SharedPreferencesUtil().batchModeEnabled = true;
       SharedPreferencesUtil().backgroundModeEnabled = true;
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);

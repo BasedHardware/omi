@@ -1118,9 +1118,10 @@ class CaptureProvider extends ChangeNotifier
   Future<bool> setBackgroundModeEnabled(bool requested) async {
     if (!requested) {
       // Disable realtime background streaming. Preserve nativeBleStreamConfig
-      // only when Transcribe Later is still enabled for a concrete native route;
-      // batch capture uses the same config to write offline audio.
-      final keepBatchConfig = SharedPreferencesUtil().batchModeEnabled && hasNativeBleAudioRoute;
+      // whenever Transcribe Later remains enabled; batch capture uses the same
+      // config for offline audio and may need it even while no route is
+      // currently live. Reconnect/setup paths will refresh it when needed.
+      final keepBatchConfig = SharedPreferencesUtil().batchModeEnabled;
       SharedPreferencesUtil().backgroundModeEnabled = false;
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);

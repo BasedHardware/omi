@@ -9311,6 +9311,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get backgroundModeNote => 'Untuk saat ini hanya berfungsi dengan perangkat Omi dan terus ditingkatkan.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Mode Latar Belakang tidak tersedia karena tidak ada perangkat kompatibel yang terhubung. Hubungkan perangkat Omi, OpenGlass, atau Friend Pendant untuk menggunakan fitur ini.';
+
+  @override
   String get regenerateRecap => 'Buat ulang ringkasan';
 
   @override

@@ -9288,6 +9288,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get backgroundModeNote => 'Fungerer indtil videre kun med Omi-enheder og forbedres løbende.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Baggrundstilstand er ikke tilgængelig, fordi der ikke er tilsluttet en kompatibel enhed. Tilslut en Omi-, OpenGlass- eller Friend Pendant-enhed for at bruge denne funktion.';
+
+  @override
   String get regenerateRecap => 'Generér resumé igen';
 
   @override

@@ -9379,6 +9379,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get backgroundModeNote => 'Funktioniert vorerst nur mit Omi-Geräten und wird kontinuierlich verbessert.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Der Hintergrundmodus ist nicht verfügbar, weil kein kompatibles Gerät verbunden ist. Verbinde ein Omi-, OpenGlass- oder Friend Pendant-Gerät, um diese Funktion zu nutzen.';
+
+  @override
   String get regenerateRecap => 'Zusammenfassung neu erstellen';
 
   @override
