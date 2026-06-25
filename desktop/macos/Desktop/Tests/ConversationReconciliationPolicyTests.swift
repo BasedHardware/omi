@@ -60,6 +60,26 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertNil(caughtUp.pendingMutations["c1"])
   }
 
+  func testExpiredPendingMutationDoesNotMaskNewerServerValue() {
+    let baseTime = Date(timeIntervalSince1970: 10_000)
+    let local = makeConversation(id: "c1", title: "Optimistic local")
+    let serverSuperseded = makeConversation(id: "c1", title: "Server from another client")
+    var mutation = ConversationPendingMutation()
+    mutation.title = "Optimistic local"
+    mutation.recordedAt = baseTime
+
+    let result = ConversationReconciliationPolicy.mergeList(
+      server: [serverSuperseded],
+      current: [local],
+      pendingMutations: ["c1": mutation],
+      now: baseTime.addingTimeInterval(121),
+      pendingMutationTTL: 120
+    )
+
+    XCTAssertEqual(result.conversations[0].structured.title, "Server from another client")
+    XCTAssertNil(result.pendingMutations["c1"])
+  }
+
   func testPendingStarAndFolderMutationsTemporarilyWinAndThenClear() {
     let local = makeConversation(id: "c1", starred: true, folderId: "local-folder")
     let serverLagging = makeConversation(id: "c1", starred: false, folderId: "server-folder")

@@ -2946,6 +2946,7 @@ class AppState: ObservableObject {
   func setConversationStarred(_ conversationId: String, starred: Bool) {
     var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
     mutation.starred = starred
+    mutation.recordedAt = Date()
     pendingConversationMutations[conversationId] = mutation
 
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
@@ -3053,6 +3054,7 @@ class AppState: ObservableObject {
 
       var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
       mutation.setFolderId(folderId)
+      mutation.recordedAt = Date()
       pendingConversationMutations[conversationId] = mutation
 
       // Update local state
@@ -3077,6 +3079,7 @@ class AppState: ObservableObject {
   func updateConversationTitle(_ conversationId: String, title: String) {
     var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
     mutation.title = title
+    mutation.recordedAt = Date()
     pendingConversationMutations[conversationId] = mutation
 
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {

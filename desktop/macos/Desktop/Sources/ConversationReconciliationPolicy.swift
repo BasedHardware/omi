@@ -8,6 +8,7 @@ import Foundation
 struct ConversationPendingMutation: Equatable {
   var title: String?
   var starred: Bool?
+  var recordedAt: Date = Date()
   private(set) var folderId: String?
   private(set) var hasFolderIdMutation: Bool = false
 
@@ -46,13 +47,21 @@ enum ConversationReconciliationPolicy {
   static func mergeList(
     server: [ServerConversation],
     current: [ServerConversation],
-    pendingMutations: [String: ConversationPendingMutation] = [:]
+    pendingMutations: [String: ConversationPendingMutation] = [:],
+    now: Date = Date(),
+    pendingMutationTTL: TimeInterval = 120
   ) -> ConversationReconciliationResult {
     let serverIds = Set(server.map(\.id))
     var nextPending = pendingMutations
 
     var merged = server.map { serverConversation in
       var mutation = nextPending[serverConversation.id]
+      if let pendingMutation = mutation,
+        now.timeIntervalSince(pendingMutation.recordedAt) > pendingMutationTTL
+      {
+        mutation = nil
+        nextPending.removeValue(forKey: serverConversation.id)
+      }
       let mergedConversation = apply(mutation: mutation, to: serverConversation)
       mutation?.clearResolvedFields(matching: serverConversation)
       if let mutation, !mutation.isEmpty {
