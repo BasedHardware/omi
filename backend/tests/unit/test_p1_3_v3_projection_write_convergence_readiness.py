@@ -1,6 +1,7 @@
-import importlib.util
 import json
 from pathlib import Path
+
+from tests.unit.readiness._harness import load_readiness_script
 
 REQUIRED_REQUIREMENT_IDS = [
     "route_scoped_projection_write_convergence_source",
@@ -32,18 +33,8 @@ FORBIDDEN_STATIC_TOKENS = [
 ]
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_projection_write_convergence_readiness", script_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {script_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _module():
-    root = Path(__file__).resolve().parents[2]
-    return _load_module(root / "scripts" / "p1_3_v3_projection_write_convergence_readiness.py")
+    return load_readiness_script("p1_3_v3_projection_write_convergence_readiness.py")
 
 
 def _report(execute=False, env=None, reader=None):
