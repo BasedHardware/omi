@@ -94,6 +94,10 @@ def test_coerce_utc_datetime_returns_none_for_missing_or_malformed_values(value)
 def test_daily_summary_payload_rejects_malformed_section_shape():
     with pytest.raises(ValidationError):
         DailySummaryPayload.model_validate({'headline': 'Today', 'highlights': ['not an object']})
+    with pytest.raises(ValidationError):
+        DailySummaryPayload.model_validate(
+            {'headline': 'Today', 'highlights': [{'topic_name': 'wrong key', 'summary': 'Summary'}]}
+        )
 
 
 def test_daily_summary_payload_allows_omitted_optional_sections():

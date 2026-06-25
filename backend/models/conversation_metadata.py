@@ -1,12 +1,9 @@
-from typing import Any, Iterable
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class ConversationMetadataKeys:
-    UID = 'uid'
-    MEMORY_ID = 'memory_id'
-    CREATED_AT = 'created_at'
     PEOPLE = 'people'
     TOPICS = 'topics'
     ENTITIES = 'entities'
@@ -35,7 +32,3 @@ def metadata_list(metadata: dict[str, Any], key: str) -> list[str]:
     if isinstance(value, tuple):
         return list(value)
     return []
-
-
-def normalize_metadata_values(values: Iterable[str]) -> list[str]:
-    return [value for value in values if value]

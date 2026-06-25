@@ -16,6 +16,7 @@ from utils.conversations.render import conversations_to_string
 from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+from utils.log_sanitizer import sanitize
 import logging
 
 logger = logging.getLogger(__name__)
@@ -326,13 +327,13 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         # Process highlights - map conversation_numbers to conversation_ids
         highlights = []
         for h in summary_data.highlights:
-            convo_nums = h.get("conversation_numbers", [])
+            convo_nums = h.conversation_numbers
             convo_ids = [get_convo_id(n) for n in convo_nums if get_convo_id(n)]
             highlights.append(
                 {
-                    "topic": h.get("topic", ""),
-                    "emoji": h.get("emoji", "💡"),
-                    "summary": h.get("summary", ""),
+                    "topic": h.topic,
+                    "emoji": h.emoji or "💡",
+                    "summary": h.summary,
                     "conversation_ids": convo_ids,
                 }
             )
@@ -341,22 +342,18 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         unresolved_questions = []
         for q in summary_data.unresolved_questions:
             unresolved_questions.append(
-                {"question": q.get("question", ""), "conversation_id": get_convo_id(q.get("conversation_number"))}
+                {"question": q.question, "conversation_id": get_convo_id(q.conversation_number)}
             )
 
         # Process decisions made
         decisions_made = []
         for d in summary_data.decisions_made:
-            decisions_made.append(
-                {"decision": d.get("decision", ""), "conversation_id": get_convo_id(d.get("conversation_number"))}
-            )
+            decisions_made.append({"decision": d.decision, "conversation_id": get_convo_id(d.conversation_number)})
 
         # Process knowledge nuggets
         knowledge_nuggets = []
         for k in summary_data.knowledge_nuggets:
-            knowledge_nuggets.append(
-                {"insight": k.get("insight", ""), "conversation_id": get_convo_id(k.get("conversation_number"))}
-            )
+            knowledge_nuggets.append({"insight": k.insight, "conversation_id": get_convo_id(k.conversation_number)})
 
         # Build the complete summary object
         summary_id = str(uuid.uuid4())
@@ -380,7 +377,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except (json.JSONDecodeError, ValidationError) as e:
-        logger.error(f"Failed to parse daily summary payload: {e}")
+        logger.error("Failed to parse daily summary payload: %s", sanitize(str(e)))
         return _basic_daily_summary(
             date_str, total_conversations, total_duration_minutes, actual_action_items, locations
         )
