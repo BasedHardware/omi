@@ -1,7 +1,12 @@
 import json
+import sys
 from pathlib import Path
 
-from utils.memory.v3_dev_cloud_proof import (
+SCRIPTS_DIR = Path(__file__).resolve().parents[2] / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from v3_dev_cloud_proof import (
     GATE_STATUS_BLOCKED,
     GATE_STATUS_READY_TO_EXECUTE,
     REQUIRED_ARTIFACTS,

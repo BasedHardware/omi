@@ -16,10 +16,12 @@ from pathlib import Path
 import sys
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
+SCRIPTS_DIR = Path(__file__).resolve().parent
+for path in (BACKEND_DIR, SCRIPTS_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
-from utils.memory.v3_dev_cloud_proof import (
+from v3_dev_cloud_proof import (
     build_candidate_manifest,
     build_dev_cloud_fixture_bundle,
     build_proof_matrix,
