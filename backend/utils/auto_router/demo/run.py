@@ -272,15 +272,6 @@ def main():
     except Exception as e:
         print(f"\n  Demo 6 skipped: {e}")
 
-    print()
-    print("=" * 70)
-    print("All 7 demos complete.")
-    print("=" * 70)
-
-
-if __name__ == "__main__":
-    main()
-
     # Demo 7: Persistent prefs (v4)
     # Sets prefs for ptt_response via PUT, verifies GET returns them, then
     # simulates a "backend restart" by creating a fresh factory instance.
@@ -328,9 +319,63 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n  Demo 7 skipped: {e}")
 
+    # Demo 8: Model overrides (v6) — user pins a specific model per task
+    # Set model_overrides[ptt_response] = "gemini-1-5-flash-8b-exp", then
+    # verify /pick returns gemini directly with attribution=user_override.
+    print_section("Demo 8: Model overrides pin a specific model per task (v6)")
+    print("Expected: with model_overrides[ptt_response] = gemini, /pick")
+    print("           returns gemini directly (attribution=user_override),")
+    print("           bypassing the auto-router's score computation.")
+    try:
+        from routers.auto_router import (
+            reset_user_prefs_store_for_endpoint_testing,
+        )
+
+        reset_user_prefs_store_for_endpoint_testing()
+
+        # Set model override for ptt_response
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {},
+                    "model_overrides": {"ptt_response": "gemini-1-5-flash-8b-exp"},
+                }
+            },
+        )
+        assert r.status_code == 200, f"set model override failed: {r.text}"
+
+        # Pick should return gemini directly with user_override attribution
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        body = r.json()
+        assert body["model"] == "gemini-1-5-flash-8b-exp", f"expected gemini, got {body['model']}"
+        assert body["attribution"] == "user_override"
+        assert body["detail"]["override_model"] == "gemini-1-5-flash-8b-exp"
+        print(f"  Pick with override: {body['model']}  attribution={body['attribution']}")
+        print(f"  weights_source={body['weights_source']}")
+
+        # Clear override — /pick should return to auto-router behavior
+        r = client.put("/v1/auto-router/prefs", json={"prefs": {"overrides": {}, "model_overrides": {}}})
+        assert r.status_code == 200
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        body = r.json()
+        assert body["attribution"] != "user_override"
+        print(f"  Pick after clearing override: {body['model']}  (auto-router)")
+
+        # /candidates endpoint powers the Settings UI's model picker.
+        r = client.get("/v1/auto-router/candidates?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["task"] == "ptt_response"
+        assert len(body["candidates"]) == 4  # gemini + gpt-realtime + claude-sonnet + haiku
+        print(f"  /candidates returned {len(body['candidates'])} models for ptt_response")
+        print(f"  Top model: {body['candidates'][0]['id']} (score={body['candidates'][0]['total']})")
+    except Exception as e:
+        print(f"\n  Demo 8 skipped: {e}")
+
     print()
     print("=" * 70)
-    print("All 7 demos complete.")
+    print("All 8 demos complete.")
     print("=" * 70)
 
 

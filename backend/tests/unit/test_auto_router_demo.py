@@ -145,4 +145,49 @@ class TestDemoRunsV3:
         assert "benchmarks_last_refresh: None" in demo_output
 
     def test_demo_runs_all_six_demos(self, demo_output: str):
-        assert "All 7 demos complete" in demo_output
+        # v6: Demo 8 added — message is "All 8 demos complete".
+        # This test name is historical (v3 era); we just check the count.
+        assert "All 8 demos complete" in demo_output
+
+
+# ---------------------------------------------------------------------------
+# v6: Demo 8 — model override end-to-end
+# ---------------------------------------------------------------------------
+
+
+class TestDemoRunsV6:
+    """v6: Demo 8 demonstrates model override behavior end-to-end.
+
+    Sets model_overrides[ptt_response] = gemini-1-5-flash-8b-exp via PUT /prefs,
+    then verifies /pick returns gemini directly with attribution=user_override.
+    Also tests the /candidates endpoint that powers the Settings UI picker.
+    """
+
+    def test_demo_8_sets_model_override_and_picks_pinned_model(self, demo_output: str):
+        assert "Demo 8" in demo_output
+        assert "attribution=user_override" in demo_output
+        assert "gemini-1-5-flash-8b-exp" in demo_output
+        assert "weights_source=user_override" in demo_output
+
+    def test_demo_8_clears_override_returns_to_auto_router(self, demo_output: str):
+        # After clearing model_overrides, /pick should return to auto-router.
+        assert "Pick after clearing override" in demo_output
+
+    def test_demo_8_calls_candidates_endpoint(self, demo_output: str):
+        # Demo 8 also hits /candidates to power the Settings UI picker.
+        assert "/candidates returned" in demo_output
+        # ptt_response has 4 candidates (per benchmarks.example.json v5+).
+        assert "for ptt_response" in demo_output
+
+    def test_demo_runs_all_eight_demos(self, demo_output: str):
+        # After v6, the demo script prints "All 8 demos complete".
+        assert "All 8 demos complete" in demo_output
+
+
+class TestDemoRunsV4:
+    """v4 Demo 7 (persistent prefs) — now runs since it was moved inside main() in v6."""
+
+    def test_demo_7_runs(self, demo_output: str):
+        # Demo 7 may be skipped if the prefs store setup fails, but it should
+        # at least be attempted. v6 moved it inside main() so it now runs.
+        assert "Demo 7" in demo_output

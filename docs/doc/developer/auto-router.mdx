@@ -458,3 +458,101 @@ your eval set, cost from your actual usage).
 - Real-time prefs sync indicator (Firestore connection status)
 - Prefs import/export
 - AA schema versioning
+
+## v6 — User-visible model selection
+
+v5 closed the loop on per-task weight overrides. v6 closes the loop on **which model** to use. Users can now pick "Auto (recommended)" — let the auto-router choose — or lock to a specific model for a specific task.
+
+### Architecture
+
+```
+User → Settings UI (SwiftUI)
+   ├── WeightSlider card (existing v5)
+   │     └── ModelPicker (NEW v6)  ← sits below the weight sliders
+   │           ├── "Auto (recommended)" option
+   │           └── Candidate list (from /candidates)
+   └── "Reset all model overrides" button (NEW)
+
+ViewModel (AutoRouterSettingsViewModel, extended v6)
+   ├── @Published candidatesByTask
+   ├── setModelOverride / clearAllModelOverrides
+   └── bindingForModelOverride(for:) → Binding<String?>
+
+Backend
+   ├── GET /v1/auto-router/pick
+   │     now consults model_overrides[task] first; returns the
+   │     pinned model directly with attribution="user_override"
+   └── GET /v1/auto-router/candidates?task=X (NEW)
+         Returns all candidates with scores + default_weights
+
+Persistence (Firestore, unchanged surface)
+   users/{uid}.auto_router_prefs = {
+     overrides: {...},
+     model_overrides: {task: model_id, ...},
+     updated_at: <ts>
+   }
+```
+
+### Endpoint contracts
+
+`GET /v1/auto-router/pick` extended response:
+```json
+{
+  "task": "ptt_response",
+  "model": "gemini-1-5-flash-8b-exp",
+  "scores": {...},
+  "detail": {
+    "weights": {...},
+    "candidates": [...],
+    "reason": "user pinned gemini-1-5-flash-8b-exp for ptt_response (model_override)",
+    "override_model": "gemini-1-5-flash-8b-exp"  // NEW (only present when reason=user_override)
+  },
+  "updated_at": "...",
+  "attribution": "user_override",  // NEW: "user_override" | "auto_router"
+  "weights_source": "user_override"  // NEW value
+}
+```
+
+`GET /v1/auto-router/candidates?task=X`:
+```json
+{
+  "task": "ptt_response",
+  "candidates": [
+    {
+      "id": "gemini-1-5-flash-8b-exp",
+      "provider": "google",
+      "scores": {"quality": 0.75, "latency": 0.95, "cost": 0.90},
+      "total": 0.9375
+    },
+    ...
+  ],
+  "default_weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1}
+}
+```
+
+`GET /v1/auto-router/candidates` requires auth (matches `/pick`). Returns 400 for unknown task, 422 for missing task query param.
+
+### Override precedence
+
+`/pick` resolves the model in this order (highest first):
+1. **`weights` query param** — call-only override; user is asking for a specific scoring
+2. **`model_overrides[task]`** — user has pinned a specific model (NEW v6)
+3. **Auto-router pick** — compute via scoring against the user's weight overrides or task defaults
+
+Invalid model overrides (model ID not in the candidate set) silently fall through to the auto-router pick — better than returning a 404.
+
+### Backward compatibility
+
+- Old v5 clients that don't send `model_overrides` work unchanged (default `{}`)
+- Old v3/v4 Firestore docs (without `model_overrides` field) load with `{}`
+- The v3 wire format for `GET /prefs` returned `{task: {quality, latency, cost}}`; v6 returns the nested `{overrides: {...}, model_overrides: {...}}` format. Old clients that only read `overrides` are unaffected.
+
+### Out of scope (v7+)
+
+- Realtime override sync across devices (Firestore listeners)
+- Per-model weight overrides (different weights for the same task depending on model)
+- Model marketplace (browse community-shared configs)
+- A/B test framework
+- Pick confidence scoring
+- Per-conversation override
+- Web (omi.me) settings parity
