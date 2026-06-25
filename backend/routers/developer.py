@@ -479,7 +479,10 @@ def create_memory(
             tags=request.tags,
         )
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        MemoryService(db_client=db).write(uid, memory_db.dict())
+        committed_id = MemoryService(db_client=db).write(uid, memory_db.dict())
+        item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db)
+        if item is not None:
+            memory_db = memory_item_to_memorydb(item)
         if memory.visibility == 'public':
             postprocess_executor.submit(update_personas_async, uid)
         return MemoryResponse(
@@ -567,23 +570,29 @@ def create_memories_batch(
             memory_dbs.append(memory_db)
             if memory.visibility == 'public':
                 has_public = True
-        memory_service.write_batch(uid, [mem.dict() for mem in memory_dbs])
+        committed_ids = memory_service.write_batch(uid, [mem.dict() for mem in memory_dbs])
         if has_public:
             postprocess_executor.submit(update_personas_async, uid)
-        created_memories = [
-            MemoryResponse(
-                id=mem.id,
-                content=mem.content,
-                category=mem.category,
-                visibility=mem.visibility,
-                tags=mem.tags,
-                created_at=mem.created_at,
-                updated_at=mem.updated_at,
-                manually_added=mem.manually_added,
-                scoring=mem.scoring,
+        created_memories = []
+        for memory_id in committed_ids:
+            item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+            if item is not None:
+                mem = memory_item_to_memorydb(item)
+            else:
+                mem = next(m for m in memory_dbs if m.id == memory_id)
+            created_memories.append(
+                MemoryResponse(
+                    id=mem.id,
+                    content=mem.content,
+                    category=mem.category,
+                    visibility=mem.visibility,
+                    tags=mem.tags,
+                    created_at=mem.created_at,
+                    updated_at=mem.updated_at,
+                    manually_added=mem.manually_added,
+                    scoring=mem.scoring,
+                )
             )
-            for mem in memory_dbs
-        ]
         return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
     for mem_req in request.memories:
@@ -719,6 +728,13 @@ def update_memory(
             if request.visibility not in ['public', 'private']:
                 raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
             memory_service.update_visibility(uid, memory_id, request.visibility)
+        if request.tags is not None or request.category is not None:
+            memory_service.update_product_fields(
+                uid,
+                memory_id,
+                tags=request.tags,
+                category=request.category.value if request.category is not None else None,
+            )
         item = _read_canonical_memory_item(uid, memory_id, db_client=db)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
