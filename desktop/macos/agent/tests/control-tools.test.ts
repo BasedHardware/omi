@@ -168,7 +168,7 @@ describe("agent control tools", () => {
     const controlToolCase = indexSrc.match(/case ["']control_tool["']:[\s\S]*?case ["']interrupt["']:/)?.[0] ?? "";
 
     expect(controlToolCase).toContain("const controlOwnerId = currentOwnerId");
-    expect(controlToolCase).toContain("ownerId: control.ownerId");
+    expect(controlToolCase).toContain("ownerId: control.ownerId.trim()");
     expect(controlToolCase).not.toContain("currentOwnerId = controlOwnerId");
     expect(controlToolCase).not.toContain("piMonoOwnerId = controlOwnerId");
   });

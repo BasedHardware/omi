@@ -65,8 +65,9 @@ final class AgentArtifactProjectionTests: XCTestCase {
     let staleLoad = Task { @MainActor in
       await store.load(request: staleRequest, bridge: bridge)
     }
-    await Task.yield()
+    await bridge.waitForStaleRequest()
     await store.load(request: currentRequest, bridge: bridge)
+    bridge.releaseStaleRequest()
     await staleLoad.value
 
     XCTAssertEqual(store.artifacts.map(\.artifactId), ["artifact-current"])
@@ -100,11 +101,33 @@ final class AgentArtifactProjectionTests: XCTestCase {
   }
 }
 
+@MainActor
 private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoading {
+  private var staleStartedContinuation: CheckedContinuation<Void, Never>?
+  private var staleReleaseContinuation: CheckedContinuation<Void, Never>?
+  private var staleRequestStarted = false
+
+  func waitForStaleRequest() async {
+    if staleRequestStarted { return }
+    await withCheckedContinuation { continuation in
+      staleStartedContinuation = continuation
+    }
+  }
+
+  func releaseStaleRequest() {
+    staleReleaseContinuation?.resume()
+    staleReleaseContinuation = nil
+  }
+
   func controlTool(name: String, input: [String: Any]) async throws -> String {
     let sessionId = input["sessionId"] as? String ?? ""
     if sessionId == "session-stale" {
-      try await Task.sleep(nanoseconds: 50_000_000)
+      staleRequestStarted = true
+      staleStartedContinuation?.resume()
+      staleStartedContinuation = nil
+      await withCheckedContinuation { continuation in
+        staleReleaseContinuation = continuation
+      }
     }
     return """
       {

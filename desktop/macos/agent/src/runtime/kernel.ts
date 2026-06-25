@@ -413,7 +413,6 @@ export class AgentRuntimeKernel {
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
       try {
-        let evictedBindingIdForReplacement: string | null = null;
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
@@ -442,7 +441,7 @@ export class AgentRuntimeKernel {
                 ? {}
                 : {
                     onIdlePinnedBindingEvicted: (evictedBindingId: string) => {
-                      evictedBindingIdForReplacement = evictedBindingId;
+                      this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
                     },
                   }),
               protectPinnedBindingAfterWork: true,
@@ -452,9 +451,6 @@ export class AgentRuntimeKernel {
         binding = resolved.binding;
         handle = resolved.handle;
         bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
-        if (evictedBindingIdForReplacement) {
-          this.markEvictedBindingStale(evictedBindingIdForReplacement, "pinned_worker_reassigned");
-        }
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
         if (isStaleBindingError(error)) {

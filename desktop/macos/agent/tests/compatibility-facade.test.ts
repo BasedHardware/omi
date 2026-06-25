@@ -410,6 +410,52 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("ignores request-scoped interrupt context when the client id does not match", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel cross-client" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      ownerId: "owner-a",
+      legacySessionKey: "cross-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+      accepted: false,
+    });
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
   it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();

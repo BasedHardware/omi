@@ -784,7 +784,7 @@ async function main(): Promise<void> {
         }
         const controlInput =
           control.ownerId && !Object.hasOwn(control.input ?? {}, "ownerId")
-            ? { ...(control.input ?? {}), ownerId: control.ownerId }
+            ? { ...(control.input ?? {}), ownerId: control.ownerId.trim() }
             : (control.input ?? {});
         const result = agentControlToolContext
           ? await (async () => {
