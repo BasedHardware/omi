@@ -172,6 +172,50 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("closes a stale binding when a restarted process reuses the native session id", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [first.session.sessionId, "pi-mono"],
+    );
+    store.execute("UPDATE adapter_bindings SET status = 'stale', invalidated_at_ms = ?, updated_at_ms = ? WHERE binding_id = ?", [
+      Date.now(),
+      Date.now(),
+      firstBinding.binding_id,
+    ]);
+    (adapter as unknown as { nextNativeSession: number }).nextNativeSession = 1;
+
+    const second = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-reused-native-session",
+    });
+
+    expect(second.run.status).toBe("succeeded");
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("closed");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND adapter_native_session_id = ? AND status = 'active'", ["pi-mono", "native-1"]).count).toBe(1);
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.closed'").payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      reason: "native_session_reused",
+    });
+    store.close();
+  });
+
   it("reassigns an idle pinned pi-mono worker to a different session", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
     Object.assign(adapter.capabilities, {
