@@ -4,7 +4,6 @@ import copy
 import logging
 import re
 from datetime import datetime, timezone
-from enum import Enum
 from typing import Protocol
 
 from pydantic import ValidationError
@@ -57,12 +56,6 @@ from utils.memory_ingestion.models import (
 )
 from utils.memory_ingestion.redaction import redact_payload, redact_text
 from utils.memory_ingestion.stages.verify_output import verify_output
-
-
-class ModelCallMode(str, Enum):
-    live = "live"
-    replay = "replay"
-    stub = "stub"
 
 
 class Clock(Protocol):
@@ -344,38 +337,150 @@ class CoreMemoryPipeline:
 
 
 # Filler / discourse-marker words that carry no substantive memory signal.
-_FILLER_WORDS = frozenset({
-    # Speech disfluencies
-    "uh", "um", "uhh", "umm", "er", "erm",
-    # Discourse fillers / backchannels
-    "like",  # discourse filler sense
-    "yeah", "yep", "yah", "yup", "yes", "ok", "okay", "okayyy",
-    "you", "know",  # "you know" as a tag
-    "hmm", "hm", "ah", "oh", "aha", "ooh", "ugh", "mhm", "mm",
-    "right", "sure", "alright", "alrighty",
-    "basically", "literally",
-    # Pronouns (near-zero information density)
-    "i", "me", "my", "we", "us", "our",
-    "it", "its", "this", "that", "these", "those",
-    # Copulas / auxiliaries
-    "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did",
-    "will", "would", "could", "should", "may", "might", "can",
-    # Determiners / articles
-    "a", "an", "the",
-    # Conjunctions / prepositions
-    "and", "or", "but", "so", "if", "then", "because", "as",
-    "in", "on", "at", "to", "for", "of", "with", "from", "by", "about",
-    # Common chitchat / phatic words (no memory value)
-    "not", "no", "just", "really", "very", "too", "also", "well",
-    "thanks", "thank", "hi", "hello", "hey", "bye", "goodbye",
-    "sounds", "good", "great", "fine", "nice", "cool", "awesome",
-    "sure thing", "yeah", "yep",
-    "weather", "today", "tomorrow", "yesterday",
-    "how", "what", "when", "where", "who", "why",
-    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-    "pure", "chatter", "example",
-})
+_FILLER_WORDS = frozenset(
+    {
+        # Speech disfluencies
+        "uh",
+        "um",
+        "uhh",
+        "umm",
+        "er",
+        "erm",
+        # Discourse fillers / backchannels
+        "like",  # discourse filler sense
+        "yeah",
+        "yep",
+        "yah",
+        "yup",
+        "yes",
+        "ok",
+        "okay",
+        "okayyy",
+        "you",
+        "know",  # "you know" as a tag
+        "hmm",
+        "hm",
+        "ah",
+        "oh",
+        "aha",
+        "ooh",
+        "ugh",
+        "mhm",
+        "mm",
+        "right",
+        "sure",
+        "alright",
+        "alrighty",
+        "basically",
+        "literally",
+        # Pronouns (near-zero information density)
+        "i",
+        "me",
+        "my",
+        "we",
+        "us",
+        "our",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        # Copulas / auxiliaries
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        # Determiners / articles
+        "a",
+        "an",
+        "the",
+        # Conjunctions / prepositions
+        "and",
+        "or",
+        "but",
+        "so",
+        "if",
+        "then",
+        "because",
+        "as",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "from",
+        "by",
+        "about",
+        # Common chitchat / phatic words (no memory value)
+        "not",
+        "no",
+        "just",
+        "really",
+        "very",
+        "too",
+        "also",
+        "well",
+        "thanks",
+        "thank",
+        "hi",
+        "hello",
+        "hey",
+        "bye",
+        "goodbye",
+        "sounds",
+        "good",
+        "great",
+        "fine",
+        "nice",
+        "cool",
+        "awesome",
+        "sure thing",
+        "yeah",
+        "yep",
+        "weather",
+        "today",
+        "tomorrow",
+        "yesterday",
+        "how",
+        "what",
+        "when",
+        "where",
+        "who",
+        "why",
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+        "ten",
+        "pure",
+        "chatter",
+        "example",
+    }
+)
 
 _MIN_SIGNAL_DENSITY = 2.0  # avg substantive words per text-bearing turn (relaxed from 3.5 post-hallucination-campaign)
 
@@ -483,7 +588,10 @@ def _candidate_mentions_from_frame(frame: MemoryEventFrame) -> list[CandidateEnt
             normalized_entity_id=frame.subject.entity_id,
             confidence=frame.subject.confidence or "medium",
         )
-    text = " ".join(str(part or "") for part in [frame.canonical_text, frame.original_text, frame.object.value if frame.object else ""])
+    text = " ".join(
+        str(part or "")
+        for part in [frame.canonical_text, frame.original_text, frame.object.value if frame.object else ""]
+    )
     for match in re.finditer(r"\b(?:SPEAKER_\d+|[A-Z][A-Za-z0-9][A-Za-z0-9._+-]{2,})\b", text):
         surface = match.group(0)
         mentions.setdefault(surface, CandidateEntityMention(surface=surface, type_hint=None, confidence="medium"))
@@ -497,7 +605,9 @@ def _candidates_from_frames(
 ) -> list[CandidateClaim]:
     candidates: list[CandidateClaim] = []
     route_id = None
-    route_meta = pipeline_input.source.metadata.get("route_id") if isinstance(pipeline_input.source.metadata, dict) else None
+    route_meta = (
+        pipeline_input.source.metadata.get("route_id") if isinstance(pipeline_input.source.metadata, dict) else None
+    )
     if route_meta:
         route_id = str(route_meta)
     for frame in frames:
@@ -533,7 +643,6 @@ def _candidates_from_frames(
             )
         )
     return candidates
-
 
 
 def _failed_output(
@@ -896,10 +1005,7 @@ def _decision_for_frame(
         elif _is_self_report_speaker_uncertain_frame(frame) and routing.auto_create_high_confidence:
             action = "create_memory"
             rationale = "Only uncertainty is speaker label, but first-person evidence directly supports the memory."
-        elif (
-            frame.uncertainty_reasons
-            and routing.review_uncertain
-        ):
+        elif frame.uncertainty_reasons and routing.review_uncertain:
             action = "route_to_review"
             rationale = "Uncertain frame requires review by the rollout routing profile."
         elif _is_idle_speculation_frame(frame):
@@ -1015,7 +1121,11 @@ def _should_reject_unsupported_frame(frame: MemoryEventFrame) -> bool:
     uncertainties = set(frame.uncertainty_reasons)
     if frame.confidence != "low" or not (hard_uncertainties & uncertainties):
         return False
-    if uncertainties <= {"inferred_not_stated", "temporal_scope_unclear", "speaker_uncertain"} and _has_self_report_evidence(frame):
+    if uncertainties <= {
+        "inferred_not_stated",
+        "temporal_scope_unclear",
+        "speaker_uncertain",
+    } and _has_self_report_evidence(frame):
         return False
     return True
 
