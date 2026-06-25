@@ -17,6 +17,8 @@ AUTH_PORT = 9099
 BACKEND_PORT = 8000
 DESKTOP_BACKEND_PORT = 10201
 REDIS_PORT = 6380
+TYPESENSE_PORT = 8108
+LOCAL_TYPESENSE_API_KEY = "local-typesense-api-key-not-real"
 LOCAL_FIREBASE_API_KEY = "local-firebase-auth-emulator-api-key"
 PROVIDER_MODES = providers.PROVIDER_MODES
 CORE_PROVIDER_ENV = (
@@ -217,8 +219,9 @@ def _harness_service_extra(cfg: HarnessConfig) -> dict[str, str]:
         "ENCRYPTION_SECRET": "omi_local_dev_harness_32_byte_test_secret_not_prod",
         "ADMIN_KEY": "local-dev-admin-key-",
         "TYPESENSE_HOST": "127.0.0.1",
-        "TYPESENSE_HOST_PORT": "8108",
-        "TYPESENSE_API_KEY": "local-typesense-api-key-not-real",
+        "TYPESENSE_HOST_PORT": str(TYPESENSE_PORT),
+        "TYPESENSE_API_KEY": LOCAL_TYPESENSE_API_KEY,
+        "TYPESENSE_PROTOCOL": "http",
         "BASE_API_URL": cfg.backend_url,
         "API_BASE_URL": cfg.backend_url,
     }
