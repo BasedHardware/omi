@@ -98,8 +98,9 @@ This shows the router can re-rank candidates based on subtle differences in the 
 | 1. Low-cost general_assistant | q=0.1/l=0.1/c=0.8 | No (haiku stayed) | Override amplifies the cost dimension; pre-existing cost leader's lead widens |
 | 2. High-quality screenshot | q=0.95/l=0.025/c=0.025 | **Yes** (gemini → claude) | The user expressed strong quality preference; the picker correctly switched to the quality king |
 | 3. Low-latency PTT | q=0.05/l=0.9/c=0.05 | No (gemini stayed) | Override changes the secondary ranking, surfacing haiku over gpt-realtime |
+| 4. Live endpoint + metrics (v2) | Hit `GET /v1/auto-router/pick?task=...` 3 times, then `GET /metrics` | n/a (wiring demo) | Proves the v2 wiring works end-to-end: auth-protected endpoint, pick history recorded, metrics endpoint surfaces the picks |
 
-**The mechanism works.** Per-task weights drive the picker; the same candidate set can produce different winners depending on the user's relative priorities.
+**The mechanism works.** Per-task weights drive the picker; the same candidate set can produce different winners depending on the user's relative priorities. The v2 wiring makes this mechanism actually USED in the desktop app (via `ChatModelRouter`).
 
 ---
 

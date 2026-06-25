@@ -14,11 +14,18 @@ The endpoint is registered automatically when `backend/main.py` is loaded:
 # Start the backend
 cd backend && uvicorn main:app --reload --port 8000
 
-# Hit the endpoint
-curl http://localhost:8000/v1/auto-router/pick?task=ptt_response
+# Hit the endpoint (v2 requires auth — pass a Bearer token)
+curl -H "Authorization: Bearer <your-firebase-token>" \
+     "http://localhost:8000/v1/auto-router/pick?task=ptt_response"
+
+# v2 also added a metrics endpoint
+curl -H "Authorization: Bearer <your-firebase-token>" \
+     "http://localhost:8000/v1/auto-router/metrics"
 ```
 
 If you have a real `benchmarks.json` (deployment data), the endpoint loads it. Otherwise it falls back to `benchmarks.example.json` (template, committed). The fallback is logged at INFO level.
+
+> **v2 note:** Both endpoints now require an `Authorization: Bearer <token>` header (matches upstream's `/v1/auto/model-pick`). The token is validated via the upstream `get_current_user_uid` helper; the `uid` is captured but not used in v2 (per-user prefs is v3).
 
 ## Supported task types (v1)
 

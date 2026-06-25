@@ -1,12 +1,12 @@
 ---
-title: "Auto-router v1"
+title: "Auto-router"
 icon: "route"
-description: "Task-based model selection across Omi — quality/latency/cost weighted scoring with daily-refreshable benchmarks"
+description: "Task-based model selection across Omi — quality/latency/cost weighted scoring with daily-refreshable benchmarks. v2 adds auth, observability, and a production wiring."
 ---
 
-# Auto-router v1 — Task-based model selection across Omi
+# Auto-router — Task-based model selection across Omi
 
-> Last updated: 2026-06-25 (PR #NEW — auto-router v1 standalone MVP)
+> **Current: v2 (production-useful).** Adds authentication, observability metrics, and a real wiring of the chat path. v1 (standalone framework) is preserved as the foundation.
 >
 > A foundational framework that picks the best model per task type using weighted
 > scoring across quality / latency / cost, with a daily-refreshable benchmark input
@@ -201,11 +201,106 @@ v1 deliberately does NOT wire into `ChatProvider`, `ModelQoS`, or `RealtimeHubCo
 ## Out of scope (v1)
 
 - **Wiring into `ChatProvider`, `ModelQoS`, `RealtimeHubController`** — deferred; this is a standalone MVP.
+
+> **v2 update:** ChatProvider wiring is now done (see "v2 — Production-useful" below). `ModelQoS` and `RealtimeHubController` wiring is still v3+.
+
 - **Real Artificial Analysis integration** — `benchmarks.json` is the source. AA key handling is a follow-up.
 - **Modifying upstream `/v1/auto/model-pick`** — explicitly out of scope.
 - **Per-user personalization** — all users get the same pick for a given task.
+
+> **v2 update:** The `uid` is captured by the endpoint but not used. Per-user weight overrides is v3.
+
 - **Online learning** — no feedback loop. Picks are pure functions of the current benchmarks file.
 - **More than 5 task types** — bounded to the 5 from the v1 brief. Adding more is straightforward (one line in `task_registry.py`) but not done in v1.
+
+## v2 — Production-useful (current)
+
+v2 builds on v1 with three additions: authentication, observability, and the first production wiring. This is still a foundation, not a full rollout — the goal is one wired path plus the metrics to measure it.
+
+### What v2 adds
+
+| Area | v1 | v2 |
+|---|---|---|
+| **Auth on `/v1/auto-router/pick`** | None (open) | Requires `Authorization: Bearer <token>` (matches upstream's `/v1/auto/model-pick`) |
+| **Metrics endpoint** | None | `GET /v1/auto-router/metrics` — cache state + per-task state + pick history |
+| **Pick history** | None | In-memory ring buffer (100 entries, FIFO) recording every successful pick |
+| **Chat path wiring** | None (standalone) | `ChatProvider` consults `AutoRouter.shared.currentPick` when settings is empty or "Auto" |
+| **Tests** | 142 backend + 15 desktop | 168 backend + 24 desktop |
+
+### New endpoint: `GET /v1/auto-router/metrics`
+
+```json
+{
+  "generated_at": "2026-06-25T13:00:00Z",
+  "cache": {
+    "last_loaded_at": "2026-06-25T10:00:00Z",
+    "age_seconds": 10800,
+    "is_fresh": true
+  },
+  "tasks": {
+    "ptt_response": {
+      "weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1},
+      "candidate_count": 4,
+      "current_pick": "gemini-1-5-flash-8b-exp",
+      "current_score": 0.865
+    }
+  },
+  "pick_history": [
+    {
+      "timestamp": "2026-06-25T12:59:42Z",
+      "task": "ptt_response",
+      "model": "gemini-1-5-flash-8b-exp",
+      "score": 0.865,
+      "weights_used": {"quality": 0.4, "latency": 0.5, "cost": 0.1}
+    }
+  ]
+}
+```
+
+- Auth: requires `Authorization: Bearer <token>` (same as `/v1/auto-router/pick`)
+- `pick_history` is **process-local** and resets on restart. v3 may add Redis/DB persistence.
+- The `tasks` block's `current_pick` is computed in-process from the live registries (what the picker WOULD return, not what it DID).
+
+### Chat path wiring: `ChatModelRouter`
+
+A new helper `desktop/macos/Desktop/Sources/Providers/ChatModelRouter.swift` decides which model to use for the chat path:
+
+```
+if selectedModel is empty or "Auto" (case-insensitive):
+    if AutoRouter.shared.currentPick(for: .generalAssistant) is non-nil:
+        use the router's pick
+    else:
+        fall back to ModelQoS.Claude.defaultSelection
+else:
+    use the user's selected model
+```
+
+**No behavior change for users with a specific model selected.** The auto-router only affects users with "Auto" or empty settings.
+
+The helper is `static func decide(selectedModel:routerPick:fallback:)` — pure, synchronous, and testable. The caller (which is `@MainActor`) fetches `routerPick` and passes it in.
+
+### Auth implementation
+
+The auth dependency is a thin local wrapper:
+
+```python
+def auth_dependency(authorization: str = None) -> str:
+    """Lazy-imports the upstream `get_current_user_uid`."""
+    from utils.other.endpoints import get_current_user_uid
+    return get_current_user_uid(authorization=authorization)
+```
+
+The lazy import keeps `firebase_admin` from being required at module load time (heavy dep, not needed for the auto-router unit tests that mock the auth dependency). In production, this delegates to the real upstream function.
+
+The `uid` is captured but **not used in v2** — per-user personalization is v3.
+
+### v2 still out of scope (v3+)
+
+- **Real AA integration** — still mock JSON
+- **Wiring for PTT, screenshot, transcription, embedding** — only chat is wired
+- **Per-user personalization** — `uid` captured but unused
+- **Persistent pick history** — in-memory only
+- **Production observability integration** (Prometheus, etc.)
 
 ## Future work
 
