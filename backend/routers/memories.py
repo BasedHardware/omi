@@ -22,6 +22,7 @@ from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3Comp
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.memory_service import MemoryService
 from utils.client_device import resolve_client_device
+from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
@@ -41,6 +42,7 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Read-Source',
         'X-Omi-Memory-Read-Decision',
         'X-Omi-Memory-Next-Cursor',
+        'X-Omi-Memory-Device-Scope-Supported',
         'Link',
         'Cache-Control',
     }
@@ -153,6 +155,45 @@ def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
         detail=memory_response.public_error or 'memory_read_failed',
         headers=_memory_allowlisted_headers(memory_response),
     )
+
+
+def _normalize_device_scope(device_scope: str) -> str:
+    scope = (device_scope or 'all').strip().lower()
+    if scope not in ('all', 'current', 'explicit'):
+        raise HTTPException(status_code=400, detail='device_scope must be one of: all, current, explicit')
+    return scope
+
+
+def _resolve_get_memories_device_scope(
+    device_scope: str,
+    client_device_id: Optional[str],
+    *,
+    x_app_platform: Optional[str],
+    x_device_id_hash: Optional[str],
+) -> tuple[str, Optional[str]]:
+    scope = _normalize_device_scope(device_scope)
+    resolved_device_id = client_device_id
+    if scope == 'current':
+        resolved_device_id = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+        ).client_device_id
+    return scope, resolved_device_id
+
+
+def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
+    """Fail closed at the HTTP boundary when scoped filtering lacks a device id.
+
+    Agents and API clients get an explicit 400 (not silent unfiltered data) so they
+    can supply X-App-Platform / X-Device-Id-Hash or client_device_id as needed.
+    """
+    detail = device_scope_validation_error(device_scope, resolved_device_id)  # type: ignore[arg-type]
+    if detail:
+        raise HTTPException(status_code=400, detail=detail)
+
+
+def _set_device_scope_capability_header(http_response: Response, *, supported: bool) -> None:
+    http_response.headers['X-Omi-Memory-Device-Scope-Supported'] = 'true' if supported else 'false'
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
@@ -286,21 +327,32 @@ def get_memories(
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
-    resolved_device_id = client_device_id
-    if device_scope == 'current':
-        resolved_device_id = resolve_client_device(
-            x_app_platform=x_app_platform,
-            x_device_id_hash=x_device_id_hash,
-        ).client_device_id
+    scope, resolved_device_id = _resolve_get_memories_device_scope(
+        device_scope,
+        client_device_id,
+        x_app_platform=x_app_platform,
+        x_device_id_hash=x_device_id_hash,
+    )
+    is_canonical = pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL
 
-    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
+    if scope != 'all' and not is_canonical:
+        raise HTTPException(
+            status_code=400,
+            detail='device_scope filtering is only supported for canonical memory users',
+        )
+
+    if is_canonical:
+        _validate_device_scope_request(scope, resolved_device_id)
+        _set_device_scope_capability_header(response, supported=True)
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
             uid,
             limit=limit,
             offset=offset,
-            device_scope=device_scope,
+            device_scope=scope,
             client_device_id=resolved_device_id,
         )
+
+    _set_device_scope_capability_header(response, supported=False)
 
     if not memory_runtime.enabled or memory_runtime.source_decision == 'disabled':
         return _legacy_get_memories(uid, limit, offset)
