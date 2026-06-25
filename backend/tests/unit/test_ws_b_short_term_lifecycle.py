@@ -378,6 +378,15 @@ def test_legacy_uid_promotion_and_lifecycle_are_noop(monkeypatch):
 def test_promotion_trigger_reason_batch_default():
     assert promotion_batch_threshold() == DEFAULT_PROMOTION_BATCH_THRESHOLD
     assert promotion_trigger_reason(promotable_count=25, last_promotion_run_at=NOW, now=NOW) == "batch_threshold"
+    assert promotion_trigger_reason(promotable_count=25, last_promotion_run_at=None, now=NOW) == "batch_threshold"
+    assert (
+        promotion_trigger_reason(
+            promotable_count=1,
+            last_promotion_run_at=None,
+            now=NOW,
+        )
+        is None
+    )
     assert (
         promotion_trigger_reason(
             promotable_count=1,
@@ -394,6 +403,72 @@ def test_promotion_trigger_reason_batch_default():
         )
         is None
     )
+
+
+def test_promotion_does_not_fire_on_first_run_below_batch_threshold(monkeypatch):
+    uid = "uid-canonical-first-tick"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    memory_id = _seed_canonical_short_term(
+        db,
+        uid=uid,
+        conversation_id="conv-first-tick",
+        content="User enjoys hiking",
+        monkeypatch=monkeypatch,
+    )
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-first-tick")
+
+    assert report.skipped_reason == "promotion_not_due"
+    assert report.promoted_count == 0
+    assert db.docs[f"users/{uid}/memory_items/{memory_id}"]["tier"] == MemoryTier.short_term.value
+
+
+def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch):
+    uid = "uid-canonical-after-first-run"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    threshold = promotion_batch_threshold()
+    for index in range(threshold):
+        _seed_canonical_short_term(
+            db,
+            uid=uid,
+            conversation_id=f"conv-first-run-{index}",
+            content=f"Batch fact {index}",
+            monkeypatch=monkeypatch,
+        )
+
+    first = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-first-run")
+    assert first.trigger_reason == "batch_threshold"
+    assert first.promoted_count == threshold
+    assert db.docs[f"users/{uid}/memory_control/state"]["last_promotion_run_at"] is not None
+
+    daily_memory_id = _seed_canonical_short_term(
+        db,
+        uid=uid,
+        conversation_id="conv-daily-after-first",
+        content="New fact after first promotion run",
+        monkeypatch=monkeypatch,
+    )
+
+    hold = run_canonical_short_term_promotion(
+        uid,
+        db_client=db,
+        now=NOW + timedelta(hours=1),
+        run_id="promo-hold-after-first",
+    )
+    assert hold.skipped_reason == "promotion_not_due"
+    assert db.docs[f"users/{uid}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.short_term.value
+
+    daily = run_canonical_short_term_promotion(
+        uid,
+        db_client=db,
+        now=NOW + timedelta(hours=25),
+        run_id="promo-daily-after-first",
+    )
+    assert daily.trigger_reason == "daily_elapsed"
+    assert daily.promoted_count == 1
+    assert daily_memory_id in daily.promoted_memory_ids
 
 
 def test_memory_control_state_coerces_naive_firestore_timestamps():
