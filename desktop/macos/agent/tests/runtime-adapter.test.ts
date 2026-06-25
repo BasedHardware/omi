@@ -14,7 +14,7 @@ import type {
   AdapterAttemptContext,
   RuntimeAdapter,
 } from "../src/adapters/interface.js";
-import { AdapterWorkerPool, configuredMaxWorkers } from "../src/runtime/worker-pool.js";
+import { AdapterWorkerPool, configuredMaxWorkers, configuredPiMonoMaxWorkers } from "../src/runtime/worker-pool.js";
 import { FakeRuntimeAdapter } from "./kernel-fakes.js";
 
 vi.mock("child_process", async () => {
@@ -318,6 +318,12 @@ describe("AdapterWorkerPool", () => {
     expect(configuredMaxWorkers({} as NodeJS.ProcessEnv)).toBe(8);
     expect(configuredMaxWorkers({ OMI_AGENT_MAX_WORKERS: "3" } as NodeJS.ProcessEnv)).toBe(3);
     expect(configuredMaxWorkers({ OMI_AGENT_MAX_WORKERS: "0" } as NodeJS.ProcessEnv)).toBe(8);
+  });
+
+  it("gives pi-mono enough workers for a parent turn to spawn a visible child agent", () => {
+    expect(configuredPiMonoMaxWorkers({} as NodeJS.ProcessEnv)).toBe(2);
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: "4" } as NodeJS.ProcessEnv)).toBe(4);
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: "0" } as NodeJS.ProcessEnv)).toBe(2);
   });
 
   it("caps worker creation", () => {
