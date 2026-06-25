@@ -349,6 +349,12 @@ def _synthetic_evidence_id(memory_key: str) -> str:
 
 
 def _synthetic_memory_evidence(memory_key: str, content: str) -> dict[str, object]:
+    """Structurally valid synthetic local-QA evidence for the dev harness.
+
+    Self-referential (quote equals memory content; no seeded transcript or
+    conversation document). Satisfies apply validation in the local emulator
+    but is not transcript-grounded or production-grade authoritative evidence.
+    """
     conversation_id = _synthetic_conversation_id(memory_key)
     return {
         "evidence_id": _synthetic_evidence_id(memory_key),
@@ -367,6 +373,7 @@ def _synthetic_memory_evidence(memory_key: str, content: str) -> dict[str, objec
 
 
 def _memory_evidence_doc(uid: str, memory_key: str, content: str) -> FirestoreSeed:
+    """Firestore seed for synthetic local-QA evidence (see ``_synthetic_memory_evidence``)."""
     evidence = _synthetic_memory_evidence(memory_key, content)
     return FirestoreSeed(
         path=f"users/{uid}/memory_evidence/{evidence['evidence_id']}",
@@ -385,6 +392,7 @@ def _append_sourced_memory(
     captured: str,
     expires: str | None = None,
 ) -> None:
+    """Append a memory_items doc plus matching synthetic local-QA evidence doc."""
     seeds.append(_memory_doc(uid, memory_id, tier, content, captured, expires, memory_key=memory_key))
     seeds.append(_memory_evidence_doc(uid, memory_key, content))
 
