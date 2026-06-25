@@ -18,6 +18,8 @@ struct FloatingControlBarView: View {
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
+    @State private var notchSettingsHoverReady = false
+    @State private var notchHoverGeneration = 0
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
     private var notchSideWidth: CGFloat {
         if agentPills.pills.isEmpty && !state.isVoiceListening {
@@ -168,7 +170,7 @@ struct FloatingControlBarView: View {
     private var notchControlLobe: some View {
         HStack(spacing: 10) {
             Button {
-                if isHovering && !state.isVoiceListening {
+                if notchSettingsHoverReady && !state.isVoiceListening {
                     openFloatingBarSettings()
                 } else {
                     onAskAI()
@@ -187,16 +189,16 @@ struct FloatingControlBarView: View {
                     } else {
                         ZStack {
                             notchOmiLogo
-                                .opacity(isHovering ? 0 : 1)
-                                .scaleEffect(isHovering ? 0.78 : 1)
-                                .rotationEffect(.degrees(isHovering ? -35 : 0))
+                                .opacity(notchSettingsHoverReady ? 0 : 1)
+                                .scaleEffect(notchSettingsHoverReady ? 0.78 : 1)
+                                .rotationEffect(.degrees(notchSettingsHoverReady ? -35 : 0))
 
                             Image(systemName: "gearshape.fill")
                                 .scaledFont(size: 15, weight: .semibold)
                                 .foregroundColor(.white.opacity(0.86))
-                                .opacity(isHovering ? 1 : 0)
-                                .scaleEffect(isHovering ? 1 : 0.55)
-                                .rotationEffect(.degrees(isHovering ? 0 : 70))
+                                .opacity(notchSettingsHoverReady ? 1 : 0)
+                                .scaleEffect(notchSettingsHoverReady ? 1 : 0.55)
+                                .rotationEffect(.degrees(notchSettingsHoverReady ? 0 : 70))
                         }
                         .frame(width: 22, height: 22)
                         .shadow(
@@ -208,13 +210,29 @@ struct FloatingControlBarView: View {
                 .frame(width: state.isVoiceListening ? 58 : 40, height: 27)
             }
             .buttonStyle(.plain)
-            .help(state.isVoiceListening ? "Listening" : (isHovering ? "Floating Bar Settings" : "Ask Omi"))
+            .help(state.isVoiceListening ? "Listening" : (notchSettingsHoverReady ? "Floating Bar Settings" : "Ask Omi"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 6)
         .onHover { hovering in
+            notchHoverGeneration += 1
+            let generation = notchHoverGeneration
             withAnimation(.easeInOut(duration: 0.16)) {
                 isHovering = hovering
+                if !hovering {
+                    notchSettingsHoverReady = false
+                }
+            }
+            if hovering {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                    guard generation == notchHoverGeneration,
+                          isHovering,
+                          !state.isVoiceListening
+                    else { return }
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        notchSettingsHoverReady = true
+                    }
+                }
             }
         }
     }
