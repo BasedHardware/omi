@@ -778,7 +778,22 @@ async function main(): Promise<void> {
         const control = msg as ControlToolRequestMessage;
         const requestId = requestIdFor(control);
         const controlOwnerKey = controlOwnerMapKey(requestId, control.clientId);
-        const controlOwnerId = control.ownerId?.trim() || currentOwnerId;
+        const trimmedControlOwnerId = control.ownerId?.trim();
+        if (control.ownerId !== undefined && !trimmedControlOwnerId) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_owner_id", message: "ownerId cannot be empty" },
+            }),
+          });
+          break;
+        }
+        const controlOwnerId = trimmedControlOwnerId ?? currentOwnerId;
         if (controlOwnerKey) {
           activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId);
         }
