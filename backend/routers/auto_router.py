@@ -34,6 +34,7 @@ Distinct from upstream `/v1/auto/model-pick`:
 
 import logging
 import os
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -50,6 +51,7 @@ from utils.auto_router.user_prefs_store import (
     get_user_prefs_store,
     reset_user_prefs_store_for_testing,
 )
+from utils.auto_router.user_prefs import TaskWeights
 from utils.executors import run_blocking
 
 # Module-level metrics collector singleton. Reset between tests via
@@ -161,13 +163,26 @@ def _get_registry_cache() -> DailyRefreshCache[tuple[TaskRegistry, ModelRegistry
 async def auto_router_pick(
     task: str = Query(..., description="Task name to pick a model for"),
     uid: str = Depends(auth_dependency),
+    weights: Optional[str] = Query(
+        None,
+        description=(
+            "Optional JSON-encoded weight override for this call only "
+            "(does NOT update stored prefs). Format: "
+            '{"quality": 0.4, "latency": 0.4, "cost": 0.2}. '
+            "Used by demo scripts + testing."
+        ),
+    ),
 ):
     """Return the recommended model for `task` plus full scoring detail.
 
     Requires authentication (matches upstream's `/v1/auto/model-pick`).
-    The `uid` is captured but not yet used in v2 (per-user prefs is v3).
+    The `uid` is used to look up the user's stored per-task weight overrides
+    (v3). If the user has overrides for this task, they take precedence over
+    the task's default weights. Pass `weights=...` to override the stored
+    prefs for THIS call only (does NOT update stored prefs).
 
     Returns HTTP 400 if `task` is not a known task name.
+    Returns HTTP 400 if `weights` is invalid JSON / doesn't sum to 1.0.
     """
     cache = _get_registry_cache()
 
@@ -189,9 +204,54 @@ async def auto_router_pick(
             },
         )
 
-    # Score candidates.
+    # Resolve effective weights for this task. Priority (highest first):
+    #   1. Query param `weights` (if provided) — call-only override
+    #   2. User's stored prefs (looked up by uid)
+    #   3. Task default weights
+    if weights is not None:
+        try:
+            parsed = json.loads(weights)
+            override_weights = TaskWeights(
+                quality=float(parsed["quality"]),
+                latency=float(parsed["latency"]),
+                cost=float(parsed["cost"]),
+            )
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "invalid_weights",
+                    "message": f"invalid weights query param: {e}",
+                },
+            )
+        effective_weights = override_weights
+        weights_source = "query_param"
+    else:
+        store = get_user_prefs_store()
+        stored = store.get(uid)
+        defaults = {
+            task_spec.name: TaskWeights(
+                quality=task_spec.quality_weight,
+                latency=task_spec.latency_weight,
+                cost=task_spec.cost_weight,
+            )
+        }
+        merged = stored.prefs.merged_with(defaults)
+        effective_weights = merged[task_spec.name]
+        weights_source = "user_prefs" if task_spec.name in stored.prefs.overrides else "task_default"
+
+    # Score candidates using the effective weights. We construct a TaskSpec
+    # on the fly with the effective weights so we can reuse the canonical
+    # `score(model, task)` function (same clamping + None handling).
+    effective_task_spec = TaskSpec(
+        name=task_spec.name,
+        quality_weight=effective_weights.quality,
+        latency_weight=effective_weights.latency,
+        cost_weight=effective_weights.cost,
+        description=task_spec.description,
+    )
     candidates = model_registry.candidates_for(task)
-    scored: List[tuple[ModelSpec, float]] = [(model, score(model, task_spec)) for model in candidates]
+    scored: List[tuple[ModelSpec, float]] = [(model, score(model, effective_task_spec)) for model in candidates]
     # Sort by score desc, then by id asc for deterministic tie-breaking.
     scored.sort(key=lambda pair: (-pair[1], pair[0].id))
 
@@ -239,6 +299,7 @@ async def auto_router_pick(
             else datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         ),
         "attribution": _ATTRIBUTION,
+        "weights_source": weights_source,  # "query_param" | "user_prefs" | "task_default"
     }
 
     # Record this pick in the metrics history (process-local, in-memory).

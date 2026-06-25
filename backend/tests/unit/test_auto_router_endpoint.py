@@ -680,3 +680,136 @@ class TestPutPrefsEndpoint:
         body = get_resp.json()
         assert body["prefs"]["ptt_response"] == {"quality": 0.1, "latency": 0.8, "cost": 0.1}
         assert body["prefs"]["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}
+
+
+# ---------------------------------------------------------------------------
+# AC: /pick applies user prefs server-side (v3, T-303)
+# ---------------------------------------------------------------------------
+
+
+class TestPickAppliesUserPrefs:
+    """/pick looks up the user's stored prefs and uses them instead of task defaults."""
+
+    def test_no_stored_prefs_uses_task_defaults(self, client):
+        """Without stored prefs, /pick returns the same as before (no behavior change)."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        # weights_source should be "task_default" when no prefs are set
+        assert body["weights_source"] == "task_default"
+
+    def test_stored_prefs_are_applied(self, client):
+        """When user has prefs for the task, /pick uses them (weights_source = user_prefs)."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Set prefs for ptt_response: all quality
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["weights_source"] == "user_prefs"
+        # With all-quality weights, the highest quality_score wins.
+        # claude-sonnet-4-6 has quality_score 0.92 in the example benchmarks.
+        assert body["model"] == "claude-sonnet-4-6"
+
+    def test_prefs_for_one_task_dont_affect_other_tasks(self, client):
+        """Setting prefs for ptt_response doesn't affect transcription (no override there)."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        r = client.get("/v1/auto-router/pick?task=transcription")
+        assert r.status_code == 200
+        body = r.json()
+        # No prefs for transcription → task_default weights
+        assert body["weights_source"] == "task_default"
+
+
+class TestPickWeightsQueryParam:
+    """/pick?weights=... overrides stored prefs for this call only."""
+
+    def test_weights_override_changes_pick(self, client):
+        """Passing weights=... selects the model that wins under those weights."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # ptt_response with weights = all cost → cost_score leader wins.
+        # gemini-1-5-flash-8b-exp has cost_score 0.90 (highest in ptt_response).
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.0, "latency": 0.0, "cost": 1.0}')
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["weights_source"] == "query_param"
+        assert body["model"] == "gemini-1-5-flash-8b-exp"
+
+    def test_weights_override_takes_precedence_over_stored_prefs(self, client):
+        """Even if user has stored prefs, weights=... wins for this call."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Store all-quality prefs
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        # But override with all-cost via query param
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.0, "latency": 0.0, "cost": 1.0}')
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        body = r.json()
+        assert body["weights_source"] == "query_param"
+        # Cost leader wins (not quality leader)
+        assert body["model"] == "gemini-1-5-flash-8b-exp"
+
+    def test_weights_override_does_not_update_stored_prefs(self, client):
+        """After a weights=... call, stored prefs are unchanged."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.5, "latency": 0.3, "cost": 0.2}}},
+        )
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.0, "latency": 0.0, "cost": 1.0}')
+        client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        # Stored prefs unchanged
+        r = client.get("/v1/auto-router/prefs")
+        assert r.json()["prefs"]["ptt_response"] == {"quality": 0.5, "latency": 0.3, "cost": 0.2}
+
+    def test_invalid_weights_json_returns_400(self, client):
+        import urllib.parse
+
+        r = client.get("/v1/auto-router/pick?task=ptt_response&weights=not-json")
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "invalid_weights"
+
+    def test_invalid_weights_sum_returns_400(self, client):
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.5, "latency": 0.5, "cost": 0.5}')
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "invalid_weights"
+
+    def test_weights_missing_keys_returns_400(self, client):
+        import urllib.parse
+
+        weights_str = urllib.parse.quote('{"quality": 0.5, "latency": 0.5}')  # no "cost"
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "invalid_weights"
