@@ -142,6 +142,12 @@ class DailyRefreshCache(Generic[T]):
                         f"DailyRefreshCache: loader raised ({type(e).__name__}: {e}), "
                         f"returning stale value (age {age_str})"
                     )
+                    # Advance the timestamp so refreshIfStale respects the TTL
+                    # even after a failing refresh. Without this, every subsequent
+                    # call would re-fire the loader (the cache is stale AND
+                    # the timestamp is still old), creating a tight retry loop
+                    # against the failing backend.
+                    self._last_loaded_at = self._clock()
                     return self._value
                 # No prior value — propagate.
                 raise
