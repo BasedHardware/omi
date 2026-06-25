@@ -146,6 +146,24 @@ class TestCollectAllPhotosSortKey:
         result = mod._collect_all_photos("uid-1", [{"id": "c1"}])
         assert [p["id"] for p in result] == ["p1", "p2", "p3"]
 
+    def test_unparseable_created_at_degrades_to_sentinel(self):
+        # The sort key now routes through _coerce_dt (one normalization
+        # contract). _coerce_dt returns None for a bad ISO string and for any
+        # non-datetime/non-string type (e.g. an int) -> both must degrade to
+        # the epoch sentinel and sort first, never raise.
+        photos = [
+            _photo("p_aware", datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)),
+            _photo("p_badstr", "not-a-timestamp"),
+            _photo("p_int", 1717000000),  # non-str/non-datetime type
+        ]
+        conversations_db.get_conversation_photos = MagicMock(return_value=photos)
+
+        result = mod._collect_all_photos("uid-1", [{"id": "c1"}])
+        ids = [p["id"] for p in result]
+        assert set(ids) == {"p_aware", "p_badstr", "p_int"}
+        # The two sentinel-valued photos sort ahead of the tz-aware one.
+        assert ids[-1] == "p_aware"
+
     def test_dedup_across_conversations(self):
         # Sanity: the dedup-by-id behaviour still holds with the new key.
         def _photos(uid, conv_id):
