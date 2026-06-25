@@ -3,14 +3,13 @@ import SwiftUI
 
 /// Connect sheet for a grouped agent (Claude → Claude Code + Cloud, ChatGPT →
 /// Codex + Cloud). Both options are shown on screen at once as cards — no
-/// picker — each with its own "Do it for me". Claude Code / Codex (the CLI) is
-/// listed first (prioritized); "Connect both" wires the CLI and the cloud.
+/// picker — each with a prominent "Do it for me" primary and a quiet "Copy
+/// command" secondary. Claude Code / Codex (the CLI) is listed first.
 struct ConnectDestinationSheet: View {
   let destination: MemoryExportDestination
   @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
   let onDismiss: () -> Void
 
-  @State private var bothStatus: String?
 
   /// CLI+cloud pair for an anchor destination (CLI first).
   static func group(for d: MemoryExportDestination) -> [MemoryExportDestination] {
@@ -48,7 +47,7 @@ struct ConnectDestinationSheet: View {
             Text("Connect \(groupName)")
               .scaledFont(size: 20, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Text("Pick one — or connect both.")
+            Text("Pick how to connect.")
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
           }
@@ -69,25 +68,6 @@ struct ConnectDestinationSheet: View {
             ForEach(members, id: \.self) { d in
               ConnectOptionCard(destination: d, statuses: $statuses)
             }
-
-            Button(action: connectBoth) {
-              Text("Connect both")
-                .scaledFont(size: 14, weight: .semibold)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                .foregroundColor(OmiColors.textPrimary)
-                .background(
-                  RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-                )
-            }
-            .buttonStyle(.plain)
-
-            if let bothStatus {
-              Text(bothStatus)
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.success)
-            }
           }
           .padding(.horizontal, 24)
           .padding(.bottom, 24)
@@ -100,15 +80,6 @@ struct ConnectDestinationSheet: View {
     }
   }
 
-  private func connectBoth() {
-    bothStatus = "Connecting…"
-    Task { @MainActor in
-      for d in members {
-        _ = try? await MemoryExportExecutor.run(d)
-      }
-      bothStatus = "Both connected — follow along in the floating bar."
-    }
-  }
 }
 
 /// A single connect option (Claude Code, Cloud, …) shown as a card with its own
@@ -151,18 +122,20 @@ private struct ConnectOptionCard: View {
         Spacer(minLength: 8)
       }
 
-      HStack(spacing: 8) {
+      VStack(alignment: .leading, spacing: 8) {
+        // Primary action — prominent, full width.
         Button(action: run) {
           Text(isRunning ? "Connecting…" : primaryLabel)
-            .scaledFont(size: 13, weight: .semibold)
+            .scaledFont(size: 14, weight: .semibold)
+            .frame(maxWidth: .infinity)
             .foregroundColor(.black)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
+            .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white))
         }
         .buttonStyle(.plain)
         .disabled(isRunning)
 
+        // Secondary — the manual route, a quiet link.
         if let copyText = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY")?.copyText {
           Button {
             NSPasteboard.general.clearContents()
@@ -170,17 +143,11 @@ private struct ConnectOptionCard: View {
             resultMessage = "Command copied."
           } label: {
             Text("Copy command")
-              .scaledFont(size: 13, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-              .padding(.horizontal, 12)
-              .padding(.vertical, 9)
-              .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                  .fill(OmiColors.backgroundTertiary))
+              .scaledFont(size: 12, weight: .medium)
+              .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
         }
-        Spacer(minLength: 0)
       }
 
       if let resultMessage {
