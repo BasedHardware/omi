@@ -665,7 +665,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId && lhs.source == rhs.source
+      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.source == rhs.source
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
   }
 

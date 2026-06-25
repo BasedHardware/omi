@@ -86,4 +86,11 @@ final class ServerConversationDecodingTests: XCTestCase {
         XCTAssertEqual(conversation.transcriptPresenceState, .includedEmpty)
         XCTAssertFalse(conversation.shouldFetchDetailForTranscript)
     }
+
+    func testLockStateParticipatesInConversationEquality() throws {
+        let unlocked = try decodeConversation(",\n\"is_locked\": false,\n\"transcript_segments\": []")
+        let locked = try decodeConversation(",\n\"is_locked\": true,\n\"transcript_segments\": []")
+
+        XCTAssertNotEqual(unlocked, locked)
+    }
 }
