@@ -2756,11 +2756,10 @@ workflows:
       - name: Bridge release to Firestore for old clients
         script: |
           # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
-          # /appcast.xml which reads from Firestore. This step writes the new build
-          # to Firestore so those clients receive this update (which includes the
-          # new SUFeedURL pointing to api.omi.me). After they update, they'll use
-          # the Python appcast directly. Remove this step once the Rust backend is
-          # decommissioned.
+          # /appcast.xml which reads from Firestore. Register as beta here; the
+          # manual desktop_promote_prod.yml workflow promotes this same Firestore
+          # release to stable only after the prod Rust backend is deployed and
+          # verified. Remove this step once the Rust backend is decommissioned.
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
 
           export CHANGELOG_JSON=$(python3 -c "
@@ -2783,7 +2782,7 @@ workflows:
             'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
             'is_live':      True,
             'is_critical':  False,
-            'channel':      'stable',
+            'channel':      'beta',
           }
           print(json.dumps(data))
           ")
@@ -2797,7 +2796,7 @@ workflows:
 
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" = "201" ]; then
-            echo "Bridge: Release registered in Firestore for old clients (channel: stable)"
+            echo "Bridge: Release registered in Firestore for old clients (channel: beta)"
           else
             echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
             echo "$(echo "$HTTP_RESPONSE" | head -n -1)"

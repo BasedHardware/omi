@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improves update release safety checks"
+  ],
   "releases": [
     {
       "version": "0.11.537",
