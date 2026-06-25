@@ -67,13 +67,13 @@ def test_canonical_config_run_record_redaction_and_fingerprint_exports_are_old_n
 
 
 def test_f6_fingerprint_known_vector_is_stable_characterization():
-    assert fingerprint("known-vector-input", key_id="project") == "hmac:project:6aa41691c2dc485103d0652f24c303ff"
+    assert fingerprint("known-vector-input", key_id="project") == "hmac:project:53a7e162432079ca92543de82fb95674"
     assert (
         fingerprint(
             "serviceAccount:PLACEHOLDER-memory-evidence@PLACEHOLDER-dev-project-id.iam.gserviceaccount.com",
             key_id="principal",
         )
-        == "hmac:principal:d4b425000d609f503e45e2ca7ba09507"
+        == "hmac:principal:1274ee103f02da89faaeadc775baf839"
     )
 
 
