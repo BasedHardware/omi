@@ -60,6 +60,7 @@ def test_validate_calendar_date_rejects_invalid_dates(value):
 @pytest.mark.parametrize('suffix', ['1704067200', '1704067200000'])
 def test_parse_sync_filename_timestamp_accepts_seconds_and_millis(suffix):
     assert parse_sync_filename_timestamp(f'audio_{suffix}.bin') == 1_704_067_200
+    assert parse_sync_filename_timestamp(f'/tmp/vad/{suffix}.wav') == 1_704_067_200
 
 
 @pytest.mark.parametrize(

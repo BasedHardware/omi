@@ -49,16 +49,18 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
 
 
 def parse_sync_filename_timestamp(path: str) -> int:
-    """Parse and validate the unix timestamp suffix in a sync .bin filename.
+    """Parse and validate the unix timestamp in a sync upload/segment filename.
 
-    Filenames are expected to end with _<unix-seconds-or-millis>.bin. The
-    returned timestamp is UTC seconds and is safe to pass to fromtimestamp(...,
+    Upload filenames are expected to end with _<unix-seconds-or-millis>.bin;
+    VAD segment files are named <unix-seconds-or-millis>.wav. The returned
+    timestamp is UTC seconds and is safe to pass to fromtimestamp(...,
     tz=timezone.utc).
     """
     filename = path.split('/')[-1]
+    timestamp_part = filename.rsplit('_', 1)[1] if '_' in filename else filename
     try:
-        raw_timestamp = int(filename.rsplit('_', 1)[1].rsplit('.', 1)[0])
-    except (IndexError, ValueError) as e:
+        raw_timestamp = int(timestamp_part.rsplit('.', 1)[0])
+    except ValueError as e:
         raise ValueError('invalid timestamp') from e
 
     timestamp = raw_timestamp // 1000 if raw_timestamp > 10_000_000_000 else raw_timestamp
