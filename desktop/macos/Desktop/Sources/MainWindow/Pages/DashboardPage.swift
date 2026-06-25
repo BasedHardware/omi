@@ -450,9 +450,12 @@ struct DashboardPage: View {
 
                 VStack(spacing: 12) {
                     centerMemoryHeader
+                    Spacer(minLength: 0)
                     homeMetricsStrip
+                    Spacer(minLength: 0)
                 }
                 .frame(width: 340)
+                .frame(maxHeight: .infinity)
 
                 destinationStack
                     .frame(width: 300)
