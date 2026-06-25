@@ -276,6 +276,21 @@ extension MemoryRecord {
         self.updatedAt = memory.updatedAt
     }
 
+    /// Merge server-authoritative tier fields without overwriting newer local edits.
+    /// Legacy/untiered server rows (`tierIsExplicit == false`) are left unchanged.
+    @discardableResult
+    mutating func mergeAuthoritativeTierFrom(_ memory: ServerMemory) -> Bool {
+        guard memory.tierIsExplicit else { return false }
+
+        let authoritativeTier = memory.tier.rawValue
+        let changed = tier != authoritativeTier || !tierIsExplicit
+        if changed {
+            tier = authoritativeTier
+            tierIsExplicit = true
+        }
+        return changed
+    }
+
     /// Convert to ServerMemory for UI display
     /// Uses backendId if available, otherwise generates a local ID for unsynced memories
     func toServerMemory() -> ServerMemory? {
