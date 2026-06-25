@@ -417,23 +417,26 @@ export class AgentRuntimeKernel {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
-            const resolved = await this.resolveBindingForAttempt({
-              input,
-              session: accepted.session,
-              adapter: worker.adapter,
-              attempt,
-              adapterId,
-            });
-            if (worker.adapter.capabilities.requiresPinnedWorker) {
-              if (resolved.replacesBindingId) {
-                worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
-              } else {
-                worker.pinBinding(resolved.handle);
+          return pool.runExclusiveQueued(
+            bindingQueueKey,
+            `${attempt.attemptId}:binding`,
+            async (worker) => {
+              const resolved = await this.resolveBindingForAttempt({
+                input,
+                session: accepted.session,
+                adapter: worker.adapter,
+                attempt,
+                adapterId,
+              });
+              if (worker.adapter.capabilities.requiresPinnedWorker) {
+                if (resolved.replacesBindingId) {
+                  worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
+                } else {
+                  worker.pinBinding(resolved.handle);
+                }
               }
-            }
-            return resolved;
-	          },
+              return resolved;
+            },
             {
               ...(bindingQueueKey
                 ? {}

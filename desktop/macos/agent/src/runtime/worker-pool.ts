@@ -224,10 +224,13 @@ export class AdapterWorkerPool {
     options?: WorkerLeaseOptions
   ): Promise<T> {
     const worker = await this.acquireQueued(binding, attemptId, options);
+    let succeeded = false;
     try {
-      return await worker.runExclusive(attemptId, binding, () => work(worker));
+      const result = await worker.runExclusive(attemptId, binding, () => work(worker));
+      succeeded = true;
+      return result;
     } finally {
-      if (options?.protectPinnedBindingAfterWork) {
+      if (succeeded && options?.protectPinnedBindingAfterWork) {
         this.protectPinnedBinding(worker.idlePinnedBindingId);
       }
       this.drainWaiters();

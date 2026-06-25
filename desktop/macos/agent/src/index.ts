@@ -798,7 +798,7 @@ async function main(): Promise<void> {
                         ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
                         fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                       }),
-                    },
+                  },
                   control.name,
                   controlInput,
                 );

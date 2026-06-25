@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   activeControlToolOwnerId,
@@ -160,6 +161,16 @@ describe("agent control tools", () => {
         fallbackOwnerId: mutableFallbackOwner,
       }),
     ).toBe("owner-b");
+  });
+
+  it("source: direct control_tool ownerId is only a guard, not session authority", () => {
+    const indexSrc = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
+    const controlToolCase = indexSrc.match(/case ["']control_tool["']:[\s\S]*?case ["']interrupt["']:/)?.[0] ?? "";
+
+    expect(controlToolCase).toContain("const controlOwnerId = currentOwnerId");
+    expect(controlToolCase).toContain("ownerId: control.ownerId");
+    expect(controlToolCase).not.toContain("currentOwnerId = controlOwnerId");
+    expect(controlToolCase).not.toContain("piMonoOwnerId = controlOwnerId");
   });
 
   it("keeps concurrent control tool calls scoped to their active request owners", async () => {
