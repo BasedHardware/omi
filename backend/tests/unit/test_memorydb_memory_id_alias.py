@@ -15,6 +15,7 @@ os.environ.setdefault(
 
 _db_client_mod = types.ModuleType("database._client")
 _db_client_mod.db = MagicMock()
+_db_client_mod.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
 sys.modules.setdefault("database._client", _db_client_mod)
 
 from models.memories import MemoryDB
