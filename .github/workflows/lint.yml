@@ -122,6 +122,12 @@ jobs:
           fi
 
       # -- Desktop Rust backend --
+      - name: Set up desktop Rust toolchain
+        if: steps.changed.outputs.has_desktop_rust == 'true'
+        run: |
+          cd desktop/macos/Backend-Rust
+          rustup show
+
       - name: Cache desktop Rust backend build
         if: steps.changed.outputs.has_desktop_rust == 'true'
         uses: actions/cache@v4
@@ -137,9 +143,12 @@ jobs:
       - name: Check desktop Rust backend
         if: steps.changed.outputs.has_desktop_rust == 'true'
         run: |
-          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt || true)
+          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs rustfmt --edition 2021 --check
+            (
+              cd desktop/macos/Backend-Rust
+              printf '%s\n' "$FILES" | xargs -d '\n' rustfmt --edition 2021 --check
+            )
           fi
           cd desktop/macos/Backend-Rust
           cargo check --locked
