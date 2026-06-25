@@ -911,8 +911,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: 
         if not users_db.get_person(user_id, person_id):
             raise ToolExecutionError("Person not found", code=-32001)
         users_db.update_person(user_id, person_id, name)
-        updated = users_db.get_person(user_id, person_id)
-        return {"success": True, "person": clean_person(updated or {"id": person_id, "name": name})}
+        return {"success": True, "person": {"id": person_id, "name": name}}
 
     elif tool_name == "delete_person":
         person_id = _required_mcp_string(arguments, "person_id")

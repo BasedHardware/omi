@@ -312,20 +312,16 @@ class TestPeople:
         assert 'speech_samples' not in result['people'][0]
 
     @patch('routers.mcp_sse.users_db')
-    def test_rename_person_tool_validates_and_returns_cleaned_person(self, mock_db):
-        original = self._person()
-        renamed = {**original, 'name': 'Robert'}
-        mock_db.get_person.side_effect = [original, renamed]
+    def test_rename_person_tool_validates_and_returns_minimal_person(self, mock_db):
+        mock_db.get_person.return_value = self._person()
 
         result = sse.execute_tool(
             UID, 'rename_person', {'person_id': ' p1 ', 'name': ' Robert '}, granted_scopes=['people.write']
         )
 
         mock_db.update_person.assert_called_once_with(UID, 'p1', 'Robert')
-        assert result['success'] is True
-        assert result['person']['name'] == 'Robert'
-        assert 'speech_samples' not in result['person']
-        assert 'speaker_embedding' not in result['person']
+        assert result == {'success': True, 'person': {'id': 'p1', 'name': 'Robert'}}
+        assert mock_db.get_person.call_count == 1
 
     @patch('routers.mcp_sse.users_db')
     def test_rename_person_rejects_bad_name(self, mock_db):
