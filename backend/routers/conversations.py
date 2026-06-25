@@ -853,6 +853,11 @@ def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
 ):
+    if search_request.speaker_id and search_request.speaker_id != 'user':
+        person = users_db.get_person(uid, search_request.speaker_id)
+        if person is None:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
@@ -877,6 +882,7 @@ def search_conversations_endpoint(
         include_discarded=search_request.include_discarded,
         start_date=start_timestamp,
         end_date=end_timestamp,
+        speaker_id=search_request.speaker_id,
     )
 
 

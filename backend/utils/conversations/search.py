@@ -25,9 +25,9 @@ def search_conversations(
     include_discarded: bool = True,
     start_date: int = None,
     end_date: int = None,
+    speaker_id: str = None,
 ) -> Dict:
     try:
-
         filter_by = f'userId:={uid}'
         if not include_discarded:
             filter_by = filter_by + ' && discarded:=false'
@@ -38,8 +38,13 @@ def search_conversations(
         if end_date is not None:
             filter_by = filter_by + f' && created_at:<={end_date}'
 
+        if speaker_id == 'user':
+            filter_by = filter_by + ' && transcript_segments.is_user:=true'
+        elif speaker_id:
+            filter_by = filter_by + f' && transcript_segments.person_id:={speaker_id}'
+
         search_parameters = {
-            'q': query,
+            'q': query.strip() or '*',
             'query_by': 'structured.overview, structured.title',
             'filter_by': filter_by,
             'sort_by': 'created_at:desc',
