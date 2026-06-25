@@ -33,9 +33,9 @@ The implementation MUST introduce a durable runtime kernel above the existing ha
 12. Omi long-term memory and agent-session history remain separate systems. Agent output may produce memory candidates, but agents do not directly establish canonical memories.
 13. Phase 1 MUST NOT create another in-memory session authority alongside the kernel.
 
-## 3. Current implementation findings
+## 3. Pre-Phase-1 findings and Phase 1 baseline
 
-The current implementation has several independent lifecycle authorities:
+Before Phase 1, the desktop agent implementation had several independent lifecycle authorities:
 
 - `desktop/macos/agent/src/index.ts` owns ACP process state, a session-key map, one active session, one active abort controller, and recursive retry behavior.
 - `PiMonoAdapter` owns synthetic `pi-session-*` identifiers and process-global conversational state.
@@ -44,16 +44,22 @@ The current implementation has several independent lifecycle authorities:
 - Each floating pill creates a separate `ChatProvider` and therefore a separate Node process to gain parallelism.
 - `TaskAgentStatusRegistry` and pill state maintain separate in-memory status authorities.
 
-Specific correctness issues that Phase 1 fixes:
+Specific correctness issues that Phase 1 was required to fix:
 
-- Current outbound messages lack request, run, attempt, and event correlation.
+- Outbound messages lacked request, run, attempt, and event correlation.
 - Starting a new ACP query aborts the prior global active query.
 - ACP retries recursively call `handleQuery`, hiding whether a fresh execution occurred.
 - ACP process exit clears all in-memory session mappings.
 - pi-mono advertises session resume even though its synthetic sessions do not survive a process restart.
-- Task chat stores adapter-native ACP IDs in message rows and has no canonical Omi session identity.
+- Task chat stored adapter-native ACP IDs in message rows and had no canonical Omi session identity.
 - Cancellation is an uncorrelated notification with no acknowledgement contract.
 - Parallel floating pills achieve isolation by multiplying UI-owned processes rather than using a scheduler and worker pool.
+
+The post-Phase-1 baseline is the local TypeScript control plane in `desktop/macos/agent`: `AgentRuntimeKernel`
+owns canonical session/run/attempt lifecycle, `AgentStore` persists that lifecycle in SQLite, ACP and pi-mono
+execute through `RuntimeAdapter`, Swift uses `AgentRuntimeProcess` plus projection stores rather than owning
+runtime authority, and local control tools operate through the kernel. Runtime-native IDs remain adapter bindings
+or explicitly named compatibility fields; they are not Omi session IDs.
 
 ## 4. Target architecture
 
@@ -932,7 +938,7 @@ inspect_agent_artifacts
 
 ### 16.2 Implementation decision
 
-Do not build capability-manifest code generation in the first persistence/kernel slice.
+Phase 1 did not build capability-manifest code generation in the first persistence/kernel slice.
 
 Implement the tools as thin, hand-written TypeScript wrappers against the kernel in one module with one set of Zod schemas. They MUST NOT be independently reimplemented in Swift, MCP, and each adapter.
 
@@ -941,16 +947,40 @@ Required sequence:
 1. Stabilize session/run/attempt/event APIs.
 2. Implement `list_agent_sessions`, `get_agent_run`, `cancel_agent_run`, and `inspect_agent_artifacts`.
 3. Implement `send_agent_message`; it creates a new run in an existing session.
-4. Implement `delegate_agent` only after child session/run/delegation creation is transactional and the scheduler supports it.
+4. Implement `delegate_agent` after child session/run/delegation creation is transactional and the scheduler supports it.
 5. Generate MCP, Swift, documentation, and permission metadata from a capability manifest in the later capability-consolidation phase.
+
+The Phase 1 baseline includes all six hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
+`cancel_agent_run`, `inspect_agent_artifacts`, `send_agent_message`, and `delegate_agent`. `send_agent_message`
+creates a follow-up run in an existing Omi session. `delegate_agent` creates or continues a distinct child Omi
+session linked to a parent run and records the delegation through kernel-owned state.
 
 ### 16.3 Delegation semantics
 
 - `call`: create a child session/run and suspend the parent until a structured result is available.
-- `spawn`: create an asynchronous child session/run and immediately return handles.
+- `spawn`: create an asynchronous canonical child session/run and immediately return handles. This is not the
+  legacy floating-pill `spawn_agent` tool and does not create or manage floating UI.
 - `continue`: create another run in an existing child session.
 
 A child result returns a summary, artifacts, verified effects, usage, and open questions. The parent does not receive the entire child transcript by default.
+
+### 16.4 Delegation versus floating-pill tools
+
+`delegate_agent` is the canonical control-plane delegation path. It creates or continues an Omi child
+`AgentSession`, `AgentRun`, and `Delegation` through kernel-owned state.
+
+The existing `spawn_agent` and `manage_agent_pills` tools remain the floating-bar UI workflow for now. They start and
+manage circular floating agent pills and MUST NOT be documented as aliases for canonical delegation. Conversely,
+`delegate_agent` spawn mode returns canonical child handles and MUST NOT imply that a floating pill appears.
+
+Until a later UX migration, models should choose explicitly:
+
+- use `delegate_agent` for canonical child runs that need durable session/run/delegation tracking;
+- use `spawn_agent` for the legacy floating-pill product surface and other-app/background UI workflow;
+- use `manage_agent_pills` only to list, dismiss, or clear floating pill UI state.
+
+Any status bridge between these surfaces is projection-only. Kernel sessions, runs, attempts, artifacts, and
+delegations remain the source of truth for control-plane state.
 
 ## 17. Phase 0 permission policy
 
@@ -1094,10 +1124,12 @@ No external standard may redefine Omi session, run, attempt, grant, or artifact 
 
 ### Step 7 — delegation controls
 
-1. Add read/control tools against the kernel.
-2. Add `send_agent_message`.
-3. Add transactional delegation and `delegate_agent`.
-4. Add artifacts and structured child results to the product UI.
+Phase 1 baseline:
+
+1. Read/control tools run against the kernel.
+2. `send_agent_message` creates a follow-up run in an existing Omi session.
+3. Transactional delegation and `delegate_agent` create or continue child Omi sessions.
+4. Artifact metadata is exposed through local kernel tools; richer product UI for artifacts remains a later phase.
 
 ## 21. First code files to change
 
@@ -1208,7 +1240,8 @@ The immediate next wave is:
 
 ## 23. Phase 1 acceptance criteria
 
-Phase 1 is complete only when all of the following are true:
+These acceptance criteria describe the Phase 1 baseline contract and remain the regression guard for the merged
+implementation:
 
 1. Every main-chat, task-chat, and floating-pill query returns durable Omi `session_id`, `run_id`, and `attempt_id` values.
 2. Restarting the Node daemon preserves canonical sessions, runs, bindings, events, and terminal statuses.
@@ -1228,16 +1261,28 @@ Phase 1 is complete only when all of the following are true:
 The following are not Phase 1 blockers:
 
 - a new user-facing approval UX;
-- full capability-manifest code generation;
 - cloud synchronization and cross-device leases;
 - AgentVM placement and failover;
 - Hermes, OpenClaw, and A2A adapters;
 - automatic context reconstruction across adapters;
 - durable pi-mono native resume;
-- full artifact browser UX;
 - automatic memory ingestion from child results;
 - Rust control-plane implementation;
 - complete event sourcing or CQRS.
+
+Phase 2 may accept local consolidation that reuses Phase 1 authority without changing the architecture:
+
+- local capability-manifest consolidation for the existing Omi control tools from one canonical source;
+- artifact write/lifecycle APIs over the existing `artifacts` table;
+- a minimal desktop artifact projection that exposes references and metadata already owned by the kernel;
+- prompt and discoverability alignment that keeps canonical `delegate_agent` delegation distinct from the existing
+  floating-pill tools.
+
+Still deferred beyond that local consolidation:
+
+- broad capability generation across cloud directories, remote runtimes, and future standards;
+- full artifact browser UX, arbitrary artifact-content browsing, cloud artifact sync, and cross-device artifact leases.
+- migrating floating pills into canonical child-session projections or replacing the legacy floating-pill tool UX.
 
 ## 25. Long-term direction
 

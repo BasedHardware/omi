@@ -208,9 +208,9 @@ enum DesktopCapabilityRegistry {
       title: "List Agent Sessions",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "List canonical Omi-managed agent sessions and latest run state.",
+      summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
-        "Use for current or recent Omi agents/subagents across main chat, task chat, and floating pills.",
+        "Use for current or recent kernel-backed Omi agents/subagents across main chat, task chat, and any future migrated floating-pill sessions.",
         "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
       ]),
     Capability(
@@ -228,7 +228,7 @@ enum DesktopCapabilityRegistry {
       title: "Cancel Agent Run",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "Request cancellation for an Omi agent run through the runtime kernel.",
+      summary: "Request cancellation for one canonical Omi agent run through the runtime kernel.",
       bullets: [
         "Use when the user asks to stop a running Omi agent/subagent.",
         "Returns whether cancellation was accepted, dispatched, and acknowledged."
@@ -238,7 +238,7 @@ enum DesktopCapabilityRegistry {
       title: "Inspect Agent Artifacts",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "List canonical artifact metadata for an Omi agent session, run, or attempt.",
+      summary: "Inspect canonical artifact metadata for an Omi agent session, run, or attempt.",
       bullets: [
         "Returns artifact references and metadata only.",
         "Use after get_agent_run when the user asks what files or outputs an agent produced."
@@ -250,7 +250,7 @@ enum DesktopCapabilityRegistry {
       surfaces: [.desktopChat],
       summary: "Send a follow-up message to an existing canonical Omi agent session.",
       bullets: [
-        "Use when continuing a multi-turn conversation with an Omi-managed agent by omiSessionId.",
+        "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
         "Creates a new run in the existing session; do not use it to create a delegated child."
       ]),
     Capability(
@@ -258,9 +258,10 @@ enum DesktopCapabilityRegistry {
       title: "Delegate Agent",
       latency: .asyncBackground,
       surfaces: [.desktopChat],
-      summary: "Create or continue a distinct child agent session linked to a parent run.",
+      summary: "Create or continue a distinct delegated child agent session linked to a parent run.",
       bullets: [
-        "Use call for a structured child result, spawn for immediate child handles, and continue for another run in an existing child session.",
+        "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
+        "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
         "Pass a concise objective and optional short context; do not pass full transcripts by default."
       ]),
     Capability(
@@ -268,10 +269,11 @@ enum DesktopCapabilityRegistry {
       title: "Spawn Agent",
       latency: .asyncBackground,
       surfaces: [.desktopChat, .realtimeHub],
-      summary: "Hand multi-step work to a floating background agent pill and return immediately.",
+      summary: "Hand multi-step work to a floating background agent pill through the legacy floating-bar UI workflow.",
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
-        "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it."
+        "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it.",
+        "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
       ]),
     Capability(
       toolName: "manage_agent_pills",
@@ -350,11 +352,12 @@ enum DesktopCapabilityRegistry {
     - Subagents/task-agent status -> get_task_agent_status.
     - Canonical Omi-managed agent sessions/runs -> list_agent_sessions, get_agent_run.
     - Continue an existing canonical Omi agent session -> send_agent_message.
-    - Delegate to a distinct child Omi agent session -> delegate_agent.
+    - Delegate to a distinct canonical child Omi agent session -> delegate_agent.
     - Stop a canonical Omi agent run -> cancel_agent_run.
     - Agent output references/artifacts -> inspect_agent_artifacts.
-    - Start a floating-bar subagent/background agent -> spawn_agent.
+    - Start a visible floating-bar subagent/background agent -> spawn_agent.
     - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
+    - delegate_agent records durable child sessions/runs/delegations; spawn_agent creates the legacy floating-pill UI workflow. Do not treat one as an alias for the other.
     - Onboarding knowledge graph -> save_knowledge_graph.
     """
   }

@@ -1,7 +1,9 @@
 import type {
+  AdapterArtifactReference,
   AdapterAttemptContext,
   AdapterAttemptResult,
   AdapterEventSink,
+  AdapterCapabilities,
   CancelAttemptContext,
   CancelDispatchResult,
   OpenBindingInput,
@@ -22,12 +24,20 @@ export interface KernelHarness {
 
 export class FakeRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId: string;
-  readonly capabilities = {
+  readonly capabilities: AdapterCapabilities = {
     resumeFidelity: "native" as const,
     supportsNativeResume: true,
     supportsCancellation: true,
+    acknowledgesCancellation: false,
+    requiresPinnedWorker: false,
+    supportsModelSwitching: true,
+    supportsArtifactEmission: true,
+    supportsTools: true,
+    restartBehavior: "native_bindings_survive",
   };
 
+  started = 0;
+  stopped = 0;
   opened: OpenBindingInput[] = [];
   resumed: ResumeBindingInput[] = [];
   executed: AdapterAttemptContext[] = [];
@@ -38,6 +48,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextResume = false;
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
+  nextArtifacts: AdapterArtifactReference[] | undefined;
   pendingResult:
     | {
         promise: Promise<AdapterAttemptResult>;
@@ -51,9 +62,13 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     this.adapterId = adapterId;
   }
 
-  async start(): Promise<void> {}
+  async start(): Promise<void> {
+    this.started += 1;
+  }
 
-  async stop(): Promise<void> {}
+  async stop(): Promise<void> {
+    this.stopped += 1;
+  }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
     this.opened.push(input);
@@ -116,6 +131,8 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.pendingResult && (!this.deferOnlyPromptIncludes || promptText.includes(this.deferOnlyPromptIncludes))) {
       return this.pendingResult.promise;
     }
+    const artifacts = this.nextArtifacts;
+    this.nextArtifacts = undefined;
     return {
       text: `done-${context.attemptId}`,
       sessionId: context.binding.adapterNativeSessionId,
@@ -123,6 +140,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       terminalStatus: "succeeded",
       inputTokens: 1,
       outputTokens: 2,
+      artifacts,
     };
   }
 

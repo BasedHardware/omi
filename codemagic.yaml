@@ -2368,6 +2368,8 @@ workflows:
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
             cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1

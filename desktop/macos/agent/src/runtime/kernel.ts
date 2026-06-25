@@ -20,6 +20,7 @@ import type {
   AgentStore,
   ArtifactRole,
   AttemptStatus,
+  NewAgentArtifact,
   ResumeFidelity,
   RunAttempt,
   RunMode,
@@ -100,6 +101,7 @@ export interface KernelSessionSummary {
 
 export interface GetRunInput {
   runId: string;
+  ownerId?: string;
   includeEvents?: boolean;
   eventLimit?: number;
 }
@@ -119,8 +121,26 @@ export interface InspectArtifactsInput {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  ownerId?: string;
   role?: ArtifactRole;
   limit?: number;
+}
+
+export interface PersistArtifactInput {
+  sessionId?: string;
+  runId?: string | null;
+  attemptId?: string | null;
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName?: string | null;
+  mimeType?: string | null;
+  contentHash?: string | null;
+  sizeBytes?: number | null;
+  metadata?: Record<string, unknown>;
+  metadataJson?: string;
+  artifactId?: string;
+  createdAtMs?: number;
 }
 
 export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
@@ -377,15 +397,29 @@ export class AgentRuntimeKernel {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
-            this.resolveBindingForAttempt({
+          if (!bindingQueueKey) {
+            const evictedBindingId = pool.releaseIdlePinnedBinding();
+            if (evictedBindingId) {
+              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
+            }
+          }
+          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
+            const resolved = await this.resolveBindingForAttempt({
               input,
               session: accepted.session,
               adapter: worker.adapter,
               attempt,
               adapterId,
-            })
-          );
+            });
+            if (worker.adapter.capabilities.requiresPinnedWorker) {
+              if (resolved.replacesBindingId) {
+                worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
+              } else {
+                worker.pinBinding(resolved.handle);
+              }
+            }
+            return resolved;
+          });
         });
         binding = resolved.binding;
         handle = resolved.handle;
@@ -479,9 +513,12 @@ export class AgentRuntimeKernel {
     };
   }
 
-  async cancelRun(runId: string): Promise<CancelRunResult> {
+  async cancelRun(runId: string, input: { ownerId?: string } = {}): Promise<CancelRunResult> {
     const active = this.activeExecutions.get(runId);
     const run = this.readRun(runId);
+    if (input.ownerId) {
+      this.assertRunOwner(run, input.ownerId);
+    }
     if (TERMINAL_STATUSES.includes(run.status)) {
       return {
         accepted: false,
@@ -625,6 +662,9 @@ export class AgentRuntimeKernel {
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);
+    if (input.ownerId) {
+      this.assertSessionOwner(session, input.ownerId);
+    }
     return {
       session,
       run,
@@ -638,7 +678,17 @@ export class AgentRuntimeKernel {
   }
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    if (!input.sessionId && !input.runId && !input.attemptId) {
+      throw new Error("Inspecting artifacts requires sessionId, runId, or attemptId");
+    }
+    if (input.ownerId) {
+      this.assertArtifactSelectorOwner(input, input.ownerId);
+    }
     return this.readArtifacts(input);
+  }
+
+  persistArtifact(input: PersistArtifactInput): AgentArtifact {
+    return this.withTransaction(() => this.persistArtifactInTransaction(input));
   }
 
   hasActiveExecutionForAdapter(adapterId: string): boolean {
@@ -986,11 +1036,11 @@ export class AgentRuntimeKernel {
     adapter: RuntimeAdapter;
     attempt: RunAttempt;
     adapterId: string;
-  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const active = this.readActiveBinding(input.session.sessionId, input.adapterId);
     if (active) {
       const handle = await this.resumeOrReplaceBinding(active, input);
-      return { binding: this.readBinding(handle.bindingId!), handle };
+      return { binding: this.readBinding(handle.bindingId!), handle, replacesBindingId: handle.replacesBindingId };
     }
 
     const nextGeneration = this.nextBindingGeneration(input.session.sessionId, input.adapterId);
@@ -1050,7 +1100,7 @@ export class AgentRuntimeKernel {
       attempt: RunAttempt;
       adapterId: string;
     }
-  ): Promise<AdapterBindingHandle> {
+  ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
     const canUseProcessLocalBinding =
       binding.adapterInstanceId === this.runtimeNodeId &&
       binding.adapterNativeSessionId &&
@@ -1058,7 +1108,7 @@ export class AgentRuntimeKernel {
     if (!binding.adapterNativeSessionId || (!input.adapter.capabilities.supportsNativeResume && !canUseProcessLocalBinding)) {
       this.markBindingStale(binding, input.attempt, "binding_not_resumable");
       const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
-      return opened.handle;
+      return { ...opened.handle, replacesBindingId: opened.replacesBindingId };
     }
     try {
       const resumed = await input.adapter.resumeBinding({
@@ -1109,7 +1159,7 @@ export class AgentRuntimeKernel {
     },
     generation: number,
     replacesBindingId: string | null
-  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const opened = await input.adapter.openBinding({
       sessionId: input.session.sessionId,
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
@@ -1148,6 +1198,7 @@ export class AgentRuntimeKernel {
     });
     return {
       binding,
+      replacesBindingId: replacesBindingId ?? undefined,
       handle: {
         ...opened,
         bindingId: binding.bindingId,
@@ -1199,6 +1250,21 @@ export class AgentRuntimeKernel {
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
+      for (const artifact of result.artifacts ?? []) {
+        this.persistArtifactInTransaction({
+          sessionId: session.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+          kind: artifact.kind,
+          role: artifact.role,
+          uri: artifact.uri,
+          displayName: artifact.displayName,
+          mimeType: artifact.mimeType,
+          contentHash: artifact.contentHash,
+          sizeBytes: artifact.sizeBytes,
+          metadata: artifact.metadata,
+        });
+      }
       this.finishAttemptAndRun({
         sessionId: session.sessionId,
         runId,
@@ -1364,6 +1430,93 @@ export class AgentRuntimeKernel {
     });
   }
 
+  private markEvictedBindingStale(bindingId: string, reason: string): void {
+    const binding = this.readBinding(bindingId);
+    this.withTransaction(() => {
+      this.updateBinding(binding.bindingId, {
+        status: "stale",
+        invalidatedAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
+      this.appendEvent({
+        sessionId: binding.sessionId,
+        runId: null,
+        attemptId: null,
+        type: "binding.stale",
+        payload: { bindingId: binding.bindingId, reason },
+      });
+    });
+  }
+
+  private persistArtifactInTransaction(input: PersistArtifactInput): AgentArtifact {
+    const scope = this.resolveArtifactScope(input);
+    const artifactInput: NewAgentArtifact = {
+      artifactId: input.artifactId,
+      sessionId: scope.sessionId,
+      runId: scope.runId,
+      attemptId: scope.attemptId,
+      kind: input.kind,
+      role: input.role,
+      uri: input.uri,
+      displayName: input.displayName ?? null,
+      mimeType: input.mimeType ?? null,
+      contentHash: input.contentHash ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      metadataJson: input.metadataJson ?? JSON.stringify(input.metadata ?? {}),
+      createdAtMs: input.createdAtMs,
+    };
+    const artifact = this.store.insertArtifact(artifactInput);
+    this.appendEvent({
+      sessionId: artifact.sessionId,
+      runId: artifact.runId,
+      attemptId: artifact.attemptId,
+      type: "artifact.created",
+      payload: {
+        artifactId: artifact.artifactId,
+        kind: artifact.kind,
+        role: artifact.role,
+        uri: artifact.uri,
+        displayName: artifact.displayName,
+        mimeType: artifact.mimeType,
+        contentHash: artifact.contentHash,
+        sizeBytes: artifact.sizeBytes,
+      },
+    });
+    return artifact;
+  }
+
+  private resolveArtifactScope(input: PersistArtifactInput): {
+    sessionId: string;
+    runId: string | null;
+    attemptId: string | null;
+  } {
+    let sessionId = input.sessionId ?? null;
+    let runId = input.runId ?? null;
+    const attemptId = input.attemptId ?? null;
+
+    if (attemptId) {
+      const attempt = this.readAttempt(attemptId);
+      if (runId && runId !== attempt.runId) {
+        throw new Error(`Artifact attempt ${attemptId} belongs to run ${attempt.runId}, not ${runId}`);
+      }
+      runId = attempt.runId;
+    }
+
+    if (runId) {
+      const run = this.readRun(runId);
+      if (sessionId && sessionId !== run.sessionId) {
+        throw new Error(`Artifact run ${runId} belongs to session ${run.sessionId}, not ${sessionId}`);
+      }
+      sessionId = run.sessionId;
+    }
+
+    if (!sessionId) {
+      throw new Error("Artifact persistence requires sessionId, runId, or attemptId");
+    }
+
+    return { sessionId, runId, attemptId };
+  }
+
   private appendEvent(input: {
     sessionId: string;
     type: string;
@@ -1456,6 +1609,32 @@ export class AgentRuntimeKernel {
 
   private readRun(runId: string): AgentRun {
     return runFromRow(this.store.getRow("SELECT * FROM runs WHERE run_id = ?", [runId]));
+  }
+
+  private assertSessionOwner(session: AgentSession, ownerId: string): void {
+    if (session.ownerId !== ownerId) {
+      throw new Error("Agent session is not visible to the active owner");
+    }
+  }
+
+  private assertRunOwner(run: AgentRun, ownerId: string): void {
+    this.assertSessionOwner(this.readSession(run.sessionId), ownerId);
+  }
+
+  private assertAttemptOwner(attempt: RunAttempt, ownerId: string): void {
+    this.assertRunOwner(this.readRun(attempt.runId), ownerId);
+  }
+
+  private assertArtifactSelectorOwner(input: InspectArtifactsInput, ownerId: string): void {
+    if (input.sessionId) {
+      this.assertSessionOwner(this.readSession(input.sessionId), ownerId);
+    }
+    if (input.runId) {
+      this.assertRunOwner(this.readRun(input.runId), ownerId);
+    }
+    if (input.attemptId) {
+      this.assertAttemptOwner(this.readAttempt(input.attemptId), ownerId);
+    }
   }
 
   private readLatestRunForSession(sessionId: string): AgentRun | undefined {

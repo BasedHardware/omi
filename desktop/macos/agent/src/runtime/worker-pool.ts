@@ -29,12 +29,11 @@ export class AdapterWorker {
     return this.activeAttemptId !== null;
   }
 
-  canRun(_binding?: AdapterBindingHandle): boolean {
+  canRun(binding?: AdapterBindingHandle): boolean {
     if (this.isBusy) return false;
     if (!this.adapter.capabilities.requiresPinnedWorker) return true;
-    // Pinned adapters retain process-local state only while busy. Once idle,
-    // the worker can be assigned to another binding and pinBinding records it.
-    return true;
+    if (!this.pinnedBindingId) return true;
+    return Boolean(binding?.bindingId && binding.bindingId === this.pinnedBindingId);
   }
 
   hasActiveBinding(bindingId: string): boolean {
@@ -45,13 +44,34 @@ export class AdapterWorker {
     return this.pinnedBindingId === bindingId;
   }
 
+  releaseIdlePinnedBinding(): string | null {
+    if (this.isBusy || !this.pinnedBindingId) {
+      return null;
+    }
+    const bindingId = this.pinnedBindingId;
+    this.pinnedBindingId = null;
+    return bindingId;
+  }
+
   pinBinding(binding: AdapterBindingHandle): void {
     if (!binding.bindingId) {
       throw new Error("Pinned adapter workers require a bindingId");
     }
-    if (this.activeAttemptId && this.pinnedBindingId && this.pinnedBindingId !== binding.bindingId) {
+    if (this.pinnedBindingId && this.pinnedBindingId !== binding.bindingId) {
       throw new Error(
         `Worker ${this.workerId} is already pinned to binding ${this.pinnedBindingId}`
+      );
+    }
+    this.pinnedBindingId = binding.bindingId;
+  }
+
+  replacePinnedBinding(replacesBindingId: string, binding: AdapterBindingHandle): void {
+    if (!binding.bindingId) {
+      throw new Error("Pinned adapter workers require a bindingId");
+    }
+    if (this.pinnedBindingId && this.pinnedBindingId !== replacesBindingId) {
+      throw new Error(
+        `Worker ${this.workerId} is pinned to binding ${this.pinnedBindingId}, not replacement source ${replacesBindingId}`
       );
     }
     this.pinnedBindingId = binding.bindingId;
@@ -96,6 +116,7 @@ interface PendingWorkerLease {
   binding?: AdapterBindingHandle;
   attemptId: string;
   resolve: WorkerLeaseResolver;
+  reject: (error: Error) => void;
 }
 
 export class AdapterWorkerPool {
@@ -119,6 +140,16 @@ export class AdapterWorkerPool {
 
   get capacity(): number {
     return this.maxWorkers;
+  }
+
+  releaseIdlePinnedBinding(): string | null {
+    for (const worker of this.workers) {
+      const bindingId = worker.releaseIdlePinnedBinding();
+      if (bindingId) {
+        return bindingId;
+      }
+    }
+    return null;
   }
 
   acquire(binding?: AdapterBindingHandle): AdapterWorker | null {
@@ -172,8 +203,11 @@ export class AdapterWorkerPool {
       worker.reserve(attemptId, binding);
       return Promise.resolve(worker);
     }
-    return new Promise((resolve) => {
-      this.waiters.push({ binding, attemptId, resolve });
+    if (!this.canEventuallyAcquire(binding)) {
+      return Promise.reject(this.noCapacityError(binding));
+    }
+    return new Promise((resolve, reject) => {
+      this.waiters.push({ binding, attemptId, resolve, reject });
     });
   }
 
@@ -189,5 +223,28 @@ export class AdapterWorkerPool {
       worker.reserve(waiter.attemptId, waiter.binding);
       waiter.resolve(worker);
     }
+    for (let i = 0; i < this.waiters.length;) {
+      const waiter = this.waiters[i]!;
+      if (this.canEventuallyAcquire(waiter.binding)) {
+        i += 1;
+        continue;
+      }
+      this.waiters.splice(i, 1);
+      waiter.reject(this.noCapacityError(waiter.binding));
+    }
+  }
+
+  private canEventuallyAcquire(binding?: AdapterBindingHandle): boolean {
+    if (this.workers.length < this.maxWorkers) return true;
+    const bindingId = binding?.bindingId;
+    return this.workers.some((worker) => {
+      if (!worker.adapter.capabilities.requiresPinnedWorker) return true;
+      return Boolean(bindingId && worker.hasPinnedBinding(bindingId));
+    });
+  }
+
+  private noCapacityError(binding?: AdapterBindingHandle): Error {
+    const bindingLabel = binding?.bindingId ? `binding ${binding.bindingId}` : "a new binding";
+    return new Error(`No adapter worker capacity available for ${bindingLabel}`);
   }
 }
