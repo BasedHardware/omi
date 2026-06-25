@@ -554,14 +554,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             UserDefaults.standard.set(NSStringFromPoint(frame.origin), forKey: FloatingControlBarWindow.positionKey)
         } else {
             // Non-draggable: center on new screen
-            let anchorFrame = targetUsesNotchIsland ? targetScreen.frame : targetVisible
-            let x = anchorFrame.midX - frame.width / 2
-            let y = targetUsesNotchIsland
-                ? anchorFrame.maxY - frame.height
-                : targetVisible.maxY - frame.height - topInsetForPillFallback
+            let x = targetVisible.midX - frame.width / 2
+            let y = targetVisible.maxY - frame.height - topInsetForPillFallback
             let clamped = FloatingControlBarWindow.clamp(
                 NSRect(origin: NSPoint(x: x, y: y), size: frame.size),
-                to: targetUsesNotchIsland ? targetScreen.frame : targetVisible
+                to: targetVisible
             )
             setFrameOrigin(clamped.origin)
         }
