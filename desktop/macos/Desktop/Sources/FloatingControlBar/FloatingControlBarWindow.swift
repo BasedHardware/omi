@@ -1139,15 +1139,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 else { return }
                 let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
                 let clampedHeight = min(max(targetHeight, Self.minResponseHeight), maxHeight)
-                let currentSurfaceHeight = self.frame.height
-                    - (self.notchModeEnabled && self.state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0)
                 // Only expand, never auto-shrink. In notch mode an active voice
                 // response glow inflates the window frame, so compare content
                 // growth against the underlying response surface height rather
                 // than the glow-padded window height.
-                guard clampedHeight > currentSurfaceHeight + 2 else { return }
+                guard clampedHeight > self.currentResponseSurfaceHeight() + 2 else { return }
                 self.resizeAnchored(
-
+                    to: NSSize(width: self.expandedContentWidth, height: clampedHeight),
                     makeResizable: true,
                     animated: true,
                     anchorTop: true
