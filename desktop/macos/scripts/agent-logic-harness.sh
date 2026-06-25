@@ -17,6 +17,7 @@ RUN_SWIFT=1
 RUN_NODE=1
 SKIP_INSTALL=0
 VERBOSE=0
+INTERNAL_FAILURE_PROBE=0
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 RUN_DIR="$DESKTOP_DIR/.harness/agent-logic/$RUN_ID"
 
@@ -57,6 +58,11 @@ while [[ $# -gt 0 ]]; do
     --verbose)
       VERBOSE=1
       ;;
+    --internal-failure-probe)
+      INTERNAL_FAILURE_PROBE=1
+      RUN_SWIFT=0
+      RUN_NODE=0
+      ;;
     --help|-h)
       usage
       exit 0
@@ -70,7 +76,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 ]]; then
+if [[ "$INTERNAL_FAILURE_PROBE" -eq 0 && "$RUN_SWIFT" -eq 0 && "$RUN_NODE" -eq 0 ]]; then
   echo "Nothing selected." >&2
   exit 2
 fi
@@ -103,10 +109,22 @@ run_step() {
   local start
   local log_path="$RUN_DIR/$(printf '%02d' "$((${#STEP_NAMES[@]} + 1))")-$(echo "$name" | tr '[:upper:] ' '[:lower:]-' | tr -cd 'a-z0-9._-').log"
   start="$(now_seconds)"
+  local status=0
   if [[ "$VERBOSE" -eq 1 ]]; then
-    "$@" 2>&1 | tee "$log_path"
-  elif ! "$@" >"$log_path" 2>&1; then
-    local status=$?
+    if "$@" 2>&1 | tee "$log_path"; then
+      status=0
+    else
+      status="${PIPESTATUS[0]}"
+      [[ "$status" -eq 0 ]] && status=1
+    fi
+  else
+    if "$@" >"$log_path" 2>&1; then
+      status=0
+    else
+      status=$?
+    fi
+  fi
+  if [[ "$status" -ne 0 ]]; then
     echo "--- $name failed; log: $log_path" >&2
     cat "$log_path" >&2
     exit "$status"
@@ -117,6 +135,29 @@ run_step() {
   STEP_SECONDS+=("$elapsed")
   STEP_LOGS+=("$log_path")
   echo "--- $name passed in ${elapsed}s (log: $log_path)"
+}
+
+run_failure_propagation_self_check() {
+  echo
+  echo "=== harness failure propagation self-check ==="
+  local start
+  local elapsed
+  local log_path="$RUN_DIR/$(printf '%02d' "$((${#STEP_NAMES[@]} + 1))")-harness-failure-propagation-self-check.log"
+  start="$(now_seconds)"
+  set +e
+  "$0" --internal-failure-probe >"$log_path" 2>&1
+  local status=$?
+  set -e
+  elapsed="$(elapsed_seconds "$start")"
+  if [[ "$status" -ne 7 ]]; then
+    echo "--- harness failure propagation self-check failed; expected exit 7, got $status; log: $log_path" >&2
+    cat "$log_path" >&2
+    exit 1
+  fi
+  STEP_NAMES+=("harness failure propagation self-check")
+  STEP_SECONDS+=("$elapsed")
+  STEP_LOGS+=("$log_path")
+  echo "--- harness failure propagation self-check passed in ${elapsed}s (log: $log_path)"
 }
 
 run_swift_focus() {
@@ -167,6 +208,13 @@ echo "desktop: $DESKTOP_DIR"
 echo "git: $(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 mkdir -p "$RUN_DIR"
 echo "logs: $RUN_DIR"
+
+if [[ "$INTERNAL_FAILURE_PROBE" -eq 1 ]]; then
+  run_step "failure propagation probe" bash -c 'exit 7'
+  exit 99
+fi
+
+run_failure_propagation_self_check
 
 if [[ "$RUN_SWIFT" -eq 1 ]]; then
   run_step "swift focused lifecycle/state tests" run_swift_focus
