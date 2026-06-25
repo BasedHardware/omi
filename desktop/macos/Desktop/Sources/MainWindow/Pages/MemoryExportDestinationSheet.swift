@@ -518,7 +518,7 @@ struct MemoryExportDestinationSheet: View {
       }
       .padding(.top, 10)
     } label: {
-      Text("Manual setup")
+      Text("Manual installation")
         .scaledFont(size: 13, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
     }
