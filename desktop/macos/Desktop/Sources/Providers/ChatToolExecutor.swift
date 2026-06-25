@@ -451,7 +451,7 @@ class ChatToolExecutor {
     if originatingChatMode == .ask {
       return "Error: spawn_agent is unavailable in Ask mode. Switch to Act mode before starting a background agent."
     }
-    if originatingClientScope == "floating-pill" {
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
       return "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
     let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")

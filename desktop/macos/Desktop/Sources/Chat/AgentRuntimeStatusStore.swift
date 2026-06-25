@@ -26,6 +26,10 @@ struct AgentSurfaceReference: Hashable, Sendable {
   }
 }
 
+enum AgentLegacyClientScope {
+  static let floatingPill = "floating-pill"
+}
+
 enum AgentRunProjectionStatus: String, Sendable {
   case idle
   case queued

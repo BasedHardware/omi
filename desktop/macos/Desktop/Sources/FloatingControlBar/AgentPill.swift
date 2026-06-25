@@ -445,7 +445,7 @@ final class AgentPillsManager: ObservableObject {
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: "floating-pill"
+                legacyClientScope: AgentLegacyClientScope.floatingPill
             )
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider, finalText: finalText)
@@ -495,7 +495,7 @@ final class AgentPillsManager: ObservableObject {
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: "floating-pill")
+                legacyClientScope: AgentLegacyClientScope.floatingPill)
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider, finalText: finalText)
         }

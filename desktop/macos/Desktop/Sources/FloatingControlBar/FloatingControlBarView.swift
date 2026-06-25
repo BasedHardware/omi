@@ -925,7 +925,9 @@ private struct NotchAgentPillsRowView: View {
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
 
-    private let directAgentLimit = 4
+    // A notched lobe has 64 pt of usable row width (76 - 12 padding); four
+    // direct 17 pt orbs plus gaps need 74 pt, so group before the fourth orb.
+    private let directAgentLimit = 3
 
     private var pillsNewestFirst: [AgentPill] {
         Array(manager.pills.reversed())
