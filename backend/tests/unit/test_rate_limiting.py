@@ -46,6 +46,7 @@ redis_db_stub = sys.modules['database.redis_db']
 redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
 redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
 sys.modules['database.users'].record_user_platform = MagicMock()
+sys.modules['database.users'].record_client_device = MagicMock()
 
 
 def _check_rate_limit(key, policy, max_requests, window):

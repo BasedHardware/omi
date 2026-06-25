@@ -66,6 +66,7 @@ if existing_endpoints is not None and not hasattr(existing_endpoints, 'get_curre
 
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
+database_users_stub.record_client_device = MagicMock()
 original_database_users = sys.modules.get('database.users')
 sys.modules['database.users'] = database_users_stub
 
