@@ -83,6 +83,12 @@ from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
+from utils.memory.legacy_backfill import (
+    BackfillCohortGateError,
+    assert_canonical_cohort_for_backfill,
+    both_store_canonical_duplicate_exists,
+    live_extraction_memory_id_for_legacy_row,
+)
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from tests.unit.test_ws_b_short_term_lifecycle import (
     NOW,
@@ -98,7 +104,7 @@ NOW_TS = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
 
 def _legacy_row(*, legacy_id: str, content: str, conversation_id: str | None = None) -> dict:
-    return {
+    row = {
         "id": legacy_id,
         "uid": LEGACY_UID,
         "content": content,
@@ -108,31 +114,70 @@ def _legacy_row(*, legacy_id: str, content: str, conversation_id: str | None = N
         "updated_at": NOW_TS,
         "manually_added": False,
         "visibility": "private",
-        "evidence": [
+    }
+    if conversation_id is not None:
+        row["evidence"] = [
             {
                 "evidence_id": f"ev_{legacy_id}",
-                "source_id": conversation_id or legacy_id,
-                "source_type": "conversation" if conversation_id else "legacy_memory",
+                "source_id": conversation_id,
+                "source_type": "conversation",
                 "source_signal": "transcription",
                 "extractor_id": "legacy_extractor",
                 "extractor_version": "v1",
                 "artifact_ref": {},
                 "capture_confidence": 0.5,
-                "independence_group": conversation_id or legacy_id,
+                "independence_group": conversation_id,
                 "redaction_status": "active",
                 "created_at": NOW_TS,
             }
-        ],
-    }
+        ]
+    else:
+        row["evidence"] = [
+            {
+                "evidence_id": f"ev_{legacy_id}",
+                "source_id": legacy_id,
+                "source_type": "legacy_memory",
+                "source_signal": "manual",
+                "extractor_id": "legacy_extractor",
+                "extractor_version": "v1",
+                "artifact_ref": {},
+                "capture_confidence": 0.5,
+                "independence_group": legacy_id,
+                "redaction_status": "active",
+                "created_at": NOW_TS,
+            }
+        ]
+    return row
 
 
-def _make_non_filtered_store(rows: list[dict]) -> tuple[Callable[..., list[dict]], list[dict]]:
+def _seed_legacy_memories_in_db(db: _PromotionFakeDb, uid: str, rows: list[dict]) -> None:
+    for row in rows:
+        legacy_id = row["id"]
+        db.docs[f"users/{uid}/memories/{legacy_id}"] = copy.deepcopy(row)
+
+
+def _legacy_memory_docs_snapshot(db: _PromotionFakeDb, uid: str) -> dict[str, dict]:
+    prefix = f"users/{uid}/memories/"
+    return {path: copy.deepcopy(data) for path, data in db.docs.items() if path.startswith(prefix)}
+
+
+def _get_memories_from_fake_db(db: _PromotionFakeDb, uid: str, limit: int = 100, offset: int = 0) -> list[dict]:
+    prefix = f"users/{uid}/memories/"
+    rows = [data for path, data in sorted(db.docs.items()) if path.startswith(prefix)]
+    active_rows = [row for row in rows if is_active_legacy_row(row)]
+    return active_rows[offset : offset + limit]
+
+
+def _make_non_filtered_store(
+    rows: list[dict], *, uid: str | None = None
+) -> tuple[Callable[..., list[dict]], list[dict]]:
     """Return (get_non_filtered_memories_fn, active_snapshot) for immutability checks."""
     store = copy.deepcopy(rows)
     active_snapshot = copy.deepcopy([row for row in store if is_active_legacy_row(row)])
+    expected_uid = uid or (rows[0].get("uid") if rows else LEGACY_UID)
 
-    def _get_non_filtered(uid, limit=100, offset=0, **kwargs):
-        assert uid == LEGACY_UID
+    def _get_non_filtered(requested_uid, limit=100, offset=0, **kwargs):
+        assert requested_uid == expected_uid
         return store[offset : offset + limit]
 
     return _get_non_filtered, active_snapshot
@@ -190,6 +235,133 @@ def test_gate_blocks_non_whitelisted_uid(_trusted_account):
     assert report.written_count == 0
     assert report.errors == ["cohort_gate: uid not in MEMORY_CANONICAL_USERS (use allow_admin_override=True to bypass)"]
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
+
+
+def test_manual_note_id_fallback_enables_both_store_dedup(_trusted_account):
+    content = "User keeps a daily journal"
+    legacy_id = "leg-manual-note"
+    rows = [_legacy_row(legacy_id=legacy_id, content=content, conversation_id=None)]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    live_id = live_extraction_memory_id_for_legacy_row(uid=LEGACY_UID, legacy_row=rows[0])
+    assert live_id == extraction_memory_id(uid=LEGACY_UID, source_id=legacy_id, content=content)
+
+    live_item = MemoryItem(
+        memory_id=live_id,
+        uid=LEGACY_UID,
+        version=1,
+        tier=MemoryTier.long_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content=content,
+        evidence=[
+            MemoryEvidence(
+                evidence_id="ev_manual_live",
+                source_type="legacy_memory",
+                source_id=legacy_id,
+                source_version="v1",
+                artifact_preservation=ArtifactPreservationState.preserved,
+            )
+        ],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW_TS,
+        updated_at=NOW_TS,
+        expires_at=None,
+        ledger_commit_id="commit_manual",
+        ledger_sequence=1,
+        source_commit_id="commit_manual",
+        source_commit_sequence=1,
+        content_hash="hash-manual-live",
+        account_generation=1,
+    )
+    db.docs[f"users/{LEGACY_UID}/memory_items/{live_id}"] = _stored_item(live_item)
+
+    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+
+    assert report.completed is True
+    assert report.written_count == 0
+    assert report.skipped_both_store_duplicate == 1
+    backfill_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=legacy_id)
+    assert f"users/{LEGACY_UID}/memory_items/{backfill_id}" not in db.docs
+    assert both_store_canonical_duplicate_exists(uid=LEGACY_UID, legacy_row=rows[0], db_client=db)
+
+
+def test_semantic_duplicate_skipped_in_run(_trusted_account):
+    conversation_id = "conv-semantic-dup"
+    content = "User prefers tea over coffee"
+    rows = [
+        _legacy_row(legacy_id="leg-sem-1", content=content, conversation_id=conversation_id),
+        _legacy_row(legacy_id="leg-sem-2", content=content, conversation_id=conversation_id),
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+
+    assert report.completed is True
+    assert report.written_count == 1
+    assert report.skipped_semantic_duplicate == 1
+    item_paths = [path for path in db.docs if path.startswith(f"users/{LEGACY_UID}/memory_items/")]
+    assert len(item_paths) == 1
+
+
+def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    uid = "uid-orphan-override"
+    rows = [_legacy_row(legacy_id="leg-orphan", content="Orphan fact", conversation_id="conv-orphan")]
+    rows[0]["uid"] = uid
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
+    db = _canonical_db_with_control(uid)
+
+    report = backfill_user(
+        uid,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+        allow_admin_override=True,
+        acknowledge_non_canonical_uid=False,
+    )
+
+    assert report.cohort_gated is True
+    assert report.written_count == 0
+    assert "acknowledge_non_canonical_uid" in report.errors[0]
+    assert not any(path.startswith(f"users/{uid}/memory_items/") for path in db.docs)
+
+    with pytest.raises(BackfillCohortGateError, match="acknowledge_non_canonical_uid"):
+        assert_canonical_cohort_for_backfill(uid, allow_admin_override=True, acknowledge_non_canonical_uid=False)
+
+
+def test_admin_override_with_ack_writes_and_logs(_trusted_account, monkeypatch, caplog):
+    import logging
+
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    uid = "uid-orphan-override-ok"
+    rows = [_legacy_row(legacy_id="leg-orphan-ok", content="Orphan ok fact", conversation_id="conv-orphan-ok")]
+    rows[0]["uid"] = uid
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows, uid=uid)
+    db = _canonical_db_with_control(uid)
+    _seed_legacy_evidence(db, rows)
+
+    with caplog.at_level(logging.WARNING, logger="utils.memory.legacy_backfill"):
+        report = backfill_user(
+            uid,
+            db_client=db,
+            get_non_filtered_memories_fn=get_non_filtered_fn,
+            allow_admin_override=True,
+            acknowledge_non_canonical_uid=True,
+            operator_context="test-operator",
+        )
+
+    assert report.cohort_gated is False
+    assert report.completed is True
+    assert report.written_count == 1
+    assert any("legacy backfill cohort override" in record.message for record in caplog.records)
+    assert any(getattr(record, "uid", None) == uid for record in caplog.records)
 
 
 def test_dedup_prevents_doubles_when_live_written(monkeypatch, _trusted_account):
@@ -508,21 +680,39 @@ def test_pagination_regression_would_miss_page_two_with_old_post_filtered_paging
     assert len(new_rows) == 3
 
 
-def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account):
+def test_legacy_read_path_unaffected_for_non_canonical_uid(_trusted_account, monkeypatch):
+    non_canonical_uid = "uid-non-canonical"
     rows = [_legacy_row(legacy_id="leg-legacy-read", content="Legacy only", conversation_id="conv-lr")]
     get_non_filtered_fn, _ = _make_non_filtered_store(rows)
     db = _canonical_db_with_control(LEGACY_UID)
     _seed_legacy_evidence(db, rows)
+    _seed_legacy_memories_in_db(db, LEGACY_UID, rows)
+    legacy_before = _legacy_memory_docs_snapshot(db, LEGACY_UID)
+
     backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
 
-    assert resolve_memory_system("uid-non-canonical", db_client=db) == MemorySystem.LEGACY
+    assert _legacy_memory_docs_snapshot(db, LEGACY_UID) == legacy_before
+    assert resolve_memory_system(non_canonical_uid, db_client=db) == MemorySystem.LEGACY
+
+    non_canonical_rows = [
+        {
+            **_legacy_row(legacy_id="leg-nc-1", content="Non-canonical legacy", conversation_id="conv-nc"),
+            "uid": non_canonical_uid,
+        }
+    ]
+    _seed_legacy_memories_in_db(db, non_canonical_uid, non_canonical_rows)
+    non_canonical_before = _legacy_memory_docs_snapshot(db, non_canonical_uid)
+
+    monkeypatch.setattr(
+        "utils.memory.memory_service.memories_db.get_memories",
+        lambda uid, limit, offset=0, **kwargs: _get_memories_from_fake_db(db, uid, limit=limit, offset=offset),
+    )
     service = MemoryService(db_client=db)
+    legacy_memories = service.read(non_canonical_uid, limit=10)
 
-    with patch("utils.memory.memory_service.memories_db.get_memories", return_value=rows):
-        legacy_memories = service.read("uid-non-canonical", limit=10)
-
+    assert _legacy_memory_docs_snapshot(db, non_canonical_uid) == non_canonical_before
     assert len(legacy_memories) == 1
-    assert legacy_memories[0].content == "Legacy only"
+    assert legacy_memories[0].content == "Non-canonical legacy"
 
 
 def test_module_never_imports_legacy_mutators():
