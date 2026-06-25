@@ -156,6 +156,10 @@ backend/scripts/rag/visualizations/
 backend/google-credentials.json
 backend/google-credentials-dev.json
 
+# Auto-router v1 deployment data (real benchmarks). The committed
+# benchmarks.example.json template is the source of truth for schema/format.
+backend/utils/auto_router/benchmarks.json
+
 startup-script.sh
 /app/lib/firebase_options_dev.dart
 /app/lib/firebase_options_prod.dart
