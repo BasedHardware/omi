@@ -203,12 +203,70 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(second.session.sessionId).not.toBe(first.session.sessionId);
     expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
     expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'", ["pi-mono"]).count).toBe(1);
-    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1").payload_json)).toMatchObject({
+    const staleEvent = store.getRow("SELECT session_id, run_id, attempt_id, payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1");
+    expect(staleEvent).toMatchObject({
+      session_id: first.session.sessionId,
+      run_id: null,
+      attempt_id: null,
+    });
+    expect(JSON.parse(staleEvent.payload_json)).toMatchObject({
       bindingId: firstBinding.binding_id,
       reason: "pinned_worker_reassigned",
     });
     expect(adapter.opened).toHaveLength(2);
     expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
+  it("releases an idle stale pi-mono pin before replacing an invalid latest binding", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [first.session.sessionId, "pi-mono"],
+    );
+    const second = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-invalid-target",
+      externalRefId: "task-invalid-target",
+    });
+    const secondBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [second.session.sessionId, "pi-mono"],
+    );
+    store.execute("UPDATE adapter_bindings SET status = 'invalid', invalidated_at_ms = ?, updated_at_ms = ? WHERE binding_id = ?", [
+      Date.now(),
+      Date.now(),
+      secondBinding.binding_id,
+    ]);
+
+    const third = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-invalid-target-retry",
+      externalRefId: "task-invalid-target",
+    });
+
+    expect(third.run.status).toBe("succeeded");
+    expect(third.session.sessionId).toBe(second.session.sessionId);
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'", ["pi-mono"]).count).toBe(1);
+    expect(adapter.opened).toHaveLength(3);
+    expect(adapter.executed).toHaveLength(3);
     store.close();
   });
 

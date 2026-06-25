@@ -395,14 +395,12 @@ export class AgentRuntimeKernel {
       let handle: AdapterBindingHandle;
       try {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
-          const existingBinding =
-            this.readActiveBinding(accepted.session.sessionId, adapterId) ??
-            this.readLatestBinding(accepted.session.sessionId, adapterId);
+          const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
           if (!bindingQueueKey) {
             const evictedBindingId = pool.releaseIdlePinnedBinding();
             if (evictedBindingId) {
-              this.markBindingStaleById(evictedBindingId, attempt, "pinned_worker_reassigned");
+              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
             }
           }
           return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
@@ -1432,8 +1430,22 @@ export class AgentRuntimeKernel {
     });
   }
 
-  private markBindingStaleById(bindingId: string, attempt: RunAttempt, reason: string): void {
-    this.markBindingStale(this.readBinding(bindingId), attempt, reason);
+  private markEvictedBindingStale(bindingId: string, reason: string): void {
+    const binding = this.readBinding(bindingId);
+    this.withTransaction(() => {
+      this.updateBinding(binding.bindingId, {
+        status: "stale",
+        invalidatedAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
+      this.appendEvent({
+        sessionId: binding.sessionId,
+        runId: null,
+        attemptId: null,
+        type: "binding.stale",
+        payload: { bindingId: binding.bindingId, reason },
+      });
+    });
   }
 
   private persistArtifactInTransaction(input: PersistArtifactInput): AgentArtifact {
