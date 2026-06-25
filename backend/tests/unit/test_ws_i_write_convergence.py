@@ -83,6 +83,7 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, So
 from models.memories import Memory, MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from database.memory_apply_store import apply_long_term_patch_firestore
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
     read_canonical_memories,
@@ -267,54 +268,57 @@ def test_arbitrary_uid_defaults_to_legacy():
 
 
 def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
+    """Routing + real apply: memory_items doc is written via apply, not legacy save."""
     uid = "uid-canonical"
     conversation_id = "conv-1"
     content = "User enjoys hiking"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
+    evidence_id = payload["evidence"][0]["evidence_id"]
     db = _FakeDb(
         {
             f"users/{uid}/memory_control/state": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
-            f"users/{uid}/memory_evidence/ev_ws_i_1": MemoryEvidence(
-                evidence_id="ev_ws_i_1",
-                source_type="conversation",
-                source_id=conversation_id,
-                source_version="v1",
-                artifact_preservation=ArtifactPreservationState.preserved,
-            ).model_dump(mode="json"),
         }
     )
 
-    committed_item = _fresh_short_term_item(
-        uid=uid,
-        memory_id=extraction_memory_id(uid=uid, source_id=conversation_id, content=content),
-        conversation_id=conversation_id,
-        content=content,
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
     )
-    apply_result = SimpleNamespace(
-        status=ApplyStatus.committed,
-        memory_items=[committed_item],
-        operation=SimpleNamespace(committed_memory_item_ids=[committed_item.memory_id]),
-        reason=None,
-    )
-
     _install_heavy_import_stubs()
     legacy_save = sys.modules["database.memories"].save_memories
     legacy_save.reset_mock()
 
     with patch(
-        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore", return_value=apply_result
+        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
+        wraps=apply_long_term_patch_firestore,
     ) as apply_mock:
-        memory_id = write_canonical_extraction_memory(
-            uid, _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content), db_client=db
-        )
+        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
 
-    assert memory_id == committed_item.memory_id
+    assert returned_id == memory_id
     apply_mock.assert_called_once()
     legacy_save.assert_not_called()
-    assert committed_item.tier == MemoryTier.short_term
-    assert committed_item.status == MemoryItemStatus.active
-    assert committed_item.processing_state == ProcessingState.processed
+
+    stored_path = f"users/{uid}/memory_items/{memory_id}"
+    assert stored_path in db.docs
+    stored = db.docs[stored_path]
+    assert stored["content"] == content
+    assert stored["tier"] == MemoryTier.short_term.value
+    assert stored["status"] == MemoryItemStatus.active.value
+    assert stored["processing_state"] == ProcessingState.processed.value
+    assert stored["evidence"][0]["evidence_id"] == evidence_id
+    assert stored["evidence"][0]["source_id"] == conversation_id
+
+    evidence_path = f"users/{uid}/memory_evidence/{evidence_id}"
+    assert evidence_path in db.docs
+    assert db.docs[evidence_path]["source_id"] == conversation_id
+
+    memories = read_canonical_memories(uid, db_client=db)
+    assert len(memories) == 1
+    assert memories[0].id == memory_id
+    assert memories[0].content == content
 
 
 def test_canonical_read_returns_default_visible_items():
