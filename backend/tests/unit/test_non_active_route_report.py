@@ -14,43 +14,7 @@ from database.memory_non_active_routes import NonActiveRoute
 from utils.memory.non_active_route_report import fetch_non_active_route_audit_report
 
 
-class _FakeSnapshot:
-    def __init__(self, data):
-        self._data = data
-
-    def to_dict(self):
-        return self._data
-
-
-class _FakeQuery:
-    def __init__(self, docs, db, filters=None):
-        self._docs = docs
-        self._db = db
-        self._filters = filters or []
-
-    def where(self, field, op, value):
-        self._db.where_calls.append((field, op, value))
-        return _FakeQuery(self._docs, self._db, self._filters + [(field, op, value)])
-
-    def stream(self):
-        self._db.streamed = True
-        docs = list(self._docs)
-        for field, op, value in self._filters:
-            assert op == "=="
-            docs = [doc for doc in docs if doc.get(field) == value]
-        return [_FakeSnapshot(doc) for doc in docs]
-
-
-class _FakeDb:
-    def __init__(self, docs):
-        self.docs = docs
-        self.collection_paths = []
-        self.where_calls = []
-        self.streamed = False
-
-    def collection(self, path):
-        self.collection_paths.append(path)
-        return _FakeQuery(self.docs, self)
+from tests.unit.fixtures.non_active_firestore import QueryFakeDb as _FakeDb
 
 
 def _route_doc(route, *, source_id=None, run_id="run-1"):
