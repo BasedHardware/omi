@@ -194,8 +194,14 @@ async def create_memory(
     if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
         try:
             memory_service = MemoryService(db_client=db_client)
-            committed_id = memory_service.write(uid, payload)
-            item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db_client)
+            committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
+            item = await run_blocking(
+                db_executor,
+                _read_canonical_memory_item,
+                uid,
+                committed_id or memory_db.id,
+                db_client=db_client,
+            )
             if item is not None:
                 return memory_item_to_memorydb(item)
             return memory_db
@@ -267,11 +273,20 @@ async def create_memories_batch(
     db_client = getattr(db_client_module, 'db', None)
     if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
         memory_service = MemoryService(db_client=db_client)
+        committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            memory_service.write(uid, memory_db.dict())
+            committed_id = await run_blocking(db_executor, memory_service.write, uid, memory_db.dict())
+            committed_ids.append(committed_id or memory_db.id)
         if has_public:
             submit_with_context(postprocess_executor, update_personas_async, uid)
-        return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
+        server_memories: List[MemoryDB] = []
+        for memory_id in committed_ids:
+            item = await run_blocking(db_executor, _read_canonical_memory_item, uid, memory_id, db_client=db_client)
+            if item is not None:
+                server_memories.append(memory_item_to_memorydb(item))
+            else:
+                server_memories.append(next(m for m in memory_dbs if m.id == memory_id))
+        return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
     await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
 
@@ -427,7 +442,11 @@ def review_memory(
     value: bool,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
     _validate_memory(uid, memory_id)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).review(uid, memory_id, value)
+        return {'status': 'ok'}
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
