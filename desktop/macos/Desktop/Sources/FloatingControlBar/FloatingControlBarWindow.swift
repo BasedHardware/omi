@@ -1032,7 +1032,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
         if notchModeEnabled {
-            resizeAnchored(to: notchSize(active: expanded), makeResizable: false, animated: true, anchorTop: true)
+            let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
+            resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
             return
         }
         let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
