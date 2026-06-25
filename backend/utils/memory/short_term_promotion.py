@@ -3,6 +3,11 @@
 Promotion policy (Q3): batch-or-daily — promote when promotable count reaches the batch
 threshold **or** ≥24h since ``last_promotion_run_at``, whichever comes first.
 
+On a user's **first** promotion evaluation (``last_promotion_run_at`` unset), only the
+batch threshold may fire — not the daily cadence. That prevents the first hourly cron
+tick after whitelist from mass-promoting every short-term item. A successful promotion
+run stamps ``last_promotion_run_at``; daily eligibility applies on subsequent ticks.
+
 Promotability rule (canonical cohort only):
 - ``tier=short_term``, ``status=active``, ``processing_state=processed``
 - ``expires_at`` is in the future (not TTL-expired)
@@ -110,15 +115,19 @@ def promotion_trigger_reason(
     now: datetime,
     batch_threshold: Optional[int] = None,
 ) -> Optional[str]:
-    """Return trigger reason when batch-or-daily fires; None when neither condition met."""
+    """Return trigger reason when batch-or-daily fires; None when neither condition met.
+
+    When ``last_promotion_run_at`` is unset (first evaluation for this user), only the
+    batch threshold can trigger promotion — daily cadence requires a prior successful run.
+    """
     if promotable_count <= 0:
         return None
     threshold = batch_threshold if batch_threshold is not None else promotion_batch_threshold()
     if promotable_count >= threshold:
         return "batch_threshold"
-    current_time = _coerce_aware_utc(now)
     if last_promotion_run_at is None:
-        return "daily_elapsed"
+        return None
+    current_time = _coerce_aware_utc(now)
     if current_time - _coerce_aware_utc(last_promotion_run_at) >= PROMOTION_DAILY_INTERVAL:
         return "daily_elapsed"
     return None
@@ -180,10 +189,14 @@ def promote_short_term_item_via_apply(
     trigger_reason: str,
     now: datetime,
     db_client=None,
-) -> MemoryItem:
-    """Promote one short_term item to long_term through the authoritative apply path."""
+) -> tuple[MemoryItem, bool]:
+    """Promote one short_term item to long_term through the authoritative apply path.
+
+    Returns ``(promoted_item, vector_sync_failed)``. Firestore promotion commits even when
+    vector sync fails; the bool is True when Pinecone upsert hard-failed.
+    """
     if item.tier == MemoryLayer.long_term:
-        return item
+        return item, False
     if not is_promotable_short_term_item(item, now=now):
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
@@ -239,8 +252,14 @@ def promote_short_term_item_via_apply(
     if promoted.tier != MemoryLayer.long_term:
         raise RuntimeError(f"promotion did not land long_term for {item.memory_id}")
     sync_atom_keyword_index_for_item(promoted, db_client=client)
-    sync_canonical_memory_vector(promoted)
-    return promoted
+    vector_sync_failed = False
+
+    def _record_vector_sync_failure() -> None:
+        nonlocal vector_sync_failed
+        vector_sync_failed = True
+
+    sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
+    return promoted, vector_sync_failed
 
 
 def _audit_promotion_transition(
@@ -268,6 +287,7 @@ class ShortTermPromotionReport:
     promotable_count: int = 0
     promoted_memory_ids: List[str] = field(default_factory=list)
     transition_records: List[ShortTermLifecycleTransitionRecord] = field(default_factory=list)
+    vector_sync_failures: int = 0
     last_promotion_run_at: Optional[datetime] = None
 
     @property
@@ -332,7 +352,7 @@ def run_canonical_short_term_promotion(
 
     for item in promotable:
         control = _read_control_state(uid, db_client=client)
-        promoted = promote_short_term_item_via_apply(
+        promoted, vector_sync_failed = promote_short_term_item_via_apply(
             uid,
             item,
             control=control,
@@ -341,6 +361,8 @@ def run_canonical_short_term_promotion(
             now=current_time,
             db_client=client,
         )
+        if vector_sync_failed:
+            report.vector_sync_failures += 1
         report.promoted_memory_ids.append(promoted.memory_id)
         report.transition_records.append(
             _audit_promotion_transition(item, store=transition_store, run_id=run_id, now=current_time)
