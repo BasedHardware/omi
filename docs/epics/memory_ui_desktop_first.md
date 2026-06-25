@@ -16,7 +16,7 @@
 
 ## Oracle status for this slice
 
-A follow-up compact no-attachment Oracle run succeeded after the earlier browser/upload stalls. See `docs/epics/memory_ui_desktop_foundation_oracle_review.md`.
+A follow-up compact no-attachment Oracle run succeeded after the earlier browser/upload stalls. The ephemeral desktop-foundation Oracle review artifact was removed during PR slim-down; the verdict summary is below.
 
 Oracle verdict for commit `a02ac1459`: **NO-GO as currently described**, while affirming that the architecture and UX direction are correct. The required local fixes before continuing are scope-aware reconciliation, scoped bulk operations, fail-closed malformed-tier handling, stale async/undo hardening, and real macOS build/test proof.
 
