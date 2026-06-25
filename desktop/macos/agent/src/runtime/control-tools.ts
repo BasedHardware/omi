@@ -166,7 +166,7 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
   return {
     requestKey: controlRequestKey(input),
-    activeOwnerId: fallbackOwnerId || "desktop-local-user",
+    activeOwnerId: ownerGuard || fallbackOwnerId || "desktop-local-user",
     ownerGuard,
   };
 }

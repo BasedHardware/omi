@@ -166,7 +166,7 @@ describe("agent control tools", () => {
     ).toBe("owner-b");
   });
 
-  it("resolves direct control request context without elevating envelope owner guard", () => {
+  it("resolves direct control request context from the envelope owner before mutable fallback", () => {
     const resolved = resolveControlRequestContext({
       ownerGuard: " owner-from-envelope ",
       fallbackOwnerId: "fallback-owner",
@@ -176,11 +176,45 @@ describe("agent control tools", () => {
 
     expect(resolved).toEqual({
       requestKey: JSON.stringify(["client-a", "request-a"]),
-      activeOwnerId: "fallback-owner",
+      activeOwnerId: "owner-from-envelope",
       ownerGuard: "owner-from-envelope",
     });
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
+  });
+
+  it("allows cold direct control calls to use the signed-in envelope owner", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
+    await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "desktop-local-user",
+      externalRefId: "local-task",
+      requestId: "local-run",
+    });
+
+    const resolved = resolveControlRequestContext({
+      ownerGuard: "signed-in-owner",
+      fallbackOwnerId: "desktop-local-user",
+      requestId: "cold-direct-request",
+      clientId: "swift-client",
+    });
+    const controlInput = withMergedOwnerGuard({}, resolved.ownerGuard, resolved.activeOwnerId);
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(
+        {
+          kernel,
+          getOwnerId: () => resolved.activeOwnerId,
+        },
+        "list_agent_sessions",
+        controlInput,
+      ),
+    );
+
+    expect(listed.ok).toBe(true);
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0].session.ownerId).toBe("signed-in-owner");
+    store.close();
   });
 
   it("rejects blank direct control envelope owners before global fallback", () => {
