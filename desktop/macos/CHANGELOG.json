@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Connect your AI: 6 agents (Claude, ChatGPT, OpenClaw, Hermes, Ask Omi, More), a simple Claude/ChatGPT picker (Claude Code/cloud/both), and one-click OpenClaw + Hermes memory-bank setup"
+  ],
   "releases": [
     {
       "version": "0.11.529",
