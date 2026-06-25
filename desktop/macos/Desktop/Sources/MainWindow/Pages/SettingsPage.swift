@@ -2490,7 +2490,9 @@ struct SettingsContentView: View {
             .toggleStyle(.switch)
             .tint(OmiColors.purplePrimary)
             .onChange(of: shortcutSettings.notchModeEnabled) { _, _ in
-              FloatingControlBarManager.shared.show()
+              if FloatingControlBarManager.shared.isEnabled {
+                FloatingControlBarManager.shared.show()
+              }
             }
         }
       }
