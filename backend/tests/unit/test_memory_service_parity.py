@@ -86,14 +86,14 @@ def _load_memory_service(monkeypatch):
         ensure_package_path("utils.memory", os.path.join(_BACKEND_DIR, "utils", "memory"))
         install_database_client_stub()
         _purge_stub_memory_modules()
+        sys.modules.pop("database.memories", None)
+        sys.modules.pop("database.vector_db", None)
+        sys.modules.pop("utils.memory.memory_service", None)
 
         import database.memories as memories_db_mod
         import database.vector_db as vector_db_mod
         import utils.memory.memory_service as service_mod
 
-        importlib.reload(memories_db_mod)
-        importlib.reload(vector_db_mod)
-        importlib.reload(service_mod)
         import database
 
         database.memories = memories_db_mod
