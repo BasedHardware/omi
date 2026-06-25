@@ -47,38 +47,50 @@ struct ConnectDestinationSheet: View {
   var body: some View {
     if members.count > 1 {
       VStack(spacing: 0) {
-        Picker("", selection: $active) {
-          ForEach(members, id: \.self) { d in Text(segmentLabel(d)).tag(d) }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
+        // The connect content for the chosen option fills the sheet…
+        MemoryExportDestinationSheet(destination: active, statuses: $statuses, onDismiss: onDismiss)
+          .id(active)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        HStack(spacing: 8) {
-          Button("Connect both") { connectBoth() }
-            .buttonStyle(.plain)
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.purplePrimary)
+        Divider().background(OmiColors.backgroundTertiary)
+
+        // …and both options stay visible at the bottom to switch or do both.
+        VStack(spacing: 6) {
+          HStack(spacing: 8) {
+            ForEach(members, id: \.self) { d in
+              bottomOption(segmentLabel(d), selected: d == active) { active = d }
+            }
+            bottomOption("Both", selected: false) { connectBoth() }
+          }
           if let bothStatus {
             Text(bothStatus)
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.success)
           }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24)
-        .padding(.top, 8)
-
-        // Re-create the inner sheet when the selection flips so its per-client
-        // model (key, steps, command) refreshes.
-        MemoryExportDestinationSheet(destination: active, statuses: $statuses, onDismiss: onDismiss)
-          .id(active)
+        .padding(14)
       }
     } else {
       MemoryExportDestinationSheet(
         destination: destination, statuses: $statuses, onDismiss: onDismiss)
     }
+  }
+
+  private func bottomOption(_ label: String, selected: Bool, action: @escaping () -> Void)
+    -> some View
+  {
+    Button(action: action) {
+      Text(label)
+        .scaledFont(size: 13, weight: .semibold)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 9)
+        .foregroundColor(selected ? Color.black : OmiColors.textPrimary)
+        .background(
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(selected ? Color.white : OmiColors.backgroundTertiary)
+        )
+    }
+    .buttonStyle(.plain)
   }
 
   private func connectBoth() {
