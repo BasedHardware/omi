@@ -17,8 +17,18 @@ from utils.auto_router.task_registry import TaskRegistry
 
 
 @pytest.fixture(autouse=True)
-def _clear_cache_between_tests():
-    """Each test gets a fresh registry cache (so test order doesn't matter)."""
+def _clear_cache_between_tests(monkeypatch):
+    """Each test gets a fresh registry cache (so test order doesn't matter).
+
+    Also forces the prefs store to the in-memory backend so tests don't
+    require a live Firestore connection (and so each test starts with
+    a clean prefs state).
+    """
+    monkeypatch.setenv("AUTO_ROUTER_PREFS_BACKEND", "memory")
+    from utils.auto_router.prefs_store_factory import reset_user_prefs_store_for_testing
+
+    reset_user_prefs_store_for_testing()
+
     reset_registry_cache_for_testing()
     from routers.auto_router import reset_metrics_collector_for_testing
 
@@ -26,6 +36,7 @@ def _clear_cache_between_tests():
     yield
     reset_registry_cache_for_testing()
     reset_metrics_collector_for_testing()
+    reset_user_prefs_store_for_testing()
 
 
 @pytest.fixture

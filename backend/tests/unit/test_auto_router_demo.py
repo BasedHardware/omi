@@ -26,7 +26,14 @@ def demo_output() -> str:
     result = subprocess.run(
         DEMO_CMD,
         cwd=str(REPO_ROOT / "backend"),
-        env={**__import__("os").environ, "PYENV_VERSION": "3.12.8"},
+        env={
+            **__import__("os").environ,
+            "PYENV_VERSION": "3.12.8",
+            # Use the in-memory prefs store in the demo subprocess so tests
+            # don't require a live Firestore connection. The AA_API_KEY is
+            # also unset (falls back to example benchmarks).
+            "AUTO_ROUTER_PREFS_BACKEND": "memory",
+        },
         capture_output=True,
         text=True,
         timeout=30,

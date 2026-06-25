@@ -47,9 +47,9 @@ from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
 from utils.auto_router.task_registry import TaskRegistry, UnknownTaskError
 from utils.auto_router.user_prefs import UserPrefs
-from utils.auto_router.user_prefs_store import (
-    get_user_prefs_store,
-    reset_user_prefs_store_for_testing,
+from utils.auto_router.prefs_store_factory import (
+    get_user_prefs_store as _factory_get_user_prefs_store,
+    reset_user_prefs_store_for_testing as _factory_reset_user_prefs_store,
 )
 from utils.auto_router.user_prefs import TaskWeights
 from utils.executors import run_blocking
@@ -227,7 +227,7 @@ async def auto_router_pick(
         effective_weights = override_weights
         weights_source = "query_param"
     else:
-        store = get_user_prefs_store()
+        store = _factory_get_user_prefs_store()
         stored = store.get(uid)
         defaults = {
             task_spec.name: TaskWeights(
@@ -369,7 +369,7 @@ async def auto_router_get_prefs(uid: str = Depends(auth_dependency)):
 
     Requires authentication (matches `/pick`).
     """
-    store = get_user_prefs_store()
+    store = _factory_get_user_prefs_store()
     entry = store.get(uid)
     updated_at_iso = (
         datetime.fromtimestamp(entry.updated_at, tz=timezone.utc).isoformat().replace("+00:00", "Z")
@@ -438,7 +438,7 @@ async def auto_router_set_prefs(
         )
 
     # Persist.
-    store = get_user_prefs_store()
+    store = _factory_get_user_prefs_store()
     entry = store.set(uid, prefs)
     return {
         "uid": uid,
@@ -526,7 +526,7 @@ def reset_metrics_collector_for_testing() -> None:
 
 def reset_user_prefs_store_for_endpoint_testing() -> None:
     """Reset the user prefs store singleton. Test-only helper."""
-    reset_user_prefs_store_for_testing()
+    _factory_reset_user_prefs_store()
 
 
 def reset_benchmarks_fetcher_for_endpoint_testing() -> None:
