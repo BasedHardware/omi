@@ -37,6 +37,22 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -> dict:
+    """Preserve legacy success shape unless there is partial-outcome detail.
+
+    Mobile clients historically treat batch endpoints as boolean success paths,
+    and the hermetic e2e harness pins that happy-path contract. Missing/no-op
+    details are only emitted when they carry actionable information.
+    """
+    body = {"status": "ok", "updated_count": result.updated_count}
+    locked_ids = locked_ids or set()
+    if result.missing_ids or result.noop_ids or locked_ids:
+        body.update(result.model())
+        if locked_ids:
+            body["locked_ids"] = sorted(locked_ids)
+    return body
+
+
 # Request models specific to action items
 class CreateActionItemRequest(BaseModel):
     description: str = Field(description="The action item description")
@@ -107,7 +123,7 @@ class BatchUpdateActionItemsRequest(BaseModel):
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
     result = action_items_db.batch_update_action_items(uid, request.items)
-    return {"status": "ok", **result.model()}
+    return _batch_mutation_response(result)
 
 
 # *****************************
@@ -191,7 +207,7 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
-    return {"status": "ok", **result.model(), "locked_ids": sorted(locked_ids)}
+    return _batch_mutation_response(result, locked_ids=locked_ids)
 
 
 # *****************************
