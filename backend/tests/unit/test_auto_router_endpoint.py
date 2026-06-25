@@ -813,3 +813,95 @@ class TestPickWeightsQueryParam:
         r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
         assert r.status_code == 400
         assert r.json()["detail"]["code"] == "invalid_weights"
+
+
+# ---------------------------------------------------------------------------
+# AC: POST /v1/auto-router/refresh-benchmarks (v3, admin)
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshBenchmarksEndpoint:
+    """POST /refresh-benchmarks requires X-Admin-Key, forces a refresh."""
+
+    def test_missing_admin_key_returns_503(self, client, monkeypatch):
+        # No ADMIN_KEY env var → admin disabled
+        monkeypatch.delenv("ADMIN_KEY", raising=False)
+        r = client.post("/v1/auto-router/refresh-benchmarks")
+        assert r.status_code == 503
+        assert r.json()["detail"]["code"] == "admin_not_configured"
+
+    def test_missing_header_returns_401(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        r = client.post("/v1/auto-router/refresh-benchmarks")
+        assert r.status_code == 401
+        assert r.json()["detail"]["code"] == "invalid_admin_key"
+
+    def test_wrong_header_returns_401(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "wrong-key"},
+        )
+        assert r.status_code == 401
+
+    def test_correct_header_returns_200(self, client, monkeypatch, tmp_path):
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        # No AA_API_KEY → fetcher falls back to example
+        monkeypatch.delenv("AA_API_KEY", raising=False)
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "secret-123"},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "ok"
+        assert body["source"] == "example"  # no AA key → example
+        assert body["task_count"] == 5
+        assert body["model_count"] > 0
+
+    def test_whitespace_header_returns_401(self, client, monkeypatch):
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "   "},
+        )
+        # Whitespace-only is rejected
+        assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# AC: /metrics includes benchmarks_source + benchmarks_last_refresh (v3)
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsBenchmarksSource:
+    """/metrics reports where the benchmarks came from."""
+
+    def test_metrics_includes_benchmarks_source_field(self, client):
+        r = client.get("/v1/auto-router/metrics")
+        assert r.status_code == 200
+        body = r.json()
+        assert "benchmarks_source" in body
+        assert body["benchmarks_source"] in ("aa", "example")
+
+    def test_metrics_includes_benchmarks_last_refresh_field(self, client):
+        r = client.get("/v1/auto-router/metrics")
+        body = r.json()
+        assert "benchmarks_last_refresh" in body
+        # Either None (no cache file) or a string (ISO 8601)
+        assert body["benchmarks_last_refresh"] is None or isinstance(body["benchmarks_last_refresh"], str)
+
+    def test_metrics_source_is_example_when_no_cache_file(self, client, monkeypatch, tmp_path):
+        # Point the cache at a fresh tmp path that doesn't exist.
+        monkeypatch.delenv("AA_API_KEY", raising=False)
+        nonexistent = tmp_path / "definitely-no-such-cache.json"
+        assert not nonexistent.exists()
+        monkeypatch.setenv("AA_CACHE_PATH", str(nonexistent))
+        # Reset fetcher so it picks up the new env var
+        from routers.auto_router import reset_benchmarks_fetcher_for_endpoint_testing
+
+        reset_benchmarks_fetcher_for_endpoint_testing()
+        r = client.get("/v1/auto-router/metrics")
+        body = r.json()
+        assert body["benchmarks_source"] == "example"
+        assert body["benchmarks_last_refresh"] is None

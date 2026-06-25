@@ -105,8 +105,8 @@ class BenchmarksFetcher:
     are exposed via `fetch_with_metadata()` for observability.
     """
 
-    DEFAULT_CACHE_PATH = "backend/utils/auto_router/benchmarks.json"
-    DEFAULT_EXAMPLE_PATH = "backend/utils/auto_router/benchmarks.example.json"
+    DEFAULT_CACHE_PATH = "benchmarks.json"
+    DEFAULT_EXAMPLE_PATH = "benchmarks.example.json"
     CACHE_TTL_SECONDS = 24 * 60 * 60  # 24h, matches daily_refresh.py
 
     def __init__(
@@ -123,12 +123,16 @@ class BenchmarksFetcher:
           example_path: fallback file (default: benchmarks.example.json)
           http_client: httpx client (default: shared web_fetch_client)
           clock: time function (default: time.time); for cache TTL checks
+
+        Default paths are resolved relative to this module's directory
+        (so they work regardless of cwd), not the process cwd.
         """
         import pathlib
 
+        module_dir = pathlib.Path(__file__).resolve().parent
         env_cache = os.environ.get(CACHE_FILE_ENV_VAR)
-        self._cache_path = pathlib.Path(cache_path or env_cache or self.DEFAULT_CACHE_PATH)
-        self._example_path = pathlib.Path(example_path or self.DEFAULT_EXAMPLE_PATH)
+        self._cache_path = pathlib.Path(cache_path or env_cache or (module_dir / self.DEFAULT_CACHE_PATH))
+        self._example_path = pathlib.Path(example_path or (module_dir / self.DEFAULT_EXAMPLE_PATH))
         self._http_client = http_client  # None = use shared pool (production)
         self._clock = clock or time.time
 

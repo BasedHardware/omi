@@ -339,6 +339,12 @@ async def auto_router_metrics(uid: str = Depends(auth_dependency)):
     state = _metrics_collector.current_state(task_registry, model_registry, cache)
     state["pick_history"] = _metrics_collector.pick_history_snapshot()
     state["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    # v3: report where the benchmarks came from (AA live data vs example mock).
+    benchmarks_source, benchmarks_last_refresh = _benchmarks_source_and_refresh()
+    state["benchmarks_source"] = benchmarks_source
+    state["benchmarks_last_refresh"] = benchmarks_last_refresh
+
     return state
 
 
@@ -440,6 +446,69 @@ async def auto_router_set_prefs(
     }
 
 
+# ---------------------------------------------------------------------------
+# Admin endpoints (v3)
+# ---------------------------------------------------------------------------
+
+
+def _benchmarks_source_and_refresh() -> tuple:
+    """Return (source, refreshed_at_iso) for the metrics endpoint."""
+    from utils.auto_router.benchmarks_fetcher import get_benchmarks_fetcher
+
+    fetcher = get_benchmarks_fetcher()
+    cache_path = Path(fetcher._cache_path)  # noqa: SLF001
+    if cache_path.exists():
+        try:
+            mtime = cache_path.stat().st_mtime
+            refreshed_iso = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+            return "aa", refreshed_iso
+        except OSError:
+            pass
+    return "example", None
+
+
+@router.post("/v1/auto-router/refresh-benchmarks")
+async def auto_router_refresh_benchmarks(
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+):
+    """Force-refresh the benchmarks cache from Artificial Analysis."""
+    expected_key = os.environ.get("ADMIN_KEY", "").strip()
+    if not expected_key:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "admin_not_configured",
+                "message": "ADMIN_KEY env var is not set; admin endpoints are disabled",
+            },
+        )
+    if not x_admin_key or x_admin_key.strip() != expected_key:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "invalid_admin_key", "message": "X-Admin-Key header is missing or invalid"},
+        )
+
+    from utils.auto_router.benchmarks_fetcher import get_benchmarks_fetcher
+
+    fetcher = get_benchmarks_fetcher()
+    try:
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "refresh_failed", "message": f"benchmarks refresh failed: {type(e).__name__}: {e}"},
+        )
+
+    task_count = len(data.get("tasks", []))
+    model_count = sum(len(candidates) for candidates in data.get("models", {}).values())
+    return {
+        "status": "ok",
+        "source": source,
+        "fetched_at": refreshed_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "task_count": task_count,
+        "model_count": model_count,
+    }
+
+
 def reset_registry_cache_for_testing() -> None:
     """Clear the module-level registry cache. Test-only helper."""
     global _registry_cache
@@ -457,3 +526,10 @@ def reset_metrics_collector_for_testing() -> None:
 def reset_user_prefs_store_for_endpoint_testing() -> None:
     """Reset the user prefs store singleton. Test-only helper."""
     reset_user_prefs_store_for_testing()
+
+
+def reset_benchmarks_fetcher_for_endpoint_testing() -> None:
+    """Reset the benchmarks fetcher singleton. Test-only helper."""
+    from utils.auto_router.benchmarks_fetcher import reset_benchmarks_fetcher_for_testing
+
+    reset_benchmarks_fetcher_for_testing()
