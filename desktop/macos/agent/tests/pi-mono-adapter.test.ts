@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
@@ -115,6 +115,48 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+  });
+
+  it("clears stale relay context when direct prompt execution has no runtime context", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const attemptContext: AdapterAttemptContext = {
+      sessionId: "ses_runtime",
+      requestId: "request-runtime",
+      clientId: "client-runtime",
+      runId: "run_runtime",
+      attemptId: "att_runtime",
+      binding: {
+        bindingId: "bind-runtime",
+        sessionId: "ses_runtime",
+        adapterId: "pi-mono",
+        adapterNativeSessionId: "session-1",
+        resumeFidelity: "none",
+        cwd: "/tmp",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "act",
+    };
+
+    const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
+    expect(existsSync((adapter as any).contextFilePath)).toBe(true);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+
+    const directPrompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "direct" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("direct done"));
+    await expect(directPrompt).resolves.toMatchObject({ text: "direct done" });
   });
 
   it("rejects the previous prompt when a new generation supersedes it", async () => {

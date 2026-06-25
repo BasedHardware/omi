@@ -645,7 +645,10 @@ export class PiMonoAdapter implements HarnessAdapter {
   }
 
   private writeRelayContext(context: PiMonoRelayContext | undefined): void {
-    if (!context) return;
+    if (!context) {
+      rmSync(this.contextFilePath, { force: true });
+      return;
+    }
     mkdirSync(dirname(this.contextFilePath), { recursive: true });
     writeFileSync(this.contextFilePath, JSON.stringify({
       adapterId: "pi-mono",
