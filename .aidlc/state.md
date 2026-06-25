@@ -1,13 +1,16 @@
 # AIDLC State
 
-- **Phase**: shipping
-- **Branch**: feat/auto-router-v2
-- **PR**: (none — v1 PR #8343 still open separately; v2 will be a separate PR)
+- **Phase**: shipped
+- **Branch**: feat/auto-router-v2 (pushed)
+- **PR**: #8349 — https://github.com/BasedHardware/omi/pull/8349
 - **Worktree**: /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v2
-- **Last action**: 2026-06-25T15:45:00Z
-- **Next action**: PAUSE — awaiting user approval to push + open PR
+- **Last action**: 2026-06-25T15:55:00Z
+- **Next action**: WAIT — for v1 PR #8343 to merge first; GitHub branch-update bot will then offer to rebase this PR
 - **Notes**:
-  - **All 5 v2 tasks DONE; /test DONE; /review APPROVED**
+  - **All 5 v2 tasks DONE; /test DONE; /review APPROVED; /ship DONE**
+  - **PR #8349 opened** stacked on #8343 (description + comment both reference the dependency)
+  - v2 branch pushed to `choguun/omi` fork (BasedHardware fork only has main, no v1/v2 branches)
+  - Cross-fork stacking: both PRs target BasedHardware:main. GitHub's branch-update bot detects the v1 → v2 dependency once v1 merges.
   - **Test count:** 192 (168 backend + 24 desktop), all passing
   - **Review verdict:** READY (0 P0, 0 P1, 5 P2 advisory, none blocking)
   - **Branch state on top of feat/auto-router-v1 (9897edcb):**
@@ -19,9 +22,6 @@
     6. `e742442e1` — T-204 demo Demo 4
     7. `ca4071d6d` — T-205 doc updates
     8. `ac87215ab` — aidlc: phase=testing
-    9. `(?pending)` — review report
-  - **v1 PR #8343** still open with all 3 CI checks passing
-  - **v2 will be a separate PR** (or stacked on v1 if user wants)
-  - **No push, no PR until user explicit approval per AGENTS.md**
+    9. `71dbbc9ab` — review report
 
-_Updated: 2026-06-25T15:45:00Z_
+_Updated: 2026-06-25T15:55:00Z_
