@@ -52,7 +52,7 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
 
 def get_better_conversation_chunk(
     memory: Conversation, topics: List[str], context_data: dict, people: List[Person] = None, user_name: str = None
-) -> str:
+) -> None:
     logger.info(f'get_better_memory_chunk {memory.id} {topics}')
     conversation = TranscriptSegment.segments_as_string(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
