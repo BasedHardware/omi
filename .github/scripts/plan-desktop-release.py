@@ -39,7 +39,7 @@ def releasable_desktop_changes_since(ref: str | None) -> list[str]:
     if ref is None:
         output = git(["ls-files", "desktop/macos"])
     else:
-        output = git(["diff", "--name-only", "--diff-filter=ACM", f"{ref}..HEAD", "--", "desktop/macos"])
+        output = git(["diff", "--name-only", "--diff-filter=ACDMR", f"{ref}..HEAD", "--", "desktop/macos"])
 
     changes = []
     for path in output.splitlines():
@@ -70,8 +70,8 @@ def tag_age_seconds(tag: str) -> int | None:
         return None
 
 
-def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None]:
-    output = run(
+def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str | None, str | None]:
+    result = subprocess.run(
         [
             "gh",
             "api",
@@ -79,15 +79,22 @@ def codemagic_check_status(repository: str, sha: str) -> tuple[str | None, str |
             "--jq",
             f'.check_runs[] | select(.name=="{CODEMAGIC_CHECK_NAME}") | [.status, (.conclusion // "")] | @tsv',
         ],
-        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
+    if result.returncode != 0:
+        error = result.stderr.strip() or result.stdout.strip() or "unknown gh api error"
+        return None, None, error
+
+    output = result.stdout.strip()
     first = next((line for line in output.splitlines() if line.strip()), "")
     if not first:
-        return None, None
+        return None, None, None
     parts = first.split("\t", 1)
     status = parts[0] if parts else None
     conclusion = parts[1] if len(parts) > 1 else None
-    return status, conclusion
+    return status, conclusion, None
 
 
 def active_release_reason(repository: str, latest_tag: str | None) -> str | None:
@@ -98,7 +105,10 @@ def active_release_reason(repository: str, latest_tag: str | None) -> str | None
     if not sha:
         return None
 
-    status, conclusion = codemagic_check_status(repository, sha)
+    status, conclusion, error = codemagic_check_status(repository, sha)
+    if error:
+        return f"could not read GitHub check runs for {latest_tag}: {error}"
+
     if status and status != "completed":
         return f"{CODEMAGIC_CHECK_NAME} for {latest_tag} is {status}"
 
