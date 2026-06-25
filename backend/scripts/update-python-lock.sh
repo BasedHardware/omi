@@ -15,19 +15,32 @@ fi
 compile_lock() {
   local platform="$1"
   local output_file="$2"
+  shift 2
 
-  uv pip compile \
-    requirements.txt \
-    testing/e2e/requirements.txt \
-    --format pylock.toml \
-    --python "$PYTHON_VERSION" \
-    --python-platform "$platform" \
-    --output-file "$output_file" \
-    --custom-compile-command 'backend/scripts/update-python-lock.sh'
+  if [[ "${PYLOCK_UPGRADE:-0}" == "1" ]]; then
+    uv pip compile \
+      "$@" \
+      --upgrade \
+      --format pylock.toml \
+      --python "$PYTHON_VERSION" \
+      --python-platform "$platform" \
+      --output-file "$output_file" \
+      --custom-compile-command 'backend/scripts/update-python-lock.sh'
+  else
+    uv pip compile \
+      "$@" \
+      --format pylock.toml \
+      --python "$PYTHON_VERSION" \
+      --python-platform "$platform" \
+      --output-file "$output_file" \
+      --custom-compile-command 'backend/scripts/update-python-lock.sh'
+  fi
 }
 
 uv python install "$PYTHON_VERSION"
-compile_lock x86_64-unknown-linux-gnu pylock.toml
-compile_lock aarch64-apple-darwin pylock.macos.toml
-compile_lock x86_64-apple-darwin pylock.macos-x86_64.toml
-compile_lock x86_64-pc-windows-msvc pylock.windows.toml
+compile_lock x86_64-unknown-linux-gnu pylock.toml requirements.txt testing/e2e/requirements.txt
+compile_lock aarch64-apple-darwin pylock.macos.toml requirements.txt testing/e2e/requirements.txt
+compile_lock x86_64-apple-darwin pylock.macos-x86_64.toml requirements.txt testing/e2e/requirements.txt
+compile_lock x86_64-pc-windows-msvc pylock.windows.toml requirements.txt testing/e2e/requirements.txt
+compile_lock x86_64-unknown-linux-gnu pylock.runtime.toml requirements.txt
+compile_lock x86_64-unknown-linux-gnu pusher/pylock.toml pusher/requirements.txt
