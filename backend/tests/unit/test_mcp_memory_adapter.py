@@ -26,6 +26,12 @@ from utils.mcp_memories import (
 )
 
 
+def _legacy_branch_after_canonical(route_contents: str) -> str:
+    """Return the legacy rollout/guard branch after the canonical early-return block."""
+    marker = 'memory_rollout = read_mcp_default_memory_rollout'
+    return route_contents[route_contents.index(marker) :]
+
+
 def test_mcp_rest_search_route_wires_app_key_scope_grant_before_memory_vector_adapter_and_legacy_search():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
     contents = mcp_py.read_text(encoding='utf-8')
@@ -182,9 +188,9 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
 
     assert 'assert_legacy_memory_write_allowed_for_default_read_decision' in contents
 
-    create_route = contents[
-        contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')
-    ]
+    create_route = _legacy_branch_after_canonical(
+        contents[contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')]
+    )
     assert 'operation="mcp_memory_create"' in create_route
     assert create_route.index('read_mcp_default_memory_rollout(uid=uid, db_client=db)') < create_route.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
@@ -196,11 +202,13 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
         'memories_db.create_memory(uid, memory_db.model_dump())'
     )
 
-    delete_route = contents[
-        contents.index('@router.delete("/v1/mcp/memories/{memory_id}"') : contents.index(
-            '@router.patch("/v1/mcp/memories/{memory_id}"'
-        )
-    ]
+    delete_route = _legacy_branch_after_canonical(
+        contents[
+            contents.index('@router.delete("/v1/mcp/memories/{memory_id}"') : contents.index(
+                '@router.patch("/v1/mcp/memories/{memory_id}"'
+            )
+        ]
+    )
     assert 'operation="mcp_memory_delete"' in delete_route
     assert delete_route.index('read_mcp_default_memory_rollout(uid=uid, db_client=db)') < delete_route.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
@@ -212,9 +220,9 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
         'memories_db.delete_memory(uid, memory_id)'
     )
 
-    edit_route = contents[
-        contents.index('@router.patch("/v1/mcp/memories/{memory_id}"') : contents.index('class UserProfile')
-    ]
+    edit_route = _legacy_branch_after_canonical(
+        contents[contents.index('@router.patch("/v1/mcp/memories/{memory_id}"') : contents.index('class UserProfile')]
+    )
     assert 'operation="mcp_memory_edit"' in edit_route
     assert edit_route.index('read_mcp_default_memory_rollout(uid=uid, db_client=db)') < edit_route.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
@@ -233,9 +241,11 @@ def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
 
     assert 'assert_legacy_memory_write_allowed_for_default_read_decision' in contents
 
-    create_tool = contents[
-        contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
-    ]
+    create_tool = _legacy_branch_after_canonical(
+        contents[
+            contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
+        ]
+    )
     assert 'operation="mcp_tool_memory_create"' in create_tool
     assert create_tool.index('read_mcp_default_memory_rollout(uid=user_id, db_client=db)') < create_tool.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
@@ -247,9 +257,11 @@ def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
         'memories_db.create_memory(user_id, memory_db.model_dump())'
     )
 
-    delete_tool = contents[
-        contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
-    ]
+    delete_tool = _legacy_branch_after_canonical(
+        contents[
+            contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
+        ]
+    )
     assert 'operation="mcp_tool_memory_delete"' in delete_tool
     assert delete_tool.index('read_mcp_default_memory_rollout(uid=user_id, db_client=db)') < delete_tool.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
@@ -261,9 +273,13 @@ def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
         'memories_db.delete_memory(user_id, memory_id)'
     )
 
-    edit_tool = contents[
-        contents.index('elif tool_name == "edit_memory":') : contents.index('elif tool_name == "get_conversations":')
-    ]
+    edit_tool = _legacy_branch_after_canonical(
+        contents[
+            contents.index('elif tool_name == "edit_memory":') : contents.index(
+                'elif tool_name == "get_conversations":'
+            )
+        ]
+    )
     assert 'operation="mcp_tool_memory_edit"' in edit_tool
     assert edit_tool.index('read_mcp_default_memory_rollout(uid=user_id, db_client=db)') < edit_tool.index(
         'assert_legacy_memory_write_allowed_for_default_read_decision('
