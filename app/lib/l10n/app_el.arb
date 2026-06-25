@@ -3062,5 +3062,5 @@
     "captureModeLater": "Αργότερα",
     "captureModeLiveDescription": "Μεταγραφή σε πραγματικό χρόνο καθώς μιλάτε.",
     "captureModeLaterDescription": "Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία."
 }

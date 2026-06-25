@@ -3062,5 +3062,5 @@
     "captureModeLater": "Mai târziu",
     "captureModeLiveDescription": "Transcrie în timp real în timp ce vorbești.",
     "captureModeLaterDescription": "Salvează audio acum și transcrie oricând dorești.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție."
 }

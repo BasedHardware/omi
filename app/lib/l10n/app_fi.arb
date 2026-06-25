@@ -3062,5 +3062,5 @@
     "captureModeLater": "Myöhemmin",
     "captureModeLiveDescription": "Litteroi reaaliajassa puhuessasi.",
     "captureModeLaterDescription": "Tallenna ääni nyt ja litteroi milloin haluat.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Taustatila ei ole käytettävissä, koska yhteensopivaa laitetta ei ole yhdistetty. Yhdistä Omi-, OpenGlass- tai Friend Pendant -laite käyttääksesi tätä ominaisuutta."
 }

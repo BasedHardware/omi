@@ -3158,5 +3158,5 @@
     "captureModeLater": "Később",
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
     "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt."
 }

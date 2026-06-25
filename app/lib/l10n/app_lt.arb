@@ -3062,5 +3062,5 @@
     "captureModeLater": "Vėliau",
     "captureModeLiveDescription": "Transkribuokite tikruoju laiku, kol kalbate.",
     "captureModeLaterDescription": "Išsaugokite garsą dabar ir transkribuokite kada panorėję.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Foninis režimas nepasiekiamas, nes neprijungtas suderinamas įrenginys. Prijunkite Omi, OpenGlass arba Friend Pendant įrenginį, kad galėtumėte naudoti šią funkciją."
 }

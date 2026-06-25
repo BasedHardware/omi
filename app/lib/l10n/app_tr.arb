@@ -3097,5 +3097,5 @@
     "captureModeLater": "Sonra",
     "captureModeLiveDescription": "Siz konuşurken gerçek zamanlı olarak yazıya dökün.",
     "captureModeLaterDescription": "Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın."
 }

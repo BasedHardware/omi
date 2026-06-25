@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
@@ -61,7 +62,7 @@ TranscriptSegment _segment(String id, String text) {
 }
 
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
-    BtDevice(id: id, name: name, type: type);
+    BtDevice(id: id, name: name, type: type, rssi: -50);
 
 void main() {
   setUpAll(() async {
@@ -650,7 +651,7 @@ void main() {
   });
 
   group('setBackgroundModeEnabled', () {
-    test('disable always succeeds and clears all prefs', () async {
+    test('disable clears realtime prefs and stale config when batch mode is off', () async {
       final provider = CaptureProvider();
       // Pre-set prefs to true to verify they get cleared
       SharedPreferencesUtil().backgroundModeEnabled = true;
@@ -665,6 +666,25 @@ void main() {
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
       expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isNull);
+      provider.dispose();
+    });
+
+    test('disable keeps native config when batch mode still needs it', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      SharedPreferencesUtil().batchModeEnabled = true;
+      SharedPreferencesUtil().backgroundModeEnabled = true;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', true);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+      await SharedPreferencesUtil().saveString('nativeBleStreamConfig', '{"test": true}');
+
+      final result = await provider.setBackgroundModeEnabled(false);
+
+      expect(result, isTrue);
+      expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
+      expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
+      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), '{"test": true}');
       provider.dispose();
     });
 

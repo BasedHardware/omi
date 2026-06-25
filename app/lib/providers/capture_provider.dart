@@ -1106,7 +1106,9 @@ class CaptureProvider extends ChangeNotifier
   /// connected device or the device lacks a native BLE audio route).
   ///
   /// When disabling: clears `backgroundModeEnabled`, `nativeBleStreamingEnabled`,
-  /// `nativeBleForegroundReady` and removes stale `nativeBleStreamConfig`.
+  /// and `nativeBleForegroundReady`. It keeps `nativeBleStreamConfig` only when
+  /// batch mode is still enabled and the current device has a valid native route,
+  /// because native batch writers use the same config for offline capture.
   ///
   /// When enabling with no concrete device or no native route: rejects the
   /// change and leaves all prefs false / removes stale config.
@@ -1115,12 +1117,17 @@ class CaptureProvider extends ChangeNotifier
   /// native streaming only when batch mode is off.
   Future<bool> setBackgroundModeEnabled(bool requested) async {
     if (!requested) {
-      // Disable: clear everything unconditionally.
+      // Disable realtime background streaming. Preserve nativeBleStreamConfig
+      // only when Transcribe Later is still enabled for a concrete native route;
+      // batch capture uses the same config to write offline audio.
+      final keepBatchConfig = SharedPreferencesUtil().batchModeEnabled && hasNativeBleAudioRoute;
       SharedPreferencesUtil().backgroundModeEnabled = false;
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
-      Logger.debug('[BackgroundMode] disabled — cleared all prefs and config');
+      if (!keepBatchConfig) {
+        await SharedPreferencesUtil().remove('nativeBleStreamConfig');
+      }
+      Logger.debug('[BackgroundMode] disabled — keepBatchConfig=$keepBatchConfig');
       notifyListeners();
       return true;
     }

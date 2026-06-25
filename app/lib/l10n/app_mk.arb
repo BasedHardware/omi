@@ -10640,5 +10640,5 @@
     "captureModeLater": "Подоцна",
     "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
     "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција."
 }

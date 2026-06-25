@@ -285,7 +285,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           value: enabled,
                           activeThumbColor: Colors.white,
                           activeTrackColor: const Color(0xFF8B5CF6),
-                          onChanged: enabled ? (v) => setEnabled(v) : null,
+                          onChanged: (enabled || canEnable) ? (v) => setEnabled(v) : null,
                         ),
                       ],
                     ),

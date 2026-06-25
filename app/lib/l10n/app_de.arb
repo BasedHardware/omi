@@ -3030,5 +3030,5 @@
     "captureModeLater": "Später",
     "captureModeLiveDescription": "Transkribiere in Echtzeit, während du sprichst.",
     "captureModeLaterDescription": "Audio jetzt speichern und transkribieren, wann du willst.",
-    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
+    "backgroundModeUnavailable": "Der Hintergrundmodus ist nicht verfügbar, weil kein kompatibles Gerät verbunden ist. Verbinde ein Omi-, OpenGlass- oder Friend Pendant-Gerät, um diese Funktion zu nutzen."
 }
