@@ -80,6 +80,25 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertNil(result.pendingMutations["c1"])
   }
 
+  func testExpiredPendingMutationForMissingServerRowIsDropped() {
+    let baseTime = Date(timeIntervalSince1970: 10_000)
+    let server = makeConversation(id: "server-row")
+    var expired = ConversationPendingMutation()
+    expired.title = "Never returned again"
+    expired.recordedAt = baseTime
+
+    let result = ConversationReconciliationPolicy.mergeList(
+      server: [server],
+      current: [server],
+      pendingMutations: ["missing-row": expired],
+      now: baseTime.addingTimeInterval(121),
+      pendingMutationTTL: 120
+    )
+
+    XCTAssertEqual(result.conversations.map(\.id), ["server-row"])
+    XCTAssertTrue(result.pendingMutations.isEmpty)
+  }
+
   func testPendingStarAndFolderMutationsTemporarilyWinAndThenClear() {
     let local = makeConversation(id: "c1", starred: true, folderId: "local-folder")
     let serverLagging = makeConversation(id: "c1", starred: false, folderId: "server-folder")

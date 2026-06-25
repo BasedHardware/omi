@@ -52,16 +52,12 @@ enum ConversationReconciliationPolicy {
     pendingMutationTTL: TimeInterval = 120
   ) -> ConversationReconciliationResult {
     let serverIds = Set(server.map(\.id))
-    var nextPending = pendingMutations
+    var nextPending = pendingMutations.filter { _, mutation in
+      now.timeIntervalSince(mutation.recordedAt) <= pendingMutationTTL
+    }
 
     var merged = server.map { serverConversation in
       var mutation = nextPending[serverConversation.id]
-      if let pendingMutation = mutation,
-        now.timeIntervalSince(pendingMutation.recordedAt) > pendingMutationTTL
-      {
-        mutation = nil
-        nextPending.removeValue(forKey: serverConversation.id)
-      }
       let mergedConversation = apply(mutation: mutation, to: serverConversation)
       mutation?.clearResolvedFields(matching: serverConversation)
       if let mutation, !mutation.isEmpty {
