@@ -666,9 +666,11 @@ final class AgentPillsManager: ObservableObject {
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
+            pill.completedAt = Date()
             pill.latestActivity = errorText
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
+            pill.completedAt = Date()
             pill.latestActivity = "Agent ended before reporting a final result"
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
