@@ -31,6 +31,10 @@ LOCAL_FIREBASE_CLIENT_ID = "local-omi-dev-local.apps.localhost"
 LOCAL_FIREBASE_GCM_SENDER_ID = "000000000000"
 LOCAL_FIREBASE_PLIST = "GoogleService-Info-Local.plist"
 LOCAL_ACCESS_GROUP = "com.omi.desktop-dev.local-auth"
+LOCAL_PROFILE_OMI_DEV_BLOCKED = (
+    "local profile cannot target Omi Dev (com.omi.desktop-dev); "
+    "use a named omi- bundle (e.g. DESKTOP_APP_NAME=omi-memory make desktop-run-local)"
+)
 
 
 def _slugify_identifier(value: str) -> str:
@@ -224,6 +228,8 @@ def resolve_profile(
 
 def validate_profile(profile: DesktopLocalProfile) -> list[str]:
     errors: list[str] = []
+    if profile.bundle_id == LOCAL_BUNDLE_ID:
+        errors.append(LOCAL_PROFILE_OMI_DEV_BLOCKED)
     if profile.bundle_id == "com.omi.computer-macos":
         errors.append("local profile must not use production bundle")
     if profile.bundle_id == "com.omi.omi-local-memory" or profile.app_name == "omi-local-memory":
