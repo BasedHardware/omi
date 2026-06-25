@@ -136,3 +136,34 @@ def retry_on_auth(
                     return None, f"Error after token refresh: {str(e2)}"
             return None, expired_msg
         return None, f"Error: {msg}"
+
+
+async def retry_on_auth_async(
+    call_fn,
+    call_kwargs: dict,
+    refresh_fn,
+    uid: str,
+    integration: dict,
+    expired_msg: str,
+    markers: Tuple[str, ...] = (
+        "Authentication failed",
+        "401",
+        "token may be expired",
+        "token may be expired or invalid",
+    ),
+):
+    try:
+        return await call_fn(**call_kwargs), None
+    except Exception as e:
+        msg = str(e)
+        if any(m in msg for m in markers):
+            new_token = await refresh_fn(uid, integration)
+            if new_token:
+                call_kwargs = dict(call_kwargs)
+                call_kwargs['access_token'] = new_token
+                try:
+                    return await call_fn(**call_kwargs), None
+                except Exception as e2:
+                    return None, f"Error after token refresh: {str(e2)}"
+            return None, expired_msg
+        return None, f"Error: {msg}"
