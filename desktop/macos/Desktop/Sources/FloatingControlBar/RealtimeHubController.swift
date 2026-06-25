@@ -377,7 +377,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.
     session?.abandonInputTurn()
-    exitVoiceUI()
+    exitVoiceUI(clearResponseGlow: true)
   }
 
   // MARK: - RealtimeHubSessionDelegate
@@ -703,7 +703,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    exitVoiceUI()
+    exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
@@ -730,14 +730,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
-  private func exitVoiceUI() {
+  private func exitVoiceUI(clearResponseGlow: Bool = false) {
     guard let barState else { return }
     // Capture before clearing: a mid-turn error or silent-tap cancel clears the
     // listening flag here, so PushToTalkManager.updateBarState() (which resizes only
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
-    barState.isVoiceResponseActive = false
+    if clearResponseGlow || !audioReceivedThisTurn {
+      barState.isVoiceResponseActive = false
+    }
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
