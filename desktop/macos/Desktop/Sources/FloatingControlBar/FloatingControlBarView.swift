@@ -26,6 +26,11 @@ struct FloatingControlBarView: View {
         FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
     }
     private var notchSideWidth: CGFloat {
+        if state.showingAIConversation {
+            return agentPills.pills.isEmpty
+                ? FloatingControlBarWindow.notchCompactSideWidth
+                : FloatingControlBarWindow.notchActiveSideWidth
+        }
         if agentPills.pills.isEmpty && !state.isVoiceListening {
             return FloatingControlBarWindow.notchCompactSideWidth
         }
@@ -180,7 +185,7 @@ struct FloatingControlBarView: View {
                 }
             } label: {
                 ZStack {
-                    if state.isVoiceListening && !state.isVoiceFollowUp {
+                    if state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation {
                         HStack(spacing: 4) {
                             VoiceWaveformBars(isActive: true)
                                 .scaleEffect(0.76)
@@ -210,10 +215,10 @@ struct FloatingControlBarView: View {
                         )
                     }
                 }
-                .frame(width: state.isVoiceListening ? 58 : 40, height: 27)
+                .frame(width: state.isVoiceListening && !state.showingAIConversation ? 58 : 40, height: 27)
             }
             .buttonStyle(.plain)
-            .help(state.isVoiceListening ? "Listening" : (notchSettingsHoverReady ? "Floating Bar Settings" : "Ask Omi"))
+            .help(state.isVoiceListening && !state.showingAIConversation ? "Listening" : (notchSettingsHoverReady ? "Floating Bar Settings" : "Ask Omi"))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .padding(.trailing, 6)
@@ -950,7 +955,11 @@ private struct NotchAgentPillsRowView: View {
         HStack(spacing: 2) {
             if pillsNewestFirst.count <= directAgentLimit {
                 ForEach(pillsNewestFirst) { pill in
-                    NotchAgentPillOrbItem(pill: pill, manager: manager)
+                    NotchAgentPillOrbItem(
+                        pill: pill,
+                        manager: manager,
+                        barWindow: barWindow
+                    )
                 }
             } else {
                 ForEach(visibleGroups) { group in
@@ -979,18 +988,6 @@ private struct NotchAgentPillsRowView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-        .popover(isPresented: selectedPillPopoverBinding, arrowEdge: .bottom) {
-            if let pill = selectedPill {
-                AgentPillPopover(
-                    pill: pill,
-                    isRecording: manager.recordingPillID == pill.id,
-                    onDismiss: { manager.dismiss(pillID: pill.id) },
-                    onOpenInChat: { openPillInChat(pill) },
-                    onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
-                    onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
-                )
-            }
-        }
         .accessibilityLabel("Agent pills")
         .accessibilityHint("Select a status to inspect agents")
         .onAppear { syncPillStatusObservers() }
@@ -1007,26 +1004,13 @@ private struct NotchAgentPillsRowView: View {
         if let presentedGroup, pills(for: presentedGroup).isEmpty {
             self.presentedGroup = nil
         }
-        if manager.hoveredPillID != nil, selectedPill == nil {
+        if let hoveredPillID = manager.hoveredPillID,
+           !manager.pills.contains(where: { $0.id == hoveredPillID }) {
             manager.hoveredPillID = nil
         }
         if pillsNewestFirst.count <= directAgentLimit {
             presentedGroup = nil
         }
-    }
-
-    private var selectedPill: AgentPill? {
-        guard let selectedID = manager.hoveredPillID else { return nil }
-        return manager.pills.first { $0.id == selectedID }
-    }
-
-    private var selectedPillPopoverBinding: Binding<Bool> {
-        Binding(
-            get: { selectedPill != nil },
-            set: { isPresented in
-                if !isPresented { manager.hoveredPillID = nil }
-            }
-        )
     }
 
     private func groupPopoverBinding(for group: NotchAgentStatusGroup) -> Binding<Bool> {
@@ -1071,6 +1055,7 @@ private struct NotchAgentPillsRowView: View {
 private struct NotchAgentPillOrbItem: View {
     @ObservedObject var pill: AgentPill
     @ObservedObject var manager: AgentPillsManager
+    weak var barWindow: NSWindow?
 
     var body: some View {
         NotchAgentOrbButton(
@@ -1080,6 +1065,37 @@ private struct NotchAgentPillOrbItem: View {
         ) {
             manager.hoveredPillID = manager.hoveredPillID == pill.id ? nil : pill.id
         }
+        .popover(isPresented: selectedPopoverBinding, arrowEdge: .bottom) {
+            AgentPillPopover(
+                pill: pill,
+                isRecording: manager.recordingPillID == pill.id,
+                onDismiss: { manager.dismiss(pillID: pill.id) },
+                onOpenInChat: { openPillInChat() },
+                onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
+                onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
+            )
+        }
+    }
+
+    private var selectedPopoverBinding: Binding<Bool> {
+        Binding(
+            get: { manager.hoveredPillID == pill.id },
+            set: { isPresented in
+                if !isPresented, manager.hoveredPillID == pill.id {
+                    manager.hoveredPillID = nil
+                }
+            }
+        )
+    }
+
+    private func openPillInChat() {
+        manager.hoveredPillID = nil
+        barWindow?.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(
+            name: .agentPillRequestedChat,
+            object: nil,
+            userInfo: ["query": pill.query]
+        )
     }
 }
 

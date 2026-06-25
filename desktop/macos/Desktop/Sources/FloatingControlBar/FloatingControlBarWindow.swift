@@ -106,6 +106,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
     }
     private var notchSideWidth: CGFloat {
+        if state.showingAIConversation {
+            return AgentPillsManager.shared.pills.isEmpty
+                ? Self.notchCompactSideWidth
+                : Self.notchActiveSideWidth
+        }
         if AgentPillsManager.shared.pills.isEmpty && !state.isVoiceListening {
             return Self.notchCompactSideWidth
         }
@@ -121,6 +126,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
         guard state.isVoiceResponseActive else { return size }
         if usesNotchIsland {
+            if state.showingAIConversation {
+                return NSSize(
+                    width: size.width,
+                    height: size.height + Self.notchGlowOutsetBottom
+                )
+            }
             return NSSize(
                 width: size.width + Self.notchGlowOutsetX * 2,
                 height: size.height + Self.notchGlowOutsetBottom
