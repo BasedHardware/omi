@@ -86,7 +86,7 @@ private struct MemoryExportRow: View {
     switch destination {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
-    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex:
+    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return "Open"
     }
   }
@@ -292,7 +292,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         }
         statusMessage = "Memory pack ready for \(destination.title). Prompt and export copied."
 
-      case .agents, .claudeCode, .codex:
+      case .agents, .claudeCode, .codex, .openclaw, .hermes:
         // MCP-only destinations have no memory-pack run step.
         return nil
       }
@@ -873,7 +873,7 @@ struct MemoryExportDestinationSheet: View {
           )
       }
 
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       EmptyView()
     }
   }
@@ -898,7 +898,7 @@ struct MemoryExportDestinationSheet: View {
       return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
       return ("Copy & open", "Preparing…")
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       return ("Copy", "…")
     }
   }
