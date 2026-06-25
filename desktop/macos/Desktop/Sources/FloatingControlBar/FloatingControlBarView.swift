@@ -224,15 +224,26 @@ struct FloatingControlBarView: View {
                 }
             }
             if hovering {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-                    guard generation == notchHoverGeneration,
-                          isHovering,
-                          !state.isVoiceListening
-                    else { return }
-                    withAnimation(.easeInOut(duration: 0.16)) {
-                        notchSettingsHoverReady = true
-                    }
-                }
+                scheduleNotchSettingsHoverReady(generation: generation)
+            }
+        }
+        .onChange(of: state.isVoiceListening) { _, isListening in
+            guard !isListening, isHovering else { return }
+            notchHoverGeneration += 1
+            scheduleNotchSettingsHoverReady(generation: notchHoverGeneration)
+        }
+    }
+
+    private func scheduleNotchSettingsHoverReady(generation: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            guard generation == notchHoverGeneration,
+                  isHovering,
+                  !state.isVoiceListening
+            else {
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.16)) {
+                notchSettingsHoverReady = true
             }
         }
     }
