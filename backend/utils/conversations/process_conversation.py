@@ -496,6 +496,7 @@ def _extract_memories_canonical(uid: str, conversation: Conversation):
             extractor_id="new_memories_extractor",
             subject_entity_id=subject_entity_id,
             subject_attribution=subject_attribution,
+            client_device_id=getattr(conversation, "client_device_id", None),
         )
         memory_db_obj.is_locked = is_locked
         memory_db_obj.id = extraction_memory_id(uid=uid, source_id=conversation.id, content=memory_db_obj.content)
@@ -642,6 +643,7 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
             extractor_id="new_memories_extractor",
             subject_entity_id=subject_entity_id,
             subject_attribution=subject_attribution,
+            client_device_id=getattr(conversation, "client_device_id", None),
         )
         memory_db_obj.is_locked = is_locked
         # Corroboration is durability: a fact that updates/merges/supersedes an
