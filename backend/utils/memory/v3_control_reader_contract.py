@@ -38,6 +38,7 @@ class V3ControlDecisionReason(str, Enum):
     WRITE_CONVERGENCE_NOT_READY = 'write_convergence_not_ready'
     INVALID_OR_MISSING_CURSOR_SECRET = 'invalid_or_missing_cursor_secret'
     ARCHIVE_NOT_ALLOWED = 'archive_not_allowed'
+    ENROLLED_READ_GATE_BLOCKED = 'enrolled_read_gate_blocked'
 
 
 @dataclass(frozen=True)
@@ -209,6 +210,9 @@ def decide_v3_control_route(
             return _fail_closed(V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY)
         if gate_result.block == MemoryReadGateBlock.PROJECTION_NOT_READY:
             return _fail_closed(V3ControlDecisionReason.PROJECTION_NOT_READY)
+        # Any other (unmapped or future) shared gate block fails closed rather than
+        # silently proceeding to the memory projection route.
+        return _fail_closed(V3ControlDecisionReason.ENROLLED_READ_GATE_BLOCKED)
 
     if request.cursor_memory_read_requested and not request.cursor_secret_config_present:
         return _fail_closed(V3ControlDecisionReason.INVALID_OR_MISSING_CURSOR_SECRET)

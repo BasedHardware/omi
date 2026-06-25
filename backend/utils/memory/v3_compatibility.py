@@ -144,6 +144,9 @@ def decide_v3_compatibility(context: V3CompatibilityContext) -> V3CompatibilityD
             return _fail_closed('write_convergence_not_ready')
         if gate_result.block == MemoryReadGateBlock.PROJECTION_NOT_READY:
             return _fail_closed('memory_projection_not_ready')
+        # Any other (unmapped or future) shared gate block denies the read rather
+        # than silently falling through to a memory projection success.
+        return _fail_closed('enrolled_read_gate_blocked_fail_closed')
 
     if context.projection_empty:
         reason = 'memory_projection_empty_no_legacy_fallback'
