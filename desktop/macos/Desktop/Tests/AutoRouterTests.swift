@@ -11,19 +11,15 @@ import XCTest
 @MainActor
 final class AutoRouterTests: XCTestCase {
 
-  // Use a unique UserDefaults suite per test to avoid cross-test pollution.
-  private var defaultsSuite: UserDefaults!
-
-  override func setUp() {
-    super.setUp()
-    defaultsSuite = UserDefaults(suiteName: "AutoRouterTests.\(UUID().uuidString)")
-  }
-
-  override func tearDown() {
-    defaultsSuite.removePersistentDomain(forName: defaultsSuite.dictionaryRepresentation().keys.first ?? "")
-    defaultsSuite = nil
-    super.tearDown()
-  }
+  // NOTE: AutoRouter writes to UserDefaults.standard (process-wide), not to a
+  // per-test suite. The original setUp/tearDown created an unused `defaultsSuite`
+  // and tried to clean it up with `dictionaryRepresentation().keys.first ?? ""`
+  // as the domain name — but `keys.first` returns a stored KEY (e.g. an
+  // autoRouterPick.* value), not the suite name, so the cleanup was a no-op.
+  // Each test that writes via `AutoRouter.shared.store(...)` cleans up by
+  // calling `AutoRouter.shared.invalidate(task: ...)` at the end. That keeps
+  // the production cache consistent and avoids bleeding sentinels into the
+  // next test or the developer's app state.
 
   // MARK: - AutoRouterTask enum
 
