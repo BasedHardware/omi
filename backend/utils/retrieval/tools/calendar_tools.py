@@ -130,7 +130,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
                 if email_addresses:
                     email = email_addresses[0].get('value')
                     names = person.get('names') or [{}]
-                    name = names[0].get('displayName', query) if names else query
+                    name = names[0].get('displayName', query)
                     logger.info(f"✅ Found contact in Other Contacts: {sanitize_pii(name)} -> {sanitize_pii(email)}")
                     return email
                 else:
