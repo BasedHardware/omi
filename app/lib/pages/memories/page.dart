@@ -291,6 +291,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       },
                                     ),
                                     const SizedBox(width: 8),
+                                    FilterChip(
+                                      label: const Text('This device', style: TextStyle(fontSize: 12)),
+                                      selected: provider.filterThisDeviceOnly,
+                                      onSelected: provider.setFilterThisDeviceOnly,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    const SizedBox(width: 8),
                                     SizedBox(
                                       width: 44,
                                       height: 44,
