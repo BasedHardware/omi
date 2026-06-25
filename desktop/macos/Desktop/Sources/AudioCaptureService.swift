@@ -174,33 +174,9 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
     private func startCaptureOnQueue() throws {
-        // 1. Resolve input device: explicit override (fallback path) wins over system default.
-        var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
-
-        if let override = overrideDeviceID {
-            inputDeviceID = override
-            log("AudioCapture: Using override device ID \(override)")
-        } else {
-            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            let status = AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &address,
-                0,
-                nil,
-                &size,
-                &inputDeviceID
-            )
-
-            guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
-                throw AudioCaptureError.noInputAvailable
-            }
-        }
+        // 1. Resolve input device: explicit override wins while available, otherwise
+        // fall back to the system default instead of pinning capture to a stale device.
+        let inputDeviceID = try resolveInputDeviceID()
         self.deviceID = inputDeviceID
 
         // 2. Get device stream format
@@ -355,6 +331,47 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     // MARK: - Private Methods
+
+    private func resolveInputDeviceID() throws -> AudioDeviceID {
+        if let override = overrideDeviceID {
+            if Self.isAvailableInputDevice(override) {
+                log("AudioCapture: Using override device ID \(override)")
+                return override
+            }
+            log("AudioCapture: Override device ID \(override) is unavailable; falling back to default input")
+        }
+
+        guard let defaultDeviceID = Self.currentDefaultInputDeviceID() else {
+            throw AudioCaptureError.noInputAvailable
+        }
+        return defaultDeviceID
+    }
+
+    private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+
+        guard status == noErr, isAvailableInputDevice(deviceID) else { return nil }
+        return deviceID
+    }
+
+    private static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        deviceID != kAudioObjectUnknown && deviceID != kAudioDeviceUnknown && deviceHasInputChannels(deviceID)
+    }
 
     /// Get stream format for a device on input scope
     private func getStreamFormat(for deviceID: AudioObjectID) -> AudioStreamBasicDescription? {
@@ -651,37 +668,13 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
-        // Preserve an explicit input override across route/sample-rate churn. The realtime
-        // hub pins capture to the built-in mic when output is Bluetooth; reopening the
-        // default input here can silently switch back to a dead Bluetooth mic mid-turn.
         let newDeviceID: AudioDeviceID
-        if let override = overrideDeviceID {
-            newDeviceID = override
-            log("AudioCapture: Reconfiguring override device ID \(override)")
-        } else {
-            var defaultDeviceID: AudioDeviceID = kAudioObjectUnknown
-            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            let status = AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &address,
-                0,
-                nil,
-                &size,
-                &defaultDeviceID
-            )
-
-            guard status == noErr, defaultDeviceID != kAudioObjectUnknown else {
-                log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
-                retryOrGiveUp(retryCount: retryCount)
-                return
-            }
-            newDeviceID = defaultDeviceID
+        do {
+            newDeviceID = try resolveInputDeviceID()
+        } catch {
+            log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
+            retryOrGiveUp(retryCount: retryCount)
+            return
         }
 
         self.deviceID = newDeviceID
