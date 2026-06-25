@@ -147,6 +147,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Dismiss loading
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     }
   }
 
@@ -395,7 +396,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           ),
         ),
         IconButton(
-          tooltip: context.l10n.deleteRecap,
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
