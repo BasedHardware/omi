@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Connect your AI: centered the omi title together with the What-omi-knows cards"
+  ],
   "releases": [
     {
       "version": "0.11.534",
