@@ -356,12 +356,18 @@ function buildControlRunMcpServers(
   if (!context.buildMcpServers) {
     return undefined;
   }
-  return context.buildMcpServers(input.mode, input.cwd, undefined, {
+  const servers = context.buildMcpServers(input.mode, input.cwd, undefined, {
     ownerId: input.ownerId,
     requestId: input.requestId,
     clientId: input.clientId,
     protocolVersion: context.getProtocolVersion?.(),
+    includeSwiftBackedTools: false,
   });
+  // Direct control-created runs do not have a Swift ActiveRequest with an
+  // onToolCall handler. Keep browser/stdio-independent MCPs available, but do
+  // not expose omi-tools, whose execute_sql/semantic_search calls must be
+  // answered by Swift-backed request routing.
+  return servers.filter((server) => server.name !== "omi-tools");
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {

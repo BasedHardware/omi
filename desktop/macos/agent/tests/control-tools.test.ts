@@ -1022,16 +1022,19 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("passes MCP tool routing into delegated child bindings", async () => {
+  it("passes only non-Swift-backed MCP tools into delegated child bindings", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
-    const buildMcpServers = vi.fn(() => [{ name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] }]);
+    const buildMcpServers = vi.fn(() => [
+      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+      { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
+    ]);
 
     const delegated = parseToolResult(
       await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
         mode: "call",
         parentRunId: parent.run.runId,
-        objective: "use Omi tools if needed",
+        objective: "use browser tools if needed",
         requestId: "delegate-tools-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1046,9 +1049,10 @@ describe("agent control tools", () => {
       requestId: "delegate-tools-1",
       clientId: "delegate-client",
       protocolVersion: 2,
+      includeSwiftBackedTools: false,
     });
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
-      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+      { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
     ]);
     store.close();
   });

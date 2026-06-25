@@ -482,36 +482,38 @@ function buildMcpServers(
 ): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
-  // omi-tools (stdio, connects back via Unix socket)
-  const omiToolsEnv: Array<{ name: string; value: string }> = [
-    { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-    { name: "OMI_QUERY_MODE", value: mode },
-    { name: "OMI_ADAPTER_ID", value: "acp" },
-  ];
-  if (context) {
-    omiToolsEnv.push(
-      { name: "OMI_REQUEST_ID", value: context.requestId },
-      { name: "OMI_CLIENT_ID", value: context.clientId }
-    );
-    if (context.protocolVersion) {
-      omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+  if (context?.includeSwiftBackedTools !== false) {
+    // omi-tools (stdio, connects back via Unix socket)
+    const omiToolsEnv: Array<{ name: string; value: string }> = [
+      { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
+      { name: "OMI_QUERY_MODE", value: mode },
+      { name: "OMI_ADAPTER_ID", value: "acp" },
+    ];
+    if (context) {
+      omiToolsEnv.push(
+        { name: "OMI_REQUEST_ID", value: context.requestId },
+        { name: "OMI_CLIENT_ID", value: context.clientId }
+      );
+      if (context.protocolVersion) {
+        omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+      }
+      if (context.sessionId) {
+        omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+      }
     }
-    if (context.sessionId) {
-      omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+    if (cwd) {
+      omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
     }
+    if (sessionKey === "onboarding") {
+      omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
+    }
+    servers.push({
+      name: "omi-tools",
+      command: process.execPath,
+      args: [omiToolsStdioScript],
+      env: omiToolsEnv,
+    });
   }
-  if (cwd) {
-    omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
-  }
-  if (sessionKey === "onboarding") {
-    omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
-  }
-  servers.push({
-    name: "omi-tools",
-    command: process.execPath,
-    args: [omiToolsStdioScript],
-    env: omiToolsEnv,
-  });
 
   // Playwright MCP server
   const playwrightArgs = [playwrightCli];

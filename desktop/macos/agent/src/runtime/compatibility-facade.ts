@@ -25,6 +25,7 @@ export interface McpServerBuildContext {
   clientId: string;
   protocolVersion?: ProtocolVersion;
   sessionId?: string;
+  includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
   mode: RunMode,
