@@ -1207,12 +1207,46 @@ test("callSwiftTool: rechecks abort after async correlation before writing to Sw
     source.indexOf("async function callSwiftTool"),
     source.indexOf("async function omiRelayCorrelation"),
   );
-  assert.match(callSwiftToolBody, /const correlation = await omiRelayCorrelation\(\);\n\s+if \(signal\?\.aborted\)/);
+  assert.match(callSwiftToolBody, /const correlation = await omiRelayCorrelation\(\);[\s\S]*if \(signal\?\.aborted\)/);
   assert.ok(
     callSwiftToolBody.indexOf("if (signal?.aborted)", callSwiftToolBody.indexOf("await omiRelayCorrelation()")) <
       callSwiftToolBody.indexOf("connection.write"),
     "abort must be rechecked before emitting tool_use to Swift",
   );
+});
+
+test("callSwiftTool: disables Swift-backed tools when relay context requests it", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-disable-tools-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  await writeFile(contextPath, JSON.stringify({ disableSwiftBackedTools: true }));
+  let sawToolUse = false;
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    server.on("connection", (socket) => {
+      socket.on("data", () => { sawToolUse = true; });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "Error: Swift-backed Omi tools are disabled for this control-created run");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+    assert.equal(sawToolUse, false, "disabled tools must not emit tool_use to Swift");
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    if (previousContextFile === undefined) {
+      delete process.env.OMI_CONTEXT_FILE;
+    } else {
+      process.env.OMI_CONTEXT_FILE = previousContextFile;
+    }
+    await rm(dir, { recursive: true, force: true });
+    try { await unlink(sockPath); } catch {}
+  }
 });
 
 test("callSwiftTool: receives result via pipe", async () => {

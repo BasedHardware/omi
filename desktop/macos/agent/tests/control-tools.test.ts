@@ -751,6 +751,7 @@ describe("agent control tools", () => {
     expect(sent.run.status).toBe("succeeded");
     expect(adapter.executed).toHaveLength(2);
     expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
+    expect(adapter.executed[1].metadata).toMatchObject({ disableSwiftBackedTools: true });
 
     const listed = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
@@ -1054,6 +1055,7 @@ describe("agent control tools", () => {
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
       { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
     ]);
+    expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
     store.close();
   });
 

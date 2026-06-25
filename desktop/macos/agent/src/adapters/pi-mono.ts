@@ -60,6 +60,7 @@ interface PiMonoRelayContext {
   attemptId: string;
   adapterSessionId?: string;
   legacyAdapterSessionId?: string;
+  disableSwiftBackedTools?: boolean;
 }
 
 interface PiAssistantMessageEvent {
@@ -958,6 +959,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
           legacyAdapterSessionId: typeof context.metadata?.legacyAdapterSessionId === "string"
             ? context.metadata.legacyAdapterSessionId
             : undefined,
+          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
         }
       );
 

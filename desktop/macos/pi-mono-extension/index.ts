@@ -482,6 +482,9 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
   const correlation = await omiRelayCorrelation();
+  if (correlation.disableSwiftBackedTools === true) {
+    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
+  }
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
@@ -513,8 +516,8 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
   });
 }
 
-async function omiRelayCorrelation(): Promise<Record<string, string | number>> {
-  const correlation: Record<string, string | number> = {};
+async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const correlation: Record<string, string | number | boolean> = {};
   if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
   if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
   if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
@@ -531,12 +534,12 @@ async function omiRelayCorrelation(): Promise<Record<string, string | number>> {
   return correlation;
 }
 
-async function omiContextFileCorrelation(): Promise<Record<string, string | number>> {
+async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
   const path = process.env.OMI_CONTEXT_FILE;
   if (!path) return {};
   try {
     const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
-    const correlation: Record<string, string | number> = {};
+    const correlation: Record<string, string | number | boolean> = {};
     for (const key of [
       "adapterId",
       "requestId",
@@ -552,6 +555,7 @@ async function omiContextFileCorrelation(): Promise<Record<string, string | numb
     }
     const protocolVersion = parsed.protocolVersion;
     if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
     return correlation;
   } catch {
     return {};

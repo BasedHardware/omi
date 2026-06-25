@@ -276,6 +276,7 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId,
           requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
             cwd: parsed.cwd,
@@ -308,6 +309,7 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId,
           requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.runMode,
             cwd: parsed.cwd,

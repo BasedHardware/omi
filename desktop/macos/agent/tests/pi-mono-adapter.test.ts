@@ -96,6 +96,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       metadata: {
         protocolVersion: 2,
         legacyAdapterSessionId: "legacy-runtime",
+        disableSwiftBackedTools: true,
       },
     };
 
@@ -111,6 +112,7 @@ describe("PiMonoAdapter prompt correlation", () => {
       attemptId: "att_runtime",
       adapterSessionId: "session-1",
       legacyAdapterSessionId: "legacy-runtime",
+      disableSwiftBackedTools: true,
     });
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
