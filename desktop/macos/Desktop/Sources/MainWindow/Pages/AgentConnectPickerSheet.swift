@@ -124,17 +124,11 @@ private struct ConnectOptionCard: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        // Primary action — prominent, full width.
-        Button(action: run) {
-          Text(isRunning ? "Connecting…" : primaryLabel)
-            .scaledFont(size: 14, weight: .semibold)
-            .frame(maxWidth: .infinity)
-            .foregroundColor(.black)
-            .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white))
-        }
-        .buttonStyle(.plain)
-        .disabled(isRunning)
+        // Primary action — the shared app pill (compact, white). Same style the
+        // single-destination sheet uses, so the connect flow is consistent.
+        Button(isRunning ? "Connecting…" : primaryLabel, action: run)
+          .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+          .disabled(isRunning)
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
