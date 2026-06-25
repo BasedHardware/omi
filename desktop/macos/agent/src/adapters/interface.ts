@@ -365,23 +365,16 @@ export interface PlaceholderRuntimeAdapter {
   readonly followUpTicket: string;
 }
 
-export const PLACEHOLDER_RUNTIME_ADAPTERS = {
-  hermes: {
-    adapterId: "hermes",
-    productionAdapter: false,
-    implementationFactory: null,
-    followUpTicket: "TICKET-hermes-adapter",
-  },
-  openclaw: {
-    adapterId: "openclaw",
-    productionAdapter: false,
-    implementationFactory: null,
-    followUpTicket: "TICKET-openclaw-adapter",
-  },
-  a2a: {
-    adapterId: "a2a",
-    productionAdapter: false,
-    implementationFactory: null,
-    followUpTicket: "TICKET-a2a-adapter",
-  },
-} as const satisfies Record<PlaceholderAdapterId, PlaceholderRuntimeAdapter>;
+export const PLACEHOLDER_RUNTIME_ADAPTERS = Object.fromEntries(
+  (Object.entries(ADAPTER_CAPABILITY_MATRIX) as [KnownAdapterId, AdapterCapabilityMatrixEntry][])
+    .filter(([, entry]) => !entry.productionAdapter)
+    .map(([adapterId, entry]) => [
+      adapterId,
+      {
+        adapterId,
+        productionAdapter: false,
+        implementationFactory: null,
+        followUpTicket: entry.expectations.nativeResume.followUpTicket ?? `TICKET-${adapterId}-adapter`,
+      },
+    ])
+) as Record<PlaceholderAdapterId, PlaceholderRuntimeAdapter>;

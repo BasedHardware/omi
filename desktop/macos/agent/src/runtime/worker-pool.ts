@@ -266,11 +266,11 @@ export class AdapterWorkerPool {
     for (const worker of this.workers) {
       const evictedBindingId = worker.idlePinnedBindingId;
       if (!evictedBindingId) continue;
-      options.onIdlePinnedBindingEvicted(evictedBindingId);
       const releasedBindingId = worker.releaseIdlePinnedBinding();
       if (releasedBindingId !== evictedBindingId) {
         throw new Error(`Worker ${worker.workerId} failed to release pinned binding ${evictedBindingId}`);
       }
+      options.onIdlePinnedBindingEvicted(evictedBindingId);
       return worker;
     }
     return null;

@@ -182,25 +182,35 @@ final class AgentArtifactProjectionStore: ObservableObject {
   @Published private(set) var artifacts: [AgentArtifactProjection] = []
   @Published private(set) var isLoading = false
   @Published private(set) var errorMessage: String?
+  private var loadGeneration = 0
 
   func load(request: AgentArtifactProjectionRequest, bridge: AgentBridge) async {
+    loadGeneration += 1
+    let generation = loadGeneration
     guard request.isScoped else {
       artifacts = []
+      isLoading = false
       errorMessage = AgentArtifactProjectionError.missingScope.localizedDescription
       return
     }
 
     isLoading = true
     errorMessage = nil
-    defer { isLoading = false }
+    defer {
+      if loadGeneration == generation {
+        isLoading = false
+      }
+    }
 
     do {
       let result = try await bridge.controlTool(
         name: "inspect_agent_artifacts",
         input: request.toolInput
       )
+      guard loadGeneration == generation else { return }
       artifacts = try AgentArtifactProjection.parseList(fromToolResult: result)
     } catch {
+      guard loadGeneration == generation else { return }
       artifacts = []
       errorMessage = error.localizedDescription
     }

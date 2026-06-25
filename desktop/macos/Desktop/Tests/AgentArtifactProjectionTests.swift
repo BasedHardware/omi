@@ -48,7 +48,7 @@ final class AgentArtifactProjectionTests: XCTestCase {
     XCTAssertEqual(artifacts[0].metadataRows, ["adapter: pi-mono", #"nested: {"index":2}"#])
   }
 
-  func testProjectionRejectsUnscopedRequestsBeforeCallingTool() {
+  func testDefaultProjectionRequestIsUnscoped() {
     let request = AgentArtifactProjectionRequest()
 
     XCTAssertFalse(request.isScoped)

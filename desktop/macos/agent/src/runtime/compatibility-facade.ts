@@ -259,7 +259,7 @@ export class JsonlCompatibilityFacade {
       return;
     }
 
-    const cancellationOwnerId = message.ownerId ?? context.ownerId ?? ownerId;
+    const cancellationOwnerId = message.ownerId ?? ownerId;
     let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
     try {
       ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });

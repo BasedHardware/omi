@@ -252,7 +252,10 @@ actor AgentRuntimeProcess {
       if let ownerId = currentOwnerId() {
         dict["ownerId"] = ownerId
       }
-      sendJson(dict)
+      let sent = sendJson(dict)
+      if !sent, let request = activeControlRequests.removeValue(forKey: requestId) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send control tool request"))
+      }
     }
   }
 
@@ -764,11 +767,18 @@ actor AgentRuntimeProcess {
   }
 
   private func failRequest(_ message: RuntimeMessage) {
+    let raw = message.payload["message"] as? String ?? "Unknown error"
+    if let requestId = message.routingKey,
+      let controlRequest = activeControlRequests.removeValue(forKey: requestId)
+    {
+      log("AgentRuntimeProcess: control tool error (raw): \(raw)")
+      controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))
+      return
+    }
     guard let requestId = message.routingKey, let request = activeRequests.removeValue(forKey: requestId) else {
       log("AgentRuntimeProcess: dropping unroutable error")
       return
     }
-    let raw = message.payload["message"] as? String ?? "Unknown error"
     log("AgentRuntimeProcess: agent error (raw): \(raw)")
     request.continuation.resume(throwing: BridgeError.agentError(raw))
   }
@@ -794,14 +804,17 @@ actor AgentRuntimeProcess {
     )
   }
 
-  private func sendJson(_ dict: [String: Any]) {
-    guard let stdinPipe else { return }
+  @discardableResult
+  private func sendJson(_ dict: [String: Any]) -> Bool {
+    guard let stdinPipe else { return false }
     do {
       let data = try JSONSerialization.data(withJSONObject: dict)
-      guard let line = String(data: data, encoding: .utf8) else { return }
+      guard let line = String(data: data, encoding: .utf8) else { return false }
       try stdinPipe.fileHandleForWriting.write(contentsOf: Data((line + "\n").utf8))
+      return true
     } catch {
       log("AgentRuntimeProcess: failed to write stdin: \(error.localizedDescription)")
+      return false
     }
   }
 

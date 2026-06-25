@@ -30,6 +30,7 @@
 import { createInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { randomUUID } from "crypto";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
 import { unlinkSync, appendFileSync } from "fs";
@@ -124,6 +125,9 @@ let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
 const activeControlToolOwnersByRequest = new Map<string, string>();
+function controlOwnerMapKey(requestId?: string, clientId?: string): string | undefined {
+  return requestId ? `${clientId ?? ""}:${requestId}` : undefined;
+}
 let toolCallCorrelation:
   | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
   | undefined;
@@ -194,8 +198,8 @@ function startOmiToolsRelay(): Promise<string> {
                         ...agentControlToolContext,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestId: msg.requestId,
-                            ownerIdForRequest: (requestId) => activeControlToolOwnersByRequest.get(requestId),
+                            requestId: controlOwnerMapKey(msg.requestId, msg.clientId),
+                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                             fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                           }),
                       }
@@ -725,9 +729,11 @@ async function main(): Promise<void> {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          query.requestId = requestIdFor(query) ?? randomUUID();
           const queryRequestId = requestIdFor(query);
-          if (queryRequestId) {
-            activeControlToolOwnersByRequest.set(queryRequestId, queryOwnerId);
+          const queryOwnerKey = controlOwnerMapKey(queryRequestId, query.clientId);
+          if (queryOwnerKey) {
+            activeControlToolOwnersByRequest.set(queryOwnerKey, queryOwnerId);
           }
           if (query.ownerId) {
             currentOwnerId = queryOwnerId;
@@ -741,8 +747,8 @@ async function main(): Promise<void> {
             }
             await facade.handleQuery(query);
           } finally {
-            if (queryRequestId) {
-              activeControlToolOwnersByRequest.delete(queryRequestId);
+            if (queryOwnerKey) {
+              activeControlToolOwnersByRequest.delete(queryOwnerKey);
             }
           }
         })().catch((err) => {
@@ -771,9 +777,10 @@ async function main(): Promise<void> {
       case "control_tool": {
         const control = msg as ControlToolRequestMessage;
         const requestId = requestIdFor(control);
+        const controlOwnerKey = controlOwnerMapKey(requestId, control.clientId);
         const controlOwnerId = control.ownerId?.trim() || currentOwnerId;
-        if (requestId) {
-          activeControlToolOwnersByRequest.set(requestId, controlOwnerId);
+        if (controlOwnerKey) {
+          activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId);
         }
         if (control.ownerId) {
           currentOwnerId = controlOwnerId;
@@ -787,8 +794,8 @@ async function main(): Promise<void> {
                     ...agentControlToolContext,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
-                        requestId,
-                        ownerIdForRequest: (id) => activeControlToolOwnersByRequest.get(id),
+                        requestId: controlOwnerKey,
+                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
                         fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                       }),
                   },
@@ -796,14 +803,14 @@ async function main(): Promise<void> {
                   control.input ?? {},
                 );
               } finally {
-                if (requestId) {
-                  activeControlToolOwnersByRequest.delete(requestId);
+                if (controlOwnerKey) {
+                  activeControlToolOwnersByRequest.delete(controlOwnerKey);
                 }
               }
             })()
           : (() => {
-              if (requestId) {
-                activeControlToolOwnersByRequest.delete(requestId);
+              if (controlOwnerKey) {
+                activeControlToolOwnersByRequest.delete(controlOwnerKey);
               }
               return JSON.stringify({
                 ok: false,
