@@ -64,6 +64,7 @@ MCP_SCOPES_SUPPORTED = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "people.write",
 ]
 
 READ_ONLY_ANNOTATIONS = {
@@ -92,6 +93,7 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+PEOPLE_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["people.write"]}]
 
 
 class MCPSession:
@@ -407,6 +409,39 @@ MCP_TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
+        "name": "rename_person",
+        "description": (
+            "Rename one of the user's people/contacts by id. Use only when the user explicitly asks to correct "
+            "a person's display name. Names must be 2-40 characters after trimming."
+        ),
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": PEOPLE_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "The Omi person/contact id to rename"},
+                "name": {"type": "string", "description": "The corrected display name (2-40 characters)"},
+            },
+            "required": ["person_id", "name"],
+        },
+    },
+    {
+        "name": "delete_person",
+        "description": (
+            "Delete one of the user's people/contacts by id. This is destructive and should only be used after "
+            "the user clearly asks to remove a false-positive or unwanted person record."
+        ),
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": PEOPLE_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "The Omi person/contact id to delete"},
+            },
+            "required": ["person_id"],
+        },
+    },
+    {
         "name": "get_screen_activity",
         "description": (
             "Retrieve the user's desktop screen activity (Rewind) — what apps and windows they used and the OCR'd "
@@ -502,6 +537,20 @@ def _parse_mcp_date(value: Optional[str], field: str) -> Optional[datetime]:
         return datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         raise ToolExecutionError(f"Invalid {field} format: '{value}'. Expected YYYY-MM-DD.", code=-32602)
+
+
+def _required_mcp_string(arguments: dict, field: str) -> str:
+    value = arguments.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ToolExecutionError(f"{field} is required", code=-32602)
+    return value.strip()
+
+
+def _validated_person_name(arguments: dict) -> str:
+    name = _required_mcp_string(arguments, "name")
+    if len(name) < 2 or len(name) > 40:
+        raise ToolExecutionError("name must be between 2 and 40 characters", code=-32602)
+    return name
 
 
 def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
@@ -835,6 +884,22 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
     elif tool_name == "get_people":
         return {"people": [clean_person(p) for p in users_db.get_people(user_id)]}
+
+    elif tool_name == "rename_person":
+        person_id = _required_mcp_string(arguments, "person_id")
+        name = _validated_person_name(arguments)
+        if not users_db.get_person(user_id, person_id):
+            raise ToolExecutionError("Person not found", code=-32001)
+        users_db.update_person(user_id, person_id, name)
+        updated = users_db.get_person(user_id, person_id)
+        return {"success": True, "person": clean_person(updated or {"id": person_id, "name": name})}
+
+    elif tool_name == "delete_person":
+        person_id = _required_mcp_string(arguments, "person_id")
+        if not users_db.get_person(user_id, person_id):
+            raise ToolExecutionError("Person not found", code=-32001)
+        users_db.delete_person(user_id, person_id)
+        return {"success": True}
 
     elif tool_name == "get_screen_activity":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")

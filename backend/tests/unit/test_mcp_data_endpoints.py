@@ -254,6 +254,51 @@ class TestPeople:
         assert result['people'][0]['id'] == 'p1'
         assert 'speech_samples' not in result['people'][0]
 
+    @patch('routers.mcp_sse.users_db')
+    def test_rename_person_tool_validates_and_returns_cleaned_person(self, mock_db):
+        original = self._person()
+        renamed = {**original, 'name': 'Robert'}
+        mock_db.get_person.side_effect = [original, renamed]
+
+        result = sse.execute_tool(UID, 'rename_person', {'person_id': ' p1 ', 'name': ' Robert '})
+
+        mock_db.update_person.assert_called_once_with(UID, 'p1', 'Robert')
+        assert result['success'] is True
+        assert result['person']['name'] == 'Robert'
+        assert 'speech_samples' not in result['person']
+        assert 'speaker_embedding' not in result['person']
+
+    @patch('routers.mcp_sse.users_db')
+    def test_rename_person_rejects_bad_name(self, mock_db):
+        for value in ['', ' ', 'x', 'x' * 41]:
+            with pytest.raises(sse.ToolExecutionError) as exc_info:
+                sse.execute_tool(UID, 'rename_person', {'person_id': 'p1', 'name': value})
+            assert exc_info.value.code == -32602
+        mock_db.update_person.assert_not_called()
+
+    @patch('routers.mcp_sse.users_db')
+    def test_rename_person_requires_existing_person(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'rename_person', {'person_id': 'missing', 'name': 'Robert'})
+        assert exc_info.value.code == -32001
+        mock_db.update_person.assert_not_called()
+
+    @patch('routers.mcp_sse.users_db')
+    def test_delete_person_tool_deletes_existing_person(self, mock_db):
+        mock_db.get_person.return_value = self._person()
+        result = sse.execute_tool(UID, 'delete_person', {'person_id': ' p1 '})
+        assert result == {'success': True}
+        mock_db.delete_person.assert_called_once_with(UID, 'p1')
+
+    @patch('routers.mcp_sse.users_db')
+    def test_delete_person_requires_existing_person(self, mock_db):
+        mock_db.get_person.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'delete_person', {'person_id': 'missing'})
+        assert exc_info.value.code == -32001
+        mock_db.delete_person.assert_not_called()
+
 
 class TestScreenActivity:
     def _row(self):
@@ -321,10 +366,20 @@ class TestToolRegistry:
             'get_goals',
             'get_chat_messages',
             'get_people',
+            'rename_person',
+            'delete_person',
             'get_screen_activity',
             'get_daily_summaries',
         ]:
             assert expected in names, f"{expected} missing from MCP_TOOLS"
+
+    def test_people_write_tools_have_write_scope(self):
+        by_name = {tool['name']: tool for tool in sse.MCP_TOOLS}
+        assert 'people.write' in sse.MCP_SCOPES_SUPPORTED
+        assert by_name['rename_person']['securitySchemes'] == sse.PEOPLE_WRITE_SECURITY
+        assert by_name['rename_person']['annotations'] == sse.WRITE_ANNOTATIONS
+        assert by_name['delete_person']['securitySchemes'] == sse.PEOPLE_WRITE_SECURITY
+        assert by_name['delete_person']['annotations'] == sse.DESTRUCTIVE_WRITE_ANNOTATIONS
 
     def test_every_tool_has_a_dispatch_branch(self):
         # Each declared read-only data tool must dispatch (not fall through to "Unknown tool").
