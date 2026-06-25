@@ -257,6 +257,22 @@ final class StopReconciliationTests: XCTestCase {
             "Binding the backend id is not completion; stop flow must still be able to mark the session pending")
     }
 
+    func testActiveBackendConversationIdAcceptsMatchingReemit() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "active-conversation",
+            activeBackendId: "active-conversation",
+            ignoredRotatedBackendId: nil
+        ))
+    }
+
+    func testActiveBackendConversationIdRejectsDifferentRollover() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "rolled-over-conversation",
+            activeBackendId: "active-conversation",
+            ignoredRotatedBackendId: nil
+        ))
+    }
+
     func testRotatedBackendConversationIdIsNotBoundToFreshSession() {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "previous-conversation",

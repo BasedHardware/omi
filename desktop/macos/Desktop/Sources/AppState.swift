@@ -71,9 +71,11 @@ enum DesktopConversationMatchPolicy {
     ignoredRotatedBackendId: String?
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
+    if let activeBackendId, !activeBackendId.isEmpty {
+      return incomingBackendId == activeBackendId
+    }
     if let ignoredRotatedBackendId,
-       incomingBackendId == ignoredRotatedBackendId,
-       activeBackendId == nil {
+       incomingBackendId == ignoredRotatedBackendId {
       return false
     }
     return true
