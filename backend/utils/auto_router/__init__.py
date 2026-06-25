@@ -10,8 +10,10 @@ Public API:
     TaskRegistry     — registry of task definitions, loads from JSON or defaults.
     ModelRegistry    — registry of candidate models per task, loads from JSON.
     DailyRefreshCache — TTL + asyncio.Lock + stale-fallback cache wrapper.
+    router (in routers/auto_router.py) — FastAPI endpoint exposing /v1/auto-router/pick.
 
-The FastAPI router and desktop client are added in subsequent AIDLC tasks.
+The desktop client (desktop/macos/Desktop/Sources/AutoRouter/AutoRouter.swift)
+is part of v1 as well. v2 adds auth, observability, and chat wiring.
 See `backend/utils/auto_router/README.md` for the full architecture.
 
 Relationship to upstream `/v1/auto/model-pick`:
