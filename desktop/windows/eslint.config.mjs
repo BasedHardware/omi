@@ -26,16 +26,55 @@ export default defineConfig(
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
       ...eslintPluginReactRefresh.configs.vite.rules,
-      'react-hooks/set-state-in-effect': 'off',
-      'react-hooks/refs': 'off',
-      'react-hooks/purity': 'off',
-      'react-hooks/immutability': 'off',
-      'react/no-unknown-property': 'off',
       'react-refresh/only-export-components': 'off'
     }
   },
   {
-    files: ['**/*.{js,mjs,test.ts}'],
+    files: [
+      'src/renderer/src/components/settings/tabs/IntegrationsTab.tsx',
+      'src/renderer/src/components/settings/tabs/RewindTab.tsx',
+      'src/renderer/src/hooks/useRewind.ts',
+      'src/renderer/src/pages/Apps.tsx',
+      'src/renderer/src/pages/ConversationDetail.tsx',
+      'src/renderer/src/pages/Conversations.tsx',
+      'src/renderer/src/pages/Home.tsx',
+      'src/renderer/src/components/rewind/RewindPlayer.tsx'
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off'
+    }
+  },
+  {
+    files: [
+      'src/renderer/src/components/overlay/OverlayApp.tsx',
+      'src/renderer/src/hooks/usePushToTalk.ts',
+      'src/renderer/src/lib/useGraphSimulation.ts',
+      'src/renderer/src/App.tsx',
+      'src/renderer/src/components/chat/ChatMessages.tsx',
+      'src/renderer/src/components/graph/BrainGraph.tsx'
+    ],
+    rules: {
+      'react-hooks/refs': 'off'
+    }
+  },
+  {
+    files: [
+      'src/renderer/src/components/rewind/RewindPlayer.tsx',
+      'src/renderer/src/hooks/useRewind.ts'
+    ],
+    rules: {
+      'react-hooks/purity': 'off'
+    }
+  },
+  {
+    files: ['src/renderer/src/components/graph/BrainGraph.tsx'],
+    rules: {
+      'react/no-unknown-property': 'off',
+      'react-hooks/immutability': 'off'
+    }
+  },
+  {
+    files: ['scripts/**/*.mjs', '**/*.test.ts'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       'no-empty': 'off'
