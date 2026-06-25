@@ -72,9 +72,11 @@ from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState,
 from database.memory_apply_store import apply_long_term_patch_firestore
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
+    memory_item_to_memorydb,
     read_canonical_memories,
     retract_conversation_sourced_memories,
     write_canonical_extraction_memory,
+    write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
@@ -560,3 +562,209 @@ def test_legal_state_short_term_active_processed():
     from models.memory_domain import assert_legal_state
 
     assert_legal_state(MemoryLayer.SHORT_TERM, MemoryRecordStatus.ACTIVE, MemoryProcessingState.PROCESSED)
+
+
+@pytest.fixture
+def _clear_canonical_env_ws_i2(monkeypatch):
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from utils.memory.memory_system_pin import clear_memory_system_pin
+
+    clear_memory_system_pin()
+    yield
+    clear_memory_system_pin()
+
+
+def test_canonical_external_write_preserves_public_visibility_and_manual_flag(monkeypatch, _clear_canonical_env_ws_i2):
+    uid = "uid-canonical-meta"
+    now = datetime(2026, 6, 25, tzinfo=timezone.utc)
+    payload = {
+        "id": "mem_public_manual",
+        "uid": uid,
+        "content": "I prefer tea over coffee",
+        "category": MemoryCategory.manual.value,
+        "visibility": "public",
+        "manually_added": True,
+        "tags": ["user-note"],
+        "created_at": now,
+        "updated_at": now,
+    }
+    db = _FakeDb(
+        {
+            f"users/{uid}/memory_control/state": MemoryControlState(
+                uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
+            ).model_dump(mode="json"),
+        }
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    with patch(
+        "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
+        wraps=apply_long_term_patch_firestore,
+    ) as apply_mock:
+        memory_id = write_canonical_external_memory(uid, payload, db_client=db)
+
+    assert memory_id == "mem_public_manual"
+    apply_mock.assert_called_once()
+    patch_payload = apply_mock.call_args.kwargs["patch_payload"]
+    assert patch_payload["visibility"] == "public"
+    assert patch_payload["user_asserted"] is True
+
+    stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
+    assert stored["visibility"] == "public"
+    assert stored["user_asserted"] is True
+    assert stored["promotion"]["category"] == MemoryCategory.manual.value
+    assert stored["promotion"]["tags"] == ["user-note"]
+
+    item = MemoryItem(**stored)
+    mapped = memory_item_to_memorydb(item)
+    assert mapped.visibility == "public"
+    assert mapped.manually_added is True
+    assert mapped.category == MemoryCategory.manual
+    assert mapped.tags == ["user-note"]
+    assert mapped.memory_tier == MemoryTier.long_term
+
+    memories = read_canonical_memories(uid, db_client=db)
+    assert len(memories) == 1
+    assert memories[0].visibility == "public"
+    assert memories[0].manually_added is True
+
+
+def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
+    source = (BACKEND_DIR / "routers" / "mcp.py").read_text(encoding="utf-8")
+    section = source.split("def _validate_mcp_memory", 1)[1].split("@router.delete", 1)[0]
+    assert "MemorySystem.CANONICAL" in section
+    assert "_read_canonical_memory_item" in section
+    assert section.index("MemorySystem.CANONICAL") < section.index("memories_db.get_memory")
+
+
+_WRITER_FILES = [
+    BACKEND_DIR / "routers" / "memories.py",
+    BACKEND_DIR / "routers" / "mcp.py",
+    BACKEND_DIR / "routers" / "mcp_sse.py",
+    BACKEND_DIR / "routers" / "developer.py",
+    BACKEND_DIR / "utils" / "conversations" / "memories.py",
+    BACKEND_DIR / "utils" / "x_connector.py",
+    BACKEND_DIR / "utils" / "consolidation" / "worker.py",
+    BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py",
+]
+
+_EXCLUDED_OFFLINE_WRITER_FILES = [
+    BACKEND_DIR / "scripts" / "rag" / "memories.py",
+]
+
+_LEGACY_WRITE_CALLS = frozenset(
+    {
+        "memories_db.create_memory",
+        "memories_db.save_memories",
+        "memories_db.review_memory",
+        "memories_db.refine_memory",
+        "memories_db.merge_contradict_memory",
+    }
+)
+
+_ALLOWLISTED_LEGACY_WRITES = frozenset(
+    {
+        ("utils/consolidation/worker.py", "memories_db.refine_memory"),
+        ("utils/consolidation/worker.py", "memories_db.merge_contradict_memory"),
+    }
+)
+
+_COHORT_GATE_MARKERS = (
+    "pin_memory_system",
+    "resolve_memory_system",
+    "MemorySystem.CANONICAL",
+)
+
+
+def _legacy_write_allowed(source_lines: list[str], lineno: int, *, rel_path: str, call_name: str) -> bool:
+    if (rel_path, call_name) in _ALLOWLISTED_LEGACY_WRITES:
+        return True
+
+    window = source_lines[max(0, lineno - 150) : lineno]
+    gate_indices = [idx for idx, line in enumerate(window) if any(marker in line for marker in _COHORT_GATE_MARKERS)]
+    if not gate_indices:
+        return False
+
+    last_gate = gate_indices[-1]
+    after_gate = window[last_gate:]
+    if any("return" in line for line in after_gate):
+        return True
+    if any(line.strip().startswith("else:") for line in window[last_gate:]):
+        return True
+    return False
+
+
+def _canonical_guarded_legacy_writes(path: Path) -> list[str]:
+    source = path.read_text(encoding="utf-8")
+    source_lines = source.splitlines()
+    tree = ast.parse(source, filename=str(path))
+    rel_path = str(path.relative_to(BACKEND_DIR))
+    violations: list[str] = []
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        call_name = None
+        if isinstance(node.func, ast.Attribute):
+            if isinstance(node.func.value, ast.Name):
+                call_name = f"{node.func.value.id}.{node.func.attr}"
+        if call_name not in _LEGACY_WRITE_CALLS:
+            continue
+        if _legacy_write_allowed(source_lines, node.lineno, rel_path=rel_path, call_name=call_name):
+            continue
+        line = source_lines[node.lineno - 1]
+        violations.append(f"{rel_path}:{node.lineno}: {line.strip()}")
+
+    return violations
+
+
+def test_canonical_writer_files_do_not_call_legacy_writes_without_cohort_gate():
+    all_violations: list[str] = []
+    for path in _WRITER_FILES:
+        assert path.exists(), f"missing writer file: {path}"
+        all_violations.extend(_canonical_guarded_legacy_writes(path))
+
+    assert not all_violations, "ungated legacy memory writes in canonical writer surfaces:\n" + "\n".join(
+        all_violations
+    )
+
+
+def test_offline_rag_script_excluded_from_live_writer_guard():
+    for path in _EXCLUDED_OFFLINE_WRITER_FILES:
+        assert path.exists(), f"missing excluded offline writer: {path}"
+    assert all(path not in _WRITER_FILES for path in _EXCLUDED_OFFLINE_WRITER_FILES)
+
+
+def test_memories_router_routes_canonical_create_through_memory_service():
+    source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
+    assert "pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL" in source
+    assert "run_blocking(db_executor, memory_service.write, uid, payload)" in source
+    create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
+    canonical_pos = create_section.find("MemorySystem.CANONICAL")
+    legacy_pos = create_section.find("memories_db.create_memory")
+    assert canonical_pos != -1 and legacy_pos != -1
+    assert canonical_pos < legacy_pos
+
+
+def test_review_memory_routes_canonical_cohort_through_memory_service():
+    source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
+    section = source.split("def review_memory", 1)[1].split("@router.patch", 1)[0]
+    assert "MemorySystem.CANONICAL" in section
+    assert ".review(uid, memory_id, value)" in section
+    canonical_pos = section.find("MemorySystem.CANONICAL")
+    legacy_pos = section.find("memories_db.review_memory")
+    assert canonical_pos != -1 and legacy_pos != -1
+    assert canonical_pos < legacy_pos
+
+
+def test_preference_tools_routes_canonical_cohort_through_memory_service():
+    source = (BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py").read_text(encoding="utf-8")
+    assert "resolve_memory_system(uid) == MemorySystem.CANONICAL" in source
+    assert "MemoryService().write(uid, memory_data)" in source
+    canonical_pos = source.find("MemorySystem.CANONICAL")
+    legacy_pos = source.find("memory_db.create_memory")
+    assert canonical_pos != -1 and legacy_pos != -1
+    assert canonical_pos < legacy_pos
