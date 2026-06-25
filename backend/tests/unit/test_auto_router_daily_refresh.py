@@ -300,12 +300,18 @@ class TestInvalidate:
         # Invalidate.
         cache.invalidate()
 
+        # Advance clock past TTL so the next call refreshes.
+        clock.advance(61)
+
         # Next call: loader raises, stale fallback returns "first".
         result = await cache.get_or_refresh(loader)
         assert result == "first"
-        # The cached value is still set; age_seconds is None (no successful load).
+        # The cached value is still set; timestamp was advanced even though
+        # the loader failed (so refreshIfStale respects the TTL and doesn't
+        # re-fire on every call — that's the fix).
         assert cache.has_value
-        assert cache.age_seconds is None
+        assert cache.age_seconds is not None
+        assert cache.age_seconds < 60  # just advanced, well within TTL
 
 
 # ---------------------------------------------------------------------------
