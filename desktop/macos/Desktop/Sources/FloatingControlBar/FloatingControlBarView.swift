@@ -157,9 +157,8 @@ struct FloatingControlBarView: View {
                 Color.clear
                     .allowsHitTesting(false)
             } else {
-                AgentPillsRowView(manager: agentPills)
-                    .frame(maxWidth: notchSideWidth - 12, alignment: .trailing)
-                    .clipped()
+                NotchAgentPillsRowView(manager: agentPills)
+                    .frame(width: notchSideWidth - 12, height: notchChromeHeight, alignment: .trailing)
                     .padding(.leading, 6)
                     .padding(.trailing, 6)
             }
@@ -912,5 +911,59 @@ private struct NotchOmiMark: View {
         }
         .drawingGroup(opaque: false, colorMode: .linear)
         .accessibilityHidden(true)
+    }
+}
+
+private struct NotchAgentPillsRowView: View {
+    @ObservedObject var manager: AgentPillsManager
+
+    private var visiblePills: ArraySlice<AgentPill> {
+        manager.pills.prefix(3)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(visiblePills) { pill in
+                NotchAgentPillIcon(pill: pill)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+}
+
+private struct NotchAgentPillIcon: View {
+    @ObservedObject var pill: AgentPill
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .fill(Color.white.opacity(0.10))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6)
+                )
+                .overlay(
+                    NotchOmiMark()
+                        .frame(width: 11, height: 11)
+                )
+
+            Circle()
+                .fill(statusColor)
+                .frame(width: 4, height: 4)
+                .offset(x: 1.5, y: -1.5)
+        }
+        .frame(width: 18, height: 18)
+        .accessibilityLabel("\(pill.title) - \(pill.status.displayLabel)")
+    }
+
+    private var statusColor: Color {
+        switch pill.status {
+        case .queued:
+            return Color(red: 0.85, green: 0.78, blue: 0.30)
+        case .starting, .running, .done:
+            return Color(red: 0.27, green: 0.92, blue: 0.46)
+        case .failed:
+            return Color(red: 1.0, green: 0.42, blue: 0.42)
+        }
     }
 }
