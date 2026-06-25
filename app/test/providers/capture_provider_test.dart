@@ -651,9 +651,12 @@ void main() {
   });
 
   group('setBackgroundModeEnabled', () {
-    setUp(() {
+    setUp(() async {
       SharedPreferencesUtil().batchModeEnabled = false;
       SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
     });
 
     test('disable clears realtime prefs and stale config when batch mode is off', () async {
@@ -790,6 +793,20 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isTrue);
       // Batch mode is off by default, so nativeBleStreamingEnabled should be true
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isTrue);
+      provider.dispose();
+    });
+
+    test('enable preserves foreground-ready when foreground streaming is already active', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+
+      final result = await provider.setBackgroundModeEnabled(true);
+
+      expect(result, isTrue);
+      expect(SharedPreferencesUtil().backgroundModeEnabled, isTrue);
+      expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isTrue);
+      expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isTrue);
       provider.dispose();
     });
 

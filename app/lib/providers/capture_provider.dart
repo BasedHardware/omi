@@ -1156,7 +1156,11 @@ class CaptureProvider extends ChangeNotifier
     SharedPreferencesUtil().backgroundModeEnabled = true;
     final device = _recordingDevice!;
     final codec = await _getAudioCodec(device.id);
+    final wasForegroundReady = SharedPreferencesUtil().getBool('nativeBleForegroundReady');
     await _saveNativeBleStreamConfig(device, codec);
+    if (wasForegroundReady) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+    }
     Logger.debug(
       '[BackgroundMode] enabled — device ${device.id} '
       'type=${device.type}, batchMode=${SharedPreferencesUtil().batchModeEnabled}',
