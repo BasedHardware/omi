@@ -181,6 +181,13 @@ if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
     exit 1
 fi
 if [ "$LOCAL_PROFILE" = true ]; then
+    if [ "$BUNDLE_ID" = "com.omi.desktop-dev" ] || { [ "$IS_NAMED_BUNDLE" = false ] && [ "$APP_NAME" = "Omi Dev" ]; }; then
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 cannot target Omi Dev (com.omi.desktop-dev)."
+        echo "       Local profile would overwrite Omi Dev auth/state/binary. Use a named omi- bundle instead:"
+        echo "         DESKTOP_APP_NAME=omi-memory make desktop-run-local"
+        echo "       or:  cd desktop/macos && OMI_APP_NAME=omi-memory OMI_DESKTOP_LOCAL_PROFILE=1 OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 ./run.sh"
+        exit 1
+    fi
     if [ "$IS_NAMED_BUNDLE" = true ]; then
         case "$APP_NAME" in
             omi-*|Omi-*) ;;
@@ -190,8 +197,8 @@ if [ "$LOCAL_PROFILE" = true ]; then
                 ;;
         esac
         export OMI_LOCAL_PROFILE_STORAGE_NAME="${OMI_LOCAL_PROFILE_STORAGE_NAME:-$APP_NAME}"
-    elif [ "$APP_NAME" != "Omi Dev" ]; then
-        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 must use Omi Dev or an omi- prefixed OMI_APP_NAME (got '$APP_NAME')"
+    else
+        echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 requires an omi- prefixed named bundle (OMI_APP_NAME or DESKTOP_APP_NAME)"
         exit 1
     fi
     if [ "${OMI_SKIP_BACKEND:-0}" != "1" ] || [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
