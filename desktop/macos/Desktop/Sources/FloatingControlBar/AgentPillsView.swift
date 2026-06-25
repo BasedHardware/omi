@@ -130,7 +130,7 @@ struct AgentPillView: View {
                     .fill(Color(nsColor: NSColor(white: 0.05, alpha: 1.0)))
                     .frame(width: 10, height: 10)
                 Circle()
-                    .fill(statusColor)
+                    .fill(pill.status.indicatorColor)
                     .frame(width: 8, height: 8)
             }
             .offset(x: 3, y: -3)
@@ -145,10 +145,6 @@ struct AgentPillView: View {
         case .done, .failed: return true
         default: return false
         }
-    }
-
-    private var statusColor: Color {
-        pill.status.tintColor
     }
 
     private func startRotationIfRunning() {
