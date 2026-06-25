@@ -4,7 +4,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.unit.memory_import_isolation import (
+    ensure_package_path,
+    ensure_test_import_packages_importable,
+    install_database_client_stub,
+)
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 class _Snapshot:
@@ -54,8 +61,43 @@ def _sample_memory_dict(memory_id: str = "mem-1", *, locked: bool = False) -> di
     }
 
 
+def _purge_stub_memory_modules() -> None:
+    import sys
+
+    for name in list(sys.modules):
+        if not (name.startswith("utils.memory") or name in {"database.memories", "database.vector_db"}):
+            continue
+        mod = sys.modules.get(name)
+        mod_file = getattr(mod, "__file__", None)
+        if not isinstance(mod_file, str):
+            sys.modules.pop(name, None)
+
+
 def _load_memory_service(monkeypatch):
-    import utils.memory.memory_service as service_mod
+    import importlib
+    import sys
+
+    service_mod = sys.modules.get("utils.memory.memory_service")
+    memories_db = getattr(service_mod, "memories_db", None) if service_mod is not None else None
+    memories_file = getattr(memories_db, "__file__", None)
+    if not isinstance(memories_file, str) or not memories_file.endswith("memories.py"):
+        ensure_test_import_packages_importable(_BACKEND_DIR)
+        ensure_package_path("database", os.path.join(_BACKEND_DIR, "database"))
+        ensure_package_path("utils.memory", os.path.join(_BACKEND_DIR, "utils", "memory"))
+        install_database_client_stub()
+        _purge_stub_memory_modules()
+
+        import database.memories as memories_db_mod
+        import database.vector_db as vector_db_mod
+        import utils.memory.memory_service as service_mod
+
+        importlib.reload(memories_db_mod)
+        importlib.reload(vector_db_mod)
+        importlib.reload(service_mod)
+        import database
+
+        database.memories = memories_db_mod
+        database.vector_db = vector_db_mod
 
     monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *args, **kwargs: [])
@@ -194,7 +236,8 @@ class TestMemoryServiceParity:
                 return_value=[],
             ) as search_mock,
             patch(
-                "utils.memory.memory_service.write_canonical_extraction_memory",
+                "utils.memory.memory_service.write_canonical_external_memory",
+                return_value="mem-1",
             ) as write_mock,
             patch(
                 "utils.memory.memory_service.delete_canonical_memory",
