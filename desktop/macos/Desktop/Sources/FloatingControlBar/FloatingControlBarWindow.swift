@@ -828,7 +828,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        let origin = defaultTopCenteredFrame(for: frame.size).origin
+        let origin = FloatingControlBarGeometry.defaultPillFrame(
+            size: frame.size,
+            visibleFrame: screen.visibleFrame,
+            topInset: Self.topInset
+        ).origin
         self.setFrameOrigin(origin)
         log("FloatingControlBarWindow: centered at \(origin) on screen \(screen.visibleFrame)")
     }
@@ -2434,7 +2438,9 @@ extension FloatingControlBarWindow {
     func cancelPendingDismiss() {
         resignKeyAnimationToken += 1
         frameAnimationToken += 1
-        pendingRestoreOrigin = nil
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            pendingRestoreOrigin = nil
+        }
         suppressHoverResize = false
         isResizingProgrammatically = false
     }
