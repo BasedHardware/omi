@@ -283,10 +283,12 @@ jobs:
           text = log_path.read_text() if log_path.exists() else ""
           start = "DER_DIAGNOSTICS_JSON_BEGIN"
           end = "DER_DIAGNOSTICS_JSON_END"
-          if start not in text or end not in text:
-              print("DER diagnostics JSON markers not found; skipping artifact extraction")
+          start_index = text.find(start)
+          end_index = text.find(end, start_index + len(start)) if start_index != -1 else -1
+          if start_index == -1 or end_index == -1:
+              print("DER diagnostics JSON markers not found in order; skipping artifact extraction")
               raise SystemExit(0)
-          json_text = text.split(start, 1)[1].split(end, 1)[0].strip()
+          json_text = text[start_index + len(start) : end_index].strip()
           output_path.write_text(json_text + "\n")
           print(f"Wrote {output_path}")
           PY
