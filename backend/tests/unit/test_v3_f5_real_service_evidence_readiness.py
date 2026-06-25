@@ -227,12 +227,11 @@ def test_f4_risk_confirmations_are_required_before_any_real_read():
 def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     root = ROOT.parent
     assert "test_v3_f5_real_service_evidence_readiness.py" in (ROOT / "test.sh").read_text(encoding="utf-8")
-    assert "f5_real_service_evidence_preparation_proof" in (
-        ROOT / "scripts" / "p1_3_v3_external_compatibility_readiness.py"
-    ).read_text(encoding="utf-8")
-    assert "f5_real_service_evidence_preparation_proof" in (
-        ROOT / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py"
-    ).read_text(encoding="utf-8")
+    f5_script = (ROOT / "scripts" / "v3_f5_real_service_evidence_readiness.py").read_text(encoding="utf-8")
+    f5_utils = (ROOT / "utils" / "memory" / "v3_f5_evidence.py").read_text(encoding="utf-8")
+    assert "memory-V3-F5 real-service read-only evidence preparation" in f5_script
+    assert "build_evidence_report" in f5_utils
+    assert "default-NOT_RUN" in f5_script
     ticket = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
     oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "memory-V3-F5 real-service read-only evidence preparation" in ticket
