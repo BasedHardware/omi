@@ -382,6 +382,7 @@ struct MemoryExportDestinationSheet: View {
   let onDismiss: () -> Void
 
   @StateObject private var model = MemoryExportDestinationSheetModel()
+  @State private var showManualSetup = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -445,27 +446,12 @@ struct MemoryExportDestinationSheet: View {
       if destination.supportsAgentSetup {
         agentSetupSection
       } else if destination.supportsMCP {
+        // Lead with the one action — "Do it for me". Everything manual (live
+        // MCP fields, memory pack) is tucked behind a collapsed disclosure so
+        // the default view stays simple.
         executeBlock
-        Divider()
-          .background(OmiColors.backgroundTertiary)
-          .padding(.vertical, 2)
-
-        methodHeader(
-          icon: "bolt.fill",
-          title: "Live connection",
-          tag: "AUTOMATIC",
-          tagColor: OmiColors.success,
-          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
-        )
-        mcpSection
-      }
-
-      if destination.supportsMemoryPack {
-        if destination.supportsMCP {
-          Divider()
-            .background(OmiColors.backgroundTertiary)
-            .padding(.vertical, 2)
-        }
+        manualSetupDisclosure
+      } else if destination.supportsMemoryPack {
         methodHeader(
           icon: "doc.on.clipboard.fill",
           title: "Memory pack",
@@ -477,6 +463,43 @@ struct MemoryExportDestinationSheet: View {
         packActionButton
       }
     }
+  }
+
+  @ViewBuilder
+  private var manualSetupDisclosure: some View {
+    DisclosureGroup(isExpanded: $showManualSetup) {
+      VStack(alignment: .leading, spacing: 18) {
+        methodHeader(
+          icon: "bolt.fill",
+          title: "Live connection",
+          tag: "AUTOMATIC",
+          tagColor: OmiColors.success,
+          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
+        )
+        mcpSection
+
+        if destination.supportsMemoryPack {
+          Divider()
+            .background(OmiColors.backgroundTertiary)
+            .padding(.vertical, 2)
+          methodHeader(
+            icon: "doc.on.clipboard.fill",
+            title: "Memory pack",
+            tag: "MANUAL",
+            tagColor: OmiColors.textTertiary,
+            subtitle: "Copy a one-time snapshot and paste it in yourself. Won't update on its own."
+          )
+          packSection
+          packActionButton
+        }
+      }
+      .padding(.top, 10)
+    } label: {
+      Text("Manual setup")
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+    .tint(OmiColors.textTertiary)
   }
 
   private var agentSetupSection: some View {
