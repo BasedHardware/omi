@@ -562,7 +562,7 @@ def _delete_person_speech_samples_async(user_id: str, person_id: str) -> None:
     try:
         delete_user_person_speech_samples(user_id, person_id)
     except Exception:
-        logger.exception("Failed to delete person speech samples uid=%s person_id=%s", user_id, person_id)
+        logger.exception("Failed to delete person speech samples")
 
 
 def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: Optional[List[str]] = None) -> dict:

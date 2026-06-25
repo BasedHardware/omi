@@ -7,7 +7,7 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import db
-from models.mcp_api_key import McpApiKey
+from models.mcp_api_key import McpApiKeyDB, McpApiKey, MCP_LEGACY_API_KEY_SCOPES
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 
 
@@ -139,7 +139,7 @@ def get_auth_by_api_key(api_key: str) -> Optional[McpApiKeyAuth]:
 
     scopes = key_data.get("scopes")
     if scopes is None:
-        scopes = []
+        scopes = list(MCP_LEGACY_API_KEY_SCOPES)
     key_doc.reference.update({"last_used_at": datetime.utcnow()})
     redis_db.cache_mcp_api_key_auth(hashed_key, user_id, scopes)
     return {"user_id": user_id, "scopes": scopes}
