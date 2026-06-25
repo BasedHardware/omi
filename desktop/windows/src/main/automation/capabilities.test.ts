@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { fromAny } from '@total-typescript/shoehorn'
 import { validateStep, validatePlan } from './capabilities'
 import type { AutomationPlan, AutomationStep } from '../../shared/types'
 
@@ -14,7 +15,7 @@ describe('validateStep', () => {
   })
 
   it('rejects unknown step types', () => {
-    bad({ type: 'nuke' } as unknown as AutomationStep)
+    bad(fromAny({ type: 'nuke' }))
   })
 
   it('accepts plain text and whitelisted named keys in send_keys', () => {
