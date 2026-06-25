@@ -133,9 +133,67 @@ export interface AgentControlToolContext {
 }
 
 export interface ActiveControlToolOwnerInput {
-  requestId?: string;
-  ownerIdForRequest?: (requestId: string) => string | undefined;
+  requestKey?: string;
+  ownerIdForRequest?: (requestKey: string) => string | undefined;
   fallbackOwnerId?: string;
+}
+
+export interface ControlRequestKeyInput {
+  requestId?: string;
+  clientId?: string;
+}
+
+export interface ControlRequestContextInput extends ControlRequestKeyInput {
+  ownerGuard?: string;
+  fallbackOwnerId?: string;
+}
+
+export interface ResolvedControlRequestContext {
+  requestKey?: string;
+  activeOwnerId: string;
+  ownerGuard?: string;
+}
+
+export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId ? JSON.stringify([input.clientId ?? "", input.requestId]) : undefined;
+}
+
+export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {
+  const ownerGuard = input.ownerGuard?.trim();
+  if (input.ownerGuard !== undefined && !ownerGuard) {
+    throw new Error("ownerId cannot be empty");
+  }
+  const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  return {
+    requestKey: controlRequestKey(input),
+    activeOwnerId: fallbackOwnerId || "desktop-local-user",
+    ownerGuard,
+  };
+}
+
+export function withDefaultOwnerGuard(input: Record<string, unknown>, ownerGuard: string): Record<string, unknown> {
+  if (Object.hasOwn(input, "ownerId")) {
+    return input;
+  }
+  return { ...input, ownerId: ownerGuard };
+}
+
+export function withMergedOwnerGuard(
+  input: Record<string, unknown>,
+  ownerGuard: string | undefined,
+  defaultOwnerGuard: string
+): Record<string, unknown> {
+  if (!ownerGuard) {
+    return withDefaultOwnerGuard(input, defaultOwnerGuard);
+  }
+  if (!Object.hasOwn(input, "ownerId")) {
+    return { ...input, ownerId: ownerGuard };
+  }
+  const inputOwnerId = typeof input.ownerId === "string" ? input.ownerId.trim() : undefined;
+  if (inputOwnerId !== ownerGuard) {
+    throw new Error("Owner guards do not match");
+  }
+  return { ...input, ownerId: ownerGuard };
 }
 
 export function isAgentControlToolName(name: string): name is AgentControlToolName {
@@ -265,7 +323,7 @@ function controlToolOwnerId(context: AgentControlToolContext): string {
 }
 
 export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): string {
-  const requestOwnerId = input.requestId ? input.ownerIdForRequest?.(input.requestId)?.trim() : undefined;
+  const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
   if (requestOwnerId) {
     return requestOwnerId;
   }
@@ -275,7 +333,11 @@ export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): st
 
 function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {
   const activeOwnerId = controlToolOwnerId(context);
-  if (requestedOwnerId && requestedOwnerId !== activeOwnerId) {
+  const ownerGuard = requestedOwnerId?.trim();
+  if (requestedOwnerId !== undefined && !ownerGuard) {
+    throw new Error("Requested ownerId cannot be empty");
+  }
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
     throw new Error("Requested ownerId does not match the active control owner");
   }
   return activeOwnerId;

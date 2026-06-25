@@ -55,9 +55,12 @@ import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import {
   activeControlToolOwnerId,
+  controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
+  resolveControlRequestContext,
   type AgentControlToolContext,
+  withMergedOwnerGuard,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 
@@ -125,9 +128,6 @@ let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
 const activeControlToolOwnersByRequest = new Map<string, string>();
-function controlOwnerMapKey(requestId?: string, clientId?: string): string | undefined {
-  return requestId ? JSON.stringify([clientId ?? "", requestId]) : undefined;
-}
 let toolCallCorrelation:
   | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
   | undefined;
@@ -198,7 +198,7 @@ function startOmiToolsRelay(): Promise<string> {
                         ...agentControlToolContext,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestId: controlOwnerMapKey(msg.requestId, msg.clientId),
+                            requestKey: controlRequestKey(msg),
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                             fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                           }),
@@ -731,7 +731,7 @@ async function main(): Promise<void> {
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
           query.requestId = requestIdFor(query) ?? randomUUID();
           const queryRequestId = requestIdFor(query);
-          const queryOwnerKey = controlOwnerMapKey(queryRequestId, query.clientId);
+          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
           if (queryOwnerKey) {
             activeControlToolOwnersByRequest.set(queryOwnerKey, queryOwnerId);
           }
@@ -777,9 +777,15 @@ async function main(): Promise<void> {
       case "control_tool": {
         const control = msg as ControlToolRequestMessage;
         const requestId = requestIdFor(control);
-        const controlOwnerKey = controlOwnerMapKey(requestId, control.clientId);
-        const trimmedControlOwnerId = control.ownerId?.trim();
-        if (control.ownerId !== undefined && !trimmedControlOwnerId) {
+        let controlContext;
+        try {
+          controlContext = resolveControlRequestContext({
+            ownerGuard: control.ownerId,
+            fallbackOwnerId: currentOwnerId,
+            requestId,
+            clientId: control.clientId,
+          });
+        } catch {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -793,14 +799,30 @@ async function main(): Promise<void> {
           });
           break;
         }
-        const controlOwnerId = currentOwnerId;
-        if (controlOwnerKey) {
-          activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId);
+        const controlOwnerKey = controlContext.requestKey;
+        let controlInput;
+        try {
+          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+        } catch (error) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
         }
-        const controlInput =
-          control.ownerId && !Object.hasOwn(control.input ?? {}, "ownerId")
-            ? { ...(control.input ?? {}), ownerId: trimmedControlOwnerId }
-            : (control.input ?? {});
+        if (controlOwnerKey) {
+          activeControlToolOwnersByRequest.set(controlOwnerKey, controlContext.activeOwnerId);
+        }
         const result = agentControlToolContext
           ? await (async () => {
               try {
@@ -809,7 +831,7 @@ async function main(): Promise<void> {
                     ...agentControlToolContext,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
-                        requestId: controlOwnerKey,
+                        requestKey: controlOwnerKey,
                         ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
                         fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                       }),

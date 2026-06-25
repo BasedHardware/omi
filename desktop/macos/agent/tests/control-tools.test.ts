@@ -1,15 +1,18 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   activeControlToolOwnerId,
   agentControlToolDefinitions,
+  controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
+  resolveControlRequestContext,
   type AgentControlToolContext,
+  withDefaultOwnerGuard,
+  withMergedOwnerGuard,
 } from "../src/runtime/control-tools.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
@@ -142,38 +145,78 @@ describe("agent control tools", () => {
 
     expect(
       activeControlToolOwnerId({
-        requestId: "request-owner-a",
+        requestKey: "request-owner-a",
         ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
         fallbackOwnerId: mutableFallbackOwner,
       }),
     ).toBe("owner-a");
     expect(
       activeControlToolOwnerId({
-        requestId: "request-owner-b",
+        requestKey: "request-owner-b",
         ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
         fallbackOwnerId: mutableFallbackOwner,
       }),
     ).toBe("owner-b");
     expect(
       activeControlToolOwnerId({
-        requestId: "request-missing",
+        requestKey: "request-missing",
         ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
         fallbackOwnerId: mutableFallbackOwner,
       }),
     ).toBe("owner-b");
   });
 
-  it("source: direct control_tool ownerId is trimmed guard input, not session authority", () => {
-    const indexSrc = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
-    const controlToolCase = indexSrc.match(/case ["']control_tool["']:[\s\S]*?case ["']interrupt["']:/)?.[0] ?? "";
+  it("resolves direct control request context without elevating envelope owner guard", () => {
+    const resolved = resolveControlRequestContext({
+      ownerGuard: " owner-from-envelope ",
+      fallbackOwnerId: "fallback-owner",
+      requestId: "request-a",
+      clientId: "client-a",
+    });
 
-    expect(controlToolCase).toContain("const trimmedControlOwnerId = control.ownerId?.trim()");
-    expect(controlToolCase).toContain("error: { code: \"invalid_owner_id\", message: \"ownerId cannot be empty\" }");
-    expect(controlToolCase).toContain("const controlOwnerId = currentOwnerId");
-    expect(controlToolCase).toContain("ownerId: trimmedControlOwnerId");
-    expect(controlToolCase).toContain("activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId)");
-    expect(controlToolCase).not.toContain("currentOwnerId = controlOwnerId");
-    expect(controlToolCase).not.toContain("piMonoOwnerId = controlOwnerId");
+    expect(resolved).toEqual({
+      requestKey: JSON.stringify(["client-a", "request-a"]),
+      activeOwnerId: "fallback-owner",
+      ownerGuard: "owner-from-envelope",
+    });
+    expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
+    expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
+  });
+
+  it("rejects blank direct control envelope owners before global fallback", () => {
+    expect(() =>
+      resolveControlRequestContext({
+        ownerGuard: "   ",
+        fallbackOwnerId: "fallback-owner",
+        requestId: "request-a",
+        clientId: "client-a",
+      }),
+    ).toThrow("ownerId cannot be empty");
+  });
+
+  it("injects the active owner as a default guard without overriding tool-supplied guards", () => {
+    expect(withDefaultOwnerGuard({ runId: "run-a" }, "owner-active")).toEqual({
+      runId: "run-a",
+      ownerId: "owner-active",
+    });
+    expect(withDefaultOwnerGuard({ runId: "run-a", ownerId: "owner-guard" }, "owner-active")).toEqual({
+      runId: "run-a",
+      ownerId: "owner-guard",
+    });
+  });
+
+  it("requires envelope and input owner guards to agree before control dispatch", () => {
+    expect(withMergedOwnerGuard({ runId: "run-a" }, "owner-envelope", "owner-active")).toEqual({
+      runId: "run-a",
+      ownerId: "owner-envelope",
+    });
+    expect(withMergedOwnerGuard({ runId: "run-a", ownerId: " owner-envelope " }, "owner-envelope", "owner-active")).toEqual({
+      runId: "run-a",
+      ownerId: "owner-envelope",
+    });
+    expect(() =>
+      withMergedOwnerGuard({ runId: "run-a", ownerId: "owner-active" }, "owner-envelope", "owner-active"),
+    ).toThrow("Owner guards do not match");
   });
 
   it("keeps concurrent control tool calls scoped to their active request owners", async () => {
@@ -194,7 +237,7 @@ describe("agent control tools", () => {
       kernel,
       getOwnerId: () =>
         activeControlToolOwnerId({
-          requestId,
+          requestKey: requestId,
           ownerIdForRequest: (id) => ownerByRequest.get(id),
           fallbackOwnerId: mutableFallbackOwner,
         }),
@@ -338,6 +381,35 @@ describe("agent control tools", () => {
       error: { code: "control_tool_failed" },
     });
     expect(sent.error.message).toContain("does not match the active control owner");
+    store.close();
+  });
+
+  it("treats caller-provided owner ids as trimmed guards", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });
+    const context: AgentControlToolContext = {
+      kernel,
+      getOwnerId: () => "owner-from-context",
+    };
+
+    const trimmed = parseToolResult(
+      await handleAgentControlToolCall(context, "list_agent_sessions", {
+        ownerId: " owner-from-context ",
+      }),
+    );
+    expect(trimmed.ok).toBe(true);
+    expect(trimmed.sessions).toHaveLength(1);
+
+    const blank = parseToolResult(
+      await handleAgentControlToolCall(context, "list_agent_sessions", {
+        ownerId: "   ",
+      }),
+    );
+    expect(blank).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(blank.error.message).toContain("cannot be empty");
     store.close();
   });
 
