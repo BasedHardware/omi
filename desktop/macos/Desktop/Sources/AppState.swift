@@ -122,6 +122,10 @@ class AppState: ObservableObject {
   // Access via RecordingTimer.shared.duration
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
+  private var hasActiveConversationFilters: Bool {
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+  }
+
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
   // Access via LiveTranscriptMonitor.shared.segments
   var liveSpeakerSegments: [SpeakerSegment] { LiveTranscriptMonitor.shared.segments }
@@ -130,7 +134,8 @@ class AppState: ObservableObject {
   @Published var conversations: [ServerConversation] = []
   @Published var isLoadingConversations: Bool = false
   @Published var conversationsError: String? = nil
-  @Published var totalConversationsCount: Int? = nil  // Total count (fetched separately)
+  @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
+  @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -2538,6 +2543,15 @@ class AppState: ObservableObject {
 
   // MARK: - Conversations
 
+  private func updateConversationCountForCurrentFilters(_ count: Int) {
+    if hasActiveConversationFilters {
+      filteredConversationsCount = count
+    } else {
+      totalConversationsCount = count
+      filteredConversationsCount = nil
+    }
+  }
+
   /// Load conversations - first from local cache (instant), then from API (background refresh)
   func loadConversations() async {
     guard !isLoadingConversations else { return }
@@ -2576,7 +2590,7 @@ class AppState: ObservableObject {
           let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
             starredOnly: showStarredOnly,
             folderId: selectedFolderId)
-          totalConversationsCount = localCount
+          updateConversationCountForCurrentFilters(localCount)
 
           // Stop loading state so UI shows cached data immediately
           isLoadingConversations = false
@@ -2589,7 +2603,7 @@ class AppState: ObservableObject {
       }
     } else {
       conversations = []
-      totalConversationsCount = 0
+      filteredConversationsCount = 0
     }
 
     // Step 2: Fetch from API in background to get fresh data
@@ -2667,8 +2681,8 @@ class AppState: ObservableObject {
     // Update total count from API (more accurate than local)
     do {
       let count = try await countTask
-      totalConversationsCount = count
-      log("Conversations: Total count from API = \(count)")
+      updateConversationCountForCurrentFilters(count)
+      log("Conversations: Count from API = \(count) (filtered=\(hasActiveConversationFilters))")
     } catch {
       logError("Conversations: Failed to get count from API", error: error)
       // Keep local count if API fails
@@ -2749,8 +2763,13 @@ class AppState: ObservableObject {
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : nil
       )
-      if totalConversationsCount != count {
+      if hasActiveConversationFilters {
+        if filteredConversationsCount != count {
+          filteredConversationsCount = count
+        }
+      } else if totalConversationsCount != count {
         totalConversationsCount = count
+        filteredConversationsCount = nil
       }
     } catch {
       // Keep existing count
