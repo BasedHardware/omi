@@ -1,7 +1,4 @@
-"""Canonical module for ``utils.memory.v3_dev_cloud_proof`` (WS-G8b).
-
-Neutral ``v3_dev_cloud_proof`` is the source of truth. Legacy ``v3_dev_cloud_proof`` remains an importable alias.
-"""
+"""Dev-cloud proof helpers for memory ``/v3`` readiness scripts and tests."""
 
 from __future__ import annotations
 
