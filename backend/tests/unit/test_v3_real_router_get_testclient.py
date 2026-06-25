@@ -53,7 +53,8 @@ def test_current_legacy_get_runtime_preserves_limit_offset_semantics(probe):
 
 def test_get_still_uses_legacy_db_not_runtime_adapter_pipeline(probe):
     assert probe["stubbed_legacy_get_memories_call_count"] == 2
-    assert probe["memory_adapter_modules_loaded"]  # imported with router; not invoked on legacy GET path
+    # Legacy GET routes through memories_db stub, not the v3 runtime adapter pipeline.
+    assert probe["memory_adapter_modules_loaded"] == []
     assert FUTURE_GET_WIRING_SEAM == [
         "GET /v3/memories query params",
         "adapt_v3_request_parameters(...) request adapter",
