@@ -118,10 +118,10 @@ backend/tests/unit/
   "task": "ptt_response",
   "model": "gemini-1-5-flash-8b-exp",
   "scores": {
-    "gemini-1-5-flash-8b-exp": 0.715,
-    "gpt-realtime-2": 0.78,
-    "claude-sonnet-4-6": 0.658,
-    "haiku-4-5": 0.778
+    "gemini-1-5-flash-8b-exp": 0.865,
+    "gpt-realtime-2": 0.800,
+    "haiku-4-5": 0.790,
+    "claude-sonnet-4-6": 0.648
   },
   "detail": {
     "weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1},
@@ -129,7 +129,7 @@ backend/tests/unit/
       {"id": "gpt-realtime-2", "provider": "openai", "scores": {"quality": 0.85, "latency": 0.80, "cost": 0.60}},
       ...
     ],
-    "reason": "selected haiku-4-5 (highest weighted score 0.7780)"
+    "reason": "selected gemini-1-5-flash-8b-exp (highest weighted score 0.8650)"
   },
   "updated_at": "2026-06-25T10:00:00Z",
   "attribution": "Mock benchmarks for development. See backend/utils/auto_router/benchmarks.example.json for the data format. Production deployment should use real measurements."
