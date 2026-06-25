@@ -450,14 +450,17 @@ struct DashboardPage: View {
 
                 VStack(spacing: 12) {
                     centerMemoryHeader
+                    // Center the metric block in an area exactly as tall as the six
+                    // side-list rows (6×48 + 5×12 spacing) so the column matches the
+                    // side columns' height and the block lines up with their center.
                     homeMetricsStrip
+                        .frame(height: CGFloat(6 * 48 + 5 * 12))
                 }
                 .frame(width: 340)
 
                 destinationStack
                     .frame(width: 300)
             }
-            .frame(height: 318)
             .padding(26)
         }
     }
@@ -495,36 +498,23 @@ struct DashboardPage: View {
 
     private var sourceConstellation: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                HomeSourceIconTile(title: "Gmail", brand: .gmail) {
-                    openImportConnector("email")
-                }
-
-                HomeSourceIconTile(title: "Calendar", brand: .calendar) {
-                    openImportConnector("calendar")
-                }
-
-                HomeSourceIconTile(title: "Files", brand: .localFiles, isConnected: true) {
-                    openImportConnector("local-files")
-                }
+            HomeAIChoiceButton(title: "Gmail", brand: .gmail) {
+                openImportConnector("email")
             }
-
-            HStack(spacing: 10) {
-                HomeSourceIconTile(title: "Notes", brand: .appleNotes) {
-                    openImportConnector("apple-notes")
-                }
-
-                HomeSourceIconTile(
-                    title: "Omi Device",
-                    usesOmiDeviceImage: true,
-                    isConnected: hasOmiDeviceHistory
-                ) {
-                    openOmiDeviceWebsite()
-                }
-
-                HomeSourceIconTile(title: "More", systemImage: "plus", isBrowse: true) {
-                    openAppsPage()
-                }
+            HomeAIChoiceButton(title: "Calendar", brand: .calendar) {
+                openImportConnector("calendar")
+            }
+            HomeAIChoiceButton(title: "Files", brand: .localFiles) {
+                openImportConnector("local-files")
+            }
+            HomeAIChoiceButton(title: "Notes", brand: .appleNotes) {
+                openImportConnector("apple-notes")
+            }
+            HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true) {
+                openOmiDeviceWebsite()
+            }
+            HomeAIChoiceButton(title: "More", systemImage: "plus") {
+                openAppsPage()
             }
         }
     }
@@ -543,11 +533,17 @@ struct DashboardPage: View {
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude", brand: .claude) {
-                openExportDestination(.claude)
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude) {
+                openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT", brand: .chatgpt) {
-                openExportDestination(.chatgpt)
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt) {
+                openExportDestination(.codex)
+            }
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw) {
+                openExportDestination(.openclaw)
+            }
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes) {
+                openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
                 navigate(to: .chat)
@@ -596,7 +592,7 @@ struct DashboardPage: View {
                 )
             }
         }
-        .frame(maxWidth: 300)
+        .frame(maxWidth: .infinity)
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -1975,7 +1971,7 @@ private struct HomeCenterMetricTile: View {
                     .minimumScaleFactor(0.82)
             }
             .padding(10)
-            .frame(width: 146, height: 82, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))

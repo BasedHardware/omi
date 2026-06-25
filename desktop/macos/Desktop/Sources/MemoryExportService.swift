@@ -10,6 +10,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   case agents
   case claudeCode
   case codex
+  case openclaw
+  case hermes
 
   var id: String { rawValue }
 
@@ -36,6 +38,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .agents: return "AI Agents"
     case .claudeCode: return "Claude Code"
     case .codex: return "Codex"
+    case .openclaw: return "OpenClaw"
+    case .hermes: return "Hermes"
     }
   }
 
@@ -49,6 +53,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .agents: return "One prompt for your agent"
     case .claudeCode: return "Connect via MCP"
     case .codex: return "Connect via MCP"
+    case .openclaw: return "Memory bank for OpenClaw"
+    case .hermes: return "Memory bank for Hermes"
     }
   }
 
@@ -62,6 +68,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .agents: return "Give your agent one prompt that connects Omi memories and this Mac."
     case .claudeCode: return "Add Omi as an MCP server so Claude Code always reads your memories."
     case .codex: return "Add Omi as an MCP server so Codex always reads your memories."
+    case .openclaw: return "Wire Omi memory into OpenClaw so your agent reads your memories."
+    case .hermes: return "Wire Omi memory into Hermes so your agent reads your memories."
     }
   }
 
@@ -75,6 +83,8 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     case .agents: return .agents
     case .claudeCode: return .claudeCode
     case .codex: return .codex
+    case .openclaw: return .openclaw
+    case .hermes: return .hermes
     }
   }
 
@@ -82,7 +92,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .obsidian:
       return true
-    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex:
+    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return false
     }
   }
@@ -90,7 +100,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   /// Whether this destination offers the live MCP connector flow.
   var supportsMCP: Bool {
     switch self {
-    case .chatgpt, .claude, .claudeCode, .codex:
+    case .chatgpt, .claude, .claudeCode, .codex, .openclaw, .hermes:
       return true
     case .notion, .obsidian, .gemini, .agents:
       return false
@@ -106,7 +116,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
   enum MCPExecuteKind { case autonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
     switch self {
-    case .chatgpt, .claude, .claudeCode, .codex: return .autonomous
+    case .chatgpt, .claude, .claudeCode, .codex, .openclaw, .hermes: return .autonomous
     case .notion, .obsidian, .gemini, .agents: return .assisted
     }
   }
@@ -120,7 +130,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     switch self {
     case .notion, .obsidian, .chatgpt, .claude, .gemini:
       return true
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       return false
     }
   }
@@ -137,14 +147,14 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       return URL(string: "https://claude.ai/new")
     case .gemini:
       return URL(string: "https://gemini.google.com/app")
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       return nil
     }
   }
 
   var manualPrompt: String {
     switch self {
-    case .notion, .agents, .claudeCode, .codex:
+    case .notion, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return ""
     case .chatgpt:
       return """
@@ -165,7 +175,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   func clipboardText(for markdown: String) -> String {
     switch self {
-    case .notion, .obsidian, .agents, .claudeCode, .codex:
+    case .notion, .obsidian, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return markdown
     case .chatgpt, .claude, .gemini:
       return """
@@ -238,6 +248,38 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
         steps: [
           "Add the block below to ~/.codex/config.toml",
           "Restart Codex — it will read your Omi memories over MCP",
+        ],
+        openURL: nil,
+        openTitle: nil
+      )
+    case .hermes:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: "Copy config",
+        copyText: """
+          omi-memory:
+            command: npx
+            args: ["-y", "mcp-remote", "\(url)", "--header", "Authorization: Bearer \(key)"]
+          """,
+        steps: [
+          "Add the block below under mcp_servers: in ~/.hermes/config.yaml",
+          "Restart Hermes — it reads your Omi memories over MCP and searches them first",
+        ],
+        openURL: nil,
+        openTitle: nil
+      )
+    case .openclaw:
+      return MCPSetup(
+        serverURL: url,
+        copyTitle: "Copy memory bank",
+        copyText: """
+          ## OMI memory (search FIRST)
+          - MCP: \(url)  (Authorization: Bearer \(key))
+          Before any task, search Omi memory for context; save durable new facts.
+          """,
+        steps: [
+          "Paste the block below into your OpenClaw MEMORY.md (additive — don't replace it)",
+          "OpenClaw will search Omi memory first on every task",
         ],
         openURL: nil,
         openTitle: nil
@@ -376,7 +418,7 @@ actor MemoryExportService {
       isConfigured = !(defaults.string(forKey: destination.obsidianVaultPathKey) ?? "").isEmpty
     case .agents:
       isConfigured = hasStoredMCPKey && LocalAgentAPISettings.isEnabled && LocalAgentAPISettings.storedToken() != nil
-    case .claudeCode, .codex:
+    case .claudeCode, .codex, .openclaw, .hermes:
       isConfigured = hasStoredMCPKey
     case .notion, .chatgpt, .claude, .gemini:
       isConfigured = exportedCount > 0
