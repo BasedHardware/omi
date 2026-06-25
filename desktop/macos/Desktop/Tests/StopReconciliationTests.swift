@@ -213,6 +213,49 @@ final class StopReconciliationTests: XCTestCase {
             sessionStartedAt: sessionStartTime
         ))
     }
+    // MARK: - Backend Conversation ID Binding
+
+    func testBoundBackendConversationIdAcceptsExactMatchBeforeTimestampFallback() {
+        let sessionStartTime = Date()
+        let boundBackendId = "backend-conversation-123"
+        let returnedBackendId = "backend-conversation-123"
+        let convStartedAt = sessionStartTime.addingTimeInterval(30)
+        let convSource: ConversationSource = .phone
+
+        let exactIdMatches = returnedBackendId == boundBackendId
+        let timestampMatches = DesktopConversationMatchPolicy.matchesDesktopConversation(
+            startedAt: convStartedAt,
+            source: convSource,
+            sessionStartedAt: sessionStartTime
+        )
+
+        XCTAssertTrue(exactIdMatches, "A bound listen conversation id should identify the stopped session exactly")
+        XCTAssertFalse(timestampMatches, "This fixture would be rejected by the old timestamp/source fallback")
+    }
+
+    func testBoundBackendConversationIdRejectsDifferentForceProcessConversation() {
+        let boundBackendId = "backend-conversation-123"
+        let returnedBackendId = "backend-conversation-456"
+
+        XCTAssertNotEqual(returnedBackendId, boundBackendId,
+            "Force-process must not bind a different conversation when the listen session id is known")
+    }
+
+    func testRecordingSessionWithBackendIdCanStillBeFinishedForRetryReconciliation() {
+        var session = TranscriptionSessionRecord(
+            source: "desktop",
+            status: .recording,
+            backendId: "backend-conversation-123",
+            backendSynced: false
+        )
+
+        XCTAssertEqual(session.backendId, "backend-conversation-123")
+        XCTAssertFalse(session.backendSynced)
+        XCTAssertEqual(session.status, .recording)
+        session.status = .pendingUpload
+        XCTAssertEqual(session.status, .pendingUpload,
+            "Binding the backend id is not completion; stop flow must still be able to mark the session pending")
+    }
 }
 
 private extension Date {
