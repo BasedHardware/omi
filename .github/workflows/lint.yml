@@ -56,7 +56,7 @@ jobs:
         if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
         run: |
           SKIP_FLAG=""
-          if [ "${{ contains(join(github.event.pull_request.labels.*.name, ','), 'no-changelog-needed') }}" = "true" ]; then
+          if [ "${{ contains(github.event.pull_request.labels.*.name, 'no-changelog-needed') }}" = "true" ]; then
             SKIP_FLAG="--skip"
           fi
 
