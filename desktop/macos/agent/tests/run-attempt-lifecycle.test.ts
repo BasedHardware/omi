@@ -172,6 +172,46 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("reassigns an idle pinned pi-mono worker to a different session", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [first.session.sessionId, "pi-mono"],
+    );
+
+    const second = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-other-session",
+      externalRefId: "task-other-session",
+    });
+
+    expect(second.run.status).toBe("succeeded");
+    expect(second.session.sessionId).not.toBe(first.session.sessionId);
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'", ["pi-mono"]).count).toBe(1);
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1").payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      reason: "pinned_worker_reassigned",
+    });
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
   it("reconciles active attempts as orphaned and keeps restart semantics adapter-scoped", () => {
     const databasePath = newDatabasePath();
     let now = 100;

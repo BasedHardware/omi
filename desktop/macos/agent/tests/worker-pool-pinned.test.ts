@@ -123,6 +123,23 @@ describe("AdapterWorkerPool pinned workers", () => {
     );
   });
 
+  it("can release an idle pinned binding for process-local worker reassignment", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+    const binding = {
+      bindingId: "binding-1",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+
+    await pool.runExclusiveQueued(binding, "attempt-1", async () => {});
+
+    expect(pool.releaseIdlePinnedBinding()).toBe("binding-1");
+    expect(pool.acquire(undefined)?.workerId).toBe("worker-1");
+  });
+
   it("keeps a first-binding creation lease pinned before the execution lease", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 2);
     const createdBinding = {

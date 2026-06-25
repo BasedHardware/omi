@@ -399,6 +399,12 @@ export class AgentRuntimeKernel {
             this.readActiveBinding(accepted.session.sessionId, adapterId) ??
             this.readLatestBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
+          if (!bindingQueueKey) {
+            const evictedBindingId = pool.releaseIdlePinnedBinding();
+            if (evictedBindingId) {
+              this.markBindingStaleById(evictedBindingId, attempt, "pinned_worker_reassigned");
+            }
+          }
           return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
             const resolved = await this.resolveBindingForAttempt({
               input,
@@ -1424,6 +1430,10 @@ export class AgentRuntimeKernel {
         payload: { bindingId: binding.bindingId, reason },
       });
     });
+  }
+
+  private markBindingStaleById(bindingId: string, attempt: RunAttempt, reason: string): void {
+    this.markBindingStale(this.readBinding(bindingId), attempt, reason);
   }
 
   private persistArtifactInTransaction(input: PersistArtifactInput): AgentArtifact {

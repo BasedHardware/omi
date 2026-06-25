@@ -44,6 +44,15 @@ export class AdapterWorker {
     return this.pinnedBindingId === bindingId;
   }
 
+  releaseIdlePinnedBinding(): string | null {
+    if (this.isBusy || !this.pinnedBindingId) {
+      return null;
+    }
+    const bindingId = this.pinnedBindingId;
+    this.pinnedBindingId = null;
+    return bindingId;
+  }
+
   pinBinding(binding: AdapterBindingHandle): void {
     if (!binding.bindingId) {
       throw new Error("Pinned adapter workers require a bindingId");
@@ -131,6 +140,16 @@ export class AdapterWorkerPool {
 
   get capacity(): number {
     return this.maxWorkers;
+  }
+
+  releaseIdlePinnedBinding(): string | null {
+    for (const worker of this.workers) {
+      const bindingId = worker.releaseIdlePinnedBinding();
+      if (bindingId) {
+        return bindingId;
+      }
+    }
+    return null;
   }
 
   acquire(binding?: AdapterBindingHandle): AdapterWorker | null {
