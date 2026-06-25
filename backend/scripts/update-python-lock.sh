@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 
 PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
 IFS=. read -r PYTHON_MAJOR PYTHON_MINOR _ <<< "$PYTHON_VERSION"
-PYLOCK_REQUIRES_PYTHON=">=${PYTHON_VERSION},<${PYTHON_MAJOR}.$((PYTHON_MINOR + 1))"
+PYLOCK_REQUIRES_PYTHON=">=${PYTHON_MAJOR}.${PYTHON_MINOR},<${PYTHON_MAJOR}.$((PYTHON_MINOR + 1))"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required. Install it from https://docs.astral.sh/uv/getting-started/installation/" >&2
