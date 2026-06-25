@@ -754,8 +754,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   private func clearResponseGlowIfRealtimeAudioIdle() {
-    guard let barState, audioReceivedThisTurn else { return }
-    barState.isVoiceResponseActive = false
+    barState?.isVoiceResponseActive = false
   }
 
   // MARK: - Tools
