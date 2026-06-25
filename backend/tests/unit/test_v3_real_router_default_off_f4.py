@@ -4,8 +4,11 @@ import sys
 import types
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 try:
     from fastapi import FastAPI
@@ -73,11 +76,12 @@ def _install_router_stubs(monkeypatch, counters):
             monkeypatch.delitem(sys.modules, name, raising=False)
 
     database_pkg = types.ModuleType("database")
-    database_pkg.__path__ = []
+    database_pkg.__path__ = [str(BACKEND_DIR / "database")]
     monkeypatch.setitem(sys.modules, "database", database_pkg)
 
     client_module = types.ModuleType("database._client")
     client_module.document_id_from_seed = lambda seed: "stubbed-document-id"
+    client_module.db = object()
     monkeypatch.setitem(sys.modules, "database._client", client_module)
     setattr(database_pkg, "_client", client_module)
 
@@ -120,6 +124,16 @@ def _install_router_stubs(monkeypatch, counters):
     monkeypatch.setitem(sys.modules, "database.vector_db", vector_db)
     setattr(database_pkg, "vector_db", vector_db)
 
+    projection = types.ModuleType("database.memory_compatibility_projection")
+
+    def read_v3_compatibility_projection_page(request):
+        counters.projection_calls += 1
+        raise AssertionError("projection reader should not run in this test path")
+
+    projection.read_v3_compatibility_projection_page = read_v3_compatibility_projection_page
+    monkeypatch.setitem(sys.modules, "database.memory_compatibility_projection", projection)
+    setattr(database_pkg, "memory_compatibility_projection", projection)
+
     apps = types.ModuleType("utils.apps")
     apps.update_personas_async = mark_mutation("update_personas_async")
     monkeypatch.setitem(sys.modules, "utils.apps", apps)
@@ -143,11 +157,22 @@ def _install_router_stubs(monkeypatch, counters):
     endpoints.with_rate_limit = with_rate_limit
     monkeypatch.setitem(sys.modules, "utils.other.endpoints", endpoints)
 
+    from utils.memory.memory_system import MemorySystem
+
+    surface_routing = types.ModuleType("utils.memory.surface_routing")
+    surface_routing.pin_memory_system = lambda uid, db_client=None: MemorySystem.LEGACY
+    surface_routing.MemorySystem = MemorySystem
+    monkeypatch.setitem(sys.modules, "utils.memory.surface_routing", surface_routing)
+
 
 def _client(monkeypatch, runtime=None):
     counters = Counters(legacy_calls=[])
+    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
     _install_router_stubs(monkeypatch, counters)
     module = importlib.import_module("routers.memories")
+    from utils.memory.memory_system import MemorySystem
+
+    monkeypatch.setattr(module, "pin_memory_system", lambda uid, db_client=None: MemorySystem.LEGACY)
     app = FastAPI()
     app.dependency_overrides[module.auth.get_current_user_uid] = lambda: "secret-uid-123"
     if runtime is not None:
