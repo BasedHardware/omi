@@ -1,6 +1,11 @@
-import importlib.util
 import json
 from pathlib import Path
+
+from tests.unit.readiness._harness import (
+    assert_readiness_safe_by_default,
+    build_readiness_report,
+    load_readiness_script,
+)
 
 REQUIRED_REQUIREMENT_IDS = [
     "canonical_control_source_path_api",
@@ -47,18 +52,11 @@ REQUIRED_PROOF_KEYS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_control_reader_readiness", script_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"cannot load {script_path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_readiness_script(script_path.name, module_label="p1_3_v3_control_reader_readiness")
 
 
 def _report(execute=False):
-    root = Path(__file__).resolve().parents[2]
-    module = _load_module(root / "scripts" / "p1_3_v3_control_reader_readiness.py")
-    return module.build_report(execute=execute)
+    return build_readiness_report("p1_3_v3_control_reader_readiness.py", execute=execute)
 
 
 def test_control_reader_readiness_runner_exists_and_is_safe_by_default():
