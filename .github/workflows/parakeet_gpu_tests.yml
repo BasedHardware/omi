@@ -138,6 +138,14 @@ jobs:
                         python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
                           --tb=short 2>&1
                         BENCH_EXIT=$?
+                        echo "--- DER Diagnostics Artifact ---"
+                        if [ -f /tmp/parakeet-gpu-artifacts/der-benchmark-results.json ]; then
+                          echo "DER_DIAGNOSTICS_JSON_BEGIN"
+                          cat /tmp/parakeet-gpu-artifacts/der-benchmark-results.json
+                          echo "DER_DIAGNOSTICS_JSON_END"
+                        else
+                          echo "DER diagnostics artifact was not produced"
+                        fi
                         set -e
 
                         if [ $BENCH_EXIT -ne 0 ]; then
@@ -256,33 +264,38 @@ jobs:
       - name: Collect test logs
         if: always()
         run: |
+          mkdir -p artifacts/parakeet
           echo "=== GPU Test Job Logs ==="
-          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} --tail=200 2>&1 || true
+          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} 2>&1 | tee artifacts/parakeet/gpu-test.log || true
           echo ""
           echo "=== Job/Pod Details ==="
           kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
           kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
 
-      - name: Collect DER diagnostics artifact
+      - name: Extract DER diagnostics artifact
         if: always()
         run: |
-          mkdir -p artifacts/parakeet
-          POD=$(kubectl -n ${{ env.NAMESPACE }} get pod -l job-name=${{ env.JOB_NAME }} \
-            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
-          if [[ -z "$POD" ]]; then
-            echo "No GPU test pod found; skipping DER artifact copy"
-            exit 0
-          fi
-          kubectl -n ${{ env.NAMESPACE }} cp \
-            "$POD:/tmp/parakeet-gpu-artifacts/der-benchmark-results.json" \
-            artifacts/parakeet/der-benchmark-results.json || \
-            echo "DER diagnostics artifact was not produced"
+          python - <<'PY'
+          from pathlib import Path
+
+          log_path = Path("artifacts/parakeet/gpu-test.log")
+          output_path = Path("artifacts/parakeet/der-benchmark-results.json")
+          text = log_path.read_text() if log_path.exists() else ""
+          start = "DER_DIAGNOSTICS_JSON_BEGIN"
+          end = "DER_DIAGNOSTICS_JSON_END"
+          if start not in text or end not in text:
+              print("DER diagnostics JSON markers not found; skipping artifact extraction")
+              raise SystemExit(0)
+          json_text = text.split(start, 1)[1].split(end, 1)[0].strip()
+          output_path.write_text(json_text + "\n")
+          print(f"Wrote {output_path}")
+          PY
 
       - name: Upload DER diagnostics artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: parakeet-der-diagnostics-${{ github.run_id }}
+          name: parakeet-der-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/parakeet/der-benchmark-results.json
           if-no-files-found: ignore
           retention-days: 30
