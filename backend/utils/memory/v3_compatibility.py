@@ -7,6 +7,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from utils.memory.memory_read_rollout_core import (
+    MemoryReadGateBlock,
+    evaluate_enrolled_memory_read_gates,
+    EnrolledMemoryReadGateContext,
+)
+
 SUPPORTED_ENROLLED_CONTROL_STATES = {'valid'}
 ENROLLED_FAIL_CLOSED_CONTROL_STATES = {
     'missing',
@@ -122,11 +128,25 @@ def decide_v3_compatibility(context: V3CompatibilityContext) -> V3CompatibilityD
             archive_available=False,
         )
 
-    if not context.write_convergence_ready:
-        return _fail_closed('write_convergence_not_ready')
-
-    if not context.projection_ready:
-        return _fail_closed('memory_projection_not_ready')
+    gate_result = evaluate_enrolled_memory_read_gates(
+        EnrolledMemoryReadGateContext(
+            global_read_gate_open=True,
+            default_memory_grant=context.default_memory_grant,
+            memory_reads_enabled=context.projection_ready,
+            write_convergence_ready=context.write_convergence_ready,
+            check_global_read_gate=False,
+            require_write_convergence=True,
+            require_rollout_write_for_convergence=False,
+        )
+    )
+    if gate_result.blocked:
+        if gate_result.block == MemoryReadGateBlock.WRITE_CONVERGENCE_NOT_READY:
+            return _fail_closed('write_convergence_not_ready')
+        if gate_result.block == MemoryReadGateBlock.PROJECTION_NOT_READY:
+            return _fail_closed('memory_projection_not_ready')
+        # Any other (unmapped or future) shared gate block denies the read rather
+        # than silently falling through to a memory projection success.
+        return _fail_closed('enrolled_read_gate_blocked_fail_closed')
 
     if context.projection_empty:
         reason = 'memory_projection_empty_no_legacy_fallback'
