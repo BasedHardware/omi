@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/client_device_service.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -21,6 +22,7 @@ class MemoriesProvider extends ChangeNotifier {
   String _searchQuery = '';
   Set<MemoryCategory> _selectedCategories = {};
   bool _showOnlyManual = false;
+  bool _filterThisDeviceOnly = false;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
 
@@ -33,6 +35,7 @@ class MemoriesProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get showOnlyManual => _showOnlyManual;
+  bool get filterThisDeviceOnly => _filterThisDeviceOnly;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
@@ -55,9 +58,21 @@ class MemoriesProvider extends ChangeNotifier {
         categoryMatch = true;
       }
 
-      return matchesSearch && categoryMatch;
+      final deviceMatch = !_filterThisDeviceOnly ||
+          ClientDeviceService.instance.memoryMatchesThisDevice(
+            primaryCaptureDevice: memory.primaryCaptureDevice,
+            captureDeviceIds: memory.captureDeviceIds,
+          );
+
+      return matchesSearch && categoryMatch && deviceMatch;
     }).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  void setFilterThisDeviceOnly(bool enabled) {
+    _filterThisDeviceOnly = enabled;
+    notifyListeners();
+    loadMemories();
   }
 
   void setShowOnlyManual(bool showOnly) {
@@ -170,7 +185,7 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories(limit: limit);
+    _memories = await getMemories(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;

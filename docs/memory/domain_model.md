@@ -390,3 +390,23 @@ desktop client fix (WS-K).
 Canonical purge paths use `neutral_vector_id_for_memory` (`mem_…` = `memory_id`). Legacy apply
 `vector_sync` / repair worker still upserts `memvec:…` via `deterministic_memory_vector_id` —
 **carry-forward to WS-G**; do not break existing `memvec:` vectors in shared Pinecone ns2.
+
+---
+
+## Client device identity (provenance)
+
+Devices are **capture surfaces only** — provenance metadata, not memory authority or dedup keys.
+
+| Field / header | Shape | Notes |
+|----------------|-------|-------|
+| `client_device_id` | `{platform}_{hash}` | Same shape as FCM `device_key` in `notifications.py` |
+| `hash` | sha256 → first 8 hex chars | From stable per-install id (Keychain UUID on desktop; IDFV/Android id on mobile) |
+| `X-Device-Id-Hash` | HTTP / WS upgrade header | Raw hash component only |
+| `X-App-Platform` | `macos` / `ios` / `android` | Platform component |
+| `X-App-Version` | optional | Stored on registry `client_devices` doc |
+
+**Nullability:** all device fields optional. Absent headers or legacy data ⇒ `client_device_id=null` ⇒ UI shows **unknown device**. Device id is **never** folded into `evidence_id` hash inputs (legacy dedup must stay byte-identical when device is absent).
+
+**Registry:** `users/{uid}/client_devices/{client_device_id}` — `platform`, `device_class`, `label`, `first_seen_at`, `last_seen_at`, `app_version`. Upsert throttled like `record_user_platform()`.
+
+**Provenance path:** Conversation (`client_device_id`, `client_platform`) → `Evidence.client_device_id` / `MemoryEvidence.client_device_id` (not in `artifact_ref` or `evidence_id` hash inputs) → optional denormalized `capture_device_ids` / `primary_capture_device` on `MemoryItem` → retrieval filter `device_scope=current|all|explicit` (canonical memory users only; see `X-Omi-Memory-Device-Scope-Supported` response header).

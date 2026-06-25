@@ -317,7 +317,9 @@ extension MemoryRecord {
             currentActivity: currentActivity,
             inputDeviceName: inputDeviceName,
             windowTitle: windowTitle,
-            headline: headline
+            headline: headline,
+            primaryCaptureDevice: nil,
+            captureDeviceIds: []
         )
     }
 }
@@ -353,7 +355,9 @@ extension ServerMemory {
         currentActivity: String?,
         inputDeviceName: String?,
         windowTitle: String? = nil,
-        headline: String? = nil
+        headline: String? = nil,
+        primaryCaptureDevice: String? = nil,
+        captureDeviceIds: [String] = []
     ) {
         self.id = id
         self.content = content
@@ -382,6 +386,8 @@ extension ServerMemory {
         self.inputDeviceName = inputDeviceName
         self.windowTitle = windowTitle
         self.headline = headline
+        self.primaryCaptureDevice = primaryCaptureDevice
+        self.captureDeviceIds = captureDeviceIds
     }
 }
 

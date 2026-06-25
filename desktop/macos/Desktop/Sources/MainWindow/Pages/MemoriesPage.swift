@@ -123,6 +123,15 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  @Published var filterThisDeviceOnly = false {
+    didSet {
+      guard oldValue != filterThisDeviceOnly else { return }
+      bumpScopeGeneration()
+      displayLimit = pageSize
+      Task { await loadMemories() }
+    }
+  }
+
   @Published var selectedTags: Set<MemoryTag> = [] {
     didSet {
       // Reset display limit when filters change
@@ -512,7 +521,7 @@ class MemoriesViewModel: ObservableObject {
 
   /// Recompute filtered memories when search/tags change
   private func recomputeFilteredMemories() {
-    let isInFilteredMode = !searchText.isEmpty || !selectedTags.isEmpty
+    let isInFilteredMode = !searchText.isEmpty || !selectedTags.isEmpty || filterThisDeviceOnly
 
     // Determine source based on current state
     var result: [ServerMemory]
@@ -537,6 +546,10 @@ class MemoriesViewModel: ObservableObject {
     // Guardrail: Archive is never part of the default list unless the user explicitly selects Archive.
     let allowedTiers = Set(activeLayerFilter)
     result = result.filter { allowedTiers.contains($0.tier) }
+
+    if filterThisDeviceOnly {
+      result = result.filter { ClientDeviceService.shared.memoryMatchesThisDevice($0) }
+    }
 
     // Sort by date (newest first)
     result.sort { $0.createdAt > $1.createdAt }
@@ -650,7 +663,11 @@ class MemoriesViewModel: ObservableObject {
 
     // Step 2: Fetch from API in background and sync to local cache
     do {
-      let fetchedMemories = try await APIClient.shared.getMemories(limit: pageSize, offset: 0)
+      let fetchedMemories = try await APIClient.shared.getMemories(
+        limit: pageSize,
+        offset: 0,
+        deviceScope: filterThisDeviceOnly ? "current" : nil
+      )
       guard isCurrentScope(token) else { return }
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
@@ -1312,6 +1329,31 @@ struct MemoriesPage: View {
       .menuStyle(.button)
       .buttonStyle(.plain)
       .help("Default shows Short-term + Long-term. Archive is explicit.")
+
+      Button {
+        viewModel.filterThisDeviceOnly.toggle()
+      } label: {
+        HStack(spacing: 6) {
+          Image(systemName: "desktopcomputer")
+            .scaledFont(size: 12)
+          Text("This device")
+            .scaledFont(size: 13, weight: viewModel.filterThisDeviceOnly ? .medium : .regular)
+        }
+        .foregroundColor(
+          viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
+        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(minHeight: 46)
+        .omiControlSurface(
+          fill: viewModel.filterThisDeviceOnly
+            ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
+          radius: 18,
+          stroke: viewModel.filterThisDeviceOnly ? OmiColors.purplePrimary.opacity(0.28) : nil
+        )
+      }
+      .buttonStyle(.plain)
+      .help("Show memories captured on this Mac")
 
       // Category filter dropdown
       Button {
@@ -1987,7 +2029,15 @@ private struct MemoryCardView: View {
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textSecondary)
 
+          if let deviceLabel = ClientDeviceService.shared.deviceProvenanceLabel(for: memory) {
+            Text(deviceLabel)
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
           // Badge when the server sent an authoritative layer (canonical cohort always does).
+          // Only badge memories the backend actually tiered; legacy/untiered
+          // records carry no real tier, so we show no badge for them.
           if memory.tierIsExplicit {
             MemoryLayerBadge(layer: memory.tier)
           }

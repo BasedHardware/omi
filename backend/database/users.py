@@ -6,7 +6,7 @@ from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
-from database.redis_db import try_acquire_user_platform_write_lock
+from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
@@ -56,6 +56,47 @@ def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str
         return None, None
     coarse = _PLATFORM_ALIASES.get(os_value)
     return coarse, os_value
+
+
+def record_client_device(
+    uid: str,
+    *,
+    client_device_id: Optional[str],
+    platform: Optional[str],
+    app_version: Optional[str] = None,
+    label: Optional[str] = None,
+) -> None:
+    """Upsert users/{uid}/client_devices/{client_device_id} from request headers.
+
+    Throttled via Redis (same 10-minute window as record_user_platform). Fail-open telemetry.
+    """
+    if not client_device_id or not platform:
+        return
+
+    try:
+        if not try_acquire_client_device_write_lock(uid, client_device_id):
+            return
+
+        now = datetime.now(timezone.utc)
+        coarse, _os_value = _normalize_platform(platform)
+        doc_ref = db.collection('users').document(uid).collection('client_devices').document(client_device_id)
+        updates = {
+            'platform': platform,
+            'device_class': coarse,
+            'last_seen_at': now,
+        }
+        if app_version:
+            updates['app_version'] = app_version
+        if label:
+            updates['label'] = label
+
+        snapshot = doc_ref.get()
+        if not snapshot.exists:
+            updates['first_seen_at'] = now
+
+        doc_ref.set(updates, merge=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
 
 def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:

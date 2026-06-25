@@ -31,6 +31,15 @@ from utils.retrieval.hybrid import rrf_rerank
 logger = logging.getLogger(__name__)
 
 
+class DeviceScopeNotSupportedError(ValueError):
+    """device_scope filtering is only supported on the canonical memory backend."""
+
+
+def _reject_legacy_device_scope(device_scope: str) -> None:
+    if device_scope and device_scope != "all":
+        raise DeviceScopeNotSupportedError("device_scope filtering is only supported for canonical memory users")
+
+
 @dataclass(frozen=True)
 class MemorySearchMatch:
     memory: MemoryDB
@@ -148,10 +157,28 @@ def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5, db_c
 
 
 class LegacyMemoryBackend:
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
+    def search(
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 5,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemorySearchMatch]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_search_memories(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
@@ -202,11 +229,35 @@ class CanonicalMemoryBackend:
     def __init__(self, *, db_client=None):
         self._db_client = db_client
 
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-        return read_canonical_memories(uid, limit=limit, offset=offset, db_client=self._db_client)
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        return read_canonical_memories(
+            uid,
+            limit=limit,
+            offset=offset,
+            db_client=self._db_client,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
-        items = search_canonical_memories(uid, query, limit=limit, db_client=self._db_client)
+    def search(
+        self, uid: str, query: str, *, limit: int = 5, device_scope: str = "all", client_device_id: Optional[str] = None
+    ) -> List[MemorySearchMatch]:
+        items = search_canonical_memories(
+            uid,
+            query,
+            limit=limit,
+            db_client=self._db_client,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
         results: List[MemorySearchMatch] = []
         for item in items:
             if not item.get("memory_id"):
@@ -267,11 +318,39 @@ class MemoryService:
             return self._canonical
         return self._legacy
 
-    def read(self, uid: str, *, limit: int = 100, offset: int = 0) -> List[MemoryDB]:
-        return self._resolve_backend(uid).read(uid, limit=limit, offset=offset)
+    def read(
+        self,
+        uid: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemoryDB]:
+        return self._resolve_backend(uid).read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
-    def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
-        return self._resolve_backend(uid).search(uid, query, limit=limit)
+    def search(
+        self,
+        uid: str,
+        query: str,
+        *,
+        limit: int = 5,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+    ) -> List[MemorySearchMatch]:
+        return self._resolve_backend(uid).search(
+            uid,
+            query,
+            limit=limit,
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+        )
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[dict]:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""

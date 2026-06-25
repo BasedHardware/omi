@@ -1,11 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/client_device_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debugging/crash_reporter.dart';
@@ -31,44 +28,20 @@ class PlatformManager {
 
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
-    _instance._deviceIdHash = await _instance._getDeviceIdHash();
+    await ClientDeviceService.instance.initialize();
+    _instance._deviceIdHash = ClientDeviceService.instance.deviceIdHash;
     await AnalyticsManager.init();
     await IntercomManager.instance.initIntercom();
   }
 
   Future<String> _getDeviceIdHash() async {
-    // Check if already stored
-    String? storedHash = SharedPreferencesUtil().deviceIdHash;
-    if (storedHash != null && storedHash.isNotEmpty) {
-      return storedHash;
-    }
-
-    // Generate hash from device info
-    final deviceInfo = DeviceInfoPlugin();
-    String deviceIdentifier = '';
-
-    try {
-      if (Platform.isIOS) {
-        final iosInfo = await deviceInfo.iosInfo;
-        deviceIdentifier = iosInfo.identifierForVendor ?? '';
-      } else if (Platform.isAndroid) {
-        final androidInfo = await deviceInfo.androidInfo;
-        deviceIdentifier = androidInfo.id;
-      }
-    } catch (e) {
-      // Fallback to timestamp if device info fails
-      deviceIdentifier = DateTime.now().millisecondsSinceEpoch.toString();
-    }
-
-    // Hash it (first 8 chars of SHA256)
-    final hash = sha256.convert(utf8.encode(deviceIdentifier)).toString().substring(0, 8);
-    SharedPreferencesUtil().deviceIdHash = hash;
-    return hash;
+    await ClientDeviceService.instance.initialize();
+    return ClientDeviceService.instance.deviceIdHash;
   }
 
   String get platform => Platform.operatingSystem;
   String get appVersion => '${_packageInfo.version}+${_packageInfo.buildNumber}';
-  String get deviceIdHash => _deviceIdHash;
+  String get deviceIdHash => ClientDeviceService.instance.deviceIdHash;
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
   bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;

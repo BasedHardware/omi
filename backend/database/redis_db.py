@@ -807,6 +807,15 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     return result is not None
 
 
+def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
+    """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
+    try:
+        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        return True
+
+
 def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:
     """Return True once every `ttl` seconds per (uid, platform) to throttle
     `last_active_platform` writes on chatty endpoints. The platform is part of

@@ -78,6 +78,7 @@ class MemoryEvidence(BaseModel):
     encryption_or_redaction_status: RedactionStatus = RedactionStatus.active
     patch_id: Optional[str] = None
     commit_id: Optional[str] = None
+    client_device_id: Optional[str] = None
 
     @field_validator("evidence_id", "source_type")
     @classmethod
@@ -91,6 +92,13 @@ class MemoryEvidence(BaseModel):
     def validate_optional_nonblank(cls, value: Optional[str]) -> Optional[str]:
         if value is not None and not value.strip():
             raise ValueError("optional evidence fields must not be whitespace")
+        return value
+
+    @field_validator("client_device_id")
+    @classmethod
+    def validate_client_device_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("client_device_id must not be whitespace")
         return value
 
     @model_validator(mode="after")

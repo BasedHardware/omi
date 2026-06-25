@@ -5,7 +5,7 @@ from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
@@ -19,6 +19,7 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
+from utils.client_device import resolve_client_device_from_request
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
 from models.conversation_enums import (
@@ -1139,6 +1140,8 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
+    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
 
 
 @router.get("/v1/dev/user/folders", response_model=List[Folder], tags=["developer"])
@@ -1344,7 +1347,11 @@ def get_conversation_endpoint(
 
 
 def _create_conversation_from_segments(
-    uid: str, request: CreateConversationFromTranscriptRequest
+    uid: str,
+    request: CreateConversationFromTranscriptRequest,
+    *,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1420,6 +1427,8 @@ def _create_conversation_from_segments(
         language=language_code,
         geolocation=geolocation,
         source=source,
+        client_device_id=client_device_id or request.client_device_id,
+        client_platform=client_platform or request.client_platform,
     )
 
     # Process conversation
@@ -1435,6 +1444,7 @@ def _create_conversation_from_segments(
 @router.post("/v1/conversations/from-segments", response_model=ConversationResponse, tags=["conversations"])
 def create_conversation_from_segments_user(
     request: CreateConversationFromTranscriptRequest,
+    http_request: Request,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "conversations:from-segments")),
 ):
     """Create a conversation from already-transcribed segments (Firebase-authed).
@@ -1442,12 +1452,19 @@ def create_conversation_from_segments_user(
     Used by clients that transcribe ON-DEVICE (e.g. the macOS desktop app with Parakeet) and need
     the conversation persisted, processed (memories/summaries), and synced across devices — exactly
     like a cloud-transcribed conversation, but without the live `/v4/listen` websocket."""
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
+    http_request: Request,
     uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
 ):
     """
@@ -1497,7 +1514,13 @@ def create_conversation_from_segments(
     }
     ```
     """
-    return _create_conversation_from_segments(uid, request)
+    device_ctx = resolve_client_device_from_request(http_request)
+    return _create_conversation_from_segments(
+        uid,
+        request,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
+    )
 
 
 @router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
