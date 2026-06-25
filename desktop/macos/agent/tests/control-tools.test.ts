@@ -197,19 +197,27 @@ describe("agent control tools", () => {
     ).toBe("owner-d");
   });
 
-  it("resolves direct control request context from the envelope owner before mutable fallback", () => {
+  it("treats direct control envelope owner as a guard against active owner", () => {
     const resolved = resolveControlRequestContext({
-      ownerGuard: " owner-from-envelope ",
-      fallbackOwnerId: "fallback-owner",
+      ownerGuard: " owner-active ",
+      fallbackOwnerId: "owner-active",
       requestId: "request-a",
       clientId: "client-a",
     });
 
     expect(resolved).toEqual({
       requestKey: JSON.stringify(["client-a", "request-a"]),
-      activeOwnerId: "owner-from-envelope",
-      ownerGuard: "owner-from-envelope",
+      activeOwnerId: "owner-active",
+      ownerGuard: "owner-active",
     });
+    expect(() =>
+      resolveControlRequestContext({
+        ownerGuard: "owner-from-envelope",
+        fallbackOwnerId: "fallback-owner",
+        requestId: "request-a",
+        clientId: "client-a",
+      }),
+    ).toThrow("ownerId does not match active control owner");
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
     expect(controlRequestKey({ requestId: "legacy-request" })).toBeUndefined();
@@ -218,7 +226,7 @@ describe("agent control tools", () => {
     );
   });
 
-  it("allows cold direct control calls to use the signed-in envelope owner", async () => {
+  it("allows cold direct control calls to use the active signed-in owner", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
     await kernel.executeRun({
@@ -230,7 +238,7 @@ describe("agent control tools", () => {
 
     const resolved = resolveControlRequestContext({
       ownerGuard: "signed-in-owner",
-      fallbackOwnerId: "desktop-local-user",
+      fallbackOwnerId: "signed-in-owner",
       requestId: "cold-direct-request",
       clientId: "swift-client",
     });
@@ -877,7 +885,6 @@ describe("agent control tools", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
@@ -940,7 +947,6 @@ describe("agent control tools", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
@@ -984,9 +990,7 @@ describe("agent control tools", () => {
     expect(adapter.executed).toHaveLength(3);
 
     adapter.resolveDeferred({
-      text: "done",
-      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      text: "done",      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await running;
@@ -1156,9 +1160,7 @@ describe("agent control tools", () => {
     expect(running.childDelegations[0].delegationId).toBe(spawned.delegation.delegationId);
 
     adapter.resolveDeferred({
-      text: "spawn complete",
-      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      text: "spawn complete",      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await waitUntil(() => {
@@ -1317,9 +1319,7 @@ describe("agent control tools", () => {
     adapter.resolveDeferred({
       text: "relay cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });

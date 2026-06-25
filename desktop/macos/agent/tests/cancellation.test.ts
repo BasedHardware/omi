@@ -40,9 +40,7 @@ describe("AgentRuntimeKernel cancellation", () => {
 
     adapter.resolveDeferred({
       text: "partial",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "cancelled",
     });
     const result = await running;
 
@@ -54,9 +52,7 @@ describe("AgentRuntimeKernel cancellation", () => {
 
     adapter.emitLate(attemptId, {
       type: "text_delta",
-      text: "late after cancel",
-      sessionId: result.adapterSessionId ?? "native",
-    });
+      text: "late after cancel",    });
     expect(store.allRows("SELECT payload_json FROM events WHERE type = 'adapter.text_delta'")).toHaveLength(1);
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
       "run.created",

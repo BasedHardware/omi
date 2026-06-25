@@ -74,9 +74,7 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
       cwd: input.cwd,
     }),
     executeAttempt: async (context: AdapterAttemptContext) => ({
-      text: "",
-      sessionId: context.binding.adapterNativeSessionId,
-      adapterSessionId: context.binding.adapterNativeSessionId,
+      text: "",      adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     }),
     cancelAttempt: async () => ({
@@ -477,8 +475,7 @@ describe("fake runtime adapter contract fixture", () => {
       adapterSessionId: "native-1",
       artifacts: [expect.objectContaining({ uri: "adapter://contract-fake/native-artifact" })],
     });
-    expect(result.sessionId).toBe("native-1");
-    expect(result.sessionId).not.toBe(adapter.executed[0].sessionId);
+    expect("sessionId" in result).toBe(false);
     expect(result.adapterSessionId).toBe("native-1");
     expect(result.adapterSessionId).toBe(adapter.executed[0].binding.adapterNativeSessionId);
     expect(cancel).toMatchObject({

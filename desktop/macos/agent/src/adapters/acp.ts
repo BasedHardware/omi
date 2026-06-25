@@ -244,7 +244,6 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
       return {
         text: fullText,
-        sessionId: adapterSessionId,
         adapterSessionId,
         terminalStatus: signal.aborted ? "cancelled" : "succeeded",
         costUsd: result._meta?.costUsd ?? 0,

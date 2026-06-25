@@ -102,6 +102,17 @@ function makeTurnEndEvent(text: string, totalCost = 1.25) {
   };
 }
 
+function makeErrorTurnEndEvent(errorMessage: string) {
+  return {
+    type: "turn_end",
+    message: {
+      role: "assistant",
+      errorMessage,
+      content: [],
+    },
+  };
+}
+
 describe("PiMonoAdapter prompt correlation", () => {
   it("writes the active runtime attempt context before prompt execution", async () => {
     const { adapter } = createAdapter();
@@ -180,7 +191,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
 
-  it("does not let a superseded attempt clear the active attempt context", async () => {
+  it("rejects a concurrent attempt without clearing the active attempt context", async () => {
     const { adapter } = createAdapter();
     seedSessions(adapter, "session-1", "session-2");
     const runtime = new PiMonoRuntimeAdapter(adapter);
@@ -198,11 +209,11 @@ describe("PiMonoAdapter prompt correlation", () => {
       new AbortController().signal
     );
 
-    await expect(first).rejects.toThrow("pi-mono prompt superseded before turn_end");
-    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_second");
+    await expect(second).rejects.toThrow("pi-mono prompt already in flight");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
 
-    (adapter as any).handleTurnEnd(makeTurnEndEvent("second done"));
-    await expect(second).resolves.toMatchObject({ terminalStatus: "succeeded" });
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("first done"));
+    await expect(first).resolves.toMatchObject({ terminalStatus: "succeeded" });
     expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
 
@@ -275,7 +286,7 @@ describe("PiMonoAdapter prompt correlation", () => {
     await expect(directPrompt).resolves.toMatchObject({ text: "direct done" });
   });
 
-  it("rejects the previous prompt when a new generation supersedes it", async () => {
+  it("rejects a second prompt while one is in flight", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1", "session-2");
 
@@ -288,35 +299,50 @@ describe("PiMonoAdapter prompt correlation", () => {
       async () => ""
     );
 
-    const secondPrompt = adapter.sendPrompt(
+    await expect(adapter.sendPrompt(
       "session-2",
       [{ type: "text", text: "second" }],
       [],
       "act",
       (event) => events.push(event),
       async () => ""
-    );
+    )).rejects.toThrow("pi-mono prompt already in flight");
 
-    await expect(firstPrompt).rejects.toThrow(
-      "pi-mono prompt superseded before turn_end"
-    );
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("first response", 2.5));
 
-    (adapter as any).handleTurnEnd(makeTurnEndEvent("second response", 2.5));
-
-    await expect(secondPrompt).resolves.toMatchObject({
-      text: "second response",
-      sessionId: "session-2",
+    await expect(firstPrompt).resolves.toMatchObject({
+      text: "first response",
+      sessionId: "session-1",
       costUsd: 2.5,
       inputTokens: 11,
       outputTokens: 7,
       cacheReadTokens: 3,
       cacheWriteTokens: 2,
     });
+    expect(events.some((event) => event.type === "result")).toBe(false);
+  });
+
+  it("rejects turn_end errors instead of resolving success", async () => {
+    const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "fail" }],
+      [],
+      "act",
+      (event) => events.push(event),
+      async () => ""
+    );
+
+    (adapter as any).handleTurnEnd(makeErrorTurnEndEvent("adapter failed"));
+
+    await expect(prompt).rejects.toThrow("adapter failed");
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "result",
-        text: "second response",
-        sessionId: "session-2",
+        type: "error",
+        message: "adapter failed",
+        adapterSessionId: "session-1",
       })
     );
   });

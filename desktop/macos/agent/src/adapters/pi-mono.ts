@@ -417,19 +417,10 @@ export class PiMonoAdapter implements HarnessAdapter {
       throw new Error(`pi-mono session is no longer active: ${sessionId}`);
     }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
-    // Any stray in-flight request here indicates a caller contract violation
-    // or a missed abort — drop it so a late turn_end can't leak into this one.
+    // Do not supersede an in-flight prompt: pi-mono turn_end events do not carry
+    // a request id, so a late completion could be misattributed to the new prompt.
     if (this.activePromptGeneration !== 0) {
-      const stale = this.pendingRequests.get(this.activePromptGeneration);
-      if (stale) {
-        this.pendingRequests.delete(this.activePromptGeneration);
-        stale.reject(
-          new Error(
-            "pi-mono prompt superseded before turn_end (previous request dropped)"
-          )
-        );
-      }
-      this.activePromptGeneration = 0;
+      throw new Error("pi-mono prompt already in flight");
     }
 
     this.eventHandler = onEvent;
@@ -867,6 +858,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     const message = event.message as PiAssistantMessage | undefined;
+    const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
+      ? message.errorMessage.trim()
+      : undefined;
+    if (errorMessage) {
+      this.eventHandler?.({
+        type: "error",
+        message: errorMessage,
+        adapterSessionId: pending.sessionId,
+      });
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(errorMessage));
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      return;
+    }
 
     // When pi-mono stops to execute a tool, this is an intermediate turn —
     // the model will continue after the tool executes. Keep the prompt state
@@ -904,12 +911,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       cacheReadTokens: usage?.cacheRead ?? 0,
       cacheWriteTokens: usage?.cacheWrite ?? 0,
     };
-
-    // Emit result event
-    this.eventHandler?.({
-      type: "result",
-      ...result,
-    });
 
     // Resolve + clear the in-flight state
     this.pendingRequests.delete(generation);
@@ -993,7 +994,12 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
       );
 
       return {
-        ...result,
+        text: result.text,
+        costUsd: result.costUsd,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        cacheReadTokens: result.cacheReadTokens,
+        cacheWriteTokens: result.cacheWriteTokens,
         adapterSessionId: result.sessionId,
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };

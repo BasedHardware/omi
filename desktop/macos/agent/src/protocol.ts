@@ -47,6 +47,9 @@ export interface ToolResultMessage {
   type: "tool_result";
   callId: string;
   result: string;
+  requestId?: string;
+  clientId?: string;
+  protocolVersion?: number;
 }
 
 export interface ControlToolRequestMessage extends ProtocolEnvelope {

@@ -143,6 +143,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
   }
 
+  func testToolResultsEchoRequestScope() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)"))
+    XCTAssertTrue(source.contains(#"if let requestId { payload["requestId"] = requestId }"#))
+    XCTAssertTrue(source.contains(#"if let clientId { payload["clientId"] = clientId }"#))
+  }
+
   func testStartupTimeoutResumesInitContinuations() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
