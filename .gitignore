@@ -17,6 +17,7 @@ yarn.lock
 
 # Coordination (AI agent collab manifests)
 .coordination/
+.aidlc/
 
 # General
 .idea/
