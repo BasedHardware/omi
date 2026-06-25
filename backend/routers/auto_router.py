@@ -38,13 +38,36 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from utils.auto_router.daily_refresh import DailyRefreshCache
 from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
 from utils.auto_router.task_registry import TaskRegistry, UnknownTaskError
 from utils.executors import run_blocking
+
+# Auth: use a thin local wrapper instead of importing get_current_user_uid
+# at module level. The upstream auth function pulls in firebase_admin + stripe
+# + redis, which are heavy deps not needed for the auto-router unit tests
+# (we override this dependency with a test uid in the test fixture).
+# In production, the lazy import in `auth_dependency` resolves to the real
+# upstream function.
+_DEFAULT_TEST_UID = "test-uid"
+
+
+def auth_dependency(authorization: str = None) -> str:  # type: ignore[assignment]
+    """FastAPI dependency for the auto-router endpoints.
+
+    Lazy-imports the upstream `get_current_user_uid` so the unit tests don't
+    need firebase_admin. In production, this delegates to the real auth
+    function (which validates the Firebase token, records the user's platform,
+    and validates BYOK headers). In tests, the dependency is overridden with
+    a lambda that returns a test uid.
+    """
+    from utils.other.endpoints import get_current_user_uid  # lazy
+
+    return get_current_user_uid(authorization=authorization)
+
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +142,14 @@ def _get_registry_cache() -> DailyRefreshCache[tuple[TaskRegistry, ModelRegistry
 
 
 @router.get("/v1/auto-router/pick")
-async def auto_router_pick(task: str = Query(..., description="Task name to pick a model for")):
+async def auto_router_pick(
+    task: str = Query(..., description="Task name to pick a model for"),
+    uid: str = Depends(auth_dependency),
+):
     """Return the recommended model for `task` plus full scoring detail.
+
+    Requires authentication (matches upstream's `/v1/auto/model-pick`).
+    The `uid` is captured but not yet used in v2 (per-user prefs is v3).
 
     Returns HTTP 400 if `task` is not a known task name.
     """
