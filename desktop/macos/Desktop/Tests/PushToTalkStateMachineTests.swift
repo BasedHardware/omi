@@ -14,10 +14,9 @@ final class PushToTalkStateMachineTests: XCTestCase {
     let source = try pushToTalkManagerSource()
 
     XCTAssertTrue(source.contains("private var micCaptureStartInFlight = false"))
-    XCTAssertTrue(source.contains("private var micCaptureActive = false"))
-    XCTAssertTrue(source.contains("guard !micCaptureStartInFlight && !micCaptureActive else"))
+    XCTAssertTrue(source.contains("guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else"))
     XCTAssertTrue(source.contains("PushToTalkManager: mic capture start ignored — already active"))
-    XCTAssertTrue(source.contains("self.micCaptureActive = true"))
+    XCTAssertFalse(source.contains("private var micCaptureActive"))
   }
 
   private func pushToTalkManagerSource() throws -> String {
