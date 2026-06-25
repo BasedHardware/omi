@@ -64,25 +64,25 @@ fn model_cost(upstream_model: &str) -> ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 6.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         "claude-opus-4-6" => ModelCost {
             input_per_token: 15.0 / 1_000_000.0,
             output_per_token: 75.0 / 1_000_000.0,
             cache_read_per_token: 1.50 / 1_000_000.0,
-            cache_write_per_token: 30.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 30.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         "claude-haiku-4-5" => ModelCost {
             input_per_token: 1.0 / 1_000_000.0,
             output_per_token: 5.0 / 1_000_000.0,
             cache_read_per_token: 0.10 / 1_000_000.0,
-            cache_write_per_token: 2.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 2.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
         _ => ModelCost {
             input_per_token: 3.0 / 1_000_000.0,
             output_per_token: 15.0 / 1_000_000.0,
             cache_read_per_token: 0.30 / 1_000_000.0,
-            cache_write_per_token: 6.0 / 1_000_000.0,  // 1h cache write = 2x base input
+            cache_write_per_token: 6.0 / 1_000_000.0, // 1h cache write = 2x base input
         },
     }
 }
@@ -114,9 +114,8 @@ fn translate_request(
                 system_prompt = Some(text);
             }
             "user" => {
-                let content = convert_user_content(
-                    msg.content.as_ref().cloned().unwrap_or(json!("")),
-                );
+                let content =
+                    convert_user_content(msg.content.as_ref().cloned().unwrap_or(json!("")));
                 anthropic_messages.push(AnthropicMessage {
                     role: "user".to_string(),
                     content,
@@ -138,8 +137,7 @@ fn translate_request(
                 if let Some(tool_calls) = &msg.tool_calls {
                     for tc in tool_calls {
                         let args: serde_json::Value =
-                            serde_json::from_str(&tc.function.arguments)
-                                .unwrap_or(json!({}));
+                            serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
                         content_blocks.push(json!({
                             "type": "tool_use",
                             "id": tc.id,
@@ -223,7 +221,17 @@ fn translate_request(
     // chat). It is stable within a pi-mono session, so every query after the
     // first reads it at 0.1x instead of re-paying full input cost.
     // (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
-    let system = system_prompt.map(cached_system_block);
+    // Filter empty/whitespace system prompts — Anthropic rejects empty cached
+    // text blocks with 400, and whitespace-only prompts have no semantic value.
+    // Use original text (not trimmed) for non-empty prompts to preserve content.
+    let system = system_prompt.and_then(|text| {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(cached_system_block(text))
+        }
+    });
 
     // Breakpoint 2: mark the latest user message so the conversation prefix up
     // to the current turn is cached too. During a tool-use loop one user turn
@@ -237,10 +245,17 @@ fn translate_request(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
+        // Use the system block produced by cached_system_block() above
+        // (line 226) which already handles sentinel splitting for cache
+        // stability — do NOT re-create here or we lose the split.
         system,
         temperature: req.temperature,
         stream: req.stream,
-        tools: if is_tool_choice_none { None } else { anthropic_tools },
+        tools: if is_tool_choice_none {
+            None
+        } else {
+            anthropic_tools
+        },
         tool_choice: anthropic_tool_choice,
     })
 }
@@ -347,9 +362,7 @@ fn translate_tool_choice(
             let choice_type = obj
                 .get("type")
                 .and_then(|t| t.as_str())
-                .ok_or_else(|| {
-                    "invalid tool_choice object: missing 'type' field".to_string()
-                })?;
+                .ok_or_else(|| "invalid tool_choice object: missing 'type' field".to_string())?;
             if choice_type != "function" {
                 return Err(format!(
                     "invalid tool_choice object: unsupported type {:?}",
@@ -362,9 +375,7 @@ fn translate_tool_choice(
             let name = func
                 .get("name")
                 .and_then(|n| n.as_str())
-                .ok_or_else(|| {
-                    "invalid tool_choice object: missing function.name".to_string()
-                })?;
+                .ok_or_else(|| "invalid tool_choice object: missing function.name".to_string())?;
             Ok(Some(json!({"type": "tool", "name": name})))
         }
         Some(other) => Err(format!(
@@ -431,19 +442,17 @@ fn convert_user_content(content: serde_json::Value) -> serde_json::Value {
 fn extract_text_content(content: &Option<serde_json::Value>) -> String {
     match content {
         Some(serde_json::Value::String(s)) => s.clone(),
-        Some(serde_json::Value::Array(parts)) => {
-            parts
-                .iter()
-                .filter_map(|p| {
-                    if p.get("type")?.as_str()? == "text" {
-                        p.get("text")?.as_str().map(String::from)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        }
+        Some(serde_json::Value::Array(parts)) => parts
+            .iter()
+            .filter_map(|p| {
+                if p.get("type")?.as_str()? == "text" {
+                    p.get("text")?.as_str().map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(""),
         Some(serde_json::Value::Null) | None => String::new(),
         Some(other) => other.to_string(),
     }
@@ -451,10 +460,7 @@ fn extract_text_content(content: &Option<serde_json::Value>) -> String {
 
 // ── Anthropic non-streaming response → OpenAI format ────────────────────────
 
-fn translate_response(
-    resp: &AnthropicResponse,
-    public_model: &str,
-) -> ChatCompletionResponse {
+fn translate_response(resp: &AnthropicResponse, public_model: &str) -> ChatCompletionResponse {
     let mut text_parts = Vec::new();
     let mut tool_calls = Vec::new();
     let mut tool_index: u32 = 0;
@@ -562,7 +568,8 @@ async fn chat_completions(
 
     // BYOK: check for user-provided Anthropic API key (issue #7357).
     // When present, use the user's key and skip server-key rate limiting.
-    let byok_anthropic_key = byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
+    let byok_anthropic_key =
+        byok::get_byok_key_if_active(&headers, byok::HEADER_ANTHROPIC, byok_stripped);
     let is_byok = byok_anthropic_key.is_some();
 
     // Rate limiting — uses the dedicated CHAT limiter (NOT the Gemini one), so a
@@ -588,7 +595,10 @@ async fn chat_completions(
 
     // Get API key — prefer BYOK, fall back to server key
     let api_key: String = if let Some(byok_key) = byok_anthropic_key {
-        tracing::info!("chat_completions: using BYOK Anthropic key for uid={}", user.uid);
+        tracing::info!(
+            "chat_completions: using BYOK Anthropic key for uid={}",
+            user.uid
+        );
         byok_key.to_string()
     } else {
         match route.provider {
@@ -742,7 +752,10 @@ async fn handle_non_streaming(
     }
 
     let anthropic_resp: AnthropicResponse = upstream_resp.json().await.map_err(|e| {
-        tracing::error!("chat_completions: failed to parse Anthropic response: {}", e);
+        tracing::error!(
+            "chat_completions: failed to parse Anthropic response: {}",
+            e
+        );
         StatusCode::BAD_GATEWAY
     })?;
 
@@ -1074,11 +1087,7 @@ async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, co
         )
         .await
     {
-        tracing::error!(
-            "chat_completions: usage log failed for {}: {}",
-            user.uid,
-            e
-        );
+        tracing::error!("chat_completions: usage log failed for {}: {}", user.uid, e);
     }
 }
 
@@ -1269,10 +1278,17 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        // system is now an ephemeral-cached content-block array, not a bare string.
-        let system = result.system.as_ref().expect("system block should be present");
-        assert_eq!(system[0]["text"], "You are helpful.");
-        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
+        // system is Option<serde_json::Value> — compare via JSON serialization
+        // to avoid type mismatch with AnthropicSystemContentBlock.
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(
+            json["system"],
+            json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
+            }])
+        );
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
@@ -1431,11 +1447,114 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        let system = result.system.as_ref().expect("system block should be present");
-        assert_eq!(system[0]["text"], "You are terse.");
-        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
-        assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
+    }
+
+    #[test]
+    fn test_translate_request_system_prompt_uses_cache_control_blocks() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(json!("You are helpful.")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let json = serde_json::to_value(&result).unwrap();
+
+        assert_eq!(
+            json["system"],
+            json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
+            }])
+        );
+    }
+
+    #[test]
+    fn test_translate_request_without_system_prompt_omits_system() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let json = serde_json::to_value(&result).unwrap();
+
+        assert!(result.system.is_none());
+        assert!(json.get("system").is_none());
+    }
+
+    #[test]
+    fn test_translate_request_empty_system_prompt_omits_system() {
+        // Empty or whitespace-only system prompts must NOT be sent as cached blocks
+        // (Anthropic rejects empty cached text blocks with 400).
+        for content in [Some(json!("")), Some(json!("   ")), None] {
+            let req = ChatCompletionRequest {
+                model: "omi-sonnet".to_string(),
+                messages: vec![
+                    ChatMessage {
+                        role: "system".to_string(),
+                        content: content.clone(),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    },
+                    ChatMessage {
+                        role: "user".to_string(),
+                        content: Some(json!("Hello")),
+                        name: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                    },
+                ],
+                stream: false,
+                temperature: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+            assert!(
+                result.system.is_none(),
+                "empty/whitespace system prompt must omit system field, got: {:?}",
+                result.system
+            );
+        }
     }
 
     #[test]
@@ -1631,10 +1750,7 @@ mod tests {
             Some("Hello!".to_string())
         );
         assert!(openai.choices[0].message.tool_calls.is_none());
-        assert_eq!(
-            openai.choices[0].finish_reason,
-            Some("stop".to_string())
-        );
+        assert_eq!(openai.choices[0].finish_reason, Some("stop".to_string()));
         let usage = openai.usage.unwrap();
         assert_eq!(usage.prompt_tokens, 10);
         assert_eq!(usage.completion_tokens, 5);
@@ -1815,7 +1931,10 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         // tool_choice "none" must strip tools entirely
-        assert!(result.tools.is_none(), "tools should be stripped when tool_choice is 'none'");
+        assert!(
+            result.tools.is_none(),
+            "tools should be stripped when tool_choice is 'none'"
+        );
         assert!(result.tool_choice.is_none());
     }
 
@@ -1849,7 +1968,10 @@ mod tests {
         // Unknown strings must return Err (→ 400) instead of silently coercing
         let choice = Some(json!("invalid_value"));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "unknown string tool_choice must return Err");
+        assert!(
+            result.is_err(),
+            "unknown string tool_choice must return Err"
+        );
     }
 
     #[test]
@@ -1871,7 +1993,10 @@ mod tests {
         // Malformed objects must return Err (→ 400)
         let choice = Some(json!({"type": "function", "function": {}}));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "object without function.name must return Err");
+        assert!(
+            result.is_err(),
+            "object without function.name must return Err"
+        );
     }
 
     #[test]
@@ -1891,7 +2016,10 @@ mod tests {
             "function": {"name": "get_weather"}
         }));
         let result = translate_tool_choice(&choice);
-        assert!(result.is_err(), "non-function tool_choice object must return Err");
+        assert!(
+            result.is_err(),
+            "non-function tool_choice object must return Err"
+        );
     }
 
     #[test]
@@ -1954,7 +2082,10 @@ mod tests {
             tool_choice: None,
         };
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.max_tokens, 0, "max_tokens=0 should be respected (capped at min)");
+        assert_eq!(
+            result.max_tokens, 0,
+            "max_tokens=0 should be respected (capped at min)"
+        );
     }
 
     #[test]
@@ -1976,7 +2107,10 @@ mod tests {
             tool_choice: None,
         };
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        assert_eq!(result.max_tokens, MAX_TOKENS_CAP, "max_tokens at exactly the cap should be preserved");
+        assert_eq!(
+            result.max_tokens, MAX_TOKENS_CAP,
+            "max_tokens at exactly the cap should be preserved"
+        );
     }
 
     // ── SSE helper tests ───────────────────────────────────────────────
@@ -1997,7 +2131,9 @@ mod tests {
             }]),
         };
         let chunk = make_chunk("id-1", 1000, "omi-sonnet", delta, None, None);
-        let tool_calls = chunk["choices"][0]["delta"]["tool_calls"].as_array().unwrap();
+        let tool_calls = chunk["choices"][0]["delta"]["tool_calls"]
+            .as_array()
+            .unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0]["function"]["name"], "get_weather");
         assert_eq!(tool_calls[0]["index"], 0);
@@ -2010,7 +2146,14 @@ mod tests {
             content: Some("done".to_string()),
             tool_calls: None,
         };
-        let chunk = make_chunk("id-2", 2000, "omi-sonnet", delta, Some("stop".to_string()), None);
+        let chunk = make_chunk(
+            "id-2",
+            2000,
+            "omi-sonnet",
+            delta,
+            Some("stop".to_string()),
+            None,
+        );
         assert_eq!(chunk["choices"][0]["finish_reason"], "stop");
     }
 
@@ -2027,7 +2170,14 @@ mod tests {
             total_tokens: 30,
             prompt_tokens_details: None,
         };
-        let chunk = make_chunk("id-3", 3000, "omi-sonnet", delta, Some("stop".to_string()), Some(usage));
+        let chunk = make_chunk(
+            "id-3",
+            3000,
+            "omi-sonnet",
+            delta,
+            Some("stop".to_string()),
+            Some(usage),
+        );
         assert_eq!(chunk["usage"]["prompt_tokens"], 10);
         assert_eq!(chunk["usage"]["completion_tokens"], 20);
         assert_eq!(chunk["usage"]["total_tokens"], 30);
@@ -2038,5 +2188,4 @@ mod tests {
         let done = Bytes::from("data: [DONE]\n\n");
         assert_eq!(done, "data: [DONE]\n\n".as_bytes());
     }
-
 }

@@ -9352,6 +9352,18 @@ class AppLocalizationsSr extends AppLocalizations {
       'Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.';
 
   @override
+  String get recordingMode => 'Режим снимања';
+
+  @override
+  String get captureModeLater => 'Касније';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибујте у реалном времену док говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Сачувајте звук сада и транскрибујте кад год желите.';
+
+  @override
   String get unmute => 'Uključi zvuk';
 
   @override

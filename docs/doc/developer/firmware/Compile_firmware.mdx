@@ -10,10 +10,10 @@ Build firmware from source to customize your Omi device. If you just want to ins
 
 <CardGroup cols={2}>
   <Card title="Consumer Firmware" icon="tag">
-    `firmware/omi` — SDK v2.9.0
+    `omi/firmware/omi` — SDK v2.9.0
   </Card>
   <Card title="DevKit Firmware" icon="flask">
-    `firmware/devkit` — SDK v2.7.0
+    `omi/firmware/devkit` — SDK v2.7.0
   </Card>
 </CardGroup>
 
@@ -35,8 +35,8 @@ Build firmware from source to customize your Omi device. If you just want to ins
 
     | Firmware | SDK Version | Folder |
     |----------|-------------|--------|
-    | Consumer (Omi) | **2.9.0** | `firmware/omi` |
-    | DevKit | **2.7.0** | `firmware/devkit` |
+    | Consumer (Omi) | **2.9.0** | `omi/firmware/omi` |
+    | DevKit | **2.7.0** | `omi/firmware/devkit` |
 
     <Warning>
     Using the wrong SDK version will cause build failures. Double-check the version before proceeding.
@@ -46,7 +46,7 @@ Build firmware from source to customize your Omi device. If you just want to ins
   <Step title="Open the Application" icon="folder-open">
     1. Open the **nRF Connect Extension** panel in VS Code
     2. Click **Open an existing application**
-    3. Navigate to `firmware/omi` (consumer) or `firmware/devkit` (DevKit)
+    3. Navigate to `omi/firmware/omi` (consumer) or `omi/firmware/devkit` (DevKit)
   </Step>
 
   <Step title="Add Build Configuration" icon="sliders">
@@ -65,7 +65,7 @@ Build firmware from source to customize your Omi device. If you just want to ins
     After a successful build, find `zephyr.uf2` in:
 
     ```
-    firmware/build/<your-preset>/zephyr/zephyr.uf2
+    omi/firmware/<omi|devkit>/build/<your-preset>/zephyr/zephyr.uf2
     ```
   </Step>
 

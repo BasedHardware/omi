@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
 import { PiMonoAdapter } from "../src/adapters/pi-mono.js";
-import type { HarnessConfig } from "../src/adapters/interface.js";
+import { HarnessFeature, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
 // Mock child_process.spawn so start() doesn't launch a real subprocess.
@@ -28,9 +28,10 @@ vi.mock("child_process", async () => {
   };
 });
 
-function createAdapter() {
+function createAdapter(configOverrides: Partial<HarnessConfig> & { onRestart?: (reason: string) => void } = {}) {
   const config: HarnessConfig = {
     authToken: "test-token",
+    ...configOverrides,
   };
   const adapter = new PiMonoAdapter(config);
   const events: OutboundMessage[] = [];
@@ -38,6 +39,13 @@ function createAdapter() {
   (adapter as any).sendCommand = vi.fn();
 
   return { adapter, events };
+}
+
+function seedSessions(adapter: PiMonoAdapter, ...sessionIds: string[]) {
+  const sessions = (adapter as any).sessions as Map<string, unknown>;
+  for (const sessionId of sessionIds) {
+    sessions.set(sessionId, { cwd: "/tmp" });
+  }
 }
 
 function makeTurnEndEvent(text: string, totalCost = 1.25) {
@@ -67,6 +75,7 @@ function makeTurnEndEvent(text: string, totalCost = 1.25) {
 describe("PiMonoAdapter prompt correlation", () => {
   it("rejects the previous prompt when a new generation supersedes it", async () => {
     const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1", "session-2");
 
     const firstPrompt = adapter.sendPrompt(
       "session-1",
@@ -112,6 +121,7 @@ describe("PiMonoAdapter prompt correlation", () => {
 
   it("resolves abort before turn_end and drops the late completion", async () => {
     const { adapter, events } = createAdapter();
+    seedSessions(adapter, "session-1");
 
     const prompt = adapter.sendPrompt(
       "session-1",
@@ -146,6 +156,23 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     expect(events).toEqual([]);
     expect((adapter as any).pendingRequests.size).toBe(0);
+  });
+});
+
+describe("PiMonoAdapter restart lifecycle", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockClear();
+  });
+
+  it("notifies restart observers after an immediate system prompt restart", async () => {
+    const onRestart = vi.fn();
+    const { adapter } = createAdapter({ onRestart });
+
+    await adapter.start();
+    await expect(adapter.setSystemPrompt("new prompt")).resolves.toBe(true);
+
+    expect(onRestart).toHaveBeenCalledWith("systemPrompt");
+    expect(spawn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -227,6 +254,14 @@ describe("PiMonoAdapter spawn args (behavioral)", () => {
   });
 });
 
+describe("PiMonoAdapter capabilities", () => {
+  it("does not advertise native session resume", () => {
+    const { adapter } = createAdapter();
+
+    expect(adapter.supportsFeature(HarnessFeature.SESSION_RESUME)).toBe(false);
+  });
+});
+
 describe("tool_use event filtering", () => {
   // Two-layer defense:
   // 1. Source-level assertion verifies the filter EXISTS in the real code
@@ -237,20 +272,25 @@ describe("tool_use event filtering", () => {
     fileURLToPath(new URL("../src/index.ts", import.meta.url)),
     "utf8"
   );
+  const facadeSrc = readFileSync(
+    fileURLToPath(new URL("../src/runtime/compatibility-facade.ts", import.meta.url)),
+    "utf8"
+  );
 
-  it("source: runPiMonoMode event callback checks type === 'tool_use'", () => {
-    // Guard against accidental removal of the filter in index.ts
-    expect(indexSrc).toMatch(/\.type\s*===\s*["']tool_use["']\)\s*return/);
+  it("source: shared runtime registers pi-mono in the same daemon", () => {
+    expect(indexSrc).toMatch(/Default harness mode/);
+    expect(indexSrc).toMatch(/registry\.register\(["']acp["']/);
+    expect(indexSrc).toMatch(/registry\.register\(["']pi-mono["']/);
   });
 
-  it("source: non-tool_use events are forwarded via send()", () => {
-    expect(indexSrc).toMatch(/send\(event\s+as\s+OutboundMessage\)/);
+  it("source: compatibility facade suppresses tool_use when configured or routed to pi-mono", () => {
+    expect(facadeSrc).toMatch(/case\s+["']tool_use["'][\s\S]*!this\.suppressToolUseEvents\s*&&\s*context\.adapterId\s*!==\s*["']pi-mono["']/);
   });
 
   it("behavioral: suppresses tool_use events and forwards all other types", () => {
     const forwarded: any[] = [];
 
-    // Exact callback from runPiMonoMode() line ~1273
+    // Equivalent filtering path used by the compatibility facade for pi-mono events.
     const eventCallback = (event: any) => {
       if ((event as any).type === "tool_use") return;
       forwarded.push(event);

@@ -9348,6 +9348,18 @@ class AppLocalizationsId extends AppLocalizations {
       'Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.';
 
   @override
+  String get recordingMode => 'Mode perekaman';
+
+  @override
+  String get captureModeLater => 'Nanti';
+
+  @override
+  String get captureModeLiveDescription => 'Transkripsikan secara langsung saat Anda berbicara.';
+
+  @override
+  String get captureModeLaterDescription => 'Simpan audio sekarang dan transkripsikan kapan saja.';
+
+  @override
   String get unmute => 'Bunyikan';
 
   @override

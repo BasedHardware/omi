@@ -33,6 +33,24 @@ jobs:
           echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          # Also run the Rust check when this workflow changes so CI PRs dogfood
+          # the new guard instead of only validating YAML syntax.
+          echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      # -- Universal source hygiene --
+      - name: Check merge conflict markers
+        run: |
+          failed=0
+          while IFS= read -r file; do
+            if [ -f "$file" ] && grep -I -nE '^(<<<<<<<|>>>>>>>)' "$file"; then
+              failed=1
+            fi
+          done < /tmp/changed-files.txt
+
+          if [ "$failed" -eq 1 ]; then
+            echo "FAIL: unresolved merge conflict markers found in changed files"
+            exit 1
+          fi
 
       # -- Dart --
       - name: Setup Flutter
@@ -102,6 +120,29 @@ jobs:
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs clang-format --dry-run --Werror
           fi
+
+      # -- Desktop Rust backend --
+      - name: Cache desktop Rust backend build
+        if: steps.changed.outputs.has_desktop_rust == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/macos/Backend-Rust/target
+          key: ${{ runner.os }}-desktop-rust-${{ hashFiles('desktop/macos/Backend-Rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-rust-
+
+      - name: Check desktop Rust backend
+        if: steps.changed.outputs.has_desktop_rust == 'true'
+        run: |
+          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            echo "$FILES" | xargs rustfmt --edition 2021 --check
+          fi
+          cd desktop/macos/Backend-Rust
+          cargo check --locked
 
       # -- Frontend --
       - name: Setup Node.js

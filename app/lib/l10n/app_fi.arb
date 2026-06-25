@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.",
     "unmute": "Poista mykistys",
     "newRecording": "Uusi tallennus",
-    "transcribeLaterPaused": "Keskeytetty – ääntä ei tallenneta"
+    "transcribeLaterPaused": "Keskeytetty – ääntä ei tallenneta",
+    "recordingMode": "Tallennustila",
+    "captureModeLater": "Myöhemmin",
+    "captureModeLiveDescription": "Litteroi reaaliajassa puhuessasi.",
+    "captureModeLaterDescription": "Tallenna ääni nyt ja litteroi milloin haluat."
 }

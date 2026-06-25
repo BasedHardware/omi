@@ -9367,6 +9367,18 @@ class AppLocalizationsSl extends AppLocalizations {
       'V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo.';
 
   @override
+  String get recordingMode => 'Način snemanja';
+
+  @override
+  String get captureModeLater => 'Pozneje';
+
+  @override
+  String get captureModeLiveDescription => 'Prepisujte v realnem času, medtem ko govorite.';
+
+  @override
+  String get captureModeLaterDescription => 'Shranite zvok zdaj in ga prepišite, kadar koli želite.';
+
+  @override
   String get unmute => 'Vklopi zvok';
 
   @override

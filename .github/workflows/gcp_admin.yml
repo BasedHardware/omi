@@ -75,8 +75,11 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           revision_traffic: LATEST=100
           # listUsers() scans ~112K Firebase Auth users for the Cumulative
-          # Users chart; 512Mi was OOMing (SIGABRT) during the scan.
-          flags: '--memory=1Gi --cpu=1'
+          # Users chart; 512Mi was OOMing (SIGABRT) during the scan. The
+          # /api/internal/precompute route runs the heaviest aggregations
+          # (profitability/infra-costs) off the request path, so the timeout is
+          # raised to 3600s and memory to 2Gi for that job.
+          flags: '--memory=2Gi --cpu=1 --timeout=3600'
           secrets: |
             FIREBASE_PROJECT_ID=WEB_ADMIN_FIREBASE_PROJECT_ID:latest
             FIREBASE_CLIENT_EMAIL=WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest
@@ -99,6 +102,7 @@ jobs:
             POSTHOG_PROJECT_ID=WEB_ADMIN_POSTHOG_PROJECT_ID:latest
             POSTHOG_HOST=WEB_ADMIN_POSTHOG_HOST:latest
             GOAFFPRO_ACCESS_TOKEN=GOAFFPRO_ACCESS_TOKEN:latest
+            CRON_SECRET=WEB_ADMIN_CRON_SECRET:latest
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

@@ -9350,6 +9350,18 @@ class AppLocalizationsTr extends AppLocalizations {
       'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
 
   @override
+  String get recordingMode => 'Kayıt modu';
+
+  @override
+  String get captureModeLater => 'Sonra';
+
+  @override
+  String get captureModeLiveDescription => 'Siz konuşurken gerçek zamanlı olarak yazıya dökün.';
+
+  @override
+  String get captureModeLaterDescription => 'Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.';
+
+  @override
   String get unmute => 'Sesi aç';
 
   @override

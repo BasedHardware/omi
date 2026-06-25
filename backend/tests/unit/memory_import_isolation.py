@@ -86,6 +86,7 @@ def install_canonical_write_runtime_stubs() -> list[str]:
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
+    subscription_mod.should_defer_desktop_processing = lambda uid: False
     sys.modules["utils.subscription"] = subscription_mod
     touched.append("utils.subscription")
 
@@ -197,6 +198,7 @@ def install_ws_i_heavy_import_stubs() -> list[str]:
     subscription_mod = types.ModuleType("utils.subscription")
     subscription_mod.get_default_basic_subscription = MagicMock()
     subscription_mod.is_trial_paywalled = lambda uid: False
+    subscription_mod.should_defer_desktop_processing = lambda uid: False
     _set("utils.subscription", subscription_mod)
 
     vector_db_mod = AutoMockModule("database.vector_db")

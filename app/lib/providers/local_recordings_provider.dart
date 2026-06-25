@@ -14,6 +14,7 @@ import 'package:omi/utils/audio_player_utils.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
 /// Owns the batch/offline-mode recordings captured natively to the phone.
@@ -80,7 +81,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _conversationProvider = provider;
   }
 
-  void _onRecordingFinalized(String _) => refresh();
+  void _onRecordingFinalized(String fileName) {
+    refresh().then((_) {
+      PlatformManager.instance.analytics.transcribeLaterRecordingCaptured(durationSeconds: _secondsByFile[fileName]);
+    });
+  }
 
   // ───────────────────────── scanning ─────────────────────────
 
@@ -220,6 +225,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
       _isUploading = false;
       _uploadingName = null;
       await refresh();
+    }
+    if (outcome == LocalUploadOutcome.started) {
+      PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
     }
     return outcome;
   }

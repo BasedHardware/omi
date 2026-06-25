@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.",
     "unmute": "Вклучи звук",
     "newRecording": "Ново снимање",
-    "transcribeLaterPaused": "Паузирано — аудиото не се снима"
+    "transcribeLaterPaused": "Паузирано — аудиото не се снима",
+    "recordingMode": "Режим на снимање",
+    "captureModeLater": "Подоцна",
+    "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
+    "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате."
 }

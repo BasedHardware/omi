@@ -11,8 +11,19 @@ import { existsSync } from "fs";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import {
   HarnessAdapter,
+  AdapterAttemptContext,
+  AdapterAttemptResult,
+  AdapterBindingHandle,
+  AdapterCapabilities,
+  AdapterEventSink,
+  CancelAttemptContext,
+  CancelDispatchResult,
   HarnessConfig,
   HarnessFeature,
+  OpenBindingInput,
+  OpenedBinding,
+  ResumeBindingInput,
+  RuntimeAdapter,
   SessionOpts,
   PromptBlock,
   PromptResult,
@@ -21,6 +32,10 @@ import {
   EventCallback,
 } from "./interface.js";
 import type { WarmupSessionConfig } from "../protocol.js";
+
+type PiMonoConfig = HarnessConfig & {
+  onRestart?: (reason: string) => void;
+};
 
 // Pi-mono RPC command/event types
 interface PiRpcCommand {
@@ -152,7 +167,7 @@ function resolveBundledExtension(): string {
 export class PiMonoAdapter implements HarnessAdapter {
   readonly name = "pi-mono";
 
-  private config: HarnessConfig;
+  private config: PiMonoConfig;
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
@@ -190,7 +205,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
-  constructor(config: HarnessConfig, piPath?: string, extensionPath?: string) {
+  constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
@@ -262,9 +277,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
+    env.OMI_ADAPTER_ID = "pi-mono";
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
-    // The pipe is already set in process.env by runPiMonoMode().
+    // The shared runtime process sets the pipe in process.env before starting pi-mono.
 
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -369,6 +385,9 @@ export class PiMonoAdapter implements HarnessAdapter {
     onToolCall: ToolExecutor,
     signal?: AbortSignal
   ): Promise<PromptResult> {
+    if (!this.sessions.has(sessionId)) {
+      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
+    }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
     // Any stray in-flight request here indicates a caller contract violation
     // or a missed abort — drop it so a late turn_end can't leak into this one.
@@ -487,6 +506,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.delete(sessionKey);
   }
 
+  hasSession(sessionId: string): boolean {
+    return this.sessions.has(sessionId);
+  }
+
   /** Update the system prompt baked into the pi subprocess.
    *
    *  Pi's RPC protocol has no set_system_prompt command — the system prompt
@@ -514,6 +537,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("systemPrompt");
     this.pendingSystemPromptRefresh = false;
     process.stderr.write(
       "[pi-mono] subprocess restarted with new system prompt\n"
@@ -535,6 +559,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("token_refresh");
     this.pendingTokenRefresh = false;
     process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
     return true;
@@ -562,6 +587,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
+    this.config.onRestart?.(reasons.join("+"));
     process.stderr.write(
       `[pi-mono] deferred restart executed (${reasons.join("+")}; subprocess restarted)\n`
     );
@@ -578,7 +604,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       case HarnessFeature.MCP_CLIENT:
         return false; // Pi-mono doesn't use MCP
       case HarnessFeature.SESSION_RESUME:
-        return true;
+        return false;
       case HarnessFeature.OAUTH:
         return false; // Uses Firebase token, not OAuth
       default:
@@ -830,5 +856,112 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = null;
     this.toolExecutor = null;
+  }
+}
+
+export class PiMonoRuntimeAdapter implements RuntimeAdapter {
+  readonly adapterId = "pi-mono";
+  readonly capabilities: AdapterCapabilities = {
+    resumeFidelity: "none",
+    supportsNativeResume: false,
+    supportsCancellation: true,
+    requiresPinnedWorker: true,
+  };
+
+  private readonly harness: PiMonoAdapter;
+  private readonly cancelledAttempts = new Set<string>();
+
+  constructor(harness: PiMonoAdapter) {
+    this.harness = harness;
+  }
+
+  start(): Promise<void> {
+    return this.harness.start();
+  }
+
+  stop(): Promise<void> {
+    return this.harness.stop();
+  }
+
+  async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    const adapterNativeSessionId = await this.harness.createSession({
+      cwd: input.cwd,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      mcpServers: input.mcpServers,
+    });
+    return this.binding(input, adapterNativeSessionId);
+  }
+
+  async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    // pi-mono has no native resume after daemon/process loss, but while this
+    // RuntimeAdapter instance is alive the opaque session id is still usable as
+    // process-local state. Startup reconciliation marks these bindings stale.
+    if (!this.harness.hasSession(input.adapterNativeSessionId)) {
+      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+    }
+    return this.binding(input, input.adapterNativeSessionId);
+  }
+
+  async executeAttempt(
+    context: AdapterAttemptContext,
+    sink: AdapterEventSink,
+    signal: AbortSignal
+  ): Promise<AdapterAttemptResult> {
+    try {
+      const result = await this.harness.sendPrompt(
+        context.binding.adapterNativeSessionId,
+        context.prompt,
+        context.tools ?? [],
+        context.mode,
+        sink,
+        async () => "",
+        signal
+      );
+
+      return {
+        ...result,
+        adapterSessionId: result.sessionId,
+        terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
+      };
+    } finally {
+      this.cancelledAttempts.delete(context.attemptId);
+      if (this.harness.hasPendingRestart) {
+        await this.harness.executePendingRestart();
+      }
+    }
+  }
+
+  async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
+    const sessionId = context.binding?.adapterNativeSessionId ?? context.sessionId;
+    if (context.attemptId) {
+      this.cancelledAttempts.add(context.attemptId);
+    }
+    this.harness.abort(sessionId);
+    return {
+      accepted: true,
+      dispatchAttempted: true,
+      adapterAcknowledged: false,
+    };
+  }
+
+  async closeBinding(binding: AdapterBindingHandle): Promise<void> {
+    this.harness.invalidateSession?.(binding.adapterNativeSessionId);
+  }
+
+  private binding(
+    input: OpenBindingInput,
+    adapterNativeSessionId: string
+  ): AdapterBindingHandle {
+    return {
+      bindingId: input.metadata?.bindingId as string | undefined,
+      sessionId: input.sessionId,
+      adapterId: this.adapterId,
+      adapterNativeSessionId,
+      resumeFidelity: "none",
+      cwd: input.cwd,
+      model: input.model,
+      metadata: input.metadata,
+    };
   }
 }

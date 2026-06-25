@@ -9380,6 +9380,18 @@ class AppLocalizationsHu extends AppLocalizations {
       'Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.';
 
   @override
+  String get recordingMode => 'Felvételi mód';
+
+  @override
+  String get captureModeLater => 'Később';
+
+  @override
+  String get captureModeLiveDescription => 'Átírás valós időben, miközben beszélsz.';
+
+  @override
+  String get captureModeLaterDescription => 'Mentsd el a hangot most, és írd át, amikor csak akarod.';
+
+  @override
   String get unmute => 'Némítás feloldása';
 
   @override

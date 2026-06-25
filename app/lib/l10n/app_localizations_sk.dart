@@ -9332,6 +9332,18 @@ class AppLocalizationsSk extends AppLocalizations {
       'V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať.';
 
   @override
+  String get recordingMode => 'Režim nahrávania';
+
+  @override
+  String get captureModeLater => 'Neskôr';
+
+  @override
+  String get captureModeLiveDescription => 'Prepis v reálnom čase počas rozprávania.';
+
+  @override
+  String get captureModeLaterDescription => 'Uložte zvuk teraz a prepíšte ho, kedykoľvek chcete.';
+
+  @override
   String get unmute => 'Zrušiť stlmenie';
 
   @override

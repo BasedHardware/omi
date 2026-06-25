@@ -3099,5 +3099,9 @@
     "transcribeLaterStorageFull": "Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.",
     "unmute": "Bunyikan",
     "newRecording": "Rekaman baru",
-    "transcribeLaterPaused": "Dijeda — audio tidak sedang direkam"
+    "transcribeLaterPaused": "Dijeda — audio tidak sedang direkam",
+    "recordingMode": "Mode perekaman",
+    "captureModeLater": "Nanti",
+    "captureModeLiveDescription": "Transkripsikan secara langsung saat Anda berbicara.",
+    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsikan kapan saja."
 }

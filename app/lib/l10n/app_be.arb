@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
     "unmute": "Уключыць гук",
     "newRecording": "Новы запіс",
-    "transcribeLaterPaused": "Прыпынена — аўдыя не запісваецца"
+    "transcribeLaterPaused": "Прыпынена — аўдыя не запісваецца",
+    "recordingMode": "Рэжым запісу",
+    "captureModeLater": "Пазней",
+    "captureModeLiveDescription": "Транскрыбаванне ў рэальным часе падчас размовы.",
+    "captureModeLaterDescription": "Захавайце аўдыя зараз і транскрыбуйце калі заўгодна."
 }

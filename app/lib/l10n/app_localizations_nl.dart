@@ -9366,6 +9366,18 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.';
 
   @override
+  String get recordingMode => 'Opnamemodus';
+
+  @override
+  String get captureModeLater => 'Later';
+
+  @override
+  String get captureModeLiveDescription => 'Transcribeer in realtime terwijl je praat.';
+
+  @override
+  String get captureModeLaterDescription => 'Sla audio nu op en transcribeer wanneer je wilt.';
+
+  @override
   String get unmute => 'Dempen opheffen';
 
   @override

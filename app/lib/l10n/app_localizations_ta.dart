@@ -9406,6 +9406,19 @@ class AppLocalizationsTa extends AppLocalizations {
       'உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.';
 
   @override
+  String get recordingMode => 'பதிவு பயன்முறை';
+
+  @override
+  String get captureModeLater => 'பின்னர்';
+
+  @override
+  String get captureModeLiveDescription => 'நீங்கள் பேசும்போது நிகழ்நேரத்தில் எழுத்தாக்கம் செய்யுங்கள்.';
+
+  @override
+  String get captureModeLaterDescription =>
+      'இப்போது ஆடியோவை சேமித்து, நீங்கள் விரும்பும்போது எழுத்தாக்கம் செய்யுங்கள்.';
+
+  @override
   String get unmute => 'ஒலியை இயக்கு';
 
   @override

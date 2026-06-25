@@ -3026,5 +3026,9 @@
     "transcribeLaterStorageFull": "V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.",
     "unmute": "Zapnout zvuk",
     "newRecording": "Nová nahrávka",
-    "transcribeLaterPaused": "Pozastaveno — zvuk se nenahrává"
+    "transcribeLaterPaused": "Pozastaveno — zvuk se nenahrává",
+    "recordingMode": "Režim nahrávání",
+    "captureModeLater": "Později",
+    "captureModeLiveDescription": "Přepis v reálném čase, jak mluvíte.",
+    "captureModeLaterDescription": "Uložte zvuk nyní a přepište jej, kdykoli budete chtít."
 }

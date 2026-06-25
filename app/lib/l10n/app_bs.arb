@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
-    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima"
+    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima",
+    "recordingMode": "Način snimanja",
+    "captureModeLater": "Kasnije",
+    "captureModeLiveDescription": "Transkribirajte u stvarnom vremenu dok govorite.",
+    "captureModeLaterDescription": "Spremite zvuk sada i transkribirajte kad god želite."
 }

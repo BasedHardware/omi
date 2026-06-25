@@ -3058,5 +3058,9 @@
     "transcribeLaterStorageFull": "スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。",
     "unmute": "ミュート解除",
     "newRecording": "新規録音",
-    "transcribeLaterPaused": "一時停止中 — 音声は録音されていません"
+    "transcribeLaterPaused": "一時停止中 — 音声は録音されていません",
+    "recordingMode": "録音モード",
+    "captureModeLater": "後で",
+    "captureModeLiveDescription": "話しながらリアルタイムで文字起こしします。",
+    "captureModeLaterDescription": "今すぐ音声を保存して、好きなときに文字起こしできます。"
 }

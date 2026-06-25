@@ -3092,5 +3092,9 @@
     "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.",
     "unmute": "Sesi aç",
     "newRecording": "Yeni kayıt",
-    "transcribeLaterPaused": "Duraklatıldı — ses kaydedilmiyor"
+    "transcribeLaterPaused": "Duraklatıldı — ses kaydedilmiyor",
+    "recordingMode": "Kayıt modu",
+    "captureModeLater": "Sonra",
+    "captureModeLiveDescription": "Siz konuşurken gerçek zamanlı olarak yazıya dökün.",
+    "captureModeLaterDescription": "Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün."
 }

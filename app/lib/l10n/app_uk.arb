@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "На телефоні бракує місця, тому запис призупинено. Звільніть місце або завантажте свої записи — і запис автоматично відновиться.",
     "unmute": "Увімкнути звук",
     "newRecording": "Новий запис",
-    "transcribeLaterPaused": "Призупинено — аудіо не записується"
+    "transcribeLaterPaused": "Призупинено — аудіо не записується",
+    "recordingMode": "Режим запису",
+    "captureModeLater": "Пізніше",
+    "captureModeLiveDescription": "Транскрибуйте в реальному часі, поки говорите.",
+    "captureModeLaterDescription": "Збережіть аудіо зараз і транскрибуйте коли завгодно."
 }

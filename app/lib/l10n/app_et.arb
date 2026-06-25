@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.",
     "unmute": "Tühista vaigistus",
     "newRecording": "Uus salvestus",
-    "transcribeLaterPaused": "Peatatud — heli ei salvestata"
+    "transcribeLaterPaused": "Peatatud — heli ei salvestata",
+    "recordingMode": "Salvestusrežiim",
+    "captureModeLater": "Hiljem",
+    "captureModeLiveDescription": "Transkribeeri reaalajas, kui räägid.",
+    "captureModeLaterDescription": "Salvesta heli kohe ja transkribeeri, millal soovid."
 }

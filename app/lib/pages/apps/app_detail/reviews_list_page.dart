@@ -8,6 +8,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
+import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -150,13 +151,6 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
         ],
       ),
     );
-  }
-
-  String _getAvatarUrl(String seed, String? username) {
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
   }
 
   Map<int, int> _getRatingDistribution(List<AppReview> reviews) {
@@ -311,33 +305,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Avatar
-              ClipOval(
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(color: Colors.grey.shade800, shape: BoxShape.circle),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
+              ReviewAvatar(seed: avatarSeed, username: review.username, size: 40),
               const SizedBox(width: 12),
               // Name, date, and stars
               Expanded(

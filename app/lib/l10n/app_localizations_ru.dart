@@ -9373,6 +9373,18 @@ class AppLocalizationsRu extends AppLocalizations {
       'На телефоне заканчивается память, поэтому запись приостановлена. Освободите место или загрузите записи — и она возобновится автоматически.';
 
   @override
+  String get recordingMode => 'Режим записи';
+
+  @override
+  String get captureModeLater => 'Позже';
+
+  @override
+  String get captureModeLiveDescription => 'Расшифровка в реальном времени, пока вы говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Сохраните аудио сейчас и расшифруйте, когда захотите.';
+
+  @override
   String get unmute => 'Включить звук';
 
   @override

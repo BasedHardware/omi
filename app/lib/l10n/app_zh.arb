@@ -3079,5 +3079,9 @@
     "transcribeLaterStorageFull": "手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。",
     "unmute": "取消静音",
     "newRecording": "新建录音",
-    "transcribeLaterPaused": "已暂停 — 当前未在录音"
+    "transcribeLaterPaused": "已暂停 — 当前未在录音",
+    "recordingMode": "录制模式",
+    "captureModeLater": "稍后",
+    "captureModeLiveDescription": "在你说话时实时转写。",
+    "captureModeLaterDescription": "立即保存音频，随时转写。"
 }

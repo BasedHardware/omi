@@ -1637,6 +1637,8 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     paths = []
     for file in files:
         filename = file.filename
+        if not filename:
+            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:

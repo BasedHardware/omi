@@ -3024,5 +3024,9 @@
     "transcribeLaterStorageFull": "مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.",
     "unmute": "إلغاء الكتم",
     "newRecording": "تسجيل جديد",
-    "transcribeLaterPaused": "متوقف مؤقتًا — لا يتم تسجيل الصوت"
+    "transcribeLaterPaused": "متوقف مؤقتًا — لا يتم تسجيل الصوت",
+    "recordingMode": "وضع التسجيل",
+    "captureModeLater": "لاحقًا",
+    "captureModeLiveDescription": "تفريغ نصي فوري أثناء حديثك.",
+    "captureModeLaterDescription": "احفظ الصوت الآن وفرّغه نصيًا متى شئت."
 }

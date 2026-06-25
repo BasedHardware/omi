@@ -173,8 +173,9 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
-    // String or array-of-content-blocks. We emit the block form with a
-    // cache_control breakpoint to cache the static tools+system prefix.
+    /// System prompt as array-of-content-blocks with optional cache_control.
+    /// Produced by `cached_system_block()` which handles sentinel splitting
+    /// so volatile live context (dates, times) is excluded from the cached prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -190,6 +191,34 @@ pub struct AnthropicRequest {
 pub struct AnthropicMessage {
     pub role: String,
     pub content: serde_json::Value,
+}
+
+/// Anthropic content block type (system prompt blocks are always "text").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicContentBlockType {
+    Text,
+}
+
+/// Anthropic cache control type (currently only "ephemeral" is supported).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicCacheControlType {
+    Ephemeral,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicSystemContentBlock {
+    #[serde(rename = "type")]
+    pub block_type: AnthropicContentBlockType,
+    pub text: String,
+    pub cache_control: AnthropicCacheControl,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicCacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: AnthropicCacheControlType,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -243,23 +272,16 @@ pub struct AnthropicUsage {
 #[serde(tag = "type")]
 pub enum AnthropicStreamEvent {
     #[serde(rename = "message_start")]
-    MessageStart {
-        message: AnthropicStreamMessage,
-    },
+    MessageStart { message: AnthropicStreamMessage },
     #[serde(rename = "content_block_start")]
     ContentBlockStart {
         index: usize,
         content_block: AnthropicContentBlock,
     },
     #[serde(rename = "content_block_delta")]
-    ContentBlockDelta {
-        index: usize,
-        delta: AnthropicDelta,
-    },
+    ContentBlockDelta { index: usize, delta: AnthropicDelta },
     #[serde(rename = "content_block_stop")]
-    ContentBlockStop {
-        index: usize,
-    },
+    ContentBlockStop { index: usize },
     #[serde(rename = "message_delta")]
     MessageDelta {
         delta: AnthropicMessageDelta,
@@ -270,9 +292,7 @@ pub enum AnthropicStreamEvent {
     #[serde(rename = "ping")]
     Ping {},
     #[serde(rename = "error")]
-    Error {
-        error: AnthropicStreamError,
-    },
+    Error { error: AnthropicStreamError },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -384,9 +404,8 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
 }
 
 pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
-    let prompt_tokens = usage.input_tokens
-        + usage.cache_creation_input_tokens
-        + usage.cache_read_input_tokens;
+    let prompt_tokens =
+        usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens;
     let completion_tokens = usage.output_tokens;
     let prompt_tokens_details = if usage.cache_read_input_tokens > 0 {
         Some(PromptTokensDetails {

@@ -9347,6 +9347,18 @@ class AppLocalizationsBn extends AppLocalizations {
       'আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।';
 
   @override
+  String get recordingMode => 'রেকর্ডিং মোড';
+
+  @override
+  String get captureModeLater => 'পরে';
+
+  @override
+  String get captureModeLiveDescription => 'আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।';
+
+  @override
+  String get captureModeLaterDescription => 'এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।';
+
+  @override
   String get unmute => 'আনমিউট করুন';
 
   @override

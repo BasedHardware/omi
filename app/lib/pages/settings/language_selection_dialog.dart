@@ -37,21 +37,7 @@ class LanguageSelectionDialog {
         : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
-    final ScrollController _scrollController = ScrollController();
-
-    // Function to scroll to the selected language
-    void scrollToSelectedLanguage() {
-      if (selectedLanguage != null) {
-        final selectedIndex = filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
-        if (selectedIndex != -1 && _scrollController.hasClients) {
-          _scrollController.animateTo(
-            selectedIndex * 56.0, // Approximate height of each list item
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
-    }
+    final ScrollController scrollController = ScrollController();
 
     await showDialog(
       context: context,
@@ -155,7 +141,7 @@ class LanguageSelectionDialog {
                               child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
                             )
                           : ListView.builder(
-                              controller: _scrollController,
+                              controller: scrollController,
                               itemCount: filteredLanguages.length,
                               itemBuilder: (context, index) {
                                 final language = filteredLanguages[index];
@@ -163,9 +149,8 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-                                      : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withOpacity(0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -193,8 +178,8 @@ class LanguageSelectionDialog {
                             final selectedIndex = filteredLanguages.indexWhere(
                               (lang) => lang.value == selectedLanguage,
                             );
-                            if (selectedIndex != -1 && _scrollController.hasClients) {
-                              _scrollController.animateTo(
+                            if (selectedIndex != -1 && scrollController.hasClients) {
+                              scrollController.animateTo(
                                 selectedIndex * 56.0, // Approximate height of each list item
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
@@ -220,6 +205,8 @@ class LanguageSelectionDialog {
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
+                          final successMsg = context.l10n.languageSetTo(selectedLanguageName!);
+                          final failMsg = context.l10n.failedToSetLanguage;
                           final userProvider = Provider.of<UserProvider>(context, listen: false);
                           final success = await homeProvider.updateUserPrimaryLanguage(
                             selectedLanguage!,
@@ -229,9 +216,9 @@ class LanguageSelectionDialog {
                           if (success) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
+                            AppSnackbar.showSnackbarSuccess(successMsg);
                           } else {
-                            AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
+                            AppSnackbar.showSnackbarError(failMsg);
                           }
                         },
                   style: ElevatedButton.styleFrom(

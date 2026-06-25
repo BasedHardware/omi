@@ -9340,6 +9340,18 @@ class AppLocalizationsCs extends AppLocalizations {
       'V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.';
 
   @override
+  String get recordingMode => 'Režim nahrávání';
+
+  @override
+  String get captureModeLater => 'Později';
+
+  @override
+  String get captureModeLiveDescription => 'Přepis v reálném čase, jak mluvíte.';
+
+  @override
+  String get captureModeLaterDescription => 'Uložte zvuk nyní a přepište jej, kdykoli budete chtít.';
+
+  @override
   String get unmute => 'Zapnout zvuk';
 
   @override

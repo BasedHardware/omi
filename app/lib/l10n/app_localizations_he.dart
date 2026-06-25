@@ -9269,6 +9269,18 @@ class AppLocalizationsHe extends AppLocalizations {
       'האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.';
 
   @override
+  String get recordingMode => 'מצב הקלטה';
+
+  @override
+  String get captureModeLater => 'מאוחר יותר';
+
+  @override
+  String get captureModeLiveDescription => 'תמלול בזמן אמת תוך כדי דיבור.';
+
+  @override
+  String get captureModeLaterDescription => 'שמרו את האודיו עכשיו ותמללו מתי שתרצו.';
+
+  @override
   String get unmute => 'בטל השתקה';
 
   @override

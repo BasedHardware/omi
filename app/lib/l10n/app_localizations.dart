@@ -17403,6 +17403,30 @@ abstract class AppLocalizations {
   /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
   String get transcribeLaterStorageFull;
 
+  /// Title of the bottom sheet for choosing between Live and Transcribe Later recording modes
+  ///
+  /// In en, this message translates to:
+  /// **'Recording mode'**
+  String get recordingMode;
+
+  /// Short label for the Transcribe Later mode shown on the home app-bar mode chip
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get captureModeLater;
+
+  /// Subtitle for the Live option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe in real time as you speak.'**
+  String get captureModeLiveDescription;
+
+  /// Subtitle for the Transcribe Later option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio now and transcribe whenever you want.'**
+  String get captureModeLaterDescription;
+
   /// Button to resume Transcribe Later capture after muting
   ///
   /// In en, this message translates to:

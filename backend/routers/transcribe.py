@@ -236,6 +236,8 @@ def resample_pcm(pcm_data: bytes, source_rate: int, target_rate: int) -> bytes:
     """Simple resampling by sample duplication/decimation."""
     if source_rate == target_rate:
         return pcm_data
+    if source_rate <= 0 or target_rate <= 0:
+        return pcm_data
     num_samples = len(pcm_data) // 2
     if num_samples == 0:
         return pcm_data
@@ -2036,13 +2038,12 @@ async def _stream_handler(
             best_match = None
             best_distance = float('inf')
 
-            # Print all candidates with scores for tuning
-            logger.info(
+            logger.debug(
                 f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people: {uid} {session_id}"
             )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
-                logger.info(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
+                logger.debug(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
                 if distance < best_distance:
                     best_distance = distance
                     best_match = (person_id, data['name'])

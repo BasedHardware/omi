@@ -9171,6 +9171,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
 
   @override
+  String get recordingMode => '录制模式';
+
+  @override
+  String get captureModeLater => '稍后';
+
+  @override
+  String get captureModeLiveDescription => '在你说话时实时转写。';
+
+  @override
+  String get captureModeLaterDescription => '立即保存音频，随时转写。';
+
+  @override
   String get unmute => '取消静音';
 
   @override

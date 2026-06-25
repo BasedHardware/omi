@@ -113,6 +113,9 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "get_task_agent_status": return "Checking agents"
+        case "spawn_agent": return "Starting agent"
+        case "manage_agent_pills": return "Managing agents"
         case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
@@ -165,6 +168,18 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "spawn_agent":
+            summary = (input["brief"] ?? input["query"]) as? String
+        case "manage_agent_pills":
+            if let action = input["action"] as? String {
+                if let agentId = input["agent_id"] as? String, !agentId.isEmpty {
+                    summary = "\(action) \(agentId)"
+                } else {
+                    summary = action
+                }
+            } else {
+                summary = nil
+            }
         case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
@@ -335,6 +350,9 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
+            "get_task_agent_status",
+            "spawn_agent",
+            "manage_agent_pills",
             "search_tasks",
             "get_daily_recap",
             "complete_task",
@@ -815,6 +833,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self.pendingAttachments.removeAll()
                     self.sessions.removeAll()
                     self.currentSession = nil
+                    AgentRuntimeStatusStore.shared.reset()
                 }
             }
 
@@ -1902,6 +1921,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         do {
+            let currentChatMode = chatMode
             let result = try await agentBridge.query(
                 prompt: question,
                 systemPrompt: systemPrompt,
@@ -1910,7 +1930,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
+                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -2687,7 +2707,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, systemPromptStyle: ChatSystemPromptStyle = .main, sessionKey: String? = nil, resume: String? = nil, imageData: Data? = nil) async {
+    func sendMessage(
+        _ text: String,
+        model: String? = nil,
+        isFollowUp: Bool = false,
+        systemPromptSuffix: String? = nil,
+        systemPromptPrefix: String? = nil,
+        systemPromptStyle: ChatSystemPromptStyle = .main,
+        sessionKey: String? = nil,
+        omiSessionId: String? = nil,
+        surfaceRef: AgentSurfaceReference? = nil,
+        legacyClientScope: String? = nil,
+        resume: String? = nil,
+        imageData: Data? = nil
+    ) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
 
@@ -2939,6 +2972,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // text-streaming window so the `generation` span excludes tool time.
             var isFirstResponse = true
             var isGenerating = false
+            let currentChatMode = chatMode
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 if isFirstResponse {
                     isFirstResponse = false
@@ -2958,7 +2992,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
                 let toolStart = ContinuousClock.now
-                let result = await ChatToolExecutor.execute(toolCall)
+                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =
@@ -3064,10 +3098,26 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
+            let resolvedSurface =
+                surfaceRef
+                ?? (systemPromptStyle == .main && !isOnboarding ? AgentSurfaceReference.mainChat(chatId: sessionId) : nil)
+            let resolvedOmiSessionId = omiSessionId ?? resolvedSurface.flatMap {
+                AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
+            }
+            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
+            let resolvedLegacyClientScope =
+                legacyClientScope
+                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
+
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
+                sessionKey: resolvedSessionKey,
+                omiSessionId: resolvedOmiSessionId,
+                surfaceKind: resolvedSurface?.surfaceKind,
+                externalRefKind: resolvedSurface?.externalRefKind,
+                externalRefId: resolvedSurface?.externalRefId,
+                legacyClientScope: resolvedLegacyClientScope,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
                 model: model ?? modelOverride,

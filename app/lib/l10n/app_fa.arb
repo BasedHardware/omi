@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.",
     "unmute": "باصدا کردن",
     "newRecording": "ضبط جدید",
-    "transcribeLaterPaused": "متوقف شد — صدا ضبط نمی‌شود"
+    "transcribeLaterPaused": "متوقف شد — صدا ضبط نمی‌شود",
+    "recordingMode": "حالت ضبط",
+    "captureModeLater": "بعداً",
+    "captureModeLiveDescription": "رونویسی همزمان هنگام صحبت کردن.",
+    "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید."
 }

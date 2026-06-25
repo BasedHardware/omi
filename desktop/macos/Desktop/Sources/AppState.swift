@@ -486,16 +486,20 @@ class AppState: ObservableObject {
     // (ProactiveAssistantsPlugin, isPaywalledEffective) keep blocking until
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
-    let cachedPlan = UserDefaults.standard.string(forKey: "floatingBar_cachedPlan")
-    let cachedPlanIsPaid = cachedPlan != nil && cachedPlan != "basic"
-    if APIKeyService.isByokActive || cachedPlanIsPaid {
-      self.isPaywalled = false
-      // didSet doesn't fire from init, so flush UserDefaults explicitly for
-      // singletons that read the key directly.
-      UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
-    } else {
-      self.isPaywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
-    }
+    // Freemium: the desktop trial paywall is disabled by default
+    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // `desktop_isPaywalled=true` from a pre-freemium session must not gate
+    // anything on launch. Previously basic-tier users trusted that cache and
+    // flashed the "monthly limit" popup until fetchTrialMetadata refreshed
+    // (~1-2s) — and synchronous readers (ProactiveAssistantsPlugin,
+    // isPaywalledEffective) blocked for that whole window. Always start
+    // non-paywalled and let the backend's trial metadata be authoritative:
+    // fetchTrialMetadata re-sets isPaywalled only if the backend genuinely
+    // reports trial_expired (it won't under freemium).
+    self.isPaywalled = false
+    // didSet doesn't fire from init, so flush UserDefaults explicitly for
+    // singletons that read the key directly.
+    UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()

@@ -9345,6 +9345,18 @@ class AppLocalizationsSv extends AppLocalizations {
       'Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.';
 
   @override
+  String get recordingMode => 'Inspelningsläge';
+
+  @override
+  String get captureModeLater => 'Senare';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribera i realtid medan du talar.';
+
+  @override
+  String get captureModeLaterDescription => 'Spara ljudet nu och transkribera när du vill.';
+
+  @override
   String get unmute => 'Slå på ljud';
 
   @override

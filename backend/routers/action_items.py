@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import uuid
 
 from utils.executors import db_executor
@@ -29,9 +30,11 @@ from utils.notifications import (
     sync_action_item_reminder,
 )
 from utils.task_sync import auto_sync_action_item
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 # Request models specific to action items
@@ -496,7 +499,15 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    response_items = [ActionItemResponse(**item) for item in action_items]
+    response_items = []
+    for item in action_items:
+        try:
+            response_items.append(ActionItemResponse(**item))
+        except ValidationError:
+            logger.warning(
+                f"Skipping malformed action item {item.get('id')} for conversation {conversation_id}, uid {uid}"
+            )
+            continue
 
     return {"action_items": response_items, "conversation_id": conversation_id}
 

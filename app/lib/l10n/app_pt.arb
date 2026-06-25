@@ -3093,5 +3093,9 @@
     "transcribeLaterStorageFull": "Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.",
     "unmute": "Reativar áudio",
     "newRecording": "Nova gravação",
-    "transcribeLaterPaused": "Em pausa — o áudio não está a ser gravado"
+    "transcribeLaterPaused": "Em pausa — o áudio não está a ser gravado",
+    "recordingMode": "Modo de gravação",
+    "captureModeLater": "Depois",
+    "captureModeLiveDescription": "Transcreva em tempo real enquanto fala.",
+    "captureModeLaterDescription": "Salve o áudio agora e transcreva quando quiser."
 }

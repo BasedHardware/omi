@@ -9289,6 +9289,18 @@ class AppLocalizationsTh extends AppLocalizations {
       'พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ';
 
   @override
+  String get recordingMode => 'โหมดการบันทึก';
+
+  @override
+  String get captureModeLater => 'ภายหลัง';
+
+  @override
+  String get captureModeLiveDescription => 'ถอดเสียงแบบเรียลไทม์ขณะที่คุณพูด';
+
+  @override
+  String get captureModeLaterDescription => 'บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ';
+
+  @override
   String get unmute => 'เปิดเสียง';
 
   @override

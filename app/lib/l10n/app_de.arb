@@ -3025,5 +3025,9 @@
     "transcribeLaterStorageFull": "Auf deinem Smartphone wird der Speicher knapp, daher ist die Aufnahme pausiert. Gib Speicher frei oder lade deine Aufnahmen hoch – danach wird sie automatisch fortgesetzt.",
     "unmute": "Ton an",
     "newRecording": "Neue Aufnahme",
-    "transcribeLaterPaused": "Pausiert – Audio wird nicht aufgenommen"
+    "transcribeLaterPaused": "Pausiert – Audio wird nicht aufgenommen",
+    "recordingMode": "Aufnahmemodus",
+    "captureModeLater": "Später",
+    "captureModeLiveDescription": "Transkribiere in Echtzeit, während du sprichst.",
+    "captureModeLaterDescription": "Audio jetzt speichern und transkribieren, wann du willst."
 }

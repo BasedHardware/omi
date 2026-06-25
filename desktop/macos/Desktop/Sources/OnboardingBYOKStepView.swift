@@ -25,11 +25,11 @@ struct OnboardingBYOKStepView: View {
       graphViewModel: graphViewModel,
       stepIndex: stepIndex,
       totalSteps: totalSteps,
-      eyebrow: "Free forever",
+      eyebrow: "Optional",
       title: "Bring your own keys.",
       description:
-        "Paste your own API keys for OpenAI, Anthropic, Gemini, and Deepgram and Omi is free forever. Keys stay on this Mac — we never store them on our servers.",
-      showsSkip: true,
+        "Omi is free to use — just continue. Prefer to run on your own API usage? Paste your OpenAI, Anthropic, Gemini, and Deepgram keys and hit Save. Keys stay on this Mac — we never store them on our servers.",
+      showsSkip: false,
       onSkip: {
         AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
         onSkip()
@@ -49,18 +49,23 @@ struct OnboardingBYOKStepView: View {
         }
 
         HStack(spacing: 12) {
-          Button(isActivating ? "Activating…" : "Activate free plan") {
-            Task { await activate() }
+          Button("Skip for now") {
+            AnalyticsManager.shared.onboardingStepCompleted(step: stepIndex, stepName: "BYOK_Skipped")
+            onSkip()
           }
           .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
-          .disabled(!allKeysProvided || isActivating)
+          .disabled(isActivating)
 
-          if !allKeysProvided {
-            Text("Fill all four to activate.")
-              .font(.system(size: 12))
-              .foregroundColor(OmiColors.textTertiary)
+          Button(isActivating ? "Saving…" : "Save keys") {
+            Task { await activate() }
           }
+          .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
+          .disabled(!allKeysProvided || isActivating)
         }
+
+        Text("Adding keys is optional — fill all four to run on your own API usage.")
+          .font(.system(size: 12))
+          .foregroundColor(OmiColors.textTertiary)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
     }

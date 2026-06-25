@@ -1,0 +1,180 @@
+name: Promote Desktop Backend to Prod
+
+# Keeps the prod desktop (Rust) backend in sync with whatever desktop release is
+# on the STABLE channel — automatically. You change ONE thing (flip a release's
+# `channel:` field to `stable`, which already promotes the app via the appcast),
+# and this reconciler deploys the matching backend to prod. No tags to manage.
+#
+# Why a reconciler instead of a `release: edited` trigger: GitHub does not
+# reliably emit Actions runs for release edits (verified). A scheduled
+# reconcile is the robust way to make "flip the channel" auto-promote the
+# backend. `workflow_dispatch` runs it immediately (no waiting for the cron).
+#
+# Safety: roll-FORWARD only. It deploys the newest `channel: stable` release iff
+# that commit is newer than what's already on prod (tracked by the
+# `desktop-backend-prod-deployed` git tag) — so it never downgrades prod. Use
+# the `force` input (with an optional `tag`) to deploy/rollback to a specific
+# release deliberately.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Override tag to deploy (default: newest channel:stable release)'
+        required: false
+      force:
+        description: 'Deploy even if not newer than current prod (allows rollback)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-backend-reconcile
+  cancel-in-progress: false
+
+env:
+  SERVICE: desktop-backend
+  REGION: us-central1
+  TRACK_TAG: desktop-backend-prod-deployed
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.c.outputs.deploy }}
+      target_sha: ${{ steps.c.outputs.target_sha }}
+      target_tag: ${{ steps.c.outputs.target_tag }}
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine target + roll-forward decision
+        id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          OVERRIDE_TAG: ${{ github.event.inputs.tag }}
+          FORCE: ${{ github.event.inputs.force }}
+        run: |
+          set -euo pipefail
+
+          # 1) TARGET: explicit override, else newest v*-macos release on channel: stable
+          TARGET_TAG="${OVERRIDE_TAG:-}"
+          if [ -z "$TARGET_TAG" ]; then
+            for tag in $(gh release list --repo "$REPO" --limit 30 --json tagName -q '.[].tagName' | grep -- '-macos'); do
+              body=$(gh release view "$tag" --repo "$REPO" --json body -q .body)
+              if printf '%s\n' "$body" | grep -qiE '^[[:space:]]*channel:[[:space:]]*stable[[:space:]]*$'; then
+                TARGET_TAG="$tag"
+                break
+              fi
+            done
+          fi
+          if [ -z "$TARGET_TAG" ]; then
+            echo "No channel:stable desktop release found; nothing to do."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          TARGET_SHA=$(git rev-list -n1 "$TARGET_TAG" 2>/dev/null || true)
+          if [ -z "$TARGET_SHA" ]; then
+            TARGET_SHA=$(gh api "repos/$REPO/git/ref/tags/$TARGET_TAG" --jq '.object.sha')
+          fi
+          CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || echo "")
+          echo "target=$TARGET_TAG ($TARGET_SHA) | tracked-prod=$CURRENT_SHA | force=${FORCE:-false}"
+
+          DEPLOY=true
+          if [ "${FORCE:-false}" = "true" ]; then
+            DEPLOY=true
+          elif [ "$TARGET_SHA" = "$CURRENT_SHA" ]; then
+            DEPLOY=false   # already on prod
+          elif [ -n "$CURRENT_SHA" ] && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA"; then
+            DEPLOY=false   # target is older than prod — never auto-downgrade
+          fi
+
+          echo "deploy=$DEPLOY" >> "$GITHUB_OUTPUT"
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "target_tag=$TARGET_TAG" >> "$GITHUB_OUTPUT"
+          echo "Decision - deploy=$DEPLOY for $TARGET_TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.deploy == 'true'
+    environment: prod
+    permissions:
+      contents: write
+      id-token: write
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout target commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.target_sha }}
+          fetch-depth: 0
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Google Service Account
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
+
+      - name: Build and Push Desktop Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
+          push: true
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ needs.check.outputs.target_sha }}
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:prod
+          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
+          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
+
+      - name: Deploy Desktop Backend to Production
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ needs.check.outputs.target_sha }}
+          flags: '--allow-unauthenticated'
+          env_vars: |
+            FIREBASE_PROJECT_ID=based-hardware
+            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+            AGENT_GCS_BUCKET=based-hardware-agent
+          secrets: |
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
+            OPENAI_API_KEY=OPENAI_API_KEY:latest
+            REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
+            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
+            REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
+            REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
+            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
+            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
+            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
+            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+
+      - name: Advance prod-tracking tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git tag -f "$TRACK_TAG" "${{ needs.check.outputs.target_sha }}"
+          git push -f origin "$TRACK_TAG"
+          echo "Promoted desktop-backend to PROD - ${{ needs.check.outputs.target_tag }} (${{ needs.check.outputs.target_sha }})" >> "$GITHUB_STEP_SUMMARY"

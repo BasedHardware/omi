@@ -9389,6 +9389,18 @@ class AppLocalizationsMk extends AppLocalizations {
       'На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.';
 
   @override
+  String get recordingMode => 'Режим на снимање';
+
+  @override
+  String get captureModeLater => 'Подоцна';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибирајте во реално време додека зборувате.';
+
+  @override
+  String get captureModeLaterDescription => 'Зачувајте го звукот сега и транскрибирајте кога сакате.';
+
+  @override
   String get unmute => 'Вклучи звук';
 
   @override

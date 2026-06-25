@@ -9424,6 +9424,18 @@ class AppLocalizationsFr extends AppLocalizations {
       'L\'espace de stockage de votre téléphone est presque plein : l\'enregistrement est donc en pause. Libérez de l\'espace ou importez vos enregistrements pour qu\'il reprenne automatiquement.';
 
   @override
+  String get recordingMode => 'Mode d\'enregistrement';
+
+  @override
+  String get captureModeLater => 'Plus tard';
+
+  @override
+  String get captureModeLiveDescription => 'Transcrivez en temps réel pendant que vous parlez.';
+
+  @override
+  String get captureModeLaterDescription => 'Enregistrez l\'audio maintenant et transcrivez quand vous voulez.';
+
+  @override
   String get unmute => 'Réactiver le son';
 
   @override

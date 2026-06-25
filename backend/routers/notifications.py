@@ -97,6 +97,8 @@ def send_app_notification_to_user(request: Request, data: dict, authorization: O
     # Check app-based auth
     if 'aid' not in data:
         raise HTTPException(status_code=400, detail='aid (app id) in request body is required')
+    if not data.get('message'):
+        raise HTTPException(status_code=400, detail='message is required')
 
     if not data.get('uid'):
         raise HTTPException(status_code=400, detail='uid is required')

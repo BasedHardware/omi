@@ -105,10 +105,14 @@ class ReviewResolutionRequest(BaseModel):
 
 
 def _legacy_get_memories(uid: str, limit: int, offset: int) -> List[MemoryDB]:
+    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
+    # on a negative argument and would otherwise 500 the request.
+    offset = max(0, offset)
     # Use high limits for the first page
     # Warn: should remove
     if offset == 0:
         limit = 5000
+    limit = max(1, min(limit, 5000))
     memories = memories_db.get_memories(uid, limit, offset)
 
     valid_memories = []

@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
     "unmute": "Įjungti garsą",
     "newRecording": "Naujas įrašas",
-    "transcribeLaterPaused": "Pristabdyta — garsas neįrašomas"
+    "transcribeLaterPaused": "Pristabdyta — garsas neįrašomas",
+    "recordingMode": "Įrašymo režimas",
+    "captureModeLater": "Vėliau",
+    "captureModeLiveDescription": "Transkribuokite tikruoju laiku, kol kalbate.",
+    "captureModeLaterDescription": "Išsaugokite garsą dabar ir transkribuokite kada panorėję."
 }

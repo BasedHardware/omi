@@ -224,6 +224,27 @@ actor GeminiClient {
       }
     }
 
+    /// Expected product/account states should not page Sentry. They are useful in
+    /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
+    var isExpectedProductState: Bool {
+      switch self {
+      case .apiError(let message):
+        let lower = message.lowercased()
+        return lower.contains("trial_expired")
+          || lower.contains("trial expired")
+          || lower.contains("payment required")
+          || lower.contains("byok")
+          || lower.contains("bring your own key")
+          || lower.contains("usage limit")
+          || lower.contains("quota exceeded")
+          || lower.contains("http 402")
+      case .missingAPIKey:
+        return true
+      case .networkError, .invalidResponse:
+        return false
+      }
+    }
+
     var errorDescription: String? {
       switch self {
       case .missingAPIKey:
@@ -242,6 +263,13 @@ actor GeminiClient {
     private static func userFacingMessage(for rawMessage: String) -> String {
       let lower = rawMessage.lowercased()
 
+      if lower.contains("trial_expired") || lower.contains("trial expired")
+        || lower.contains("payment required") || lower.contains("byok")
+        || lower.contains("bring your own key") || lower.contains("usage limit")
+        || lower.contains("http 402") || lower.contains("quota exceeded")
+      {
+        return "AI features require an active plan or BYOK keys."
+      }
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
         || lower.contains("unauthorized") || lower.contains("permission denied")
         || lower.contains("invalid key") || lower.contains("forbidden")

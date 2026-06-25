@@ -436,12 +436,15 @@ The system prompt guides the LLM through a 5-step strategy:
 
 | Model | Use Case | Location |
 |-------|----------|----------|
+| `gpt-5.4-mini` / `gpt-5.4` | Core chat, conversation processing | Premium / Max QoS profiles |
 | `gpt-4.1-mini` | Fast classification, date extraction | `requires_context()`, filters |
-| `gpt-4.1` | Medium complexity, initial QA | QA with RAG context |
-| `gpt-5.1` | Agentic workflows with tool calling | Main chat agent |
+| `claude-sonnet-4-6` | Chat agent (all QoS tiers) | `chat_agent` profile |
+| `gemini-2.5-flash-lite` | Session titles, followups | Light tasks (premium) |
 | `text-embedding-3-large` | Vector embeddings (3,072 dims) | Pinecone queries |
-| Gemini Flash 1.5 | Persona responses | Via OpenRouter |
-| Claude 3.5 Sonnet | Persona responses | Via OpenRouter |
+
+<Note>
+Models are selected via QoS profiles (`premium`, `max`, `fair_use`, `byok`) in `backend/utils/llm/model_config.py`. The `fair_use` profile uses `gpt-5.1` as a fallback. See the config file for the current authoritative set.
+</Note>
 
 ## Streaming Response Format
 

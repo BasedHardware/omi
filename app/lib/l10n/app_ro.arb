@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
     "unmute": "Reactivează sunetul",
     "newRecording": "Înregistrare nouă",
-    "transcribeLaterPaused": "În pauză — audio nu se înregistrează"
+    "transcribeLaterPaused": "În pauză — audio nu se înregistrează",
+    "recordingMode": "Mod de înregistrare",
+    "captureModeLater": "Mai târziu",
+    "captureModeLiveDescription": "Transcrie în timp real în timp ce vorbești.",
+    "captureModeLaterDescription": "Salvează audio acum și transcrie oricând dorești."
 }

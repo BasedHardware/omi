@@ -656,7 +656,7 @@ async def _async_trigger_realtime_integrations(
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
         # Return mentor results if any, even if no external apps
@@ -707,7 +707,9 @@ async def _async_trigger_realtime_integrations(
             await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
-                record_app_usage(
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
                     uid,
                     app.id,
                     UsageHistoryType.transcript_processed_external_integration,

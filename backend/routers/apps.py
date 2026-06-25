@@ -467,7 +467,12 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
-    data = json.loads(app_data)
+    try:
+        data = json.loads(app_data)
+    except (json.JSONDecodeError, TypeError):
+        raise HTTPException(status_code=400, detail='Invalid app_data: must be valid JSON')
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail='Invalid app_data: must be a JSON object')
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
@@ -560,9 +565,9 @@ async def create_persona(
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
-    user = await run_blocking(db_executor, get_user_from_uid, uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
     data['author'] = user.get('display_name', '')
-    data['email'] = user['email']
+    data['email'] = user.get('email')
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '').lower()
@@ -1663,7 +1668,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1680,7 +1686,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])

@@ -9371,6 +9371,18 @@ class AppLocalizationsKn extends AppLocalizations {
       'ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.';
 
   @override
+  String get recordingMode => 'ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್';
+
+  @override
+  String get captureModeLater => 'ನಂತರ';
+
+  @override
+  String get captureModeLiveDescription => 'ನೀವು ಮಾತನಾಡುತ್ತಿರುವಾಗ ನೈಜ ಸಮಯದಲ್ಲಿ ಲಿಪ್ಯಂತರಿಸಿ.';
+
+  @override
+  String get captureModeLaterDescription => 'ಈಗ ಆಡಿಯೋ ಉಳಿಸಿ ಮತ್ತು ನಿಮಗೆ ಬೇಕಾದಾಗ ಲಿಪ್ಯಂತರಿಸಿ.';
+
+  @override
   String get unmute => 'ಮ್ಯೂಟ್ ತೆಗೆ';
 
   @override

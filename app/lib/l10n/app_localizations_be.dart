@@ -9368,6 +9368,18 @@ class AppLocalizationsBe extends AppLocalizations {
       'На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.';
 
   @override
+  String get recordingMode => 'Рэжым запісу';
+
+  @override
+  String get captureModeLater => 'Пазней';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрыбаванне ў рэальным часе падчас размовы.';
+
+  @override
+  String get captureModeLaterDescription => 'Захавайце аўдыя зараз і транскрыбуйце калі заўгодна.';
+
+  @override
   String get unmute => 'Уключыць гук';
 
   @override

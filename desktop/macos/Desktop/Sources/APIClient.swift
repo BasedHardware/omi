@@ -29,8 +29,9 @@ actor APIClient {
   // Short-lived caches to deduplicate simultaneous calls from multiple services
   private var goalsCacheTime: Date?
   private var goalsCache: [Goal]?
-  private var conversationsCountCacheTime: Date?
-  private var conversationsCountCache: Int?
+  // Keyed by the query parameters so a cached total for one filter set is never
+  // returned for a different one (e.g. includeDiscarded / statuses).
+  private var conversationsCountCache: [String: (count: Int, time: Date)] = [:]
 
   init() {
     let config = URLSessionConfiguration.default
@@ -515,12 +516,6 @@ extension APIClient {
     includeDiscarded: Bool = false,
     statuses: [ConversationStatus] = [.completed, .processing]
   ) async throws -> Int {
-    if let cache = conversationsCountCache, let time = conversationsCountCacheTime,
-      Date().timeIntervalSince(time) < 5
-    {
-      return cache
-    }
-
     var queryItems: [String] = [
       "include_discarded=\(includeDiscarded)"
     ]
@@ -532,13 +527,16 @@ extension APIClient {
 
     let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
 
+    if let cache = conversationsCountCache[endpoint], Date().timeIntervalSince(cache.time) < 5 {
+      return cache.count
+    }
+
     struct CountResponse: Decodable {
       let count: Int
     }
 
     let response: CountResponse = try await get(endpoint)
-    conversationsCountCache = response.count
-    conversationsCountCacheTime = Date()
+    conversationsCountCache[endpoint] = (count: response.count, time: Date())
     return response.count
   }
 
@@ -687,6 +685,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
+  // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
+  // cleared once enriched on first open (get_conversation_by_id).
+  let deferred: Bool
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -707,6 +708,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
+    case deferred
   }
 
   init(from decoder: Decoder) throws {
@@ -731,6 +733,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
     folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
+    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
   }
 
   /// Memberwise initializer for creating from local storage
@@ -752,7 +755,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     isLocked: Bool,
     starred: Bool,
     folderId: String?,
-    inputDeviceName: String?
+    inputDeviceName: String?,
+    deferred: Bool = false
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -772,6 +776,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
+    self.deferred = deferred
   }
 
   /// Returns the title from structured data, or a fallback
@@ -2906,7 +2911,8 @@ struct Goal: Codable, Identifiable {
   /// Progress as a percentage (0-100), based on targetValue
   var progress: Double {
     guard targetValue != minValue else { return 0 }
-    return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    let pct = ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    return min(max(pct, 0), 100)
   }
 
   /// Whether the goal is completed

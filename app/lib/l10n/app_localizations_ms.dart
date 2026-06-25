@@ -9363,6 +9363,18 @@ class AppLocalizationsMs extends AppLocalizations {
       'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
 
   @override
+  String get recordingMode => 'Mod rakaman';
+
+  @override
+  String get captureModeLater => 'Kemudian';
+
+  @override
+  String get captureModeLiveDescription => 'Transkripsi secara masa nyata semasa anda bercakap.';
+
+  @override
+  String get captureModeLaterDescription => 'Simpan audio sekarang dan transkripsi bila-bila masa.';
+
+  @override
   String get unmute => 'Nyahsenyap';
 
   @override

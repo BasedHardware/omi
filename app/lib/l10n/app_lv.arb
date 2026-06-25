@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.",
     "unmute": "Ieslēgt skaņu",
     "newRecording": "Jauns ieraksts",
-    "transcribeLaterPaused": "Apturēts — audio netiek ierakstīts"
+    "transcribeLaterPaused": "Apturēts — audio netiek ierakstīts",
+    "recordingMode": "Ierakstīšanas režīms",
+    "captureModeLater": "Vēlāk",
+    "captureModeLiveDescription": "Transkribējiet reāllaikā, kamēr runājat.",
+    "captureModeLaterDescription": "Saglabājiet audio tagad un transkribējiet, kad vēlaties."
 }

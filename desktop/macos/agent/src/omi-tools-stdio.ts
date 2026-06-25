@@ -12,6 +12,7 @@ import { createConnection } from "net";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { agentControlToolDefinitions, isAgentControlToolName } from "./runtime/control-tools.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -100,7 +101,17 @@ async function requestSwiftTool(
 
   return new Promise<string>((resolve) => {
     pendingToolCalls.set(callId, { resolve });
-    const msg = JSON.stringify({ type: "tool_use", callId, name, input });
+    const msg = JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      protocolVersion: process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined,
+      requestId: process.env.OMI_REQUEST_ID,
+      clientId: process.env.OMI_CLIENT_ID,
+      sessionId: process.env.OMI_SESSION_ID,
+      adapterId: process.env.OMI_ADAPTER_ID,
+    });
     pipeConnection!.write(msg + "\n");
   });
 }
@@ -116,7 +127,6 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "set_user_preferences",
   "ask_followup",
   "complete_onboarding",
-  "save_knowledge_graph",
 ]);
 
 // Tool order: local tools first (always available), then backend RAG tools (require auth token).
@@ -216,6 +226,71 @@ Parameter guidance:
         },
       },
       required: [],
+    },
+  },
+  {
+    name: "get_task_agent_status",
+    description: `Inspect Omi's local task-chat agents/subagents and floating agent pills.
+
+Use when:
+- User asks about "your subagents", "task agents", running agents, background agents, errors, or timeouts
+- User wants to know which Omi task-agent chats or floating agent pills are running, completed, failed, or timed out
+- User asks you to recover from or diagnose "Response took too long" in a task-agent chat
+
+Returns JSON with recent task_agents and floating_agent_pills. floating_agent_pills are the circular agent UI below the floating bar.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+      required: [],
+    },
+  },
+  ...agentControlToolDefinitions,
+  {
+    name: "spawn_agent",
+    description: `Start a floating background agent pill.
+
+Use when:
+- User explicitly asks to run, start, spawn, or launch a subagent/background agent
+- User asks for multi-step work in other apps/browser/files
+
+Calling this tool is the only way to start the circular floating-bar subagent. Saying you will start one does not start it.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        brief: {
+          type: "string" as const,
+          description: "Clear, self-contained task brief for the background agent.",
+        },
+        title: {
+          type: "string" as const,
+          description: "Short Title Case label for the agent pill.",
+        },
+      },
+      required: ["brief"],
+    },
+  },
+  {
+    name: "manage_agent_pills",
+    description: `List, dismiss, or clear completed floating agent pills shown below the floating bar.
+
+Actions:
+- list: return current floating pill status
+- dismiss: dismiss one pill by agent_id
+- clear_completed: clear finished pills`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string" as const,
+          enum: ["list", "dismiss", "clear_completed"],
+          description: "Management action.",
+        },
+        agent_id: {
+          type: "string" as const,
+          description: "Floating agent pill id from get_task_agent_status; required for dismiss.",
+        },
+      },
+      required: ["action"],
     },
   },
   {
@@ -730,6 +805,33 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
+      } else if (toolName === "get_task_agent_status") {
+        const result = await requestSwiftTool("get_task_agent_status", {});
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "spawn_agent") {
+        const result = await requestSwiftTool("spawn_agent", args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
+      } else if (toolName === "manage_agent_pills") {
+        const result = await requestSwiftTool("manage_agent_pills", args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
       } else if (toolName === "search_tasks") {
         const input: Record<string, unknown> = { query: args.query };
         if (args.include_completed) input.include_completed = args.include_completed;
@@ -795,6 +897,17 @@ async function handleJsonRpc(
                 text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
               }],
             },
+          });
+        }
+      } else if (isAgentControlToolName(toolName)) {
+        // Runtime control tools are handled by the Node parent/kernel. They
+        // still travel over the relay so MCP clients use the same tool path.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (

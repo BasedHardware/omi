@@ -126,7 +126,7 @@ export function Sidebar(): React.JSX.Element {
       {!collapsed && (
         <span
           className={cn(
-            'relative h-4 w-7 shrink-0 rounded-full transition-colors duration-200',
+            'relative ml-auto h-4 w-7 shrink-0 rounded-full transition-colors duration-200',
             on ? 'bg-[color:var(--accent)]' : 'bg-white/15'
           )}
         >

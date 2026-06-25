@@ -10635,5 +10635,9 @@
     "transcribeLaterStorageFull": "آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔",
     "unmute": "آواز چالو کریں",
     "newRecording": "نئی ریکارڈنگ",
-    "transcribeLaterPaused": "روکا گیا — آڈیو ریکارڈ نہیں ہو رہی"
+    "transcribeLaterPaused": "روکا گیا — آڈیو ریکارڈ نہیں ہو رہی",
+    "recordingMode": "ریکارڈنگ موڈ",
+    "captureModeLater": "بعد میں",
+    "captureModeLiveDescription": "بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔",
+    "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔"
 }

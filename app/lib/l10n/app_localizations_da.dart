@@ -9325,6 +9325,18 @@ class AppLocalizationsDa extends AppLocalizations {
       'Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.';
 
   @override
+  String get recordingMode => 'Optagetilstand';
+
+  @override
+  String get captureModeLater => 'Senere';
+
+  @override
+  String get captureModeLiveDescription => 'Transskriber i realtid, mens du taler.';
+
+  @override
+  String get captureModeLaterDescription => 'Gem lyden nu, og transskriber den, når du vil.';
+
+  @override
   String get unmute => 'Slå lyd til';
 
   @override

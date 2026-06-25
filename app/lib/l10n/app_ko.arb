@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.",
     "unmute": "음소거 해제",
     "newRecording": "새 녹음",
-    "transcribeLaterPaused": "일시중지됨 — 오디오가 녹음되지 않고 있습니다"
+    "transcribeLaterPaused": "일시중지됨 — 오디오가 녹음되지 않고 있습니다",
+    "recordingMode": "녹음 모드",
+    "captureModeLater": "나중에",
+    "captureModeLiveDescription": "말하는 동안 실시간으로 변환합니다.",
+    "captureModeLaterDescription": "지금 오디오를 저장하고 원할 때 변환하세요."
 }

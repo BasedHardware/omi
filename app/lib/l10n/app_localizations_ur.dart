@@ -9354,6 +9354,18 @@ class AppLocalizationsUr extends AppLocalizations {
       'آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔';
 
   @override
+  String get recordingMode => 'ریکارڈنگ موڈ';
+
+  @override
+  String get captureModeLater => 'بعد میں';
+
+  @override
+  String get captureModeLiveDescription => 'بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔';
+
+  @override
+  String get captureModeLaterDescription => 'ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔';
+
+  @override
   String get unmute => 'آواز چالو کریں';
 
   @override

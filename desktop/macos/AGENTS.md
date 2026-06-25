@@ -127,9 +127,9 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - NEVER use the default `./run.sh` (which overwrites "Omi Dev") when testing a specific feature — always set `OMI_APP_NAME`
 - **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
 - Keep the name short and descriptive (it becomes both the app name and bundle ID suffix)
-- The named bundle gets its own permissions, database, and auth state — the user may need to re-grant permissions and sign in
+- The named bundle gets its own permissions and database. `./run.sh` auto-seeds auth/onboarding from "Omi Dev" unless `OMI_SKIP_AUTH_SEED=1` is set.
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
-- **Skip the web login:** sign into "Omi Dev" once, then `./scripts/omi-auth-dump.sh && ./scripts/omi-auth-seed.sh com.omi.omi-fix-rewind` clones the session so the named bundle boots signed-in
+- **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
 
 ### After Implementing Changes

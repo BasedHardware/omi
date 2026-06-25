@@ -278,11 +278,18 @@ final class LocalAgentAPIServer {
       return errorResponse("screenshot_id is required", statusCode: 400)
     }
 
+    let screenshot: Screenshot?
     do {
-      guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
-        return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
-      }
+      screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID)
+    } catch {
+      logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
+      return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
+    }
+    guard let screenshot else {
+      return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
+    }
 
+    do {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
       return jsonResponse([
@@ -293,9 +300,56 @@ final class LocalAgentAPIServer {
         "image_base64": imageData.base64EncodedString(),
       ])
     } catch {
+      // The image row exists but its pixels could not be loaded. Rather than a
+      // generic 500, classify why so agents get an actionable reason + hint.
+      return await screenshotUnavailableResponse(screenshot, screenshotID: screenshotID, error: error)
+    }
+  }
+
+  /// Map a screenshot load failure to a clear, structured response. Recent
+  /// screenshots commonly sit in the active (unfinalized) video chunk, which
+  /// cannot be decoded yet; other rows may be orphaned or have a file that
+  /// retention already removed. All of these previously surfaced as an opaque
+  /// `failed_to_load_screenshot: Screenshot not found` 500.
+  private func screenshotUnavailableResponse(
+    _ screenshot: Screenshot,
+    screenshotID: Int64,
+    error: Error
+  ) async -> LocalHTTPResponse {
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+
+    let code: String
+    let reason: String
+    let hint: String
+
+    if let rewindError = error as? RewindError, case .corruptedVideoChunk = rewindError {
+      code = "screenshot_chunk_corrupted"
+      reason = "The video chunk backing this screenshot is corrupted and cannot be decoded."
+      hint = "Pick a different screenshot_id; this frame's pixels are unrecoverable."
+    } else if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath, chunk == activeChunk {
+      code = "screenshot_pending"
+      reason = "The frame is in the active recording segment that has not been flushed to disk yet."
+      hint = "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized."
+    } else if !screenshot.usesVideoStorage, (screenshot.imagePath ?? "").isEmpty {
+      code = "screenshot_image_unavailable"
+      reason = "This screenshot row has no stored image (orphaned capture with no video chunk or image file)."
+      hint = "Pick a different screenshot_id from a recent search_screen_history result."
+    } else if error as? RewindError != nil {
+      code = "screenshot_file_missing"
+      reason = "The image data for this screenshot is no longer on disk (likely removed by retention/cleanup)."
+      hint = "Pick a more recent screenshot_id whose pixels are still retained."
+    } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
+
+    return jsonResponse([
+      "ok": false,
+      "error": code,
+      "reason": reason,
+      "hint": hint,
+      "screenshot_id": screenshotID,
+    ], statusCode: 422)
   }
 
   private func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {
@@ -370,7 +424,7 @@ final class LocalAgentAPIServer {
     LocalAgentTool(
       name: "get_screenshot",
       description:
-        "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql.",
+        "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql. Very recent captures may return screenshot_pending (still in the active, unflushed video segment) — retry shortly or pick an older id.",
       properties: [
         "screenshot_id": ["type": "number", "description": "Screenshot ID from search_screen_history or the screenshots table"]
       ],
@@ -461,6 +515,7 @@ final class LocalAgentAPIServer {
     case 401: statusText = "Unauthorized"
     case 404: statusText = "Not Found"
     case 413: statusText = "Payload Too Large"
+    case 422: statusText = "Unprocessable Entity"
     default: statusText = "Internal Server Error"
     }
 

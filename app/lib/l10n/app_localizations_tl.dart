@@ -9425,6 +9425,18 @@ class AppLocalizationsTl extends AppLocalizations {
       'Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.';
 
   @override
+  String get recordingMode => 'Mode ng pag-record';
+
+  @override
+  String get captureModeLater => 'Mamaya';
+
+  @override
+  String get captureModeLiveDescription => 'I-transcribe nang real time habang nagsasalita ka.';
+
+  @override
+  String get captureModeLaterDescription => 'I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.';
+
+  @override
   String get unmute => 'I-unmute';
 
   @override

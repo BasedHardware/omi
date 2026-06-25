@@ -3057,5 +3057,9 @@
     "transcribeLaterStorageFull": "Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.",
     "unmute": "Nyahsenyap",
     "newRecording": "Rakaman baharu",
-    "transcribeLaterPaused": "Dijeda — audio tidak dirakam"
+    "transcribeLaterPaused": "Dijeda — audio tidak dirakam",
+    "recordingMode": "Mod rakaman",
+    "captureModeLater": "Kemudian",
+    "captureModeLiveDescription": "Transkripsi secara masa nyata semasa anda bercakap.",
+    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsi bila-bila masa."
 }
