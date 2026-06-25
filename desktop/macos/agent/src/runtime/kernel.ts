@@ -171,6 +171,15 @@ export interface InvalidateBindingsResult {
   invalidatedBindingIds: string[];
 }
 
+export interface StaleProcessLocalBindingsInput {
+  adapterId: string;
+  reason: string;
+}
+
+export interface StaleProcessLocalBindingsResult {
+  staleBindingIds: string[];
+}
+
 export interface SendAgentMessageInput {
   sessionId: string;
   ownerId: string;
@@ -843,6 +852,46 @@ export class AgentRuntimeKernel {
     });
 
     return { sessionId: session?.sessionId, invalidatedBindingIds };
+  }
+
+  staleProcessLocalBindings(input: StaleProcessLocalBindingsInput): StaleProcessLocalBindingsResult {
+    const rows = this.store.allRows(
+      `SELECT binding_id, session_id
+       FROM adapter_bindings
+       WHERE adapter_id = ?
+         AND resume_fidelity = ?
+         AND status = ?`,
+      [input.adapterId, "none", "active"],
+    );
+    const staleBindingIds = rows.map((row) => String(row.binding_id));
+    if (staleBindingIds.length === 0) {
+      return { staleBindingIds };
+    }
+
+    const now = Date.now();
+    this.withTransaction(() => {
+      for (const row of rows) {
+        const bindingId = String(row.binding_id);
+        this.updateBinding(bindingId, {
+          status: "stale",
+          invalidatedAtMs: now,
+          updatedAtMs: now,
+        });
+        this.appendEvent({
+          sessionId: String(row.session_id),
+          runId: null,
+          attemptId: null,
+          type: "binding.stale",
+          payload: {
+            bindingId,
+            adapterId: input.adapterId,
+            reason: input.reason,
+          },
+        });
+      }
+    });
+
+    return { staleBindingIds };
   }
 
   private createDelegatedRun(

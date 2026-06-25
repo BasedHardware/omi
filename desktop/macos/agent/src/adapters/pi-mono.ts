@@ -7,7 +7,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 import { ChildProcess, spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
@@ -341,6 +341,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       }
       this.pendingRequests.clear();
       this.activePromptGeneration = 0;
+      rmSync(this.contextFilePath, { force: true });
     });
   }
 
@@ -506,6 +507,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.activePromptGeneration = 0;
   }
 
+  clearRelayContextForAttempt(attemptId: string): void {
+    this.clearRelayContext(attemptId);
+  }
+
   async setModel(sessionId: string, model: string): Promise<void> {
     const mapped = mapModel(model);
     const session = this.sessions.get(sessionId);
@@ -661,6 +666,23 @@ export class PiMonoAdapter implements HarnessAdapter {
       adapterId: "pi-mono",
       ...context,
     }));
+  }
+
+  private clearRelayContext(expectedAttemptId?: string): void {
+    if (!expectedAttemptId) {
+      rmSync(this.contextFilePath, { force: true });
+      return;
+    }
+    if (!existsSync(this.contextFilePath)) return;
+
+    try {
+      const parsed = JSON.parse(readFileSync(this.contextFilePath, "utf8")) as Record<string, unknown>;
+      if (parsed.attemptId !== expectedAttemptId) return;
+    } catch {
+      // Invalid context is unusable by the extension; remove it as stale.
+    }
+
+    rmSync(this.contextFilePath, { force: true });
   }
 
   private handleEvent(line: string): void {
@@ -976,6 +998,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
       };
     } finally {
+      this.harness.clearRelayContextForAttempt(context.attemptId);
       this.cancelledAttempts.delete(context.attemptId);
       if (this.harness.hasPendingRestart) {
         await this.harness.executePendingRestart();

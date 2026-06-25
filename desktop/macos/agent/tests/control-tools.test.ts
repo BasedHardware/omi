@@ -139,6 +139,8 @@ describe("agent control tools", () => {
       ["request-owner-a", "owner-a"],
       ["request-owner-b", "owner-b"],
     ]);
+    const ownerByRun = new Map([["run-owner-c", "owner-c"]]);
+    const ownerByAttempt = new Map([["attempt-owner-d", "owner-d"]]);
     let mutableFallbackOwner = "owner-a";
 
     mutableFallbackOwner = "owner-b";
@@ -164,6 +166,26 @@ describe("agent control tools", () => {
         fallbackOwnerId: mutableFallbackOwner,
       }),
     ).toBe("owner-b");
+    expect(
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        runId: "run-owner-c",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        ownerIdForRun: (runId) => ownerByRun.get(runId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-c");
+    expect(
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        runId: "run-owner-c",
+        attemptId: "attempt-owner-d",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        ownerIdForRun: (runId) => ownerByRun.get(runId),
+        ownerIdForAttempt: (attemptId) => ownerByAttempt.get(attemptId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-d");
   });
 
   it("resolves direct control request context from the envelope owner before mutable fallback", () => {

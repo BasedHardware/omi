@@ -261,7 +261,7 @@ export class JsonlCompatibilityFacade {
     const activeRequestContext = requestId
       ? (hasExplicitClientId
         ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
-        : this.singleActiveRequestContext(requestId))
+        : this.legacyUnscopedActiveRequestContext(requestId))
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     const runId =
@@ -402,8 +402,17 @@ export class JsonlCompatibilityFacade {
     return selectUnscopedToolCallCorrelation(this.activeByRequest.values());
   }
 
-  toolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
-    const context = this.singleActiveRequestContext(requestId);
+  toolCallCorrelationForRequest(requestId: string, clientId: string): Partial<QueryScopedOutbound> {
+    const context = this.activeByRequest.get(this.activeRequestKey(requestId, clientId));
+    return context ? this.toolCallCorrelationForContext(context) : {};
+  }
+
+  legacyUnscopedToolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
+    const context = this.legacyUnscopedActiveRequestContext(requestId);
+    return context ? this.toolCallCorrelationForContext(context) : {};
+  }
+
+  private toolCallCorrelationForContext(context: ActiveRequestContext): Partial<QueryScopedOutbound> {
     if (!context || context.protocolVersion !== 2) return {};
     return {
       protocolVersion: 2,
@@ -444,7 +453,7 @@ export class JsonlCompatibilityFacade {
         requestId && clientId
           ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
           : requestId
-            ? this.singleActiveRequestContext(requestId)
+            ? this.legacyUnscopedActiveRequestContext(requestId)
             : undefined;
       if (context) {
         context.sessionId = event.sessionId;
@@ -557,7 +566,7 @@ export class JsonlCompatibilityFacade {
     return JSON.stringify([clientId, requestId]);
   }
 
-  private singleActiveRequestContext(requestId: string): ActiveRequestContext | undefined {
+  private legacyUnscopedActiveRequestContext(requestId: string): ActiveRequestContext | undefined {
     const contexts = [...this.activeByRequest.values()].filter((context) => context.requestId === requestId);
     return contexts.length === 1 ? contexts[0] : undefined;
   }

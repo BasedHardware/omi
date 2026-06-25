@@ -123,6 +123,68 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("stales all active process-local bindings for an adapter across owners and surfaces", () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const firstSession = store.insertSession({
+      ownerId: "owner-a",
+      surfaceKind: "legacy_jsonl",
+      defaultAdapterId: "pi-mono",
+    });
+    const secondSession = store.insertSession({
+      ownerId: "owner-b",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "pi-mono",
+    });
+    const acpSession = store.insertSession({
+      ownerId: "owner-a",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const firstPiBinding = store.insertAdapterBinding({
+      sessionId: firstSession.sessionId,
+      adapterId: "pi-mono",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "pi-native-a",
+      resumeFidelity: "none",
+      status: "active",
+    });
+    const secondPiBinding = store.insertAdapterBinding({
+      sessionId: secondSession.sessionId,
+      adapterId: "pi-mono",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "pi-native-b",
+      resumeFidelity: "none",
+      status: "active",
+    });
+    const nativeAcpBinding = store.insertAdapterBinding({
+      sessionId: acpSession.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "acp-native",
+      resumeFidelity: "native",
+      status: "active",
+    });
+
+    const result = kernel.staleProcessLocalBindings({
+      adapterId: "pi-mono",
+      reason: "pi_mono_restart_test",
+    });
+
+    expect(new Set(result.staleBindingIds)).toEqual(new Set([firstPiBinding.bindingId, secondPiBinding.bindingId]));
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstPiBinding.bindingId]).status).toBe("stale");
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [secondPiBinding.bindingId]).status).toBe("stale");
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [nativeAcpBinding.bindingId]).status).toBe("active");
+    expect(
+      store
+        .allRows("SELECT type, payload_json FROM events WHERE type = ? ORDER BY event_seq", ["binding.stale"])
+        .map((row) => JSON.parse(String(row.payload_json))),
+    ).toEqual(expect.arrayContaining([
+      expect.objectContaining({ bindingId: firstPiBinding.bindingId, reason: "pi_mono_restart_test" }),
+      expect.objectContaining({ bindingId: secondPiBinding.bindingId, reason: "pi_mono_restart_test" }),
+    ]));
+    store.close();
+  });
+
   it("replaces a stale process-local pinned binding through the pinned worker", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
     Object.assign(adapter.capabilities, {
