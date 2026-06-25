@@ -57,6 +57,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     run_id: str
     user_count: int = 0
     promoted_total: int = 0
+    vector_sync_failures_total: int = 0
     skipped_users: int = 0
     errors: List[str] = field(default_factory=list)
 
@@ -115,25 +116,31 @@ def run_canonical_short_term_maintenance_for_cohort(
             continue
 
         promoted = _promoted_count(report)
+        vector_sync_failures = report.promotion.vector_sync_failures if report.promotion else 0
         skipped = _skipped_reason(report)
         trigger = report.promotion.trigger_reason if report.promotion else None
         summary.promoted_total += promoted
+        summary.vector_sync_failures_total += vector_sync_failures
         if promoted == 0:
             summary.skipped_users += 1
 
         logger.info(
-            "canonical_short_term_maintenance_cron: uid=%s trigger_reason=%s promoted_count=%d skipped_reason=%s",
+            "canonical_short_term_maintenance_cron: uid=%s trigger_reason=%s promoted_count=%d "
+            "vector_sync_failures=%d skipped_reason=%s",
             uid,
             trigger,
             promoted,
+            vector_sync_failures,
             skipped,
         )
 
     logger.info(
-        "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d promoted_total=%d skipped_users=%d errors=%d",
+        "canonical_short_term_maintenance_cron: done run_id=%s user_count=%d promoted_total=%d "
+        "vector_sync_failures_total=%d skipped_users=%d errors=%d",
         effective_run_id,
         summary.user_count,
         summary.promoted_total,
+        summary.vector_sync_failures_total,
         summary.skipped_users,
         len(summary.errors),
     )
