@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/services/client_device_service.dart';
-import 'package:omi/services/client_device_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debugging/crash_reporter.dart';
