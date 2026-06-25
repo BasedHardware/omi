@@ -92,6 +92,8 @@ def delete_folder(
         raise HTTPException(status_code=400, detail="Cannot delete system folder")
 
     if move_to_folder_id:
+        if move_to_folder_id == folder_id:
+            raise HTTPException(status_code=400, detail="Cannot move conversations to the folder being deleted")
         target_folder = folders_db.get_folder(uid, move_to_folder_id)
         if not target_folder:
             raise HTTPException(status_code=404, detail="Target folder not found")

@@ -129,3 +129,24 @@ def test_delete_folder_missing_target_returns_404_not_unhandled():
     assert exc_info.value.status_code == 404
     # And it must short-circuit before delegating to the DB delete (no orphaning).
     delete_folder_mock.assert_not_called()
+
+
+def test_delete_folder_self_target_rejected_not_orphaned():
+    # move_to_folder_id == folder_id would re-point conversations onto the folder that is about to
+    # be deleted, orphaning them. The handler must reject this before delegating to the DB layer.
+    source_folder = {'id': 'f-src', 'is_system': False}
+
+    # The source folder resolves (and would also resolve as the target, since they are the same id),
+    # so a plain existence check is not enough -- the inequality guard is what protects the data.
+    get_folder_mock = MagicMock(return_value=source_folder)
+    delete_folder_mock = MagicMock(return_value=True)
+
+    with patch.object(folders_mod.folders_db, 'get_folder', get_folder_mock), patch.object(
+        folders_mod.folders_db, 'delete_folder', delete_folder_mock
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            folders_mod.delete_folder(folder_id='f-src', move_to_folder_id='f-src', uid='u1')
+
+    assert exc_info.value.status_code == 400
+    # Must short-circuit before delegating to the DB delete (no orphaning of conversations).
+    delete_folder_mock.assert_not_called()
