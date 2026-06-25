@@ -61,8 +61,9 @@ import {
   isAgentControlToolName,
   legacyControlRequestKey,
   resolveControlRequestContext,
-  type AgentControlToolContext,
   withMergedOwnerGuard,
+  DEFAULT_LOCAL_OWNER_ID,
+  type AgentControlToolContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
@@ -838,7 +839,7 @@ async function main(): Promise<void> {
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
-  let currentOwnerId = "desktop-local-user";
+  let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
     piMonoAuthToken = authToken;
@@ -918,6 +919,7 @@ async function main(): Promise<void> {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          currentOwnerId = queryOwnerId;
           query.requestId = requestIdFor(query) ?? randomUUID();
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =

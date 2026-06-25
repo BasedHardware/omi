@@ -168,6 +168,7 @@ export interface ResolvedControlRequestContext {
 }
 
 export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
+export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
 
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
@@ -183,7 +184,9 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
     throw new Error("ownerId cannot be empty");
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
-  const activeOwnerId = fallbackOwnerId || "desktop-local-user";
+  const activeOwnerId = fallbackOwnerId && fallbackOwnerId !== DEFAULT_LOCAL_OWNER_ID
+    ? fallbackOwnerId
+    : ownerGuard || fallbackOwnerId || DEFAULT_LOCAL_OWNER_ID;
   if (ownerGuard && ownerGuard !== activeOwnerId) {
     throw new Error("ownerId does not match active control owner");
   }

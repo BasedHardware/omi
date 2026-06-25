@@ -226,6 +226,21 @@ describe("agent control tools", () => {
     );
   });
 
+  it("uses the direct control envelope owner before a signed-in owner is cached", () => {
+    const resolved = resolveControlRequestContext({
+      ownerGuard: "signed-in-owner",
+      fallbackOwnerId: "desktop-local-user",
+      requestId: "cold-control-request",
+      clientId: "swift-client",
+    });
+
+    expect(resolved).toEqual({
+      requestKey: JSON.stringify(["swift-client", "cold-control-request"]),
+      activeOwnerId: "signed-in-owner",
+      ownerGuard: "signed-in-owner",
+    });
+  });
+
   it("allows cold direct control calls to use the active signed-in owner", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
