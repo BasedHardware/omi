@@ -136,6 +136,26 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("preserves legacy active bindings without system prompt hashes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun(baseRunInput);
+    store.execute("UPDATE adapter_bindings SET system_prompt_hash = NULL WHERE binding_generation = 1", []);
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-legacy-system-prompt",
+      systemPrompt: "post-upgrade prompt",
+    });
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    const bindings = store.allRows("SELECT binding_generation, status, system_prompt_hash FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    expect(bindings[0].system_prompt_hash).not.toBeNull();
+    store.close();
+  });
+
   it("replaces an active binding when stable MCP server configuration changes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
