@@ -117,6 +117,7 @@ def process_external_integration_memory(
 
     # Save all memories to the database if any were created
     if saved_memories:
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
         if resolve_memory_system(uid) == MemorySystem.CANONICAL:
             memory_service = MemoryService()
             for memory_db in saved_memories:
@@ -157,6 +158,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
 
     # Save all memories in batch
     if saved_memories:
+        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
         if resolve_memory_system(uid) == MemorySystem.CANONICAL:
             memory_service = MemoryService()
             for memory_db in saved_memories:
