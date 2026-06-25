@@ -21,7 +21,9 @@ curl http://localhost:8000/v1/auto-router/pick?task=general_assistant
 curl http://localhost:8000/v1/auto-router/pick?task=screenshot_understanding
 ```
 
-The demo script (`scripts/auto_router_demo.py`) uses the framework's scoring function directly with overridden weights — it does NOT call the HTTP endpoint. That's intentional: it shows the picker would behave correctly IF you adjusted the task weights (e.g., in `benchmarks.json` or a per-user preference layer).
+The demo script (`backend/utils/auto_router/demo/run.py`) uses the framework's scoring function directly with overridden weights — it does NOT call the HTTP endpoint. That's intentional: it shows the picker would behave correctly IF you adjusted the task weights (e.g., in `benchmarks.json` or a per-user preference layer).
+
+Run it with: `cd backend && PYENV_VERSION=3.12.8 python -m utils.auto_router.demo.run`
 
 ---
 
