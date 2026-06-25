@@ -96,6 +96,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
           env: [
             { value: "request-2", name: "OMI_REQUEST_ID" },
             { value: "client-b", name: "OMI_CLIENT_ID" },
+            { value: "canonical-session-1", name: "OMI_SESSION_ID" },
             { value: "act", name: "OMI_QUERY_MODE" },
           ],
           args: ["tools.js"],
