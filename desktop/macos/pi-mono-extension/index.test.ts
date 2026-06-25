@@ -1010,21 +1010,18 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
-  const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
-
-  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+test("OMI_TOOLS: no top-level schema combinators (Anthropic rejects anyOf/allOf/oneOf on tool input_schema)", () => {
+  const forbidden = ["anyOf", "allOf", "oneOf"] as const;
+  for (const tool of OMI_TOOLS) {
+    const params = tool.parameters as Record<string, unknown>;
+    for (const key of forbidden) {
+      assert.equal(
+        params[key],
+        undefined,
+        `${tool.name} parameters must not have top-level ${key}`,
+      );
+    }
+  }
 });
 
 test("OMI_TOOLS: all declared properties have TypeBox type metadata", () => {
