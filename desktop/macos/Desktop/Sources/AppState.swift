@@ -80,6 +80,15 @@ enum DesktopConversationMatchPolicy {
     return true
   }
 
+  static func canCompleteBoundBackendConversation(
+    id conversationId: String,
+    boundBackendId: String,
+    status: ConversationStatus,
+    source: ConversationSource?
+  ) -> Bool {
+    conversationId == boundBackendId && source == .desktop && status != .inProgress
+  }
+
   static func parseMemoryEventDate(_ value: Any?) -> Date? {
     if let date = value as? Date {
       return date
@@ -2144,8 +2153,11 @@ class AppState: ObservableObject {
           // timestamp/source matching for older backend sessions that did not emit the event.
           if let sessionId = capturedSessionId,
              let backendConversationId = capturedBackendConversationId,
-             conversation.id == backendConversationId,
-             conversation.source == .desktop {
+             DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+               id: conversation.id,
+               boundBackendId: backendConversationId,
+               status: conversation.status,
+               source: conversation.source) {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
             log("Transcription: Force-processed bound conversation \(conversation.id), session \(sessionId) completed")
@@ -2252,12 +2264,13 @@ class AppState: ObservableObject {
       if let backendConversationId, !backendConversationId.isEmpty {
         do {
           let conversation = try await APIClient.shared.getConversation(id: backendConversationId)
-          guard conversation.status != .inProgress else {
-            log("Transcription: Exact backend conversation \(backendConversationId) is still in progress; falling back to timestamp")
-            throw APIError.invalidResponse
-          }
-          guard conversation.source == .desktop else {
-            log("Transcription: Exact backend conversation \(backendConversationId) has source \(conversation.source?.rawValue ?? "nil"); falling back to timestamp")
+          guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: conversation.id,
+            boundBackendId: backendConversationId,
+            status: conversation.status,
+            source: conversation.source
+          ) else {
+            log("Transcription: Exact backend conversation \(backendConversationId) is not a completed desktop session; falling back to timestamp")
             throw APIError.invalidResponse
           }
           try await TranscriptionStorage.shared.markSessionCompleted(

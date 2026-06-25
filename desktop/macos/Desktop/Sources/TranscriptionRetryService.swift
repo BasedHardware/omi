@@ -217,15 +217,20 @@ class TranscriptionRetryService {
             if let backendId = session.backendId, !backendId.isEmpty {
                 do {
                     let conversation = try await APIClient.shared.getConversation(id: backendId)
-                    guard conversation.status != .inProgress else {
-                        log("TranscriptionRetryService: Backend conversation \(backendId) is still in progress, will retry")
-                        try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
-                        try await TranscriptionStorage.shared.markSessionFailed(
-                            id: sessionId, error: "Bound backend conversation is still in progress")
-                        return
-                    }
-                    guard conversation.source == .desktop else {
-                        log("TranscriptionRetryService: Backend conversation \(backendId) has source \(conversation.source?.rawValue ?? "nil"), falling back to timestamp")
+                    guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+                        id: conversation.id,
+                        boundBackendId: backendId,
+                        status: conversation.status,
+                        source: conversation.source
+                    ) else {
+                        if conversation.status == .inProgress {
+                            log("TranscriptionRetryService: Backend conversation \(backendId) is still in progress, will retry")
+                            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+                            try await TranscriptionStorage.shared.markSessionFailed(
+                                id: sessionId, error: "Bound backend conversation is still in progress")
+                            return
+                        }
+                        log("TranscriptionRetryService: Backend conversation \(backendId) is not a completed desktop session, falling back to timestamp")
                         throw APIError.invalidResponse
                     }
                     log("TranscriptionRetryService: Session \(sessionId) found by exact backend id \(conversation.id), marking completed")

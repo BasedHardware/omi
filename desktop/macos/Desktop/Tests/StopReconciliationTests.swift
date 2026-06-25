@@ -241,13 +241,31 @@ final class StopReconciliationTests: XCTestCase {
             "Force-process must not bind a different conversation when the listen session id is known")
     }
 
-    func testBoundBackendConversationIdRejectsNonDesktopExactMatch() {
-        let exactIdMatches = "backend-conversation-123" == "backend-conversation-123"
-        let convSource: ConversationSource = .phone
+    func testBoundBackendConversationCompletionRejectsNonDesktopExactMatch() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .completed,
+            source: .phone
+        ), "Exact listen ids still need source validation before completing a desktop session")
+    }
 
-        XCTAssertTrue(exactIdMatches)
-        XCTAssertNotEqual(convSource, .desktop,
-            "Exact listen ids still need source validation before completing a desktop session")
+    func testBoundBackendConversationCompletionRejectsInProgressExactMatch() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .inProgress,
+            source: .desktop
+        ), "Exact listen ids must not complete a session until backend processing finishes")
+    }
+
+    func testBoundBackendConversationCompletionAcceptsCompletedDesktopExactMatch() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .completed,
+            source: .desktop
+        ))
     }
 
     func testRecordingSessionWithBackendIdCanStillBeFinishedForRetryReconciliation() {
