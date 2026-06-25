@@ -1,7 +1,8 @@
 """Admin entrypoint for WS-C legacy → canonical memory backfill (single uid).
 
 Non-destructive: reads legacy ``users/{uid}/memories`` only; writes canonical ``memory_items``.
-Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``--allow-admin-override`` is passed.
+Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``--allow-admin-override`` and
+``--i-understand-uid-not-whitelisted`` are both passed.
 
 Usage:
     cd backend
@@ -13,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sys
 
@@ -28,19 +30,32 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-admin-override",
         action="store_true",
-        help="Bypass MEMORY_CANONICAL_USERS gate (emergency only)",
+        help="Bypass MEMORY_CANONICAL_USERS gate (requires --i-understand-uid-not-whitelisted)",
+    )
+    parser.add_argument(
+        "--i-understand-uid-not-whitelisted",
+        action="store_true",
+        help="Confirm uid may be outside MEMORY_CANONICAL_USERS (required with --allow-admin-override)",
+    )
+    parser.add_argument(
+        "--operator-context",
+        default=None,
+        help="Operator identity for audit logs (default: current OS user)",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    operator_context = args.operator_context or getpass.getuser()
     report = backfill_user(
         args.uid,
         dry_run=args.dry_run,
         batch_size=args.batch_size,
         resume=not args.no_resume,
         allow_admin_override=args.allow_admin_override,
+        acknowledge_non_canonical_uid=args.i_understand_uid_not_whitelisted,
+        operator_context=operator_context,
     )
     print(json.dumps(report.__dict__, default=str, indent=2))
     if report.cohort_gated:
