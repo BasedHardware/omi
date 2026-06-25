@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypedDict
 
 from google.cloud import firestore
 
@@ -8,6 +8,11 @@ import database.redis_db as redis_db
 from database._client import db
 from models.mcp_api_key import McpApiKey
 from utils.mcp_api_keys import generate_api_key, hash_api_key
+
+
+class McpApiKeyAuth(TypedDict):
+    user_id: str
+    scopes: Optional[List[str]]
 
 
 def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
@@ -101,3 +106,29 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
         key_ref.update({"last_used_at": datetime.utcnow()})
 
     return user_id
+
+
+def get_auth_by_api_key(api_key: str) -> Optional[McpApiKeyAuth]:
+    """Verify an MCP API key and return its user id plus explicit scopes.
+
+    This bypasses the legacy user-id-only cache so write tools can fail closed
+    when a key has no stored scopes.
+    """
+    if not api_key.startswith("omi_mcp_"):
+        return None
+    secret_part = api_key.replace("omi_mcp_", "", 1)
+    hashed_key = hash_api_key(secret_part)
+
+    keys_ref = db.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
+    docs = list(keys_ref.stream())
+    if not docs:
+        return None
+
+    key_doc = docs[0]
+    key_data = key_doc.to_dict()
+    user_id = key_data.get("user_id")
+    if not user_id:
+        return None
+
+    key_doc.reference.update({"last_used_at": datetime.utcnow()})
+    return {"user_id": user_id, "scopes": key_data.get("scopes")}

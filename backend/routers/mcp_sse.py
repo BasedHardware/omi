@@ -12,7 +12,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional, Union, List, Any
+from typing import Optional, Union, List, Any, TypedDict
 
 from fastapi import APIRouter, HTTPException, Header, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -32,6 +32,7 @@ import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
+from utils.other.storage import delete_user_person_speech_samples
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
@@ -94,6 +95,13 @@ CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 PEOPLE_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["people.write"]}]
+PEOPLE_WRITE_SCOPE = "people.write"
+PEOPLE_WRITE_TOOLS = {"rename_person", "delete_person"}
+
+
+class McpAuth(TypedDict):
+    user_id: str
+    scopes: Optional[List[str]]
 
 
 class MCPSession:
@@ -106,8 +114,8 @@ class MCPSession:
         self.initialized = False
 
 
-def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
-    """Validate API key from Authorization header and return user_id if valid."""
+def authenticate_api_key(authorization: Optional[str]) -> Optional[McpAuth]:
+    """Validate API key from Authorization header and return auth details if valid."""
     if not authorization:
         return None
 
@@ -119,7 +127,7 @@ def authenticate_api_key(authorization: Optional[str]) -> Optional[str]:
     if not token.startswith("omi_mcp_"):
         return None
 
-    return mcp_api_key_db.get_user_id_by_api_key(token)
+    return mcp_api_key_db.get_auth_by_api_key(token)
 
 
 def invalid_mcp_auth_exception(
@@ -553,8 +561,10 @@ def _validated_person_name(arguments: dict) -> str:
     return name
 
 
-def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
+def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: Optional[List[str]] = None) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
+    if tool_name in PEOPLE_WRITE_TOOLS and PEOPLE_WRITE_SCOPE not in (granted_scopes or []):
+        raise ToolExecutionError(f"Insufficient permissions. Required scope: {PEOPLE_WRITE_SCOPE}", code=-32003)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
@@ -898,6 +908,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
         person_id = _required_mcp_string(arguments, "person_id")
         if not users_db.get_person(user_id, person_id):
             raise ToolExecutionError("Person not found", code=-32001)
+        delete_user_person_speech_samples(user_id, person_id)
         users_db.delete_person(user_id, person_id)
         return {"success": True}
 
@@ -947,7 +958,10 @@ def create_mcp_error(id: Any, code: int, message: str) -> dict:
 
 
 def handle_mcp_message(
-    user_id: str, message: dict, session: Optional[MCPSession] = None
+    user_id: str,
+    message: dict,
+    session: Optional[MCPSession] = None,
+    granted_scopes: Optional[List[str]] = None,
 ) -> tuple[Optional[dict], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
@@ -999,7 +1013,7 @@ def handle_mcp_message(
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
         try:
-            result = execute_tool(user_id, tool_name, arguments)
+            result = execute_tool(user_id, tool_name, arguments, granted_scopes)
         except ToolExecutionError as e:
             return create_mcp_error(msg_id, e.code, e.message), None
 
@@ -1059,8 +1073,8 @@ async def mcp_token(request: Request):
     if client_id != "omi":
         raise HTTPException(status_code=400, detail="Invalid client_id")
 
-    user_id = authenticate_api_key(client_secret)
-    if not user_id:
+    auth = authenticate_api_key(client_secret)
+    if not auth:
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     return {
@@ -1086,9 +1100,11 @@ async def mcp_streamable_http(
     - Session ID is returned in Mcp-Session-Id header after initialization
     """
     # Authenticate
-    user_id = authenticate_api_key(authorization)
-    if not user_id:
+    auth = authenticate_api_key(authorization)
+    if not auth:
         raise invalid_mcp_auth_exception()
+    user_id = auth["user_id"]
+    granted_scopes = auth.get("scopes")
 
     # Rate limit per-user
     check_rate_limit_inline(user_id, "mcp:sse")
@@ -1116,7 +1132,7 @@ async def mcp_streamable_http(
     if all_notifications:
         # Process notifications without response
         for msg in messages:
-            handle_mcp_message(user_id, msg, session)
+            handle_mcp_message(user_id, msg, session, granted_scopes)
         return Response(status_code=202)
 
     # Process messages and collect responses
@@ -1124,7 +1140,7 @@ async def mcp_streamable_http(
     new_session_id = None
 
     for msg in messages:
-        response, session_id = handle_mcp_message(user_id, msg, session)
+        response, session_id = handle_mcp_message(user_id, msg, session, granted_scopes)
         if session_id:
             new_session_id = session_id
         if response:
@@ -1170,8 +1186,8 @@ async def mcp_sse_get(
     This is optional per the MCP spec and mainly used for long-polling scenarios.
     """
     # Authenticate
-    user_id = authenticate_api_key(authorization)
-    if not user_id:
+    auth = authenticate_api_key(authorization)
+    if not auth:
         raise invalid_mcp_auth_exception()
 
     # For backwards compatibility, also support the old SSE flow
@@ -1204,9 +1220,10 @@ def mcp_delete_session(
     """
     Delete/terminate an MCP session.
     """
-    user_id = authenticate_api_key(authorization)
-    if not user_id:
+    auth = authenticate_api_key(authorization)
+    if not auth:
         raise invalid_mcp_auth_exception("Invalid or missing API key")
+    user_id = auth["user_id"]
 
     if not mcp_session_id:
         raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")

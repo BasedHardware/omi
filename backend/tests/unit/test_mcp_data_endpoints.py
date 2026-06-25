@@ -260,7 +260,9 @@ class TestPeople:
         renamed = {**original, 'name': 'Robert'}
         mock_db.get_person.side_effect = [original, renamed]
 
-        result = sse.execute_tool(UID, 'rename_person', {'person_id': ' p1 ', 'name': ' Robert '})
+        result = sse.execute_tool(
+            UID, 'rename_person', {'person_id': ' p1 ', 'name': ' Robert '}, granted_scopes=['people.write']
+        )
 
         mock_db.update_person.assert_called_once_with(UID, 'p1', 'Robert')
         assert result['success'] is True
@@ -272,7 +274,9 @@ class TestPeople:
     def test_rename_person_rejects_bad_name(self, mock_db):
         for value in ['', ' ', 'x', 'x' * 41]:
             with pytest.raises(sse.ToolExecutionError) as exc_info:
-                sse.execute_tool(UID, 'rename_person', {'person_id': 'p1', 'name': value})
+                sse.execute_tool(
+                    UID, 'rename_person', {'person_id': 'p1', 'name': value}, granted_scopes=['people.write']
+                )
             assert exc_info.value.code == -32602
         mock_db.update_person.assert_not_called()
 
@@ -280,24 +284,39 @@ class TestPeople:
     def test_rename_person_requires_existing_person(self, mock_db):
         mock_db.get_person.return_value = None
         with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'rename_person', {'person_id': 'missing', 'name': 'Robert'})
+            sse.execute_tool(
+                UID, 'rename_person', {'person_id': 'missing', 'name': 'Robert'}, granted_scopes=['people.write']
+            )
         assert exc_info.value.code == -32001
         mock_db.update_person.assert_not_called()
 
+    @patch('routers.mcp_sse.delete_user_person_speech_samples')
     @patch('routers.mcp_sse.users_db')
-    def test_delete_person_tool_deletes_existing_person(self, mock_db):
+    def test_delete_person_tool_deletes_existing_person(self, mock_db, mock_delete_samples):
         mock_db.get_person.return_value = self._person()
-        result = sse.execute_tool(UID, 'delete_person', {'person_id': ' p1 '})
+        result = sse.execute_tool(UID, 'delete_person', {'person_id': ' p1 '}, granted_scopes=['people.write'])
         assert result == {'success': True}
+        mock_delete_samples.assert_called_once_with(UID, 'p1')
         mock_db.delete_person.assert_called_once_with(UID, 'p1')
 
     @patch('routers.mcp_sse.users_db')
     def test_delete_person_requires_existing_person(self, mock_db):
         mock_db.get_person.return_value = None
         with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'delete_person', {'person_id': 'missing'})
+            sse.execute_tool(UID, 'delete_person', {'person_id': 'missing'}, granted_scopes=['people.write'])
         assert exc_info.value.code == -32001
         mock_db.delete_person.assert_not_called()
+
+    @patch('routers.mcp_sse.users_db')
+    def test_people_write_tools_require_people_write_scope(self, mock_db):
+        for tool_name, arguments in [
+            ('rename_person', {'person_id': 'p1', 'name': 'Robert'}),
+            ('delete_person', {'person_id': 'p1'}),
+        ]:
+            with pytest.raises(sse.ToolExecutionError) as exc_info:
+                sse.execute_tool(UID, tool_name, arguments, granted_scopes=['people.read'])
+            assert exc_info.value.code == -32003
+        mock_db.get_person.assert_not_called()
 
 
 class TestScreenActivity:
