@@ -8,6 +8,8 @@ from database import short_term_memories as short_term_db
 from database.vector_db import find_similar_memories
 from models.memories import Memory, MemoryDB, ShortTermMemory
 from utils.llm.memories import TypedMemoryResolution
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.consolidation.typed_resolver import (
     fact_from_short_term,
     mutations_for_typed_resolution,
@@ -127,8 +129,14 @@ def consolidate_pending_window(
         for short_term in active_short_terms
     ]
     if memory_dbs:
-        commit_result = memories_db.save_memories(uid, [memory_db.model_dump() for memory_db in memory_dbs])
-        commit_id = (commit_result or {}).get('commit', {}).get('commit_id')
+        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
+            memory_service = MemoryService()
+            for memory_db in memory_dbs:
+                memory_service.write(uid, memory_db.model_dump())
+            commit_id = f"canonical_consolidation_{len(memory_dbs)}"
+        else:
+            commit_result = memories_db.save_memories(uid, [memory_db.model_dump() for memory_db in memory_dbs])
+            commit_id = (commit_result or {}).get('commit', {}).get('commit_id')
         if commit_id:
             result.commit_ids.append(commit_id)
             active_ids = {short_term.get('id') for short_term in active_short_terms}
