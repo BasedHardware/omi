@@ -25,6 +25,7 @@ from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -86,7 +87,10 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
     if memory_system == MemorySystem.CANONICAL:
         memory.category = identify_category_for_memory(memory.content)
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        MemoryService(db_client=db).write(uid, memory_db.model_dump())
+        committed_id = MemoryService(db_client=db).write(uid, memory_db.model_dump())
+        item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db)
+        if item is not None:
+            memory_db = memory_item_to_memorydb(item)
         postprocess_executor.submit(update_personas_async, uid)
         return memory_db
 
@@ -118,6 +122,12 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
 
 
 def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
+
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
