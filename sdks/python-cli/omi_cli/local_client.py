@@ -9,7 +9,7 @@ from typing import Any, Mapping, Optional
 import httpx
 
 from omi_cli.client import DEFAULT_TIMEOUT, USER_AGENT, _extract_detail, _safe_parse_json
-from omi_cli.errors import CliError, ServerError, from_status
+from omi_cli.errors import AuthError, CliError, NotFoundError, RateLimitError, ServerError
 
 LOCAL_TOOL_PATH = "/v1/local/tool"
 LOCAL_TOOLS_PATH = "/v1/local/tools"
@@ -118,13 +118,14 @@ class LocalOmiClient:
                 detail=detail,
                 extra=extra,
             )
-        error = from_status(response.status_code, detail=detail)
-        return CliError(
-            message=f"Local Omi Desktop API error ({response.status_code})",
-            detail=detail,
-            exit_code=error.exit_code,
-            extra=extra,
-        )
+        message = f"Local Omi Desktop API error ({response.status_code})"
+        if response.status_code in {401, 403}:
+            return AuthError(message, detail=detail, extra=extra)
+        if response.status_code == 404:
+            return NotFoundError(message, detail=detail, extra=extra)
+        if response.status_code == 429:
+            return RateLimitError(message, detail=detail, extra=extra)
+        return CliError(message=message, detail=detail, extra=extra)
 
 
 def _structured_local_error(status_code: int, body: Any) -> dict[str, Any]:

@@ -11,7 +11,7 @@ import pytest
 import respx
 
 from omi_cli import config as cfg
-from omi_cli.errors import CliError
+from omi_cli.errors import CliError, NotFoundError
 from omi_cli.local_client import LocalOmiClient
 from omi_cli.main import app
 
@@ -360,6 +360,24 @@ def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Pa
     assert payload["reason"] == error_payload["reason"]
     assert payload["hint"] == error_payload["hint"]
     assert payload["screenshot_id"] == 123
+
+
+def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            return_value=httpx.Response(
+                404,
+                json={"ok": False, "error": "screenshot_not_found", "screenshot_id": "missing"},
+            )
+        )
+        with LocalOmiClient(api_url=FAKE_LOCAL_URL, token=FAKE_LOCAL_TOKEN) as client:
+            with pytest.raises(NotFoundError) as exc_info:
+                client.call_tool("get_screenshot", {"screenshot_id": "missing"})
+
+    assert exc_info.value.extra["status_code"] == 404
+    assert exc_info.value.extra["error"] == "screenshot_not_found"
+    assert exc_info.value.extra["screenshot_id"] == "missing"
 
 
 def test_main_json_screenshot_error_preserves_structured_stderr(

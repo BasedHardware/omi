@@ -105,8 +105,9 @@ class RateLimitError(CliError):
         detail: Optional[str] = None,
         retry_after_seconds: Optional[float] = None,
         policy: Optional[str] = None,
+        extra: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        super().__init__(message=message, detail=detail)
+        super().__init__(message=message, detail=detail, extra=extra)
         self.retry_after_seconds = retry_after_seconds
         self.policy = policy
 
