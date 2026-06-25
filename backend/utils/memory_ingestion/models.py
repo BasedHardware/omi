@@ -1154,11 +1154,3 @@ class MemoryPipelineOutput(StrictBaseModel):
         if "labels" in dumped:
             raise ValueError("core pipeline output must not contain benchmark labels")
         return self
-
-
-class AppliedMemoryPipelineOutput(StrictBaseModel):
-    run_id: str
-    status: Literal["ok", "partial", "failed"]
-    applied_mutation_ids: list[str] = Field(default_factory=list)
-    skipped_mutation_ids: list[str] = Field(default_factory=list)
-    errors: list[PipelineError] = Field(default_factory=list)
