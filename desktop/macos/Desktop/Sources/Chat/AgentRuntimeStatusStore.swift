@@ -167,7 +167,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .unknown:
+    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
       break
     }
   }

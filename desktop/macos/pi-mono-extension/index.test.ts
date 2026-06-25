@@ -933,8 +933,8 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 25 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 25);
+test("OMI_TOOLS: exactly 26 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 26);
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -983,6 +983,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     get_agent_run: ["runId"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
+    update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
     delegate_agent: ["mode", "parentRunId", "objective"],

@@ -22,6 +22,7 @@ actor AgentRuntimeProcess {
       case authRequired
       case authSuccess
       case cancelAck
+      case controlToolResult
       case unknown(String)
     }
 
@@ -62,6 +63,7 @@ actor AgentRuntimeProcess {
       case "auth_required": return .authRequired
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
+      case "control_tool_result": return .controlToolResult
       default: return .unknown(type)
       }
     }
@@ -89,6 +91,12 @@ actor AgentRuntimeProcess {
     var cancelAck: RuntimeMessage?
   }
 
+  private struct ActiveControlRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<String, Error>
+  }
+
   private var process: Process?
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
@@ -99,6 +107,7 @@ actor AgentRuntimeProcess {
   private var lastExitWasOOM = false
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [String: ActiveRequest] = [:]
+  private var activeControlRequests: [String: ActiveControlRequest] = [:]
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private var receivedInit = false
   private var isRestarting = false
@@ -127,6 +136,10 @@ actor AgentRuntimeProcess {
       activeRequests.removeValue(forKey: requestId)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
+    for (requestId, request) in activeControlRequests where request.clientId == clientId {
+      activeControlRequests.removeValue(forKey: requestId)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
 
     if clients.isEmpty {
       await stopProcess(resumeRequestsWith: BridgeError.stopped)
@@ -145,8 +158,10 @@ actor AgentRuntimeProcess {
   }
 
   func restart(harnessMode: String) async throws {
-    guard activeRequests.isEmpty else {
-      log("AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) are active")
+    guard activeRequests.isEmpty, activeControlRequests.isEmpty else {
+      log(
+        "AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) and \(activeControlRequests.count) control request(s) are active"
+      )
       throw BridgeError.requestAlreadyActive
     }
     isRestarting = true
@@ -209,6 +224,36 @@ actor AgentRuntimeProcess {
       dict["ownerId"] = ownerId
     }
     sendJson(dict)
+  }
+
+  func controlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+
+    let requestId = UUID().uuidString
+    return try await withCheckedThrowingContinuation { continuation in
+      activeControlRequests[requestId] = ActiveControlRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "control_tool",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "name": name,
+        "input": input,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      sendJson(dict)
+    }
   }
 
   func interrupt(clientId: String, requestId: String) {
@@ -646,6 +691,9 @@ actor AgentRuntimeProcess {
         activeRequests[requestId] = request
       }
 
+    case .controlToolResult:
+      completeControlRequest(message)
+
     case .result:
       completeRequest(message)
 
@@ -703,6 +751,16 @@ actor AgentRuntimeProcess {
       return
     }
     request.continuation.resume(returning: queryResult(from: message))
+  }
+
+  private func completeControlRequest(_ message: RuntimeMessage) {
+    guard let requestId = message.routingKey,
+      let request = activeControlRequests.removeValue(forKey: requestId)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable control tool result")
+      return
+    }
+    request.continuation.resume(returning: message.payload["result"] as? String ?? "")
   }
 
   private func failRequest(_ message: RuntimeMessage) {
@@ -798,6 +856,11 @@ actor AgentRuntimeProcess {
     let requests = activeRequests.values
     activeRequests.removeAll()
     for request in requests {
+      request.continuation.resume(throwing: error)
+    }
+    let controlRequests = activeControlRequests.values
+    activeControlRequests.removeAll()
+    for request in controlRequests {
       request.continuation.resume(throwing: error)
     }
   }

@@ -35,6 +35,7 @@ import { homedir, tmpdir } from "os";
 import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
+  ControlToolRequestMessage,
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
@@ -766,6 +767,59 @@ async function main(): Promise<void> {
       case "tool_result":
         resolveToolCall(msg);
         break;
+
+      case "control_tool": {
+        const control = msg as ControlToolRequestMessage;
+        const requestId = requestIdFor(control);
+        const controlOwnerId = control.ownerId?.trim() || currentOwnerId;
+        if (requestId) {
+          activeControlToolOwnersByRequest.set(requestId, controlOwnerId);
+        }
+        if (control.ownerId) {
+          currentOwnerId = controlOwnerId;
+          piMonoOwnerId = controlOwnerId;
+        }
+        const result = agentControlToolContext
+          ? await (async () => {
+              try {
+                return await handleAgentControlToolCall(
+                  {
+                    ...agentControlToolContext,
+                    getOwnerId: () =>
+                      activeControlToolOwnerId({
+                        requestId,
+                        ownerIdForRequest: (id) => activeControlToolOwnersByRequest.get(id),
+                        fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
+                      }),
+                  },
+                  control.name,
+                  control.input ?? {},
+                );
+              } finally {
+                if (requestId) {
+                  activeControlToolOwnersByRequest.delete(requestId);
+                }
+              }
+            })()
+          : (() => {
+              if (requestId) {
+                activeControlToolOwnersByRequest.delete(requestId);
+              }
+              return JSON.stringify({
+                ok: false,
+                error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+              });
+            })();
+        send({
+          type: "control_tool_result",
+          protocolVersion: control.protocolVersion,
+          requestId,
+          clientId: control.clientId,
+          name: control.name,
+          result,
+        });
+        break;
+      }
 
       case "interrupt":
         logErr("Interrupt requested by user");
