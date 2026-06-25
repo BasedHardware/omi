@@ -411,7 +411,9 @@ export class AgentRuntimeKernel {
 
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
+      let bindingResolutionProtectedBindingId: string | null = null;
       try {
+        let evictedBindingIdForReplacement: string | null = null;
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
@@ -431,15 +433,27 @@ export class AgentRuntimeKernel {
               }
             }
             return resolved;
-          }, bindingQueueKey ? undefined : {
-            onIdlePinnedBindingEvicted: (evictedBindingId) => {
-              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
+	          },
+            {
+              ...(bindingQueueKey
+                ? {}
+                : {
+                    onIdlePinnedBindingEvicted: (evictedBindingId: string) => {
+                      evictedBindingIdForReplacement = evictedBindingId;
+                    },
+                  }),
+              protectPinnedBindingAfterWork: true,
             },
-          });
+          );
         });
         binding = resolved.binding;
         handle = resolved.handle;
+        bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
+        if (evictedBindingIdForReplacement) {
+          this.markEvictedBindingStale(evictedBindingIdForReplacement, "pinned_worker_reassigned");
+        }
       } catch (error) {
+        pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
         if (isStaleBindingError(error)) {
           this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
           retryReason = "stale_binding";
@@ -456,6 +470,8 @@ export class AgentRuntimeKernel {
       }
 
       const abortController = new AbortController();
+      const protectedPinnedBindingId = pool.requiresPinnedWorkers ? handle.bindingId : null;
+      pool.protectPinnedBinding(protectedPinnedBindingId);
 
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
@@ -514,6 +530,8 @@ export class AgentRuntimeKernel {
           errorMessage: wasCancelling ? null : messageFrom(error),
         });
         break;
+      } finally {
+        pool.unprotectPinnedBinding(protectedPinnedBindingId);
       }
     }
 

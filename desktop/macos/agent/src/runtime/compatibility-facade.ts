@@ -227,14 +227,15 @@ export class JsonlCompatibilityFacade {
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
-    const ownerId = message.ownerId ?? this.ownerId;
+    const activeRequestContext = requestId ? this.activeByRequest.get(requestId) : undefined;
+    const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     const runId =
       message.runId ??
-      (requestId ? this.activeByRequest.get(requestId)?.runId : undefined) ??
+      activeRequestContext?.runId ??
       this.latestRunByClient.get(this.latestRunByClientKey(ownerId, clientId)) ??
       this.latestRunByOwner.get(ownerId);
     const context =
-      (requestId ? this.activeByRequest.get(requestId) : undefined) ??
+      activeRequestContext ??
       (runId ? this.activeByRun.get(runId) : undefined) ?? {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
@@ -259,7 +260,7 @@ export class JsonlCompatibilityFacade {
       return;
     }
 
-    const cancellationOwnerId = message.ownerId ?? ownerId;
+    const cancellationOwnerId = message.ownerId ?? activeRequestContext?.ownerId ?? ownerId;
     let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
     try {
       ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });

@@ -177,6 +177,12 @@ enum AgentArtifactProjectionError: LocalizedError, Equatable {
   }
 }
 
+protocol AgentArtifactProjectionLoading {
+  func controlTool(name: String, input: [String: Any]) async throws -> String
+}
+
+extension AgentBridge: AgentArtifactProjectionLoading {}
+
 @MainActor
 final class AgentArtifactProjectionStore: ObservableObject {
   @Published private(set) var artifacts: [AgentArtifactProjection] = []
@@ -184,7 +190,7 @@ final class AgentArtifactProjectionStore: ObservableObject {
   @Published private(set) var errorMessage: String?
   private var loadGeneration = 0
 
-  func load(request: AgentArtifactProjectionRequest, bridge: AgentBridge) async {
+  func load(request: AgentArtifactProjectionRequest, bridge: AgentArtifactProjectionLoading) async {
     loadGeneration += 1
     let generation = loadGeneration
     guard request.isScoped else {

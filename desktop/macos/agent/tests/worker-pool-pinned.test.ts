@@ -210,6 +210,42 @@ describe("AdapterWorkerPool pinned workers", () => {
     expect(pool.acquire(undefined)?.workerId).toBe("worker-1");
   });
 
+  it("does not evict protected idle pinned bindings", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+    const binding1 = {
+      bindingId: "binding-1",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+
+    const worker = pool.acquire(binding1);
+    expect(worker?.workerId).toBe("worker-1");
+    pool.protectPinnedBinding("binding-1");
+    let evictedBindingId: string | undefined;
+
+    const queued = pool.runExclusiveQueued(
+      undefined,
+      "attempt-new-binding",
+      async (leasedWorker) => {
+        expect(leasedWorker.workerId).toBe("worker-1");
+      },
+      {
+        onIdlePinnedBindingEvicted: (bindingId) => {
+          evictedBindingId = bindingId;
+        },
+      },
+    );
+
+    await Promise.resolve();
+    expect(evictedBindingId).toBeUndefined();
+    pool.unprotectPinnedBinding("binding-1");
+    await queued;
+    expect(evictedBindingId).toBe("binding-1");
+  });
+
   it("can release an idle pinned binding for process-local worker reassignment", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
     const binding = {

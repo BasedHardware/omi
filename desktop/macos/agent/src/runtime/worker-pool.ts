@@ -119,6 +119,7 @@ type WorkerLeaseResolver = (worker: AdapterWorker) => void;
 
 interface WorkerLeaseOptions {
   onIdlePinnedBindingEvicted?: (bindingId: string) => void;
+  protectPinnedBindingAfterWork?: boolean;
 }
 
 interface PendingWorkerLease {
@@ -134,6 +135,7 @@ export class AdapterWorkerPool {
   private readonly adapterFactory: AdapterFactory;
   private readonly workers: AdapterWorker[] = [];
   private readonly waiters: PendingWorkerLease[] = [];
+  private readonly protectedPinnedBindingIds = new Set<string>();
   private nextWorkerId = 1;
 
   constructor(adapterFactory: AdapterFactory, maxWorkers = configuredMaxWorkers()) {
@@ -152,14 +154,35 @@ export class AdapterWorkerPool {
     return this.maxWorkers;
   }
 
+  get requiresPinnedWorkers(): boolean {
+    return this.workers.some((worker) => worker.adapter.capabilities.requiresPinnedWorker);
+  }
+
   releaseIdlePinnedBinding(): string | null {
     for (const worker of this.workers) {
+      const idlePinnedBindingId = worker.idlePinnedBindingId;
+      if (idlePinnedBindingId && this.protectedPinnedBindingIds.has(idlePinnedBindingId)) {
+        continue;
+      }
       const bindingId = worker.releaseIdlePinnedBinding();
       if (bindingId) {
         return bindingId;
       }
     }
     return null;
+  }
+
+  protectPinnedBinding(bindingId: string | null | undefined): void {
+    if (bindingId) {
+      this.protectedPinnedBindingIds.add(bindingId);
+    }
+  }
+
+  unprotectPinnedBinding(bindingId: string | null | undefined): void {
+    if (bindingId) {
+      this.protectedPinnedBindingIds.delete(bindingId);
+      this.drainWaiters();
+    }
   }
 
   acquire(binding?: AdapterBindingHandle): AdapterWorker | null {
@@ -204,6 +227,9 @@ export class AdapterWorkerPool {
     try {
       return await worker.runExclusive(attemptId, binding, () => work(worker));
     } finally {
+      if (options?.protectPinnedBindingAfterWork) {
+        this.protectPinnedBinding(worker.idlePinnedBindingId);
+      }
       this.drainWaiters();
     }
   }
@@ -266,6 +292,7 @@ export class AdapterWorkerPool {
     for (const worker of this.workers) {
       const evictedBindingId = worker.idlePinnedBindingId;
       if (!evictedBindingId) continue;
+      if (this.protectedPinnedBindingIds.has(evictedBindingId)) continue;
       const releasedBindingId = worker.releaseIdlePinnedBinding();
       if (releasedBindingId !== evictedBindingId) {
         throw new Error(`Worker ${worker.workerId} failed to release pinned binding ${evictedBindingId}`);

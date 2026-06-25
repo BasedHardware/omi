@@ -55,16 +55,23 @@ final class AgentArtifactProjectionTests: XCTestCase {
     XCTAssertTrue(request.toolInput.isEmpty)
   }
 
-  func testProjectionStoreGatesStaleLoadResults() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentArtifactProjection.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+  @MainActor
+  func testProjectionStoreIgnoresStaleLoadResults() async {
+    let store = AgentArtifactProjectionStore()
+    let bridge = DelayedArtifactProjectionLoader()
+    let staleRequest = AgentArtifactProjectionRequest(sessionId: "session-stale")
+    let currentRequest = AgentArtifactProjectionRequest(sessionId: "session-current")
 
-    XCTAssertTrue(source.contains("private var loadGeneration = 0"))
-    XCTAssertTrue(source.contains("let generation = loadGeneration"))
-    XCTAssertTrue(source.contains("guard loadGeneration == generation else { return }"))
+    let staleLoad = Task { @MainActor in
+      await store.load(request: staleRequest, bridge: bridge)
+    }
+    await Task.yield()
+    await store.load(request: currentRequest, bridge: bridge)
+    await staleLoad.value
+
+    XCTAssertEqual(store.artifacts.map(\.artifactId), ["artifact-current"])
+    XCTAssertFalse(store.isLoading)
+    XCTAssertNil(store.errorMessage)
   }
 
   func testProjectionBuildsScopedControlToolInput() {
@@ -90,5 +97,28 @@ final class AgentArtifactProjectionTests: XCTestCase {
     XCTAssertThrowsError(try AgentArtifactProjection.parseList(fromToolResult: result)) { error in
       XCTAssertEqual(error as? AgentArtifactProjectionError, .toolFailed("wrong owner"))
     }
+  }
+}
+
+private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoading {
+  func controlTool(name: String, input: [String: Any]) async throws -> String {
+    let sessionId = input["sessionId"] as? String ?? ""
+    if sessionId == "session-stale" {
+      try await Task.sleep(nanoseconds: 50_000_000)
+    }
+    return """
+      {
+        "ok": true,
+        "artifacts": [
+          {
+            "artifactId": "\(sessionId == "session-current" ? "artifact-current" : "artifact-stale")",
+            "omiSessionId": "\(sessionId)",
+            "kind": "json",
+            "role": "result",
+            "uri": "omi-artifact://\(sessionId)"
+          }
+        ]
+      }
+      """
   }
 }

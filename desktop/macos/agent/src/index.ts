@@ -126,7 +126,7 @@ let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
 const activeControlToolOwnersByRequest = new Map<string, string>();
 function controlOwnerMapKey(requestId?: string, clientId?: string): string | undefined {
-  return requestId ? `${clientId ?? ""}:${requestId}` : undefined;
+  return requestId ? JSON.stringify([clientId ?? "", requestId]) : undefined;
 }
 let toolCallCorrelation:
   | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
@@ -778,14 +778,14 @@ async function main(): Promise<void> {
         const control = msg as ControlToolRequestMessage;
         const requestId = requestIdFor(control);
         const controlOwnerKey = controlOwnerMapKey(requestId, control.clientId);
-        const controlOwnerId = control.ownerId?.trim() || currentOwnerId;
+        const controlOwnerId = currentOwnerId;
         if (controlOwnerKey) {
           activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId);
         }
-        if (control.ownerId) {
-          currentOwnerId = controlOwnerId;
-          piMonoOwnerId = controlOwnerId;
-        }
+        const controlInput =
+          control.ownerId && !Object.hasOwn(control.input ?? {}, "ownerId")
+            ? { ...(control.input ?? {}), ownerId: control.ownerId }
+            : (control.input ?? {});
         const result = agentControlToolContext
           ? await (async () => {
               try {
@@ -798,9 +798,9 @@ async function main(): Promise<void> {
                         ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
                         fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                       }),
-                  },
+                    },
                   control.name,
-                  control.input ?? {},
+                  controlInput,
                 );
               } finally {
                 if (controlOwnerKey) {
