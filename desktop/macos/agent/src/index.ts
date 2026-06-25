@@ -53,6 +53,7 @@ import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
+import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -786,16 +787,15 @@ async function main(): Promise<void> {
     maxRecoverableRetries: 2,
   });
   toolCallCorrelation = ({ requestId, clientId, adapterId }) => {
-    if (requestId && clientId) {
-      const requestCorrelation = facade.toolCallCorrelationForRequest(requestId, clientId);
-      if (requestCorrelation.requestId) {
-        return requestCorrelation;
+    return resolveToolCallCorrelation(
+      { requestId, clientId, adapterId },
+      {
+        forRequest: (scopedRequestId, scopedClientId) =>
+          facade.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
+        forAdapter: (scopedAdapterId) => facade.toolCallCorrelationForAdapter(scopedAdapterId),
+        unscoped: () => facade.unscopedToolCallCorrelation(),
       }
-    }
-    if (adapterId) {
-      return facade.toolCallCorrelationForAdapter(adapterId);
-    }
-    return facade.unscopedToolCallCorrelation();
+    );
   };
 
   // 3. Signal readiness
