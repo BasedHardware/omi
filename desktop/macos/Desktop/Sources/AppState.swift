@@ -2587,6 +2587,9 @@ class AppState: ObservableObject {
         log("Conversations: Local cache unavailable, falling back to API")
         // Continue to API fetch even if local fails
       }
+    } else {
+      conversations = []
+      totalConversationsCount = 0
     }
 
     // Step 2: Fetch from API in background to get fresh data

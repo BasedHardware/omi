@@ -362,21 +362,16 @@ extension APIClient {
 
 extension APIClient {
 
-  /// Fetches conversations from the API with optional filtering
-  func getConversations(
-    limit: Int = 50,
-    offset: Int = 0,
+  static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
     starred: Bool? = nil
-  ) async throws -> [ServerConversation] {
+  ) -> [String] {
     var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-      "include_discarded=\(includeDiscarded)",
+      "include_discarded=\(includeDiscarded)"
     ]
 
     if !statuses.isEmpty {
@@ -401,6 +396,33 @@ extension APIClient {
     if let starred = starred {
       queryItems.append("starred=\(starred)")
     }
+
+    return queryItems
+  }
+
+  /// Fetches conversations from the API with optional filtering
+  func getConversations(
+    limit: Int = 50,
+    offset: Int = 0,
+    statuses: [ConversationStatus] = [],
+    includeDiscarded: Bool = false,
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) async throws -> [ServerConversation] {
+    var queryItems: [String] = [
+      "limit=\(limit)",
+      "offset=\(offset)",
+    ]
+    queryItems += Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
 
     let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
@@ -429,6 +451,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -516,34 +539,20 @@ extension APIClient {
     folderId: String? = nil,
     starred: Bool? = nil
   ) -> String {
-    var queryItems: [String] = [
-      "include_discarded=\(includeDiscarded)"
-    ]
-
-    if !statuses.isEmpty {
-      let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
-      queryItems.append("statuses=\(statusStrings)")
-    }
-
-    if let startDate = startDate {
-      let formatter = ISO8601DateFormatter()
-      queryItems.append("start_date=\(formatter.string(from: startDate))")
-    }
-
-    if let endDate = endDate {
-      let formatter = ISO8601DateFormatter()
-      queryItems.append("end_date=\(formatter.string(from: endDate))")
-    }
-
-    if let folderId = folderId {
-      queryItems.append("folder_id=\(folderId)")
-    }
-
-    if let starred = starred {
-      queryItems.append("starred=\(starred)")
-    }
+    let queryItems = Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
 
     return "v1/conversations/count?\(queryItems.joined(separator: "&"))"
+  }
+
+  func invalidateConversationsCountCache() {
+    conversationsCountCache.removeAll()
   }
 
   /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
@@ -653,6 +662,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
 }

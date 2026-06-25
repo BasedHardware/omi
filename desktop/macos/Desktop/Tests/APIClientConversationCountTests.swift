@@ -40,4 +40,25 @@ final class APIClientConversationCountTests: XCTestCase {
     XCTAssertNotEqual(unfiltered, starredFalse)
     XCTAssertTrue(starredFalse.contains("starred=false"))
   }
+
+  func testConversationFilterQueryItemsAreSharedByListAndCount() throws {
+    let formatter = ISO8601DateFormatter()
+    let start = try XCTUnwrap(formatter.date(from: "2026-06-01T00:00:00Z"))
+
+    let queryItems = APIClient.conversationFilterQueryItems(
+      statuses: [.completed],
+      includeDiscarded: true,
+      startDate: start,
+      folderId: "folder-a",
+      starred: false
+    )
+
+    XCTAssertEqual(queryItems, [
+      "include_discarded=true",
+      "statuses=completed",
+      "start_date=2026-06-01T00:00:00Z",
+      "folder_id=folder-a",
+      "starred=false",
+    ])
+  }
 }
