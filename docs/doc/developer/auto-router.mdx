@@ -376,3 +376,85 @@ Nested `overrides` is part of the new value, replaced wholesale.
 - Persistent Firestore emulator for tests (currently uses in-memory mock)
 - Per-user prefs encryption
 - Versioned prefs (rollback)
+
+## v5 — Settings UI for prefs + STT/embedding benchmarks
+
+v5 lands the two features deferred from v4: a desktop Settings page for
+the user's per-task weight overrides, and an expanded benchmark data set
+covering STT and embedding tasks.
+
+### Settings UI
+
+`Settings → Auto-router` opens a new page (`AutoRouterSettingsView.swift`)
+that lets the user override the per-task weights for all 5 task types:
+
+- One card per task (Push-to-talk, Screenshot understanding,
+  Screenshot embedding, Transcription, General assistant)
+- Each card has 3 sliders (Quality, Latency, Cost) that auto-balance
+  so the sum is always exactly 100% (matches backend's `TaskWeights`
+  validation tolerance of 1e-3)
+- "Reset to default" button per card (only shown when override differs
+  from the task default)
+- "Reset all overrides" button at the bottom
+- Saves are debounced (~500ms) and go through `UserPrefsClient.shared.save`
+  → `PUT /v1/auto-router/prefs` → Firestore
+
+Architecture:
+
+```
+AutoRouterSettingsView (SwiftUI)
+  ├── @StateObject viewModel: AutoRouterSettingsViewModel
+  │     ├── @Published prefs: UserPrefs
+  │     ├── @Published saveStatus: SaveStatus
+  │     ├── @Published isLoading, errorState
+  │     ├── debouncedSaveTask (500ms)
+  │     └── binding(for:) → Binding<TaskWeights>
+  └── ForEach(AutoRouterTask.allCases) → WeightSlider
+        ├── @Binding weights
+        ├── defaults: TaskWeights?
+        └── onReset: () -> Void
+```
+
+### Expanded benchmark data (`benchmarks.example.json`)
+
+v5 adds 4 model entries and updates one existing score to MTEB-based values:
+
+**`transcription` (4 candidates, was 3):**
+
+| Model | Provider | Quality | Latency | Cost |
+|---|---|---|---|---|
+| parakeet-stt-v2 | nvidia | 0.85 | 0.95 | 0.95 |
+| deepgram-nova-2 | deepgram | 0.90 | 0.85 | 0.75 |
+| whisper-large-v3 | openai | 0.88 | 0.65 | 0.70 |
+| **assemblyai-universal** (v5 new) | assemblyai | 0.91 | 0.80 | 0.65 |
+
+**`screenshot_embedding` (5 candidates, was 3):**
+
+| Model | Provider | Quality | Latency | Cost |
+|---|---|---|---|---|
+| **text-embedding-3-small** (v5 updated) | openai | 0.82 | 0.85 | 0.95 |
+| **text-embedding-3-large** (v5 new) | openai | 0.88 | 0.75 | 0.70 |
+| **text-embedding-ada-002** (v5 new) | openai | 0.72 | 0.85 | 0.95 |
+| voyage-large-2 | voyage | 0.90 | 0.60 | 0.70 |
+| cohere-embed-english-v3 | cohere | 0.85 | 0.75 | 0.85 |
+
+Score sources:
+
+- **AssemblyAI Universal:** WER ~8.4% on LibriSpeech test-clean (public
+  benchmark), ~800ms median latency (real-world), $0.00027/sec (public pricing)
+- **OpenAI embeddings:** MTEB averages from the MTEB leaderboard
+  snapshot (text-embedding-3-small = 62.3%, text-embedding-3-large = 64.6%,
+  ada-002 = 61.0%); pricing from OpenAI's public pricing page
+
+These are EDUCATED ESTIMATES curated from public sources, not proprietary
+measurements. They are sufficient for development and demo. For production,
+replace with your own measurements (latency from load tests, quality from
+your eval set, cost from your actual usage).
+
+### Out of scope (v6+)
+
+- AA audio-models / text-embedding-models endpoints (if AA supports them)
+- Settings UI for STT/embedding model choice (separate from auto-router prefs)
+- Real-time prefs sync indicator (Firestore connection status)
+- Prefs import/export
+- AA schema versioning
