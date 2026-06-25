@@ -115,7 +115,9 @@ backend/tests/unit/
 ├── test_auto_router_task_registry.py
 ├── test_auto_router_model_registry.py
 ├── test_auto_router_daily_refresh.py
-└── test_auto_router_endpoint.py
+├── test_auto_router_endpoint.py
+├── test_auto_router_metrics.py
+├── test_auto_router_demo.py
 ```
 
 ## Endpoint response shape

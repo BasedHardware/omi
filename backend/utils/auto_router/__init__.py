@@ -1,7 +1,11 @@
-"""Auto-router v1: task-based model selection across Omi.
+"""Auto-router: task-based model selection across Omi.
 
-A foundational framework (not a production routing replacement) that picks the
-best model per task type using weighted scoring across quality / latency / cost.
+A framework that picks the best model per task type using weighted
+scoring across quality / latency / cost. v1 shipped the standalone
+framework + FastAPI endpoint + desktop client. v2 added auth +
+observability + chat wiring. v3 added per-user prefs + AA integration.
+v4 added Firestore persistence for prefs. See `.aidlc/spec.md` for
+version history.
 
 Public API:
     ModelSpec        — a candidate model with quality/latency/cost scores (0..1).
@@ -10,9 +14,11 @@ Public API:
     TaskRegistry     — registry of task definitions, loads from JSON or defaults.
     ModelRegistry    — registry of candidate models per task, loads from JSON.
     DailyRefreshCache — TTL + asyncio.Lock + stale-fallback cache wrapper.
+    router (in routers/auto_router.py) — FastAPI endpoint exposing /v1/auto-router/pick.
 
-The FastAPI router and desktop client are added in subsequent AIDLC tasks.
-See `backend/utils/auto_router/README.md` for the full architecture.
+The desktop client (desktop/macos/Desktop/Sources/AutoRouter/AutoRouter.swift)
+is part of v1. See `backend/utils/auto_router/README.md` for the full
+architecture.
 
 Relationship to upstream `/v1/auto/model-pick`:
     The maintainer's narrow realtime-voice auto-router (see
