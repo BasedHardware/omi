@@ -1887,7 +1887,6 @@ class FloatingControlBarManager {
             chatCancellable = nil
             window.cancelInputHeightObserver()
             window.state.currentQueryFromVoice = true
-            window.state.isVoiceResponseActive = true
             if window.state.showingAIConversation {
                 window.closeAIConversation()
             } else if !window.isVisible {
@@ -2662,7 +2661,6 @@ class FloatingControlBarManager {
         }
 
         FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
-        barWindow.state.isVoiceResponseActive = true
         FloatingBarVoicePlaybackService.shared.tracer = currentTracer
         FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
 

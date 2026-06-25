@@ -50,6 +50,53 @@ enum RealtimeHubCloseClassifier {
   }
 }
 
+/// Keeps the response glow tied to perceived playback instead of raw PCM chunk
+/// boundaries. Realtime providers can leave short gaps between streamed audio
+/// buffers; clearing the glow on every empty queue makes the notch resize and
+/// shimmer restart repeatedly.
+final class RealtimeResponseGlowGate {
+  private let idleClearDelay: TimeInterval
+  private let setActive: (Bool) -> Void
+  private var idleClearWorkItem: DispatchWorkItem?
+  private(set) var isActive = false
+
+  init(idleClearDelay: TimeInterval = 0.75, setActive: @escaping (Bool) -> Void) {
+    self.idleClearDelay = idleClearDelay
+    self.setActive = setActive
+  }
+
+  func markPlaybackActive() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard !isActive else { return }
+    isActive = true
+    setActive(true)
+  }
+
+  func scheduleIdleClear() {
+    idleClearWorkItem?.cancel()
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.isActive = false
+      self.setActive(false)
+      self.idleClearWorkItem = nil
+    }
+    idleClearWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + idleClearDelay, execute: workItem)
+  }
+
+  func clearImmediately() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard isActive else {
+      setActive(false)
+      return
+    }
+    isActive = false
+    setActive(false)
+  }
+}
+
 @MainActor
 final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeechSynthesizerDelegate {
   static let shared = RealtimeHubController()
@@ -59,6 +106,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   private var sessionProvider: RealtimeHubProvider?
   private var pcmPlayer: StreamingPCMPlayer?
   private let speech = AVSpeechSynthesizer()
+  private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
+    self?.barState?.isVoiceResponseActive = active
+  }
 
   // Per-turn state.
   private var turnTranscript = ""
@@ -323,6 +373,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     lastTurnAt = Date()
     pcmPlayer?.stop()  // stop any prior reply locally
     if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    responseGlowGate.clearImmediately()
     if bargeIn {
       // Interrupt the in-flight reply IN-SESSION (no teardown — the warm socket and
       // its conversation context survive). OpenAI: response.cancel + clear input.
@@ -410,7 +461,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     audioReceivedThisTurn = true
-    barState?.isVoiceResponseActive = true
+    // If PTT muted music/system output while listening, make sure the model's
+    // reply is audible even if capture teardown restore is delayed by hardware.
+    SystemAudioMuteController.shared.restore()
+    responseGlowGate.markPlaybackActive()
     pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
@@ -422,7 +476,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
       // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
       if !audioReceivedThisTurn, !reply.isEmpty {
-        barState?.isVoiceResponseActive = true
+        responseGlowGate.markPlaybackActive()
         speak(reply)
       }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
@@ -738,7 +792,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
     if clearResponseGlow || !audioReceivedThisTurn {
-      barState.isVoiceResponseActive = false
+      responseGlowGate.clearImmediately()
     }
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
@@ -754,7 +808,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   private func clearResponseGlowIfRealtimeAudioIdle() {
-    barState?.isVoiceResponseActive = false
+    responseGlowGate.scheduleIdleClear()
   }
 
   // MARK: - Tools
@@ -825,7 +879,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     Task { @MainActor [weak self] in
-      self?.barState?.isVoiceResponseActive = false
+      self?.responseGlowGate.clearImmediately()
     }
   }
 

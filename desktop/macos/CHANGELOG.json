@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Added Notch Mode for a MacBook notch-integrated floating bar with compact voice, chat, and agent controls"
+    "Added Notch Mode for a MacBook notch-integrated floating bar with compact voice, chat, and agent controls",
+    "Fixed Notch Mode voice response audio and glow stability during streamed playback"
   ],
   "releases": [
     {
