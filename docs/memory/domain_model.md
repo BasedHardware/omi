@@ -409,4 +409,4 @@ Devices are **capture surfaces only** — provenance metadata, not memory author
 
 **Registry:** `users/{uid}/client_devices/{client_device_id}` — `platform`, `device_class`, `label`, `first_seen_at`, `last_seen_at`, `app_version`. Upsert throttled like `record_user_platform()`.
 
-**Provenance path:** Conversation (`client_device_id`, `client_platform`) → evidence / artifact_ref → optional denormalized `capture_device_ids` on `MemoryItem` → retrieval filter `device_scope=current|all|explicit`.
+**Provenance path:** Conversation (`client_device_id`, `client_platform`) → `Evidence.client_device_id` / `MemoryEvidence.client_device_id` (not in `artifact_ref` or `evidence_id` hash inputs) → optional denormalized `capture_device_ids` / `primary_capture_device` on `MemoryItem` → retrieval filter `device_scope=current|all|explicit` (canonical memory users only; see `X-Omi-Memory-Device-Scope-Supported` response header).
