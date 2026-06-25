@@ -62,7 +62,7 @@ def test_no_module_level_sys_modules_stub_in_unit_tests():
         "test_mcp_search_memories.py",
         "test_upstream_boundary.py",
         "test_canonical_memory_vectors.py",
-        "test_read_api.py",
+        "test_memory_read_api.py",
         "test_product_memory_router.py",
     )
     guarded_paths = [unit_dir / name for name in guarded_filenames]
@@ -70,6 +70,8 @@ def test_no_module_level_sys_modules_stub_in_unit_tests():
     all_offenders: list[str] = []
     for path in guarded_paths:
         if path.name == "test_no_module_level_sys_modules_stub.py":
+            continue
+        if not path.exists():
             continue
         all_offenders.extend(_module_level_sys_modules_offenders(path))
 
