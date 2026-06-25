@@ -1,9 +1,15 @@
 {
   "unreleased": [
-    "Connect your AI: centered the omi title together with the What-omi-knows cards",
     "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons"
   ],
   "releases": [
+    {
+      "version": "0.11.535",
+      "date": "2026-06-25",
+      "changes": [
+        "Connect your AI: centered the omi title together with the What-omi-knows cards"
+      ]
+    },
     {
       "version": "0.11.534",
       "date": "2026-06-25",
