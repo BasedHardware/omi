@@ -925,16 +925,70 @@ private struct NotchAgentPillsRowView: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(visiblePills) { pill in
-                NotchAgentPillIcon(pill: pill)
-                    .onTapGesture {
-                        openPillInChat(pill)
-                    }
+                NotchAgentPillIcon(pill: pill, manager: manager, barWindow: barWindow)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
     }
+}
 
-    private func openPillInChat(_ pill: AgentPill) {
+private struct NotchAgentPillIcon: View {
+    @ObservedObject var pill: AgentPill
+    @ObservedObject var manager: AgentPillsManager
+    weak var barWindow: NSWindow?
+
+    var body: some View {
+        Button {
+            if manager.hoveredPillID == pill.id {
+                manager.hoveredPillID = nil
+            } else {
+                manager.hoveredPillID = pill.id
+            }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color.white.opacity(0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6)
+                    )
+                    .overlay(
+                        NotchOmiMark()
+                            .frame(width: 11, height: 11)
+                    )
+
+                Circle()
+                    .fill(pill.status.tintColor)
+                    .frame(width: 4, height: 4)
+                    .offset(x: 1.5, y: -1.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .frame(width: 18, height: 18)
+        .accessibilityLabel("\(pill.title) - \(pill.status.displayLabel)")
+        .popover(isPresented: popoverBinding, arrowEdge: .bottom) {
+            AgentPillPopover(
+                pill: pill,
+                isRecording: manager.recordingPillID == pill.id,
+                onDismiss: { manager.dismiss(pillID: pill.id) },
+                onOpenInChat: { openPillInChat() },
+                onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
+                onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
+            )
+        }
+    }
+
+    private var popoverBinding: Binding<Bool> {
+        Binding(
+            get: { manager.hoveredPillID == pill.id },
+            set: { isPresented in
+                manager.hoveredPillID = isPresented ? pill.id : nil
+            }
+        )
+    }
+
+    private func openPillInChat() {
+        manager.hoveredPillID = nil
         barWindow?.makeKeyAndOrderFront(nil)
         NotificationCenter.default.post(
             name: .agentPillRequestedChat,
@@ -942,31 +996,4 @@ private struct NotchAgentPillsRowView: View {
             userInfo: ["query": pill.query]
         )
     }
-}
-
-private struct NotchAgentPillIcon: View {
-    @ObservedObject var pill: AgentPill
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Color.white.opacity(0.10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6)
-                )
-                .overlay(
-                    NotchOmiMark()
-                        .frame(width: 11, height: 11)
-                )
-
-            Circle()
-                .fill(pill.status.tintColor)
-                .frame(width: 4, height: 4)
-                .offset(x: 1.5, y: -1.5)
-        }
-        .frame(width: 18, height: 18)
-        .accessibilityLabel("\(pill.title) - \(pill.status.displayLabel)")
-    }
-
 }
