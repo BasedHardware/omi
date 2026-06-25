@@ -15,6 +15,7 @@ This is NOT a load test — it measures single-threaded CPU time, not concurrent
 throughput under load. For that, use a real load-testing tool.
 """
 
+import asyncio
 import statistics
 import sys
 import time
@@ -63,8 +64,6 @@ def bench_endpoint_load():
             return TaskRegistry.from_json(BENCHMARKS), ModelRegistry.from_json(BENCHMARKS)
 
         # Use asyncio.run for the async loader (each measurement is independent).
-        import asyncio
-
         asyncio.run(cache.get_or_refresh(loader))
         durations.append(time.perf_counter_ns() - t0)
     return durations
@@ -83,8 +82,6 @@ def bench_endpoint_cached(cache):
 
     async def loader():
         return TaskRegistry.from_json(BENCHMARKS), ModelRegistry.from_json(BENCHMARKS)
-
-    import asyncio
 
     async def prime_and_bench():
         # First call: cache miss, loader runs, returns (tasks, models).
