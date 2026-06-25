@@ -51,7 +51,12 @@ import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
-import { handleAgentControlToolCall, isAgentControlToolName, type AgentControlToolContext } from "./runtime/control-tools.js";
+import {
+  activeControlToolOwnerId,
+  handleAgentControlToolCall,
+  isAgentControlToolName,
+  type AgentControlToolContext,
+} from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -117,6 +122,7 @@ function agentStateDir(): string {
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
+const activeControlToolOwnersByRequest = new Map<string, string>();
 let toolCallCorrelation:
   | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
   | undefined;
@@ -182,8 +188,19 @@ function startOmiToolsRelay(): Promise<string> {
             if (msg.type === "tool_use") {
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
-                  const result = agentControlToolContext
-                    ? await handleAgentControlToolCall(agentControlToolContext, msg.name, msg.input ?? {})
+                  const controlToolContext = agentControlToolContext
+                    ? {
+                        ...agentControlToolContext,
+                        getOwnerId: () =>
+                          activeControlToolOwnerId({
+                            requestId: msg.requestId,
+                            ownerIdForRequest: (requestId) => activeControlToolOwnersByRequest.get(requestId),
+                            fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
+                          }),
+                      }
+                    : undefined;
+                  const result = controlToolContext
+                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
                     : JSON.stringify({
                         ok: false,
                         error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
@@ -706,16 +723,27 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
+          const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          const queryRequestId = requestIdFor(query);
+          if (queryRequestId) {
+            activeControlToolOwnersByRequest.set(queryRequestId, queryOwnerId);
+          }
           if (query.ownerId) {
-            currentOwnerId = query.ownerId;
+            currentOwnerId = queryOwnerId;
             if (adapterId === "pi-mono") {
-              piMonoOwnerId = query.ownerId;
+              piMonoOwnerId = queryOwnerId;
             }
           }
-          if (adapterId === "acp") {
-            await initializeAcp();
+          try {
+            if (adapterId === "acp") {
+              await initializeAcp();
+            }
+            await facade.handleQuery(query);
+          } finally {
+            if (queryRequestId) {
+              activeControlToolOwnersByRequest.delete(queryRequestId);
+            }
           }
-          await facade.handleQuery(query);
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
           const query = msg as QueryMessage;

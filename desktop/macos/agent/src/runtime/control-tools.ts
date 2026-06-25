@@ -119,6 +119,12 @@ export interface AgentControlToolContext {
   getOwnerId?: () => string;
 }
 
+export interface ActiveControlToolOwnerInput {
+  requestId?: string;
+  ownerIdForRequest?: (requestId: string) => string | undefined;
+  fallbackOwnerId?: string;
+}
+
 export function isAgentControlToolName(name: string): name is AgentControlToolName {
   return CONTROL_TOOL_NAME_SET.has(name);
 }
@@ -231,6 +237,15 @@ export async function handleAgentControlToolCall(
 function controlToolOwnerId(context: AgentControlToolContext): string {
   const ownerId = context.getOwnerId?.().trim();
   return ownerId || "desktop-local-user";
+}
+
+export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): string {
+  const requestOwnerId = input.requestId ? input.ownerIdForRequest?.(input.requestId)?.trim() : undefined;
+  if (requestOwnerId) {
+    return requestOwnerId;
+  }
+  const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  return fallbackOwnerId || "desktop-local-user";
 }
 
 function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {

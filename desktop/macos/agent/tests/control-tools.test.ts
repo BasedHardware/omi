@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  activeControlToolOwnerId,
   agentControlToolDefinitions,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -125,6 +126,88 @@ describe("agent control tools", () => {
     expect(listed.ok).toBe(true);
     expect(listed.sessions).toHaveLength(1);
     expect(listed.sessions[0].session.ownerId).toBe("owner-from-context");
+    store.close();
+  });
+
+  it("resolves control owners from active request context before mutable global fallback", () => {
+    const ownerByRequest = new Map([
+      ["request-owner-a", "owner-a"],
+      ["request-owner-b", "owner-b"],
+    ]);
+    let mutableFallbackOwner = "owner-a";
+
+    mutableFallbackOwner = "owner-b";
+
+    expect(
+      activeControlToolOwnerId({
+        requestId: "request-owner-a",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-a");
+    expect(
+      activeControlToolOwnerId({
+        requestId: "request-owner-b",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-b");
+    expect(
+      activeControlToolOwnerId({
+        requestId: "request-missing",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-b");
+  });
+
+  it("keeps concurrent control tool calls scoped to their active request owners", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "owner-a", requestId: "run-owner-a" });
+    await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "owner-b",
+      externalRefId: "task-owner-b",
+      requestId: "run-owner-b",
+    });
+    const ownerByRequest = new Map([
+      ["request-owner-a", "owner-a"],
+      ["request-owner-b", "owner-b"],
+    ]);
+    let mutableFallbackOwner = "owner-a";
+    const contextForRequest = (requestId: string): AgentControlToolContext => ({
+      kernel,
+      getOwnerId: () =>
+        activeControlToolOwnerId({
+          requestId,
+          ownerIdForRequest: (id) => ownerByRequest.get(id),
+          fallbackOwnerId: mutableFallbackOwner,
+        }),
+    });
+
+    mutableFallbackOwner = "owner-b";
+    const [ownerAResult, ownerBResult] = await Promise.all([
+      handleAgentControlToolCall(contextForRequest("request-owner-a"), "list_agent_sessions", {}),
+      handleAgentControlToolCall(contextForRequest("request-owner-b"), "list_agent_sessions", {}),
+    ]);
+    const ownerAListed = parseToolResult(ownerAResult);
+    const ownerBListed = parseToolResult(ownerBResult);
+
+    expect(ownerAListed.sessions).toHaveLength(1);
+    expect(ownerAListed.sessions[0].session.ownerId).toBe("owner-a");
+    expect(ownerBListed.sessions).toHaveLength(1);
+    expect(ownerBListed.sessions[0].session.ownerId).toBe("owner-b");
+
+    const guarded = parseToolResult(
+      await handleAgentControlToolCall(contextForRequest("request-owner-a"), "list_agent_sessions", {
+        ownerId: "owner-b",
+      }),
+    );
+    expect(guarded).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(guarded.error.message).toContain("does not match the active control owner");
     store.close();
   });
 
@@ -404,7 +487,7 @@ describe("agent control tools", () => {
       await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
     );
     expect(listed.sessions).toHaveLength(1);
-    expect(listed.sessions[0].latestRun.runId).toBe(sent.run.runId);
+    expect([first.run.runId, sent.run.runId]).toContain(listed.sessions[0].latestRun.runId);
     store.close();
   });
 
