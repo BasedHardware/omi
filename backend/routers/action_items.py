@@ -106,8 +106,8 @@ class BatchUpdateActionItemsRequest(BaseModel):
 @router.patch("/v1/action-items/batch", tags=['action-items'])
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
-    action_items_db.batch_update_action_items(uid, request.items)
-    return {"status": "ok", "updated_count": len(request.items)}
+    result = action_items_db.batch_update_action_items(uid, request.items)
+    return {"status": "ok", **result.model()}
 
 
 # *****************************
@@ -181,16 +181,17 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
         if update_data:
             updates.append({'id': item.id, 'data': update_data})
 
-    action_items_db.batch_sync_update_action_items(uid, updates)
+    result = action_items_db.batch_sync_update_action_items(uid, updates)
 
-    desc_updates = [u for u in updates if 'description' in u['data']]
+    updated_ids = set(result.updated_ids)
+    desc_updates = [u for u in updates if u['id'] in updated_ids and 'description' in u['data']]
     if desc_updates:
         upsert_action_item_vectors_batch(
             uid,
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
-    return {"status": "ok", "updated_count": len(updates)}
+    return {"status": "ok", **result.model(), "locked_ids": sorted(locked_ids)}
 
 
 # *****************************
