@@ -48,7 +48,7 @@ def _ws_i_hardening_import_isolation():
 
 
 ensure_utils_memory_packages_importable()
-from database.memory_apply_store import atomic_bump_source_generation  # noqa: E402
+from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation  # noqa: E402
 from models.memory_evidence import (  # noqa: E402
     ArtifactPreservationState,
     MemoryEvidence,
@@ -60,8 +60,6 @@ from models.memory_evidence import (  # noqa: E402
 from models.memory_apply import ApplyStatus, MemoryControlState  # noqa: E402
 from models.product_memory import MemoryItemStatus  # noqa: E402
 from utils.memory.canonical_memory_adapter import (  # noqa: E402
-    extraction_memory_id,
-    read_canonical_memories,
     retract_conversation_sourced_memories,
     write_canonical_extraction_memory,
 )
@@ -164,10 +162,12 @@ def test_retract_path_bumps_source_generation_via_transaction(monkeypatch):
 
 
 def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkeypatch):
+    """Reprocess rewrite preserves redaction on evidence docs through real apply (not mocked)."""
     uid = "uid-canonical"
     conversation_id = "conv-redaction"
     content = "Sensitive fact"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
     evidence_path = f"users/{uid}/memory_evidence/ev_ws_i_1"
     control_path = f"users/{uid}/memory_control/state"
     db = _FakeDb(
@@ -200,25 +200,14 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
     )
     _install_heavy_import_stubs()
 
-    memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
-    committed_item = _fresh_short_term_item(
-        uid=uid,
-        memory_id=memory_id,
-        conversation_id=conversation_id,
-        content=content,
-    )
-    apply_result = SimpleNamespace(
-        status=ApplyStatus.committed,
-        memory_items=[committed_item],
-        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
-        reason=None,
-    )
-
     with patch(
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
-        return_value=apply_result,
-    ):
-        write_canonical_extraction_memory(uid, payload, db_client=db)
+        wraps=apply_long_term_patch_firestore,
+    ) as apply_mock:
+        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+
+    apply_mock.assert_called_once()
+    assert returned_id == memory_id
 
     stored = db.docs[evidence_path]
     assert stored["source_state"] == SourceState.active.value
@@ -226,12 +215,19 @@ def test_persist_evidence_preserves_redaction_status_on_reprocess_rewrite(monkey
     assert stored["provenance_visibility"] == ProvenanceVisibility.redacted.value
     assert stored["encryption_or_redaction_status"] == RedactionStatus.redacted.value
 
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    assert item_path in db.docs
+    assert db.docs[item_path]["status"] == MemoryItemStatus.active.value
+    assert db.docs[item_path]["content"] == content
+
 
 def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
+    """First-write evidence gets active redaction defaults; apply persists memory_items."""
     uid = "uid-canonical"
     conversation_id = "conv-default-redaction"
     content = "Plain fact"
     payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+    memory_id = payload["id"]
     evidence_path = f"users/{uid}/memory_evidence/ev_ws_i_1"
     control_path = f"users/{uid}/memory_control/state"
     db = _FakeDb(
@@ -251,27 +247,21 @@ def test_persist_evidence_defaults_redaction_when_no_prior_value(monkeypatch):
     )
     _install_heavy_import_stubs()
 
-    memory_id = extraction_memory_id(uid=uid, source_id=conversation_id, content=content)
-    committed_item = _fresh_short_term_item(
-        uid=uid,
-        memory_id=memory_id,
-        conversation_id=conversation_id,
-        content=content,
-    )
-    apply_result = SimpleNamespace(
-        status=ApplyStatus.committed,
-        memory_items=[committed_item],
-        operation=SimpleNamespace(committed_memory_item_ids=[memory_id]),
-        reason=None,
-    )
-
     with patch(
         "utils.memory.canonical_memory_adapter.apply_long_term_patch_firestore",
-        return_value=apply_result,
-    ):
-        write_canonical_extraction_memory(uid, payload, db_client=db)
+        wraps=apply_long_term_patch_firestore,
+    ) as apply_mock:
+        returned_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+
+    apply_mock.assert_called_once()
+    assert returned_id == memory_id
 
     stored = db.docs[evidence_path]
     assert stored["redaction_status"] == RedactionStatus.active.value
     assert stored["provenance_visibility"] == ProvenanceVisibility.visible.value
     assert stored["encryption_or_redaction_status"] == RedactionStatus.active.value
+
+    item_path = f"users/{uid}/memory_items/{memory_id}"
+    assert item_path in db.docs
+    assert db.docs[item_path]["status"] == MemoryItemStatus.active.value
+    assert db.docs[item_path]["content"] == content
