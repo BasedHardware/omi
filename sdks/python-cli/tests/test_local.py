@@ -14,6 +14,7 @@ from omi_cli import config as cfg
 from omi_cli.errors import CliError, NotFoundError
 from omi_cli.local_client import LocalOmiClient
 from omi_cli.main import app
+from omi_cli.output import Renderer
 
 FAKE_LOCAL_URL = "http://127.0.0.1:47778"
 FAKE_LOCAL_TOKEN = "local_test_token"
@@ -360,6 +361,17 @@ def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Pa
     assert payload["reason"] == error_payload["reason"]
     assert payload["hint"] == error_payload["hint"]
     assert payload["screenshot_id"] == 123
+
+
+def test_non_json_error_escapes_structured_extra_markup(capsys: pytest.CaptureFixture[str]) -> None:
+    Renderer(json_mode=False).error(
+        "Local Omi Desktop API error (422)",
+        extra={"hint": "Use [safe] text", "[danger]": "<value>"},
+    )
+
+    captured = capsys.readouterr()
+    assert "hint: Use [safe] text" in captured.err
+    assert "[danger]: <value>" in captured.err
 
 
 def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:

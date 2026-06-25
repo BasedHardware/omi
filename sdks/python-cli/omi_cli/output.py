@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 
@@ -148,7 +149,7 @@ class Renderer:
                 line += f"\n  [dim]{detail}[/dim]"
             if extra:
                 for key, value in extra.items():
-                    line += f"\n  [dim]{key}: {_stringify(value)}[/dim]"
+                    line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
             self._stderr.print(line)
 
     def debug(self, message: str) -> None:
