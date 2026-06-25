@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { fromPartial } from '@total-typescript/shoehorn'
 import {
   buildStripItems,
   activeStripIndex,
@@ -8,7 +9,7 @@ import {
 } from './rewindStrip'
 import type { RewindFrame } from '../../../shared/types'
 
-const f = (ts: number): RewindFrame => ({ ts }) as RewindFrame
+const f = (ts: number): RewindFrame => fromPartial({ ts })
 const GAP = 60_000
 
 describe('buildStripItems', () => {
