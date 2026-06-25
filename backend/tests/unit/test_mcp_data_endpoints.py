@@ -143,6 +143,7 @@ sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError',
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
+from models.mcp_api_key import MCP_LEGACY_API_KEY_SCOPES  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
@@ -203,6 +204,11 @@ class TestMcpKeys:
 
         mock_db.create_mcp_key.assert_called_once_with(UID, 'Agent', [])
         assert result.scopes == []
+
+    def test_legacy_scopes_preserve_existing_memory_write_without_people_write(self):
+        assert 'memories.write' in MCP_LEGACY_API_KEY_SCOPES
+        assert 'memories.read' in MCP_LEGACY_API_KEY_SCOPES
+        assert 'people.write' not in MCP_LEGACY_API_KEY_SCOPES
 
 
 class TestMcpRestScopes:

@@ -15,7 +15,7 @@ MCP_SCOPES_SUPPORTED = [
     "people.write",
 ]
 MCP_DEFAULT_API_KEY_SCOPES = list(MCP_SCOPES_SUPPORTED)
-MCP_LEGACY_API_KEY_SCOPES = [scope for scope in MCP_SCOPES_SUPPORTED if scope.endswith(".read")]
+MCP_LEGACY_API_KEY_SCOPES = [scope for scope in MCP_SCOPES_SUPPORTED if scope.endswith(".read")] + ["memories.write"]
 
 
 class McpApiKey(BaseModel):
