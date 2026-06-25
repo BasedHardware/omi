@@ -2546,43 +2546,47 @@ class AppState: ObservableObject {
     conversationsError = nil
 
     // Step 1: Load from local cache first (instant display)
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
-    do {
-      let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) {
-        group in
-        group.addTask {
-          try await TranscriptionStorage.shared.getLocalConversations(
-            limit: 50,
-            starredOnly: self.showStarredOnly,
-            folderId: self.selectedFolderId
-          )
+    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
+    // The local cache currently supports starred/folder filters but not server date ranges;
+    // skip it for date-filtered views so the visible list and total count share semantics.
+    if selectedDateFilter == nil {
+      do {
+        let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) { group in
+          group.addTask {
+            try await TranscriptionStorage.shared.getLocalConversations(
+              limit: 50,
+              starredOnly: self.showStarredOnly,
+              folderId: self.selectedFolderId
+            )
+          }
+          group.addTask {
+            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
+            throw CancellationError()
+          }
+          let result = try await group.next()!
+          group.cancelAll()
+          return result
         }
-        group.addTask {
-          try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-          throw CancellationError()
+
+        if !cachedConversations.isEmpty {
+          conversations = cachedConversations
+          log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
+
+          // Get local count
+          let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
+            starredOnly: showStarredOnly,
+            folderId: selectedFolderId)
+          totalConversationsCount = localCount
+
+          // Stop loading state so UI shows cached data immediately
+          isLoadingConversations = false
+          // Notify sidebar immediately so loading indicator clears with cached data
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
         }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
+      } catch {
+        log("Conversations: Local cache unavailable, falling back to API")
+        // Continue to API fetch even if local fails
       }
-
-      if !cachedConversations.isEmpty {
-        conversations = cachedConversations
-        log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
-
-        // Get local count
-        let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
-          starredOnly: showStarredOnly)
-        totalConversationsCount = localCount
-
-        // Stop loading state so UI shows cached data immediately
-        isLoadingConversations = false
-        // Notify sidebar immediately so loading indicator clears with cached data
-        NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-      }
-    } catch {
-      log("Conversations: Local cache unavailable, falling back to API")
-      // Continue to API fetch even if local fails
     }
 
     // Step 2: Fetch from API in background to get fresh data
@@ -2609,7 +2613,14 @@ class AppState: ObservableObject {
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : nil
     )
-    async let countTask = APIClient.shared.getConversationsCount(includeDiscarded: false)
+    async let countTask = APIClient.shared.getConversationsCount(
+      includeDiscarded: false,
+      statuses: [.completed, .processing],
+      startDate: startDate,
+      endDate: endDate,
+      folderId: selectedFolderId,
+      starred: showStarredOnly ? true : nil
+    )
 
     do {
       let fetchedConversations = try await conversationsTask
@@ -2727,7 +2738,14 @@ class AppState: ObservableObject {
     }
 
     do {
-      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
+      let count = try await APIClient.shared.getConversationsCount(
+        includeDiscarded: false,
+        statuses: [.completed, .processing],
+        startDate: startDate,
+        endDate: endDate,
+        folderId: selectedFolderId,
+        starred: showStarredOnly ? true : nil
+      )
       if totalConversationsCount != count {
         totalConversationsCount = count
       }

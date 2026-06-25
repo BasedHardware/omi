@@ -508,11 +508,14 @@ extension APIClient {
     return try await post("v1/conversations/search", body: body)
   }
 
-  /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
-  func getConversationsCount(
+  static func conversationsCountEndpoint(
     includeDiscarded: Bool = false,
-    statuses: [ConversationStatus] = [.completed, .processing]
-  ) async throws -> Int {
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) -> String {
     var queryItems: [String] = [
       "include_discarded=\(includeDiscarded)"
     ]
@@ -522,7 +525,44 @@ extension APIClient {
       queryItems.append("statuses=\(statusStrings)")
     }
 
-    let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
+    if let startDate = startDate {
+      let formatter = ISO8601DateFormatter()
+      queryItems.append("start_date=\(formatter.string(from: startDate))")
+    }
+
+    if let endDate = endDate {
+      let formatter = ISO8601DateFormatter()
+      queryItems.append("end_date=\(formatter.string(from: endDate))")
+    }
+
+    if let folderId = folderId {
+      queryItems.append("folder_id=\(folderId)")
+    }
+
+    if let starred = starred {
+      queryItems.append("starred=\(starred)")
+    }
+
+    return "v1/conversations/count?\(queryItems.joined(separator: "&"))"
+  }
+
+  /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
+  func getConversationsCount(
+    includeDiscarded: Bool = false,
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) async throws -> Int {
+    let endpoint = Self.conversationsCountEndpoint(
+      includeDiscarded: includeDiscarded,
+      statuses: statuses,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
 
     if let cache = conversationsCountCache[endpoint], Date().timeIntervalSince(cache.time) < 5 {
       return cache.count
