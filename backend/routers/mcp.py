@@ -3,7 +3,8 @@ from typing import List, Optional
 
 from utils.executors import db_executor, postprocess_executor
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Security
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 import database.memories as memories_db
@@ -25,7 +26,7 @@ from utils.conversations.render import populate_speaker_names, redact_conversati
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.retrieval.hybrid import rrf_rerank
-from dependencies import get_uid_from_mcp_api_key, get_current_user_id
+from dependencies import get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
@@ -50,6 +51,39 @@ from models.mcp_api_key import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+mcp_api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
+
+
+async def get_mcp_api_key_auth(api_key: str = Security(mcp_api_key_header)) -> mcp_api_key_db.McpApiKeyAuth:
+    if not api_key or not api_key.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
+        )
+
+    auth = mcp_api_key_db.get_auth_by_api_key(api_key.replace("Bearer ", ""))
+    if not auth:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return auth
+
+
+def require_mcp_scope(required_scope: str):
+    async def dependency(auth: mcp_api_key_db.McpApiKeyAuth = Depends(get_mcp_api_key_auth)) -> str:
+        if required_scope not in (auth.get("scopes") or []):
+            raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {required_scope}")
+        return auth["user_id"]
+
+    return dependency
+
+
+get_uid_with_mcp_memories_read = require_mcp_scope("memories.read")
+get_uid_with_mcp_memories_write = require_mcp_scope("memories.write")
+get_uid_with_mcp_conversations_read = require_mcp_scope("conversations.read")
+get_uid_with_mcp_action_items_read = require_mcp_scope("action_items.read")
+get_uid_with_mcp_goals_read = require_mcp_scope("goals.read")
+get_uid_with_mcp_chat_read = require_mcp_scope("chat.read")
+get_uid_with_mcp_screen_activity_read = require_mcp_scope("screen_activity.read")
+get_uid_with_mcp_people_read = require_mcp_scope("people.read")
 
 
 @router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
@@ -76,7 +110,9 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
-def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
+def create_memory(
+    memory: Memory, uid: str = Depends(with_rate_limit(get_uid_with_mcp_memories_write, "memories:create"))
+):
     # Auto-categorize memories from external sources
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -99,7 +135,7 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def delete_memory(memory_id: str, uid: str = Depends(get_uid_with_mcp_memories_write)):
     _validate_mcp_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     try:
@@ -110,7 +146,7 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_with_mcp_memories_write)):
     memory = _validate_mcp_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     try:
@@ -127,7 +163,7 @@ class UserProfile(BaseModel):
 
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
-def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_user_profile(uid: str = Depends(get_uid_with_mcp_memories_read)):
     """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
@@ -152,7 +188,7 @@ class SearchedMemory(CleanerMemory):
 def search_memories(
     query: str,
     limit: int = 10,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_memories_read),
 ):
     logger.info(f"search_memories {uid} query={sanitize_pii(query)} limit={limit}")
     limit = max(1, min(limit, 20))
@@ -201,7 +237,7 @@ def search_memories(
 
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_memories_read),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -299,7 +335,7 @@ def get_conversations(
     categories: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     try:
@@ -336,7 +372,7 @@ def search_conversations(
     limit: int = 10,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"search_conversations {uid} query={sanitize_pii(query)} limit={limit}")
 
@@ -375,7 +411,7 @@ def search_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_with_mcp_conversations_read)):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
@@ -411,7 +447,7 @@ def get_action_items(
     due_end_date: Optional[datetime] = None,
     limit: int = 100,
     offset: int = 0,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_action_items_read),
 ):
     logger.info(f"get_action_items {uid} completed={completed} limit={limit} offset={offset}")
     limit = max(1, min(limit, 500))
@@ -433,7 +469,7 @@ def get_action_items(
 
 
 @router.get("/v1/mcp/goals", tags=["mcp"])
-def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_with_mcp_goals_read)):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     return goals_db.get_all_goals(uid, include_inactive=include_inactive)
 
@@ -452,7 +488,7 @@ class SimpleChatMessage(BaseModel):
 
 
 @router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
-def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_with_mcp_chat_read)):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -473,7 +509,7 @@ class SimplePerson(BaseModel):
 
 
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
-def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_people(uid: str = Depends(get_uid_with_mcp_people_read)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
 
@@ -490,7 +526,7 @@ def get_screen_activity(
     app: Optional[str] = None,
     summary: bool = False,
     limit: int = 200,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_screen_activity_read),
 ):
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     if summary:
@@ -513,7 +549,7 @@ def get_daily_summaries(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    uid: str = Depends(get_uid_from_mcp_api_key),
+    uid: str = Depends(get_uid_with_mcp_memories_read),
 ):
     logger.info(f"get_daily_summaries {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 100))

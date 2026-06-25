@@ -8,6 +8,8 @@ stubbing pattern in test_mcp_search_memories.py.
 
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
+import asyncio
+import inspect
 import os
 import sys
 from types import ModuleType
@@ -201,6 +203,51 @@ class TestMcpKeys:
 
         mock_db.create_mcp_key.assert_called_once_with(UID, 'Agent', [])
         assert result.scopes == []
+
+
+class TestMcpRestScopes:
+    def test_scope_dependency_rejects_missing_scope(self):
+        with pytest.raises(rest.HTTPException) as exc:
+            asyncio.run(rest.get_uid_with_mcp_people_read({'user_id': UID, 'scopes': ['memories.read']}))
+
+        assert exc.value.status_code == 403
+        assert 'people.read' in exc.value.detail
+
+    def test_scope_dependency_allows_required_scope(self):
+        uid = asyncio.run(rest.get_uid_with_mcp_people_read({'user_id': UID, 'scopes': ['people.read']}))
+
+        assert uid == UID
+
+    @patch('routers.mcp.mcp_api_key_db')
+    def test_api_key_auth_reads_stored_scopes(self, mock_db):
+        mock_db.get_auth_by_api_key.return_value = {'user_id': UID, 'scopes': ['people.read']}
+
+        auth = asyncio.run(rest.get_mcp_api_key_auth('Bearer omi_mcp_secret'))
+
+        mock_db.get_auth_by_api_key.assert_called_once_with('omi_mcp_secret')
+        assert auth == {'user_id': UID, 'scopes': ['people.read']}
+
+    def test_rest_routes_use_scope_specific_dependencies(self):
+        expected = {
+            rest.create_memory: rest.get_uid_with_mcp_memories_write,
+            rest.delete_memory: rest.get_uid_with_mcp_memories_write,
+            rest.edit_memory: rest.get_uid_with_mcp_memories_write,
+            rest.get_user_profile: rest.get_uid_with_mcp_memories_read,
+            rest.search_memories: rest.get_uid_with_mcp_memories_read,
+            rest.get_memories: rest.get_uid_with_mcp_memories_read,
+            rest.get_conversations: rest.get_uid_with_mcp_conversations_read,
+            rest.search_conversations: rest.get_uid_with_mcp_conversations_read,
+            rest.get_conversation_by_id: rest.get_uid_with_mcp_conversations_read,
+            rest.get_action_items: rest.get_uid_with_mcp_action_items_read,
+            rest.get_goals: rest.get_uid_with_mcp_goals_read,
+            rest.get_chat_messages: rest.get_uid_with_mcp_chat_read,
+            rest.get_people: rest.get_uid_with_mcp_people_read,
+            rest.get_screen_activity: rest.get_uid_with_mcp_screen_activity_read,
+            rest.get_daily_summaries: rest.get_uid_with_mcp_memories_read,
+        }
+
+        for endpoint, dependency in expected.items():
+            assert inspect.signature(endpoint).parameters['uid'].default.dependency is dependency
 
 
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):
