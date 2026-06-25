@@ -36,5 +36,4 @@ def test_validate_profile_allows_omi_memory_named_bundle() -> None:
     assert profile.bundle_id == "com.omi.omi-memory"
 
     errors = desktop_profile.validate_profile(profile)
-    assert not any(desktop_profile.LOCAL_PROFILE_OMI_DEV_BLOCKED in error for error in errors)
-    assert not any("omi-memory" in error and "disabled" in error for error in errors)
+    assert not errors
