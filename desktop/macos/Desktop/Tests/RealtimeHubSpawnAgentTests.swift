@@ -16,8 +16,9 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testSpawnAgentProvidesLocalAckWhenModelDidNotSpeakBeforeToolCall() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("if !audioReceivedThisTurn && assistantText.trimmingCharacters"))
-    XCTAssertTrue(source.contains("let ack = \"Starting a background agent.\""))
+    XCTAssertTrue(source.contains("if !audioReceivedThisTurn {"))
+    XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
+    XCTAssertTrue(source.contains("let ack = existingAck.isEmpty ? \"Starting a background agent.\" : existingAck"))
     XCTAssertTrue(source.contains("speak(ack)"))
   }
 
