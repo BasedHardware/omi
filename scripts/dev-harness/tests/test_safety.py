@@ -32,6 +32,7 @@ def test_state_root_layout_and_sentinel(tmp_path: Path) -> None:
     assert (layout.services_dir / "firestore").is_dir()
     assert (layout.services_dir / "auth").is_dir()
     assert (layout.services_dir / "redis").is_dir()
+    assert (layout.services_dir / "typesense").is_dir()
 
     sentinel = safety.read_and_validate_sentinel(layout.state_root, repo_root=REPO_ROOT, instance="default")
     assert sentinel["project_id"] == safety.DEFAULT_LOCAL_FIREBASE_PROJECT_ID
