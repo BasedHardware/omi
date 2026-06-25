@@ -97,6 +97,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
             { value: "request-2", name: "OMI_REQUEST_ID" },
             { value: "client-b", name: "OMI_CLIENT_ID" },
             { value: "canonical-session-1", name: "OMI_SESSION_ID" },
+            { value: "/tmp/omi-tools-999.sock", name: "OMI_BRIDGE_PIPE" },
             { value: "act", name: "OMI_QUERY_MODE" },
           ],
           args: ["tools.js"],
@@ -109,6 +110,29 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
     expect(bindings).toHaveLength(1);
     expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    store.close();
+  });
+
+  it("preserves legacy active bindings without MCP metadata hashes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      mcpServers: [{ name: "omi-tools", command: "node", args: ["tools.js"] }],
+    });
+    store.execute("UPDATE adapter_bindings SET metadata_json = '{}' WHERE binding_generation = 1", []);
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-legacy-binding",
+      mcpServers: [{ name: "omi-tools", command: "node", args: ["tools.js"] }],
+    });
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    expect(JSON.parse(String(bindings[0].metadata_json)).mcpServersHash).toBeDefined();
     store.close();
   });
 

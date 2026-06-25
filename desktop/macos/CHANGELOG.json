@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes."
+  ],
   "releases": [
     {
       "version": "0.11.533",

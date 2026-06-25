@@ -42,7 +42,7 @@ function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
-const REQUEST_SCOPED_MCP_ENV_KEYS = new Set(["OMI_REQUEST_ID", "OMI_CLIENT_ID", "OMI_SESSION_ID"]);
+const REQUEST_SCOPED_MCP_ENV_KEYS = new Set(["OMI_BRIDGE_PIPE", "OMI_REQUEST_ID", "OMI_CLIENT_ID", "OMI_SESSION_ID"]);
 
 function stableJsonStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -1311,6 +1311,9 @@ export class AgentRuntimeKernel {
     }
     const metadata = parseJsonObject(binding.metadataJson);
     const expectedMcpServersHash = stableJsonHash(stableMcpServerConfig(input.input.mcpServers ?? []));
+    if (metadata.mcpServersHash === undefined) {
+      return true;
+    }
     return metadata.mcpServersHash === expectedMcpServersHash;
   }
 
