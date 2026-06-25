@@ -101,13 +101,17 @@ class MetricsCollector:
         weights_used: Dict[str, float],
     ) -> None:
         """Record a successful pick. Called by the pick endpoint."""
+        # Copy weights_used to break the reference to the caller's dict.
+        # Without this, the caller could mutate the dict after the call,
+        # silently mutating the history (which the pick_history_snapshot
+        # caller assumes is immutable). Defensive copy is cheap (~100 bytes).
         self._history.record(
             PickRecord(
                 timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                 task=task,
                 model=model,
                 score=score,
-                weights_used=weights_used,
+                weights_used=dict(weights_used),
             )
         )
 

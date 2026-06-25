@@ -22,6 +22,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, Generic, Optional, TypeVar
 
+from utils.log_sanitizer import sanitize
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -139,7 +141,8 @@ class DailyRefreshCache(Generic[T]):
                 if self._value is not None:
                     age_str = f"{self.age_seconds:.1f}s" if self.age_seconds is not None else "unknown"
                     logger.warning(
-                        f"DailyRefreshCache: loader raised ({type(e).__name__}: {e}), "
+                        f"DailyRefreshCache: loader raised "
+                        f"({type(e).__name__}: {sanitize(str(e))}), "
                         f"returning stale value (age {age_str})"
                     )
                     return self._value
