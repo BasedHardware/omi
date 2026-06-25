@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
@@ -46,6 +46,36 @@ function seedSessions(adapter: PiMonoAdapter, ...sessionIds: string[]) {
   for (const sessionId of sessionIds) {
     sessions.set(sessionId, { cwd: "/tmp" });
   }
+}
+
+type AttemptContextOverrides = Omit<Partial<AdapterAttemptContext>, "binding"> & {
+  binding?: Partial<AdapterAttemptContext["binding"]>;
+};
+
+function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAttemptContext {
+  const attemptId = overrides.attemptId ?? "att_runtime";
+  const sessionId = overrides.sessionId ?? "ses_runtime";
+  const adapterNativeSessionId = overrides.binding?.adapterNativeSessionId ?? "session-1";
+  return {
+    sessionId,
+    requestId: overrides.requestId ?? "request-runtime",
+    clientId: overrides.clientId ?? "client-runtime",
+    runId: overrides.runId ?? "run_runtime",
+    attemptId,
+    binding: {
+      bindingId: "bind-runtime",
+      sessionId,
+      adapterId: "pi-mono",
+      adapterNativeSessionId,
+      resumeFidelity: "none",
+      cwd: "/tmp",
+      ...overrides.binding,
+    },
+    prompt: overrides.prompt ?? [{ type: "text", text: "hello" }],
+    tools: overrides.tools,
+    mode: overrides.mode ?? "act",
+    metadata: overrides.metadata,
+  };
 }
 
 function makeTurnEndEvent(text: string, totalCost = 1.25) {
@@ -117,6 +147,90 @@ describe("PiMonoAdapter prompt correlation", () => {
 
     (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
     await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+  });
+
+  it("removes the runtime attempt context after adapter errors", async () => {
+    const { adapter } = createAdapter();
+    (adapter as any).sendCommand = vi.fn(() => {
+      throw new Error("adapter send failed");
+    });
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const attemptContext = makeAttemptContext({ attemptId: "att_error" });
+
+    await expect(runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal)).rejects.toThrow(
+      "adapter send failed"
+    );
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+  });
+
+  it("removes the runtime attempt context after abort", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const controller = new AbortController();
+    const attemptContext = makeAttemptContext({ attemptId: "att_abort" });
+
+    const execution = runtime.executeAttempt(attemptContext, () => {}, controller.signal);
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_abort");
+    controller.abort();
+
+    await expect(execution).resolves.toMatchObject({ terminalStatus: "cancelled" });
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+  });
+
+  it("does not let a superseded attempt clear the active attempt context", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1", "session-2");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+
+    const first = runtime.executeAttempt(
+      makeAttemptContext({ attemptId: "att_first", binding: { adapterNativeSessionId: "session-1" } }),
+      () => {},
+      new AbortController().signal
+    );
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_first");
+
+    const second = runtime.executeAttempt(
+      makeAttemptContext({ attemptId: "att_second", binding: { adapterNativeSessionId: "session-2" } }),
+      () => {},
+      new AbortController().signal
+    );
+
+    await expect(first).rejects.toThrow("pi-mono prompt superseded before turn_end");
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_second");
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("second done"));
+    await expect(second).resolves.toMatchObject({ terminalStatus: "succeeded" });
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+  });
+
+  it("removes the runtime attempt context after subprocess exit rejects the prompt", async () => {
+    const { adapter } = createAdapter();
+    await adapter.start();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const execution = runtime.executeAttempt(
+      makeAttemptContext({ attemptId: "att_exit" }),
+      () => {},
+      new AbortController().signal
+    );
+    expect(JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8")).attemptId).toBe("att_exit");
+
+    (adapter as any).process.emit("exit", 7);
+
+    await expect(execution).rejects.toThrow("pi-mono process exited (code 7)");
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+  });
+
+  it("removes invalid relay context for the completed attempt", () => {
+    const { adapter } = createAdapter();
+    writeFileSync((adapter as any).contextFilePath, "{invalid json");
+
+    (adapter as any).clearRelayContextForAttempt("att_invalid");
+
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
   });
 
   it("clears stale relay context when direct prompt execution has no runtime context", async () => {

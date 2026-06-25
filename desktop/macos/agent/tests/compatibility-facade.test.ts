@@ -112,11 +112,12 @@ describe("JsonlCompatibilityFacade", () => {
       runId: adapter.executed[0].runId,
       attemptId,
     });
-    expect(facade.toolCallCorrelationForRequest("control-run-1")).toMatchObject({
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toMatchObject({
       requestId: "control-run-1",
       clientId: "control-client",
       attemptId,
     });
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "other-client")).toEqual({});
 
     adapter.resolveDeferred({
       text: "done",
@@ -125,7 +126,68 @@ describe("JsonlCompatibilityFacade", () => {
       terminalStatus: "succeeded",
     });
     await running;
-    expect(facade.toolCallCorrelationForRequest("control-run-1")).toEqual({});
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toEqual({});
+    store.close();
+  });
+
+  it("requires client id when resolving request-scoped v2 tool-call correlation", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
+    adapter.deferResult();
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      suppressToolUseEvents: false,
+    });
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    const first = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      prompt: "control-created child a",
+    });
+    const second = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      prompt: "control-created child b",
+      externalRefId: "task-b",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-a")).toMatchObject({
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      runId: adapter.executed[0].runId,
+    });
+    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-b")).toMatchObject({
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      runId: adapter.executed[1].runId,
+    });
+    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-control-run")).toEqual({});
+
+    adapter.resolveDeferred({
+      text: "done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await Promise.all([first, second]);
     store.close();
   });
 
@@ -997,12 +1059,12 @@ describe("JsonlCompatibilityFacade", () => {
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
     });
-    expect(facade.toolCallCorrelationForRequest("request-terminal-marker")).toMatchObject({
+    expect(facade.toolCallCorrelationForRequest("request-terminal-marker", "client-terminal-marker")).toMatchObject({
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
       attemptId: adapter.executed[0].attemptId,
     });
-    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process")).toEqual({});
+    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process", "client-terminal-marker")).toEqual({});
     expect(facade.toolCallCorrelationForAdapter("fake")).toMatchObject({
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,

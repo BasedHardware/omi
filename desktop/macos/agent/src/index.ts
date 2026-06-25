@@ -129,8 +129,12 @@ let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
 const activeControlToolOwnersByRequest = new Map<string, string>();
+const activeControlToolOwnersByRun = new Map<string, string>();
+const activeControlToolOwnersByAttempt = new Map<string, string>();
+const activeControlToolRequestKeyByRun = new Map<string, string>();
+const activeControlToolAttemptIdsByRun = new Map<string, Set<string>>();
 let toolCallCorrelation:
-  | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
+  | ((input: { requestId?: string; clientId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
   | undefined;
 
 // Pending tool call promises — resolved when Swift sends back results
@@ -203,7 +207,11 @@ function startOmiToolsRelay(): Promise<string> {
                         getOwnerId: () =>
                           activeControlToolOwnerId({
                             requestKey: controlRequestKey(msg),
+                            runId: msg.runId,
+                            attemptId: msg.attemptId,
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                            ownerIdForRun: (runId) => activeControlToolOwnersByRun.get(runId),
+                            ownerIdForAttempt: (attemptId) => activeControlToolOwnersByAttempt.get(attemptId),
                             fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                           }),
                       }
@@ -231,9 +239,12 @@ function startOmiToolsRelay(): Promise<string> {
 
               // Forward tool call to Swift via stdout
               const resolvedCorrelation =
-                toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {};
+                toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
               const messageRequestIsActive = Boolean(
-                msg.requestId && resolvedCorrelation.requestId === msg.requestId
+                msg.requestId &&
+                  msg.clientId &&
+                  resolvedCorrelation.requestId === msg.requestId &&
+                  resolvedCorrelation.clientId === msg.clientId
               );
               const correlation = {
                 ...resolvedCorrelation,
@@ -572,6 +583,19 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
 }
 
+function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
+  return name === "delegate_agent" && input.mode === "spawn";
+}
+
+function payloadObject(payloadJson: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(payloadJson) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
 // --- Error handling ---
 
 /**
@@ -679,6 +703,42 @@ async function main(): Promise<void> {
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
   const kernel = new AgentRuntimeKernel({ store, registry });
+  kernel.subscribe((event) => {
+    if (!event.runId) return;
+    if (event.type === "run.created") {
+      const payload = payloadObject(event.payloadJson);
+      const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
+      const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
+      const requestKey = controlRequestKey({ requestId, clientId });
+      const ownerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
+      if (requestKey && ownerId) {
+        activeControlToolRequestKeyByRun.set(event.runId, requestKey);
+        activeControlToolOwnersByRun.set(event.runId, ownerId);
+      }
+    }
+    const runOwnerId = activeControlToolOwnersByRun.get(event.runId);
+    if (event.attemptId && runOwnerId) {
+      activeControlToolOwnersByAttempt.set(event.attemptId, runOwnerId);
+      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId) ?? new Set<string>();
+      attemptIds.add(event.attemptId);
+      activeControlToolAttemptIdsByRun.set(event.runId, attemptIds);
+    }
+    if (event.type.startsWith("run.") && ["succeeded", "failed", "cancelled", "timed_out", "orphaned"].includes(event.type.slice("run.".length))) {
+      const requestKey = activeControlToolRequestKeyByRun.get(event.runId);
+      if (requestKey) {
+        activeControlToolOwnersByRequest.delete(requestKey);
+        activeControlToolRequestKeyByRun.delete(event.runId);
+      }
+      activeControlToolOwnersByRun.delete(event.runId);
+      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
+      if (attemptIds) {
+        for (const attemptId of attemptIds) {
+          activeControlToolOwnersByAttempt.delete(attemptId);
+        }
+        activeControlToolAttemptIdsByRun.delete(event.runId);
+      }
+    }
+  });
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
@@ -726,9 +786,9 @@ async function main(): Promise<void> {
     },
     maxRecoverableRetries: 2,
   });
-  toolCallCorrelation = ({ requestId, adapterId }) => {
-    if (requestId) {
-      const requestCorrelation = facade.toolCallCorrelationForRequest(requestId);
+  toolCallCorrelation = ({ requestId, clientId, adapterId }) => {
+    if (requestId && clientId) {
+      const requestCorrelation = facade.toolCallCorrelationForRequest(requestId, clientId);
       if (requestCorrelation.requestId) {
         return requestCorrelation;
       }
@@ -833,13 +893,20 @@ async function main(): Promise<void> {
         const controlOwnerKey = controlContext.requestKey;
         let controlInput;
         let controlRunCorrelation: { requestId?: string; clientId?: string } = {};
+        let controlRunOwnerKey: string | undefined;
+        let preserveControlRunOwner = false;
         try {
           controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
           const correlated = withControlRunCorrelation(control.name, controlInput, requestId, control.clientId);
           controlInput = correlated.input;
           controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
+          preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput);
           const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
           if (adapterId && correlated.requestId && correlated.clientId) {
+            controlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
+            if (controlRunOwnerKey) {
+              activeControlToolOwnersByRequest.set(controlRunOwnerKey, controlContext.activeOwnerId);
+            }
             facade.registerExternalRequestContext({
               protocolVersion: control.protocolVersion,
               requestId: correlated.requestId,
@@ -886,19 +953,25 @@ async function main(): Promise<void> {
                   controlInput,
                 );
               } finally {
-                if (controlOwnerKey) {
+                if (controlOwnerKey && (!preserveControlRunOwner || controlOwnerKey !== controlRunOwnerKey)) {
                   activeControlToolOwnersByRequest.delete(controlOwnerKey);
                 }
-                if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                if (controlRunOwnerKey && !preserveControlRunOwner) {
+                  activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
+                }
+                if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
                   facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
                 }
               }
             })()
           : (() => {
-              if (controlOwnerKey) {
+              if (controlOwnerKey && (!preserveControlRunOwner || controlOwnerKey !== controlRunOwnerKey)) {
                 activeControlToolOwnersByRequest.delete(controlOwnerKey);
               }
-              if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+              if (controlRunOwnerKey && !preserveControlRunOwner) {
+                activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
+              }
+              if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
                 facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
               return JSON.stringify({

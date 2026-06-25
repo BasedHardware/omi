@@ -142,7 +142,11 @@ export interface AgentControlToolContext {
 
 export interface ActiveControlToolOwnerInput {
   requestKey?: string;
+  runId?: string;
+  attemptId?: string;
   ownerIdForRequest?: (requestKey: string) => string | undefined;
+  ownerIdForRun?: (runId: string) => string | undefined;
+  ownerIdForAttempt?: (attemptId: string) => string | undefined;
   fallbackOwnerId?: string;
 }
 
@@ -383,6 +387,14 @@ export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): st
   const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
   if (requestOwnerId) {
     return requestOwnerId;
+  }
+  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
+  if (attemptOwnerId) {
+    return attemptOwnerId;
+  }
+  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
+  if (runOwnerId) {
+    return runOwnerId;
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
   return fallbackOwnerId || "desktop-local-user";
