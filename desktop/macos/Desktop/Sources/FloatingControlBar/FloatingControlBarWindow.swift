@@ -371,18 +371,30 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
     }
 
-    private func currentNotchSurfaceSize() -> NSSize {
+    private func currentSurfaceSize(usesNotchIsland: Bool) -> NSSize {
         if state.showingAIConversation {
-            let glowOutsetBottom = state.usesNotchIsland && state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0
-            return NSSize(width: expandedContentWidth, height: max(inputPanelHeight, frame.height - glowOutsetBottom))
+            let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
+            let glowOutsetBottom = usesNotchIsland && state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0
+            return NSSize(width: width, height: max(panelHeight, frame.height - glowOutsetBottom))
         }
         if state.isVoiceListening {
-            return state.usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
+            return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
         }
         if state.currentNotification != nil {
-            return NSSize(width: Self.notificationWidth, height: Self.notchChromeHeight + Self.notificationSpacing + Self.notificationHeight)
+            let barHeight = usesNotchIsland
+                ? Self.notchChromeHeight
+                : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
+            return NSSize(
+                width: Self.notificationWidth,
+                height: barHeight + Self.notificationSpacing + Self.notificationHeight
+            )
         }
-        return state.usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+        return usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+    }
+
+    private func currentSurfaceSizeForCurrentScreen() -> NSSize {
+        currentSurfaceSize(usesNotchIsland: notchModeEnabled)
     }
 
     private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
@@ -478,7 +490,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .sink { [weak self] _ in
                 guard let self else { return }
                 self.resizeAnchored(
-                    to: self.currentNotchSurfaceSize(),
+                    to: self.currentSurfaceSizeForCurrentScreen(),
                     makeResizable: self.styleMask.contains(.resizable),
                     animated: true,
                     animationDuration: 0.18,
@@ -556,7 +568,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         updateNotchIslandState()
         if wasUsingNotchIsland != notchModeEnabled {
-            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: currentSurfaceSize(usesNotchIsland: targetUsesNotchIsland),
+                makeResizable: state.showingAIConversation && state.showingAIResponse,
+                animated: true,
+                anchorTop: true
+            )
         }
         log("FloatingControlBarWindow: followed cursor to screen \(targetScreen.localizedName)")
     }
