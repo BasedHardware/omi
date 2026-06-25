@@ -241,6 +241,9 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .assisted:
         statusMessage =
           "Opened \(destination.title) and copied your key — finish with the steps below."
+      case .completed:
+        // Deterministic local write (OpenClaw/Hermes) — show the result directly.
+        statusMessage = outcome.taskTitle
       }
     } catch {
       errorMessage = error.localizedDescription
