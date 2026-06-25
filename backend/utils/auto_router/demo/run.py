@@ -201,9 +201,80 @@ def main():
     except Exception as e:
         print(f"\n  Demo 4 skipped: {e}")
 
+    # Demo 5: Per-user prefs flow (v3)
+    # Set prefs for ptt_response to bias toward quality, hit /pick, see the
+    # override applied (weights_source=user_prefs), then reset prefs and
+    # verify behavior returns to task_default.
+    print_section("Demo 5: Per-user prefs change the pick (v3)")
+    print("Expected: setting q=1.0,l=0.0,c=0.0 for ptt_response picks")
+    print("           the highest-quality model (claude-sonnet-4-6 in example data).")
+    print("           Resetting prefs returns to default weights (gemini wins).")
+    try:
+        from routers.auto_router import (
+            reset_user_prefs_store_for_endpoint_testing,
+            reset_metrics_collector_for_testing,
+            reset_registry_cache_for_testing,
+        )
+
+        reset_registry_cache_for_testing()
+        reset_metrics_collector_for_testing()
+        reset_user_prefs_store_for_endpoint_testing()
+
+        # Initial pick (task default weights → cost leader wins for ptt)
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        print(f"\n  Pick #1 (default weights): {r.json()['model']}")
+
+        # Set all-quality prefs
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        assert r.status_code == 200, f"set prefs failed: {r.text}"
+
+        # Pick with quality-biased weights → claude-sonnet-4-6 (highest quality in example)
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        body = r.json()
+        print(f"  Pick #2 (q=1.0 prefs):  {body['model']}  weights_source={body['weights_source']}")
+
+        # Reset prefs
+        r = client.put("/v1/auto-router/prefs", json={"prefs": {}})
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        body = r.json()
+        print(f"  Pick #3 (prefs cleared): {body['model']}  weights_source={body['weights_source']}")
+    except Exception as e:
+        print(f"\n  Demo 5 skipped: {e}")
+
+    # Demo 6: AA fallback observability (v3)
+    # Without AA_API_KEY, the metrics endpoint reports benchmarks_source="example"
+    # and benchmarks_last_refresh=None (no cache file).
+    print_section("Demo 6: AA fallback observability (v3)")
+    print("Expected: without AA_API_KEY, /metrics reports benchmarks_source='example'")
+    print("           and benchmarks_last_refresh=None.")
+    try:
+        # Ensure no AA_API_KEY for this demo (don't pollute the demo env).
+        import os
+
+        old_aa_key = os.environ.pop("AA_API_KEY", None)
+        # Reset fetcher so it picks up the missing env var.
+        from routers.auto_router import reset_benchmarks_fetcher_for_endpoint_testing
+
+        reset_benchmarks_fetcher_for_endpoint_testing()
+
+        r = client.get("/v1/auto-router/metrics")
+        body = r.json()
+        print(f"\n  /metrics (no AA_API_KEY):")
+        print(f"    → benchmarks_source: {body['benchmarks_source']}")
+        print(f"    → benchmarks_last_refresh: {body['benchmarks_last_refresh']}")
+
+        # Restore env var if it was set.
+        if old_aa_key is not None:
+            os.environ["AA_API_KEY"] = old_aa_key
+    except Exception as e:
+        print(f"\n  Demo 6 skipped: {e}")
+
     print()
     print("=" * 70)
-    print("All 4 demos complete.")
+    print("All 6 demos complete.")
     print("=" * 70)
 
 

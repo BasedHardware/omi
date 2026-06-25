@@ -14,18 +14,46 @@ The endpoint is registered automatically when `backend/main.py` is loaded:
 # Start the backend
 cd backend && uvicorn main:app --reload --port 8000
 
-# Hit the endpoint (v2 requires auth — pass a Bearer token)
+# Hit the pick endpoint (auth required — pass a Bearer token)
 curl -H "Authorization: Bearer <your-firebase-token>" \
      "http://localhost:8000/v1/auto-router/pick?task=ptt_response"
 
-# v2 also added a metrics endpoint
+# Metrics endpoint (auth required)
 curl -H "Authorization: Bearer <your-firebase-token>" \
      "http://localhost:8000/v1/auto-router/metrics"
+
+# Per-user prefs (auth required)
+curl -H "Authorization: Bearer <your-firebase-token>" \
+     "http://localhost:8000/v1/auto-router/prefs"
+
+# Admin force-refresh (requires X-Admin-Key header)
+curl -X POST -H "X-Admin-Key: $ADMIN_KEY" \
+     "http://localhost:8000/v1/auto-router/refresh-benchmarks"
 ```
 
 If you have a real `benchmarks.json` (deployment data), the endpoint loads it. Otherwise it falls back to `benchmarks.example.json` (template, committed). The fallback is logged at INFO level.
 
 > **v2 note:** Both endpoints now require an `Authorization: Bearer <token>` header (matches upstream's `/v1/auto/model-pick`). The token is validated via the upstream `get_current_user_uid` helper; the `uid` is captured but not used in v2 (per-user prefs is v3).
+
+## Environment variables
+
+| Var | Required? | Effect |
+|---|---|---|
+| `AA_API_KEY` | No | Enables live benchmarks from `https://artificialanalysis.ai/api/v2/data/llms/models` (LLM tasks only). If unset, the fetcher falls back to `benchmarks.example.json` and logs WARNING. Get a key at https://artificialanalysis.ai/api. |
+| `ADMIN_KEY` | No | Enables the admin-only `POST /v1/auto-router/refresh-benchmarks` endpoint. If unset, the endpoint returns 503 (admin disabled). When set, callers must send `X-Admin-Key: <ADMIN_KEY>` header. |
+| `AA_CACHE_PATH` | No | Override the cache file path (default: `backend/utils/auto_router/benchmarks.json`, gitignored). Useful for tests. |
+
+### v3 fallback chain
+
+Benchmarks are loaded in this priority (highest first):
+
+1. **`benchmarks.json`** if present and <24h old → use cached AA response
+2. **`AA_API_KEY` set + cache stale/empty** → fetch from AA, write to `benchmarks.json`
+3. **Any failure** (no key, AA unreachable, malformed JSON) → fall back to `benchmarks.example.json` + log WARNING
+
+STT and embedding tasks (transcription, screenshot_embedding) are NOT covered by AA — they always come from `benchmarks.example.json` regardless of source.
+
+> **v3 note:** Both pick and metrics endpoints require auth. Per-user prefs endpoints (GET/PUT `/prefs`) also require auth. Admin refresh requires `X-Admin-Key` (separate from user auth).
 
 ## Supported task types (v1)
 

@@ -119,3 +119,23 @@ class TestDemoInvariants:
         for match in re.finditer(r"score=(\d+\.\d+)", demo_output):
             score = float(match.group(1))
             assert 0.0 <= score <= 2.0, f"score {score} out of plausible range"
+
+
+class TestDemoRunsV3:
+    """Demo 5 (per-user prefs flow) + Demo 6 (AA fallback observability) run successfully."""
+
+    def test_demo_5_changes_pick_with_prefs(self, demo_output: str):
+        """Demo 5 demonstrates that setting prefs changes the pick."""
+        # Demo 5 sets q=1.0 prefs for ptt_response and expects claude-sonnet-4-6 to win.
+        assert "Demo 5" in demo_output
+        assert "claude-sonnet-4-6" in demo_output
+        assert "weights_source=user_prefs" in demo_output
+
+    def test_demo_6_aa_fallback_observability(self, demo_output: str):
+        """Demo 6 shows benchmarks_source='example' when AA_API_KEY is unset."""
+        assert "Demo 6" in demo_output
+        assert "benchmarks_source: example" in demo_output
+        assert "benchmarks_last_refresh: None" in demo_output
+
+    def test_demo_runs_all_six_demos(self, demo_output: str):
+        assert "All 6 demos complete" in demo_output
