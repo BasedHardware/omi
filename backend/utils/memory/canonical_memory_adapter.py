@@ -127,17 +127,28 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         if evidence.source_type == "conversation" and evidence.source_id:
             conversation_id = evidence.source_id
 
+    promotion = item.promotion or {}
+    category_raw = promotion.get("category", MemoryCategory.interesting.value)
+    try:
+        category = MemoryCategory(category_raw)
+    except ValueError:
+        category = MemoryCategory.interesting
+    tags = list(promotion.get("tags") or [])
+    reviewed = bool(promotion.get("reviewed", False))
+    user_review = promotion.get("user_review")
+
     return MemoryDB(
         id=item.memory_id,
         uid=item.uid,
         content=item.content or "",
-        category=MemoryCategory.interesting,
-        tags=[],
+        category=category,
+        tags=tags,
         created_at=item.captured_at,
         updated_at=item.updated_at,
         conversation_id=conversation_id,
         manually_added=item.user_asserted,
-        reviewed=False,
+        reviewed=reviewed,
+        user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
         memory_tier=item.tier,
@@ -316,6 +327,41 @@ def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
     return decide_initial_memory_tier(bool(data.get("manually_added")), data.get("durability")).value
 
 
+def _visibility_from_payload(data: Dict[str, Any]) -> str:
+    visibility = (data.get("visibility") or "private").strip()
+    return visibility if visibility in {"public", "private"} else "private"
+
+
+def _user_asserted_from_payload(data: Dict[str, Any]) -> bool:
+    if "manually_added" in data:
+        return bool(data.get("manually_added"))
+    return bool(data.get("user_asserted"))
+
+
+def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+    category = data.get("category")
+    if category is not None:
+        metadata["category"] = category.value if hasattr(category, "value") else str(category)
+    tags = data.get("tags")
+    if tags:
+        metadata["tags"] = list(tags)
+    return metadata
+
+
+def _apply_product_metadata(item: MemoryItem, metadata: Dict[str, Any]) -> MemoryItem:
+    if not metadata:
+        return item
+    promotion = dict(item.promotion or {})
+    promotion.update(metadata)
+    return item.model_copy(update={"promotion": promotion})
+
+
+def _persist_memory_item(uid: str, item: MemoryItem, *, db_client) -> None:
+    path = f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}"
+    db_client.document(path).set(item.model_dump(mode="json"))
+
+
 def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
     conversation_id = data.get("conversation_id")
     evidence_items: List[MemoryEvidence] = []
@@ -413,6 +459,8 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "confidence": "medium",
         "relationship_to_user": "self",
         "initial_tier": _resolve_initial_tier_value(data),
+        "visibility": _visibility_from_payload(data),
+        "user_asserted": _user_asserted_from_payload(data),
     }
 
     result = apply_long_term_patch_firestore(
@@ -437,6 +485,10 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             item = MemoryItem(**(snapshot.to_dict() or {}))
 
     if item is not None:
+        product_metadata = _product_metadata_from_payload(data)
+        if product_metadata:
+            item = _apply_product_metadata(item, product_metadata)
+            _persist_memory_item(uid, item, db_client=client)
         assert_legal_state(
             DomainMemoryLayer(item.tier.value),
             physical_status_to_record_status(item.status.value),
@@ -477,6 +529,45 @@ def update_canonical_memory_visibility(uid: str, memory_id: str, visibility: str
     now = datetime.now(timezone.utc)
     updated = item.model_copy(update={"visibility": visibility, "updated_at": now})
     client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    return updated
+
+
+def update_canonical_memory_review(uid: str, memory_id: str, value: bool, *, db_client=None) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    now = datetime.now(timezone.utc)
+    promotion = dict(item.promotion or {})
+    promotion["reviewed"] = True
+    promotion["user_review"] = value
+    updated = item.model_copy(update={"promotion": promotion, "updated_at": now})
+    _persist_memory_item(uid, updated, db_client=client)
+    return updated
+
+
+def update_canonical_memory_product_fields(
+    uid: str,
+    memory_id: str,
+    *,
+    tags: Optional[List[str]] = None,
+    category: Optional[str] = None,
+    db_client=None,
+) -> MemoryItem:
+    client = db_client if db_client is not None else default_db_client
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    metadata: Dict[str, Any] = {}
+    if tags is not None:
+        metadata["tags"] = list(tags)
+    if category is not None:
+        metadata["category"] = category
+    if not metadata:
+        return item
+    now = datetime.now(timezone.utc)
+    updated = _apply_product_metadata(item, metadata).model_copy(update={"updated_at": now})
+    _persist_memory_item(uid, updated, db_client=client)
     return updated
 
 
