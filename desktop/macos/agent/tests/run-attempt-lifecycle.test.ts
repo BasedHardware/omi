@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -215,6 +215,57 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     });
     expect(adapter.opened).toHaveLength(2);
     expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
+  it("queues a new pi-mono binding while the only pinned worker is busy", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+    adapter.deferOnlyPromptIncludes = "hold worker";
+    adapter.deferResult();
+
+    const firstRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-hold-worker",
+      prompt: "hold worker",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'",
+      ["pi-mono"],
+    );
+
+    const secondRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-queued-saturation",
+      externalRefId: "task-queued-saturation",
+      prompt: "queued after saturation",
+    });
+    await Promise.resolve();
+    expect(adapter.opened).toHaveLength(1);
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "first done" });
+    const [first, second] = await Promise.all([firstRun, secondRun]);
+
+    expect(first.run.status).toBe("succeeded");
+    expect(second.run.status).toBe("succeeded");
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(2);
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    const staleEvent = store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1");
+    expect(JSON.parse(staleEvent.payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      reason: "pinned_worker_reassigned",
+    });
     store.close();
   });
 

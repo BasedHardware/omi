@@ -397,12 +397,6 @@ export class AgentRuntimeKernel {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          if (!bindingQueueKey) {
-            const evictedBindingId = pool.releaseIdlePinnedBinding();
-            if (evictedBindingId) {
-              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
-            }
-          }
           return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
             const resolved = await this.resolveBindingForAttempt({
               input,
@@ -419,6 +413,10 @@ export class AgentRuntimeKernel {
               }
             }
             return resolved;
+          }, bindingQueueKey ? undefined : {
+            onIdlePinnedBindingEvicted: (evictedBindingId) => {
+              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
+            },
           });
         });
         binding = resolved.binding;

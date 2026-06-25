@@ -102,7 +102,7 @@ describe("AdapterWorkerPool pinned workers", () => {
     expect(pool.size).toBe(1);
   });
 
-  it("rejects unbound first-binding waiters when all pinned workers are occupied by live bindings", async () => {
+  it("rejects unbound first-binding waiters without an explicit pin eviction path", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
 
     await pool.runExclusiveQueued(
@@ -121,6 +121,63 @@ describe("AdapterWorkerPool pinned workers", () => {
     await expect(pool.runExclusiveQueued(undefined, "attempt-new-binding", async () => {})).rejects.toThrow(
       "No adapter worker capacity available for a new binding",
     );
+  });
+
+  it("queues unbound first-binding waiters while a pinned worker is busy, then evicts the idle pin", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+    const binding1 = {
+      bindingId: "binding-1",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+    const binding2 = {
+      bindingId: "binding-2",
+      sessionId: "session-2",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-2",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+
+    let release!: () => void;
+    const active = pool.runExclusiveQueued(
+      binding1,
+      "attempt-1",
+      async () => new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const evictedBindingIds: string[] = [];
+    let queuedRan = false;
+    const queued = pool.runExclusiveQueued(
+      undefined,
+      "attempt-new-binding",
+      async (worker) => {
+        queuedRan = true;
+        expect(evictedBindingIds).toEqual(["binding-1"]);
+        expect(worker.workerId).toBe("worker-1");
+        worker.pinBinding(binding2);
+      },
+      {
+        onIdlePinnedBindingEvicted: (bindingId) => {
+          evictedBindingIds.push(bindingId);
+        },
+      },
+    );
+
+    await Promise.resolve();
+    expect(queuedRan).toBe(false);
+    expect(evictedBindingIds).toEqual([]);
+
+    release();
+    await active;
+    await queued;
+
+    expect(pool.acquire(binding1)).toBeNull();
+    expect(pool.acquire(binding2)?.workerId).toBe("worker-1");
   });
 
   it("can release an idle pinned binding for process-local worker reassignment", async () => {
