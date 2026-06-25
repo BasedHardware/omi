@@ -347,6 +347,26 @@ describe("SqliteAgentStore", () => {
       /Bundled Node runtime does not support required node:sqlite AgentStore features: sqlite unavailable/,
     );
   });
+
+  it("includes artifact lifecycle migration in the runtime probe", () => {
+    const execStatements: string[] = [];
+    class ProbeDatabase {
+      readonly isTransaction = false;
+      constructor(_path: string) {}
+      exec(sql: string): void {
+        execStatements.push(sql);
+      }
+      prepare(_sql: string): { run: (..._args: unknown[]) => void } {
+        return { run: () => {} };
+      }
+      close(): void {}
+    }
+
+    probeNodeSqliteRuntime({ databaseFactory: ProbeDatabase });
+
+    expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_state"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_updated_at_ms"))).toBe(true);
+  });
 });
 
 function newStore(options: { reconcileOnOpen: boolean }): SqliteAgentStore {
