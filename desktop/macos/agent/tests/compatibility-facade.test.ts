@@ -410,6 +410,53 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("uses the sole active request context when interrupt omits clientId", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "cancel without client id" }),
+      protocolVersion: 2,
+      requestId: "request-without-client",
+      clientId: "non-default-client",
+      ownerId: "owner-without-client",
+      legacySessionKey: "without-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "request-without-client",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-without-client",
+      clientId: "non-default-client",
+      accepted: true,
+    });
+
+    adapter.resolveDeferred({
+      text: "cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
   it("ignores request-scoped interrupt context when the client id does not match", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();

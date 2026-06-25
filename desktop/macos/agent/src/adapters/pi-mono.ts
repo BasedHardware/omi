@@ -7,7 +7,9 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 import { ChildProcess, spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
 import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
 import type {
@@ -47,6 +49,17 @@ interface PiRpcCommand {
 interface PiRpcEvent {
   type: string;
   [key: string]: unknown;
+}
+
+interface PiMonoRelayContext {
+  protocolVersion?: 1 | 2;
+  requestId: string;
+  clientId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  adapterSessionId?: string;
+  legacyAdapterSessionId?: string;
 }
 
 interface PiAssistantMessageEvent {
@@ -197,6 +210,10 @@ export class PiMonoAdapter implements HarnessAdapter {
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
+  private readonly contextFilePath = join(
+    tmpdir(),
+    `omi-pi-mono-context-${process.pid}-${Math.random().toString(36).slice(2)}.json`
+  );
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
@@ -278,6 +295,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
     env.OMI_ADAPTER_ID = "pi-mono";
+    env.OMI_CONTEXT_FILE = this.contextFilePath;
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
     // The shared runtime process sets the pipe in process.env before starting pi-mono.
@@ -343,6 +361,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.clear();
     this.pendingRequests.clear();
     this.activePromptGeneration = 0;
+    rmSync(this.contextFilePath, { force: true });
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
@@ -383,7 +402,8 @@ export class PiMonoAdapter implements HarnessAdapter {
     _mode: "ask" | "act",
     onEvent: EventCallback,
     onToolCall: ToolExecutor,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    relayContext?: PiMonoRelayContext
   ): Promise<PromptResult> {
     if (!this.sessions.has(sessionId)) {
       throw new Error(`pi-mono session is no longer active: ${sessionId}`);
@@ -407,6 +427,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
     this.currentAbortController = new AbortController();
+    this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
     this.activePromptGeneration = generation;
@@ -621,6 +642,15 @@ export class PiMonoAdapter implements HarnessAdapter {
     const id = `req-${this.nextRequestId++}`;
     cmd.id = id;
     this.process.stdin.write(JSON.stringify(cmd) + "\n");
+  }
+
+  private writeRelayContext(context: PiMonoRelayContext | undefined): void {
+    if (!context) return;
+    mkdirSync(dirname(this.contextFilePath), { recursive: true });
+    writeFileSync(this.contextFilePath, JSON.stringify({
+      adapterId: "pi-mono",
+      ...context,
+    }));
   }
 
   private handleEvent(line: string): void {
@@ -911,7 +941,21 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         context.mode,
         sink,
         async () => "",
-        signal
+        signal,
+        {
+          protocolVersion: context.metadata?.protocolVersion === 1 || context.metadata?.protocolVersion === 2
+            ? context.metadata.protocolVersion
+            : undefined,
+          requestId: context.requestId,
+          clientId: context.clientId,
+          sessionId: context.sessionId,
+          runId: context.runId,
+          attemptId: context.attemptId,
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          legacyAdapterSessionId: typeof context.metadata?.legacyAdapterSessionId === "string"
+            ? context.metadata.legacyAdapterSessionId
+            : undefined,
+        }
       );
 
       return {

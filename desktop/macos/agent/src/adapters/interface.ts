@@ -292,6 +292,9 @@ export type OpenedBinding = AdapterBindingHandle;
 export interface AdapterAttemptContext {
   /** Omi-owned correlation id for host/runtime bookkeeping only. */
   sessionId: string;
+  /** Compatibility transport correlation for request-scoped tool relays. */
+  requestId: string;
+  clientId: string;
   runId: string;
   attemptId: string;
   binding: AdapterBindingHandle;

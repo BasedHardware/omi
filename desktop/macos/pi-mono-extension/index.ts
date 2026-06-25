@@ -28,6 +28,7 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
+import { readFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -504,9 +505,53 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
       callId,
       name,
       input,
-      adapterId: process.env.OMI_ADAPTER_ID,
+      ...omiRelayCorrelation(),
     }) + "\n");
   });
+}
+
+function omiRelayCorrelation(): Record<string, string | number> {
+  const correlation: Record<string, string | number> = omiContextFileCorrelation();
+  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
+  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
+  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
+  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
+  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
+  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
+  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
+  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
+    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
+  }
+  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
+  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  return correlation;
+}
+
+function omiContextFileCorrelation(): Record<string, string | number> {
+  const path = process.env.OMI_CONTEXT_FILE;
+  if (!path) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    const correlation: Record<string, string | number> = {};
+    for (const key of [
+      "adapterId",
+      "requestId",
+      "clientId",
+      "sessionId",
+      "runId",
+      "attemptId",
+      "adapterSessionId",
+      "legacyAdapterSessionId",
+    ]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.length > 0) correlation[key] = value;
+    }
+    const protocolVersion = parsed.protocolVersion;
+    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    return correlation;
+  } catch {
+    return {};
+  }
 }
 
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
@@ -1042,6 +1087,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __omiRelayCorrelationForTest = omiRelayCorrelation;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

@@ -488,6 +488,8 @@ export class AgentRuntimeKernel {
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
+              requestId: accepted.run.requestId,
+              clientId: accepted.run.clientId,
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               binding: handle,
