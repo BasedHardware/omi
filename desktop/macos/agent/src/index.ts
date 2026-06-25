@@ -915,6 +915,12 @@ async function main(): Promise<void> {
             });
           }
         } catch (error) {
+          if (controlRunOwnerKey) {
+            activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
+          }
+          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+          }
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
