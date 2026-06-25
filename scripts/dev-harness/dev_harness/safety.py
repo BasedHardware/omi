@@ -33,6 +33,7 @@ _STATE_SUBDIRECTORIES = (
     "services/firestore",
     "services/auth",
     "services/redis",
+    "services/typesense",
     "files",
 )
 
