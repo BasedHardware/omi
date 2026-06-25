@@ -89,10 +89,7 @@ pytest tests/unit/test_vector_metadata.py -v
 pytest tests/unit/test_vector_filters.py -v
 pytest tests/unit/test_vector_search_service.py -v
 pytest tests/unit/test_vector_repair_outbox_worker.py -v
-pytest tests/unit/test_vector_repair_outbox_telemetry.py -v
-pytest tests/unit/test_vector_repair_outbox_worker_entrypoint.py -v
-pytest tests/unit/test_vector_repair_outbox_deployment_contract.py -v
-pytest tests/unit/test_vector_repair_outbox_oidc_iam_proof.py -v
+pytest tests/unit/test_vector_repair_outbox_infra.py -v
 pytest tests/unit/test_firestore_rules_iam_proof.py -v
 pytest tests/unit/test_pinecone_repair_validation_readiness.py -v
 pytest tests/unit/test_shared_ns2_legacy_isolation_readiness.py -v
@@ -153,7 +150,6 @@ pytest tests/unit/test_v3_f6_readonly_contracts.py -v
 pytest tests/unit/test_v3_f6_pre_gcp_aggregate.py -v
 pytest tests/unit/test_v3_dev_cloud_readiness.py -v
 pytest tests/unit/test_cutover_evidence_readiness.py -v
-pytest tests/unit/test_vector_repair_outbox_emulator_harness.py -v
 pytest tests/unit/test_firestore_indexes.py -v
 pytest tests/unit/test_firestore_index_config.py -v
 pytest tests/unit/test_normative_foundations.py -v
@@ -163,9 +159,7 @@ pytest tests/unit/test_atomic_apply.py -v
 pytest tests/unit/test_memory_search_gateway.py -v
 pytest tests/unit/test_memory_apply_store.py -v
 pytest tests/unit/test_firestore_security_rules.py -v
-pytest tests/unit/test_firestore_emulator_harness.py -v
-pytest tests/unit/test_firestore_transaction_emulator_harness.py -v
-pytest tests/unit/test_firestore_python_adapter_emulator_harness.py -v
+pytest tests/unit/test_firestore_emulator_harness_wiring.py -v
 pytest tests/unit/test_firestore_iam_deployment_doc.py -v
 pytest tests/unit/test_non_active_routes.py -v
 pytest tests/unit/test_non_active_route_audit.py -v
