@@ -690,6 +690,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         withAnimation(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
+            state.activeAgentChatPillID = nil
             state.aiInputText = ""
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
@@ -854,6 +855,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     func clearVisibleConversationFromUI() {
         guard state.showingAIConversation else { return }
+
+        if state.activeAgentChatPillID != nil {
+            state.activeAgentChatPillID = nil
+            focusInputField()
+            return
+        }
 
         FloatingControlBarManager.shared.cancelChat()
         FloatingControlBarManager.shared.clearPendingNotificationContext()
@@ -1622,10 +1629,17 @@ class FloatingControlBarManager {
         ) { [weak barWindow] note in
             guard let barWindow = barWindow else { return }
             Task { @MainActor in
-                let query = (note.userInfo?["query"] as? String) ?? ""
+                let pillIDString = note.userInfo?["pillID"] as? String
+                let pillID = pillIDString.flatMap(UUID.init(uuidString:))
                 barWindow.showAIConversation()
-                if !query.isEmpty {
-                    barWindow.state.aiInputText = query
+                if let pillID,
+                   AgentPillsManager.shared.pills.contains(where: { $0.id == pillID }) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                        barWindow.state.activeAgentChatPillID = pillID
+                        barWindow.state.showingAIResponse = true
+                        barWindow.state.isAILoading = false
+                        barWindow.state.aiInputText = ""
+                    }
                 }
             }
         }
@@ -2019,7 +2033,8 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
-        if provider.isSending {
+        let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
+        if provider.isSending, handoff == nil {
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
@@ -2035,13 +2050,45 @@ class FloatingControlBarManager {
             prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
         }
 
+        let routerTracer = QueryTracerContext.current
+        if let handoff {
+            if provider.isSending {
+                pendingFollowUpQuery = nil
+                provider.stopAgent()
+            }
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "source": "explicit"])
+            let pill = AgentPillsManager.shared.spawnFromHandoff(
+                handoff,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice
+            )
+            let assistantText = "I started a background agent titled \"\(pill.title)\" for that."
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: handoff.originalRequest,
+                assistantText: assistantText,
+                logLabel: "floating-agent-explicit"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentHandoff(
+                    handoff,
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
+            return
+        }
+
         // Skip the Haiku router for obviously-conversational queries (short, no
         // task/agent signal): they're the common case, almost always route to "chat"
         // anyway, and skipping removes a ~1.1s round-trip from the critical path.
         // Ambiguous / task-like queries still go through the router so genuine
         // background-agent work isn't misrouted. Inline chat is the safe fallback —
         // it's also what the router defaults to on timeout.
-        let routerTracer = QueryTracerContext.current
         if Self.routerCanSkipToChat(message) {
             routerTracer?.mark("router_classify", metadata: ["route": "chat"])
             await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
@@ -2060,6 +2107,17 @@ class FloatingControlBarManager {
                 fromVoice: presentation.fromVoice,
                 preFetchedTitle: decision.title,
                 preFetchedAck: decision.ack
+            )
+            let title = decision.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
+            let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let assistantText = ack?.isEmpty == false
+                ? "\(ack!) I started a background agent\(titleSuffix) for that."
+                : "I started a background agent\(titleSuffix) for that."
+            provider.recordCompletedTurn(
+                userText: message,
+                assistantText: assistantText,
+                logLabel: "floating-agent"
             )
             switch presentation {
             case .visible:
@@ -2089,6 +2147,26 @@ class FloatingControlBarManager {
         case .voiceOnly:
             await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
         }
+    }
+
+    private func completeVisibleAgentHandoff(
+        _ handoff: AgentPillsManager.FloatingAgentHandoff,
+        assistantMessage: ChatMessage?,
+        assistantText: String,
+        barWindow: FloatingControlBarWindow
+    ) {
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        barWindow.state.aiInputText = ""
+        barWindow.state.displayedQuery = handoff.originalRequest
+        barWindow.state.currentAIMessage = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        barWindow.state.isAILoading = false
+        barWindow.state.showingAIConversation = true
+        barWindow.state.showingAIResponse = true
+        barWindow.state.currentQueryFromVoice = false
+        barWindow.state.isVoiceResponseActive = false
+        barWindow.state.markConversationActivity()
+        barWindow.resizeToResponseHeightPublic(animated: true)
     }
 
     private func dispatchPendingQueryIfNeeded(

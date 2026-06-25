@@ -37,6 +37,8 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "send a message to my team about the launch",
             "buy the top-rated keyboard on Amazon",
             "download the report and rename it",
+            "spawn a subagent to look at my memories",
+            "start a background agent to review my notes",
             // long, no explicit signal — word-count gate should still keep the router
             "tell me a fun fact about cats and dogs and birds and fish and lizards please",
         ]
@@ -44,6 +46,36 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             XCTAssertFalse(
                 FloatingControlBarManager.routerCanSkipToChat(q),
                 "Expected to KEEP the router for task-like query: \"\(q)\"")
+        }
+    }
+
+    func testExplicitFloatingAgentRequestsAreDetected() {
+        let spawnRequests: [(String, String)] = [
+            ("spawn a subagent to look at my memories", "look at my memories"),
+            ("start a background agent to review my notes", "review my notes"),
+            ("launch an agent to research this", "research this"),
+            ("make a floating agent for this task", "this task"),
+        ]
+        for (q, task) in spawnRequests {
+            XCTAssertTrue(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected explicit floating-agent request: \"\(q)\"")
+            XCTAssertEqual(
+                AgentPillsManager.floatingAgentHandoff(for: q)?.agentTask,
+                task,
+                "Expected child agent task to exclude the parent control command: \"\(q)\"")
+        }
+
+        let normalFollowUps = [
+            "how did it go?",
+            "ask this agent what it found",
+            "what do you know about my memories?",
+            "can you explain that result?",
+        ]
+        for q in normalFollowUps {
+            XCTAssertFalse(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected normal follow-up, not floating-agent control command: \"\(q)\"")
         }
     }
 

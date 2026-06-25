@@ -134,6 +134,15 @@ final class AgentPillsManager: ObservableObject {
     /// floating bar, or get hoisted into a background agent pill?
     enum Route: String { case chat, agent }
 
+    /// Explicit UI/control-plane handoff: the parent turn is the user's request
+    /// to create a background agent, while `agentTask` is the work the child
+    /// agent should actually perform. Keeping these separate prevents the child
+    /// prompt from inheriting control words like "spawn a subagent".
+    struct FloatingAgentHandoff: Equatable {
+        let originalRequest: String
+        let agentTask: String
+    }
+
     /// Combined router result. Title/ack are pre-computed alongside the route
     /// so we don't need a second Haiku call when the answer is "agent".
     struct RouterDecision {
@@ -295,6 +304,55 @@ final class AgentPillsManager: ObservableObject {
         return 1
     }
 
+    /// User control-plane request from the floating bar UI: create a visible sibling
+    /// background agent. This is intentionally separate from an agent's own tool use;
+    /// existing floating agents still cannot self-spawn nested pills.
+    nonisolated static func floatingAgentHandoff(for text: String) -> FloatingAgentHandoff? {
+        let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return nil }
+        let lower = text.lowercased()
+        let agentPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
+        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
+        guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
+        guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
+
+        return FloatingAgentHandoff(
+            originalRequest: original,
+            agentTask: extractFloatingAgentTask(from: original) ?? original
+        )
+    }
+
+    nonisolated static func explicitlyRequestsFloatingAgent(_ text: String) -> Bool {
+        floatingAgentHandoff(for: text) != nil
+    }
+
+    private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {
+        let nounPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
+        guard let regex = try? NSRegularExpression(pattern: nounPattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let matchRange = Range(match.range, in: text)
+        else {
+            return nil
+        }
+
+        var task = String(text[matchRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let connectorPattern = #"^(?:to|for|that\s+can|that\s+will|which\s+can|which\s+will|and)\s+"#
+        if let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) {
+            task = connectorRegex.stringByReplacingMatches(
+                in: task,
+                range: NSRange(task.startIndex..., in: task),
+                withTemplate: ""
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard task.split(whereSeparator: \.isWhitespace).count >= 2 else { return nil }
+        return task
+    }
+
     /// Spawn one or more pills for a user query. If the query says "spawn 3
     /// agents" we create 3 pills (each runs the same task on the shared
     /// queue). Returns the first pill so callers can inspect it.
@@ -334,6 +392,39 @@ final class AgentPillsManager: ObservableObject {
             if first == nil { first = pill }
         }
         return first ?? spawn(query: query, model: model, fromVoice: fromVoice)
+    }
+
+    @discardableResult
+    func spawnFromHandoff(
+        _ handoff: FloatingAgentHandoff,
+        model: String,
+        fromVoice: Bool = false,
+        preFetchedTitle: String? = nil,
+        preFetchedAck: String? = nil
+    ) -> AgentPill {
+        let count = AgentPillsManager.parseAgentCount(from: handoff.originalRequest)
+        if count <= 1 {
+            return spawn(
+                query: handoff.agentTask,
+                model: model,
+                fromVoice: fromVoice,
+                preFetchedTitle: preFetchedTitle,
+                preFetchedAck: preFetchedAck
+            )
+        }
+        var first: AgentPill?
+        for i in 1...count {
+            let labelled = "[\(i)/\(count)] \(handoff.agentTask)"
+            let pill = spawn(
+                query: labelled,
+                model: model,
+                fromVoice: fromVoice && first == nil,
+                preFetchedTitle: first == nil ? preFetchedTitle : nil,
+                preFetchedAck: first == nil ? preFetchedAck : nil
+            )
+            if first == nil { first = pill }
+        }
+        return first ?? spawn(query: handoff.agentTask, model: model, fromVoice: fromVoice)
     }
 
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the

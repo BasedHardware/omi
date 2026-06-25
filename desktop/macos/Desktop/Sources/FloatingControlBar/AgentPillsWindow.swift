@@ -184,7 +184,7 @@ final class AgentPillsWindow: NSPanel, NSWindowDelegate {
         NotificationCenter.default.post(
             name: .agentPillRequestedChat,
             object: nil,
-            userInfo: ["query": pill.query]
+            userInfo: ["pillID": pill.id.uuidString]
         )
     }
 }

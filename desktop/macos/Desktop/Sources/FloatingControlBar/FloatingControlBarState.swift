@@ -76,6 +76,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var responseContentHeight: CGFloat = 0
     @Published var chatHistory: [FloatingChatExchange] = []
     @Published var lastConversationActivityAt: Date? = nil
+    @Published var activeAgentChatPillID: UUID? = nil
 
     /// Convenience accessor for plain-text response (used by window geometry and error handling).
     var aiResponseText: String {
@@ -118,7 +119,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
 
     var hasVisibleConversation: Bool {
-        !chatHistory.isEmpty || currentAIMessage != nil || !displayedQuery.isEmpty
+        activeAgentChatPillID != nil || !chatHistory.isEmpty || currentAIMessage != nil || !displayedQuery.isEmpty
     }
 
     var canRestoreVisibleConversation: Bool {
@@ -131,6 +132,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
 
     func clearVisibleConversation() {
+        activeAgentChatPillID = nil
         aiInputText = ""
         displayedQuery = ""
         currentAIMessage = nil

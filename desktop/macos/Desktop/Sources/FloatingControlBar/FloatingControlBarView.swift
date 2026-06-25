@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import MarkdownUI
 import SwiftUI
 
 /// Main floating control bar SwiftUI view composing all sub-views.
@@ -78,14 +79,23 @@ struct FloatingControlBarView: View {
 
             if state.showingAIConversation {
                 conversationView
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
-                    )
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.white.opacity(0.025))
                     )
+                    .overlay(alignment: .topLeading) {
+                        if let pointerX = activeAgentChatPointerX {
+                            SubagentChatPointer()
+                                .fill(Color.black)
+                                .frame(width: 18, height: 10)
+                                .overlay(
+                                    SubagentChatPointer()
+                                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                                )
+                                .offset(x: pointerX - 9, y: -9)
+                                .transition(.opacity.combined(with: .scale(scale: 0.75, anchor: .bottom)))
+                        }
+                    }
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
                     .padding(.bottom, 9)
@@ -101,12 +111,6 @@ struct FloatingControlBarView: View {
         }
         .background(alignment: .top) {
             ZStack(alignment: .top) {
-                if state.isVoiceResponseActive {
-                    NotchResponseGlowView(
-                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
-                    )
-                }
-
                 if state.showingAIConversation || state.currentNotification != nil {
                     NotchDockShape(bottomRadius: 22)
                         .fill(Color.black)
@@ -115,6 +119,12 @@ struct FloatingControlBarView: View {
                     NotchDockShape(bottomRadius: 18)
                         .fill(Color.black)
                         .frame(height: notchChromeHeight)
+                }
+
+                if state.isVoiceResponseActive {
+                    NotchResponseGlowView(
+                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
+                    )
                 }
             }
         }
@@ -273,10 +283,6 @@ struct FloatingControlBarView: View {
             // AI conversation view - conditionally visible
             if state.showingAIConversation {
                 conversationView
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .strokeBorder(Color.black.opacity(0.5), lineWidth: 1)
-                )
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -359,7 +365,23 @@ struct FloatingControlBarView: View {
 
     private var conversationView: some View {
         ZStack(alignment: .top) {
-            if state.showingAIResponse {
+            if let activeAgentChatPill {
+                AgentMainChatView(
+                    pill: activeAgentChatPill,
+                    manager: agentPills,
+                    onBackToOmi: {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                            state.activeAgentChatPillID = nil
+                            if state.chatHistory.isEmpty && state.currentAIMessage == nil && state.displayedQuery.isEmpty {
+                                state.showingAIResponse = false
+                            }
+                        }
+                    },
+                    onEscape: onEscape
+                )
+                .id(activeAgentChatPill.id)
+                .zIndex(1)
+            } else if state.showingAIResponse {
                 aiResponseView
                     .id("response")
                     .zIndex(1)
@@ -370,6 +392,45 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var activeAgentChatPill: AgentPill? {
+        guard let id = state.activeAgentChatPillID else { return nil }
+        return agentPills.pills.first { $0.id == id }
+    }
+
+    private var activeAgentChatPointerX: CGFloat? {
+        guard state.usesNotchIsland, let pill = activeAgentChatPill else { return nil }
+        let newestFirst = Array(agentPills.pills.reversed())
+        let itemWidth: CGFloat = 17
+        let spacing: CGFloat = 2
+        let rowWidth = max(0, notchSideWidth - 12)
+        let panelInset: CGFloat = 12
+        let directAgentLimit = 3
+        let groupedStatusLimit = 3
+        let itemIndex: Int?
+        let itemCount: Int
+
+        if newestFirst.count <= directAgentLimit {
+            itemIndex = newestFirst.firstIndex { $0.id == pill.id }
+            itemCount = newestFirst.count
+        } else {
+            let groups = NotchAgentStatusGroup.displayOrder.filter { group in
+                newestFirst.contains { group.contains($0.status) }
+            }
+            let visibleGroups: [NotchAgentStatusGroup] = groups.count > groupedStatusLimit
+                ? Array(groups.prefix(groupedStatusLimit - 1)) + [.more]
+                : groups
+            let selectedGroup = NotchAgentStatusGroup(status: pill.status)
+            itemIndex = visibleGroups.firstIndex(of: selectedGroup) ?? visibleGroups.firstIndex(of: .more)
+            itemCount = visibleGroups.count
+        }
+
+        guard let itemIndex, itemCount > 0 else { return nil }
+        let totalWidth = CGFloat(itemCount) * itemWidth + CGFloat(max(0, itemCount - 1)) * spacing
+        let itemCenterInRow = max(0, rowWidth - totalWidth) + CGFloat(itemIndex) * (itemWidth + spacing) + itemWidth / 2
+        let itemCenterInExpandedChrome = itemCenterInRow + 6
+        return itemCenterInExpandedChrome - panelInset
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -923,6 +984,283 @@ private struct NotchOmiMark: View {
     }
 }
 
+private struct SubagentChatPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct AgentMainChatView: View {
+    @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject var pill: AgentPill
+    @ObservedObject var manager: AgentPillsManager
+    let onBackToOmi: () -> Void
+    let onEscape: () -> Void
+
+    @State private var followUpText = ""
+    @FocusState private var isFollowUpFocused: Bool
+
+    private var isRecording: Bool {
+        manager.recordingPillID == pill.id
+    }
+
+    private var isRunning: Bool {
+        switch pill.status {
+        case .queued, .starting, .running:
+            return true
+        case .done, .failed:
+            return false
+        }
+    }
+
+    private var outputText: String {
+        if let message = pill.aiMessage {
+            let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return text
+            }
+        }
+        return pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        questionBubble
+
+                        responseContent
+
+                        if isRecording {
+                            voiceFollowUpView
+                                .id("agentVoiceFollowUp")
+                        }
+
+                        Color.clear.frame(height: 1).id("agentBottom")
+                    }
+                    .background(
+                        GeometryReader { geometry -> Color in
+                            let height = geometry.size.height
+                            DispatchQueue.main.async {
+                                state.responseContentHeight = height
+                            }
+                            return Color.clear
+                        }
+                    )
+                }
+                .onChange(of: pill.latestActivity) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: pill.aiMessage?.text) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: isRecording) {
+                    scrollToBottom(proxy)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            followUpInput
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                isFollowUpFocused = true
+            }
+        }
+        .onExitCommand {
+            onEscape()
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button(action: onBackToOmi) {
+                Image(systemName: "chevron.left")
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.82))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Back to Omi chat")
+
+            Text(pill.title)
+                .scaledFont(size: 13, weight: .bold)
+                .foregroundColor(.white)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            statusBadge
+        }
+    }
+
+    private var statusBadge: some View {
+        Text(pill.status.displayLabel)
+            .scaledFont(size: 9, weight: .bold)
+            .foregroundColor(statusForeground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(pill.status.tintColor.opacity(statusBackgroundOpacity))
+            .clipShape(Capsule())
+    }
+
+    private var statusForeground: Color {
+        switch pill.status {
+        case .queued, .starting, .running, .done:
+            return .black.opacity(0.86)
+        case .failed:
+            return .white
+        }
+    }
+
+    private var statusBackgroundOpacity: Double {
+        switch pill.status {
+        case .queued, .starting, .running, .done:
+            return 1
+        case .failed:
+            return 0.75
+        }
+    }
+
+    private var questionBubble: some View {
+        Text(pill.query)
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(.white)
+            .textSelection(.enabled)
+            .lineLimit(4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(pill.query, forType: .string)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var responseContent: some View {
+        if isRunning && outputText.isEmpty {
+            TypingIndicator()
+                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                if isRunning {
+                    HStack(spacing: 7) {
+                        ProgressView()
+                            .scaleEffect(0.55)
+                            .frame(width: 14, height: 14)
+                        Text("working")
+                            .scaledFont(size: 11, weight: .medium)
+                            .foregroundColor(.white.opacity(0.48))
+                    }
+                }
+
+                Markdown(outputText.isEmpty ? "Working..." : outputText)
+                    .markdownTheme(.aiMessage(scale: 0.88))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 4)
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(outputText, forType: .string)
+                }
+            }
+        }
+    }
+
+    private var voiceFollowUpView: some View {
+        HStack(spacing: 8) {
+            VoiceWaveformBars(isActive: true)
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(.white)
+            Text("Listening...")
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(0.62))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(OmiColors.purplePrimary.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var followUpInput: some View {
+        HStack(spacing: 6) {
+            Button {
+                manager.toggleFollowUpVoice(for: pill)
+            } label: {
+                Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
+                    .scaledFont(size: 17, weight: .semibold)
+                    .foregroundColor(isRecording ? OmiColors.purpleAccent : .secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
+
+            TextField("Ask this agent...", text: $followUpText)
+                .textFieldStyle(.plain)
+                .scaledFont(size: 13)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .focused($isFollowUpFocused)
+                .onSubmit {
+                    sendFollowUp()
+                }
+
+            Button(action: sendFollowUp) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .scaledFont(size: 20)
+                    .foregroundColor(canSend ? .white : .secondary)
+            }
+            .disabled(!canSend)
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var canSend: Bool {
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func sendFollowUp() {
+        let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        followUpText = ""
+        if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
+            let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
+            state.activeAgentChatPillID = sibling.id
+            return
+        }
+        manager.continueAgent(from: pill, text: trimmed)
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo("agentBottom", anchor: .bottom)
+        }
+    }
+}
+
 private struct NotchAgentPillsRowView: View {
     @ObservedObject var manager: AgentPillsManager
     weak var barWindow: NSWindow?
@@ -979,7 +1317,7 @@ private struct NotchAgentPillsRowView: View {
                             onSelect: { pill in
                                 presentedGroup = nil
                                 DispatchQueue.main.async {
-                                    manager.hoveredPillID = pill.id
+                                    openPillInChat(pill)
                                 }
                             }
                         )
@@ -1026,7 +1364,7 @@ private struct NotchAgentPillsRowView: View {
         if group == .more {
             return groups.dropFirst(groupedStatusLimit - 1).flatMap { pills(for: $0) }
         }
-        pillsNewestFirst.filter { group.contains($0.status) }
+        return pillsNewestFirst.filter { group.contains($0.status) }
     }
 
     private func syncPillStatusObservers() {
@@ -1047,7 +1385,7 @@ private struct NotchAgentPillsRowView: View {
         NotificationCenter.default.post(
             name: .agentPillRequestedChat,
             object: nil,
-            userInfo: ["query": pill.query]
+            userInfo: ["pillID": pill.id.uuidString]
         )
     }
 }
@@ -1063,17 +1401,7 @@ private struct NotchAgentPillOrbItem: View {
             count: nil,
             isPresented: manager.hoveredPillID == pill.id
         ) {
-            manager.hoveredPillID = manager.hoveredPillID == pill.id ? nil : pill.id
-        }
-        .popover(isPresented: selectedPopoverBinding, arrowEdge: .bottom) {
-            AgentPillPopover(
-                pill: pill,
-                isRecording: manager.recordingPillID == pill.id,
-                onDismiss: { manager.dismiss(pillID: pill.id) },
-                onOpenInChat: { openPillInChat() },
-                onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
-                onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
-            )
+            openPillInChat()
         }
     }
 
@@ -1094,7 +1422,7 @@ private struct NotchAgentPillOrbItem: View {
         NotificationCenter.default.post(
             name: .agentPillRequestedChat,
             object: nil,
-            userInfo: ["query": pill.query]
+            userInfo: ["pillID": pill.id.uuidString]
         )
     }
 }
