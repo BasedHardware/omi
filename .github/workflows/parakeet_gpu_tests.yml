@@ -134,6 +134,7 @@ jobs:
 
                         set +e
                         DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
+                        DER_RESULTS_PATH=/tmp/parakeet-gpu-artifacts/der-benchmark-results.json \
                         python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
                           --tb=short 2>&1
                         BENCH_EXIT=$?
@@ -261,6 +262,30 @@ jobs:
           echo "=== Job/Pod Details ==="
           kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
           kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
+
+      - name: Collect DER diagnostics artifact
+        if: always()
+        run: |
+          mkdir -p artifacts/parakeet
+          POD=$(kubectl -n ${{ env.NAMESPACE }} get pod -l job-name=${{ env.JOB_NAME }} \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
+          if [[ -z "$POD" ]]; then
+            echo "No GPU test pod found; skipping DER artifact copy"
+            exit 0
+          fi
+          kubectl -n ${{ env.NAMESPACE }} cp \
+            "$POD:/tmp/parakeet-gpu-artifacts/der-benchmark-results.json" \
+            artifacts/parakeet/der-benchmark-results.json || \
+            echo "DER diagnostics artifact was not produced"
+
+      - name: Upload DER diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parakeet-der-diagnostics-${{ github.run_id }}
+          path: artifacts/parakeet/der-benchmark-results.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       - name: Check job result
         run: |
