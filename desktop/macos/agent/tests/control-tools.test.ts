@@ -40,6 +40,7 @@ describe("agent control tools", () => {
       "get_agent_run",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "update_agent_artifact_lifecycle",
       "send_agent_message",
       "delegate_agent",
     ]);
@@ -355,6 +356,8 @@ describe("agent control tools", () => {
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         uri: "omi-artifact://art_test",
+        lifecycleState: "retained",
+        lifecycleUpdatedAtMs: null,
         metadata: { source: "test" },
       }),
     ]);
@@ -365,6 +368,152 @@ describe("agent control tools", () => {
       runId: result.run.runId,
       attemptId: result.attempt.attemptId,
     });
+    store.close();
+  });
+
+  it("updates artifact lifecycle metadata idempotently and appends ordered events", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const result = await kernel.executeRun(baseRunInput);
+    const artifact = kernel.persistArtifact({
+      artifactId: "art_lifecycle",
+      attemptId: result.attempt.attemptId,
+      kind: "markdown",
+      role: "result",
+      uri: "omi-artifact://art_lifecycle",
+    });
+
+    const dismissed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "update_agent_artifact_lifecycle", {
+        artifactId: artifact.artifactId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        state: "dismissed",
+        reason: "not useful",
+        metadata: { source: "test" },
+      }),
+    );
+    expect(dismissed).toMatchObject({
+      ok: true,
+      changed: true,
+      artifact: {
+        artifactId: artifact.artifactId,
+        lifecycleState: "dismissed",
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+      },
+      event: {
+        type: "artifact.dismissed",
+        payload: {
+          artifactId: artifact.artifactId,
+          previousState: "retained",
+          state: "dismissed",
+          reason: "not useful",
+          metadata: { source: "test" },
+        },
+      },
+    });
+    expect(dismissed.artifact.lifecycleUpdatedAtMs).toEqual(expect.any(Number));
+
+    const idempotent = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "update_agent_artifact_lifecycle", {
+        artifactId: artifact.artifactId,
+        sessionId: result.session.sessionId,
+        state: "dismissed",
+      }),
+    );
+    expect(idempotent).toMatchObject({
+      ok: true,
+      changed: false,
+      event: null,
+      artifact: {
+        artifactId: artifact.artifactId,
+        lifecycleState: "dismissed",
+      },
+    });
+
+    const opened = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "update_agent_artifact_lifecycle", {
+        artifactId: artifact.artifactId,
+        state: "opened",
+      }),
+    );
+    expect(opened).toMatchObject({
+      ok: true,
+      changed: true,
+      artifact: {
+        artifactId: artifact.artifactId,
+        lifecycleState: "opened",
+      },
+      event: {
+        type: "artifact.opened",
+        payload: {
+          previousState: "dismissed",
+          state: "opened",
+        },
+      },
+    });
+
+    const events = kernel
+      .getRun({ runId: result.run.runId, includeEvents: true, eventLimit: 100 })
+      .events.filter((event) => event.type.startsWith("artifact."));
+    expect(events.map((event) => event.type)).toEqual(["artifact.created", "artifact.dismissed", "artifact.opened"]);
+    expect(events[1].eventSeq).toBeLessThan(events[2].eventSeq);
+    expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [artifact.artifactId]).lifecycle_state).toBe("opened");
+    store.close();
+  });
+
+  it("rejects artifact lifecycle updates outside owner visibility or scope", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const ownerRun = await kernel.executeRun(baseRunInput);
+    const otherRun = await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "other-owner",
+      externalRefId: "task-other-lifecycle",
+      requestId: "request-other-lifecycle",
+    });
+    const ownerArtifact = kernel.persistArtifact({
+      artifactId: "art_owner_scope",
+      attemptId: ownerRun.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://owner-scope",
+    });
+    const otherArtifact = kernel.persistArtifact({
+      artifactId: "art_other_scope",
+      attemptId: otherRun.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://other-scope",
+    });
+
+    const context: AgentControlToolContext = { kernel, getOwnerId: () => "owner" };
+    const wrongOwner = parseToolResult(
+      await handleAgentControlToolCall(context, "update_agent_artifact_lifecycle", {
+        artifactId: otherArtifact.artifactId,
+        state: "dismissed",
+      }),
+    );
+    expect(wrongOwner).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(wrongOwner.error.message).toContain("not visible to the active owner");
+
+    const wrongScope = parseToolResult(
+      await handleAgentControlToolCall(context, "update_agent_artifact_lifecycle", {
+        artifactId: ownerArtifact.artifactId,
+        runId: otherRun.run.runId,
+        state: "dismissed",
+      }),
+    );
+    expect(wrongScope).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(wrongScope.error.message).toContain("belongs to run");
+
+    expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [ownerArtifact.artifactId]).lifecycle_state).toBe("retained");
+    expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [otherArtifact.artifactId]).lifecycle_state).toBe("retained");
     store.close();
   });
 

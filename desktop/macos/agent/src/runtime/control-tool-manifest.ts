@@ -13,6 +13,7 @@ export interface AgentControlManifestTool {
     | "get_agent_run"
     | "cancel_agent_run"
     | "inspect_agent_artifacts"
+    | "update_agent_artifact_lifecycle"
     | "send_agent_message"
     | "delegate_agent";
   label: string;
@@ -138,6 +139,38 @@ Returns metadata and references only. It does not read arbitrary artifact conten
         { required: ["attemptId"] },
       ],
     },
+  },
+  {
+    name: "update_agent_artifact_lifecycle",
+    label: "Update Agent Artifact Lifecycle",
+    description: `Update metadata-only lifecycle state for one canonical Omi agent artifact.
+
+This only records artifact metadata state and ordered kernel events. It does not open files, delete files, retain blobs, or read artifact contents.`,
+    promptSnippet: "update_agent_artifact_lifecycle - Mark an Omi agent artifact retained, dismissed, or opened",
+    promptGuidelines: [
+      "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
+      "Pass sessionId, runId, or attemptId when available as a scope guard.",
+      "This never reads artifact contents and has no OS side effects.",
+    ],
+    latency: "fast local",
+    surfaces: ["desktopChat"],
+    runtimePreconditions: [
+      "Requires artifactId.",
+      "Defaults ownerId to the active signed-in owner when omitted and rejects artifacts outside that owner.",
+      "Optional sessionId, runId, and attemptId must match the artifact scope.",
+    ],
+    timeoutClass: "normal",
+    properties: {
+      artifactId: { type: "string", description: "Canonical Omi artifact_id." },
+      state: { type: "string", enum: ["retained", "dismissed", "opened"], description: "Target metadata lifecycle state." },
+      sessionId: { type: "string", description: "Optional canonical Omi session_id scope guard." },
+      runId: { type: "string", description: "Optional canonical Omi run_id scope guard." },
+      attemptId: { type: "string", description: "Optional canonical Omi attempt_id scope guard." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to the active signed-in owner." },
+      reason: { type: "string", description: "Optional short reason for the lifecycle event." },
+      metadata: { type: "object", description: "Small structured metadata for the lifecycle event.", additionalProperties: true },
+    },
+    required: ["artifactId", "state"],
   },
   {
     name: "send_agent_message",

@@ -22,6 +22,7 @@ import type {
 
 const DATABASE_FILENAME = "omi-agentd.sqlite3";
 const PHASE_1_MIGRATION_VERSION = 1;
+const ARTIFACT_LIFECYCLE_MIGRATION_VERSION = 2;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -341,10 +342,12 @@ export class SqliteAgentStore implements AgentStore {
 
   migrate(): void {
     createSchemaMigrationsTable(this.db);
-    if (this.hasMigration(PHASE_1_MIGRATION_VERSION)) {
-      return;
+    if (!this.hasMigration(PHASE_1_MIGRATION_VERSION)) {
+      runPhase1Migration(this.db, this.nowMs());
     }
-    runPhase1Migration(this.db, this.nowMs());
+    if (!this.hasMigration(ARTIFACT_LIFECYCLE_MIGRATION_VERSION)) {
+      runArtifactLifecycleMigration(this.db, this.nowMs());
+    }
   }
 
   withTransaction<T>(work: () => T): T {
@@ -605,14 +608,17 @@ export class SqliteAgentStore implements AgentStore {
       mimeType: input.mimeType ?? null,
       contentHash: input.contentHash ?? null,
       sizeBytes: input.sizeBytes ?? null,
+      lifecycleState: input.lifecycleState ?? "retained",
+      lifecycleUpdatedAtMs: input.lifecycleUpdatedAtMs ?? null,
       metadataJson: input.metadataJson ?? "{}",
       createdAtMs: input.createdAtMs ?? this.nowMs(),
     };
     this.db.prepare(
       `INSERT INTO artifacts (
         artifact_id, session_id, run_id, attempt_id, kind, role, uri,
-        display_name, mime_type, content_hash, size_bytes, metadata_json, created_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        display_name, mime_type, content_hash, size_bytes, lifecycle_state,
+        lifecycle_updated_at_ms, metadata_json, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(...artifactValues(artifact));
     return artifact;
   }
@@ -731,6 +737,22 @@ function runPhase1Migration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTrans
     db.exec(phase1SchemaSql);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       PHASE_1_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runArtifactLifecycleMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE artifacts
+        ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'retained' CHECK (lifecycle_state IN ('retained', 'dismissed', 'opened'));
+
+      ALTER TABLE artifacts
+        ADD COLUMN lifecycle_updated_at_ms INTEGER;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      ARTIFACT_LIFECYCLE_MIGRATION_VERSION,
       appliedAtMs,
     );
   });
@@ -903,6 +925,8 @@ function artifactValues(artifact: AgentArtifact): SQLInputValue[] {
     artifact.mimeType,
     artifact.contentHash,
     artifact.sizeBytes,
+    artifact.lifecycleState,
+    artifact.lifecycleUpdatedAtMs,
     artifact.metadataJson,
     artifact.createdAtMs,
   ];

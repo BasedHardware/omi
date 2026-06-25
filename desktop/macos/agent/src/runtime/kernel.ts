@@ -18,6 +18,7 @@ import type {
   AgentRun,
   AgentSession,
   AgentStore,
+  ArtifactLifecycleState,
   ArtifactRole,
   AttemptStatus,
   NewAgentArtifact,
@@ -124,6 +125,23 @@ export interface InspectArtifactsInput {
   ownerId?: string;
   role?: ArtifactRole;
   limit?: number;
+}
+
+export interface UpdateArtifactLifecycleInput {
+  artifactId: string;
+  state: ArtifactLifecycleState;
+  ownerId?: string;
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateArtifactLifecycleResult {
+  artifact: AgentArtifact;
+  changed: boolean;
+  event: AgentEvent | null;
 }
 
 export interface PersistArtifactInput {
@@ -683,6 +701,40 @@ export class AgentRuntimeKernel {
       this.assertArtifactSelectorOwner(input, input.ownerId);
     }
     return this.readArtifacts(input);
+  }
+
+  updateArtifactLifecycle(input: UpdateArtifactLifecycleInput): UpdateArtifactLifecycleResult {
+    return this.withTransaction(() => {
+      const artifact = this.readArtifact(input.artifactId);
+      this.assertArtifactScope(artifact, input);
+      if (input.ownerId) {
+        this.assertSessionOwner(this.readSession(artifact.sessionId), input.ownerId);
+      }
+      if (artifact.lifecycleState === input.state) {
+        return { artifact, changed: false, event: null };
+      }
+
+      const now = Date.now();
+      this.store.execute(
+        "UPDATE artifacts SET lifecycle_state = ?, lifecycle_updated_at_ms = ? WHERE artifact_id = ?",
+        [input.state, now, artifact.artifactId],
+      );
+      const updatedArtifact = this.readArtifact(artifact.artifactId);
+      const event = this.appendEvent({
+        sessionId: updatedArtifact.sessionId,
+        runId: updatedArtifact.runId,
+        attemptId: updatedArtifact.attemptId,
+        type: `artifact.${input.state}`,
+        payload: {
+          artifactId: updatedArtifact.artifactId,
+          previousState: artifact.lifecycleState,
+          state: updatedArtifact.lifecycleState,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {},
+        },
+      });
+      return { artifact: updatedArtifact, changed: true, event };
+    });
   }
 
   persistArtifact(input: PersistArtifactInput): AgentArtifact {
@@ -1478,6 +1530,7 @@ export class AgentRuntimeKernel {
         mimeType: artifact.mimeType,
         contentHash: artifact.contentHash,
         sizeBytes: artifact.sizeBytes,
+        lifecycleState: artifact.lifecycleState,
       },
     });
     return artifact;
@@ -1729,6 +1782,25 @@ export class AgentRuntimeKernel {
         [...values, limit],
       )
       .map(artifactFromRow);
+  }
+
+  private readArtifact(artifactId: string): AgentArtifact {
+    return artifactFromRow(this.store.getRow("SELECT * FROM artifacts WHERE artifact_id = ?", [artifactId]));
+  }
+
+  private assertArtifactScope(
+    artifact: AgentArtifact,
+    input: Pick<UpdateArtifactLifecycleInput, "sessionId" | "runId" | "attemptId">
+  ): void {
+    if (input.sessionId && input.sessionId !== artifact.sessionId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to session ${artifact.sessionId}, not ${input.sessionId}`);
+    }
+    if (input.runId && input.runId !== artifact.runId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to run ${artifact.runId ?? "none"}, not ${input.runId}`);
+    }
+    if (input.attemptId && input.attemptId !== artifact.attemptId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to attempt ${artifact.attemptId ?? "none"}, not ${input.attemptId}`);
+    }
   }
 
   private readDelegation(delegationId: string): AgentDelegation {
@@ -2024,6 +2096,8 @@ function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
     mimeType: nullableText(row.mime_type),
     contentHash: nullableText(row.content_hash),
     sizeBytes: nullableNumber(row.size_bytes),
+    lifecycleState: text(row.lifecycle_state) as ArtifactLifecycleState,
+    lifecycleUpdatedAtMs: nullableNumber(row.lifecycle_updated_at_ms),
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
   };

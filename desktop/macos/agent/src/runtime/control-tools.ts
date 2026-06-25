@@ -5,6 +5,7 @@ import { agentControlCapabilityManifest, agentControlInputSchema } from "./contr
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
+const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 
@@ -40,6 +41,17 @@ const inspectAgentArtifactsSchema = z
   .refine((value) => value.sessionId || value.runId || value.attemptId, {
     message: "Provide sessionId, runId, or attemptId",
   });
+
+const updateAgentArtifactLifecycleSchema = z.object({
+  artifactId: z.string().min(1),
+  state: artifactLifecycleStateSchema,
+  sessionId: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  attemptId: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  reason: z.string().min(1).max(500).optional(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
 
 const sendAgentMessageSchema = z.object({
   sessionId: z.string().min(1),
@@ -92,6 +104,7 @@ export const agentControlToolSchemas = {
   get_agent_run: getAgentRunSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
+  update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
   delegate_agent: delegateAgentSchema,
 } as const;
@@ -174,6 +187,18 @@ export async function handleAgentControlToolCall(
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
+      }
+      case "update_agent_artifact_lifecycle": {
+        const parsed = agentControlToolSchemas.update_agent_artifact_lifecycle.parse(input);
+        const result = context.kernel.updateArtifactLifecycle({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
+        return stringifyToolResult({
+          artifact: serializeArtifact(result.artifact),
+          changed: result.changed,
+          event: result.event ? serializeEvent(result.event) : null,
+        });
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
@@ -423,6 +448,8 @@ function serializeArtifact(artifact: AgentArtifact): Record<string, unknown> {
     mimeType: artifact.mimeType,
     contentHash: artifact.contentHash,
     sizeBytes: artifact.sizeBytes,
+    lifecycleState: artifact.lifecycleState,
+    lifecycleUpdatedAtMs: artifact.lifecycleUpdatedAtMs,
     metadata: parseJsonObject(artifact.metadataJson),
     createdAtMs: artifact.createdAtMs,
   };

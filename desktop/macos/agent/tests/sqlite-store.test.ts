@@ -19,7 +19,7 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(1);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(2);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
@@ -117,6 +117,10 @@ describe("SqliteAgentStore", () => {
     expect(store.getRow("SELECT uri, metadata_json FROM artifacts WHERE artifact_id = ?", [artifact.artifactId])).toMatchObject({
       uri: "adapter://fake/native-artifact",
       metadata_json: "{\"adapterArtifactId\":\"native-artifact\"}",
+    });
+    expect(store.getRow("SELECT lifecycle_state, lifecycle_updated_at_ms FROM artifacts WHERE artifact_id = ?", [artifact.artifactId])).toMatchObject({
+      lifecycle_state: "retained",
+      lifecycle_updated_at_ms: null,
     });
     expect(store.getRow("SELECT type FROM events WHERE event_id = ?", [event.eventId]).type).toBe("run.completed");
     store.close();
