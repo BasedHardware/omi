@@ -19,6 +19,8 @@ from utils.memory.canonical_memory_adapter import (
     search_result_to_memorydb,
     update_canonical_memory_content,
     update_canonical_memory_visibility,
+    update_canonical_memory_product_fields,
+    update_canonical_memory_review,
     write_canonical_extraction_memory,
     write_canonical_external_memory,
 )
@@ -156,6 +158,27 @@ class LegacyMemoryBackend:
         memories_db.create_memory(uid, data)
         return str(data.get("id") or "")
 
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        memories_db.review_memory(uid, memory_id, value)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        update_data: Dict[str, Any] = {}
+        if tags is not None:
+            update_data["tags"] = tags
+        if category is not None:
+            update_data["category"] = category
+        if update_data:
+            memories_db.update_memory_fields(uid, memory_id, update_data)
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
+
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
         memories_db.save_memories(uid, items)
         return [str(item.get("id") or "") for item in items]
@@ -193,7 +216,27 @@ class CanonicalMemoryBackend:
         return results
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
-        write_canonical_external_memory(uid, data, db_client=self._db_client)
+        return write_canonical_external_memory(uid, data, db_client=self._db_client)
+
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        update_canonical_memory_review(uid, memory_id, value, db_client=self._db_client)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        item = update_canonical_memory_product_fields(
+            uid,
+            memory_id,
+            tags=tags,
+            category=category,
+            db_client=self._db_client,
+        )
+        return memory_item_to_memorydb(item)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
         return [self.write(uid, item) for item in items]
@@ -247,6 +290,19 @@ class MemoryService:
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
         self._resolve_backend(uid).update_visibility(uid, memory_id, visibility)
+
+    def review(self, uid: str, memory_id: str, value: bool) -> None:
+        self._resolve_backend(uid).review(uid, memory_id, value)
+
+    def update_product_fields(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        tags: Optional[List[str]] = None,
+        category: Optional[str] = None,
+    ) -> MemoryDB:
+        return self._resolve_backend(uid).update_product_fields(uid, memory_id, tags=tags, category=category)
 
     def delete(self, uid: str, memory_id: str) -> None:
         self._resolve_backend(uid).delete(uid, memory_id)
