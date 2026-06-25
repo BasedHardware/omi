@@ -918,17 +918,22 @@ private struct NotchAgentPillsRowView: View {
     @ObservedObject var manager: AgentPillsManager
     weak var barWindow: NSWindow?
 
-    private var visiblePills: ArraySlice<AgentPill> {
-        manager.pills.suffix(3)
+    private var pillsNewestFirst: [AgentPill] {
+        Array(manager.pills.reversed())
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(visiblePills) { pill in
-                NotchAgentPillIcon(pill: pill, manager: manager, barWindow: barWindow)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                ForEach(pillsNewestFirst) { pill in
+                    NotchAgentPillIcon(pill: pill, manager: manager, barWindow: barWindow)
+                }
             }
+            .frame(maxHeight: .infinity, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        .accessibilityLabel("Agent pills")
+        .accessibilityHint("Scroll horizontally to reach older agents")
     }
 }
 
