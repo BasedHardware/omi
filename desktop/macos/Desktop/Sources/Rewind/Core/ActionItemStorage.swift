@@ -724,12 +724,26 @@ actor ActionItemStorage {
         insertRecord.backendSynced = false
         let recordToInsert = insertRecord
 
-        let inserted = try await db.write { database in
-            try recordToInsert.inserted(database)
-        }
+        do {
+            let inserted = try await db.write { database in
+                try recordToInsert.inserted(database)
+            }
+            log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+            return inserted
+        } catch {
+            guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
+                throw error
+            }
 
-        log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
-        return inserted
+            logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
+            try await RewindDatabase.shared.repairActionItemsFTS(reason: "insertLocalActionItem")
+
+            let inserted = try await db.write { database in
+                try recordToInsert.inserted(database)
+            }
+            log("ActionItemStorage: Inserted local action item after FTS repair (id: \(inserted.id ?? -1))")
+            return inserted
+        }
     }
 
     /// Insert a screen observation (context captured during task extraction)

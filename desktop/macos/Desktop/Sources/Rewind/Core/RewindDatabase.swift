@@ -105,6 +105,80 @@ actor RewindDatabase {
         }
     }
 
+    /// Return true for SQLite failures that specifically implicate action_items_fts.
+    /// Keep this narrow so unrelated write/constraint failures are never hidden by an FTS repair retry.
+    func isActionItemsFTSError(_ error: Error) -> Bool {
+        guard let dbError = error as? DatabaseError else { return false }
+        let message = "\(dbError)".lowercased()
+        guard message.contains("action_items_fts") || message.contains("vtable constructor failed") else {
+            return false
+        }
+
+        return dbError.resultCode == .SQLITE_IOERR
+            || dbError.resultCode == .SQLITE_CORRUPT
+            || message.contains("no such table")
+            || message.contains("malformed")
+            || message.contains("database disk image is malformed")
+            || dbError.extendedResultCode.rawValue == 6922
+    }
+
+    /// Rebuild only the action_items full-text-search table and triggers from durable action_items rows.
+    /// This intentionally never drops or rewrites action_items itself.
+    func repairActionItemsFTS(reason: String) async throws {
+        guard let queue = dbQueue else {
+            throw DatabaseError(resultCode: .SQLITE_MISUSE, message: "database is not initialized")
+        }
+
+        try await queue.write { db in
+            try Self.recreateActionItemsFTS(in: db)
+        }
+        log("RewindDatabase: Rebuilt action_items_fts after \(reason)")
+    }
+
+    private static func recreateActionItemsFTS(in db: Database) throws {
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ai")
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_ad")
+        try db.execute(sql: "DROP TRIGGER IF EXISTS action_items_fts_au")
+        try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
+
+        try db.execute(sql: """
+            CREATE VIRTUAL TABLE action_items_fts USING fts5(
+                description,
+                content='action_items',
+                content_rowid='id',
+                tokenize='unicode61'
+            )
+            """)
+
+        try db.execute(sql: """
+            CREATE TRIGGER action_items_fts_ai AFTER INSERT ON action_items BEGIN
+                INSERT INTO action_items_fts(rowid, description)
+                VALUES (new.id, new.description);
+            END
+            """)
+
+        try db.execute(sql: """
+            CREATE TRIGGER action_items_fts_ad AFTER DELETE ON action_items BEGIN
+                INSERT INTO action_items_fts(action_items_fts, rowid, description)
+                VALUES ('delete', old.id, old.description);
+            END
+            """)
+
+        try db.execute(sql: """
+            CREATE TRIGGER action_items_fts_au AFTER UPDATE ON action_items BEGIN
+                INSERT INTO action_items_fts(action_items_fts, rowid, description)
+                VALUES ('delete', old.id, old.description);
+                INSERT INTO action_items_fts(rowid, description)
+                VALUES (new.id, new.description);
+            END
+            """)
+
+        try db.execute(sql: """
+            INSERT INTO action_items_fts(rowid, description)
+            SELECT id, description FROM action_items
+            """)
+    }
+
     /// Configure the database for a specific user.
     /// Does NOT close or reopen the database — call initialize() after this.
     /// initialize() will detect the user mismatch and reopen if needed.
