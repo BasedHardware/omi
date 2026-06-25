@@ -450,12 +450,13 @@ struct DashboardPage: View {
 
                 VStack(spacing: 12) {
                     centerMemoryHeader
-                    Spacer(minLength: 0)
+                    // Center the metric block in an area exactly as tall as the six
+                    // side-list rows (6×48 + 5×12 spacing) so the column matches the
+                    // side columns' height and the block lines up with their center.
                     homeMetricsStrip
-                    Spacer(minLength: 0)
+                        .frame(height: CGFloat(6 * 48 + 5 * 12))
                 }
                 .frame(width: 340)
-                .frame(maxHeight: .infinity)
 
                 destinationStack
                     .frame(width: 300)
@@ -1970,7 +1971,7 @@ private struct HomeCenterMetricTile: View {
                     .minimumScaleFactor(0.82)
             }
             .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 82, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))
