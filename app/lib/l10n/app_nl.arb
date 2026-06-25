@@ -3061,5 +3061,6 @@
     "recordingMode": "Opnamemodus",
     "captureModeLater": "Later",
     "captureModeLiveDescription": "Transcribeer in realtime terwijl je praat.",
-    "captureModeLaterDescription": "Sla audio nu op en transcribeer wanneer je wilt."
+    "captureModeLaterDescription": "Sla audio nu op en transcribeer wanneer je wilt.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

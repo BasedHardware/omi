@@ -10639,5 +10639,6 @@
     "recordingMode": "Mode ng pag-record",
     "captureModeLater": "Mamaya",
     "captureModeLiveDescription": "I-transcribe nang real time habang nagsasalita ka.",
-    "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto."
+    "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

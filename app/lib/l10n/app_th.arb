@@ -3061,5 +3061,6 @@
     "recordingMode": "โหมดการบันทึก",
     "captureModeLater": "ภายหลัง",
     "captureModeLiveDescription": "ถอดเสียงแบบเรียลไทม์ขณะที่คุณพูด",
-    "captureModeLaterDescription": "บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ"
+    "captureModeLaterDescription": "บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

@@ -3061,5 +3061,6 @@
     "recordingMode": "녹음 모드",
     "captureModeLater": "나중에",
     "captureModeLiveDescription": "말하는 동안 실시간으로 변환합니다.",
-    "captureModeLaterDescription": "지금 오디오를 저장하고 원할 때 변환하세요."
+    "captureModeLaterDescription": "지금 오디오를 저장하고 원할 때 변환하세요.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

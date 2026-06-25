@@ -3030,5 +3030,6 @@
     "recordingMode": "Режим на запис",
     "captureModeLater": "По-късно",
     "captureModeLiveDescription": "Транскрибиране в реално време, докато говорите.",
-    "captureModeLaterDescription": "Запазете звука сега и го транскрибирайте, когато пожелаете."
+    "captureModeLaterDescription": "Запазете звука сега и го транскрибирайте, когато пожелаете.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

@@ -3028,5 +3028,6 @@
     "recordingMode": "وضع التسجيل",
     "captureModeLater": "لاحقًا",
     "captureModeLiveDescription": "تفريغ نصي فوري أثناء حديثك.",
-    "captureModeLaterDescription": "احفظ الصوت الآن وفرّغه نصيًا متى شئت."
+    "captureModeLaterDescription": "احفظ الصوت الآن وفرّغه نصيًا متى شئت.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

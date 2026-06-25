@@ -3103,5 +3103,6 @@
     "recordingMode": "Mode perekaman",
     "captureModeLater": "Nanti",
     "captureModeLiveDescription": "Transkripsikan secara langsung saat Anda berbicara.",
-    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsikan kapan saja."
+    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsikan kapan saja.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

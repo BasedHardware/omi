@@ -10639,5 +10639,6 @@
     "recordingMode": "రికార్డింగ్ మోడ్",
     "captureModeLater": "తర్వాత",
     "captureModeLiveDescription": "మీరు మాట్లాడుతున్నప్పుడు రియల్ టైమ్‌లో ట్రాన్‌స్క్రైబ్ చేయండి.",
-    "captureModeLaterDescription": "ఇప్పుడు ఆడియోను సేవ్ చేసి, మీకు నచ్చినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి."
+    "captureModeLaterDescription": "ఇప్పుడు ఆడియోను సేవ్ చేసి, మీకు నచ్చినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

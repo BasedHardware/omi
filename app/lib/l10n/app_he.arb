@@ -10639,5 +10639,6 @@
     "recordingMode": "מצב הקלטה",
     "captureModeLater": "מאוחר יותר",
     "captureModeLiveDescription": "תמלול בזמן אמת תוך כדי דיבור.",
-    "captureModeLaterDescription": "שמרו את האודיו עכשיו ותמללו מתי שתרצו."
+    "captureModeLaterDescription": "שמרו את האודיו עכשיו ותמללו מתי שתרצו.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

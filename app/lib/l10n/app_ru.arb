@@ -3096,5 +3096,6 @@
     "recordingMode": "Режим записи",
     "captureModeLater": "Позже",
     "captureModeLiveDescription": "Расшифровка в реальном времени, пока вы говорите.",
-    "captureModeLaterDescription": "Сохраните аудио сейчас и расшифруйте, когда захотите."
+    "captureModeLaterDescription": "Сохраните аудио сейчас и расшифруйте, когда захотите.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

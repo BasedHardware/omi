@@ -10639,5 +10639,6 @@
     "recordingMode": "Način snemanja",
     "captureModeLater": "Pozneje",
     "captureModeLiveDescription": "Prepisujte v realnem času, medtem ko govorite.",
-    "captureModeLaterDescription": "Shranite zvok zdaj in ga prepišite, kadar koli želite."
+    "captureModeLaterDescription": "Shranite zvok zdaj in ga prepišite, kadar koli želite.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

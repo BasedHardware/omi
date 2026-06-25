@@ -3157,5 +3157,6 @@
     "recordingMode": "Felvételi mód",
     "captureModeLater": "Később",
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
-    "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod."
+    "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

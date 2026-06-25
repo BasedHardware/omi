@@ -10639,5 +10639,6 @@
     "recordingMode": "ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್",
     "captureModeLater": "ನಂತರ",
     "captureModeLiveDescription": "ನೀವು ಮಾತನಾಡುತ್ತಿರುವಾಗ ನೈಜ ಸಮಯದಲ್ಲಿ ಲಿಪ್ಯಂತರಿಸಿ.",
-    "captureModeLaterDescription": "ಈಗ ಆಡಿಯೋ ಉಳಿಸಿ ಮತ್ತು ನಿಮಗೆ ಬೇಕಾದಾಗ ಲಿಪ್ಯಂತರಿಸಿ."
+    "captureModeLaterDescription": "ಈಗ ಆಡಿಯೋ ಉಳಿಸಿ ಮತ್ತು ನಿಮಗೆ ಬೇಕಾದಾಗ ಲಿಪ್ಯಂತರಿಸಿ.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

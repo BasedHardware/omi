@@ -10639,5 +10639,6 @@
     "recordingMode": "حالت ضبط",
     "captureModeLater": "بعداً",
     "captureModeLiveDescription": "رونویسی همزمان هنگام صحبت کردن.",
-    "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید."
+    "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

@@ -3061,5 +3061,6 @@
     "recordingMode": "Modalità di registrazione",
     "captureModeLater": "Più tardi",
     "captureModeLiveDescription": "Trascrivi in tempo reale mentre parli.",
-    "captureModeLaterDescription": "Salva l'audio ora e trascrivilo quando vuoi."
+    "captureModeLaterDescription": "Salva l'audio ora e trascrivilo quando vuoi.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

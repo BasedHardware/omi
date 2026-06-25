@@ -10639,5 +10639,6 @@
     "recordingMode": "ریکارڈنگ موڈ",
     "captureModeLater": "بعد میں",
     "captureModeLiveDescription": "بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔",
-    "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔"
+    "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

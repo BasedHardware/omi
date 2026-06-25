@@ -3061,5 +3061,6 @@
     "recordingMode": "Salvestusrežiim",
     "captureModeLater": "Hiljem",
     "captureModeLiveDescription": "Transkribeeri reaalajas, kui räägid.",
-    "captureModeLaterDescription": "Salvesta heli kohe ja transkribeeri, millal soovid."
+    "captureModeLaterDescription": "Salvesta heli kohe ja transkribeeri, millal soovid.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

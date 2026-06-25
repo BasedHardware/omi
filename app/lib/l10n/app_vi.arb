@@ -3066,5 +3066,6 @@
     "recordingMode": "Chế độ ghi",
     "captureModeLater": "Sau",
     "captureModeLiveDescription": "Phiên âm theo thời gian thực khi bạn nói.",
-    "captureModeLaterDescription": "Lưu âm thanh ngay bây giờ và phiên âm bất cứ khi nào bạn muốn."
+    "captureModeLaterDescription": "Lưu âm thanh ngay bây giờ và phiên âm bất cứ khi nào bạn muốn.",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }

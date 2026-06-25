@@ -3083,5 +3083,6 @@
     "recordingMode": "录制模式",
     "captureModeLater": "稍后",
     "captureModeLiveDescription": "在你说话时实时转写。",
-    "captureModeLaterDescription": "立即保存音频，随时转写。"
+    "captureModeLaterDescription": "立即保存音频，随时转写。",
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature."
 }
