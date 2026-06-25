@@ -28,60 +28,9 @@ from utils.memory.v3_projection_reader_contract import (
 )
 
 
-class _FakeSnapshot:
-    def __init__(self, data, exists=True):
-        self._data = data
-        self.exists = exists
-
-    def to_dict(self):
-        return self._data
-
-
-class _FakeDocumentRef:
-    def __init__(self, path, db):
-        self.path = path
-        self._db = db
-
-    def get(self, transaction=None):
-        if self.path not in self._db.docs:
-            return _FakeSnapshot(None, exists=False)
-        value = self._db.docs[self.path]
-        if isinstance(value, BaseException):
-            raise value
-        return _FakeSnapshot(value, exists=True)
-
-
-class _FakeQuery:
-    def __init__(self, docs):
-        self._docs = docs
-
-    def where(self, *args, **kwargs):
-        return self
-
-    def order_by(self, *args, **kwargs):
-        return self
-
-    def start_after(self, *args, **kwargs):
-        return self
-
-    def limit(self, *args, **kwargs):
-        return self
-
-    def stream(self):
-        return []
-
-
-class _FakeDb:
-    def __init__(self, docs):
-        self.docs = docs
-        self.document_reads = []
-
-    def document(self, path):
-        self.document_reads.append(path)
-        return _FakeDocumentRef(path, self)
-
-    def collection(self, path):
-        return _FakeQuery([])
+from tests.unit.fake_firestore import FakeDocumentReference as _FakeDocumentRef
+from tests.unit.fake_firestore import FakeFirestore as _FakeDb
+from tests.unit.fake_firestore import FakeSnapshot as _FakeSnapshot
 
 
 def _head_doc(**overrides):
