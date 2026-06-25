@@ -36,9 +36,7 @@ function pinnedAdapter(): RuntimeAdapter {
       cwd: input.cwd,
     }),
     executeAttempt: async (context: AdapterAttemptContext) => ({
-      text: "done",
-      sessionId: context.binding.adapterNativeSessionId,
-      adapterSessionId: context.binding.adapterNativeSessionId,
+      text: "done",      adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     }),
     cancelAttempt: async () => ({

@@ -46,9 +46,7 @@ describe("AgentRuntimeKernel event stream", () => {
     const result = await kernel.executeRun(baseRunInput);
     adapter.emitLate(result.attempt.attemptId, {
       type: "text_delta",
-      text: "late",
-      sessionId: result.adapterSessionId ?? "native",
-    });
+      text: "late",    });
 
     const textEvents = store.allRows("SELECT payload_json FROM events WHERE type = 'adapter.text_delta' ORDER BY event_seq");
     expect(textEvents).toHaveLength(1);

@@ -173,6 +173,10 @@ export class JsonlCompatibilityFacade {
   }
 
   registerExternalRequestContext(input: ExternalRequestContextInput): void {
+    const key = this.activeRequestKey(input.requestId, input.clientId);
+    if (this.activeByRequest.has(key)) {
+      throw new Error("Request context already active for clientId/requestId");
+    }
     const context: ActiveRequestContext = {
       protocolVersion: input.protocolVersion,
       requestId: input.requestId,
@@ -181,7 +185,7 @@ export class JsonlCompatibilityFacade {
       adapterId: input.adapterId,
       sessionId: input.sessionId,
     };
-    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
+    this.activeByRequest.set(key, context);
   }
 
   releaseExternalRequestContext(requestId: string, clientId: string): void {
@@ -194,6 +198,10 @@ export class JsonlCompatibilityFacade {
 
   async handleQuery(message: QueryMessage): Promise<void> {
     const input = this.buildRunInput(message);
+    const key = this.activeRequestKey(input.requestId, input.clientId);
+    if (this.activeByRequest.has(key)) {
+      throw new Error("Request context already active for clientId/requestId");
+    }
     const context: ActiveRequestContext = {
       protocolVersion: message.protocolVersion,
       requestId: input.requestId,
@@ -203,7 +211,7 @@ export class JsonlCompatibilityFacade {
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
     };
-    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
+    this.activeByRequest.set(key, context);
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -261,7 +269,9 @@ export class JsonlCompatibilityFacade {
     const activeRequestContext = requestId
       ? (hasExplicitClientId
         ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
-        : this.legacyUnscopedActiveRequestContext(requestId))
+        : message.protocolVersion === 2
+          ? undefined
+          : this.legacyUnscopedActiveRequestContext(requestId))
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     const runId =
@@ -452,7 +462,7 @@ export class JsonlCompatibilityFacade {
       const context =
         requestId && clientId
           ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
-          : requestId
+          : requestId && payload.protocolVersion !== 2
             ? this.legacyUnscopedActiveRequestContext(requestId)
             : undefined;
       if (context) {
@@ -490,9 +500,9 @@ export class JsonlCompatibilityFacade {
     }
     if (!event.type.startsWith("adapter.")) return;
 
-    const adapterEvent = payload as Partial<OutboundMessage> & { sessionId?: string; adapterSessionId?: string };
+    const adapterEvent = payload as Partial<OutboundMessage> & { adapterSessionId?: string };
     const type = event.type.slice("adapter.".length);
-    context.adapterSessionId = adapterEvent.adapterSessionId ?? adapterEvent.sessionId ?? context.adapterSessionId;
+    context.adapterSessionId = adapterEvent.adapterSessionId ?? context.adapterSessionId;
 
     switch (type) {
       case "text_delta":

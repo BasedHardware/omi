@@ -336,7 +336,13 @@ export interface AdapterArtifactReference {
   metadata?: Record<string, unknown>;
 }
 
-export interface AdapterAttemptResult extends PromptResult {
+export interface AdapterAttemptResult {
+  text: string;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
@@ -417,7 +423,7 @@ export function assertAdapterAttemptResultContract(
   if (!result.adapterSessionId) {
     throw new Error(`${operation} returned an empty adapterSessionId`);
   }
-  if (result.adapterSessionId === context.sessionId || result.sessionId === context.sessionId) {
+  if (result.adapterSessionId === context.sessionId) {
     throw new Error(
       `${operation} conflated Omi sessionId ${context.sessionId} with adapter native session id`
     );

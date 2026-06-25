@@ -142,17 +142,51 @@ let toolCallCorrelation:
 // Pending tool call promises — resolved when Swift sends back results
 const pendingToolCalls = new Map<
   string,
-  { resolve: (result: string) => void }
+  {
+    client: Socket;
+    callId: string;
+    clientId?: string;
+    requestId?: string;
+    resolve: (result: string) => void;
+    timeout: ReturnType<typeof setTimeout>;
+  }
 >();
+const TERMINAL_RUN_EVENT_TYPES = new Set(["run.succeeded", "run.failed", "run.cancelled", "run.timed_out", "run.orphaned"]);
+const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.succeeded", "attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
+
+function registerActiveControlOwner(requestKey: string, ownerId: string): void {
+  const existingOwnerId = activeControlToolOwnersByRequest.get(requestKey);
+  if (existingOwnerId && existingOwnerId !== ownerId) {
+    throw new Error("Request owner context already active for clientId/requestId");
+  }
+  activeControlToolOwnersByRequest.set(requestKey, ownerId);
+}
+
+function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
+  return input.clientId && input.requestId
+    ? `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`
+    : `legacy\0${input.callId}`;
+}
 
 /** Resolve a pending tool call with a result from Swift */
-function resolveToolCall(msg: { callId: string; result: string }): void {
-  const pending = pendingToolCalls.get(msg.callId);
+function resolveToolCall(msg: { callId: string; result: string; clientId?: string; requestId?: string }): void {
+  const key = toolCallPendingKey(msg);
+  const pending = pendingToolCalls.get(key);
   if (pending) {
+    pendingToolCalls.delete(key);
+    clearTimeout(pending.timeout);
     pending.resolve(msg.result);
-    pendingToolCalls.delete(msg.callId);
   } else {
-    logErr(`Warning: no pending tool call for callId=${msg.callId}`);
+    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<legacy>"} requestId=${msg.requestId ?? "<legacy>"}`);
+  }
+}
+
+function resolveClientToolCalls(client: Socket, result: string): void {
+  for (const [key, pending] of pendingToolCalls) {
+    if (pending.client !== client) continue;
+    pendingToolCalls.delete(key);
+    clearTimeout(pending.timeout);
+    pending.resolve(result);
   }
 }
 
@@ -208,7 +242,7 @@ function startOmiToolsRelay(): Promise<string> {
                         getProtocolVersion: () => protocolVersion,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestKey: controlRequestKey(msg) ?? legacyControlRequestKey(msg),
+                            requestKey: controlRequestKey(msg) ?? (protocolVersion === 2 ? undefined : legacyControlRequestKey(msg)),
                             runId: msg.runId,
                             attemptId: msg.attemptId,
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
@@ -241,6 +275,16 @@ function startOmiToolsRelay(): Promise<string> {
               // Forward tool call to Swift via stdout
               const resolvedCorrelation =
                 toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
+              if (protocolVersion === 2 && (!msg.requestId || !msg.clientId || !resolvedCorrelation.requestId)) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing active Omi request context for v2 tool relay",
+                  }) + "\n"
+                );
+                continue;
+              }
               const messageRequestIsActive = Boolean(
                 msg.requestId &&
                   msg.clientId &&
@@ -258,17 +302,37 @@ function startOmiToolsRelay(): Promise<string> {
                 ...(messageRequestIsActive && msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
                 ...(messageRequestIsActive && msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
               };
-              send({
-                type: "tool_use",
-                callId: msg.callId,
-                name: msg.name,
-                input: msg.input,
-                ...correlation,
-              });
 
-              // Create a promise that will be resolved when Swift responds
               const callId = msg.callId;
-              pendingToolCalls.set(callId, {
+              const pendingKey = toolCallPendingKey({
+                callId,
+                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
+                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+              });
+              if (pendingToolCalls.has(pendingKey)) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId,
+                    result: "Error: duplicate tool call id",
+                  }) + "\n"
+                );
+                continue;
+              }
+
+              // Create a promise that will be resolved when Swift responds.
+              const timeout = setTimeout(() => {
+                const pending = pendingToolCalls.get(pendingKey);
+                if (!pending) return;
+                pendingToolCalls.delete(pendingKey);
+                pending.resolve("Error: timed out waiting for Swift tool result");
+              }, 120_000);
+              pendingToolCalls.set(pendingKey, {
+                client,
+                callId,
+                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
+                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+                timeout,
                 resolve: (result: string) => {
                   // Send result back to the omi-tools stdio process
                   try {
@@ -284,6 +348,13 @@ function startOmiToolsRelay(): Promise<string> {
                   }
                 },
               });
+              send({
+                type: "tool_use",
+                callId,
+                name: msg.name,
+                input: msg.input,
+                ...correlation,
+              });
             }
           } catch {
             logErr(`Failed to parse omi-tools message: ${line.slice(0, 200)}`);
@@ -293,10 +364,12 @@ function startOmiToolsRelay(): Promise<string> {
 
       client.on("close", () => {
         omiToolsClients = omiToolsClients.filter((c) => c !== client);
+        resolveClientToolCalls(client, "Error: omi-tools relay client disconnected");
       });
 
       client.on("error", (err) => {
         logErr(`omi-tools client error: ${err.message}`);
+        resolveClientToolCalls(client, "Error: omi-tools relay client error");
       });
     });
 
@@ -553,16 +626,13 @@ function buildMcpServers(
 function withControlRunCorrelation(
   name: string,
   input: Record<string, unknown>,
-  fallbackRequestId: string | undefined,
   fallbackClientId: string | undefined
 ): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
   if (name !== "send_agent_message" && name !== "delegate_agent") {
     return { input };
   }
-  const inputRequestId = typeof input.requestId === "string" && input.requestId.trim() ? input.requestId.trim() : undefined;
-  const inputClientId = typeof input.clientId === "string" && input.clientId.trim() ? input.clientId.trim() : undefined;
-  const requestId = inputRequestId ?? fallbackRequestId ?? randomUUID();
-  const clientId = inputClientId ?? fallbackClientId ?? "omi-control-tools";
+  const requestId = randomUUID();
+  const clientId = fallbackClientId ?? "omi-control-tools";
   return {
     input: {
       ...input,
@@ -728,12 +798,28 @@ async function main(): Promise<void> {
     }
     const runOwnerId = activeControlToolOwnersByRun.get(event.runId);
     if (event.attemptId && runOwnerId) {
+      if (event.type === "attempt.created" || event.type === "attempt.started") {
+        const previousAttemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
+        if (previousAttemptIds) {
+          for (const attemptId of previousAttemptIds) {
+            if (attemptId !== event.attemptId) {
+              activeControlToolOwnersByAttempt.delete(attemptId);
+            }
+          }
+          previousAttemptIds.clear();
+        }
+      }
       activeControlToolOwnersByAttempt.set(event.attemptId, runOwnerId);
       const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId) ?? new Set<string>();
       attemptIds.add(event.attemptId);
       activeControlToolAttemptIdsByRun.set(event.runId, attemptIds);
     }
-    if (event.type.startsWith("run.") && ["succeeded", "failed", "cancelled", "timed_out", "orphaned"].includes(event.type.slice("run.".length))) {
+    if (event.attemptId && TERMINAL_ATTEMPT_EVENT_TYPES.has(event.type)) {
+      activeControlToolOwnersByAttempt.delete(event.attemptId);
+      const attemptIds = activeControlToolAttemptIdsByRun.get(event.runId);
+      attemptIds?.delete(event.attemptId);
+    }
+    if (TERMINAL_RUN_EVENT_TYPES.has(event.type)) {
       const requestKey = activeControlToolRequestKeyByRun.get(event.runId);
       if (requestKey) {
         activeControlToolOwnersByRequest.delete(requestKey);
@@ -836,12 +922,9 @@ async function main(): Promise<void> {
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =
             controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
-            legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
+            (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
           if (queryOwnerKey) {
-            activeControlToolOwnersByRequest.set(queryOwnerKey, queryOwnerId);
-          }
-          if (query.ownerId) {
-            currentOwnerId = queryOwnerId;
+            registerActiveControlOwner(queryOwnerKey, queryOwnerId);
           }
           try {
             if (adapterId === "acp") {
@@ -908,14 +991,14 @@ async function main(): Promise<void> {
         let preserveControlRunOwner = false;
         try {
           controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
-          const correlated = withControlRunCorrelation(control.name, controlInput, requestId, control.clientId);
+          const correlated = withControlRunCorrelation(control.name, controlInput, control.clientId);
           controlInput = correlated.input;
           controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
           const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
           if (adapterId && correlated.requestId && correlated.clientId) {
             controlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
             if (controlRunOwnerKey) {
-              activeControlToolOwnersByRequest.set(controlRunOwnerKey, controlContext.activeOwnerId);
+              registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
             }
             facade.registerExternalRequestContext({
               protocolVersion: control.protocolVersion,
@@ -948,8 +1031,32 @@ async function main(): Promise<void> {
           });
           break;
         }
-        if (controlOwnerKey) {
-          activeControlToolOwnersByRequest.set(controlOwnerKey, controlContext.activeOwnerId);
+        try {
+          if (controlOwnerKey) {
+            registerActiveControlOwner(controlOwnerKey, controlContext.activeOwnerId);
+          }
+        } catch (error) {
+          if (controlRunOwnerKey) {
+            activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
+          }
+          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+          }
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "control_context_conflict",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
         }
         const result = agentControlToolContext
           ? await (async () => {
@@ -959,12 +1066,10 @@ async function main(): Promise<void> {
                     ...agentControlToolContext,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
-                      activeControlToolOwnerId({
-                        requestKey: controlOwnerKey,
-                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
-                        fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
-                        allowFallbackOwner: true,
-                      }),
+	                      activeControlToolOwnerId({
+	                        requestKey: controlOwnerKey,
+	                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+	                      }),
                   },
                   control.name,
                   controlInput,

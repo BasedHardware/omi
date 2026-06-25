@@ -183,9 +183,13 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
     throw new Error("ownerId cannot be empty");
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  const activeOwnerId = fallbackOwnerId || "desktop-local-user";
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
+    throw new Error("ownerId does not match active control owner");
+  }
   return {
     requestKey: controlRequestKey(input),
-    activeOwnerId: ownerGuard || fallbackOwnerId || "desktop-local-user",
+    activeOwnerId,
     ownerGuard,
   };
 }

@@ -29,6 +29,7 @@ import type {
   DelegationMode,
   DelegationStatus,
 } from "./types.js";
+import { createHash } from "node:crypto";
 
 const ACTIVE_STATUSES: readonly RunStatus[] = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"];
 const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"];
@@ -36,6 +37,30 @@ const DEFAULT_DELEGATION_MAX_DEPTH = 3;
 const HARD_DELEGATION_MAX_DEPTH = 5;
 const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
 const HARD_DELEGATION_MAX_BUDGET_USD = 10;
+
+function stableHash(value: string | undefined): string {
+  return createHash("sha256").update(value ?? "").digest("hex");
+}
+
+function stableJsonHash(value: unknown): string {
+  return stableHash(JSON.stringify(value ?? null));
+}
+
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function bindingMetadata(input: ExecuteAgentRunInput): string {
+  return JSON.stringify({
+    mcpServersHash: stableJsonHash(input.mcpServers ?? []),
+  });
+}
 
 export interface KernelSessionResolutionInput {
   sessionId?: string;
@@ -1177,8 +1202,10 @@ export class AgentRuntimeKernel {
           adapterInstanceId: this.runtimeNodeId,
           resumeFidelity: "native",
           status: "active",
-          cwd: input.input.cwd ?? input.session.defaultCwd,
+          cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
           modelId: input.input.model ?? null,
+          systemPromptHash: stableHash(input.input.systemPrompt),
+          metadataJson: bindingMetadata(input.input),
         });
         this.appendEvent({
           sessionId: input.session.sessionId,
@@ -1214,6 +1241,29 @@ export class AgentRuntimeKernel {
     };
   }
 
+  private isBindingCompatible(
+    binding: AdapterBinding,
+    input: {
+      input: ExecuteAgentRunInput;
+      session: AgentSession;
+    }
+  ): boolean {
+    const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
+    if (binding.cwd !== requestedCwd) {
+      return false;
+    }
+    if (input.input.model !== undefined && binding.modelId !== input.input.model) {
+      return false;
+    }
+    const requestedSystemPromptHash = stableHash(input.input.systemPrompt);
+    if (binding.systemPromptHash !== requestedSystemPromptHash && !(binding.systemPromptHash === null && requestedSystemPromptHash === stableHash(undefined))) {
+      return false;
+    }
+    const metadata = parseJsonObject(binding.metadataJson);
+    const expectedMcpServersHash = stableJsonHash(input.input.mcpServers ?? []);
+    return metadata.mcpServersHash === expectedMcpServersHash;
+  }
+
   private async resumeOrReplaceBinding(
     binding: AdapterBinding,
     input: {
@@ -1224,6 +1274,11 @@ export class AgentRuntimeKernel {
       adapterId: string;
     }
   ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
+    if (!this.isBindingCompatible(binding, input)) {
+      this.markBindingStale(binding, input.attempt, "binding_context_changed");
+      const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
+      return { ...opened.handle, replacesBindingId: opened.replacesBindingId };
+    }
     const canUseProcessLocalBinding =
       binding.adapterInstanceId === this.runtimeNodeId &&
       binding.adapterNativeSessionId &&
@@ -1245,6 +1300,10 @@ export class AgentRuntimeKernel {
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
           adapterInstanceId: this.runtimeNodeId,
+          cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? null,
+          modelId: input.input.model ?? binding.modelId ?? null,
+          systemPromptHash: stableHash(input.input.systemPrompt),
+          metadataJson: bindingMetadata(input.input),
           lastUsedAtMs: Date.now(),
           updatedAtMs: Date.now(),
         });
@@ -1308,6 +1367,8 @@ export class AgentRuntimeKernel {
         status: "active",
         cwd: opened.cwd,
         modelId: opened.model ?? input.input.model ?? null,
+        systemPromptHash: stableHash(input.input.systemPrompt),
+        metadataJson: bindingMetadata(input.input),
         lastUsedAtMs: Date.now(),
       });
       this.appendEvent({

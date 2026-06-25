@@ -726,7 +726,9 @@ actor AgentRuntimeProcess {
         log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
         completeToolCall(
           callId: callId,
-          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs"
+          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs",
+          requestId: message.requestId,
+          clientId: message.clientId
         )
         return
       }
@@ -740,16 +742,19 @@ actor AgentRuntimeProcess {
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
       let result = await request.onToolCall(callId, name, input)
-      completeToolCall(callId: callId, result: result)
+      completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
   }
 
-  private func completeToolCall(callId: String, result: String) {
-    sendJson([
+  private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
+    var payload: [String: Any] = [
       "type": "tool_result",
       "callId": callId,
       "result": result,
-    ])
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    sendJson(payload)
   }
 
   private func completeRequest(_ message: RuntimeMessage) {

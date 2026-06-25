@@ -36,6 +36,59 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("replaces an active binding when cwd changes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({ ...baseRunInput, cwd: "/tmp/project-a" });
+    await kernel.executeRun({ ...baseRunInput, requestId: "request-cwd-b", cwd: "/tmp/project-b" });
+
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.resumed).toHaveLength(0);
+    const bindings = store.allRows("SELECT binding_generation, status, cwd FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings).toEqual([
+      expect.objectContaining({ binding_generation: 1, status: "stale", cwd: "/tmp/project-a" }),
+      expect.objectContaining({ binding_generation: 2, status: "active", cwd: "/tmp/project-b" }),
+    ]);
+    store.close();
+  });
+
+  it("replaces an active binding when system prompt changes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({ ...baseRunInput, systemPrompt: "prompt-a" });
+    await kernel.executeRun({ ...baseRunInput, requestId: "request-system-prompt-b", systemPrompt: "prompt-b" });
+
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.resumed).toHaveLength(0);
+    const bindings = store.allRows("SELECT binding_generation, status, system_prompt_hash FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "stale" });
+    expect(bindings[1]).toMatchObject({ binding_generation: 2, status: "active" });
+    expect(bindings[0].system_prompt_hash).not.toBe(bindings[1].system_prompt_hash);
+    store.close();
+  });
+
+  it("replaces an active binding when MCP server configuration changes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      mcpServers: [{ name: "omi-tools", command: "node", args: ["tools-a.js"] }],
+    });
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-mcp-b",
+      mcpServers: [{ name: "omi-tools", command: "node", args: ["tools-b.js"] }],
+    });
+
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.resumed).toHaveLength(0);
+    const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "stale" });
+    expect(bindings[1]).toMatchObject({ binding_generation: 2, status: "active" });
+    expect(JSON.parse(bindings[0].metadata_json).mcpServersHash).not.toBe(JSON.parse(bindings[1].metadata_json).mcpServersHash);
+    store.close();
+  });
+
   it("does not allow another non-terminal attempt for the same run", () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const session = store.insertSession({
@@ -401,9 +454,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
 
     adapter.resolveDeferred({
       terminalStatus: "succeeded",
-      text: "first done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      text: "first done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
     });
     const [first, second] = await Promise.all([firstRun, secondRun]);
 
@@ -452,9 +503,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(adapter.opened).toHaveLength(1);
     adapter.resolveDeferred({
       terminalStatus: "succeeded",
-      text: "first done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      text: "first done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
     });
     const [first, second] = await Promise.all([firstRun, secondRun]);
 
@@ -503,9 +552,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     await waitUntil(() => adapter.executed.length === 2);
     adapter.resolveDeferred({
       terminalStatus: "succeeded",
-      text: "existing done",
-      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      text: "existing done",      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
     });
     const [existing, next] = await Promise.all([existingBindingRun, newBindingRun]);
 

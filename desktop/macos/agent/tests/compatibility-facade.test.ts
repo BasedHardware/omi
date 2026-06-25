@@ -120,9 +120,7 @@ describe("JsonlCompatibilityFacade", () => {
     expect(facade.toolCallCorrelationForRequest("control-run-1", "other-client")).toEqual({});
 
     adapter.resolveDeferred({
-      text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await running;
@@ -182,9 +180,7 @@ describe("JsonlCompatibilityFacade", () => {
     expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-control-run")).toEqual({});
 
     adapter.resolveDeferred({
-      text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await Promise.all([first, second]);
@@ -424,9 +420,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "partial",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     expect(sent.some((message) => message.type === "result" && message.terminalStatus === "cancelled")).toBe(true);
     store.close();
@@ -475,9 +469,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "still running",
       terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });
@@ -523,14 +515,12 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });
 
-  it("uses the sole active request context when interrupt omits clientId", async () => {
+  it("rejects protocol v2 request-scoped interrupts that omit clientId", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
@@ -557,22 +547,21 @@ describe("JsonlCompatibilityFacade", () => {
       requestId: "request-without-client",
     });
 
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    expect(adapter.cancelled).toHaveLength(0);
     const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
     expect(cancelAck).toMatchObject({
       protocolVersion: 2,
       requestId: "request-without-client",
-      clientId: "non-default-client",
-      accepted: true,
+      clientId: "legacy-jsonl-client",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
     });
 
     adapter.resolveDeferred({
       text: "cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });
@@ -616,9 +605,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "still running",
       terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });
@@ -662,9 +649,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "still running",
       terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });
@@ -719,9 +704,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "client a cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([first, second]);
     store.close();
   });
@@ -770,9 +753,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([ownerA, ownerB]);
     store.close();
   });
@@ -819,9 +800,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([first, second]);
     store.close();
   });
@@ -868,9 +847,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "first done",
       terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await first;
     await second;
 
@@ -1018,9 +995,7 @@ describe("JsonlCompatibilityFacade", () => {
     });
     adapter.resolveDeferred({
       text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
     });
     await running;
 
@@ -1073,9 +1048,7 @@ describe("JsonlCompatibilityFacade", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
     });
     await running;
 
