@@ -1,0 +1,504 @@
+"""Tests for BenchmarksFetcher (v3, T-304) — AA integration + fallback + cache."""
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import pytest
+
+from utils.auto_router.benchmarks_fetcher import (
+    AA_API_URL,
+    AA_ENV_VAR,
+    AA_UNCOVERED_TASKS,
+    BenchmarksFetcher,
+)
+
+FIXTURES_DIR = Path(__file__).parent.parent.parent / "utils" / "auto_router" / "fixtures"
+AA_FIXTURE_PATH = FIXTURES_DIR / "aa_response_2025_06_25.json"
+EXAMPLE_PATH = Path(__file__).parent.parent.parent / "utils" / "auto_router" / "benchmarks.example.json"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _mock_http_response(json_data: Any, status_code: int = 200) -> httpx.Response:
+    """Build a fake httpx.Response with the given JSON body and status code."""
+    return httpx.Response(
+        status_code=status_code,
+        json=json_data,
+        request=httpx.Request("GET", AA_API_URL),
+    )
+
+
+def _mock_http_client(response: httpx.Response) -> AsyncMock:
+    """Build a mock httpx.AsyncClient whose .get() returns the given response."""
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=response)
+    return client
+
+
+def _make_fetcher(
+    tmp_cache: Path,
+    http_response: Optional[httpx.Response] = None,
+    clock_value: float = 1_000_000.0,
+) -> BenchmarksFetcher:
+    """Build a BenchmarksFetcher with mocked HTTP client and a tmp cache path."""
+    client = _mock_http_client(http_response) if http_response is not None else None
+    return BenchmarksFetcher(
+        cache_path=tmp_cache,
+        example_path=EXAMPLE_PATH,
+        http_client=client,
+        clock=lambda: clock_value,
+    )
+
+
+def _load_aa_fixture() -> Dict[str, Any]:
+    with AA_FIXTURE_PATH.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+# ---------------------------------------------------------------------------
+# AA parser (pure-function tests, no HTTP)
+# ---------------------------------------------------------------------------
+
+
+class TestAAParser:
+    """BenchmarksFetcher._parse_aa_model converts one AA entry to internal format."""
+
+    def test_full_model_parsed(self):
+        item = {
+            "id": "claude-sonnet-4-6",
+            "model_creator": {"name": "Anthropic"},
+            "evaluations": [
+                {"name": "MMLU", "value": 0.88},
+                {"name": "GPQA", "value": 0.74},
+                {"name": "MATH", "value": 0.78},
+            ],
+            "pricing": {"price_1m_input_tokens_usd": 3.0, "price_1m_output_tokens_usd": 15.0},
+            "median_latency_seconds": 1.2,
+        }
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed is not None
+        assert parsed["id"] == "claude-sonnet-4-6"
+        assert parsed["provider"] == "Anthropic"
+        # quality = mean(0.88, 0.74, 0.78) = 0.80
+        assert parsed["quality_score"] == pytest.approx(0.80, abs=1e-3)
+        # latency = 1 - 1.2/5 = 0.76
+        assert parsed["latency_score"] == pytest.approx(0.76, abs=1e-3)
+        # cost = 1 - 3.0/30 = 0.9
+        assert parsed["cost_score"] == pytest.approx(0.9, abs=1e-3)
+
+    def test_model_missing_id_returns_none(self):
+        assert BenchmarksFetcher._parse_aa_model({"evaluations": []}) is None
+
+    def test_quality_score_clamped_to_unit_interval(self):
+        # Quality > 1.0 (unrealistic but possible) should clamp to 1.0.
+        item = {
+            "id": "x",
+            "evaluations": [{"name": "MMLU", "value": 1.5}],
+        }
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["quality_score"] == 1.0
+
+    def test_latency_zero_gives_perfect_latency_score(self):
+        item = {"id": "x", "median_latency_seconds": 0.0}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["latency_score"] == 1.0
+
+    def test_latency_very_high_gives_zero_latency_score(self):
+        item = {"id": "x", "median_latency_seconds": 10.0}  # > 5s normalization
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["latency_score"] == 0.0
+
+    def test_cost_zero_gives_perfect_cost_score(self):
+        item = {"id": "x", "pricing": {"price_1m_input_tokens_usd": 0.0}}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["cost_score"] == 1.0
+
+    def test_cost_very_high_gives_zero_cost_score(self):
+        item = {"id": "x", "pricing": {"price_1m_input_tokens_usd": 100.0}}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["cost_score"] == 0.0
+
+    def test_missing_evaluations_gives_zero_quality(self):
+        item = {"id": "x", "evaluations": []}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["quality_score"] == 0.0
+
+    def test_missing_pricing_gives_perfect_cost_score(self):
+        # No pricing data → treat as $0 (likely open-source/free) → cost_score=1.0
+        # Per spec: "$0 = 1 cost_score". Matches "missing pricing → 1.0 (best)".
+        item = {"id": "x", "pricing": {}}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["cost_score"] == 1.0
+
+    def test_provider_fallback_to_provider_field(self):
+        # If model_creator is missing, fall back to top-level "provider"
+        item = {"id": "x", "provider": "TestProvider"}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["provider"] == "TestProvider"
+
+    def test_provider_fallback_to_empty(self):
+        item = {"id": "x"}
+        parsed = BenchmarksFetcher._parse_aa_model(item)
+        assert parsed["provider"] == ""
+
+
+# ---------------------------------------------------------------------------
+# fetch() with mocked HTTP
+# ---------------------------------------------------------------------------
+
+
+class TestFetchFromAA:
+    """BenchmarksFetcher.fetch hits AA and returns parsed data."""
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_returns_aa_source(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        fixture = _load_aa_fixture()
+        response = _mock_http_response(fixture)
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "aa"
+        assert refreshed_at is not None  # cache file was written
+        assert "tasks" in data
+        assert "models" in data
+        # All LLM tasks (not in AA_UNCOVERED_TASKS) should have all 4 fixture models
+        llm_tasks = [t for t in data["tasks"] if t["name"] not in AA_UNCOVERED_TASKS]
+        assert len(llm_tasks) >= 1
+        for task in llm_tasks:
+            assert len(data["models"][task["name"]]) == 4
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_preserves_uncovered_tasks(self, tmp_path):
+        """STT/embedding tasks come from example, not AA."""
+        fixture = _load_aa_fixture()
+        response = _mock_http_response(fixture)
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        # transcription + screenshot_embedding should have models from example
+        for task_name in AA_UNCOVERED_TASKS:
+            assert task_name in data["models"]
+            assert len(data["models"][task_name]) > 0
+
+    @pytest.mark.asyncio
+    async def test_4xx_response_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        response = _mock_http_response({"error": "unauthorized"}, status_code=401)
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+        assert refreshed_at is None
+        # Example data should still be returned with all 5 tasks
+        assert len(data["tasks"]) == 5
+
+    @pytest.mark.asyncio
+    async def test_5xx_response_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        response = _mock_http_response({"error": "server"}, status_code=500)
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+    @pytest.mark.asyncio
+    async def test_network_error_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        fetcher = BenchmarksFetcher(
+            cache_path=tmp_path / "cache.json",
+            example_path=EXAMPLE_PATH,
+            http_client=client,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+    @pytest.mark.asyncio
+    async def test_timeout_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        client = AsyncMock()
+        client.get = AsyncMock(side_effect=httpx.TimeoutException("read timeout"))
+        fetcher = BenchmarksFetcher(
+            cache_path=tmp_path / "cache.json",
+            example_path=EXAMPLE_PATH,
+            http_client=client,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+    @pytest.mark.asyncio
+    async def test_malformed_json_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        # httpx.Response with json=... invalid raises json.JSONDecodeError on .json()
+        response = httpx.Response(
+            status_code=200,
+            content=b"not valid json",
+            request=httpx.Request("GET", AA_API_URL),
+        )
+        client = AsyncMock()
+        client.get = AsyncMock(return_value=response)
+        fetcher = BenchmarksFetcher(
+            cache_path=tmp_path / "cache.json",
+            example_path=EXAMPLE_PATH,
+            http_client=client,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+    @pytest.mark.asyncio
+    async def test_unexpected_response_shape_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        response = _mock_http_response("unexpected string body")
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+
+# ---------------------------------------------------------------------------
+# Missing API key
+# ---------------------------------------------------------------------------
+
+
+class TestMissingAPIKey:
+    @pytest.mark.asyncio
+    async def test_no_api_key_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(AA_ENV_VAR, raising=False)
+        # No HTTP client — should not be called.
+        fetcher = _make_fetcher(tmp_path / "cache.json", http_response=None)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+        assert refreshed_at is None
+        assert len(data["tasks"]) == 5
+
+    @pytest.mark.asyncio
+    async def test_empty_api_key_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "")
+        fetcher = _make_fetcher(tmp_path / "cache.json", http_response=None)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+    @pytest.mark.asyncio
+    async def test_whitespace_api_key_falls_back_to_example(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "   ")
+        fetcher = _make_fetcher(tmp_path / "cache.json", http_response=None)
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "example"
+
+
+# ---------------------------------------------------------------------------
+# 24h cache
+# ---------------------------------------------------------------------------
+
+
+class TestCache:
+    @pytest.mark.asyncio
+    async def test_fresh_cache_avoids_http_call(self, tmp_path, monkeypatch):
+        # Pre-populate the cache with valid data.
+        cache_file = tmp_path / "cache.json"
+        with cache_file.open("w") as f:
+            json.dump({"tasks": [], "models": {}}, f)
+        mtime = cache_file.stat().st_mtime
+
+        # Use a clock that returns mtime + 1s (within 24h TTL).
+        fetcher = BenchmarksFetcher(
+            cache_path=cache_file,
+            example_path=EXAMPLE_PATH,
+            http_client=None,
+            clock=lambda: mtime + 1.0,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=False)
+
+        assert source == "aa"
+        assert refreshed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_stale_cache_triggers_fetch(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        cache_file = tmp_path / "cache.json"
+        with cache_file.open("w") as f:
+            json.dump({"tasks": [], "models": {}}, f)
+        mtime = cache_file.stat().st_mtime
+
+        # Clock 25h later — cache stale.
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = BenchmarksFetcher(
+            cache_path=cache_file,
+            example_path=EXAMPLE_PATH,
+            http_client=_mock_http_client(response),
+            clock=lambda: mtime + 25 * 60 * 60,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=False)
+
+        assert source == "aa"  # fetched fresh from AA
+
+    @pytest.mark.asyncio
+    async def test_missing_cache_triggers_fetch(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        data, source, refreshed_at = await fetcher.fetch(force=False)
+
+        assert source == "aa"
+        # Cache file should now exist
+        assert (tmp_path / "cache.json").exists()
+
+    @pytest.mark.asyncio
+    async def test_corrupt_cache_triggers_fetch(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        cache_file = tmp_path / "cache.json"
+        with cache_file.open("w") as f:
+            f.write("not valid json")
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = BenchmarksFetcher(
+            cache_path=cache_file,
+            example_path=EXAMPLE_PATH,
+            http_client=_mock_http_client(response),
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=False)
+
+        assert source == "aa"  # corrupt cache ignored, fetched fresh
+
+    @pytest.mark.asyncio
+    async def test_force_skips_cache(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        cache_file = tmp_path / "cache.json"
+        with cache_file.open("w") as f:
+            json.dump({"tasks": [], "models": {}}, f)
+        mtime = cache_file.stat().st_mtime
+
+        # Clock 1s after mtime (cache fresh).
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = BenchmarksFetcher(
+            cache_path=cache_file,
+            example_path=EXAMPLE_PATH,
+            http_client=_mock_http_client(response),
+            clock=lambda: mtime + 1.0,
+        )
+
+        data, source, refreshed_at = await fetcher.fetch(force=True)
+
+        assert source == "aa"  # force=True always hits AA
+
+    @pytest.mark.asyncio
+    async def test_cache_file_written_on_success(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        cache_file = tmp_path / "cache.json"
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = _make_fetcher(cache_file, response)
+
+        await fetcher.fetch(force=True)
+
+        assert cache_file.exists()
+        with cache_file.open() as f:
+            cached = json.load(f)
+        assert "tasks" in cached
+        assert "models" in cached
+
+
+# ---------------------------------------------------------------------------
+# fetch_with_metadata convenience wrapper
+# ---------------------------------------------------------------------------
+
+
+class TestFetchWithMetadata:
+    @pytest.mark.asyncio
+    async def test_aa_source_metadata_shape(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
+        response = _mock_http_response(_load_aa_fixture())
+        fetcher = _make_fetcher(tmp_path / "cache.json", response)
+
+        result = await fetcher.fetch_with_metadata(force=True)
+
+        assert "data" in result
+        assert result["source"] == "aa"
+        assert result["refreshed_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_example_source_metadata_shape(self, tmp_path, monkeypatch):
+        monkeypatch.delenv(AA_ENV_VAR, raising=False)
+        fetcher = _make_fetcher(tmp_path / "cache.json", http_response=None)
+
+        result = await fetcher.fetch_with_metadata(force=True)
+
+        assert "data" in result
+        assert result["source"] == "example"
+        assert result["refreshed_at"] is None
+
+
+# ---------------------------------------------------------------------------
+# Singleton
+# ---------------------------------------------------------------------------
+
+
+class TestSingleton:
+    def test_get_benchmarks_fetcher_returns_same_instance(self):
+        from utils.auto_router.benchmarks_fetcher import (
+            get_benchmarks_fetcher,
+            reset_benchmarks_fetcher_for_testing,
+        )
+
+        reset_benchmarks_fetcher_for_testing()
+        a = get_benchmarks_fetcher()
+        b = get_benchmarks_fetcher()
+        assert a is b
+        reset_benchmarks_fetcher_for_testing()
+
+    def test_reset_creates_new_instance(self):
+        from utils.auto_router.benchmarks_fetcher import (
+            get_benchmarks_fetcher,
+            reset_benchmarks_fetcher_for_testing,
+        )
+
+        reset_benchmarks_fetcher_for_testing()
+        a = get_benchmarks_fetcher()
+        reset_benchmarks_fetcher_for_testing()
+        b = get_benchmarks_fetcher()
+        assert a is not b
+        reset_benchmarks_fetcher_for_testing()
+
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+
+class TestConstants:
+    def test_aa_api_url_is_official(self):
+        assert AA_API_URL == "https://artificialanalysis.ai/api/v2/data/llms/models"
+
+    def test_aa_env_var_name(self):
+        assert AA_ENV_VAR == "AA_API_KEY"
+
+    def test_uncovered_tasks_are_stt_and_embedding(self):
+        assert AA_UNCOVERED_TASKS == frozenset({"transcription", "screenshot_embedding"})
