@@ -177,7 +177,8 @@ weights propagate) are worth addressing before shipping to a wider audience.
 - "I want progress that survives `Ctrl+C` and resumes."
 - "I want a 'remember me' option for the in-tree registry cache."
 - "I want to export the per-task scoring as a CSV for offline review."
-- "I want the back button to work on this flow."
+
+(Web back-button removed — this is a CLI / library per the report's scope; no web UI flow exists.)
 
 ---
 
