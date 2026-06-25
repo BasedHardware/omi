@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import sys
-import types
-import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -17,43 +14,20 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-
-
-def _document_id_from_seed(seed: str) -> str:
-    seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
-    return str(uuid.UUID(bytes=seed_hash[:16], version=4))
-
-
-_db_client_mod.document_id_from_seed = _document_id_from_seed
-
 from tests.unit.memory_import_isolation import (
+    WS_B_STUB_MODULE_NAMES,
     ensure_utils_memory_packages_importable,
-    install_canonical_write_runtime_stubs,
-    install_database_client_stub,
+    install_ws_b_import_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
-)
-
-_STUB_MODULE_NAMES = (
-    "database._client",
-    "firebase_admin",
-    "utils.subscription",
-    "database.users",
-    "pinecone",
-    "typesense",
-    "database.vector_db",
 )
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _ws_b_import_isolation():
-    saved = snapshot_sys_modules(_STUB_MODULE_NAMES)
-    for name in ("database.vector_db",):
-        sys.modules.pop(name, None)
-    install_database_client_stub()
-    install_canonical_write_runtime_stubs()
+    saved = snapshot_sys_modules(WS_B_STUB_MODULE_NAMES)
+    touched = install_ws_b_import_stubs()
+    saved.update(snapshot_sys_modules(touched))
     yield
     restore_sys_modules(saved)
 
