@@ -426,6 +426,21 @@ actor MemoryStorage {
         }
     }
 
+    /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
+    /// Local-only rows (backendId NULL) are preserved. No-op when the snapshot is empty.
+    @discardableResult
+    func syncServerMemoriesAndPruneAbsent(
+        _ memories: [ServerMemory],
+        within scope: MemoryLayerScope
+    ) async throws -> Int {
+        try await syncServerMemories(memories)
+        guard !memories.isEmpty else { return 0 }
+        return try await softDeleteSyncedOrphans(
+            keepingBackendIds: Set(memories.map(\.id)),
+            within: scope
+        )
+    }
+
     // MARK: - Local Extraction Operations
 
     /// Insert a locally extracted memory (before backend sync)
