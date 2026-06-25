@@ -59,6 +59,7 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
+  legacyControlRequestKey,
   resolveControlRequestContext,
   type AgentControlToolContext,
   withMergedOwnerGuard,
@@ -207,7 +208,7 @@ function startOmiToolsRelay(): Promise<string> {
                         getProtocolVersion: () => protocolVersion,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestKey: controlRequestKey(msg),
+                            requestKey: controlRequestKey(msg) ?? legacyControlRequestKey(msg),
                             runId: msg.runId,
                             attemptId: msg.attemptId,
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
@@ -587,6 +588,15 @@ function isLongLivedControlRun(name: string, input: Record<string, unknown>): bo
   return name === "delegate_agent" && input.mode === "spawn";
 }
 
+function controlToolResultOk(result: string): boolean {
+  try {
+    const parsed = JSON.parse(result) as { ok?: unknown };
+    return parsed.ok === true;
+  } catch {
+    return false;
+  }
+}
+
 function payloadObject(payloadJson: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(payloadJson) as unknown;
@@ -824,7 +834,9 @@ async function main(): Promise<void> {
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
           query.requestId = requestIdFor(query) ?? randomUUID();
           const queryRequestId = requestIdFor(query);
-          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
+          const queryOwnerKey =
+            controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
+            legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
           if (queryOwnerKey) {
             activeControlToolOwnersByRequest.set(queryOwnerKey, queryOwnerId);
           }
@@ -899,7 +911,6 @@ async function main(): Promise<void> {
           const correlated = withControlRunCorrelation(control.name, controlInput, requestId, control.clientId);
           controlInput = correlated.input;
           controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
-          preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput);
           const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
           if (adapterId && correlated.requestId && correlated.clientId) {
             controlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
@@ -943,7 +954,7 @@ async function main(): Promise<void> {
         const result = agentControlToolContext
           ? await (async () => {
               try {
-                return await handleAgentControlToolCall(
+                const toolResult = await handleAgentControlToolCall(
                   {
                     ...agentControlToolContext,
                     getProtocolVersion: () => control.protocolVersion,
@@ -958,6 +969,8 @@ async function main(): Promise<void> {
                   control.name,
                   controlInput,
                 );
+                preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
+                return toolResult;
               } finally {
                 if (controlOwnerKey && (!preserveControlRunOwner || controlOwnerKey !== controlRunOwnerKey)) {
                   activeControlToolOwnersByRequest.delete(controlOwnerKey);
