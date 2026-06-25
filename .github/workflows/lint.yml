@@ -52,6 +52,19 @@ jobs:
             exit 1
           fi
 
+      - name: Check desktop changelog entry
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
+        run: |
+          SKIP_FLAG=""
+          if [ "${{ contains(join(github.event.pull_request.labels.*.name, ','), 'no-changelog-needed') }}" = "true" ]; then
+            SKIP_FLAG="--skip"
+          fi
+
+          python3 .github/scripts/check-desktop-changelog.py \
+            --base "origin/${{ github.base_ref }}" \
+            --head HEAD \
+            $SKIP_FLAG
+
       # -- Dart --
       - name: Setup Flutter
         if: steps.changed.outputs.has_dart == 'true'
