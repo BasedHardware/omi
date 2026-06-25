@@ -155,9 +155,51 @@ def main():
         models=models,
     )
 
+    # Demo 4: Hit the live endpoint (v2 wiring)
+    # Uses FastAPI's TestClient so the demo is self-contained (no uvicorn needed).
+    # v2 added auth + a metrics endpoint; this demo exercises both.
+    print_section("Demo 4: Hit the live endpoint and check metrics")
+    print("Expected: GET /v1/auto-router/pick returns the winner;")
+    print("           GET /v1/auto-router/metrics records the pick in pick_history.")
+    try:
+        from fastapi.testclient import TestClient
+        from routers.auto_router import router, reset_registry_cache_for_testing, reset_metrics_collector_for_testing
+
+        # Fresh state for the demo.
+        reset_registry_cache_for_testing()
+        reset_metrics_collector_for_testing()
+
+        from fastapi import FastAPI
+        from routers.auto_router import auth_dependency
+
+        app = FastAPI()
+        app.include_router(router)
+        # Override the auth dependency to skip real Firebase auth in the demo.
+        app.dependency_overrides[auth_dependency] = lambda: "demo-uid"
+        client = TestClient(app)
+
+        for task in ("ptt_response", "general_assistant", "transcription"):
+            r = client.get(f"/v1/auto-router/pick?task={task}")
+            assert r.status_code == 200, f"pick failed: {r.status_code} {r.text}"
+            data = r.json()
+            print(f"\n  GET /pick?task={task}")
+            print(f"    → model: {data['model']}  (score={data['scores'][data['model']]:.4f})")
+
+        r = client.get("/v1/auto-router/metrics")
+        assert r.status_code == 200, f"metrics failed: {r.status_code} {r.text}"
+        metrics = r.json()
+        print("\n  GET /metrics")
+        print(f"    → cache age: {metrics['cache']['age_seconds']:.1f}s")
+        print(f"    → pick_history length: {len(metrics['pick_history'])}")
+        print(
+            f"    → first recorded pick: {metrics['pick_history'][0]['task']} → {metrics['pick_history'][0]['model']}"
+        )
+    except Exception as e:
+        print(f"\n  Demo 4 skipped: {e}")
+
     print()
     print("=" * 70)
-    print("All 3 demos complete.")
+    print("All 4 demos complete.")
     print("=" * 70)
 
 

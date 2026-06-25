@@ -47,8 +47,8 @@ class TestDemoRuns:
         # If we got here, returncode was 0 (enforced by fixture).
         assert demo_output  # output is non-empty
 
-    def test_demo_has_all_three_sections(self, demo_output: str):
-        for header in ("Demo 1:", "Demo 2:", "Demo 3:"):
+    def test_demo_has_all_four_sections(self, demo_output: str):
+        for header in ("Demo 1:", "Demo 2:", "Demo 3:", "Demo 4:"):
             assert header in demo_output, f"missing section header {header!r} in demo output"
 
     def test_demo_prints_picks_and_scores(self, demo_output: str):
