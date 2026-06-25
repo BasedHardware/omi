@@ -137,6 +137,13 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
+### Agent Logic Harness
+When touching desktop agent runtime, floating agent pills, realtime hub, PTT, or `pi-mono-extension`, run the focused harness before broader checks:
+```bash
+cd desktop/macos && ./scripts/agent-logic-harness.sh
+```
+It is self-driving for agents: it runs the risky Swift lifecycle/state tests, focused agent runtime tests, exact `pi-mono-extension` package tests, and prints per-step runtime. Use `--swift-only`, `--node-only`, or `--skip-install` only when narrowing a failure.
+
 ### Verifying UI Changes (agent-swift)
 
 After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.
