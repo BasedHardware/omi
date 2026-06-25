@@ -50,6 +50,10 @@ Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDevi
       return decoded.map((e) => Memory.fromJson(e)).toList();
     }
   }
+  // Legacy memory users cannot use server-side device_scope; fetch all and filter locally.
+  if (thisDeviceOnly && response.statusCode == 400) {
+    return getMemories(limit: limit, offset: offset);
+  }
   return [];
 }
 
