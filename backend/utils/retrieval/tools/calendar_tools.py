@@ -272,6 +272,24 @@ async def get_google_calendar_event(access_token: str, event_id: str) -> dict:
     return event_data
 
 
+def _parse_event_dt(time_field: Optional[dict]) -> Optional[datetime]:
+    """Parse a Google Calendar event start/end block into a tz-aware datetime.
+
+    Handles timed events ('dateTime'), all-day events ('date'), and returns None when the
+    field is missing or unparseable so callers can skip validation rather than crash.
+    """
+    if not time_field:
+        return None
+    try:
+        if 'dateTime' in time_field:
+            return datetime.fromisoformat(time_field['dateTime'].replace('Z', '+00:00'))
+        if 'date' in time_field:
+            return datetime.fromisoformat(time_field['date'] + 'T00:00:00+00:00')
+    except (ValueError, TypeError):
+        return None
+    return None
+
+
 async def update_google_calendar_event(
     access_token: str,
     event_id: str,
@@ -1360,8 +1378,22 @@ async def update_calendar_event_tool(
         if err:
             return err
 
-        if new_start_dt is not None and new_end_dt is not None and new_end_dt <= new_start_dt:
-            return f"Error: new_end_time must be after new_start_time. Start: {new_start_dt.strftime('%Y-%m-%d %H:%M:%S')}, End: {new_end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+        # Validate the resulting start/end order. For a partial reschedule (only one side
+        # provided) the unchanged side is taken from the existing event, so a single-field
+        # update can't silently produce an inverted (end <= start) event.
+        effective_start_dt = new_start_dt if new_start_dt is not None else _parse_event_dt(current_event.get('start'))
+        effective_end_dt = new_end_dt if new_end_dt is not None else _parse_event_dt(current_event.get('end'))
+        if (
+            (new_start_dt is not None or new_end_dt is not None)
+            and effective_start_dt is not None
+            and effective_end_dt is not None
+            and effective_end_dt <= effective_start_dt
+        ):
+            return (
+                f"Error: new_end_time must be after new_start_time. "
+                f"Start: {effective_start_dt.strftime('%Y-%m-%d %H:%M:%S')}, "
+                f"End: {effective_end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
+            )
 
         # Handle attendees
         update_attendees = None
@@ -1416,19 +1448,9 @@ async def update_calendar_event_tool(
 
             update_attendees = current_emails
 
-        # Update the event
-        try:
-            updated_event = await update_google_calendar_event(
-                access_token=access_token,
-                event_id=target_event_id,
-                summary=update_summary,
-                start_time=new_start_dt,
-                end_time=new_end_dt,
-                description=update_description,
-                location=update_location,
-                attendees=update_attendees,
-            )
-
+        def _format_update_result(updated_event: dict) -> str:
+            # Build the confirmation payload. Shared by the primary call and the
+            # post-token-refresh retry so both report the same reschedule details.
             result = f"✅ Successfully updated calendar event: {updated_event.get('summary', 'Untitled')}\n"
 
             if update_summary:
@@ -1452,6 +1474,21 @@ async def update_calendar_event_tool(
 
             return result.strip()
 
+        # Update the event
+        try:
+            updated_event = await update_google_calendar_event(
+                access_token=access_token,
+                event_id=target_event_id,
+                summary=update_summary,
+                start_time=new_start_dt,
+                end_time=new_end_dt,
+                description=update_description,
+                location=update_location,
+                attendees=update_attendees,
+            )
+
+            return _format_update_result(updated_event)
+
         except GoogleAPIError as e:
             logger.error(f"❌ Google API error updating calendar event: status={e.status_code}, msg={e.message}")
 
@@ -1471,10 +1508,7 @@ async def update_calendar_event_tool(
                             attendees=update_attendees,
                         )
 
-                        result = f"✅ Successfully updated calendar event: {updated_event.get('summary', 'Untitled')}\n"
-                        if update_attendees is not None:
-                            result += f"   Attendees: {', '.join(update_attendees)}\n"
-                        return result.strip()
+                        return _format_update_result(updated_event)
                     except Exception as retry_error:
                         return f"Error updating calendar event: {retry_error}"
                 else:

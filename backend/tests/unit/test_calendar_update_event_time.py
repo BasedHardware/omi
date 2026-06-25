@@ -20,7 +20,6 @@ tz-aware datetimes).
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import inspect
 import os
 import sys
 import types
@@ -137,14 +136,28 @@ async def _fake_get_event(_token, event_id):
     return {'id': event_id, 'summary': 'Standup', 'attendees': []}
 
 
-def _run_update(update_mock, **kwargs):
+def _make_get_event(event):
+    async def _fetch(_token, event_id):
+        return dict(event, id=event_id)
+
+    return _fetch
+
+
+def _run_update(update_mock, fetch=None, refresh_token=None, **kwargs):
     """Drive update_calendar_event_tool.coroutine with prepare_access / fetch stubbed.
 
-    event_id is supplied so the search branch is skipped. Returns the tool's result string.
+    event_id is supplied so the search branch is skipped. ``fetch`` overrides the
+    get_google_calendar_event stub (e.g. to supply existing start/end), and
+    ``refresh_token`` patches refresh_google_token for the auth-retry path. Returns the
+    tool's result string.
     """
+    fetch = fetch or _fake_get_event
+    refresh_mock = AsyncMock(return_value=refresh_token)
     with patch.object(mod, 'prepare_access', return_value=('uid-1', {'id': 'cal'}, 'tok-abc', None)), patch.object(
-        mod, 'get_google_calendar_event', side_effect=_fake_get_event
-    ), patch.object(mod, 'update_google_calendar_event', update_mock):
+        mod, 'get_google_calendar_event', side_effect=fetch
+    ), patch.object(mod, 'update_google_calendar_event', update_mock), patch.object(
+        mod, 'refresh_google_token', refresh_mock
+    ):
         return asyncio.run(_update_tool(event_id='evt-1', config={'configurable': {}}, **kwargs))
 
 
@@ -191,8 +204,73 @@ def test_new_time_without_timezone_is_rejected():
     assert not update_mock.called, "update_google_calendar_event must not run on invalid time input"
 
 
-def test_source_threads_new_times_into_update_calls():
-    """Source-assert: both update_google_calendar_event calls receive the parsed new times."""
-    src = inspect.getsource(_update_tool)
-    assert src.count('start_time=new_start_dt') >= 2, "new_start_dt not threaded into both update calls"
-    assert src.count('end_time=new_end_dt') >= 2, "new_end_dt not threaded into both update calls"
+def test_retry_after_token_refresh_returns_reschedule_details():
+    """The auth-refresh retry path must keep the reschedule confirmation in its output.
+
+    The first update raises a 401 GoogleAPIError; after refresh_google_token yields a new
+    token, the retry succeeds. The returned string must still surface the new Start/End
+    (red before the fix: the retry path only echoed attendees and dropped the times).
+    """
+    update_mock = AsyncMock(
+        side_effect=[
+            mod.GoogleAPIError(401, 'invalid_credentials'),
+            {'id': 'evt-1', 'summary': 'Standup', 'htmlLink': 'http://x'},
+        ]
+    )
+    result = _run_update(
+        update_mock,
+        refresh_token='tok-refreshed',
+        new_start_time='2024-01-20T14:00:00-08:00',
+        new_end_time='2024-01-20T15:00:00-08:00',
+    )
+
+    # Both calls happened (original + retry) and the retry used the refreshed token.
+    assert update_mock.call_count == 2
+    assert update_mock.call_args.kwargs.get('access_token') == 'tok-refreshed'
+    # The confirmation payload still reports the rescheduled times.
+    assert 'Successfully updated' in result
+    assert 'Start:' in result, "retry-path response dropped the new start time"
+    assert 'End:' in result, "retry-path response dropped the new end time"
+
+
+def test_partial_reschedule_inverting_existing_end_is_rejected():
+    """Moving only the start past the existing end must be rejected, not silently sent.
+
+    Existing event runs 14:00-15:00. A start-only update to 16:00 would invert the event;
+    the tool must return an error and never call update_google_calendar_event.
+    """
+    existing = {
+        'summary': 'Standup',
+        'attendees': [],
+        'start': {'dateTime': '2024-01-20T14:00:00Z'},
+        'end': {'dateTime': '2024-01-20T15:00:00Z'},
+    }
+    update_mock = AsyncMock(return_value={})
+    result = _run_update(
+        update_mock,
+        fetch=_make_get_event(existing),
+        new_start_time='2024-01-20T16:00:00+00:00',
+    )
+
+    assert result.startswith('Error')
+    assert not update_mock.called, "an inverted partial reschedule must not be sent to Google Calendar"
+
+
+def test_partial_reschedule_within_existing_bounds_is_sent():
+    """A start-only update that stays before the existing end is threaded through normally."""
+    existing = {
+        'summary': 'Standup',
+        'attendees': [],
+        'start': {'dateTime': '2024-01-20T14:00:00Z'},
+        'end': {'dateTime': '2024-01-20T15:00:00Z'},
+    }
+    update_mock = AsyncMock(return_value={'id': 'evt-1', 'summary': 'Standup'})
+    _run_update(
+        update_mock,
+        fetch=_make_get_event(existing),
+        new_start_time='2024-01-20T14:30:00+00:00',
+    )
+
+    kwargs = update_mock.call_args.kwargs
+    assert kwargs.get('start_time') is not None
+    assert kwargs.get('end_time') is None
