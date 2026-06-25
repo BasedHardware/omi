@@ -663,10 +663,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // so the window center shifts — anchoring from center would land in the wrong spot).
         // Draggable + preChatCenter set: restore to where the bar was before chat opened.
         // Draggable + no preChatCenter: fall back to current center-anchor (best effort).
-        let size = collapsedBarSize
+        let surfaceSize = collapsedBarSize
+        let size = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: surfaceSize)
         let restoreOrigin: NSPoint
         if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
-            restoreOrigin = defaultPillOrigin()
+            restoreOrigin = defaultTopCenteredFrame(for: size).origin
         } else if let center = preChatCenter {
             restoreOrigin = NSPoint(x: center.x - size.width / 2, y: center.y - size.height / 2)
         } else {
