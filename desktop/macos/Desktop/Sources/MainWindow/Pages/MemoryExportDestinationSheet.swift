@@ -2,9 +2,25 @@ import AppKit
 import SwiftUI
 
 struct ExportsSection: View {
-  private let destinations = MemoryExportDestination.allCases
   let statuses: [MemoryExportDestination: MemoryExportStatus]
   let onSelectDestination: (MemoryExportDestination) -> Void
+
+  // Claude/Claude Code and ChatGPT/Codex are merged into one row each; tapping
+  // opens the grouped sheet that shows both options. The CLI-only cases drop out.
+  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?)] {
+    MemoryExportDestination.allCases.compactMap { d in
+      switch d {
+      case .claudeCode, .codex:
+        return nil
+      case .claude:
+        return (.claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup.")
+      case .chatgpt:
+        return (.chatgpt, "ChatGPT / Codex", "Codex (CLI) or ChatGPT cloud — choose in setup.")
+      default:
+        return (d, nil, nil)
+      }
+    }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -13,18 +29,20 @@ struct ExportsSection: View {
         .foregroundColor(OmiColors.textPrimary)
 
       VStack(spacing: 0) {
-        ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
+        ForEach(Array(entries.enumerated()), id: \.element.destination.id) { index, entry in
           if index > 0 {
             Divider()
               .background(OmiColors.backgroundTertiary)
           }
           MemoryExportRow(
-            destination: destination,
-            status: statuses[destination]
+            destination: entry.destination,
+            titleOverride: entry.title,
+            subtitleOverride: entry.subtitle,
+            status: statuses[entry.destination]
               ?? MemoryExportStatus(
                 exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
           ) {
-            onSelectDestination(destination)
+            onSelectDestination(entry.destination)
           }
         }
       }
@@ -71,6 +89,8 @@ private struct AgentSetupActionButtonStyle: ButtonStyle {
 
 private struct MemoryExportRow: View {
   let destination: MemoryExportDestination
+  var titleOverride: String? = nil
+  var subtitleOverride: String? = nil
   let status: MemoryExportStatus
   let action: () -> Void
 
@@ -97,12 +117,12 @@ private struct MemoryExportRow: View {
         ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(destination.title)
+          Text(titleOverride ?? destination.title)
             .scaledFont(size: 14, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
-          Text(destination.description)
+          Text(subtitleOverride ?? destination.description)
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(1)
