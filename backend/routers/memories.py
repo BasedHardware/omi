@@ -20,6 +20,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
@@ -155,6 +156,12 @@ def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
+    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
+        item = _read_canonical_memory_item(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
+
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
@@ -182,6 +189,19 @@ async def create_memory(
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
     payload = memory_db.dict()
+
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        try:
+            memory_service = MemoryService(db_client=db_client)
+            committed_id = memory_service.write(uid, payload)
+            item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db_client)
+            if item is not None:
+                return memory_item_to_memorydb(item)
+            return memory_db
+        except Exception:
+            logger.exception("Canonical create_memory failed uid=%s", uid)
+            raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
         await run_blocking(db_executor, memories_db.create_memory, uid, payload)
@@ -243,6 +263,15 @@ async def create_memories_batch(
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True
+
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        memory_service = MemoryService(db_client=db_client)
+        for memory_db in memory_dbs:
+            memory_service.write(uid, memory_db.dict())
+        if has_public:
+            submit_with_context(postprocess_executor, update_personas_async, uid)
+        return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
     await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
 
@@ -347,6 +376,11 @@ def delete_memory(
     memory_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).delete(uid, memory_id)
+        return {'status': 'ok'}
+
     _validate_memory(uid, memory_id)
     memories_db.delete_memory(uid, memory_id)
     try:
@@ -360,6 +394,11 @@ def delete_memory(
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).delete_all(uid)
+        return {'status': 'ok'}
+
     # Collect all memory IDs before Firestore delete so we can also purge
     # their Pinecone vectors — otherwise orphaned vectors become search
     # noise that never gets cleaned up.
@@ -399,6 +438,12 @@ def edit_memory(
     value: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        _validate_memory(uid, memory_id)
+        MemoryService(db_client=db_client).update_content(uid, memory_id, value)
+        return {'status': 'ok'}
+
     memory = _validate_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
@@ -422,6 +467,11 @@ def update_memory_visibility(
     _validate_memory(uid, memory_id)
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
+    db_client = getattr(db_client_module, 'db', None)
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
+        postprocess_executor.submit(update_personas_async, uid)
+        return {'status': 'ok'}
     memories_db.change_memory_visibility(uid, memory_id, value)
     postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}
