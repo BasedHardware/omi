@@ -34,6 +34,16 @@ from utils.auto_router.task_registry import (
     TaskValidationError,
     UnknownTaskError,
 )
+from utils.auto_router.user_prefs import TaskWeights, UserPrefs
+from utils.auto_router.user_prefs_store import (
+    UserPrefsStore,
+    get_in_memory_user_prefs_store,
+    reset_in_memory_user_prefs_store_for_testing,
+)
+from utils.auto_router.user_prefs_store_protocol import (
+    StoredPrefs,
+    UserPrefsStoreProtocol,
+)
 
 __all__ = [
     # Scoring (T-001)
@@ -48,4 +58,13 @@ __all__ = [
     "ModelValidationError",
     # Daily refresh (T-003)
     "DailyRefreshCache",
+    # Per-user prefs (T-301)
+    "TaskWeights",
+    "UserPrefs",
+    # Per-user prefs store (T-401)
+    "StoredPrefs",
+    "UserPrefsStoreProtocol",
+    "UserPrefsStore",
+    "get_in_memory_user_prefs_store",
+    "reset_in_memory_user_prefs_store_for_testing",
 ]
