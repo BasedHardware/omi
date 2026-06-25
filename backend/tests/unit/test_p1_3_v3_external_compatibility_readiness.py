@@ -1,6 +1,7 @@
-import importlib.util
 import json
 from pathlib import Path
+
+from tests.unit.readiness._harness import load_readiness_script
 
 REQUIRED_ROUTE_REFERENCES = {
     "GET /v3/memories": "list_default_memories",
@@ -24,10 +25,7 @@ REQUIRED_GAPS = {
 
 
 def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_external_compatibility_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return load_readiness_script(script_path.name, module_label="p1_3_v3_external_compatibility_readiness")
 
 
 def test_v3_external_compatibility_runner_exists_and_is_safe_by_default():

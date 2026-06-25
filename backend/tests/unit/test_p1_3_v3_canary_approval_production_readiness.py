@@ -1,25 +1,18 @@
-import importlib.util
 import json
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tests.unit.readiness._harness import load_readiness_script
+
 SCRIPT_NAME = "p1_3_v3_canary_approval_production_readiness.py"
 EXPECTED_ARTIFACT_PATH = "system/v3_canary_approvals/routes/get_v3_memories"
 EXPECTED_ROUTE_SCOPE = "GET /v3/memories"
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_canary_approval_production_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _module():
-    root = Path(__file__).resolve().parents[2]
-    return _load_module(root / "scripts" / SCRIPT_NAME)
+    return load_readiness_script(SCRIPT_NAME)
 
 
 def test_production_readiness_runner_exists_and_is_fail_safe_not_run_by_default():
