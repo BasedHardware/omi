@@ -883,7 +883,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if notchModeEnabled {
             return defaultTopCenteredOrigin(for: newSize)
         }
-        FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
+        return FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
     private func resizeAnchored(
@@ -1141,7 +1141,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 size: size
             )
         }
-        FloatingControlBarGeometry.defaultPillFrame(
+        return FloatingControlBarGeometry.defaultPillFrame(
             size: size,
             visibleFrame: geometryScreenVisibleFrame(),
             topInset: topInsetForPillFallback
