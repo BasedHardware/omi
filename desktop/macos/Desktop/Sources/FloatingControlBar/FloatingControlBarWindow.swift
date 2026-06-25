@@ -372,12 +372,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return NSRect(origin: defaultTopCenteredOrigin(for: windowSize), size: windowSize)
     }
 
-    private func currentSurfaceSize(usesNotchIsland: Bool, removingExistingGlow: Bool = false) -> NSSize {
+    private func currentSurfaceSize(
+        usesNotchIsland: Bool,
+        frameIncludesVoiceGlow: Bool? = nil
+    ) -> NSSize {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
-            let existingGlowOutset = usesNotchIsland && removingExistingGlow ? Self.notchGlowOutsetBottom : 0
-            return NSSize(width: width, height: max(panelHeight, frame.height - existingGlowOutset))
+            let hasBakedInGlow = usesNotchIsland && (frameIncludesVoiceGlow ?? previousVoiceResponseGlowActive)
+            // Only subtract a glow inset that is already baked into the current
+            // frame. On the first voice-response frame the glow does not exist
+            // yet, so subtracting it here would shrink the Ask Omi content area
+            // before responseGlowWindowSize(...) adds the active glow.
+            let bakedInGlowOutset = hasBakedInGlow ? Self.notchGlowOutsetBottom : 0
+            let contentHeight = max(panelHeight, frame.height - bakedInGlowOutset)
+            return NSSize(width: width, height: contentHeight)
         }
         if state.isVoiceListening {
             return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -394,8 +403,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return usesNotchIsland ? notchCollapsedSize : Self.minBarSize
     }
 
-    private func currentSurfaceSizeForCurrentScreen(removingExistingGlow: Bool = false) -> NSSize {
-        currentSurfaceSize(usesNotchIsland: notchModeEnabled, removingExistingGlow: removingExistingGlow)
+    private func currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: Bool? = nil) -> NSSize {
+        currentSurfaceSize(usesNotchIsland: notchModeEnabled, frameIncludesVoiceGlow: frameIncludesVoiceGlow)
     }
 
     private func frameForCurrentState(on screen: NSScreen, usesNotchIsland: Bool) -> NSRect {
@@ -491,10 +500,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .sink { [weak self] isActive in
                 guard let self else { return }
                 let wasActive = self.previousVoiceResponseGlowActive
+                let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)
                 self.previousVoiceResponseGlowActive = isActive
-                let targetSize = self.currentSurfaceSizeForCurrentScreen(
-                    removingExistingGlow: wasActive && !isActive
-                )
                 self.resizeAnchored(
                     to: targetSize,
                     makeResizable: self.styleMask.contains(.resizable),
