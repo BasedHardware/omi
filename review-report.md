@@ -145,3 +145,33 @@ b51c109eb implement T-001: backend scoring engine
 - [✓] Tests follow existing patterns (pytest with class-based test grouping, XCTest with `@MainActor final class` + `XCTestCase`)
 - [✓] Test framework matches codebase conventions (pytest for backend, XCTest for desktop — NOT Swift Testing, which 0 of 44 desktop test files use)
 - [✓] Demo script (`backend/utils/auto_router/demo/run.py`) runs without errors and produces the documented expected output (verified against `docs/auto-router-demo.md`)
+
+## Post-review QA pass (added 2026-06-25)
+
+A `qa-tester` subagent was spawned after the author's review. Findings documented in `UAT-REPORT.md` and `uat-findings.json`. Verdict: **READY-WITH-FIXES**.
+
+### Findings addressed (3)
+
+- **UAT-FN-01 (medium)** — HTTP 400 leaked the full list of known task names. **Fixed.** Replaced with `{code: "unknown_task", message: "...", docs: "..."}`. Verified e2e via TestClient: no task names in response body for any of the 5 known tasks.
+- **UAT-FN-02 (medium)** — NaN weights propagated to the response as invalid JSON. **Fixed.** `TaskSpec.__post_init__` now rejects non-finite weights (`math.isfinite`), out-of-range (negative or >1.0), bool, and non-numeric types. Verified e2e: NaN, +inf, -inf, negative, bool, str all raise appropriate errors.
+- **UAT-FN-03 (low)** — "EDUCATED ESTIMATES" disclaimer was only in the JSON `_comment`. **Fixed.** Added a one-line cross-reference in `backend/utils/auto_router/README.md` above the task types table.
+
+### Findings disputed (1)
+
+- **UAT-FN-04 (low)** — Tester claimed `task_registry.py does not validate weight sum`. **Disputed.** Weight-sum validation exists at the registry layer (`abs(total - 1.0) > WEIGHT_SUM_TOLERANCE`). My UAT-FN-02 fix added the same validation at `TaskSpec.__post_init__`, so direct construction (e.g., in the demo script) is now also validated. The demo's overridden weights all sum to 1.0 so it still runs.
+
+### Findings deferred (3)
+
+- **UAT-FN-05 (low)** — README lacks a microbenchmark for scoring time. Deferred; not blocking.
+- **UAT-FN-06 (low)** — Tester reported a Pydantic v1 `@validator` deprecation. **Misreport.** The actual warning is `PendingDeprecationWarning: Please use 'import python_multipart' instead` from starlette's multipart parser. My code does not import pydantic. No action needed.
+- **UAT-FN-07 (low)** — Tests don't assert against the in-tree demo output. Deferred; demo is a documentation tool, not production code.
+
+### Updated verdict
+
+**READY.** The 2 medium findings are fixed and verified. 3 low findings are either disputed, deferred, or misreports. New test count: **120 tests** (110 backend + 10 desktop), all passing.
+
+**Test deltas from QA pass:**
+- +6 tests in `TestWeightValidation` (NaN, inf, negative, >1.0, bool, str — all rejected)
+- 3 tests in `TestWeightHandling` updated to verify CONSTRUCTION validation (was: scoring preserves bad sums; now: construction rejects bad sums)
+- 1 endpoint test updated for the new 400 response format (no leak)
+- +0 desktop tests (no changes needed)

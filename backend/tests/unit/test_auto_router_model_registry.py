@@ -179,3 +179,136 @@ class TestFromJson:
             assert (
                 len(reg.candidates_for(task)) >= 3
             ), f"task {task!r} has only {len(reg.candidates_for(task))} models (need >= 3)"
+
+
+# ---------------------------------------------------------------------------
+# Edge cases: Unicode, empty fields, model used across multiple tasks
+# ---------------------------------------------------------------------------
+
+
+class TestEdgeCases:
+    """JSON loader should handle non-ASCII, empty fields, and shared model IDs."""
+
+    def test_unicode_model_id_loads(self, tmp_path: Path):
+        path = tmp_path / "models.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "translation": [
+                            {
+                                "id": "gpt-4o-模型-\u4e2d\u6587",
+                                "provider": "openai",
+                                "quality_score": 0.9,
+                                "latency_score": 0.7,
+                                "cost_score": 0.5,
+                            }
+                        ],
+                    },
+                },
+                ensure_ascii=False,
+            )
+        )
+        reg = ModelRegistry.from_json(path)
+        candidates = reg.candidates_for("translation")
+        assert candidates[0].id == "gpt-4o-模型-\u4e2d\u6587"
+
+    def test_empty_provider_string_accepted(self, tmp_path: Path):
+        path = tmp_path / "models.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "t": [
+                            {
+                                "id": "m1",
+                                "quality_score": 0.5,
+                                "latency_score": 0.5,
+                                "cost_score": 0.5,
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        reg = ModelRegistry.from_json(path)
+        assert reg.candidates_for("t")[0].provider == ""
+
+    def test_same_model_id_in_multiple_tasks_allowed(self, tmp_path: Path):
+        # A model can be a candidate for multiple tasks (e.g., claude-sonnet-4-6
+        # is in both ptt_response and screenshot_understanding).
+        path = tmp_path / "models.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "task_a": [
+                            {
+                                "id": "shared-model",
+                                "quality_score": 0.5,
+                                "latency_score": 0.5,
+                                "cost_score": 0.5,
+                            }
+                        ],
+                        "task_b": [
+                            {
+                                "id": "shared-model",
+                                "quality_score": 0.7,
+                                "latency_score": 0.3,
+                                "cost_score": 0.7,
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        reg = ModelRegistry.from_json(path)
+        # Same ID, different task — each task gets its own copy of the ModelSpec.
+        assert reg.candidates_for("task_a")[0].quality_score == 0.5
+        assert reg.candidates_for("task_b")[0].quality_score == 0.7
+
+    def test_very_long_model_id_accepted(self, tmp_path: Path):
+        long_id = "a" * 500
+        path = tmp_path / "models.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "t": [
+                            {
+                                "id": long_id,
+                                "quality_score": 0.5,
+                                "latency_score": 0.5,
+                                "cost_score": 0.5,
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        reg = ModelRegistry.from_json(path)
+        assert reg.candidates_for("t")[0].id == long_id
+
+    def test_models_array_can_be_empty_per_task(self, tmp_path: Path):
+        # Empty candidate list is valid (no models registered yet for a new task).
+        path = tmp_path / "models.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "task_with_models": [
+                            {
+                                "id": "m1",
+                                "quality_score": 0.5,
+                                "latency_score": 0.5,
+                                "cost_score": 0.5,
+                            }
+                        ],
+                        "task_without_models": [],
+                    },
+                }
+            )
+        )
+        reg = ModelRegistry.from_json(path)
+        assert len(reg.candidates_for("task_with_models")) == 1
+        assert len(reg.candidates_for("task_without_models")) == 0

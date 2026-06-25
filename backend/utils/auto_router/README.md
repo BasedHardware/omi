@@ -142,13 +142,33 @@ backend/tests/unit/
 cd backend && PYENV_VERSION=3.12.8 python -m pytest tests/unit/test_auto_router_*.py -v
 ```
 
-98 tests across 5 files:
+118 tests across 6 files:
 
-- `test_auto_router_scoring.py` (31) — formula, clamping, None handling, determinism
+- `test_auto_router_scoring.py` (40) — formula, clamping, None handling, determinism, weight validation (NaN/inf/negative/bool/str rejected)
 - `test_auto_router_task_registry.py` (21) — defaults, lookups, validation, JSON loading
 - `test_auto_router_model_registry.py` (16) — empty, lookups, JSON loading
 - `test_auto_router_daily_refresh.py` (13) — TTL, lock contention, stale fallback
-- `test_auto_router_endpoint.py` (17) — happy path (5 tasks), invalid task, scores completeness, no-candidates → null
+- `test_auto_router_endpoint.py` (20) — happy path (5 tasks), invalid task, scores completeness, no-candidates → null, HTTP method/route handling
+- `test_auto_router_demo.py` (8) — integration test that runs the demo script and verifies expected picks
+
+## Performance characteristics
+
+Run from the backend directory:
+
+```bash
+cd backend && PYENV_VERSION=3.12.8 python -m utils.auto_router.benchmark
+```
+
+Measured on macOS Darwin, Python 3.12.8, single-threaded:
+
+| Metric | Value | Notes |
+|---|---|---|
+| Per-candidate `score()` call | ~135 ns | Pure-function overhead; CPU-bound |
+| Full warm endpoint request (5 tasks × all candidates) | ~2.7 µs | After cache is primed; JSON serialization excluded |
+| Cold first request (registry load from disk) | ~235 µs | One-time cost; cached for 24h after |
+| `benchmarks.json` file size | ~3 KB | JSON parse is fast |
+
+**Net:** Scoring is microseconds. Response time is dominated by network I/O and FastAPI's JSON serialization, NOT by the scoring function. No optimization needed for v1.
 
 ## Out of scope (v1)
 

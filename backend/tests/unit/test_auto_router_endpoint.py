@@ -245,3 +245,133 @@ class TestNoCandidates:
         assert data["model"] is None
         assert data["scores"] == {}
         assert data["detail"]["reason"] == "no candidates registered for this task"
+
+
+# ---------------------------------------------------------------------------
+# AC: HTTP method handling
+# ---------------------------------------------------------------------------
+
+
+class TestHTTPMethods:
+    """Only GET is supported; other methods return 405."""
+
+    def test_post_returns_405(self, client: TestClient):
+        resp = client.post("/v1/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 405
+
+    def test_put_returns_405(self, client: TestClient):
+        resp = client.put("/v1/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 405
+
+    def test_delete_returns_405(self, client: TestClient):
+        resp = client.delete("/v1/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 405
+
+
+# ---------------------------------------------------------------------------
+# AC: Route handling — unknown paths return 404
+# ---------------------------------------------------------------------------
+
+
+class TestRoutes:
+    """The router only exposes /v1/auto-router/pick."""
+
+    def test_root_path_returns_404(self, client: TestClient):
+        resp = client.get("/")
+        assert resp.status_code == 404
+
+    def test_unknown_subpath_returns_404(self, client: TestClient):
+        resp = client.get("/v1/auto-router/notapath")
+        assert resp.status_code == 404
+
+    def test_v1_auto_router_no_pick_returns_404(self, client: TestClient):
+        resp = client.get("/v1/auto-router")
+        assert resp.status_code == 404
+
+    def test_pick_alone_without_v1_prefix_returns_404(self, client: TestClient):
+        resp = client.get("/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# AC: Extra query parameters are ignored (forward-compat)
+# ---------------------------------------------------------------------------
+
+
+class TestQueryParams:
+    """Extra query params don't break the endpoint (forward compat for future fields)."""
+
+    def test_extra_query_param_ignored(self, client: TestClient):
+        resp = client.get("/v1/auto-router/pick?task=ptt_response&debug=true&version=2")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["task"] == "ptt_response"
+        assert data["model"] is not None
+
+    def test_empty_task_param_returns_400(self, client: TestClient):
+        # Empty task name goes through the same path as any unknown task name
+        # (TaskRegistry.get("") raises UnknownTaskError), so we get HTTP 400,
+        # not 422. This is consistent: "" is a valid string, just not a valid
+        # task. FastAPI's 422 is reserved for missing query params entirely.
+        resp = client.get("/v1/auto-router/pick?task=")
+        assert resp.status_code == 400
+        assert resp.json()["detail"]["code"] == "unknown_task"
+
+
+# ---------------------------------------------------------------------------
+# AC: Concurrent requests fire only 1 loader call (cache contention)
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrency:
+    """Concurrent first-time requests should hit the loader only ONCE (asyncio.Lock).
+
+    Note: We can't easily test this with FastAPI's TestClient (which is sync and
+    runs requests sequentially through a threadpool). Instead, we exercise the
+    DailyRefreshCache directly via asyncio.gather — same async lock, same logic.
+    """
+
+    def test_cache_concurrent_calls_invoke_loader_once(self):
+        """asyncio.gather of 10 cache calls fires the loader exactly once on an empty cache."""
+        import asyncio
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        cache: DailyRefreshCache[str] = DailyRefreshCache(ttl_seconds=60)
+        loader_calls = 0
+
+        async def slow_loader() -> str:
+            nonlocal loader_calls
+            await asyncio.sleep(0.02)  # ensure other callers queue up
+            loader_calls += 1
+            return "value"
+
+        async def gather_all():
+            coros = [cache.get_or_refresh(slow_loader) for _ in range(10)]
+            return await asyncio.gather(*coros)
+
+        results = asyncio.run(gather_all())
+        assert all(r == "value" for r in results)
+        assert loader_calls == 1, f"loader called {loader_calls} times, expected 1"
+
+    def test_cache_second_call_returns_same_value_no_loader_call(self):
+        """Within TTL, a second call returns cached value without invoking loader."""
+        import asyncio
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        cache: DailyRefreshCache[str] = DailyRefreshCache(ttl_seconds=60)
+        loader_calls = 0
+
+        async def loader() -> str:
+            nonlocal loader_calls
+            loader_calls += 1
+            return "v1"
+
+        async def hit():
+            return await cache.get_or_refresh(loader)
+
+        async def hit_three_times():
+            return [await hit() for _ in range(3)]
+
+        results = asyncio.run(hit_three_times())
+        assert all(r == "v1" for r in results)
+        assert loader_calls == 1

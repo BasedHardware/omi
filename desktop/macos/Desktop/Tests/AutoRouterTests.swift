@@ -96,6 +96,30 @@ final class AutoRouterTests: XCTestCase {
     XCTAssertEqual(url?.port, 8000)
   }
 
+  func testEndpointURL_queryValueIsCorrect() {
+    // Tasks already use snake_case which is URL-safe. Verify the query
+    // value is exactly the task's rawValue (no double-encoding, no skipping).
+    let url = AutoRouter.endpointURL(base: "https://api.example.com", task: .screenshotUnderstanding)
+    let comps = URLComponents(url: url!, resolvingAgainstBaseURL: false)
+    XCTAssertEqual(comps?.queryItems?.first?.value, "screenshot_understanding")
+  }
+
+  func testEndpointURL_worksWithUnderscoredBaseURL() {
+    let url = AutoRouter.endpointURL(base: "https://api_omi.example.com", task: .transcription)
+    XCTAssertNotNil(url)
+    XCTAssertEqual(url?.host, "api_omi.example.com")
+  }
+
+  func testEndpointURL_pathIsConsistentAcrossTasks() {
+    // All 5 tasks should hit the same path; only the query param differs.
+    let urls = AutoRouterTask.allCases.map {
+      AutoRouter.endpointURL(base: "https://api.example.com", task: $0)
+    }
+    let paths = Set(urls.compactMap { $0?.path })
+    XCTAssertEqual(paths.count, 1, "all tasks should hit the same path, got \(paths)")
+    XCTAssertEqual(paths.first, "/v1/auto-router/pick")
+  }
+
   // MARK: - Cache key generation (via store / currentPick)
 
   /// AutoRouter.store uses UserDefaults.standard — for these tests we
@@ -112,6 +136,6 @@ final class AutoRouterTests: XCTestCase {
   /// URLProtocol mocking (URLSession interception) or a running local
   /// backend. Both are deferred to a follow-up AIDLC cycle if needed.
   /// For v1 the structure is verified via:
-  ///   - Backend endpoint tests (test_auto_router_endpoint.py — 17 tests)
+  ///   - Backend endpoint tests (test_auto_router_endpoint.py — 28 tests)
   ///   - Swift structure tests (this file — enum, URL building, key pattern)
 }
