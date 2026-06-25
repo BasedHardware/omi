@@ -292,4 +292,30 @@ enum PrefsError: Error, Equatable {
     case transport(underlying: String)
     /// Local validation rejected the weights (sum != 1.0, out of [0,1], NaN).
     case invalidWeight(reason: String)
+
+    /// User-facing description for the Settings → Auto-router error banner.
+    /// Kept here (not on the view) so it's testable in isolation and so all
+    /// callers show consistent messaging.
+    var userMessage: String {
+        switch self {
+        case .unauthorized:
+            return "Sign in to save preferences."
+        case .invalidWeights:
+            return "Server rejected the weight values. Try adjusting the sliders."
+        case .invalidWeight:
+            return "These weight values are invalid. Try adjusting the sliders."
+        case .unavailable:
+            return "Server is temporarily unavailable. Your changes are still on this screen."
+        case .transport:
+            return "Network error. Your changes are still on this screen."
+        case .invalidURL:
+            return "Auto-router URL is misconfigured. Please report this bug."
+        case .invalidResponse:
+            return "Server returned an unexpected response."
+        case .decodingFailed:
+            return "Couldn't read the server response. Please try again."
+        case .serverError(let status):
+            return "Server error (\(status)). Please try again."
+        }
+    }
 }

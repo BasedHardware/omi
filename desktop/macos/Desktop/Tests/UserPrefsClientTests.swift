@@ -189,4 +189,46 @@ final class UserPrefsClientTests: XCTestCase {
         )
         XCTAssertNotEqual(PrefsError.unauthorized, PrefsError.unavailable)
     }
+
+    // MARK: - PrefsError userMessage
+
+    func testPrefsError_userMessage_unauthorized() {
+        XCTAssertTrue(PrefsError.unauthorized.userMessage.contains("Sign in"))
+    }
+
+    func testPrefsError_userMessage_invalidWeights() {
+        XCTAssertTrue(PrefsError.invalidWeights.userMessage.contains("rejected"))
+    }
+
+    func testPrefsError_userMessage_invalidWeight_local() {
+        // Local validation (different from server-side invalidWeights).
+        XCTAssertTrue(PrefsError.invalidWeight(reason: "sum != 1.0").userMessage.contains("invalid"))
+    }
+
+    func testPrefsError_userMessage_unavailable() {
+        XCTAssertTrue(PrefsError.unavailable.userMessage.contains("unavailable"))
+    }
+
+    func testPrefsError_userMessage_transport() {
+        XCTAssertTrue(PrefsError.transport(underlying: "offline").userMessage.contains("Network"))
+    }
+
+    func testPrefsError_userMessage_invalidURL() {
+        XCTAssertTrue(PrefsError.invalidURL(base: "x").userMessage.contains("misconfigured"))
+    }
+
+    func testPrefsError_userMessage_invalidResponse() {
+        XCTAssertTrue(PrefsError.invalidResponse.userMessage.contains("unexpected"))
+    }
+
+    func testPrefsError_userMessage_decodingFailed() {
+        XCTAssertTrue(PrefsError.decodingFailed.userMessage.contains("read the server response"))
+    }
+
+    func testPrefsError_userMessage_serverError_includesStatus() {
+        // The status code should be in the user-facing message so users can
+        // report it when filing a bug.
+        let msg = PrefsError.serverError(status: 503).userMessage
+        XCTAssertTrue(msg.contains("503"), "server message should include status: \(msg)")
+    }
 }

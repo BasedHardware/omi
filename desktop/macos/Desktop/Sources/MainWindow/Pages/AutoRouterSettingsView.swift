@@ -178,20 +178,7 @@ struct AutoRouterSettingsView: View {
     }
 
     private var errorDescription: String {
-        switch viewModel.errorState {
-        case .unauthorized:
-            return "Sign in to save preferences."
-        case .invalidWeights:
-            return "Server rejected the weight values. Try adjusting the sliders."
-        case .unavailable:
-            return "Server is temporarily unavailable. Your changes are still on this screen."
-        case .transport:
-            return "Network error. Your changes are still on this screen."
-        case .invalidWeight, .invalidURL, .invalidResponse, .decodingFailed, .serverError:
-            return "Something went wrong. Try again."
-        case .none:
-            return ""
-        }
+        viewModel.errorState?.userMessage ?? ""
     }
 }
 
