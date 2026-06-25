@@ -117,3 +117,47 @@ def test_none_timezone_does_not_raise():
         )
 
     assert result == _EMPTY
+
+
+def _capturing_llm(captured_prompts):
+    """A get_llm replacement whose .with_structured_output(...).invoke(prompt) records the
+    prompt and returns an empty-but-valid ExtractedInformation-shaped result."""
+    structured = MagicMock()
+    structured.people = []
+    structured.topics = []
+    structured.dates = []
+
+    def _invoke(prompt):
+        captured_prompts.append(prompt)
+        return structured
+
+    chain = MagicMock()
+    chain.invoke.side_effect = _invoke
+
+    llm = MagicMock()
+    llm.with_structured_output.return_value = chain
+
+    return MagicMock(return_value=llm)
+
+
+def test_invalid_timezone_prompt_uses_utc_not_the_bad_string():
+    # Cubic edge case: when tz parsing fails, the date context is computed in UTC,
+    # so the prompt label must say UTC too -- not the original invalid timezone string,
+    # otherwise the LLM is told the date is local to a bogus zone (inconsistent date context).
+    created_at = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    captured = []
+
+    with patch.object(mod, 'track_usage', _noop_usage), patch.object(mod, 'get_llm', _capturing_llm(captured)):
+        mod.retrieve_metadata_fields_from_transcript(
+            uid='user-123',
+            created_at=created_at,
+            transcript_segment=_make_segments(),
+            tz='Not/AZone',  # invalid IANA name -> falls back to UTC
+        )
+
+    assert len(captured) == 1
+    prompt = captured[0]
+    # The invalid timezone must NOT leak into the prompt's date context.
+    assert 'Not/AZone' not in prompt
+    # The prompt must name UTC as the timezone, matching the UTC-computed date.
+    assert 'in UTC (user' in prompt

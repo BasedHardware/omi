@@ -1065,6 +1065,7 @@ def retrieve_metadata_fields_from_transcript(
     except Exception:
         logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
         user_tz = timezone.utc
+        tz = 'UTC'
     tz = tz or 'UTC'
     today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
 
@@ -1155,6 +1156,7 @@ def retrieve_metadata_from_message(
     except Exception:
         logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
         user_tz = timezone.utc
+        tz = 'UTC'
     tz = tz or 'UTC'
     today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
 
@@ -1197,6 +1199,7 @@ def retrieve_metadata_from_text(
     except Exception:
         logger.warning(f'Invalid timezone {tz!r} for metadata extraction; falling back to UTC')
         user_tz = timezone.utc
+        tz = 'UTC'
     tz = tz or 'UTC'
     today_local = created_at.astimezone(user_tz).strftime('%Y-%m-%d')
 
