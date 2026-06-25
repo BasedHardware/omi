@@ -928,7 +928,7 @@ private struct NotchAgentPillsRowView: View {
     // A notched lobe has 64 pt of usable row width (76 - 12 padding); four
     // direct 17 pt orbs plus gaps need 74 pt, so group before the fourth orb.
     private let directAgentLimit = 3
-    private let groupedStatusLimit = 4
+    private let groupedStatusLimit = 3
 
     private var pillsNewestFirst: [AgentPill] {
         Array(manager.pills.reversed())
@@ -940,6 +940,11 @@ private struct NotchAgentPillsRowView: View {
         }
     }
 
+    private var visibleGroups: [NotchAgentStatusGroup] {
+        guard groups.count > groupedStatusLimit else { return groups }
+        return Array(groups.prefix(groupedStatusLimit - 1)) + [.more]
+    }
+
     var body: some View {
         let _ = pillStatusChangeToken
         HStack(spacing: 2) {
@@ -948,7 +953,7 @@ private struct NotchAgentPillsRowView: View {
                     NotchAgentPillOrbItem(pill: pill, manager: manager)
                 }
             } else {
-                ForEach(groups.prefix(groupedStatusLimit)) { group in
+                ForEach(visibleGroups) { group in
                     NotchAgentOrbButton(
                         group: group,
                         count: pills(for: group).count,
@@ -1034,6 +1039,9 @@ private struct NotchAgentPillsRowView: View {
     }
 
     private func pills(for group: NotchAgentStatusGroup) -> [AgentPill] {
+        if group == .more {
+            return groups.dropFirst(groupedStatusLimit - 1).flatMap { pills(for: $0) }
+        }
         pillsNewestFirst.filter { group.contains($0.status) }
     }
 
@@ -1080,6 +1088,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
     case queued
     case failed
     case done
+    case more
 
     static let displayOrder: [NotchAgentStatusGroup] = [.running, .queued, .failed, .done]
 
@@ -1104,6 +1113,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return "Queued"
         case .failed: return "Failed"
         case .done: return "Done"
+        case .more: return "More"
         }
     }
 
@@ -1113,6 +1123,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
         case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+        case .more: return Color.white.opacity(0.70)
         }
     }
 
@@ -1122,6 +1133,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
         case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
+        case .more: return Color.white.opacity(0.80)
         }
     }
 
@@ -1131,6 +1143,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
         case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
         case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
+        case .more: return Color.black.opacity(0.45)
         }
     }
 
@@ -1140,13 +1153,14 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return "clock"
         case .failed: return "exclamationmark"
         case .done: return "checkmark"
+        case .more: return "ellipsis"
         }
     }
 
     var breathes: Bool {
         switch self {
         case .running: return true
-        case .queued, .failed, .done: return false
+        case .queued, .failed, .done, .more: return false
         }
     }
 
@@ -1156,6 +1170,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return 3.8
         case .failed: return 4.6
         case .done: return 5.2
+        case .more: return 5.8
         }
     }
 
