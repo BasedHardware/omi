@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -454,9 +455,9 @@ def batch_update_action_items(uid: str, items: list) -> BatchMutationResult:
     """
     Batch update sort_order and/or indent_level for multiple action items.
 
-    Missing IDs are returned explicitly instead of letting Firestore's batch
-    update fail the whole request or silently pretending every requested id
-    changed.
+    Missing IDs are returned explicitly. Each document update is applied
+    independently so a concurrent delete cannot make Firestore reject an entire
+    mutation after an earlier existence pre-read succeeded.
     """
     result = BatchMutationResult()
     if not items:
@@ -466,15 +467,8 @@ def batch_update_action_items(uid: str, items: list) -> BatchMutationResult:
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for item in items:
         doc_ref = action_items_ref.document(item.id)
-        if not doc_ref.get().exists:
-            result.missing_ids.append(item.id)
-            continue
-
         update_data = {'updated_at': now}
         if item.sort_order is not None:
             update_data['sort_order'] = item.sort_order
@@ -485,17 +479,12 @@ def batch_update_action_items(uid: str, items: list) -> BatchMutationResult:
             result.noop_ids.append(item.id)
             continue
 
-        batch.update(doc_ref, update_data)
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(item.id)
+            continue
         result.updated_ids.append(item.id)
-        count += 1
-
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
-
-    if count > 0:
-        batch.commit()
 
     return result
 
@@ -670,10 +659,12 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
 
 def batch_sync_update_action_items(uid: str, updates: List[dict]) -> BatchMutationResult:
     """
-    Batch update action items during reminders sync. Single Firestore batch commit.
+    Batch update action items during reminders sync.
 
-    Missing IDs are returned explicitly; callers should use only updated_ids for
-    downstream vector/cache work.
+    Missing IDs are returned explicitly; each document update is applied
+    independently so a concurrent delete cannot fail the whole request after an
+    existence pre-read. Callers should use only updated_ids for downstream
+    vector/cache work.
     """
     result = BatchMutationResult()
     if not updates:
@@ -683,31 +674,19 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> BatchMutati
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for entry in updates:
         doc_ref = action_items_ref.document(entry['id'])
-        if not doc_ref.get().exists:
-            result.missing_ids.append(entry['id'])
-            continue
-
         update_data = _prepare_action_item_for_write(entry['data'])
         update_data['updated_at'] = now
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
-        batch.update(doc_ref, update_data)
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(entry['id'])
+            continue
         result.updated_ids.append(entry['id'])
-        count += 1
-
-        if count >= 499:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-
-    if count > 0:
-        batch.commit()
 
     return result
 
