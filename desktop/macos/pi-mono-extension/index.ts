@@ -477,10 +477,13 @@ function connectOmiPipe(pipePath: string): Promise<void> {
 }
 
 async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
-  if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
+  const connection: Socket | null = omiPipeConnection;
+  if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
   const correlation = await omiRelayCorrelation();
+  if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
+  if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
@@ -493,14 +496,14 @@ async function callSwiftTool(name: string, input: Record<string, unknown>, signa
     };
     signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
-      connection: omiPipeConnection,
+      connection,
       resolve: (result: string) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cleanup);
         resolve(result);
       },
     });
-    omiPipeConnection!.write(JSON.stringify({
+    connection.write(JSON.stringify({
       type: "tool_use",
       callId,
       name,
