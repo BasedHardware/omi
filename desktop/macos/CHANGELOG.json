@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons"
+    "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons",
+    "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes."
   ],
   "releases": [
     {
