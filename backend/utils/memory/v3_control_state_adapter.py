@@ -14,6 +14,7 @@ from utils.memory.default_read_rollout import (
     read_rollout_state_doc,
     read_write_convergence_gate,
 )
+from utils.memory.memory_read_rollout_core import extract_consumer_grants
 from utils.memory.v3_control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
@@ -52,16 +53,9 @@ def _read_error_reason(reason: str | None) -> V3ControlDecisionReason:
 
 
 def _consumer_grants(data: dict, consumer: str) -> tuple[bool, bool]:
-    grants = data.get('grants')
-    if not isinstance(grants, dict):
-        return False, False
-    consumer_grants = grants.get(consumer)
-    if not isinstance(consumer_grants, dict):
-        return False, False
-    default_memory = consumer_grants.get('default_memory') is True
-    archive_value = consumer_grants.get('archive')
-    archive_allowed = archive_value if isinstance(archive_value, bool) else False
-    return default_memory, archive_allowed
+    snapshot = extract_consumer_grants(data, consumer)
+    archive_allowed = snapshot.archive_capability if snapshot.archive_capability is not None else False
+    return snapshot.default_memory, archive_allowed
 
 
 def _missing_or_unsupported_schema(data) -> bool:

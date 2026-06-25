@@ -10,6 +10,10 @@ from enum import Enum
 from typing import Protocol
 
 from config.memory_rollout import MemoryRolloutMode
+from utils.memory.memory_read_rollout_core import (
+    MemoryReadGateBlock,
+    v3_rollout_allows_memory_read,
+)
 
 
 class V3ControlRouteFamily(str, Enum):
@@ -188,14 +192,24 @@ def decide_v3_control_route(
 
     if _generation_is_stale(request, control):
         return _fail_closed(V3ControlDecisionReason.STALE_GENERATION)
-    if not control.global_read_gate_open:
-        return _fail_closed(V3ControlDecisionReason.GLOBAL_READ_GATE_CLOSED)
-    if control.default_memory_grant is not True:
-        return _fail_closed(V3ControlDecisionReason.NO_DEFAULT_MEMORY_GRANT, http_status=403)
-    if not control.rollout_write_ready or not control.write_convergence_ready:
-        return _fail_closed(V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY)
-    if not control.projection_ready:
-        return _fail_closed(V3ControlDecisionReason.PROJECTION_NOT_READY)
+
+    gate_result = v3_rollout_allows_memory_read(
+        global_read_gate_open=control.global_read_gate_open,
+        default_memory_grant=control.default_memory_grant,
+        memory_reads_enabled=control.projection_ready,
+        write_convergence_ready=control.write_convergence_ready,
+        rollout_write_ready=control.rollout_write_ready,
+    )
+    if gate_result.blocked:
+        if gate_result.block == MemoryReadGateBlock.GLOBAL_READ_GATE_CLOSED:
+            return _fail_closed(V3ControlDecisionReason.GLOBAL_READ_GATE_CLOSED)
+        if gate_result.block == MemoryReadGateBlock.NO_DEFAULT_MEMORY_GRANT:
+            return _fail_closed(V3ControlDecisionReason.NO_DEFAULT_MEMORY_GRANT, http_status=403)
+        if gate_result.block == MemoryReadGateBlock.WRITE_CONVERGENCE_NOT_READY:
+            return _fail_closed(V3ControlDecisionReason.WRITE_CONVERGENCE_NOT_READY)
+        if gate_result.block == MemoryReadGateBlock.PROJECTION_NOT_READY:
+            return _fail_closed(V3ControlDecisionReason.PROJECTION_NOT_READY)
+
     if request.cursor_memory_read_requested and not request.cursor_secret_config_present:
         return _fail_closed(V3ControlDecisionReason.INVALID_OR_MISSING_CURSOR_SECRET)
     if request.archive_requested and not control.archive_allowed:

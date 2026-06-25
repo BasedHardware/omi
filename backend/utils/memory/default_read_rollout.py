@@ -14,6 +14,7 @@ from config.memory_rollout import (
     decide_memory_rollout_capabilities,
 )
 from database.memory_collections import MemoryCollections
+from utils.memory.memory_read_rollout_core import extract_consumer_grants
 
 SUPPORTED_DEFAULT_READ_CONSUMERS = {'mcp', 'developer_api', 'omi_chat'}
 DEFAULT_READ_OBSERVABILITY_CONSUMERS = ('mcp', 'developer_api', 'omi_chat')
@@ -374,28 +375,11 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
 
 
 def _consumer_default_memory_grant_enabled(data: dict, consumer: str) -> bool:
-    grants = data.get('grants')
-    if not isinstance(grants, dict):
-        return False
-    consumer_grants = grants.get(consumer)
-    if not isinstance(consumer_grants, dict):
-        return False
-    return consumer_grants.get('default_memory') is True
+    return extract_consumer_grants(data, consumer).default_memory
 
 
 def _consumer_archive_capability_value(data: dict, consumer: str) -> bool | None:
-    grants = data.get('grants')
-    if not isinstance(grants, dict):
-        return False
-    consumer_grants = grants.get(consumer)
-    if not isinstance(consumer_grants, dict):
-        return False
-    if 'archive' not in consumer_grants:
-        return False
-    archive_capability = consumer_grants.get('archive')
-    if not isinstance(archive_capability, bool):
-        return None
-    return archive_capability
+    return extract_consumer_grants(data, consumer).archive_capability
 
 
 def normalize_default_read_rollout_decision(
