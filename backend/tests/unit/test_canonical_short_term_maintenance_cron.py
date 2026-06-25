@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -50,13 +50,22 @@ def _cron_import_isolation():
 
 ensure_utils_memory_packages_importable()
 
+from models.product_memory import MemoryTier
 from utils.memory.canonical_short_term_maintenance_cron import (
     run_canonical_short_term_maintenance_for_cohort,
     should_run_canonical_short_term_maintenance_cron,
 )
 from utils.memory.memory_system import list_canonical_cohort_uids
-from utils.memory.short_term_promotion import CanonicalShortTermMaintenanceReport, ShortTermPromotionReport
-from tests.unit.test_ws_b_short_term_lifecycle import _canonical_db_with_control
+from utils.memory.short_term_promotion import (
+    CanonicalShortTermMaintenanceReport,
+    ShortTermPromotionReport,
+    promotion_batch_threshold,
+)
+from tests.unit.test_ws_b_short_term_lifecycle import (
+    _canonical_db_with_control,
+    _seed_canonical_short_term,
+    _set_canonical_cohort,
+)
 
 NOW = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
 CANONICAL_A = "uid-canonical-a"
@@ -139,3 +148,84 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
     assert summary.promoted_total == 0
     assert summary.skipped_users == 1
     assert summary.errors == []
+
+
+def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch):
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    db = _canonical_db_with_control(CANONICAL_A)
+    _set_canonical_cohort(monkeypatch, CANONICAL_A)
+    memory_id = _seed_canonical_short_term(
+        db,
+        uid=CANONICAL_A,
+        conversation_id="conv-cron-first-tick",
+        content="Single short-term fact",
+        monkeypatch=monkeypatch,
+    )
+
+    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-first-tick")
+
+    assert summary.promoted_total == 0
+    assert summary.skipped_users == 1
+    assert db.docs[f"users/{CANONICAL_A}/memory_items/{memory_id}"]["tier"] == MemoryTier.short_term.value
+
+
+def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch):
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    db = _canonical_db_with_control(CANONICAL_A)
+    _set_canonical_cohort(monkeypatch, CANONICAL_A)
+    threshold = promotion_batch_threshold()
+    for index in range(threshold):
+        _seed_canonical_short_term(
+            db,
+            uid=CANONICAL_A,
+            conversation_id=f"conv-cron-batch-{index}",
+            content=f"Batch fact {index}",
+            monkeypatch=monkeypatch,
+        )
+
+    summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-batch")
+
+    assert summary.promoted_total == threshold
+    assert summary.skipped_users == 0
+
+
+def test_daily_cadence_after_first_promotion_run(monkeypatch):
+    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    db = _canonical_db_with_control(CANONICAL_A)
+    _set_canonical_cohort(monkeypatch, CANONICAL_A)
+    threshold = promotion_batch_threshold()
+    for index in range(threshold):
+        _seed_canonical_short_term(
+            db,
+            uid=CANONICAL_A,
+            conversation_id=f"conv-cron-daily-seed-{index}",
+            content=f"Seed fact {index}",
+            monkeypatch=monkeypatch,
+        )
+
+    first = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-daily-seed")
+    assert first.promoted_total == threshold
+
+    daily_memory_id = _seed_canonical_short_term(
+        db,
+        uid=CANONICAL_A,
+        conversation_id="conv-cron-daily",
+        content="Fact for daily promotion",
+        monkeypatch=monkeypatch,
+    )
+
+    hold = run_canonical_short_term_maintenance_for_cohort(
+        db_client=db,
+        now=NOW + timedelta(hours=1),
+        run_id="cron-daily-hold",
+    )
+    assert hold.promoted_total == 0
+    assert db.docs[f"users/{CANONICAL_A}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.short_term.value
+
+    daily = run_canonical_short_term_maintenance_for_cohort(
+        db_client=db,
+        now=NOW + timedelta(hours=25),
+        run_id="cron-daily-fire",
+    )
+    assert daily.promoted_total == 1
+    assert db.docs[f"users/{CANONICAL_A}/memory_items/{daily_memory_id}"]["tier"] == MemoryTier.long_term.value
