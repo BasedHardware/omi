@@ -20,7 +20,27 @@ Side-effect-free. No I/O, no async, no shared state.
 
 from dataclasses import dataclass, field
 import math
-from typing import Dict, Mapping, Optional
+from typing import Any, Dict, Mapping, Optional
+
+
+def _safe_to_float(value: Any, field_name: str, task_name: str) -> float:
+    """Convert a weight value to float, rejecting booleans explicitly.
+
+    In Python, `bool` is a subclass of `int`, so `float(True) == 1.0` would
+    silently accept booleans as weights. The TaskWeights constructor
+    checks `isinstance(w, bool)` AFTER coercion, so the bool silently
+    becomes 1.0 and passes through. We reject it here before coercion
+    with a clear error message.
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"UserPrefs weight '{field_name}' for task '{task_name}' " f"must be a number, got bool")
+    if not isinstance(value, (int, float)):
+        raise ValueError(
+            f"UserPrefs weight '{field_name}' for task '{task_name}' " f"must be a number, got {type(value).__name__}"
+        )
+    if math.isnan(value):
+        raise ValueError(f"UserPrefs weight '{field_name}' for task '{task_name}' must be finite")
+    return float(value)
 
 
 @dataclass(frozen=True)
@@ -119,6 +139,10 @@ class UserPrefs:
         """Parse a JSON-friendly nested dict into a UserPrefs.
 
         Returns an empty UserPrefs if `data` is None or empty.
+
+        Bool check FIRST: in Python, `bool` is a subclass of `int`, so
+        `float(True) == 1.0` would silently accept booleans as weights.
+        We reject booleans explicitly with a clear error message.
         """
         if not data:
             return cls.empty()
@@ -129,8 +153,8 @@ class UserPrefs:
                     f"UserPrefs entry for {task_name!r} must be a dict, " f"got {type(weights_dict).__name__}"
                 )
             overrides[task_name] = TaskWeights(
-                quality=float(weights_dict["quality"]),
-                latency=float(weights_dict["latency"]),
-                cost=float(weights_dict["cost"]),
+                quality=_safe_to_float(weights_dict["quality"], "quality", task_name),
+                latency=_safe_to_float(weights_dict["latency"], "latency", task_name),
+                cost=_safe_to_float(weights_dict["cost"], "cost", task_name),
             )
         return cls(overrides=overrides)

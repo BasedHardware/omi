@@ -254,3 +254,32 @@ class TestUserPrefsStore:
 
         store = UserPrefsStore()
         store.clear("never-existed")  # must not raise
+
+
+class TestUserPrefsBoolBypass:
+    """from_dict should reject booleans explicitly (cubic P2 fix)."""
+
+    def test_from_dict_rejects_bool_quality(self):
+        """float(True) == 1.0 would silently accept booleans as weights."""
+        with pytest.raises(ValueError, match=r"got bool"):
+            UserPrefs.from_dict({"ptt_response": {"quality": True, "latency": 0.5, "cost": 0.4}})
+
+    def test_from_dict_rejects_bool_latency(self):
+        with pytest.raises(ValueError, match=r"got bool"):
+            UserPrefs.from_dict({"ptt_response": {"quality": 0.5, "latency": False, "cost": 0.5}})
+
+    def test_from_dict_rejects_bool_cost(self):
+        with pytest.raises(ValueError, match=r"got bool"):
+            UserPrefs.from_dict({"ptt_response": {"quality": 0.5, "latency": 0.5, "cost": False}})
+
+    def test_from_dict_rejects_string_weight(self):
+        with pytest.raises(ValueError, match=r"got str"):
+            UserPrefs.from_dict({"ptt_response": {"quality": "0.5", "latency": 0.5, "cost": 0.0}})
+
+    def test_from_dict_rejects_none_weight(self):
+        with pytest.raises(ValueError, match=r"got NoneType"):
+            UserPrefs.from_dict({"ptt_response": {"quality": None, "latency": 0.5, "cost": 0.5}})
+
+    def test_from_dict_rejects_nan_weight(self):
+        with pytest.raises(ValueError, match=r"finite"):
+            UserPrefs.from_dict({"ptt_response": {"quality": float("nan"), "latency": 0.5, "cost": 0.5}})
