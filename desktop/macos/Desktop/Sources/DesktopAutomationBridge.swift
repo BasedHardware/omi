@@ -370,7 +370,13 @@ final class DesktopAutomationBridge {
         log("DesktopAutomationBridge: invalid port \(DesktopAutomationLaunchOptions.port)")
         return
       }
-      let listener = try NWListener(using: parameters, on: port)
+      guard let loopback = IPv4Address("127.0.0.1") else {
+        log("DesktopAutomationBridge: failed to resolve loopback address")
+        return
+      }
+      parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(loopback), port: port)
+
+      let listener = try NWListener(using: parameters)
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
