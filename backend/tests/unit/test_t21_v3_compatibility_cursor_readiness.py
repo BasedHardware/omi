@@ -1,6 +1,6 @@
-import importlib.util
-import sys
 from pathlib import Path
+
+from tests.unit.readiness._harness import load_readiness_script
 
 REQUIRED_CASE_KEYS = {
     "v3_endpoint_legacy_shape_compatibility",
@@ -61,19 +61,8 @@ FORBIDDEN_MUTATION_TERMS = [
 ]
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("t21_v3_compatibility_cursor_readiness", script_path)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
 def _module():
-    root = Path(__file__).resolve().parents[2]
-    return _load_module(root / "scripts" / "t21_v3_compatibility_cursor_readiness.py")
+    return load_readiness_script("t21_v3_compatibility_cursor_readiness.py", register=True)
 
 
 def test_t21_v3_compatibility_cursor_runner_exists_and_is_safe_by_default():

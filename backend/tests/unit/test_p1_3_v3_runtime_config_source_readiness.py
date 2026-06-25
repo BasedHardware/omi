@@ -1,24 +1,17 @@
-import importlib.util
 import json
 import os
 import re
 from pathlib import Path
+
+from tests.unit.readiness._harness import load_readiness_script
 
 SCRIPT_NAME = "p1_3_v3_runtime_config_source_readiness.py"
 EXPECTED_ROUTE_SCOPE = "GET /v3/memories"
 EXPECTED_CONFIG_PATHS = ["memory_control/global_read_gate", "memory_control/write_convergence_gate"]
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_runtime_config_source_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _module():
-    root = Path(__file__).resolve().parents[2]
-    return _load_module(root / "scripts" / SCRIPT_NAME)
+    return load_readiness_script(SCRIPT_NAME)
 
 
 def test_runtime_config_source_runner_exists_and_is_fail_safe_not_run_by_default():
