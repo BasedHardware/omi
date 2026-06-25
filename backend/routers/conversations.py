@@ -46,6 +46,7 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -178,8 +179,8 @@ def reprocess_conversation(
     ),
 )
 def get_conversations(
-    limit: int = 100,
-    offset: int = 0,
+    limit: PositiveLimit = 100,
+    offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
@@ -513,7 +514,7 @@ def set_action_item_status(
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
-        if action_item_idx >= len(action_items):
+        if not (0 <= action_item_idx < len(action_items)):
             continue
 
         action_item = action_items[action_item_idx]
@@ -550,7 +551,7 @@ def set_action_item_status(
             description_to_ids.setdefault(desc, []).append(ai['id'])
 
         for i, action_item_idx in enumerate(data.items_idx):
-            if action_item_idx >= len(action_items):
+            if not (0 <= action_item_idx < len(action_items)):
                 continue
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]

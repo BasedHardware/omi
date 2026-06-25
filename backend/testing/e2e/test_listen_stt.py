@@ -5,43 +5,13 @@ import uuid
 
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event
-
-
-def _seed_listen_user(uid: str):
-    get_mock_firestore().collection("users").document(uid).set(
-        {
-            "id": uid,
-            "language": "en",
-            "private_cloud_sync_enabled": False,
-            "transcription_preferences": {"uses_custom_stt": True},
-        }
-    )
-
-
-def _receive_until(websocket, predicate, *, limit=20):
-    for _ in range(limit):
-        message = websocket.receive()
-        if message.get("type") == "websocket.close":
-            raise AssertionError(f"websocket closed before expected message: {message}")
-        text = message.get("text")
-        if not text or text == "ping":
-            continue
-        payload = json.loads(text)
-        if predicate(payload):
-            return payload
-    raise AssertionError("expected websocket payload was not received")
-
-
-def _is_ready_event(payload):
-    return isinstance(payload, dict) and payload.get("type") == "service_status" and payload.get("status") == "ready"
-
-
-def _is_conversation_session_event(payload):
-    return isinstance(payload, dict) and payload.get("type") == "conversation_session"
-
-
-def _is_segment_batch(payload):
-    return isinstance(payload, list) and payload and payload[0].get("id") == "seg-custom-stt-1"
+from listen_test_helpers import (
+    is_conversation_session_event,
+    is_ready_event,
+    is_segment_batch,
+    receive_until,
+    seed_listen_user,
+)
 
 
 def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch):
@@ -118,7 +88,7 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     Deepgram is not contacted, but the real route, websocket loop, transcript
     normalization, client emission, and fake-Firestore persistence all run.
     """
-    _seed_listen_user(test_uid)
+    seed_listen_user(test_uid)
 
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&source=desktop"
@@ -126,15 +96,15 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
         auth_response = websocket.receive_json()
         assert auth_response == {"type": "auth_response", "success": True}
-        session_event = _receive_until(websocket, _is_conversation_session_event)
+        session_event = receive_until(websocket, is_conversation_session_event)
         uuid.UUID(session_event["conversation_id"])
         assert session_event["status"] == "in_progress"
-        _receive_until(websocket, _is_ready_event)
+        receive_until(websocket, is_ready_event)
 
         websocket.send_bytes(b"\x80" * 320)
         websocket.send_text(json.dumps(fake_suggested_transcript_event()))
 
-        emitted_segments = _receive_until(websocket, _is_segment_batch)
+        emitted_segments = receive_until(websocket, is_segment_batch)
 
     expected_segment = {
         "id": "seg-custom-stt-1",
@@ -174,24 +144,24 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
 
 def test_web_listen_reconnect_emits_existing_conversation_session_id(client, test_uid):
     """A fast reconnect should expose the same active conversation id instead of making clients infer it."""
-    _seed_listen_user(test_uid)
+    seed_listen_user(test_uid)
 
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
     ) as websocket:
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
         assert websocket.receive_json() == {"type": "auth_response", "success": True}
-        first_event = _receive_until(websocket, _is_conversation_session_event)
+        first_event = receive_until(websocket, is_conversation_session_event)
         uuid.UUID(first_event["conversation_id"])
-        _receive_until(websocket, _is_ready_event)
+        receive_until(websocket, is_ready_event)
 
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
     ) as websocket:
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
         assert websocket.receive_json() == {"type": "auth_response", "success": True}
-        second_event = _receive_until(websocket, _is_conversation_session_event)
-        _receive_until(websocket, _is_ready_event)
+        second_event = receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
 
     assert second_event["conversation_id"] == first_event["conversation_id"]
     conversations = list(
