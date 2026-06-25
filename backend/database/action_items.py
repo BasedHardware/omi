@@ -428,34 +428,46 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     return True
 
 
-def batch_update_action_items(uid: str, items: list) -> None:
+def batch_update_action_items(uid: str, items: list) -> int:
     """
     Batch update sort_order and/or indent_level for multiple action items.
 
     Args:
         uid: User ID
         items: List of objects with id, sort_order (optional), indent_level (optional)
+
+    Returns:
+        Number of action items actually updated (missing ids and no-op entries
+        are skipped, so this can be lower than ``len(items)``).
     """
     if not items:
-        return
+        return 0
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
+    # Only items that carry a sort_order/indent_level change can produce a write;
+    # entries with neither are no-ops, so skip them before the existence read to
+    # avoid wasted Firestore get_all reads.
+    actionable_items = [item for item in items if item.sort_order is not None or item.indent_level is not None]
+    if not actionable_items:
+        return 0
 
     # Pre-filter to existing docs: batch.update() on a missing doc raises
     # google NotFound, which would 500 the whole batch on one stale id.
-    requested_ids = [item.id for item in items]
+    requested_ids = [item.id for item in actionable_items]
     existing_ids = {
         doc.id
         for doc in db.get_all([action_items_ref.document(i) for i in requested_ids])
         if doc is not None and doc.exists
     }
 
-    for item in items:
+    batch = db.batch()
+    count = 0
+    updated_count = 0
+
+    for item in actionable_items:
         if item.id not in existing_ids:
             continue
         update_data = {'updated_at': now}
@@ -464,10 +476,10 @@ def batch_update_action_items(uid: str, items: list) -> None:
         if item.indent_level is not None:
             update_data['indent_level'] = item.indent_level
 
-        if len(update_data) > 1:  # More than just updated_at
-            doc_ref = action_items_ref.document(item.id)
-            batch.update(doc_ref, update_data)
-            count += 1
+        doc_ref = action_items_ref.document(item.id)
+        batch.update(doc_ref, update_data)
+        count += 1
+        updated_count += 1
 
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
@@ -476,6 +488,8 @@ def batch_update_action_items(uid: str, items: list) -> None:
 
     if count > 0:
         batch.commit()
+
+    return updated_count
 
 
 def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = True) -> bool:

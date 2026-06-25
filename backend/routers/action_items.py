@@ -106,8 +106,8 @@ class BatchUpdateActionItemsRequest(BaseModel):
 @router.patch("/v1/action-items/batch", tags=['action-items'])
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
-    action_items_db.batch_update_action_items(uid, request.items)
-    return {"status": "ok", "updated_count": len(request.items)}
+    updated_count = action_items_db.batch_update_action_items(uid, request.items)
+    return {"status": "ok", "updated_count": updated_count}
 
 
 # *****************************

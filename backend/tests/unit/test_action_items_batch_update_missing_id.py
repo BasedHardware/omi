@@ -20,6 +20,13 @@ asserts ``batch.update`` is invoked only for the existing id.
 
 Red (pre-fix): missing id flows to batch.update -> commit raises NotFound.
 Green (post-fix): missing id is filtered out -> no NotFound, only valid id updated.
+
+Additionally guards the cubic review follow-ups:
+- The helper returns the count of items *actually* updated, so the router does
+  not over-report ``updated_count`` to the client when ids are missing (a
+  skipped missing id must not inflate the count).
+- No-op entries (neither sort_order nor indent_level set) are filtered out
+  before the ``db.get_all`` existence read, so they add no Firestore reads.
 """
 
 import os
@@ -162,12 +169,17 @@ def test_missing_id_does_not_raise_not_found(monkeypatch):
 
     # Pre-fix: 'missing-1' reaches batch.update -> commit raises _FakeNotFound.
     # Post-fix: 'missing-1' is filtered out via db.get_all and skipped.
-    mod.batch_update_action_items('uid', items)
+    updated_count = mod.batch_update_action_items('uid', items)
 
     # Only the existing id should have been written.
     assert fake_batch.updated_ids == [
         'exists-1'
     ], f"batch.update must run only for existing ids, got {fake_batch.updated_ids}"
+
+    # The returned count must reflect only the id that was actually updated.
+    # A skipped missing id must NOT inflate the count the router reports to the
+    # client (cubic P2): 2 items requested, 1 missing -> updated_count == 1.
+    assert updated_count == 1, f"updated_count must exclude skipped missing ids, got {updated_count}"
 
 
 def test_all_missing_ids_commits_nothing(monkeypatch):
@@ -177,9 +189,27 @@ def test_all_missing_ids_commits_nothing(monkeypatch):
 
     items = [_Item('gone-1', sort_order=1), _Item('gone-2', indent_level=2)]
 
-    mod.batch_update_action_items('uid', items)
+    updated_count = mod.batch_update_action_items('uid', items)
 
     assert fake_batch.updated_ids == []
+    assert updated_count == 0, f"all-missing batch must report 0 updates, got {updated_count}"
+
+
+def test_noop_only_items_skip_existence_read(monkeypatch):
+    """Entries with neither sort_order nor indent_level are no-ops and must not
+    incur a Firestore existence read (cubic P3) nor inflate the count."""
+    db, fake_batch = _build_db(existing_ids={'a', 'b'})
+    monkeypatch.setattr(mod, 'db', db)
+
+    items = [_Item('a'), _Item('b')]  # no sort_order / indent_level on either
+
+    updated_count = mod.batch_update_action_items('uid', items)
+
+    # No actionable entries -> nothing written, count is 0, and crucially the
+    # existence read is skipped entirely (no wasted get_all reads).
+    assert fake_batch.updated_ids == []
+    assert updated_count == 0
+    db.get_all.assert_not_called()
 
 
 def test_valid_ids_still_updated(monkeypatch):
@@ -190,7 +220,36 @@ def test_valid_ids_still_updated(monkeypatch):
 
     items = [_Item('a', sort_order=1), _Item('b', indent_level=3)]
 
-    mod.batch_update_action_items('uid', items)
+    updated_count = mod.batch_update_action_items('uid', items)
 
     assert sorted(fake_batch.updated_ids) == ['a', 'b']
     assert fake_batch.commits >= 1
+    assert updated_count == 2, f"both valid ids must be counted, got {updated_count}"
+
+
+def test_existence_read_excludes_noop_entries(monkeypatch):
+    """A mixed batch must only read the actionable ids from Firestore — no-op
+    entries are dropped before db.get_all (cubic P3)."""
+    db, fake_batch = _build_db(existing_ids={'a', 'b', 'c'})
+    monkeypatch.setattr(mod, 'db', db)
+
+    seen_ids = []
+
+    def _record_get_all(doc_refs):
+        refs = list(doc_refs)
+        seen_ids.extend(ref._doc_id for ref in refs)
+        return [_FakeDocSnapshot(ref._doc_id, ref._doc_id in {'a', 'b', 'c'}) for ref in refs]
+
+    db.get_all.side_effect = _record_get_all
+
+    items = [
+        _Item('a', sort_order=1),  # actionable
+        _Item('b'),  # no-op: must not be read
+        _Item('c', indent_level=2),  # actionable
+    ]
+
+    updated_count = mod.batch_update_action_items('uid', items)
+
+    assert sorted(seen_ids) == ['a', 'c'], f"only actionable ids should be read, got {sorted(seen_ids)}"
+    assert sorted(fake_batch.updated_ids) == ['a', 'c']
+    assert updated_count == 2
