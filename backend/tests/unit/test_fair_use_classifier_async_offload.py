@@ -66,6 +66,9 @@ finally:
         sys.modules[_USAGE_TRACKER_MODULE] = _original_usage_tracker
 
 _classifier_llm = classifier_mod._classifier_llm
+# Snapshot the original `ainvoke` so a guard test can prove the patches above
+# restore it (no AsyncMock leaks onto the shared module-level singleton).
+_ORIGINAL_AINVOKE = _classifier_llm.ainvoke
 
 
 class TestClassifierOffloadsBlockingRead:
@@ -88,9 +91,10 @@ class TestClassifierOffloadsBlockingRead:
         llm_response.content = json.dumps(
             {'misuse_score': 0.1, 'usage_type': 'none', 'confidence': 0.9, 'evidence': [], 'reasoning': 'ok'}
         )
-        _classifier_llm.ainvoke = AsyncMock(return_value=llm_response)
 
-        with patch.object(
+        # Patch `ainvoke` via patch.object so the module-level `_classifier_llm`
+        # singleton is restored on exit -- no leak across tests.
+        with patch.object(_classifier_llm, 'ainvoke', AsyncMock(return_value=llm_response)), patch.object(
             classifier_mod, 'run_blocking', side_effect=fake_run_blocking
         ) as mock_run_blocking, patch.object(classifier_mod, '_prepare_conversation_summaries', prep_mock):
             result = await classifier_mod.classify_user_purpose('user1')
@@ -117,9 +121,9 @@ class TestClassifierOffloadsBlockingRead:
         async def fake_run_blocking(executor, fn, *args, **kwargs):
             return fn(*args, **kwargs)
 
-        _classifier_llm.ainvoke = AsyncMock()  # must NOT be awaited
-
-        with patch.object(
+        # Patch `ainvoke` via patch.object (restored on exit) so the mock never
+        # leaks onto the module-level `_classifier_llm`; it must NOT be awaited.
+        with patch.object(_classifier_llm, 'ainvoke', AsyncMock()) as mock_ainvoke, patch.object(
             classifier_mod, 'run_blocking', side_effect=fake_run_blocking
         ) as mock_run_blocking, patch.object(
             classifier_mod, '_prepare_conversation_summaries', MagicMock(return_value=[])
@@ -129,4 +133,12 @@ class TestClassifierOffloadsBlockingRead:
         mock_run_blocking.assert_called_once()
         assert result['misuse_score'] == 0.0
         assert result['usage_type'] == 'none'
-        _classifier_llm.ainvoke.assert_not_called()
+        mock_ainvoke.assert_not_called()
+
+    def test_classifier_llm_ainvoke_not_leaked_by_other_tests(self):
+        """Guard: the patched `ainvoke` must not leak onto the shared module-level
+        `_classifier_llm`. After the patched tests run, the attribute must be the
+        original reference (not a left-over AsyncMock), so test order can't carry a
+        stale mock between cases."""
+        assert _classifier_llm.ainvoke is _ORIGINAL_AINVOKE
+        assert not isinstance(_classifier_llm.ainvoke, AsyncMock)
