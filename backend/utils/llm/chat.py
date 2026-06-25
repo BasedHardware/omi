@@ -16,6 +16,7 @@ from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
 from models.conversation_enums import CategoryEnum
+from models.conversation_metadata import ConversationMetadata
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event
 from models.other import Person
@@ -25,6 +26,27 @@ from utils.llm.usage_tracker import track_usage, Features
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_filter(value: str) -> str:
+    # Convert to lowercase and strip whitespace
+    value = value.lower().strip()
+
+    # Remove special characters and extra spaces
+    value = re.sub(r'[^\w\s-]', '', value)
+    value = re.sub(r'\s+', ' ', value)
+
+    # Remove common filler words
+    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+    value = ' '.join(word for word in value.split() if word not in filler_words)
+
+    # Standardize common variations
+    value = value.replace('artificial intelligence', 'ai')
+    value = value.replace('machine learning', 'ml')
+    value = value.replace('natural language processing', 'nlp')
+
+    return value.strip()
+
 
 # ****************************************
 # ************* CHAT BASICS **************
@@ -1089,31 +1111,12 @@ def retrieve_metadata_fields_from_transcript(
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.topics],
-        'dates': [],
-    }
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=[],
+    ).to_vector_metadata()
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
     for date in result.dates:
         try:
@@ -1214,31 +1217,12 @@ def _process_extracted_metadata(uid: str, prompt: str) -> dict:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.entities],
-        'dates': [],
-    }
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=[],
+    ).to_vector_metadata()
 
     for date in result.dates:
         try:

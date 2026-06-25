@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import ValidationError
 import database.action_items as action_items_db
 import database.users as users_db
 from models.conversation import Conversation
+from models.daily_summary_payload import DailySummaryPayload
 from models.structured import Structured
 from models.other import Person
 from utils.conversations.render import conversations_to_string
@@ -17,6 +19,34 @@ from utils.llms.memory import get_prompt_memories
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _basic_daily_summary(
+    date_str: str,
+    total_conversations: int,
+    total_duration_minutes: float,
+    actual_action_items: list,
+    locations: list,
+) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "date": date_str,
+        "created_at": datetime.utcnow().isoformat(),
+        "headline": "Your Day in Review",
+        "overview": f"You had {total_conversations} conversations today.",
+        "day_emoji": "📅",
+        "stats": {
+            "total_conversations": total_conversations,
+            "total_duration_minutes": int(total_duration_minutes),
+            "action_items_count": len(actual_action_items),
+        },
+        "highlights": [],
+        "action_items": actual_action_items,
+        "unresolved_questions": [],
+        "decisions_made": [],
+        "knowledge_nuggets": [],
+        "locations": locations,
+    }
 
 
 def get_message_structure(
@@ -285,7 +315,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         response = re.sub(r':\s*\\"([^"]*)\\"', r': "\1"', response)
         response = response.replace('\\"', '"')
 
-        summary_data = json.loads(response)
+        summary_data = DailySummaryPayload.model_validate(json.loads(response))
 
         # Helper to map conversation number to ID
         def get_convo_id(num):
@@ -295,7 +325,7 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
 
         # Process highlights - map conversation_numbers to conversation_ids
         highlights = []
-        for h in summary_data.get("highlights", []):
+        for h in summary_data.highlights:
             convo_nums = h.get("conversation_numbers", [])
             convo_ids = [get_convo_id(n) for n in convo_nums if get_convo_id(n)]
             highlights.append(
@@ -309,21 +339,21 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
 
         # Process unresolved questions
         unresolved_questions = []
-        for q in summary_data.get("unresolved_questions", []):
+        for q in summary_data.unresolved_questions:
             unresolved_questions.append(
                 {"question": q.get("question", ""), "conversation_id": get_convo_id(q.get("conversation_number"))}
             )
 
         # Process decisions made
         decisions_made = []
-        for d in summary_data.get("decisions_made", []):
+        for d in summary_data.decisions_made:
             decisions_made.append(
                 {"decision": d.get("decision", ""), "conversation_id": get_convo_id(d.get("conversation_number"))}
             )
 
         # Process knowledge nuggets
         knowledge_nuggets = []
-        for k in summary_data.get("knowledge_nuggets", []):
+        for k in summary_data.knowledge_nuggets:
             knowledge_nuggets.append(
                 {"insight": k.get("insight", ""), "conversation_id": get_convo_id(k.get("conversation_number"))}
             )
@@ -334,9 +364,9 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "id": summary_id,
             "date": date_str,
             "created_at": datetime.utcnow().isoformat(),
-            "headline": summary_data.get("headline", "Your Day in Review"),
-            "overview": summary_data.get("overview", ""),
-            "day_emoji": summary_data.get("day_emoji", "📅"),
+            "headline": summary_data.headline,
+            "overview": summary_data.overview,
+            "day_emoji": summary_data.day_emoji,
             "stats": {
                 "total_conversations": total_conversations,
                 "total_duration_minutes": int(total_duration_minutes),
@@ -349,26 +379,8 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "knowledge_nuggets": knowledge_nuggets,
             "locations": locations,
         }
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        logger.info(f"Response was: {response}")
-        # Return a basic summary on parse failure
-        return {
-            "id": str(uuid.uuid4()),
-            "date": date_str,
-            "created_at": datetime.utcnow().isoformat(),
-            "headline": "Your Day in Review",
-            "overview": f"You had {total_conversations} conversations today.",
-            "day_emoji": "📅",
-            "stats": {
-                "total_conversations": total_conversations,
-                "total_duration_minutes": int(total_duration_minutes),
-                "action_items_count": len(actual_action_items),
-            },
-            "highlights": [],
-            "action_items": actual_action_items,
-            "unresolved_questions": [],
-            "decisions_made": [],
-            "knowledge_nuggets": [],
-            "locations": locations,
-        }
+    except (json.JSONDecodeError, ValidationError) as e:
+        logger.error(f"Failed to parse daily summary payload: {e}")
+        return _basic_daily_summary(
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+        )
