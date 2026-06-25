@@ -270,6 +270,40 @@ def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
     return control
 
 
+def _ordered_capture_devices_from_evidence(raw_evidence: list) -> tuple[List[str], Optional[str]]:
+    """Unique capture device ids ordered by earliest evidence created_at, then list order."""
+    keyed: list[tuple[tuple, str]] = []
+    for index, raw in enumerate(raw_evidence or []):
+        if not isinstance(raw, dict):
+            continue
+        device_id = raw.get("client_device_id")
+        if not device_id:
+            device_id = (raw.get("artifact_ref") or {}).get("client_device_id")
+        if not device_id:
+            continue
+        created_at = raw.get("created_at")
+        if isinstance(created_at, datetime):
+            sort_key = (0, created_at)
+        elif isinstance(created_at, str) and created_at.strip():
+            try:
+                sort_key = (0, datetime.fromisoformat(created_at.replace("Z", "+00:00")))
+            except ValueError:
+                sort_key = (1, index)
+        else:
+            sort_key = (1, index)
+        keyed.append((sort_key, device_id))
+
+    keyed.sort(key=lambda item: item[0])
+    device_ids: List[str] = []
+    seen: set[str] = set()
+    for _, device_id in keyed:
+        if device_id in seen:
+            continue
+        seen.add(device_id)
+        device_ids.append(device_id)
+    return device_ids, (device_ids[0] if device_ids else None)
+
+
 def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
     source_id = evidence_data.get("source_id") or conversation_id
     client_device_id = evidence_data.get("client_device_id")
@@ -421,20 +455,20 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
-        device_ids = sorted({ev.client_device_id for ev in evidence_items if ev.client_device_id})
+        device_ids, primary_device = _ordered_capture_devices_from_evidence(data.get("evidence") or [])
         if device_ids:
             item_ref = client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
             item_ref.set(
                 {
                     "capture_device_ids": device_ids,
-                    "primary_capture_device": device_ids[0],
+                    "primary_capture_device": primary_device,
                 },
                 merge=True,
             )
             item = item.model_copy(
                 update={
                     "capture_device_ids": device_ids,
-                    "primary_capture_device": device_ids[0],
+                    "primary_capture_device": primary_device,
                 }
             )
         sync_atom_keyword_index_for_item(item, db_client=client)
