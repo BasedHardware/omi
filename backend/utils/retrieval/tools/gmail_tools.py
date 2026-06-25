@@ -11,6 +11,7 @@ from typing import Optional, List
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
+from utils.executors import db_executor, run_blocking
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     prepare_access,
@@ -201,7 +202,9 @@ async def get_gmail_messages_tool(
     Returns:
         Formatted list of emails with their details.
     """
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         config,
         'google_calendar',
         'Gmail',
