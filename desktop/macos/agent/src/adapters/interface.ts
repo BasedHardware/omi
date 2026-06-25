@@ -260,6 +260,7 @@ export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterC
 }
 
 export interface OpenBindingInput {
+  /** Omi-owned correlation id. Adapters must not treat this as their native session id. */
   sessionId: string;
   cwd: string;
   model?: string;
@@ -269,13 +270,16 @@ export interface OpenBindingInput {
 }
 
 export interface ResumeBindingInput extends OpenBindingInput {
+  /** Adapter-owned native session id recovered from the active binding. */
   adapterNativeSessionId: string;
 }
 
 export interface AdapterBindingHandle {
   bindingId?: string;
+  /** Omi-owned correlation id. Runtime state uses this to group runs and bindings. */
   sessionId: string;
   adapterId: string;
+  /** Adapter-owned native session id. This is the only id adapters should send back to native runtimes. */
   adapterNativeSessionId: string;
   resumeFidelity: ResumeFidelity;
   cwd: string;
@@ -286,6 +290,7 @@ export interface AdapterBindingHandle {
 export type OpenedBinding = AdapterBindingHandle;
 
 export interface AdapterAttemptContext {
+  /** Omi-owned correlation id for host/runtime bookkeeping only. */
   sessionId: string;
   runId: string;
   attemptId: string;
@@ -311,6 +316,7 @@ export interface AdapterArtifactReference {
 }
 
 export interface AdapterAttemptResult extends PromptResult {
+  /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
   artifacts?: AdapterArtifactReference[];
@@ -349,3 +355,33 @@ export interface RuntimeAdapter {
   cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>;
   closeBinding?(binding: AdapterBindingHandle): Promise<void>;
 }
+
+export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
+
+export interface PlaceholderRuntimeAdapter {
+  readonly adapterId: PlaceholderAdapterId;
+  readonly productionAdapter: false;
+  readonly implementationFactory: null;
+  readonly followUpTicket: string;
+}
+
+export const PLACEHOLDER_RUNTIME_ADAPTERS = {
+  hermes: {
+    adapterId: "hermes",
+    productionAdapter: false,
+    implementationFactory: null,
+    followUpTicket: "TICKET-hermes-adapter",
+  },
+  openclaw: {
+    adapterId: "openclaw",
+    productionAdapter: false,
+    implementationFactory: null,
+    followUpTicket: "TICKET-openclaw-adapter",
+  },
+  a2a: {
+    adapterId: "a2a",
+    productionAdapter: false,
+    implementationFactory: null,
+    followUpTicket: "TICKET-a2a-adapter",
+  },
+} as const satisfies Record<PlaceholderAdapterId, PlaceholderRuntimeAdapter>;
