@@ -116,7 +116,11 @@ from utils.llm.app_generator import generate_description
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
-from utils.request_validation import parse_form_json
+from utils.request_validation import (
+    backfill_app_home_url_from_auth_steps,
+    normalize_required_webhook_url,
+    parse_form_json,
+)
 from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
@@ -496,9 +500,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
         if external_integration.get('triggers_on'):
-            if not external_integration.get('webhook_url'):
-                raise HTTPException(status_code=422, detail='external_integration.webhook_url is required')
-            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            normalize_required_webhook_url(external_integration)
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
                     'setup_instructions_file_path'
@@ -527,9 +529,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         app = AppCreate.model_validate(data)
@@ -740,11 +740,7 @@ def update_app(
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            if not ext_int['auth_steps'][0].get('url'):
-                raise HTTPException(status_code=422, detail='external_integration.auth_steps[0].url is required')
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)

@@ -9,6 +9,7 @@ from models.conversation import SetConversationActionItemsStateRequest, SetConve
 from utils.request_validation import (
     HistoryDays,
     ImageChunkEnvelope,
+    MAX_IMAGE_CHUNK_TOTAL,
     NonNegativeOffset,
     PositiveLimit,
     parse_form_json,
@@ -63,6 +64,11 @@ def test_parse_sync_filename_timestamp_accepts_seconds_and_millis(suffix):
     assert parse_sync_filename_timestamp(f'/tmp/vad/{suffix}.wav') == 1_704_067_200
 
 
+def test_parse_sync_filename_timestamp_accepts_fractional_vad_segment_names():
+    assert parse_sync_filename_timestamp('/tmp/vad/1704067200.0.wav') == 1_704_067_200
+    assert parse_sync_filename_timestamp('/tmp/vad/1704067200.5.wav') == 1_704_067_200.5
+
+
 @pytest.mark.parametrize(
     'filename',
     [
@@ -103,6 +109,13 @@ def test_image_chunk_envelope_rejects_inconsistent_cached_total():
 
     with pytest.raises(ValueError):
         chunk.validate_against_cached_total(3)
+
+
+def test_image_chunk_envelope_allows_mobile_photo_chunk_counts_above_legacy_cap():
+    chunk = ImageChunkEnvelope(id='img', index=300, total=512, data='b')
+
+    assert chunk.total == 512
+    assert MAX_IMAGE_CHUNK_TOTAL >= 512
 
 
 def test_parallel_action_item_arrays_must_have_matching_lengths():

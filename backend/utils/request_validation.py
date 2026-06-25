@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, TypeVar
 
 from fastapi import HTTPException, Query
@@ -27,6 +28,29 @@ def parse_form_json(model_type: type[ModelT] | type[dict], raw_value: str, field
         raise HTTPException(status_code=422, detail=f'Invalid {field_name}: {e}')
 
 
+def normalize_required_webhook_url(external_integration: dict[str, Any]) -> None:
+    webhook_url = external_integration.get('webhook_url')
+    if not isinstance(webhook_url, str) or not webhook_url.strip():
+        raise HTTPException(status_code=422, detail='external_integration.webhook_url is required')
+    external_integration['webhook_url'] = webhook_url.strip()
+
+
+def backfill_app_home_url_from_auth_steps(external_integration: dict[str, Any]) -> None:
+    if external_integration.get('app_home_url'):
+        return
+    auth_steps = external_integration.get('auth_steps')
+    if not auth_steps:
+        return
+    if not isinstance(auth_steps, list):
+        raise HTTPException(status_code=422, detail='external_integration.auth_steps must be a list')
+    if len(auth_steps) != 1:
+        return
+    auth_step = auth_steps[0]
+    if not isinstance(auth_step, dict) or not auth_step.get('url'):
+        raise HTTPException(status_code=422, detail='external_integration.auth_steps[0].url is required')
+    external_integration['app_home_url'] = auth_step['url']
+
+
 def validate_calendar_date(value: str | None, field_name: str = 'date') -> str | None:
     """Validate YYYY-MM-DD strings as real calendar dates and return the original string."""
     if value is None:
@@ -48,7 +72,10 @@ def parse_timezone_aware_datetime(value: str, field_name: str) -> datetime:
     return parsed
 
 
-def parse_sync_filename_timestamp(path: str) -> int:
+MAX_IMAGE_CHUNK_TOTAL = 4096
+
+
+def parse_sync_filename_timestamp(path: str) -> int | float:
     """Parse and validate the unix timestamp in a sync upload/segment filename.
 
     Upload filenames are expected to end with _<unix-seconds-or-millis>.bin;
@@ -58,12 +85,19 @@ def parse_sync_filename_timestamp(path: str) -> int:
     """
     filename = path.split('/')[-1]
     timestamp_part = filename.rsplit('_', 1)[1] if '_' in filename else filename
+    raw_timestamp_text = timestamp_part.rsplit('.', 1)[0]
     try:
-        raw_timestamp = int(timestamp_part.rsplit('.', 1)[0])
-    except ValueError as e:
+        raw_timestamp = Decimal(raw_timestamp_text)
+    except InvalidOperation as e:
         raise ValueError('invalid timestamp') from e
+    if not raw_timestamp.is_finite() or raw_timestamp <= 0:
+        raise ValueError('invalid timestamp')
 
-    timestamp = raw_timestamp // 1000 if raw_timestamp > 10_000_000_000 else raw_timestamp
+    timestamp_decimal = raw_timestamp / Decimal(1000) if raw_timestamp > Decimal(10_000_000_000) else raw_timestamp
+    if timestamp_decimal == timestamp_decimal.to_integral_value():
+        timestamp = int(timestamp_decimal)
+    else:
+        timestamp = float(timestamp_decimal)
     try:
         timestamp_dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
     except (OSError, OverflowError, ValueError) as e:
@@ -78,7 +112,7 @@ def parse_sync_filename_timestamp(path: str) -> int:
 class ImageChunkEnvelope(BaseModel):
     id: str = Field(min_length=1)
     index: int = Field(ge=0)
-    total: int = Field(ge=1, le=256)
+    total: int = Field(ge=1, le=MAX_IMAGE_CHUNK_TOTAL)
     data: str = Field(min_length=1)
 
     @model_validator(mode='after')
@@ -90,5 +124,3 @@ class ImageChunkEnvelope(BaseModel):
     def validate_against_cached_total(self, cached_total: int | None) -> None:
         if cached_total is not None and cached_total != self.total:
             raise ValueError('total must be consistent for all chunks in an image upload')
-        if cached_total is not None and self.index >= cached_total:
-            raise ValueError('index is outside the cached upload buffer')

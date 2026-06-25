@@ -11,6 +11,7 @@ import shutil
 from pathlib import Path
 
 from fakes.storage import list_storage_files
+from listen_test_helpers import is_ready_event, receive_until, seed_listen_user
 
 
 def _fake_png_file():
@@ -86,46 +87,15 @@ def test_v2_sync_rejects_invalid_upload_timestamps_before_creating_job(client, a
     shutil.rmtree(sync_dir, ignore_errors=True)
 
 
-def _seed_listen_user(uid: str):
-    from fakes.firestore import get_mock_firestore
-
-    get_mock_firestore().collection("users").document(uid).set(
-        {
-            "id": uid,
-            "language": "en",
-            "private_cloud_sync_enabled": False,
-            "transcription_preferences": {"uses_custom_stt": True},
-        }
-    )
-
-
-def _receive_until(websocket, predicate, *, limit=20):
-    for _ in range(limit):
-        message = websocket.receive()
-        if message.get("type") == "websocket.close":
-            raise AssertionError(f"websocket closed before expected message: {message}")
-        text = message.get("text")
-        if not text or text == "ping":
-            continue
-        payload = json.loads(text)
-        if predicate(payload):
-            return payload
-    raise AssertionError("expected websocket payload was not received")
-
-
-def _is_ready_event(payload):
-    return isinstance(payload, dict) and payload.get("type") == "service_status" and payload.get("status") == "ready"
-
-
 def test_invalid_listen_image_chunk_closes_websocket_with_policy_violation(client, test_uid):
-    _seed_listen_user(test_uid)
+    seed_listen_user(test_uid)
 
     with client.websocket_connect(
         "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&channels=2&source=phone_call"
     ) as websocket:
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
         assert websocket.receive_json() == {"type": "auth_response", "success": True}
-        _receive_until(websocket, _is_ready_event)
+        receive_until(websocket, is_ready_event)
 
         websocket.send_text(json.dumps({"type": "image_chunk", "id": "img-1", "index": 2, "total": 2, "data": "abc"}))
         close_message = websocket.receive()

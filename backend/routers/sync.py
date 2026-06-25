@@ -691,10 +691,6 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
-        time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
-        if time > datetime.now(timezone.utc) or time < datetime(2024, 1, 1, tzinfo=timezone.utc):
-            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
-
         path = f"{directory}{filename}"
         try:
             with open(path, "wb") as buffer:
