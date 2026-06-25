@@ -742,7 +742,7 @@ actor AgentRuntimeProcess {
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
       let result = await request.onToolCall(callId, name, input)
-      completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
+      completeToolCall(callId: callId, result: result, requestId: message.requestId, clientId: message.clientId)
     }
   }
 

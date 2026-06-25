@@ -58,6 +58,23 @@ describe("Tool relay: resolveToolCall routing", () => {
     expect(pendingToolCalls.has(toolCallPendingKey({ callId: "call-1", clientId: "client-1", requestId: "req-1" }))).toBe(false);
   });
 
+  it("keeps legacy tool_result correlation unscoped", () => {
+    let resolved = "";
+    pendingToolCalls.set(toolCallPendingKey({ callId: "legacy-call" }), {
+      resolve: (r) => { resolved = r; },
+    });
+
+    resolveToolCall({ callId: "legacy-call", clientId: "client-1", requestId: "req-1", result: "wrong scope" });
+
+    expect(resolved).toBe("");
+    expect(pendingToolCalls.has(toolCallPendingKey({ callId: "legacy-call" }))).toBe(true);
+
+    resolveToolCall({ callId: "legacy-call", result: "legacy success" });
+
+    expect(resolved).toBe("legacy success");
+    expect(pendingToolCalls.has(toolCallPendingKey({ callId: "legacy-call" }))).toBe(false);
+  });
+
   it("ignores tool_result for unknown callId (no crash)", () => {
     // Should not throw
     resolveToolCall({ callId: "unknown-id", result: "data" });
