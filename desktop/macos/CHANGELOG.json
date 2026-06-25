@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Connect your AI: centered the omi title together with the What-omi-knows cards"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.535",
+      "date": "2026-06-25",
+      "changes": [
+        "Connect your AI: centered the omi title together with the What-omi-knows cards"
+      ]
+    },
     {
       "version": "0.11.534",
       "date": "2026-06-25",
