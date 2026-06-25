@@ -45,6 +45,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -657,7 +658,10 @@ def execute_tool(
             category = identify_category_for_memory(content)
             memory = Memory(content=content, category=category)
             memory_db = MemoryDB.from_memory(memory, user_id, None, True)
-            MemoryService(db_client=db).write(user_id, memory_db.model_dump())
+            committed_id = MemoryService(db_client=db).write(user_id, memory_db.model_dump())
+            item = _read_canonical_memory_item(user_id, committed_id or memory_db.id, db_client=db)
+            if item is not None:
+                memory_db = memory_item_to_memorydb(item)
             return {"success": True, "memory": memory_db.model_dump()}
 
         memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
