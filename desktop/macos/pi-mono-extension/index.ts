@@ -648,13 +648,6 @@ export const OMI_TOOLS = [
       limit: Type.Optional(Type.Number({ description: "Maximum artifacts to return. Default 50, max 200." })),
     },
     required: [],
-    schemaOptions: {
-      anyOf: [
-        { required: ["sessionId"] },
-        { required: ["runId"] },
-        { required: ["attemptId"] },
-      ],
-    },
   }),
   omiTool({
     name: "send_agent_message",
@@ -705,14 +698,6 @@ export const OMI_TOOLS = [
     },
     required: ["mode", "parentRunId", "objective"],
     timeoutMs: OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
-    schemaOptions: {
-      allOf: [
-        {
-          if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-          then: { required: ["childSessionId"] },
-        },
-      ],
-    },
   }),
   omiTool({
     name: "spawn_agent",
