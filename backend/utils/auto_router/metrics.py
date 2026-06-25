@@ -91,7 +91,11 @@ class MetricsCollector:
     """
 
     def __init__(self, history: Optional[PickHistory] = None) -> None:
-        self._history = history or PickHistory()
+        # Explicit None check — `history or PickHistory()` would ignore an
+        # explicitly-passed empty PickHistory (PickHistory instances are
+        # always truthy as objects, even when empty). Use a None check so
+        # the caller's intent is honored exactly.
+        self._history = history if history is not None else PickHistory()
 
     def record_pick(
         self,

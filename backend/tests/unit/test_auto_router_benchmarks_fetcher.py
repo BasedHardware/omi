@@ -177,8 +177,9 @@ class TestFetchFromAA:
             assert len(data["models"][task["name"]]) == 4
 
     @pytest.mark.asyncio
-    async def test_successful_fetch_preserves_uncovered_tasks(self, tmp_path):
-        """STT/embedding tasks come from example, not AA."""
+    async def test_successful_fetch_preserves_uncovered_tasks(self, tmp_path, monkeypatch):
+        """STT/embedding tasks come from example, not AA — even when AA is hit."""
+        monkeypatch.setenv(AA_ENV_VAR, "test-key-12345")
         fixture = _load_aa_fixture()
         response = _mock_http_response(fixture)
         fetcher = _make_fetcher(tmp_path / "cache.json", response)
