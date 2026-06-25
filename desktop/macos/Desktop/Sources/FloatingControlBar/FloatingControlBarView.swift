@@ -96,12 +96,6 @@ struct FloatingControlBarView: View {
         }
         .background(alignment: .top) {
             ZStack(alignment: .top) {
-                if state.isVoiceResponseActive {
-                    NotchResponseGlowView(
-                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
-                    )
-                }
-
                 if state.showingAIConversation || state.currentNotification != nil {
                     NotchDockShape(bottomRadius: 22)
                         .fill(Color.black)
@@ -110,6 +104,12 @@ struct FloatingControlBarView: View {
                     NotchDockShape(bottomRadius: 18)
                         .fill(Color.black)
                         .frame(height: notchChromeHeight)
+                }
+
+                if state.isVoiceResponseActive {
+                    NotchResponseGlowView(
+                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
+                    )
                 }
             }
         }
