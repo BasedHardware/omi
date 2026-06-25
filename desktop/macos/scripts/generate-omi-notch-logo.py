@@ -79,7 +79,7 @@ def connected_components(mask: set[tuple[int, int]]) -> list[Dot]:
     return sorted(dots, key=lambda dot: math.atan2(dot.cy - 512.0, dot.cx - 512.0))
 
 
-def svg_for_dots(dots: list[Dot], width: int, height: int) -> str:
+def svg_for_dots(dots: list[Dot]) -> str:
     min_x = min(dot.cx - dot.radius for dot in dots)
     min_y = min(dot.cy - dot.radius for dot in dots)
     max_x = max(dot.cx + dot.radius for dot in dots)
@@ -144,13 +144,14 @@ def main() -> int:
         raise SystemExit(f"expected 8 logo dots, found {len(dots)}")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    args.out.write_text(svg_for_dots(dots, width, height), encoding="utf-8")
+    args.out.write_text(svg_for_dots(dots), encoding="utf-8")
 
     rendered_png = (
         args.report.with_suffix(".png")
         if args.report
         else args.out.with_name(f"{args.out.stem}.fit.png")
     )
+    rendered_png.parent.mkdir(parents=True, exist_ok=True)
     render_dots(dots, width, height).save(rendered_png)
     rendered_mask = white_alpha_mask(Image.open(rendered_png))
 
