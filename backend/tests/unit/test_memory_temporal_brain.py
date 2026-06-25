@@ -77,6 +77,7 @@ def _temporal_brain_import_isolation():
         os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
     )
     _drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+    sys.modules.pop('models.memories', None)
 
     client_stub = _AutoMockModule('database._client')
     client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
