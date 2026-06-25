@@ -472,6 +472,44 @@ def install_ws_n_heavy_import_stubs() -> list[str]:
     return touched
 
 
+def install_ws_c_import_stubs() -> list[str]:
+    """Install stubs for WS-C backfill tests (database client + backfill chain)."""
+    install_database_client_stub()
+    touched = ["database._client", *install_ws_c_backfill_stubs()]
+    return list(dict.fromkeys(touched))
+
+
+def install_ws_b_import_stubs() -> list[str]:
+    """Install stubs for WS-B short-term lifecycle tests."""
+    for name in ("database.vector_db",):
+        sys.modules.pop(name, None)
+    install_database_client_stub()
+    touched = ["database._client", *install_canonical_write_runtime_stubs()]
+    return list(dict.fromkeys(touched))
+
+
+WS_B_STUB_MODULE_NAMES = (
+    "database._client",
+    "firebase_admin",
+    "utils.subscription",
+    "database.users",
+    "pinecone",
+    "typesense",
+    "database.vector_db",
+)
+
+WS_C_STUB_MODULE_NAMES = (
+    "database._client",
+    "firebase_admin",
+    "utils.subscription",
+    "database.users",
+    "stripe",
+    "pinecone",
+    "database.vector_db",
+    "database.memories",
+)
+
+
 def module_import_isolation(
     install_fn: Callable[[], Sequence[str]],
     extra_names: Sequence[str] = (),
