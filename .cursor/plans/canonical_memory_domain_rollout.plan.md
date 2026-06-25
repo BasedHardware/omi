@@ -1202,7 +1202,16 @@ Q9/Q10/Q11/Q12/Q13/Q14 not yet needed (WS-L/WS-F/WS-M/WS-N) — ratify before th
   4. **`_bump_source_generation` is non-atomic** (read-modify-write) — concurrent same-uid reprocess can race/lose a bump → make transactional before external cohort.
   5. **`_persist_evidence` overwrites full evidence doc** — could clobber `redaction_status`/`provenance_visibility` if a security-redaction worker and canonical extraction share an `evidence_id` (theoretical until such a worker writes canonical evidence) → preserve redaction on rewrite.
   6. **Canonical extraction skips** legacy conflict-resolution / supersession / per-memory vector upsert (short_term-only scope) — revisit when promotion (WS-B) + vectors (WS-J) land.
-- **Status:** `write-convergence` todo = **in_progress** (primary seam routed + reads consistent for cohort; external writers + MCP/tools remain).
+- **Status:** `write-convergence` todo = **completed** for WS-I.2 product write paths (see below); consolidation refine/merge deferred.
+
+### WS-I.2 — Product write-convergence completion (branch `feature/ws-i2-write-convergence`) — ✅ 2026-06-25
+
+- **Acceptance (product paths):** canonical-cohort users no longer hit `memories_db.create_memory` / `save_memories` / `review_memory` on live product surfaces; creates return server-authoritative `memory_tier`/`layer` after re-read.
+- **Fixed:** visibility + `user_asserted`/`manually_added` + tags/category plumbed through canonical apply; MCP PATCH validates canonical store; `POST /v3/memories/{id}/review` + chat `preference_tools` routed via `MemoryService`; async canonical writes offloaded via `run_blocking(db_executor, …)`; batch/dev/MCP create responses re-read canonical items; `CanonicalMemoryBackend.write` returns id; dev API canonical PATCH handles tags/category.
+- **Regression guard:** `test_ws_i2_write_convergence_guard.py` expanded (`preference_tools`, review path, consolidation allowlist); `scripts/rag/memories.py` documented as offline-excluded.
+- **Deferred (separate consolidation wave):** `utils/consolidation/worker.py` `refine_memory` / `merge_contradict_memory` + `retrieve_candidates` legacy reads — explicitly allowlisted in guard with TODO comments in worker.
+- **Cohort signal note:** background writers use `resolve_memory_system`; routers use `pin_memory_system` — commented, not refactored.
+- **Tests:** `test_ws_i2_write_convergence_guard.py`, `test_ws_i_write_convergence.py`, `test_memories_create.py`, `test_ws_i2_canonical_create_metadata.py` → **44 passed** (2026-06-25).
 
 ### WS-F / WS-K — Desktop layer badge (macOS) — ✅ built + self-verified (2026-06-23)
 
