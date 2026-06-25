@@ -66,7 +66,7 @@ final class MemoryReconciliationScopeTests: XCTestCase {
     }
 
     func testArchiveScopeReconcileDeletesOnlyAbsentArchiveRows() async throws {
-        let short = makeMemory(id: "short-1", tier: .shortTerm)
+        let short = makeMemory(id: "short-1", tier: .longTerm)
         let long = makeMemory(id: "long-1", tier: .longTerm)
         let archiveDeleted = makeMemory(id: "archive-deleted", tier: .archive)
         let archiveKept = makeMemory(id: "archive-kept", tier: .archive)
@@ -89,7 +89,27 @@ final class MemoryReconciliationScopeTests: XCTestCase {
         XCTAssertEqual(archiveKeptRecord?.deleted, false)
     }
 
-    private func makeMemory(id: String, tier: MemoryLayer) -> ServerMemory {
+    func testSyncAndPruneAbsentRemovesPromotedOrphanWithoutConversationId() async throws {
+        // Promoted memory: server projection dropped conversation_id, but local row lingers
+        // after the source conversation is cascade-deleted server-side.
+        let promotedOrphan = makeMemory(id: "promoted-orphan", tier: .longTerm, conversationId: nil)
+        let kept = makeMemory(id: "kept-memory", tier: .longTerm, conversationId: nil)
+
+        try await MemoryStorage.shared.syncServerMemories([promotedOrphan, kept])
+
+        let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
+            [kept],
+            within: .defaultAccess
+        )
+
+        XCTAssertEqual(pruned, 1)
+        let orphanRecord = try await MemoryStorage.shared.getMemoryByBackendId("promoted-orphan")
+        let keptRecord = try await MemoryStorage.shared.getMemoryByBackendId("kept-memory")
+        XCTAssertEqual(orphanRecord?.deleted, true)
+        XCTAssertEqual(keptRecord?.deleted, false)
+    }
+
+    private func makeMemory(id: String, tier: MemoryLayer, conversationId: String? = nil) -> ServerMemory {
         ServerMemory(
             id: id,
             content: "Memory \(id)",
@@ -97,7 +117,7 @@ final class MemoryReconciliationScopeTests: XCTestCase {
             tier: tier,
             createdAt: Date(timeIntervalSince1970: 1),
             updatedAt: Date(timeIntervalSince1970: 2),
-            conversationId: nil,
+            conversationId: conversationId,
             reviewed: false,
             userReview: nil,
             visibility: "private",
