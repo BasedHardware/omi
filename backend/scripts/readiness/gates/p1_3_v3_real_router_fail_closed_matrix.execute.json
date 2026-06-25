@@ -1,0 +1,270 @@
+{
+  "app_startup_executed": false,
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_real_router_fail_closed_matrix",
+  "current_real_router_baseline": {
+    "behavior": "legacy_only_under_stubs",
+    "memory_adapters_invoked": false,
+    "mutation_flags_clear": false,
+    "non_claim": "Current real router has no fail-closed/memory dispatcher branch wired; it still calls legacy get_memories.",
+    "observed_get_memories_calls": [],
+    "runtime_cutover_claimed": false,
+    "runtime_fail_closed_matrix_wired": false,
+    "source": "backend/scripts/p1_3_v3_real_router_get_testclient.py",
+    "stubbed_legacy_get_memories_call_count": 0,
+    "testclient_ok": false
+  },
+  "execute": true,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "future_dispatcher_matrix_proof": {
+    "case_count": 12,
+    "cases": [
+      {
+        "archive_default_available": false,
+        "body": [
+          {
+            "id": "legacy-5000",
+            "source": "legacy"
+          }
+        ],
+        "case_id": "non_enrolled_offset_zero_legacy_primary",
+        "http_status": 200,
+        "legacy_calls": [
+          {
+            "limit": 5000,
+            "offset": 0,
+            "uid": "uid-matrix"
+          }
+        ],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "legacy_primary_plan_only",
+        "projection_calls": [],
+        "read_decision": "non_enrolled_legacy_primary",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": [
+          {
+            "id": "legacy-explicit",
+            "limit": 17,
+            "offset": 3,
+            "source": "legacy"
+          }
+        ],
+        "case_id": "non_enrolled_explicit_limit_offset_legacy_primary",
+        "http_status": 200,
+        "legacy_calls": [
+          {
+            "limit": 17,
+            "offset": 3,
+            "uid": "uid-matrix"
+          }
+        ],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "legacy_primary_plan_only",
+        "projection_calls": [],
+        "read_decision": "non_enrolled_legacy_primary",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": [
+          {
+            "content": "projection memory",
+            "id": "projection-1"
+          }
+        ],
+        "case_id": "enrolled_projection_success_projection_only",
+        "http_status": 200,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "memory_response_envelope",
+        "projection_calls": [
+          {
+            "cursor": null,
+            "limit": 100,
+            "uid": "uid-matrix"
+          }
+        ],
+        "read_decision": "memory_compatibility_projection_primary",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": [],
+        "case_id": "enrolled_enabled_empty_no_legacy_fallback",
+        "http_status": 200,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "memory_response_envelope",
+        "projection_calls": [],
+        "read_decision": "memory_projection_empty_no_legacy_fallback",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_missing_control_fail_closed",
+        "http_status": 503,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "enrolled_missing_fail_closed",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_malformed_control_fail_closed",
+        "http_status": 503,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "enrolled_malformed_fail_closed",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_projection_not_ready_fail_closed",
+        "http_status": 503,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "memory_projection_not_ready",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_write_convergence_not_ready_fail_closed",
+        "http_status": 503,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "write_convergence_not_ready",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_account_generation_mismatch_fail_closed",
+        "http_status": 503,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "memory_projection_not_ready",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_cursor_mismatch_fail_closed",
+        "http_status": 400,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "fail_closed",
+        "projection_calls": [],
+        "read_decision": "cursor_validation_context_missing",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_no_grant_denied",
+        "http_status": 403,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "deny",
+        "projection_calls": [],
+        "read_decision": "no_default_memory_grant_privacy_consent_deny",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      },
+      {
+        "archive_default_available": false,
+        "body": null,
+        "case_id": "enrolled_archive_denied",
+        "http_status": 403,
+        "legacy_calls": [],
+        "legacy_fallback_allowed": false,
+        "plan_kind": "deny",
+        "projection_calls": [],
+        "read_decision": "archive_not_allowed",
+        "runtime_wired": false,
+        "stale_short_term_default_visible": false
+      }
+    ],
+    "fail_closed_or_denied_case_count": 8,
+    "fake_readers_only": true,
+    "legacy_reader": "fake in-memory call recorder",
+    "non_claim": "This matrix is not direct real-router fail-closed runtime behavior until backend/routers/memories.py is explicitly wired later.",
+    "projection_reader": "fake in-memory call recorder",
+    "proof_level": "pure_helper_route_planner_seam_only",
+    "runtime_behavior_changed": false,
+    "runtime_wired": false
+  },
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py runtime wiring changed.",
+    "Current real-router behavior remains legacy-only under stubs.",
+    "Future fail-closed matrix is proven only through pure helper/route-planner seams with fake readers.",
+    "No production Firestore, cloud, provider, vector, or network calls executed.",
+    "No legacy fallback/merge for memory failures is claimed or permitted by the helper matrix.",
+    "No production rollout approval claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "production_app_imported": false,
+  "production_rollout_approved": false,
+  "proof_constant": {
+    "covered_defaults": [
+      "current_real_router_get_remains_legacy_only_under_stubs",
+      "non_enrolled_legacy_preserves_limit_offset_and_offset_zero_limit_5000",
+      "enrolled_projection_success_calls_projection_reader_only",
+      "enrolled_fail_closed_states_call_no_reader_and_never_legacy_fallback",
+      "no_grant_and_archive_denial_return_403_without_body_or_legacy_fallback",
+      "projection_control_account_cursor_mismatch_fail_closed_without_legacy_fallback",
+      "enabled_empty_returns_empty_list_with_no_legacy_fallback",
+      "no_backend_routers_memories_runtime_wiring_or_production_rollout_claimed"
+    ],
+    "external_calls": [],
+    "future_dispatcher_matrix_proof_level": "pure_helper_route_planner_seam_only",
+    "production_rollout_approved": false,
+    "real_router_current_behavior_proven": "legacy_only_under_stubs",
+    "runtime_wired": false,
+    "service": "backend/scripts/p1_3_v3_real_router_fail_closed_matrix.py",
+    "test": "backend/tests/unit/test_p1_3_v3_real_router_fail_closed_matrix.py"
+  },
+  "provider_calls_executed": false,
+  "read_only": true,
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "current_real_router_legacy_only": true,
+    "future_matrix_case_count": 12,
+    "future_matrix_fail_closed_or_denied_case_count": 8,
+    "future_matrix_runtime_wired": false,
+    "runtime_wiring_changed": false,
+    "status": "BLOCKED"
+  }
+}

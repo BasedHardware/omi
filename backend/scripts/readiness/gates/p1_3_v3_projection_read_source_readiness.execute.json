@@ -1,0 +1,355 @@
+{
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_projection_read_source_readiness",
+  "execute": true,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py runtime wiring changed.",
+    "No runtime /v3 behavior changed.",
+    "No production calls by default; explicit execution is read-only projection source metadata proof only.",
+    "No client-controlled collection/path/source, uid config dimension, legacy fallback, or memory/legacy merge is allowed.",
+    "No uid, session, memory id, request payload, cursor token, secret, or memory content telemetry labels are allowed.",
+    "No production Firestore write, vector/provider call, telemetry sink call, Archive default visibility, stale Short-term default visibility, rollout approval, or canary approval claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "production_read_source_proof": {
+    "approval_claimed": false,
+    "backend_service_principal_read_proven": false,
+    "backend_service_principal_read_required": true,
+    "client_override_allowed": false,
+    "credentials_present": false,
+    "fail_closed_on_missing_stale_malformed": true,
+    "missing_prerequisites": [
+      "MEMORY_V3_PROJECTION_READ_SOURCE_PROD_READ_ALLOW=1",
+      "MEMORY_V3_PROJECTION_READ_SOURCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_JSON",
+      "MEMORY_V3_PROJECTION_READ_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
+      "MEMORY_V3_PROJECTION_READ_SOURCE_PROD_READ_UID"
+    ],
+    "mutating_firestore_methods_allowed": false,
+    "production_projection_source_exists": false,
+    "production_projection_source_valid": false,
+    "production_rollout_approved": false,
+    "project_id_present": false,
+    "projection_read_source_contract": {
+      "archive_default_available": false,
+      "client_controlled_collection_or_path_allowed": false,
+      "client_override_allowed": false,
+      "configuration_dimension_fields": [],
+      "cursor_fields": [
+        "created_at",
+        "memory_id",
+        "account_generation",
+        "projection_generation",
+        "projection_commit_id"
+      ],
+      "fail_closed_on_missing_stale_malformed_metadata": true,
+      "items_path_template": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+      "legacy_fallback_allowed": false,
+      "limit_bounds": {
+        "default": 100,
+        "max": 500,
+        "min": 1
+      },
+      "merge_legacy_and_memory_allowed": false,
+      "ordering": [
+        {
+          "direction": "DESC",
+          "field": "created_at"
+        },
+        {
+          "direction": "DESC",
+          "field": "__name__"
+        }
+      ],
+      "owner": "memory_platform",
+      "required_state_fields": [
+        "route_scope",
+        "owner",
+        "schema_version",
+        "source",
+        "projection_version",
+        "ready",
+        "uid",
+        "account_generation",
+        "projection_generation",
+        "projection_commit_id",
+        "max_staleness_seconds",
+        "write_convergence_complete",
+        "delete_convergence_complete",
+        "tombstone_convergence_complete",
+        "freshness_fence_generation",
+        "tombstone_fence_generation",
+        "vector_cleanup_fence_generation"
+      ],
+      "route_scope": "GET /v3/memories",
+      "route_scope_label": "get_v3_memories",
+      "runtime_wired": false,
+      "server_owned": true,
+      "source_type": "firestore_compatibility_projection",
+      "stale_short_term_default_visible": false,
+      "state_path_template": "users/{uid}/v3_compatibility_projection/state",
+      "telemetry_forbidden_dimensions": [
+        "uid",
+        "user_id",
+        "session_id",
+        "memory_id",
+        "request_payload",
+        "cursor_token",
+        "raw_cursor",
+        "secret",
+        "memory_content"
+      ],
+      "telemetry_safe_labels": [
+        "route_scope",
+        "read_source",
+        "read_decision",
+        "failure_reason",
+        "projection_schema_version",
+        "limit_bucket"
+      ],
+      "uid_usage": "authenticated_subject_selector_only"
+    },
+    "read_error": null,
+    "read_only_firestore_method": "google.cloud.firestore.Client(...).document(state_path).get",
+    "route_scope": "GET /v3/memories",
+    "route_scoped_without_user_dimensions": false,
+    "runtime_wired": false,
+    "service_account_email_present": false,
+    "source_validation_reason": "not_run",
+    "uid_present": false
+  },
+  "production_rollout_approved": false,
+  "projection_read_source_contract": {
+    "archive_default_available": false,
+    "client_controlled_collection_or_path_allowed": false,
+    "client_override_allowed": false,
+    "configuration_dimension_fields": [],
+    "cursor_fields": [
+      "created_at",
+      "memory_id",
+      "account_generation",
+      "projection_generation",
+      "projection_commit_id"
+    ],
+    "fail_closed_on_missing_stale_malformed_metadata": true,
+    "items_path_template": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+    "legacy_fallback_allowed": false,
+    "limit_bounds": {
+      "default": 100,
+      "max": 500,
+      "min": 1
+    },
+    "merge_legacy_and_memory_allowed": false,
+    "ordering": [
+      {
+        "direction": "DESC",
+        "field": "created_at"
+      },
+      {
+        "direction": "DESC",
+        "field": "__name__"
+      }
+    ],
+    "owner": "memory_platform",
+    "required_state_fields": [
+      "route_scope",
+      "owner",
+      "schema_version",
+      "source",
+      "projection_version",
+      "ready",
+      "uid",
+      "account_generation",
+      "projection_generation",
+      "projection_commit_id",
+      "max_staleness_seconds",
+      "write_convergence_complete",
+      "delete_convergence_complete",
+      "tombstone_convergence_complete",
+      "freshness_fence_generation",
+      "tombstone_fence_generation",
+      "vector_cleanup_fence_generation"
+    ],
+    "route_scope": "GET /v3/memories",
+    "route_scope_label": "get_v3_memories",
+    "runtime_wired": false,
+    "server_owned": true,
+    "source_type": "firestore_compatibility_projection",
+    "stale_short_term_default_visible": false,
+    "state_path_template": "users/{uid}/v3_compatibility_projection/state",
+    "telemetry_forbidden_dimensions": [
+      "uid",
+      "user_id",
+      "session_id",
+      "memory_id",
+      "request_payload",
+      "cursor_token",
+      "raw_cursor",
+      "secret",
+      "memory_content"
+    ],
+    "telemetry_safe_labels": [
+      "route_scope",
+      "read_source",
+      "read_decision",
+      "failure_reason",
+      "projection_schema_version",
+      "limit_bucket"
+    ],
+    "uid_usage": "authenticated_subject_selector_only"
+  },
+  "proof_status": "NOT_RUN",
+  "provider_calls_executed": false,
+  "read_only": true,
+  "read_source_requirements": [
+    {
+      "approval_claimed": false,
+      "client_override_allowed": false,
+      "items_path_template": "users/{uid}/v3_compatibility_projection_items/{memory_id}",
+      "required_before_runtime_change": true,
+      "requirement_id": "route_scoped_server_owned_projection_source",
+      "route_scope": "GET /v3/memories",
+      "runtime_wired": false,
+      "server_owned": true,
+      "state_path_template": "users/{uid}/v3_compatibility_projection/state",
+      "status": "LOCAL_CONTRACT_DEFINED"
+    },
+    {
+      "approval_claimed": false,
+      "client_supplied_uid_trusted": false,
+      "required_before_runtime_change": true,
+      "requirement_id": "authenticated_subject_selector_only",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED",
+      "uid_as_authenticated_subject_selector": true,
+      "uid_as_config_dimension_allowed": false
+    },
+    {
+      "approval_claimed": false,
+      "default_limit": 100,
+      "legacy_offset_zero_limit_5000_allowed_for_memory": false,
+      "max_limit": 500,
+      "min_limit": 1,
+      "required_before_runtime_change": true,
+      "requirement_id": "bounded_page_size_limit_contract",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED"
+    },
+    {
+      "approval_claimed": false,
+      "cursor_fields": [
+        "created_at",
+        "memory_id",
+        "account_generation",
+        "projection_generation",
+        "projection_commit_id"
+      ],
+      "offset_supported_for_memory": false,
+      "ordering": [
+        {
+          "direction": "DESC",
+          "field": "created_at"
+        },
+        {
+          "direction": "DESC",
+          "field": "__name__"
+        }
+      ],
+      "required_before_runtime_change": true,
+      "requirement_id": "deterministic_keyset_ordering_contract",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED"
+    },
+    {
+      "approval_claimed": false,
+      "blocked_states": [
+        "missing_projection_state",
+        "malformed_projection_state",
+        "unsupported_schema",
+        "route_scope_mismatch",
+        "uid_mismatch",
+        "source_or_projection_version_mismatch",
+        "stale_or_unbounded_max_staleness",
+        "account_projection_or_fence_mismatch",
+        "incomplete_write_delete_tombstone_convergence"
+      ],
+      "fail_closed": true,
+      "required_before_runtime_change": true,
+      "requirement_id": "projection_metadata_freshness_fail_closed",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED"
+    },
+    {
+      "approval_claimed": false,
+      "required_before_runtime_change": true,
+      "requirement_id": "privacy_safe_telemetry_dimensions",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED",
+      "telemetry_forbidden_dimensions": [
+        "uid",
+        "user_id",
+        "session_id",
+        "memory_id",
+        "request_payload",
+        "cursor_token",
+        "raw_cursor",
+        "secret",
+        "memory_content"
+      ],
+      "telemetry_safe_labels": [
+        "route_scope",
+        "read_source",
+        "read_decision",
+        "failure_reason",
+        "projection_schema_version",
+        "limit_bucket"
+      ],
+      "telemetry_sink_calls_executed": false
+    },
+    {
+      "approval_claimed": false,
+      "client_collection_override_allowed": false,
+      "client_source_path_override_allowed": false,
+      "required_before_runtime_change": true,
+      "requirement_id": "no_client_controlled_source_or_path",
+      "runtime_wired": false,
+      "source_path_derived_from_server_contract_only": true,
+      "status": "LOCAL_CONTRACT_DEFINED"
+    },
+    {
+      "approval_claimed": false,
+      "empty_projection_allows_legacy_query": false,
+      "legacy_fallback_allowed": false,
+      "merge_legacy_and_memory_allowed": false,
+      "projection_error_allows_legacy_query": false,
+      "required_before_runtime_change": true,
+      "requirement_id": "no_legacy_fallback_or_merge_claim",
+      "runtime_wired": false,
+      "status": "LOCAL_CONTRACT_DEFINED"
+    }
+  ],
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "backend_service_principal_read_proven": false,
+    "client_override_allowed": false,
+    "missing_prerequisite_count": 5,
+    "mutation_allowed": false,
+    "production_projection_source_exists": false,
+    "production_projection_source_valid": false,
+    "proof_status": "NOT_RUN",
+    "read_only": true,
+    "read_source_requirement_count": 8,
+    "route_scoped_without_user_dimensions": false,
+    "runtime_wiring_changed": false,
+    "selected_source_count": 2,
+    "status": "BLOCKED"
+  },
+  "telemetry_sink_calls_executed": false
+}

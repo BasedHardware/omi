@@ -1,0 +1,20 @@
+{
+  "REQUIRED_GAPS": [
+    "archive_default_unavailable",
+    "category_filter_compatibility",
+    "cursor_pagination_stability",
+    "disabled_malformed_no_grant_semantics",
+    "enabled_empty_semantics",
+    "response_shape_source_metadata",
+    "unsafe_legacy_fallback_after_memory_writes"
+  ],
+  "REQUIRED_ROUTE_REFERENCES": {
+    "DELETE /v3/memories/{memory_id}": "delete_memory",
+    "GET /v3/memories": "list_default_memories",
+    "GET /v3/memories/search": "missing_search_endpoint_gap",
+    "GET /v3/memories/{memory_id}": "missing_read_endpoint_gap",
+    "PATCH /v3/memories/{memory_id}": "edit_memory",
+    "POST /v3/memories": "create_memory",
+    "POST /v3/memories/batch": "batch_create_memory"
+  }
+}

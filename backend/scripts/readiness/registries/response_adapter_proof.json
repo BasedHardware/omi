@@ -1,0 +1,16 @@
+{
+  "covered_defaults": [
+    "pure_local_read_service_envelope_to_memorydb_response_adapter",
+    "preserve_list_memorydb_body_no_source_policy_cursor_fields_in_body",
+    "additive_headers_only_read_source_read_decision_next_cursor_link_rel_next",
+    "enabled_empty_returns_empty_list_with_memory_headers_no_legacy_fallback_marker",
+    "fail_closed_and_denied_have_no_body_data_no_legacy_fallback_marker",
+    "reject_memory_only_body_source_policy_cursor_diagnostics_fields",
+    "archive_default_unavailable_no_stale_short_term_default_visible_proof_fields_only"
+  ],
+  "external_calls": [],
+  "production_rollout_approved": false,
+  "runtime_wired": false,
+  "service": "backend/utils/memory/v3_response_adapter.py",
+  "test": "backend/tests/unit/test_v3_response_adapter.py"
+}

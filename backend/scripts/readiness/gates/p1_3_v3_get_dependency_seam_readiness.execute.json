@@ -1,0 +1,343 @@
+{
+  "app_startup_executed": false,
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_get_dependency_seam_readiness",
+  "auth_subject_first": true,
+  "client_uid_override_rejected_before_control": true,
+  "dependency_order": [
+    "authenticate_subject",
+    "reject_client_uid_override",
+    "load_enrollment_control",
+    "validate_runtime_config",
+    "validate_cursor",
+    "select_projection_source",
+    "check_rate_limit_backpressure",
+    "projection_read_allowed_after_rate_limit_backpressure"
+  ],
+  "execute_requested": true,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "logging_contract": {
+    "allowed_fields": [
+      "route",
+      "decision_code",
+      "dependency_step",
+      "status"
+    ],
+    "logs_client_supplied_uid": false,
+    "logs_cursor_token": false,
+    "logs_secret_material": false,
+    "logs_user_content": false
+  },
+  "low_cardinality_decision_codes": [
+    "auth_ok",
+    "backpressure_denied",
+    "client_uid_override_rejected",
+    "config_ok",
+    "config_unavailable",
+    "control_ok",
+    "control_unavailable",
+    "cursor_invalid",
+    "cursor_ok",
+    "dependency_adapter_exception",
+    "dependency_adapter_malformed_return",
+    "dependency_adapter_timeout",
+    "dependency_contract_violation",
+    "missing_or_invalid_auth",
+    "no_client_uid_override",
+    "non_enrolled_legacy_primary",
+    "projection_source_ok",
+    "projection_source_unavailable",
+    "rate_limit_backpressure_ok"
+  ],
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py change or runtime route wiring.",
+    "No production rollout approval claimed.",
+    "No Firestore reads/writes, provider/vector/cloud/network calls, mutating calls, or telemetry sink calls.",
+    "No secret material, cursor token, client-supplied uid, or user memory content logging.",
+    "No legacy fallback/merge for enrolled memory failures.",
+    "No Archive default visibility or stale Short-term default visibility claim."
+  ],
+  "pinecone_calls_executed": false,
+  "production_app_imported": false,
+  "proof": {
+    "approval_claimed": false,
+    "covered_defaults": [
+      "authenticated_subject_first",
+      "client_uid_override_rejected_before_control_or_reads",
+      "non_enrolled_legacy_primary_only_without_memory_legacy_merge",
+      "control_config_cursor_projection_source_validated_before_reads",
+      "rate_limit_backpressure_before_projection_read",
+      "missing_invalid_auth_control_cursor_config_source_backpressure_fail_closed",
+      "bounded_low_cardinality_decision_codes_no_secret_cursor_content_logging"
+    ],
+    "external_calls": [],
+    "production_rollout_approved": false,
+    "proof_status": "NOT_RUN",
+    "runtime_wired": false,
+    "service": "backend/scripts/p1_3_v3_get_dependency_seam_readiness.py",
+    "status": "BLOCKED",
+    "test": "backend/tests/unit/test_p1_3_v3_get_dependency_seam_readiness.py",
+    "utility": "backend/utils/memory/v3_get_dependency_seam.py",
+    "utility_test": "backend/tests/unit/test_v3_get_dependency_seam.py"
+  },
+  "proof_status": "BLOCKED",
+  "provider_calls_executed": false,
+  "rate_limit_before_projection_read": true,
+  "read_only": true,
+  "route": "GET /v3/memories",
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "seam_cases": [
+    {
+      "case_id": "happy_enrolled_ready",
+      "decision_code": "rate_limit_backpressure_ok",
+      "dependency_step": "rate_limit_backpressure",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control",
+        "config",
+        "cursor",
+        "projection_source",
+        "rate_limit_backpressure"
+      ],
+      "http_status": 200,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "rate_limit_backpressure_ok",
+        "dependency_step": "rate_limit_backpressure",
+        "route": "GET /v3/memories",
+        "status": "READY"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": "rate_limit_backpressure",
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": true,
+      "status": "READY"
+    },
+    {
+      "case_id": "client_uid_override",
+      "decision_code": "client_uid_override_rejected",
+      "dependency_step": "reject_client_uid_override",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override"
+      ],
+      "http_status": 403,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "client_uid_override_rejected",
+        "dependency_step": "reject_client_uid_override",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    },
+    {
+      "case_id": "non_enrolled",
+      "decision_code": "non_enrolled_legacy_primary",
+      "dependency_step": "enrollment_control",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control"
+      ],
+      "http_status": 200,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "non_enrolled_legacy_primary",
+        "dependency_step": "enrollment_control",
+        "route": "GET /v3/memories",
+        "status": "LEGACY_PRIMARY_ONLY"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": true,
+      "should_fetch_memory_projection": false,
+      "status": "LEGACY_PRIMARY_ONLY"
+    },
+    {
+      "case_id": "control_missing",
+      "decision_code": "control_unavailable",
+      "dependency_step": "enrollment_control",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control"
+      ],
+      "http_status": 503,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "control_unavailable",
+        "dependency_step": "enrollment_control",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    },
+    {
+      "case_id": "config_missing",
+      "decision_code": "config_unavailable",
+      "dependency_step": "config",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control",
+        "config"
+      ],
+      "http_status": 503,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "config_unavailable",
+        "dependency_step": "config",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    },
+    {
+      "case_id": "cursor_invalid",
+      "decision_code": "cursor_invalid",
+      "dependency_step": "cursor",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control",
+        "config",
+        "cursor"
+      ],
+      "http_status": 400,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "cursor_invalid",
+        "dependency_step": "cursor",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    },
+    {
+      "case_id": "projection_source_missing",
+      "decision_code": "projection_source_unavailable",
+      "dependency_step": "projection_source",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control",
+        "config",
+        "cursor",
+        "projection_source"
+      ],
+      "http_status": 503,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "projection_source_unavailable",
+        "dependency_step": "projection_source",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    },
+    {
+      "case_id": "backpressure_denied",
+      "decision_code": "backpressure_denied",
+      "dependency_step": "rate_limit_backpressure",
+      "executed_steps": [
+        "auth",
+        "reject_client_uid_override",
+        "enrollment_control",
+        "config",
+        "cursor",
+        "projection_source",
+        "rate_limit_backpressure"
+      ],
+      "http_status": 429,
+      "legacy_fallback_allowed": false,
+      "logged_fields": {
+        "decision_code": "backpressure_denied",
+        "dependency_step": "rate_limit_backpressure",
+        "route": "GET /v3/memories",
+        "status": "BLOCKED"
+      },
+      "logs_client_supplied_uid": false,
+      "logs_cursor_token": false,
+      "logs_secret_material": false,
+      "logs_user_content": false,
+      "memory_legacy_merge_allowed": false,
+      "projection_reads_allowed_after_step": null,
+      "route_wired": false,
+      "should_fetch_legacy": false,
+      "should_fetch_memory_projection": false,
+      "status": "BLOCKED"
+    }
+  ],
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "blocked_case_count": 6,
+    "case_count": 8,
+    "legacy_primary_only_case_count": 1,
+    "read_only": true,
+    "runtime_wired": false,
+    "status": "BLOCKED"
+  },
+  "telemetry_sink_calls_executed": false
+}

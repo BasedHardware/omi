@@ -1,0 +1,126 @@
+{
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_account_generation_readiness",
+  "execute": false,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "future_route_generation_requirements": {
+    "expected_account_generation_source": "trusted_memory_state_head_reader",
+    "fail_closed_reasons": [
+      "missing_state_head",
+      "malformed_state_head",
+      "uid_mismatch",
+      "source_mismatch",
+      "unsupported_schema",
+      "malformed_account_generation",
+      "read_failed",
+      "trusted_control_projection_cursor_generation_mismatch"
+    ],
+    "forbidden_shortcuts": [
+      "copy_control_state_account_generation_into_expected_account_generation",
+      "copy_projection_state_account_generation_into_expected_account_generation",
+      "trust_client_supplied_expected_account_generation"
+    ],
+    "must_equal": [
+      "trusted_account_generation",
+      "control_state.account_generation",
+      "projection_state.account_generation",
+      "cursor.account_generation_when_present"
+    ],
+    "runtime_wired": false
+  },
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py change.",
+    "No runtime /v3 behavior change.",
+    "No production rollout approval.",
+    "No production Firestore/cloud/provider/vector calls.",
+    "No client-supplied generation trust.",
+    "No copying observed control/projection generation into expected generation.",
+    "No legacy fallback/merge for memory failures."
+  ],
+  "pinecone_calls_executed": false,
+  "production_rollout_approved": false,
+  "proof_status": "NOT_RUN",
+  "provider_calls_executed": false,
+  "read_only": true,
+  "remaining_runtime_blocker": {
+    "approval_claimed": false,
+    "blocker_id": "runtime_route_integration_and_remaining_gates_missing",
+    "required_before_runtime_change": "Runtime GET /v3 route wiring, remaining gate evidence, telemetry/approval, and real route fail-closed integration are still required before changing backend/routers/memories.py.",
+    "runtime_wired": false,
+    "safe_local_contract_proved": true,
+    "safe_local_writer_emulator_proved": true,
+    "status": "BLOCKED"
+  },
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "state_head_writer_emulator_evidence": {
+    "admin_emulator_writer_reader_proof": "backend/scripts/firestore_python_apply_emulator_test.py",
+    "client_rules_denial_proof": "backend/scripts/firestore_rules_emulator_test.mjs",
+    "lockstep_fields": [
+      "uid",
+      "account_generation",
+      "head_commit_id",
+      "commit_sequence",
+      "updated_at"
+    ],
+    "materializes_from": "committed MemoryControlState returned by apply_long_term_patch_transaction",
+    "npm_emulator_command": "npm run test:memory-v3-state-head:emulator",
+    "production_rollout_approved": false,
+    "reader_contract_fields": [
+      "uid",
+      "schema_version",
+      "source",
+      "account_generation",
+      "head_commit_id",
+      "commit_sequence"
+    ],
+    "runtime_wired": false,
+    "server_owned": true,
+    "status": "LOCAL_WRITER_EMULATOR_PROVED_RUNTIME_BLOCKED",
+    "writer_function": "_write_apply_result",
+    "writer_path": "backend/database/memory_apply_store.py"
+  },
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "mutation_allowed": false,
+    "proof_status": "NOT_RUN",
+    "read_only": true,
+    "remaining_runtime_blocker_count": 1,
+    "runtime_wiring_changed": false,
+    "state_head_writer_emulator_proved": false,
+    "status": "BLOCKED",
+    "trusted_source_identified": true
+  },
+  "trusted_account_generation_source": {
+    "canonical_path": "users/{uid}/memory_state/head",
+    "client_supplied_generation_trusted": false,
+    "emulator_test": "backend/scripts/firestore_python_apply_emulator_test.py",
+    "independent_from_control_doc": true,
+    "independent_from_projection_doc": true,
+    "npm_emulator_command": "npm run test:memory-v3-state-head:emulator",
+    "production_rollout_approved": false,
+    "reader_contract": "backend/utils/memory/v3_account_generation_source.py",
+    "required_fields": [
+      "uid",
+      "schema_version",
+      "source",
+      "account_generation",
+      "head_commit_id",
+      "commit_sequence"
+    ],
+    "required_source_field": "memory_state_head",
+    "rules_emulator_test": "backend/scripts/firestore_rules_emulator_test.mjs",
+    "runtime_wired": false,
+    "schema_version": 1,
+    "server_owned": true,
+    "source_id": "trusted_memory_state_head",
+    "unit_test": "backend/tests/unit/test_v3_account_generation_source.py",
+    "used_for_runtime_expected_generation_now": false,
+    "writer": "backend/database/memory_apply_store.py",
+    "writer_unit_test": "backend/tests/unit/test_firestore_apply_store.py"
+  }
+}

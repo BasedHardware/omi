@@ -1,0 +1,19 @@
+{
+  "approval_claimed": false,
+  "covered_defaults": [
+    "authenticated_subject_binding_required_before_any_read",
+    "legacy_token_api_key_mcp_auth_behavior_inventory_required",
+    "client_uid_override_rejected_before_read_source_selection",
+    "non_enrolled_legacy_boundary_and_enrolled_memory_boundary_required",
+    "rate_limit_or_backpressure_dependency_hook_required_for_get",
+    "missing_invalid_auth_control_cursor_config_fail_closed_required",
+    "real_testclient_scenarios_blocked_until_runtime_route_wiring_exists"
+  ],
+  "external_calls": [],
+  "production_rollout_approved": false,
+  "proof_status": "NOT_RUN",
+  "runtime_wired": false,
+  "service": "backend/scripts/p1_3_v3_route_dependency_contract_readiness.py",
+  "status": "BLOCKED",
+  "test": "backend/tests/unit/test_p1_3_v3_route_dependency_contract_readiness.py"
+}

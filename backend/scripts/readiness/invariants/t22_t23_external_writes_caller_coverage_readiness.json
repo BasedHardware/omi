@@ -1,0 +1,45 @@
+{
+  "REQUIRED_CASE_KEYS": [
+    "app_key_scope_grant_enforcement",
+    "archive_default_unavailable",
+    "chat_tool_agent_caller_coverage",
+    "delete_review_import_compatibility",
+    "developer_api_write_read_paths",
+    "dual_write_outbox_or_memory_write_convergence_plan",
+    "external_create_write_read_convergence",
+    "external_delete_write_read_convergence",
+    "external_edit_write_read_convergence",
+    "external_list_search_read_convergence",
+    "mcp_rest_write_read_list_search_paths",
+    "mcp_sse_tool_write_read_list_search_paths",
+    "no_legacy_unsafe_fallback_after_memory_writes",
+    "response_shape_compatibility",
+    "rollback_disable_behavior"
+  ],
+  "REQUIRED_REFERENCE_TERMS": [
+    "backend/routers/memories.py POST/PATCH/DELETE/GET /v3/memories",
+    "backend/routers/developer.py /v1/dev/user/memories create/edit/delete/list/vector/search",
+    "backend/routers/mcp.py MCP REST create/edit/delete/list/search",
+    "backend/routers/mcp_sse.py MCP streamable HTTP/SSE tools create_memory/edit_memory/delete_memory/get_memories/search_memories",
+    "backend/routers/tools.py /v1/tools/memories list/search",
+    "backend/routers/agent_tools.py /v1/agent/execute-tool",
+    "backend/database/memories.py create_memory/edit_memory/delete_memory/save_memories/get_memories",
+    "backend/utils/memory/default_read_rollout.py assert_legacy_memory_write_allowed_for_default_read_decision",
+    "backend/utils/memory/product_authorization.py authorize_memory_external_default_memory_read",
+    "docs/epics/memory_implementation_tickets.md T22/T23",
+    "cutover_evidence_readiness.py"
+  ],
+  "REQUIRED_SCOPE_TERMS": [
+    "external create/edit/delete/list/search write/read convergence",
+    "Developer API write/read paths",
+    "MCP REST/SSE write/read/list/search paths",
+    "chat/tool/agent caller coverage",
+    "dual-write/outbox or memory-write convergence plan",
+    "delete/review/import compatibility",
+    "no legacy unsafe fallback after memory writes",
+    "app/key/scope grant enforcement",
+    "Archive default-unavailable",
+    "response-shape compatibility",
+    "rollback/disable behavior"
+  ]
+}

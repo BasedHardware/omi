@@ -1,0 +1,21 @@
+{
+  "covered_defaults": [
+    "opaque_hmac_signed_cursor",
+    "created_at_desc_memory_id_desc_keyset",
+    "uid_bound",
+    "account_generation_bound",
+    "projection_generation_bound",
+    "filter_hash_bound",
+    "source_bound",
+    "read_mode_bound",
+    "expiration_enforced",
+    "tamper_rejected_fail_closed",
+    "offset_disallowed_in_memory_cursor_mode",
+    "legacy_first_page_5000_override_disallowed"
+  ],
+  "external_calls": [],
+  "production_rollout_approved": false,
+  "runtime_wired": false,
+  "service": "backend/utils/memory/v3_cursor.py",
+  "test": "backend/tests/unit/test_v3_cursor.py"
+}

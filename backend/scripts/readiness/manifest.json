@@ -1,0 +1,241 @@
+{
+  "gates": [
+    {
+      "artifact": "p1_3_caller_api_compatibility_readiness",
+      "gate_id": "p1_3_caller_api_compatibility_readiness",
+      "handler": null,
+      "script": "p1_3_caller_api_compatibility_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_account_generation_readiness",
+      "gate_id": "p1_3_v3_account_generation_readiness",
+      "handler": null,
+      "script": "p1_3_v3_account_generation_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_canary_approval_aggregate_readiness",
+      "gate_id": "p1_3_v3_canary_approval_aggregate_readiness",
+      "handler": "p1_3_v3_canary_approval_aggregate_readiness",
+      "script": "p1_3_v3_canary_approval_aggregate_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_canary_approval_lifecycle_readiness",
+      "gate_id": "p1_3_v3_canary_approval_lifecycle_readiness",
+      "handler": null,
+      "script": "p1_3_v3_canary_approval_lifecycle_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_canary_approval_production_readiness",
+      "gate_id": "p1_3_v3_canary_approval_production_readiness",
+      "handler": "p1_3_v3_canary_approval_production_readiness",
+      "script": "p1_3_v3_canary_approval_production_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_canary_approval_source_readiness",
+      "gate_id": "p1_3_v3_canary_approval_source_readiness",
+      "handler": null,
+      "script": "p1_3_v3_canary_approval_source_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_control_reader_emulator_readiness",
+      "gate_id": "p1_3_v3_control_reader_emulator_readiness",
+      "handler": "p1_3_v3_control_reader_emulator_readiness",
+      "script": "p1_3_v3_control_reader_emulator_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_control_reader_readiness",
+      "gate_id": "p1_3_v3_control_reader_readiness",
+      "handler": null,
+      "script": "p1_3_v3_control_reader_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_cursor_secret_production_readiness",
+      "gate_id": "p1_3_v3_cursor_secret_production_readiness",
+      "handler": "p1_3_v3_cursor_secret_production_readiness",
+      "script": "p1_3_v3_cursor_secret_production_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_cursor_secret_readiness",
+      "gate_id": "p1_3_v3_cursor_secret_readiness",
+      "handler": null,
+      "script": "p1_3_v3_cursor_secret_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_external_compatibility_readiness",
+      "gate_id": "p1_3_v3_external_compatibility_readiness",
+      "handler": null,
+      "script": "p1_3_v3_external_compatibility_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_fastapi_route_contract",
+      "gate_id": "p1_3_v3_fastapi_route_contract",
+      "handler": "p1_3_v3_fastapi_route_contract",
+      "script": "p1_3_v3_fastapi_route_contract.py"
+    },
+    {
+      "artifact": "p1_3_v3_get_dependency_auth_readiness",
+      "gate_id": "p1_3_v3_get_dependency_auth_readiness",
+      "handler": "p1_3_v3_get_dependency_auth_readiness",
+      "script": "p1_3_v3_get_dependency_auth_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_get_dependency_seam_readiness",
+      "gate_id": "p1_3_v3_get_dependency_seam_readiness",
+      "handler": null,
+      "script": "p1_3_v3_get_dependency_seam_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_get_runtime_wiring_readiness",
+      "gate_id": "p1_3_v3_get_runtime_wiring_readiness",
+      "handler": null,
+      "script": "p1_3_v3_get_runtime_wiring_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_observability_approval_readiness",
+      "gate_id": "p1_3_v3_observability_approval_readiness",
+      "handler": null,
+      "script": "p1_3_v3_observability_approval_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_projection_read_source_readiness",
+      "gate_id": "p1_3_v3_projection_read_source_readiness",
+      "handler": null,
+      "script": "p1_3_v3_projection_read_source_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_projection_store_readiness",
+      "gate_id": "p1_3_v3_projection_store_readiness",
+      "handler": null,
+      "script": "p1_3_v3_projection_store_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_projection_write_convergence_readiness",
+      "gate_id": "p1_3_v3_projection_write_convergence_readiness",
+      "handler": "p1_3_v3_projection_write_convergence_readiness",
+      "script": "p1_3_v3_projection_write_convergence_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_real_router_dependency_map",
+      "gate_id": "p1_3_v3_real_router_dependency_map",
+      "handler": "p1_3_v3_real_router_dependency_map",
+      "script": "p1_3_v3_real_router_dependency_map.py"
+    },
+    {
+      "artifact": "p1_3_v3_real_router_fail_closed_matrix",
+      "gate_id": "p1_3_v3_real_router_fail_closed_matrix",
+      "handler": "p1_3_v3_real_router_fail_closed_matrix",
+      "script": "p1_3_v3_real_router_fail_closed_matrix.py"
+    },
+    {
+      "artifact": "p1_3_v3_real_router_get_testclient",
+      "gate_id": "p1_3_v3_real_router_get_testclient",
+      "handler": "p1_3_v3_real_router_get_testclient",
+      "script": "p1_3_v3_real_router_get_testclient.py"
+    },
+    {
+      "artifact": "p1_3_v3_route_dependency_contract_readiness",
+      "gate_id": "p1_3_v3_route_dependency_contract_readiness",
+      "handler": null,
+      "script": "p1_3_v3_route_dependency_contract_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_route_signature_integration",
+      "gate_id": "p1_3_v3_route_signature_integration",
+      "handler": "p1_3_v3_route_signature_integration",
+      "script": "p1_3_v3_route_signature_integration.py"
+    },
+    {
+      "artifact": "p1_3_v3_runtime_config_source_readiness",
+      "gate_id": "p1_3_v3_runtime_config_source_readiness",
+      "handler": "p1_3_v3_runtime_config_source_readiness",
+      "script": "p1_3_v3_runtime_config_source_readiness.py"
+    },
+    {
+      "artifact": "p1_3_v3_write_convergence_tombstone_matrix",
+      "gate_id": "p1_3_v3_write_convergence_tombstone_matrix",
+      "handler": null,
+      "script": "p1_3_v3_write_convergence_tombstone_matrix.py"
+    },
+    {
+      "artifact": "t20_repair_projection_consistency_readiness",
+      "gate_id": "t20_repair_projection_consistency_readiness",
+      "handler": null,
+      "script": "t20_repair_projection_consistency_readiness.py"
+    },
+    {
+      "artifact": "t21_v3_compatibility_cursor_readiness",
+      "gate_id": "t21_v3_compatibility_cursor_readiness",
+      "handler": null,
+      "script": "t21_v3_compatibility_cursor_readiness.py"
+    },
+    {
+      "artifact": "t22_t23_external_writes_caller_coverage_readiness",
+      "gate_id": "t22_t23_external_writes_caller_coverage_readiness",
+      "handler": null,
+      "script": "t22_t23_external_writes_caller_coverage_readiness.py"
+    }
+  ],
+  "handler_gates": [
+    "p1_3_v3_canary_approval_aggregate_readiness",
+    "p1_3_v3_canary_approval_production_readiness",
+    "p1_3_v3_control_reader_emulator_readiness",
+    "p1_3_v3_cursor_secret_production_readiness",
+    "p1_3_v3_fastapi_route_contract",
+    "p1_3_v3_get_dependency_auth_readiness",
+    "p1_3_v3_projection_write_convergence_readiness",
+    "p1_3_v3_real_router_dependency_map",
+    "p1_3_v3_real_router_fail_closed_matrix",
+    "p1_3_v3_real_router_get_testclient",
+    "p1_3_v3_route_signature_integration",
+    "p1_3_v3_runtime_config_source_readiness"
+  ],
+  "keep_scripts": [
+    "backfill_legacy_memories.py",
+    "firestore_rules_iam_proof.py",
+    "p1_3_v3_archive_short_term_visibility_readiness.py",
+    "p1_3_v3_control_reader_emulator_test.py",
+    "p1_3_v3_projection_reader_emulator_test.py",
+    "pinecone_repair_validation_readiness.py",
+    "v3_f5_real_service_evidence_readiness.py",
+    "vector_repair_outbox_oidc_iam_proof.py",
+    "vector_repair_outbox_worker_entrypoint.py"
+  ],
+  "registries": {
+    "account_generation_readiness_proof": "registries/account_generation_readiness_proof.json",
+    "archive_short_term_visibility_readiness_proof": "registries/archive_short_term_visibility_readiness_proof.json",
+    "canary_approval_aggregate_readiness_proof": "registries/canary_approval_aggregate_readiness_proof.json",
+    "canary_approval_lifecycle_readiness_proof": "registries/canary_approval_lifecycle_readiness_proof.json",
+    "canary_approval_production_readiness_proof": "registries/canary_approval_production_readiness_proof.json",
+    "canary_approval_source_readiness_proof": "registries/canary_approval_source_readiness_proof.json",
+    "control_reader_contract_proof": "registries/control_reader_contract_proof.json",
+    "control_reader_emulator_readiness_proof": "registries/control_reader_emulator_readiness_proof.json",
+    "control_reader_readiness_proof": "registries/control_reader_readiness_proof.json",
+    "cursor_secret_production_readiness_proof": "registries/cursor_secret_production_readiness_proof.json",
+    "cursor_secret_readiness_proof": "registries/cursor_secret_readiness_proof.json",
+    "cursor_service_proof": "registries/cursor_service_proof.json",
+    "decision_service_proof": "registries/decision_service_proof.json",
+    "f5_real_service_evidence_preparation_proof": "registries/f5_real_service_evidence_preparation_proof.json",
+    "fastapi_route_contract_proof": "registries/fastapi_route_contract_proof.json",
+    "get_dependency_auth_readiness_proof": "registries/get_dependency_auth_readiness_proof.json",
+    "get_dependency_seam_readiness_proof": "registries/get_dependency_seam_readiness_proof.json",
+    "get_runtime_wiring_readiness_proof": "registries/get_runtime_wiring_readiness_proof.json",
+    "memory_read_service_proof": "registries/memory_read_service_proof.json",
+    "observability_approval_readiness_proof": "registries/observability_approval_readiness_proof.json",
+    "projection_read_source_readiness_proof": "registries/projection_read_source_readiness_proof.json",
+    "projection_readiness_proof": "registries/projection_readiness_proof.json",
+    "projection_store_readiness_proof": "registries/projection_store_readiness_proof.json",
+    "projection_write_convergence_readiness_proof": "registries/projection_write_convergence_readiness_proof.json",
+    "real_router_dependency_map_proof": "registries/real_router_dependency_map_proof.json",
+    "real_router_fail_closed_matrix_proof": "registries/real_router_fail_closed_matrix_proof.json",
+    "real_router_get_testclient_proof": "registries/real_router_get_testclient_proof.json",
+    "request_adapter_proof": "registries/request_adapter_proof.json",
+    "response_adapter_proof": "registries/response_adapter_proof.json",
+    "route_dependency_contract_readiness_proof": "registries/route_dependency_contract_readiness_proof.json",
+    "route_planner_proof": "registries/route_planner_proof.json",
+    "route_signature_integration_proof": "registries/route_signature_integration_proof.json",
+    "runtime_config_source_readiness_proof": "registries/runtime_config_source_readiness_proof.json",
+    "write_convergence_proof": "registries/write_convergence_proof.json",
+    "write_convergence_tombstone_matrix_proof": "registries/write_convergence_tombstone_matrix_proof.json"
+  },
+  "version": 1
+}

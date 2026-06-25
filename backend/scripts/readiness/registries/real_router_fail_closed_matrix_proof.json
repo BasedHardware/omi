@@ -1,0 +1,17 @@
+{
+  "covered_defaults": [
+    "current_real_router_get_remains_legacy_only_under_stubs",
+    "non_enrolled_legacy_preserves_limit_offset_and_offset_zero_limit_5000",
+    "enrolled_projection_success_calls_projection_reader_only",
+    "enrolled_fail_closed_states_call_no_reader_and_never_legacy_fallback",
+    "no_grant_and_archive_denial_return_403_without_body_or_legacy_fallback",
+    "projection_control_account_cursor_mismatch_fail_closed_without_legacy_fallback",
+    "enabled_empty_returns_empty_list_with_no_legacy_fallback",
+    "future_dispatcher_matrix_proven_only_at_pure_helper_route_planner_seam"
+  ],
+  "external_calls": [],
+  "production_rollout_approved": false,
+  "runtime_wired": false,
+  "service": "backend/scripts/p1_3_v3_real_router_fail_closed_matrix.py",
+  "test": "backend/tests/unit/test_p1_3_v3_real_router_fail_closed_matrix.py"
+}

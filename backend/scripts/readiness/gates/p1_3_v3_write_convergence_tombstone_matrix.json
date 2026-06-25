@@ -1,0 +1,66 @@
+{
+  "app_startup_executed": false,
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_write_convergence_tombstone_matrix",
+  "execute": false,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "matrix_proof": {
+    "case_count": 0,
+    "cases": [],
+    "fail_closed_or_denied_case_count": 0,
+    "fake_contexts_only": true,
+    "fake_readers_only": true,
+    "non_claim": "This matrix is not real-router runtime behavior until backend/routers/memories.py is explicitly wired later.",
+    "proof_level": "pure_helper_route_planner_write_projection_seam_only",
+    "ready_case_count": 0,
+    "runtime_behavior_changed": false,
+    "runtime_wired": false
+  },
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py runtime wiring changed.",
+    "Future write-convergence/delete/tombstone matrix is proven only through pure helper seams with fake contexts.",
+    "No production Firestore, cloud, provider, vector, or network calls executed.",
+    "No legacy fallback/merge for memory failures is claimed or permitted by the helper matrix.",
+    "No Archive default visibility or stale Short-term default visibility is claimed.",
+    "No production rollout approval claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "production_app_imported": false,
+  "production_rollout_approved": false,
+  "proof_constant": {
+    "covered_defaults": [
+      "create_update_delete_convergence_all_required_before_memory_projection_reads",
+      "create_convergence_false_fails_closed_without_legacy_fallback",
+      "update_convergence_false_fails_closed_without_legacy_fallback",
+      "delete_convergence_false_fails_closed_without_legacy_fallback",
+      "delete_tombstone_fence_missing_or_stale_fails_closed",
+      "account_projection_tombstone_freshness_generation_fences_must_match",
+      "enabled_empty_allowed_only_when_all_write_projection_tombstone_fences_ready",
+      "archive_default_unavailable_and_stale_short_term_default_hidden",
+      "failures_never_allow_legacy_fallback_or_memory_legacy_merge",
+      "no_backend_routers_memories_runtime_wiring_or_production_rollout_claimed"
+    ],
+    "external_calls": [],
+    "future_dispatcher_matrix_proof_level": "pure_helper_route_planner_write_projection_seam_only",
+    "production_rollout_approved": false,
+    "runtime_wired": false,
+    "service": "backend/scripts/p1_3_v3_write_convergence_tombstone_matrix.py",
+    "test": "backend/tests/unit/test_p1_3_v3_write_convergence_tombstone_matrix.py"
+  },
+  "provider_calls_executed": false,
+  "read_only": true,
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "fail_closed_or_denied_case_count": 0,
+    "matrix_case_count": 0,
+    "ready_case_count": 0,
+    "runtime_wiring_changed": false,
+    "status": "BLOCKED"
+  }
+}

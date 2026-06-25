@@ -1,0 +1,230 @@
+{
+  "approval_claimed": false,
+  "approval_lifecycle_contract": {
+    "approval_claimed": false,
+    "approval_ids_and_timestamps_are_metadata_only": true,
+    "approver_roles": [
+      "product_privacy_ops"
+    ],
+    "artifact_source": "firestore:system/v3_canary_approvals/routes/get_v3_memories",
+    "evidence_bundle_required_before_production_use": true,
+    "explicit_route_scope_required": true,
+    "max_lifetime_hours": 24,
+    "monitoring_gate_ids": [
+      "fail_closed_rate",
+      "p95_latency_ms",
+      "error_rate",
+      "projection_freshness_seconds"
+    ],
+    "owner_groups": [
+      "product_privacy_ops",
+      "memory_platform_oncall"
+    ],
+    "production_rollout_approved": false,
+    "rollback_owner_groups": [
+      "memory_platform_oncall",
+      "product_privacy_ops"
+    ],
+    "rotation_required_before_expires_at": true,
+    "route_scope": "GET /v3/memories",
+    "runtime_wired_to_v3_get": false
+  },
+  "artifact": "p1_3_v3_canary_approval_lifecycle_readiness",
+  "execute": true,
+  "fail_closed_semantics": [
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "approval_evidence_missing"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "approval_evidence_stale_or_unrotated"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "rollback_owner_or_steps_missing"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "monitoring_gates_missing"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "production_read_proof_missing"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "iam_emulator_proof_missing"
+    },
+    {
+      "approval_claimed": false,
+      "future_route_behavior": "fail_closed_before_memory_read",
+      "legacy_fallback_allowed": false,
+      "required_before_runtime_change": true,
+      "state": "route_scope_mismatch"
+    }
+  ],
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py runtime wiring changed.",
+    "No runtime /v3 behavior changed.",
+    "No production rollout approval claimed.",
+    "No production Firestore/cloud/provider/vector/network calls executed.",
+    "No telemetry sink production call executed or claimed.",
+    "No PII/raw content telemetry emitted.",
+    "No secret/cursor logging allowed or performed.",
+    "No legacy fallback/merge for memory failures claimed.",
+    "No Archive default visibility or stale Short-term default visibility claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "production_rollout_approved": false,
+  "proof_status": "BLOCKED",
+  "provider_calls_executed": false,
+  "read_only": true,
+  "required_evidence_bundle": [
+    {
+      "approval_claimed": false,
+      "evidence_id": "human_ops_approval_ticket_present",
+      "metadata_only": true,
+      "required_before_runtime_change": true,
+      "required_fields": [
+        "approval_ticket_id",
+        "approval_id"
+      ],
+      "status": "BLOCKED"
+    },
+    {
+      "allowed_approver_roles": [
+        "product_privacy_ops"
+      ],
+      "allowed_owner_groups": [
+        "product_privacy_ops",
+        "memory_platform_oncall"
+      ],
+      "approval_claimed": false,
+      "evidence_id": "bounded_owner_groups_and_approver_role_present",
+      "required_before_runtime_change": true,
+      "required_fields": [
+        "owner_group",
+        "approver_role"
+      ],
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "approved_at_must_be_between_issued_and_expires": true,
+      "evidence_id": "issued_approved_expires_rotation_window_valid",
+      "max_lifetime_hours": 24,
+      "required_before_runtime_change": true,
+      "required_fields": [
+        "issued_at",
+        "approved_at",
+        "expires_at"
+      ],
+      "rotation_required_before_expires_at": true,
+      "status": "BLOCKED"
+    },
+    {
+      "allowed_rollback_owner_groups": [
+        "memory_platform_oncall",
+        "product_privacy_ops"
+      ],
+      "approval_claimed": false,
+      "evidence_id": "rollback_owner_and_steps_present",
+      "minimum_step_count": 2,
+      "must_include_disable_and_verify_steps": true,
+      "required_before_runtime_change": true,
+      "required_fields": [
+        "rollback_owner",
+        "rollback_steps"
+      ],
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "evidence_id": "monitoring_gate_ids_present",
+      "required_before_runtime_change": true,
+      "required_fields": [
+        "monitoring_gate_ids"
+      ],
+      "required_gate_ids": [
+        "fail_closed_rate",
+        "p95_latency_ms",
+        "error_rate",
+        "projection_freshness_seconds"
+      ],
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "evidence_id": "production_read_proof_reference_present",
+      "must_prove_backend_service_principal_read": true,
+      "reference": "backend/scripts/p1_3_v3_canary_approval_production_readiness.py",
+      "required_before_runtime_change": true,
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "evidence_id": "iam_emulator_proof_reference_present",
+      "must_prove_direct_client_denial_and_backend_read_source": true,
+      "reference": "backend/scripts/p1_3_v3_canary_approval_source_readiness.py",
+      "required_before_runtime_change": true,
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "evidence_id": "telemetry_runbook_reference_present",
+      "must_prove_observable_gates_and_runbook": true,
+      "reference": "backend/scripts/p1_3_v3_observability_approval_readiness.py",
+      "required_before_runtime_change": true,
+      "status": "BLOCKED"
+    },
+    {
+      "approval_claimed": false,
+      "evidence_id": "explicit_route_scope_matches_get_v3_memories",
+      "expected_route_scope": "GET /v3/memories",
+      "required_before_runtime_change": true,
+      "route_scope_is_exact": true,
+      "status": "BLOCKED"
+    }
+  ],
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "scope": "Read-only lifecycle and evidence-bundle readiness contract for future GET /v3/memories canary approval.",
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "blocked_required_evidence_count": 9,
+    "fail_closed_semantics_count": 7,
+    "mutation_allowed": false,
+    "production_rollout_approved": false,
+    "proof_status": "BLOCKED",
+    "read_only": true,
+    "required_evidence_count": 9,
+    "route_scope": "GET /v3/memories",
+    "runtime_wiring_changed": false,
+    "status": "BLOCKED"
+  },
+  "telemetry_sink_calls_executed": false
+}

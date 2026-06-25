@@ -1,0 +1,15 @@
+{
+  "covered_defaults": [
+    "real_memories_router_imported_only_after_explicit_unsafe_dependency_stubs",
+    "pins_import_side_effects_and_required_testclient_overrides_before_route_execution",
+    "pins_get_post_delete_v3_route_functions_and_decorators_from_real_router",
+    "future_get_seam_remains_request_adapter_to_route_planner_to_response_adapter",
+    "no_main_app_startup_no_external_calls_no_mutations_no_runtime_cutover"
+  ],
+  "external_calls": [],
+  "imports_real_router_under_stubs": true,
+  "production_rollout_approved": false,
+  "runtime_wired": false,
+  "service": "backend/scripts/p1_3_v3_real_router_dependency_map.py",
+  "test": "backend/tests/unit/test_p1_3_v3_real_router_dependency_map.py"
+}

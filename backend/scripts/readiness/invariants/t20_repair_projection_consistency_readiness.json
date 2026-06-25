@@ -1,0 +1,29 @@
+{
+  "REQUIRED_CASE_KEYS": [
+    "account_generation_parity",
+    "duplicate_vector_detection",
+    "item_revision_source_commit_content_hash_parity",
+    "no_silent_data_loss",
+    "projection_commit_id_parity",
+    "repair_outbox_enqueue_dead_letter_backlog",
+    "repair_worker_convergence",
+    "shared_ns2_legacy_memory_isolation_under_stale_candidates",
+    "stale_physical_vector_detection",
+    "tombstone_deleted_source_handling"
+  ],
+  "REQUIRED_REFERENCE_TERMS": [
+    "vector_search_provider_readiness.py",
+    "shared_ns2_legacy_isolation_readiness.py",
+    "pinecone_repair_validation_readiness.py",
+    "memory_vector_repair_outbox_telemetry.py",
+    "projection_commit_id",
+    "account_generation",
+    "item_revision",
+    "source_commit_id",
+    "content_hash",
+    "memory_items",
+    "vector metadata",
+    "vector repair outbox",
+    "shared ns2"
+  ]
+}

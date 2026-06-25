@@ -1,0 +1,264 @@
+{
+  "app_startup_executed": false,
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_route_signature_integration",
+  "benchmark_evidence_collected": false,
+  "current_runtime_summary": "GET /v3/memories now has a hard default-off memory dependency branch: production/default and non-enrolled legacy-primary reads preserve legacy memories_db semantics, while TestClient-only memory read-mode overrides can call the composed service without legacy fallback. POST/DELETE remain legacy mutation paths.",
+  "execute": true,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "future_wiring_seam": [
+    "GET route query params -> adapt_v3_request_parameters(...) without FastAPI-specific coupling",
+    "adapted request + server-owned control/grant/projection/write evidence -> plan_v3_memory_route(...) pure planner",
+    "planner read envelope -> adapt_v3_memory_response(...) List[MemoryDB] body plus additive headers"
+  ],
+  "get_param_contract_mapping": [
+    {
+      "blocked_reason": null,
+      "current_route_param_present": true,
+      "future_only": false,
+      "memory_constraint": "bounded memory limit; never expanded to 5000 in memory cursor mode",
+      "request_adapter_field": "limit",
+      "route_param": "limit",
+      "safe_to_map": true
+    },
+    {
+      "blocked_reason": "offset is legacy-primary only; memory cohort requires signed cursor mode",
+      "current_route_param_present": true,
+      "future_only": false,
+      "memory_constraint": "legacy-primary compatibility only",
+      "request_adapter_field": "offset",
+      "route_param": "offset",
+      "safe_to_map": false
+    },
+    {
+      "blocked_reason": null,
+      "current_route_param_present": true,
+      "future_only": false,
+      "memory_constraint": "additive opaque HMAC keyset cursor bound to uid/account/projection/filter/source/read-mode",
+      "request_adapter_field": "cursor",
+      "route_param": "cursor",
+      "safe_to_map": true
+    },
+    {
+      "blocked_reason": null,
+      "current_route_param_present": false,
+      "future_only": true,
+      "memory_constraint": "filter hash must be cursor-bound; no silent legacy fallback for unsupported filters",
+      "request_adapter_field": "filters.category",
+      "route_param": "category",
+      "safe_to_map": true
+    },
+    {
+      "blocked_reason": "Archive default-unavailable for /v3 default reads",
+      "current_route_param_present": false,
+      "future_only": true,
+      "memory_constraint": "Archive default-unavailable unless a separate explicit persisted capability is launched",
+      "request_adapter_field": "include_archive",
+      "route_param": "include_archive",
+      "safe_to_map": false
+    }
+  ],
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No FastAPI/router module import or app startup executed.",
+    "No runtime /v3 route behavior changed.",
+    "No production traffic, Firestore, Pinecone, cloud, provider, or network calls executed.",
+    "No Firestore reads or writes executed.",
+    "No benchmark evidence or rollout approval claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "production_rollout_approved": false,
+  "provider_calls_executed": false,
+  "read_only": true,
+  "route_signature_integration_proof": {
+    "covered_defaults": [
+      "static_ast_source_inspection_of_memories_router_no_fastapi_import",
+      "pins_get_post_delete_v3_route_signatures_and_body_models",
+      "pins_current_legacy_get_post_delete_db_vector_paths_no_cutover_claim",
+      "maps_get_limit_offset_to_request_adapter_contract_with_offset_memory_blocked",
+      "identifies_future_query_to_request_adapter_to_route_planner_to_response_adapter_seam",
+      "archive_default_unavailable_no_stale_short_term_default_visible"
+    ],
+    "external_calls": [],
+    "production_rollout_approved": false,
+    "runtime_wired": true,
+    "service": "backend/scripts/p1_3_v3_route_signature_integration.py",
+    "test": "backend/tests/unit/test_p1_3_v3_route_signature_integration.py"
+  },
+  "route_signatures": [
+    {
+      "body_model": null,
+      "handler": "delete_memory",
+      "is_async": false,
+      "legacy_runtime_calls": [
+        "_validate_memory(uid, memory_id)",
+        "memories_db.delete_memory(uid, memory_id)",
+        "delete_memory_vector(uid, memory_id)"
+      ],
+      "method": "DELETE",
+      "params": [
+        {
+          "annotation": "str",
+          "default": null,
+          "dependency": null,
+          "kind": "path",
+          "name": "memory_id"
+        },
+        {
+          "annotation": "str",
+          "default": "Depends(auth.with_rate_limit(auth.get_current_user_uid, 'memories:delete'))",
+          "dependency": "auth.with_rate_limit(auth.get_current_user_uid, 'memories:delete')",
+          "kind": "dependency",
+          "name": "uid"
+        }
+      ],
+      "path": "/v3/memories/{memory_id}",
+      "response_model": null,
+      "route": "DELETE /v3/memories/{memory_id}",
+      "runtime_wired_to_memory": false,
+      "source_file": "backend/routers/memories.py",
+      "static_source_inspection": true
+    },
+    {
+      "body_model": null,
+      "handler": "get_memories",
+      "is_async": false,
+      "legacy_runtime_calls": [
+        "if offset == 0: limit = 5000",
+        "memories_db.get_memories(uid, limit, offset)"
+      ],
+      "method": "GET",
+      "params": [
+        {
+          "annotation": "Response",
+          "default": null,
+          "dependency": null,
+          "kind": "query",
+          "name": "response"
+        },
+        {
+          "annotation": "int",
+          "default": "100",
+          "dependency": null,
+          "kind": "query",
+          "name": "limit"
+        },
+        {
+          "annotation": "int",
+          "default": "0",
+          "dependency": null,
+          "kind": "query",
+          "name": "offset"
+        },
+        {
+          "annotation": "Optional[str]",
+          "default": "None",
+          "dependency": null,
+          "kind": "query",
+          "name": "cursor"
+        },
+        {
+          "annotation": "str",
+          "default": "Query('all')",
+          "dependency": null,
+          "kind": "query",
+          "name": "device_scope"
+        },
+        {
+          "annotation": "Optional[str]",
+          "default": "Query(None)",
+          "dependency": null,
+          "kind": "query",
+          "name": "client_device_id"
+        },
+        {
+          "annotation": "str",
+          "default": "Depends(auth.get_current_user_uid)",
+          "dependency": "auth.get_current_user_uid",
+          "kind": "dependency",
+          "name": "uid"
+        },
+        {
+          "annotation": "V3GetRuntime",
+          "default": "Depends(get_v3_get_runtime)",
+          "dependency": "get_v3_get_runtime",
+          "kind": "dependency",
+          "name": "memory_runtime"
+        },
+        {
+          "annotation": "str",
+          "default": "Header(None, alias='X-App-Platform')",
+          "dependency": null,
+          "kind": "query",
+          "name": "x_app_platform"
+        },
+        {
+          "annotation": "str",
+          "default": "Header(None, alias='X-Device-Id-Hash')",
+          "dependency": null,
+          "kind": "query",
+          "name": "x_device_id_hash"
+        }
+      ],
+      "path": "/v3/memories",
+      "response_model": "List[MemoryDB]",
+      "route": "GET /v3/memories",
+      "runtime_wired_to_memory": true,
+      "source_file": "backend/routers/memories.py",
+      "static_source_inspection": true
+    },
+    {
+      "body_model": "Memory",
+      "handler": "create_memory",
+      "is_async": true,
+      "legacy_runtime_calls": [
+        "MemoryDB.from_memory(memory, uid, None, manually_added)",
+        "memories_db.create_memory(uid, payload)",
+        "upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value, memory_db.subject_entity_id)"
+      ],
+      "method": "POST",
+      "params": [
+        {
+          "annotation": "Memory",
+          "default": null,
+          "dependency": null,
+          "kind": "body",
+          "name": "memory"
+        },
+        {
+          "annotation": "str",
+          "default": "Depends(auth.with_rate_limit(auth.get_current_user_uid, 'memories:create'))",
+          "dependency": "auth.with_rate_limit(auth.get_current_user_uid, 'memories:create')",
+          "kind": "dependency",
+          "name": "uid"
+        }
+      ],
+      "path": "/v3/memories",
+      "response_model": "MemoryDB",
+      "route": "POST /v3/memories",
+      "runtime_wired_to_memory": false,
+      "source_file": "backend/routers/memories.py",
+      "static_source_inspection": true
+    }
+  ],
+  "router_imported": false,
+  "runtime_blockers": [
+    "Do not wire while GET still lacks route-local server-owned memory control/grant/projection evidence inputs.",
+    "Do not wire while POST/DELETE still execute direct legacy DB/vector mutation paths for enrolled memory accounts.",
+    "Do not wire until FastAPI dependency/response-model behavior is proven with controlled stubs or production deps."
+  ],
+  "runtime_cutover_claimed": false,
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "mapped_get_param_count": 5,
+    "mutation_allowed": false,
+    "read_only": true,
+    "route_signature_count": 3,
+    "router_imported": false,
+    "runtime_cutover_claimed": false,
+    "status": "BLOCKED"
+  }
+}

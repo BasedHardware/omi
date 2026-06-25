@@ -1,0 +1,395 @@
+{
+  "approval_claimed": false,
+  "behavior_contract_matrix": {
+    "archive_default_unavailable": {
+      "blocking_questions": [
+        "Which non-product external surfaces, if any, will ever expose explicit Archive reads?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "Archive default-unavailable is mandatory on every default/list/search surface.",
+        "Explicit Archive access requires separate server authorization and explicit caller intent; no client-provided category/filter should imply Archive default visibility."
+      ],
+      "status": "NOT_RUN"
+    },
+    "category_filter_semantics": {
+      "blocking_questions": [
+        "Can category-filtered Developer API list deny while unfiltered default list uses memory?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "Developer category filtering must not force unsafe legacy.",
+        "Define valid, invalid, multi-category, no-category, and category=other behavior across Developer API, MCP list, and /v3."
+      ],
+      "status": "NOT_RUN"
+    },
+    "developer_non_fabrication_contract": {
+      "blocking_questions": [
+        "Are current CleanerMemory required fields compatible with memory authoritative item fields without fabrication?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "Developer response shape must not fabricate private/reviewed/edited/category defaults.",
+        "Missing authoritative memory fields must be denied, omitted if optional, or explicitly marked as compatibility-derived with product approval."
+      ],
+      "status": "NOT_RUN"
+    },
+    "disabled_malformed_no_grant_semantics": {
+      "blocking_questions": [
+        "Which external surfaces may retain legacy-safe fallback after memory writes converge?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "For each surface, choose and document disabled rollout semantics per surface: 403, empty, or legacy-safe.",
+        "Malformed rollout, missing schema, no app/key grant, missing scope, global gate denial, and read errors must fail closed or use only explicitly proven legacy-safe fallback."
+      ],
+      "status": "NOT_RUN"
+    },
+    "enabled_but_empty_semantics": {
+      "blocking_questions": [
+        "What response text/status should chat, tools, and MCP SSE use for denied versus genuinely empty?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "Define enabled-but-empty semantics for empty authoritative store, empty after category filter, empty after vector hydration, and genuinely empty account.",
+        "Require observability that distinguishes empty-after-hydration from no matching memories."
+      ],
+      "status": "NOT_RUN"
+    },
+    "fallback_semantics": {
+      "blocking_questions": [
+        "What is the abort threshold for legacy-safe fallback once reconciliation detects split-brain?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "Every memory attempt must return an explicit USE_MEMORY, USE_LEGACY_SAFE, DENY_MEMORY, or SHADOW_ONLY-style outcome before fallback.",
+        "No implicit None/exception fallback; no unsafe legacy fallback after write convergence or no-grant denial."
+      ],
+      "status": "NOT_RUN"
+    },
+    "get_list_search_consistency": {
+      "blocking_questions": [
+        "Should get/list promote to memory before search, or should search stay legacy-safe until get/list parity exists?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "MCP search_memories vs get_memories consistency must be resolved before external rollout.",
+        "Chat get/search and tools REST get/search must publish aligned fallback and empty semantics."
+      ],
+      "status": "NOT_RUN"
+    },
+    "mcp_rest_sse_parity": {
+      "blocking_questions": [
+        "Can SSE tool text differ from REST JSON while preserving a single compatibility contract?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "MCP REST vs SSE shape/fallback consistency must cover search, get/list, create/edit/delete denial, empty, invalid category, and auth failures.",
+        "Both transports must use verified app/key/scope context and the same Archive default-unavailable policy."
+      ],
+      "status": "NOT_RUN"
+    },
+    "response_shape_compatibility": {
+      "blocking_questions": [
+        "Which fields are additive and which legacy fields are required by external clients?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "MCP REST vs SSE shape/fallback consistency must be proven with golden fixtures.",
+        "Product, /v3, Developer API, MCP REST, MCP SSE, chat text, tools REST, and agent wrappers need stable success/empty/error shapes."
+      ],
+      "status": "NOT_RUN"
+    },
+    "tools_and_agent_callers": {
+      "blocking_questions": [
+        "Should tools REST and agent execute-tool follow chat semantics or external Developer/MCP semantics?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "tools and agent callers must be included in disabled/no-grant, enabled-empty, response-shape, and fallback compatibility decisions.",
+        "Agent execute-tool must not bypass memory rollout policy by invoking legacy LangChain memory tools under a different wrapper."
+      ],
+      "status": "NOT_RUN"
+    },
+    "v3_external_compatibility": {
+      "blocking_questions": [
+        "Should /v3 remain pure legacy until all P1/P0 blockers close?"
+      ],
+      "evidence": [],
+      "required_decisions": [
+        "/v3 external compatibility requires legacy response model parse proof, stable pagination/order, invalid-record handling, and rollback proof.",
+        "A memory-backed /v3 path must not make stale Short-term or Archive default-visible."
+      ],
+      "status": "NOT_RUN"
+    }
+  },
+  "benchmark_evidence_collected": false,
+  "compatibility_contract_title": "Oracle P1-3 caller/API compatibility contract",
+  "execute_requested": false,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "local_route_adapter_and_test_references": {
+    "agent_execute_tool": "backend/routers/agent_tools.py POST /v1/agent/execute-tool",
+    "chat_adapter": "backend/utils/memory/chat_memory_adapter.py",
+    "chat_get_tool": "backend/utils/retrieval/tools/memory_tools.py get_memories_tool",
+    "chat_search_tool": "backend/utils/retrieval/tools/memory_tools.py search_memories_tool",
+    "developer_adapter": "backend/utils/memory/developer_memory_adapter.py",
+    "developer_default_list": "backend/routers/developer.py GET /v1/dev/user/memories",
+    "developer_vector_search": "backend/routers/developer.py GET /v1/dev/user/memories/vector/search",
+    "existing_tests": "backend/tests/unit/test_product_memory_router.py; backend/tests/unit/test_developer_memory_adapter.py; backend/tests/unit/test_memory_mcp_memory_adapter.py; backend/tests/unit/test_chat_memory_adapter.py; backend/tests/unit/test_mcp_search_memories.py; backend/tests/unit/test_mcp_memory_filters.py; backend/tests/unit/test_dev_api_memories_pagination.py; backend/tests/unit/test_tools_router.py",
+    "mcp_adapter": "backend/utils/mcp_memories.py",
+    "mcp_rest_get": "backend/routers/mcp.py GET /v1/mcp/memories",
+    "mcp_rest_search": "backend/routers/mcp.py GET /v1/mcp/memories/search",
+    "mcp_sse_get": "backend/routers/mcp_sse.py get_memories tool",
+    "mcp_sse_search": "backend/routers/mcp_sse.py search_memories tool",
+    "product_memory_archive_search": "backend/routers/memory_product.py GET /memory/archive/search",
+    "product_memory_default_search": "backend/routers/memory_product.py GET /memory/search",
+    "product_memory_vector_search": "backend/routers/memory_product.py GET /memory/vector/search",
+    "product_read_service": "backend/utils/memory/product_memory_read_service.py",
+    "rollout_helper": "backend/utils/memory/default_read_rollout.py",
+    "tools_rest_get": "backend/routers/tools.py GET /v1/tools/memories",
+    "tools_rest_search": "backend/routers/tools.py POST /v1/tools/memories/search",
+    "v3_legacy_list": "backend/routers/memories.py GET /v3/memories"
+  },
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "Oracle verdict remains BLOCK production rollout / NO-GO.",
+    "This Oracle P1-3 caller/API compatibility contract is NOT_RUN/BLOCKED and does not claim production approval.",
+    "Default and execute modes are read-only inventory only; no network/provider/cloud calls are executed and no mutations are planned.",
+    "No production traffic, Firestore read/write, Pinecone read/write, provider call, benchmark run, telemetry sink integration, runtime behavior change, or rollout approval is performed by this artifact.",
+    "Archive remains default-unavailable and stale Short-term remains not default-visible."
+  ],
+  "planned_safe_commands": [
+    "python3 backend/scripts/p1_3_caller_api_compatibility_readiness.py",
+    "python3 backend/scripts/p1_3_caller_api_compatibility_readiness.py --execute",
+    "pytest tests/unit/test_p1_3_caller_api_compatibility_readiness.py -q",
+    "pytest tests/unit/test_memory_*.py -q"
+  ],
+  "production_rollout_approved": false,
+  "provider_calls_executed": false,
+  "read_only": true,
+  "required_scope_summary": "Inventory Product, /v3, Developer API, MCP REST, MCP SSE, chat, tools, and agent callers across disabled/malformed/no-grant, enabled-but-empty, category filters, get/list/search, response shape, Archive default-unavailable, and fallback semantics. Required decisions include MCP search_memories vs get_memories consistency; MCP REST vs SSE shape/fallback consistency; Developer category filtering must not force unsafe legacy; Developer response shape must not fabricate private/reviewed/edited/category defaults; disabled rollout semantics per surface: 403, empty, or legacy-safe; enabled-but-empty semantics; Archive default-unavailable; /v3 external compatibility; tools and agent callers.",
+  "status": "BLOCKED",
+  "surface_contract_matrix": {
+    "agent_execute_tool_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "agent execute memory tools"
+      ],
+      "category_filter_contract": "No direct category filter; invoked tool parameters must still be constrained by the chosen memory-tool contract.",
+      "disabled_malformed_no_grant_contract": "Agent execute-tool memory callers must inherit a documented tool contract instead of bypassing rollout through LangChain legacy reads.",
+      "enabled_but_empty_contract": "Agent string result must distinguish empty, denied, and unsafe-fallback-blocked states.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/agent_tools.py POST /v1/agent/execute-tool"
+      ],
+      "fallback_contract": "Agent callers must not get broader legacy fallback than chat/tools callers for equivalent operations.",
+      "response_shape_contract": "Agent result/error wrapper must be compatible with VM agent clients and documented against tools REST output.",
+      "status": "NOT_RUN"
+    },
+    "chat_get_memories_tool": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "LLM get_memories_tool"
+      ],
+      "category_filter_contract": "No category filter; date filters must not make Archive or stale Short-term visible by default.",
+      "disabled_malformed_no_grant_contract": "Define whether chat get memory remains legacy-safe or denies when rollout is disabled/malformed/no-grant.",
+      "enabled_but_empty_contract": "Empty natural-language output must be compatible and distinguish real empty from denied/unsafe fallback.",
+      "evidence": [],
+      "existing_references": [
+        "backend/utils/retrieval/tools/memory_tools.py get_memories_tool"
+      ],
+      "fallback_contract": "Chat get/search tools should not disagree on disabled rollout semantics.",
+      "response_shape_contract": "Text formatting must mark memory content as data before future P1-5 prompt-injection hardening.",
+      "status": "NOT_RUN"
+    },
+    "chat_search_memories_tool": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "LLM search_memories_tool"
+      ],
+      "category_filter_contract": "No category filter on current search tool.",
+      "disabled_malformed_no_grant_contract": "Document whether disabled rollout returns legacy-safe text, empty text, or denial text; align with chat get_memories_tool.",
+      "enabled_but_empty_contract": "Empty vector result text must distinguish no match from empty-after-hydration or denied state.",
+      "evidence": [],
+      "existing_references": [
+        "backend/utils/retrieval/tools/memory_tools.py search_memories_tool",
+        "backend/utils/memory/chat_memory_adapter.py"
+      ],
+      "fallback_contract": "Legacy-safe fallback only through explicit MemoryReadDecision; no implicit None downgrade.",
+      "response_shape_contract": "Text response must remain compatible with LangChain tool consumers and avoid fabricated fields.",
+      "status": "NOT_RUN"
+    },
+    "developer_api_category_filter": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "category-filtered list"
+      ],
+      "category_filter_contract": "Define valid/invalid category behavior, multi-category behavior, and no category=other fabrication before rollout.",
+      "disabled_malformed_no_grant_contract": "Developer category filtering must not force unsafe legacy; if memory write/read convergence is active, category fallback must deny or use a proven safe compatibility path.",
+      "enabled_but_empty_contract": "Empty category pages must distinguish no matching category from blocked split-brain category fallback.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/developer.py GET /v1/dev/user/memories"
+      ],
+      "fallback_contract": "Current explicit legacy-safe fallback remains BLOCKED for external rollout until category compatibility is proven.",
+      "response_shape_contract": "Developer response shape must not fabricate private/reviewed/edited/category defaults on category-filtered records.",
+      "status": "NOT_RUN"
+    },
+    "developer_api_default_list": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "default list"
+      ],
+      "category_filter_contract": "No category filter on this default path; see developer_api_category_filter for category-specific contract.",
+      "disabled_malformed_no_grant_contract": "Developer default list should deny with a stable external error shape when app/key/scope/grant or rollout fails closed.",
+      "enabled_but_empty_contract": "Return an empty List[CleanerMemory] only when memory is authoritative and reconciliation proves no compatible legacy data is being hidden.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/developer.py GET /v1/dev/user/memories",
+        "backend/utils/memory/developer_memory_adapter.py"
+      ],
+      "fallback_contract": "Legacy-safe fallback is allowed only while memory writes are not converged and the shared decision explicitly says USE_LEGACY_SAFE.",
+      "response_shape_contract": "Developer response shape must not fabricate private/reviewed/edited/category defaults when memory data lacks authoritative fields.",
+      "status": "NOT_RUN"
+    },
+    "developer_api_vector_search": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "vector search"
+      ],
+      "category_filter_contract": "No category filter accepted on current vector route; future filters require the category contract.",
+      "disabled_malformed_no_grant_contract": "Deny with stable 403 detail when app/key/scope/grant or rollout fails closed.",
+      "enabled_but_empty_contract": "Return documented empty search list only when vector hydration/reconciliation proves no silent data loss.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/developer.py GET /v1/dev/user/memories/vector/search",
+        "backend/utils/memory/developer_memory_adapter.py"
+      ],
+      "fallback_contract": "No unsafe legacy vector fallback after DENY_MEMORY or SHADOW_ONLY; USE_LEGACY_SAFE requires explicit bounded semantics.",
+      "response_shape_contract": "Search result shape must be documented against developer list shape and should not fabricate legacy-only fields.",
+      "status": "NOT_RUN"
+    },
+    "mcp_rest_get_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "get/list memories"
+      ],
+      "category_filter_contract": "Category/review/manual/date/sensitive filters need compatibility proof before any memory default read promotion.",
+      "disabled_malformed_no_grant_contract": "Define whether disabled rollout means 403, empty, or legacy-safe for MCP get_memories; current legacy path is not external-rollout proof.",
+      "enabled_but_empty_contract": "List empty shape must match MCP SSE get_memories semantics and pagination/filter behavior.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/mcp.py GET /v1/mcp/memories"
+      ],
+      "fallback_contract": "MCP search_memories vs get_memories consistency is a blocking compatibility decision.",
+      "response_shape_contract": "CleanerMemory list shape must be compared with REST search and SSE tool response shapes.",
+      "status": "NOT_RUN"
+    },
+    "mcp_rest_search_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "search_memories"
+      ],
+      "category_filter_contract": "No category filter on REST search; category behavior must align if added.",
+      "disabled_malformed_no_grant_contract": "Deny app/key/scope/grant failures; memory rollout DENY_MEMORY/SHADOW_ONLY returns documented empty or error consistently with SSE.",
+      "enabled_but_empty_contract": "Empty search results must be identical in semantics to MCP SSE search_memories for the same input.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/mcp.py GET /v1/mcp/memories/search",
+        "backend/utils/mcp_memories.py"
+      ],
+      "fallback_contract": "MCP search_memories vs get_memories consistency must be resolved; search cannot silently use memory while get remains unsafe legacy.",
+      "response_shape_contract": "MCP REST searched-memory list shape must be compared with MCP SSE tool-result shape before rollout.",
+      "status": "NOT_RUN"
+    },
+    "mcp_sse_get_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "streamable HTTP/SSE get_memories tool"
+      ],
+      "category_filter_contract": "List filters require REST/SSE parity fixtures.",
+      "disabled_malformed_no_grant_contract": "Define MCP SSE get_memories disabled/no-grant behavior and align it with MCP REST get_memories before external rollout.",
+      "enabled_but_empty_contract": "Tool result empty content must be stable across REST/SSE list semantics.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/mcp_sse.py get_memories tool"
+      ],
+      "fallback_contract": "MCP REST vs SSE shape/fallback consistency is required before memory read promotion.",
+      "response_shape_contract": "MCP SSE get_memories text/tool shape must be compared with MCP REST CleanerMemory list response.",
+      "status": "NOT_RUN"
+    },
+    "mcp_sse_search_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "streamable HTTP/SSE search_memories tool"
+      ],
+      "category_filter_contract": "No category filter on current search tool unless explicitly added and aligned with REST.",
+      "disabled_malformed_no_grant_contract": "MCP SSE disabled/no-grant behavior must match MCP REST search for equivalent authenticated app/key/scope context.",
+      "enabled_but_empty_contract": "Tool result empty content must be stable and semantically equal to MCP REST search empty behavior.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/mcp_sse.py search_memories tool"
+      ],
+      "fallback_contract": "Fallback chain must be identical to MCP REST search or explicitly documented as incompatible and BLOCKED.",
+      "response_shape_contract": "MCP REST vs SSE shape/fallback consistency must be proven with golden tool-result fixtures.",
+      "status": "NOT_RUN"
+    },
+    "product_memory_routes": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "list/search default memory",
+        "vector search",
+        "explicit Archive search"
+      ],
+      "category_filter_contract": "No default Archive or stale Short-term exposure; any future category filters require the same server authorization and non-active filtering contract.",
+      "disabled_malformed_no_grant_contract": "Fail closed with HTTP 403/deny observability for disabled, malformed, or no-grant states; no unsafe legacy downgrade from memory product routes.",
+      "enabled_but_empty_contract": "Return the documented empty product response shape with rollout observability; empty-after-hydration must be distinguishable before rollout approval.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/memory_product.py GET /memory/search",
+        "backend/routers/memory_product.py GET /memory/vector/search",
+        "backend/routers/memory_product.py GET /memory/archive/search",
+        "backend/utils/memory/product_memory_read_service.py"
+      ],
+      "fallback_contract": "memory product routes deny or return memory results only; legacy fallback requires an explicit compatibility route decision, not an implicit downgrade.",
+      "response_shape_contract": "Keep product memory response fields additive and stable; do not claim /v3 compatibility from product-only shapes.",
+      "status": "NOT_RUN"
+    },
+    "tools_rest_memories": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "tools REST get",
+        "tools REST search"
+      ],
+      "category_filter_contract": "No category filter on current tools REST memory endpoints.",
+      "disabled_malformed_no_grant_contract": "tools and agent callers need explicit disabled rollout semantics; current tool service legacy reads are not memory rollout proof.",
+      "enabled_but_empty_contract": "ToolResponse empty/error text must be stable and not hide legacy-authoritative data.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/tools.py GET /v1/tools/memories",
+        "backend/routers/tools.py POST /v1/tools/memories/search"
+      ],
+      "fallback_contract": "Define if tools REST follows chat semantics, product semantics, or separate legacy-safe compatibility semantics.",
+      "response_shape_contract": "ToolResponse wrapping must be compared with chat tool text and agent execute-tool results.",
+      "status": "NOT_RUN"
+    },
+    "v3_legacy_external_api": {
+      "archive_default_unavailable": true,
+      "caller_operations": [
+        "legacy external list"
+      ],
+      "category_filter_contract": "Preserve legacy category semantics or publish an additive migration contract with invalid-category behavior and ordering proof.",
+      "disabled_malformed_no_grant_contract": "Legacy /v3 remains legacy until a dedicated compatibility proof exists; any memory-backed replacement must define disabled rollout semantics per surface: 403, empty, or legacy-safe.",
+      "enabled_but_empty_contract": "Must not silently hide legacy-authoritative data; enabled-but-empty semantics require fixture proof before any memory-backed /v3 read.",
+      "evidence": [],
+      "existing_references": [
+        "backend/routers/memories.py GET /v3/memories"
+      ],
+      "fallback_contract": "Rollback must not duplicate, skip, resurrect, or expose Archive by default.",
+      "response_shape_contract": "/v3 external compatibility requires legacy model parse compatibility and additive-only metadata.",
+      "status": "NOT_RUN"
+    }
+  }
+}

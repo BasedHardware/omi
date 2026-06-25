@@ -1,0 +1,157 @@
+{
+  "approval_claimed": false,
+  "artifact": "p1_3_v3_runtime_config_source_readiness",
+  "execute": true,
+  "firestore_reads_executed": false,
+  "firestore_writes_executed": false,
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/routers/memories.py runtime wiring changed.",
+    "No production calls by default; explicit execution is read-only config/source proof only.",
+    "No client override, user content, cursor token, secret material, telemetry sink, provider, vector, or write path used.",
+    "Valid source-selection proof is not route wiring, rollout approval, or canary approval."
+  ],
+  "pinecone_calls_executed": false,
+  "production_rollout_approved": false,
+  "proof_status": "NOT_RUN",
+  "provider_calls_executed": false,
+  "read_only": true,
+  "routers_memories_modified": false,
+  "runtime_wiring_changed": false,
+  "source_selection_proof": {
+    "approval_claimed": false,
+    "backend_service_principal_read_proven": false,
+    "backend_service_principal_read_required": true,
+    "client_override_allowed": false,
+    "config_paths_present": false,
+    "config_validation_reason": "not_run",
+    "credentials_present": false,
+    "fail_closed_on_missing_stale_malformed": true,
+    "missing_prerequisites": [
+      "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_ALLOW=1",
+      "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_PROJECT_ID or GOOGLE_CLOUD_PROJECT",
+      "GOOGLE_APPLICATION_CREDENTIALS or SERVICE_ACCOUNT_JSON",
+      "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_SERVICE_ACCOUNT_EMAIL",
+      "MEMORY_V3_RUNTIME_CONFIG_SOURCE_PROD_READ_CONFIG_PATHS"
+    ],
+    "mutating_firestore_methods_allowed": false,
+    "production_config_sources_exist": false,
+    "production_config_sources_valid": false,
+    "production_rollout_approved": false,
+    "project_id_present": false,
+    "read_error": null,
+    "read_only_firestore_method": "google.cloud.firestore.Client(...).document(path).get",
+    "route_scope": "GET /v3/memories",
+    "route_scoped_without_user_dimensions": false,
+    "runtime_wired": false,
+    "selected_sources": [
+      {
+        "path": "memory_control/global_read_gate",
+        "purpose": "v3_runtime_enablement",
+        "required_fields": [
+          "route_scope",
+          "purpose",
+          "owner",
+          "config_schema_version",
+          "max_staleness_seconds",
+          "memory_reads_enabled",
+          "kill_switch_active"
+        ]
+      },
+      {
+        "path": "memory_control/write_convergence_gate",
+        "purpose": "v3_write_convergence_gate",
+        "required_fields": [
+          "route_scope",
+          "purpose",
+          "owner",
+          "config_schema_version",
+          "max_staleness_seconds",
+          "durable_outbox_enabled",
+          "dual_write_projection_ready",
+          "delete_convergence_ready",
+          "idempotency_contract_ready"
+        ]
+      }
+    ],
+    "service_account_email_present": false,
+    "source_api_shape": {
+      "allowed_metadata_keys": [
+        "route_scope",
+        "purpose",
+        "owner",
+        "config_schema_version",
+        "max_staleness_seconds",
+        "memory_reads_enabled",
+        "kill_switch_active",
+        "durable_outbox_enabled",
+        "dual_write_projection_ready",
+        "delete_convergence_ready",
+        "idempotency_contract_ready"
+      ],
+      "client_override_allowed": false,
+      "forbidden_dimensions": [
+        "uid",
+        "user_id",
+        "session_id",
+        "memory_id",
+        "request_payload",
+        "raw_cursor",
+        "cursor",
+        "cursor-token",
+        "secret"
+      ],
+      "route_scope": "GET /v3/memories",
+      "runtime_wired": false,
+      "selected_sources": [
+        {
+          "path": "memory_control/global_read_gate",
+          "purpose": "v3_runtime_enablement",
+          "required_fields": [
+            "route_scope",
+            "purpose",
+            "owner",
+            "config_schema_version",
+            "max_staleness_seconds",
+            "memory_reads_enabled",
+            "kill_switch_active"
+          ]
+        },
+        {
+          "path": "memory_control/write_convergence_gate",
+          "purpose": "v3_write_convergence_gate",
+          "required_fields": [
+            "route_scope",
+            "purpose",
+            "owner",
+            "config_schema_version",
+            "max_staleness_seconds",
+            "durable_outbox_enabled",
+            "dual_write_projection_ready",
+            "delete_convergence_ready",
+            "idempotency_contract_ready"
+          ]
+        }
+      ],
+      "source_type": "firestore_route_scoped_runtime_config_or_equivalent_server_config_inventory"
+    }
+  },
+  "status": "BLOCKED",
+  "summary": {
+    "approval_claimed": false,
+    "backend_service_principal_read_proven": false,
+    "client_override_allowed": false,
+    "missing_prerequisite_count": 5,
+    "mutation_allowed": false,
+    "production_config_sources_exist": false,
+    "production_config_sources_valid": false,
+    "proof_status": "NOT_RUN",
+    "read_only": true,
+    "route_scoped_without_user_dimensions": false,
+    "runtime_wiring_changed": false,
+    "selected_source_count": 2,
+    "status": "BLOCKED"
+  },
+  "telemetry_sink_calls_executed": false
+}

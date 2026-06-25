@@ -1,0 +1,12 @@
+{
+  "REQUIRED_REQUIREMENT_IDS": [
+    "route_scoped_projection_write_convergence_source",
+    "durable_outbox_acknowledged_before_projection_reads",
+    "dual_write_projection_writer_ready",
+    "delete_tombstone_convergence_complete",
+    "idempotency_key_contract",
+    "generation_freshness_tombstone_vector_fences_aligned",
+    "rollback_behavior_fail_closed",
+    "no_legacy_fallback_or_merge_claim"
+  ]
+}

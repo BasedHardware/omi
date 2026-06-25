@@ -1,0 +1,19 @@
+{
+  "approval_claimed": false,
+  "covered_defaults": [
+    "archive_not_default_visible_and_requires_explicit_opt_in",
+    "stale_short_term_not_default_visible_and_requires_explicit_historical_opt_in",
+    "fresh_short_term_source_backed_projection_default_visible",
+    "active_long_term_stable_synthesis_default_visible",
+    "unknown_visibility_lifecycle_or_source_freshness_fails_closed",
+    "no_legacy_fallback_or_memory_legacy_merge_claim"
+  ],
+  "external_calls": [],
+  "production_rollout_approved": false,
+  "proof_status": "NOT_RUN",
+  "runtime_wired": false,
+  "service": "backend/scripts/p1_3_v3_archive_short_term_visibility_readiness.py",
+  "status": "BLOCKED",
+  "test": "backend/tests/unit/test_v3_archive_visibility_readiness.py",
+  "utility": "backend/utils/memory/v3_archive_visibility_readiness.py"
+}

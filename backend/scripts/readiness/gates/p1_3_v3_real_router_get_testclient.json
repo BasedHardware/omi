@@ -1,0 +1,112 @@
+{
+  "app_startup_executed": false,
+  "artifact": "p1_3_v3_real_router_get_testclient",
+  "dependency_overrides": [
+    "routers.memories.auth.get_current_user_uid -> stubbed-test-uid"
+  ],
+  "execute": false,
+  "firestore_writes_executed": false,
+  "future_get_wiring_seam": [
+    "GET /v3/memories query params",
+    "adapt_v3_request_parameters(...) request adapter",
+    "plan_v3_memory_route(...) route planner",
+    "adapt_v3_memory_response(...) response adapter"
+  ],
+  "memory_adapters_invoked": false,
+  "minimal_fastapi_app_created": false,
+  "mutation_allowed": false,
+  "network_or_provider_calls_executed": false,
+  "non_claims": [
+    "No backend/main.py import or production app startup executed.",
+    "Only GET /v3/memories was executed through TestClient; POST/DELETE remain unexecuted.",
+    "No real Firestore, Pinecone, cloud, provider, or network calls executed.",
+    "Current runtime still calls stubbed legacy memories_db.get_memories; no memory adapter/planner/response cutover is claimed.",
+    "No runtime /v3 wiring, benchmark, telemetry sink integration, or rollout approval claimed."
+  ],
+  "pinecone_calls_executed": false,
+  "post_delete_executed": false,
+  "probe": {
+    "testclient_ok": false
+  },
+  "production_app_imported": false,
+  "production_rollout_approved": false,
+  "provider_calls_executed": false,
+  "read_only": true,
+  "real_firestore_reads_executed": false,
+  "real_router_included_under_stubs": false,
+  "real_router_target": "backend/routers/memories.py",
+  "required_import_stubs": [
+    {
+      "module": "database.memories",
+      "stubbed_attributes": [
+        "get_memory",
+        "get_memories",
+        "create_memory",
+        "save_memories",
+        "delete_memory",
+        "delete_all_memories",
+        "review_memory",
+        "edit_memory",
+        "change_memory_visibility"
+      ]
+    },
+    {
+      "module": "database.review_queue",
+      "stubbed_attributes": [
+        "list_review_conflicts",
+        "resolve_review_conflict"
+      ]
+    },
+    {
+      "module": "database.vector_db",
+      "stubbed_attributes": [
+        "delete_memory_vector",
+        "delete_memory_vectors_batch",
+        "upsert_memory_vector",
+        "upsert_memory_vectors_batch"
+      ]
+    },
+    {
+      "module": "database._client",
+      "stubbed_attributes": [
+        "document_id_from_seed"
+      ]
+    },
+    {
+      "module": "utils.executors",
+      "stubbed_attributes": [
+        "db_executor",
+        "postprocess_executor",
+        "run_blocking",
+        "submit_with_context"
+      ]
+    },
+    {
+      "module": "utils.apps",
+      "stubbed_attributes": [
+        "update_personas_async"
+      ]
+    },
+    {
+      "module": "utils.other.endpoints",
+      "stubbed_attributes": [
+        "get_current_user_uid",
+        "with_rate_limit"
+      ]
+    }
+  ],
+  "route_handlers_executed": [],
+  "runtime_cutover_claimed": false,
+  "status": "BLOCKED",
+  "stubbed_legacy_get_memories_executed": false,
+  "summary": {
+    "get_only": false,
+    "memory_adapters_invoked": false,
+    "mutation_flags_clear": false,
+    "post_delete_unexecuted": false,
+    "runtime_cutover_claimed": false,
+    "status": "BLOCKED",
+    "stubbed_legacy_get_memories_call_count": 0,
+    "testclient_ok": false
+  }
+}
