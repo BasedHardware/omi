@@ -653,6 +653,13 @@ def execute_tool(
         if not content:
             raise ToolExecutionError("Content is required")
 
+        if memory_system == MemorySystem.CANONICAL:
+            category = identify_category_for_memory(content)
+            memory = Memory(content=content, category=category)
+            memory_db = MemoryDB.from_memory(memory, user_id, None, True)
+            MemoryService(db_client=db).write(user_id, memory_db.model_dump())
+            return {"success": True, "memory": memory_db.model_dump()}
+
         memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
         memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
             memory_rollout,
@@ -702,6 +709,10 @@ def execute_tool(
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db).update_content(user_id, memory_id, content)
+            return {"success": True}
 
         memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
         memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
