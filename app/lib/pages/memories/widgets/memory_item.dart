@@ -11,7 +11,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/memories/page.dart';
+import 'package:omi/services/client_device_service.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -59,7 +59,22 @@ class MemoryItem extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [Text(memory.content.decodeString, style: AppStyles.body)],
+                    children: [
+                      Text(memory.content.decodeString, style: AppStyles.body),
+                      if (ClientDeviceService.instance.deviceProvenanceLabel(
+                            primaryCaptureDevice: memory.primaryCaptureDevice,
+                          ) !=
+                          null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            ClientDeviceService.instance.deviceProvenanceLabel(
+                              primaryCaptureDevice: memory.primaryCaptureDevice,
+                            )!,
+                            style: TextStyle(fontSize: 11, color: AppStyles.textTertiary),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: AppStyles.spacingM),
