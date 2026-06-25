@@ -1306,7 +1306,7 @@ export class AgentRuntimeKernel {
       return false;
     }
     const requestedSystemPromptHash = stableHash(input.input.systemPrompt);
-    if (binding.systemPromptHash !== requestedSystemPromptHash && !(binding.systemPromptHash === null && requestedSystemPromptHash === stableHash(undefined))) {
+    if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
       return false;
     }
     const metadata = parseJsonObject(binding.metadataJson);
