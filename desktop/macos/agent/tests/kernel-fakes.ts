@@ -1,4 +1,5 @@
 import type {
+  AdapterArtifactReference,
   AdapterAttemptContext,
   AdapterAttemptResult,
   AdapterEventSink,
@@ -38,6 +39,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextResume = false;
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
+  nextArtifacts: AdapterArtifactReference[] | undefined;
   pendingResult:
     | {
         promise: Promise<AdapterAttemptResult>;
@@ -123,6 +125,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       terminalStatus: "succeeded",
       inputTokens: 1,
       outputTokens: 2,
+      artifacts: this.nextArtifacts,
     };
   }
 

@@ -20,6 +20,7 @@ import type {
   AgentStore,
   ArtifactRole,
   AttemptStatus,
+  NewAgentArtifact,
   ResumeFidelity,
   RunAttempt,
   RunMode,
@@ -121,6 +122,23 @@ export interface InspectArtifactsInput {
   attemptId?: string;
   role?: ArtifactRole;
   limit?: number;
+}
+
+export interface PersistArtifactInput {
+  sessionId?: string;
+  runId?: string | null;
+  attemptId?: string | null;
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName?: string | null;
+  mimeType?: string | null;
+  contentHash?: string | null;
+  sizeBytes?: number | null;
+  metadata?: Record<string, unknown>;
+  metadataJson?: string;
+  artifactId?: string;
+  createdAtMs?: number;
 }
 
 export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
@@ -639,6 +657,10 @@ export class AgentRuntimeKernel {
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
     return this.readArtifacts(input);
+  }
+
+  persistArtifact(input: PersistArtifactInput): AgentArtifact {
+    return this.withTransaction(() => this.persistArtifactInTransaction(input));
   }
 
   hasActiveExecutionForAdapter(adapterId: string): boolean {
@@ -1199,6 +1221,21 @@ export class AgentRuntimeKernel {
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
+      for (const artifact of result.artifacts ?? []) {
+        this.persistArtifactInTransaction({
+          sessionId: session.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+          kind: artifact.kind,
+          role: artifact.role,
+          uri: artifact.uri,
+          displayName: artifact.displayName,
+          mimeType: artifact.mimeType,
+          contentHash: artifact.contentHash,
+          sizeBytes: artifact.sizeBytes,
+          metadata: artifact.metadata,
+        });
+      }
       this.finishAttemptAndRun({
         sessionId: session.sessionId,
         runId,
@@ -1362,6 +1399,75 @@ export class AgentRuntimeKernel {
         payload: { bindingId: binding.bindingId, reason },
       });
     });
+  }
+
+  private persistArtifactInTransaction(input: PersistArtifactInput): AgentArtifact {
+    const scope = this.resolveArtifactScope(input);
+    const artifactInput: NewAgentArtifact = {
+      artifactId: input.artifactId,
+      sessionId: scope.sessionId,
+      runId: scope.runId,
+      attemptId: scope.attemptId,
+      kind: input.kind,
+      role: input.role,
+      uri: input.uri,
+      displayName: input.displayName ?? null,
+      mimeType: input.mimeType ?? null,
+      contentHash: input.contentHash ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      metadataJson: input.metadataJson ?? JSON.stringify(input.metadata ?? {}),
+      createdAtMs: input.createdAtMs,
+    };
+    const artifact = this.store.insertArtifact(artifactInput);
+    this.appendEvent({
+      sessionId: artifact.sessionId,
+      runId: artifact.runId,
+      attemptId: artifact.attemptId,
+      type: "artifact.created",
+      payload: {
+        artifactId: artifact.artifactId,
+        kind: artifact.kind,
+        role: artifact.role,
+        uri: artifact.uri,
+        displayName: artifact.displayName,
+        mimeType: artifact.mimeType,
+        contentHash: artifact.contentHash,
+        sizeBytes: artifact.sizeBytes,
+      },
+    });
+    return artifact;
+  }
+
+  private resolveArtifactScope(input: PersistArtifactInput): {
+    sessionId: string;
+    runId: string | null;
+    attemptId: string | null;
+  } {
+    let sessionId = input.sessionId ?? null;
+    let runId = input.runId ?? null;
+    const attemptId = input.attemptId ?? null;
+
+    if (attemptId) {
+      const attempt = this.readAttempt(attemptId);
+      if (runId && runId !== attempt.runId) {
+        throw new Error(`Artifact attempt ${attemptId} belongs to run ${attempt.runId}, not ${runId}`);
+      }
+      runId = attempt.runId;
+    }
+
+    if (runId) {
+      const run = this.readRun(runId);
+      if (sessionId && sessionId !== run.sessionId) {
+        throw new Error(`Artifact run ${runId} belongs to session ${run.sessionId}, not ${sessionId}`);
+      }
+      sessionId = run.sessionId;
+    }
+
+    if (!sessionId) {
+      throw new Error("Artifact persistence requires sessionId, runId, or attemptId");
+    }
+
+    return { sessionId, runId, attemptId };
   }
 
   private appendEvent(input: {

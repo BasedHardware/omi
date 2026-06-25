@@ -4,7 +4,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
 import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
-import type { ResumeFidelity, RunMode } from "../runtime/types.js";
+import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
 /**
  * Configuration for creating a harness adapter.
@@ -176,9 +176,21 @@ export interface AdapterAttemptContext {
 
 export type AdapterEventSink = (event: OutboundMessage) => void;
 
+export interface AdapterArtifactReference {
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName?: string | null;
+  mimeType?: string | null;
+  contentHash?: string | null;
+  sizeBytes?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
 export interface AdapterAttemptResult extends PromptResult {
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
+  artifacts?: AdapterArtifactReference[];
 }
 
 export interface CancelAttemptContext {

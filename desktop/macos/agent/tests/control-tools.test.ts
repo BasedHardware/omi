@@ -117,27 +117,18 @@ describe("agent control tools", () => {
   it("returns canonical artifact references without reading artifact contents", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = await kernel.executeRun(baseRunInput);
-    store.execute(
-      `INSERT INTO artifacts (
-        artifact_id, session_id, run_id, attempt_id, kind, role, uri,
-        display_name, mime_type, content_hash, size_bytes, metadata_json, created_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "art_test",
-        result.session.sessionId,
-        result.run.runId,
-        result.attempt.attemptId,
-        "json",
-        "result",
-        "omi-artifact://art_test",
-        "result.json",
-        "application/json",
-        "sha256:test",
-        42,
-        JSON.stringify({ source: "test" }),
-        Date.now(),
-      ],
-    );
+    kernel.persistArtifact({
+      artifactId: "art_test",
+      attemptId: result.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://art_test",
+      displayName: "result.json",
+      mimeType: "application/json",
+      contentHash: "sha256:test",
+      sizeBytes: 42,
+      metadata: { source: "test" },
+    });
 
     const inspected = parseToolResult(
       await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
@@ -154,6 +145,95 @@ describe("agent control tools", () => {
         metadata: { source: "test" },
       }),
     ]);
+
+    const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
+    expect(events.find((event: any) => event.type === "artifact.created")).toMatchObject({
+      sessionId: result.session.sessionId,
+      runId: result.run.runId,
+      attemptId: result.attempt.attemptId,
+    });
+    store.close();
+  });
+
+  it("filters persisted artifacts by session, run, attempt, and role", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const first = await kernel.executeRun(baseRunInput);
+    const second = await kernel.executeRun({
+      ...baseRunInput,
+      externalRefId: "task-2",
+      requestId: "request-2",
+    });
+
+    kernel.persistArtifact({
+      attemptId: first.attempt.attemptId,
+      kind: "log",
+      role: "log",
+      uri: "omi-artifact://first-log",
+    });
+    kernel.persistArtifact({
+      attemptId: first.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://first-result",
+    });
+    kernel.persistArtifact({
+      attemptId: second.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://second-result",
+    });
+
+    const runFiltered = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
+        runId: first.run.runId,
+        role: "result",
+      }),
+    );
+    expect(runFiltered.artifacts.map((artifact: any) => artifact.uri)).toEqual(["omi-artifact://first-result"]);
+
+    const attemptFiltered = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
+        sessionId: first.session.sessionId,
+        attemptId: first.attempt.attemptId,
+        role: "log",
+      }),
+    );
+    expect(attemptFiltered.artifacts.map((artifact: any) => artifact.uri)).toEqual(["omi-artifact://first-log"]);
+    store.close();
+  });
+
+  it("persists adapter result artifacts as artifact refs with native ids in metadata", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.nextArtifacts = [
+      {
+        kind: "markdown",
+        role: "result",
+        uri: "adapter://fake/native-summary",
+        displayName: "summary.md",
+        mimeType: "text/markdown",
+        contentHash: "sha256:native-summary",
+        sizeBytes: 128,
+        metadata: { adapterArtifactId: "native-summary" },
+      },
+    ];
+
+    const result = await kernel.executeRun(baseRunInput);
+    const inspected = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
+        attemptId: result.attempt.attemptId,
+      }),
+    );
+
+    expect(inspected.artifacts).toEqual([
+      expect.objectContaining({
+        omiSessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        uri: "adapter://fake/native-summary",
+        metadata: { adapterArtifactId: "native-summary" },
+      }),
+    ]);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings").count).toBe(1);
     store.close();
   });
 
@@ -594,27 +674,16 @@ describe("agent control tools", () => {
 
     const runId = adapter.executed[0].runId;
     const attemptId = adapter.executed[0].attemptId;
-    store.execute(
-      `INSERT INTO artifacts (
-        artifact_id, session_id, run_id, attempt_id, kind, role, uri,
-        display_name, mime_type, content_hash, size_bytes, metadata_json, created_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "art_relay",
-        adapter.executed[0].sessionId,
-        runId,
-        attemptId,
-        "log",
-        "log",
-        "omi-artifact://art_relay",
-        "relay.log",
-        "text/plain",
-        null,
-        9,
-        "{}",
-        Date.now(),
-      ],
-    );
+    kernel.persistArtifact({
+      artifactId: "art_relay",
+      attemptId,
+      kind: "log",
+      role: "log",
+      uri: "omi-artifact://art_relay",
+      displayName: "relay.log",
+      mimeType: "text/plain",
+      sizeBytes: 9,
+    });
     const sockPath = await startControlRelay({ kernel });
 
     const listed = parseToolResult((await sendToolUse(sockPath, "list_agent_sessions", { ownerId: "owner" })).result);

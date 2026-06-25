@@ -160,6 +160,19 @@ export interface AgentArtifact {
   createdAtMs: number;
 }
 
+// Artifact lifecycle records store references, not blobs. Keep adapter-native
+// references in `uri` or `metadataJson`, never in adapter_bindings:
+// - roles: input, result, checkpoint, tool_output, log, other
+// - common kinds: json, text, markdown, image, file, directory, transcript
+// - uri schemes: omi-artifact:// for local runtime-managed artifacts; file://
+//   for local files; adapter:// or provider-specific schemes for native refs
+// - metadataJson carries adapter/provider ids and projection hints
+// - contentHash is preferably sha256:<hex>; sizeBytes is advisory metadata
+// - retention is currently local SQLite metadata only; blob retention/sync is
+//   deferred to the artifact storage layer.
+export type NewAgentArtifact = Partial<AgentArtifact> &
+  Pick<AgentArtifact, "sessionId" | "kind" | "role" | "uri">;
+
 export interface AgentDelegation {
   delegationId: string;
   parentSessionId: string;
@@ -208,6 +221,7 @@ export interface AgentStore {
   insertRun(input: NewAgentRun): AgentRun;
   insertAttempt(input: NewRunAttempt): RunAttempt;
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;
+  insertArtifact(input: NewAgentArtifact): AgentArtifact;
   appendEvent(input: NewAgentEvent): AgentEvent;
   execute(sql: string, values?: unknown[]): number;
   getOptionalRow(sql: string, values?: unknown[]): Record<string, unknown> | undefined;

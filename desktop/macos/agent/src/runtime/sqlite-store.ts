@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import type {
   AdapterBinding,
+  AgentArtifact,
   AgentEvent,
   AgentIdKind,
   AgentRun,
@@ -11,6 +12,7 @@ import type {
   AgentStore,
   NewAdapterBinding,
   NewAgentEvent,
+  NewAgentArtifact,
   NewAgentRun,
   NewAgentSession,
   NewRunAttempt,
@@ -590,6 +592,31 @@ export class SqliteAgentStore implements AgentStore {
     return binding;
   }
 
+  insertArtifact(input: NewAgentArtifact): AgentArtifact {
+    const artifact: AgentArtifact = {
+      artifactId: input.artifactId ?? generateAgentId("artifact"),
+      sessionId: input.sessionId,
+      runId: input.runId ?? null,
+      attemptId: input.attemptId ?? null,
+      kind: input.kind,
+      role: input.role,
+      uri: input.uri,
+      displayName: input.displayName ?? null,
+      mimeType: input.mimeType ?? null,
+      contentHash: input.contentHash ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      metadataJson: input.metadataJson ?? "{}",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+    };
+    this.db.prepare(
+      `INSERT INTO artifacts (
+        artifact_id, session_id, run_id, attempt_id, kind, role, uri,
+        display_name, mime_type, content_hash, size_bytes, metadata_json, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...artifactValues(artifact));
+    return artifact;
+  }
+
   appendEvent(input: NewAgentEvent): AgentEvent {
     const event = this.buildEvent(input);
     this.db.prepare(
@@ -860,5 +887,23 @@ function eventValues(event: AgentEvent): SQLInputValue[] {
     event.visibility,
     event.payloadJson,
     event.createdAtMs,
+  ];
+}
+
+function artifactValues(artifact: AgentArtifact): SQLInputValue[] {
+  return [
+    artifact.artifactId,
+    artifact.sessionId,
+    artifact.runId,
+    artifact.attemptId,
+    artifact.kind,
+    artifact.role,
+    artifact.uri,
+    artifact.displayName,
+    artifact.mimeType,
+    artifact.contentHash,
+    artifact.sizeBytes,
+    artifact.metadataJson,
+    artifact.createdAtMs,
   ];
 }
