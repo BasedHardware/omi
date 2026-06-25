@@ -456,6 +456,63 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("keeps duplicate request ids isolated by client when interrupting", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const first = facade.handleQuery({
+      ...v1Query({ prompt: "shared request client a" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      ownerId: "owner-shared",
+      legacySessionKey: "shared-a",
+    });
+    const second = facade.handleQuery({
+      ...v1Query({ prompt: "shared request client b" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+      ownerId: "owner-shared",
+      legacySessionKey: "shared-b",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      runId: adapter.executed[0].runId,
+      accepted: true,
+    });
+
+    adapter.resolveDeferred({
+      text: "client a cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await Promise.all([first, second]);
+    store.close();
+  });
+
   it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();

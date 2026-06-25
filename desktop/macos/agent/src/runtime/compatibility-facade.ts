@@ -173,7 +173,7 @@ export class JsonlCompatibilityFacade {
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
     };
-    this.activeByRequest.set(context.requestId, context);
+    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -210,7 +210,7 @@ export class JsonlCompatibilityFacade {
       const errorMessage: ErrorMessage = { type: "error", message: messageText };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
-      this.activeByRequest.delete(context.requestId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {
         this.activeByRun.delete(context.runId);
         const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
@@ -227,8 +227,7 @@ export class JsonlCompatibilityFacade {
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
-    const requestContext = requestId ? this.activeByRequest.get(requestId) : undefined;
-    const activeRequestContext = requestContext?.clientId === clientId ? requestContext : undefined;
+    const activeRequestContext = requestId ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId)) : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     const runId =
       message.runId ??
@@ -369,7 +368,7 @@ export class JsonlCompatibilityFacade {
   }
 
   toolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
-    const context = this.activeByRequest.get(requestId);
+    const context = this.singleActiveRequestContext(requestId);
     if (!context || context.protocolVersion !== 2) return {};
     return {
       protocolVersion: 2,
@@ -405,7 +404,13 @@ export class JsonlCompatibilityFacade {
     const payload = parsePayload(event.payloadJson);
     if (event.type === "run.created") {
       const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
-      const context = requestId ? this.activeByRequest.get(requestId) : undefined;
+      const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
+      const context =
+        requestId && clientId
+          ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
+          : requestId
+            ? this.singleActiveRequestContext(requestId)
+            : undefined;
       if (context) {
         context.sessionId = event.sessionId;
         context.runId = event.runId;
@@ -502,6 +507,15 @@ export class JsonlCompatibilityFacade {
 
   private latestRunByClientKey(ownerId: string, clientId: string): string {
     return JSON.stringify([ownerId, clientId]);
+  }
+
+  private activeRequestKey(requestId: string, clientId: string): string {
+    return JSON.stringify([clientId, requestId]);
+  }
+
+  private singleActiveRequestContext(requestId: string): ActiveRequestContext | undefined {
+    const contexts = [...this.activeByRequest.values()].filter((context) => context.requestId === requestId);
+    return contexts.length === 1 ? contexts[0] : undefined;
   }
 
   private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {

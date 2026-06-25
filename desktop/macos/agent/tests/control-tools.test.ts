@@ -163,14 +163,14 @@ describe("agent control tools", () => {
     ).toBe("owner-b");
   });
 
-  it("source: direct control_tool ownerId seeds only request-scoped control ownership", () => {
+  it("source: direct control_tool ownerId is trimmed guard input, not session authority", () => {
     const indexSrc = readFileSync(fileURLToPath(new URL("../src/index.ts", import.meta.url)), "utf8");
     const controlToolCase = indexSrc.match(/case ["']control_tool["']:[\s\S]*?case ["']interrupt["']:/)?.[0] ?? "";
 
     expect(controlToolCase).toContain("const trimmedControlOwnerId = control.ownerId?.trim()");
     expect(controlToolCase).toContain("error: { code: \"invalid_owner_id\", message: \"ownerId cannot be empty\" }");
-    expect(controlToolCase).toContain("const controlOwnerId = trimmedControlOwnerId ?? currentOwnerId");
-    expect(controlToolCase).toContain("ownerId: controlOwnerId");
+    expect(controlToolCase).toContain("const controlOwnerId = currentOwnerId");
+    expect(controlToolCase).toContain("ownerId: trimmedControlOwnerId");
     expect(controlToolCase).toContain("activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId)");
     expect(controlToolCase).not.toContain("currentOwnerId = controlOwnerId");
     expect(controlToolCase).not.toContain("piMonoOwnerId = controlOwnerId");

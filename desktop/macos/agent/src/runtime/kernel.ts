@@ -371,7 +371,7 @@ export class AgentRuntimeKernel {
         sessionId: session.sessionId,
         runId: run.runId,
         type: "run.created",
-        payload: { runId: run.runId, requestId: run.requestId },
+        payload: { runId: run.runId, requestId: run.requestId, clientId: run.clientId },
       });
       return { session, run };
     });
@@ -915,6 +915,7 @@ export class AgentRuntimeKernel {
         payload: {
           runId: run.runId,
           requestId: run.requestId,
+          clientId: run.clientId,
           parentRunId: parentRun.runId,
           delegationId: delegation.delegationId,
         },

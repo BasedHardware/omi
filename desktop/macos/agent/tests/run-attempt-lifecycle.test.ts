@@ -218,6 +218,46 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("marks an evicted pi-mono binding stale even when replacement open fails", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [first.session.sessionId, "pi-mono"],
+    );
+    adapter.failNextOpenError = new Error("replacement open failed");
+
+    const failed = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-replacement-open-fails",
+      externalRefId: "task-replacement-open-fails",
+      maxAttempts: 1,
+    });
+
+    expect(failed.run.status).toBe("failed");
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("stale");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND status = 'active'", ["pi-mono"]).count).toBe(0);
+    const staleEvent = store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' ORDER BY event_seq DESC LIMIT 1");
+    expect(JSON.parse(staleEvent.payload_json)).toMatchObject({
+      bindingId: firstBinding.binding_id,
+      reason: "pinned_worker_reassigned",
+    });
+    store.close();
+  });
+
   it("queues a new pi-mono binding while the only pinned worker is busy", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
     Object.assign(adapter.capabilities, {
