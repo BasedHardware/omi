@@ -40,12 +40,17 @@ from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 50
 LEGACY_SCAN_PAGE_SIZE = 500
 COHORT_GATE_REASON = "cohort_gate: uid not in MEMORY_CANONICAL_USERS (use allow_admin_override=True to bypass)"
+COHORT_OVERRIDE_ACK_REQUIRED_REASON = (
+    "cohort_gate: allow_admin_override requires acknowledge_non_canonical_uid=True "
+    "(CLI: --i-understand-uid-not-whitelisted)"
+)
 
 
 class BackfillCohortGateError(ValueError):
@@ -61,6 +66,7 @@ class BackfillReport:
     written_count: int
     skipped_already_present: int
     skipped_both_store_duplicate: int
+    skipped_semantic_duplicate: int
     destination_count: int
     verified: bool
     discrepancy: Optional[str] = None
@@ -99,10 +105,25 @@ def assert_canonical_cohort_for_backfill(
     uid: str,
     *,
     allow_admin_override: bool = False,
+    acknowledge_non_canonical_uid: bool = False,
+    operator_context: Optional[str] = None,
     db_client=None,
 ) -> None:
     """Require ``uid`` to be in the canonical whitelist before backfill runs."""
     if allow_admin_override:
+        if not acknowledge_non_canonical_uid:
+            raise BackfillCohortGateError(COHORT_OVERRIDE_ACK_REQUIRED_REASON)
+        memory_system = resolve_memory_system(uid, db_client=db_client)
+        if memory_system != MemorySystem.CANONICAL:
+            logger.warning(
+                "legacy backfill cohort override",
+                extra={
+                    "event": "legacy_backfill_cohort_override",
+                    "uid": uid,
+                    "memory_system": memory_system.value,
+                    "operator_context": sanitize(operator_context or "unspecified"),
+                },
+            )
         return
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         raise BackfillCohortGateError(COHORT_GATE_REASON)
@@ -113,10 +134,24 @@ def live_extraction_memory_id_for_legacy_row(*, uid: str, legacy_row: dict) -> O
     content = (legacy_row.get("content") or "").strip()
     if not content:
         return None
-    source_id = legacy_row.get("conversation_id") or legacy_row.get("memory_id")
+    source_id = legacy_row.get("conversation_id") or legacy_row.get("memory_id") or legacy_row.get("id")
     if not source_id:
         return None
     return extraction_memory_id(uid=uid, source_id=source_id, content=content)
+
+
+def semantic_materialization_key(*, uid: str, legacy_row: dict) -> Optional[str]:
+    """In-run dedup key: live extraction id when derivable, else normalized (source_id, content)."""
+    content = (legacy_row.get("content") or "").strip()
+    if not content:
+        return None
+    live_id = live_extraction_memory_id_for_legacy_row(uid=uid, legacy_row=legacy_row)
+    if live_id is not None:
+        return f"live:{live_id}"
+    source_id = legacy_row.get("conversation_id") or legacy_row.get("memory_id") or legacy_row.get("id")
+    if not source_id:
+        return None
+    return f"semantic:{source_id}:{content}"
 
 
 def _load_canonical_item(uid: str, memory_id: str, *, db_client) -> Optional[MemoryItem]:
@@ -431,7 +466,7 @@ def reconcile_backfill_counts(
     return source_count, destination_count, verified, discrepancy
 
 
-def _cohort_gated_report(uid: str, *, dry_run: bool) -> BackfillReport:
+def _cohort_gated_report(uid: str, *, dry_run: bool, reason: str = COHORT_GATE_REASON) -> BackfillReport:
     return BackfillReport(
         uid=uid,
         dry_run=dry_run,
@@ -440,10 +475,11 @@ def _cohort_gated_report(uid: str, *, dry_run: bool) -> BackfillReport:
         written_count=0,
         skipped_already_present=0,
         skipped_both_store_duplicate=0,
+        skipped_semantic_duplicate=0,
         destination_count=0,
         verified=False,
         cohort_gated=True,
-        errors=[COHORT_GATE_REASON],
+        errors=[reason],
     )
 
 
@@ -454,24 +490,29 @@ def backfill_user(
     batch_size: int = DEFAULT_BATCH_SIZE,
     resume: bool = True,
     allow_admin_override: bool = False,
+    acknowledge_non_canonical_uid: bool = False,
+    operator_context: Optional[str] = None,
     db_client=None,
     get_non_filtered_memories_fn: Callable[..., List[dict]] = get_non_filtered_memories,
     run_id: Optional[str] = None,
 ) -> BackfillReport:
     """Copy active legacy memories into canonical long_term items.
 
-    **Does not modify or delete legacy data** — read-only on ``database.memories``.
-    Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``allow_admin_override=True``.
+      **Does not modify or delete legacy data** — read-only on ``database.memories``.
+      Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``allow_admin_override=True``
+    and ``acknowledge_non_canonical_uid=True``.
     """
     client = db_client if db_client is not None else default_db_client
     try:
         assert_canonical_cohort_for_backfill(
             uid,
             allow_admin_override=allow_admin_override,
+            acknowledge_non_canonical_uid=acknowledge_non_canonical_uid,
+            operator_context=operator_context,
             db_client=client,
         )
-    except BackfillCohortGateError:
-        return _cohort_gated_report(uid, dry_run=dry_run)
+    except BackfillCohortGateError as exc:
+        return _cohort_gated_report(uid, dry_run=dry_run, reason=str(exc))
 
     effective_run_id = run_id or f"legacy_backfill_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     legacy_rows = _fetch_active_legacy_memories(uid, get_non_filtered_memories_fn=get_non_filtered_memories_fn)
@@ -494,6 +535,7 @@ def backfill_user(
             written_count=0,
             skipped_already_present=0,
             skipped_both_store_duplicate=0,
+            skipped_semantic_duplicate=0,
             destination_count=destination_count,
             verified=verified,
             discrepancy=discrepancy,
@@ -519,12 +561,27 @@ def backfill_user(
     written_count = 0
     skipped_already_present = 0
     skipped_both_store_duplicate = 0
+    skipped_semantic_duplicate = 0
     vector_sync_failures = 0
     errors: List[str] = []
+    materialized_semantic_keys: set[str] = set()
 
     processed_index = start_index
     while processed_index < source_count:
         legacy_row = eligible_rows[processed_index]
+        semantic_key = semantic_materialization_key(uid=uid, legacy_row=legacy_row)
+        if semantic_key is not None and semantic_key in materialized_semantic_keys:
+            skipped_semantic_duplicate += 1
+            processed_index += 1
+            control = control.model_copy(
+                update={
+                    "legacy_backfill_processed_count": processed_index,
+                    "legacy_backfill_source_fingerprint": fingerprint,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            )
+            _persist_control_state(control, db_client=client)
+            continue
         try:
             control, written, skip_reason, row_vector_sync_failed = _apply_one_legacy_row(
                 uid=uid,
@@ -540,6 +597,8 @@ def backfill_user(
                 skipped_both_store_duplicate += 1
             elif skip_reason in {"already_present", "idempotent_skip"}:
                 skipped_already_present += 1
+            if semantic_key is not None and skip_reason not in {"empty_content"}:
+                materialized_semantic_keys.add(semantic_key)
             if row_vector_sync_failed:
                 vector_sync_failures += 1
         except Exception as exc:
@@ -582,6 +641,7 @@ def backfill_user(
         written_count=written_count,
         skipped_already_present=skipped_already_present,
         skipped_both_store_duplicate=skipped_both_store_duplicate,
+        skipped_semantic_duplicate=skipped_semantic_duplicate,
         destination_count=destination_count,
         verified=verified,
         discrepancy=discrepancy,
