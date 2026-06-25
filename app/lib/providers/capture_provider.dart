@@ -1147,13 +1147,18 @@ class CaptureProvider extends ChangeNotifier
       return false;
     }
 
-    // Valid route — enable.
+    // Valid route — enable and recreate the native config immediately. A user
+    // can toggle Background Mode off and back on without reconnecting; in that
+    // case the disable/reject paths may have removed nativeBleStreamConfig and
+    // the native background streamer cannot start from nativeBleStreamingEnabled
+    // alone.
     SharedPreferencesUtil().backgroundModeEnabled = true;
-    final batchMode = SharedPreferencesUtil().batchModeEnabled;
-    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', !batchMode);
+    final device = _recordingDevice!;
+    final codec = await _getAudioCodec(device.id);
+    await _saveNativeBleStreamConfig(device, codec);
     Logger.debug(
-      '[BackgroundMode] enabled — device ${_recordingDevice!.id} '
-      'type=${_recordingDevice!.type}, batchMode=$batchMode',
+      '[BackgroundMode] enabled — device ${device.id} '
+      'type=${device.type}, batchMode=${SharedPreferencesUtil().batchModeEnabled}',
     );
     notifyListeners();
     return true;

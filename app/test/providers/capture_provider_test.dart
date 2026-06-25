@@ -651,6 +651,11 @@ void main() {
   });
 
   group('setBackgroundModeEnabled', () {
+    setUp(() {
+      SharedPreferencesUtil().batchModeEnabled = false;
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+    });
+
     test('disable clears realtime prefs and stale config when batch mode is off', () async {
       final provider = CaptureProvider();
       // Pre-set prefs to true to verify they get cleared
@@ -894,6 +899,11 @@ void main() {
   });
 
   group('Background Mode + batch mode interaction', () {
+    setUp(() {
+      SharedPreferencesUtil().batchModeEnabled = false;
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+    });
+
     test('enable background, then enable batch: streaming should be false', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
