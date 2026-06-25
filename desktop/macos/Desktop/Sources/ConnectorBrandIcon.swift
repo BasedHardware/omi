@@ -56,6 +56,10 @@ enum ConnectorBrand: String, Sendable {
       return "obsidian_logo"
     case .gemini:
       return "gemini_logo"
+    case .hermes:
+      return "hermes_logo"
+    case .openclaw:
+      return "openclaw_logo"
     default:
       return nil
     }
