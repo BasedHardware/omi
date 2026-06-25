@@ -56,8 +56,17 @@ def load_readiness_script(script_filename: str, *, module_label: str | None = No
 
 
 def build_readiness_report(script_filename: str, *, execute: bool = False, module_label: str | None = None) -> dict:
-    module = load_readiness_script(script_filename, module_label=module_label)
-    return module.build_report(execute=execute)
+    gate_id = script_filename.removesuffix(".py")
+    try:
+        from scripts.readiness.loader import build_report as build_gate_report
+
+        return build_gate_report(gate_id, execute=execute)
+    except (KeyError, ImportError):
+        module = load_readiness_script(script_filename, module_label=module_label)
+        if hasattr(module, "build_report"):
+            return module.build_report(execute=execute)
+        cfg_cls = next(getattr(module, name) for name in dir(module) if name.endswith("ReadinessConfig"))
+        return module.build_readiness_artifact(cfg_cls(execute=execute))
 
 
 def assert_readiness_safe_by_default(report: dict, *, artifact: str, expected: dict[str, Any] | None = None) -> None:
