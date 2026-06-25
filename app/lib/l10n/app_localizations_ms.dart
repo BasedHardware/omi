@@ -9326,6 +9326,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Mod Latar Belakang tidak tersedia kerana tiada peranti serasi yang disambungkan. Sambungkan peranti Omi, OpenGlass atau Friend Pendant untuk menggunakan ciri ini.';
+
+  @override
   String get regenerateRecap => 'Jana semula ringkasan';
 
   @override

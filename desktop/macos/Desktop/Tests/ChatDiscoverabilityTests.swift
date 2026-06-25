@@ -129,6 +129,14 @@ final class ChatDiscoverabilityTests: XCTestCase {
         XCTAssertTrue(prompt.contains("circular floating agent pills"))
     }
 
+    func testDesktopPromptDistinguishesDelegationFromFloatingPills() {
+        let prompt = ChatPrompts.desktopChat
+        XCTAssertTrue(prompt.contains("**delegate_agent**"))
+        XCTAssertTrue(prompt.contains("Use spawn_agent instead when the user wants a visible floating-bar background agent pill."))
+        XCTAssertTrue(prompt.contains("Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."))
+        XCTAssertTrue(prompt.contains("Do not treat one as an alias for the other."))
+    }
+
     func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("Do not guess when you can look it up"))
@@ -151,9 +159,41 @@ final class ChatDiscoverabilityTests: XCTestCase {
     func testDesktopCapabilitiesExistInAgentToolDeclarations() throws {
         let declaredTools = try readToolNames(from: "pi-mono-extension/index.ts")
             .union(readToolNames(from: "agent/src/omi-tools-stdio.ts"))
+            .union(Set(readAgentControlManifestEntries().map(\.name)))
 
         for toolName in DesktopCapabilityRegistry.desktopToolNames {
             XCTAssertTrue(declaredTools.contains(toolName), "Missing agent tool declaration for \(toolName)")
+        }
+    }
+
+    func testAgentControlCapabilitiesMatchCanonicalManifest() throws {
+        let manifestEntries = try readAgentControlManifestEntries()
+        XCTAssertEqual(manifestEntries.map(\.name), [
+            "list_agent_sessions",
+            "get_agent_run",
+            "cancel_agent_run",
+            "inspect_agent_artifacts",
+            "update_agent_artifact_lifecycle",
+            "send_agent_message",
+            "delegate_agent",
+        ])
+
+        let capabilities = Dictionary(
+            uniqueKeysWithValues: DesktopCapabilityRegistry.capabilities.map { ($0.toolName, $0) })
+
+        for entry in manifestEntries {
+            let capability = try XCTUnwrap(capabilities[entry.name], "Missing Swift capability for \(entry.name)")
+            XCTAssertEqual(capability.title, entry.label, "\(entry.name) label drifted")
+            XCTAssertEqual(capability.latency.rawValue, entry.latency, "\(entry.name) latency drifted")
+            XCTAssertEqual(capability.summary, entry.summary, "\(entry.name) summary drifted")
+            XCTAssertEqual(capability.surfaces, [.desktopChat], "\(entry.name) surface drifted")
+            XCTAssertFalse(entry.promptSnippet.isEmpty, "\(entry.name) manifest promptSnippet is empty")
+            XCTAssertFalse(entry.runtimePreconditions.isEmpty, "\(entry.name) manifest runtimePreconditions is empty")
+            for guideline in entry.promptGuidelines {
+                XCTAssertTrue(
+                    capability.bullets.contains(guideline),
+                    "\(entry.name) missing manifest guideline in Swift docs: \(guideline)")
+            }
         }
     }
 
@@ -169,6 +209,91 @@ final class ChatDiscoverabilityTests: XCTestCase {
             guard let nameRange = Range(match.range(at: 1), in: text) else { return nil }
             return String(text[nameRange])
         })
+    }
+
+    private struct AgentControlManifestEntry {
+        let name: String
+        let label: String
+        let summary: String
+        let promptSnippet: String
+        let promptGuidelines: [String]
+        let latency: String
+        let runtimePreconditions: [String]
+    }
+
+    private func readAgentControlManifestEntries() throws -> [AgentControlManifestEntry] {
+        let source = try readMacOSFile("agent/src/runtime/control-tool-manifest.ts")
+        guard let start = source.range(of: "export const agentControlCapabilityManifest = ["),
+              let end = source.range(of: "] as const", range: start.upperBound..<source.endIndex) else {
+            XCTFail("Could not find agentControlCapabilityManifest")
+            return []
+        }
+        let body = String(source[start.upperBound..<end.lowerBound])
+        let nameRegex = try NSRegularExpression(pattern: #"name:\s*"([^"]+)""#)
+        let range = NSRange(body.startIndex..<body.endIndex, in: body)
+        let matches = nameRegex.matches(in: body, range: range)
+        let namesAndOffsets: [(String, String.Index)] = matches.compactMap { match in
+            guard let nameRange = Range(match.range(at: 1), in: body),
+                  let matchRange = Range(match.range(at: 0), in: body) else { return nil }
+            return (String(body[nameRange]), matchRange.lowerBound)
+        }
+
+        return try namesAndOffsets.enumerated().map { index, namedOffset in
+            let nextOffset = index + 1 < namesAndOffsets.count ? namesAndOffsets[index + 1].1 : body.endIndex
+            let block = String(body[namedOffset.1..<nextOffset])
+            return AgentControlManifestEntry(
+                name: namedOffset.0,
+                label: try stringLiteralValue("label", in: block),
+                summary: try templateFirstLineValue("description", in: block),
+                promptSnippet: try stringLiteralValue("promptSnippet", in: block),
+                promptGuidelines: try arrayStringValues("promptGuidelines", in: block),
+                latency: try stringLiteralValue("latency", in: block),
+                runtimePreconditions: try arrayStringValues("runtimePreconditions", in: block))
+        }
+    }
+
+    private func readMacOSFile(_ relativePath: String) throws -> String {
+        let testFile = URL(fileURLWithPath: #filePath)
+        let desktopDir = testFile.deletingLastPathComponent().deletingLastPathComponent()
+        let macOSDir = desktopDir.deletingLastPathComponent()
+        return try String(contentsOf: macOSDir.appendingPathComponent(relativePath))
+    }
+
+    private func stringLiteralValue(_ key: String, in text: String) throws -> String {
+        let regex = try NSRegularExpression(pattern: #"\#(key):\s*"([^"]*)""#)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let valueRange = Range(match.range(at: 1), in: text) else {
+            XCTFail("Missing string literal \(key)")
+            return ""
+        }
+        return String(text[valueRange])
+    }
+
+    private func templateFirstLineValue(_ key: String, in text: String) throws -> String {
+        let regex = try NSRegularExpression(pattern: #"\#(key):\s*`([^\n`]+)"#)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let valueRange = Range(match.range(at: 1), in: text) else {
+            XCTFail("Missing template literal \(key)")
+            return ""
+        }
+        return String(text[valueRange])
+    }
+
+    private func arrayStringValues(_ key: String, in text: String) throws -> [String] {
+        guard let start = text.range(of: "\(key): ["),
+              let end = text.range(of: "],", range: start.upperBound..<text.endIndex) else {
+            XCTFail("Missing string array \(key)")
+            return []
+        }
+        let arrayBody = String(text[start.upperBound..<end.lowerBound])
+        let regex = try NSRegularExpression(pattern: #""([^"]*)""#)
+        let range = NSRange(arrayBody.startIndex..<arrayBody.endIndex, in: arrayBody)
+        return regex.matches(in: arrayBody, range: range).compactMap { match in
+            guard let valueRange = Range(match.range(at: 1), in: arrayBody) else { return nil }
+            return String(arrayBody[valueRange])
+        }
     }
 
     // MARK: - Table Annotations Completeness

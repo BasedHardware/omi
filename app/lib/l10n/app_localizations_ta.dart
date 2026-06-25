@@ -9369,6 +9369,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'இணக்கமான சாதனம் எதுவும் இணைக்கப்படாததால் பின்னணி முறை கிடைக்கவில்லை. இந்த அம்சத்தைப் பயன்படுத்த Omi, OpenGlass அல்லது Friend Pendant சாதனத்தை இணைக்கவும்.';
+
+  @override
   String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
 
   @override

@@ -32,10 +32,12 @@ The implementation MUST introduce a durable runtime kernel above the existing ha
 11. Cancellation acknowledgement means the kernel accepted and dispatched the cancellation request; it MUST NOT falsely claim that an adapter stopped unless the adapter confirmed or the worker terminated.
 12. Omi long-term memory and agent-session history remain separate systems. Agent output may produce memory candidates, but agents do not directly establish canonical memories.
 13. Phase 1 MUST NOT create another in-memory session authority alongside the kernel.
+14. Owner authority for control operations comes from Omi request context. Tool-supplied `ownerId` values are guards only; they may reject a request but MUST NOT become the active owner.
+15. Request-scoped control and tool-relay paths MUST carry `clientId` and `requestId` together. A bare `requestId` is not globally unique under concurrent clients.
 
-## 3. Current implementation findings
+## 3. Pre-Phase-1 findings and Phase 1 baseline
 
-The current implementation has several independent lifecycle authorities:
+Before Phase 1, the desktop agent implementation had several independent lifecycle authorities:
 
 - `desktop/macos/agent/src/index.ts` owns ACP process state, a session-key map, one active session, one active abort controller, and recursive retry behavior.
 - `PiMonoAdapter` owns synthetic `pi-session-*` identifiers and process-global conversational state.
@@ -44,16 +46,22 @@ The current implementation has several independent lifecycle authorities:
 - Each floating pill creates a separate `ChatProvider` and therefore a separate Node process to gain parallelism.
 - `TaskAgentStatusRegistry` and pill state maintain separate in-memory status authorities.
 
-Specific correctness issues that Phase 1 fixes:
+Specific correctness issues that Phase 1 was required to fix:
 
-- Current outbound messages lack request, run, attempt, and event correlation.
+- Outbound messages lacked request, run, attempt, and event correlation.
 - Starting a new ACP query aborts the prior global active query.
 - ACP retries recursively call `handleQuery`, hiding whether a fresh execution occurred.
 - ACP process exit clears all in-memory session mappings.
 - pi-mono advertises session resume even though its synthetic sessions do not survive a process restart.
-- Task chat stores adapter-native ACP IDs in message rows and has no canonical Omi session identity.
+- Task chat stored adapter-native ACP IDs in message rows and had no canonical Omi session identity.
 - Cancellation is an uncorrelated notification with no acknowledgement contract.
 - Parallel floating pills achieve isolation by multiplying UI-owned processes rather than using a scheduler and worker pool.
+
+The post-Phase-1 baseline is the local TypeScript control plane in `desktop/macos/agent`: `AgentRuntimeKernel`
+owns canonical session/run/attempt lifecycle, `AgentStore` persists that lifecycle in SQLite, ACP and pi-mono
+execute through `RuntimeAdapter`, Swift uses `AgentRuntimeProcess` plus projection stores rather than owning
+runtime authority, and local control tools operate through the kernel. Runtime-native IDs remain adapter bindings
+or explicitly named compatibility fields; they are not Omi session IDs.
 
 ## 4. Target architecture
 
@@ -101,6 +109,8 @@ The adapter registry MUST support bounded worker pools because the current ACP a
 - UI surfaces MUST NOT create or own workers.
 - When all workers are busy, the kernel queues runs rather than spawning without limit.
 - The initial global worker cap SHOULD match the current practical desktop parallelism ceiling. Use eight active workers by default, configurable through `OMI_AGENT_MAX_WORKERS`.
+
+Pinned process-local bindings MUST follow the lifecycle invariants in section 10.4 rather than being treated as incidental worker flags.
 
 ## 5. Decision: kernel versus `HarnessAdapter`
 
@@ -567,6 +577,29 @@ For a run using adapter `A`:
 - On worker restart, the prior binding becomes stale and a new generation is created.
 - A pi-mono worker may have only one live pinned binding in Phase 1.
 
+### 10.4 Pinned-worker lifecycle invariants
+
+Process-local adapters such as pi-mono MUST model pinned binding ownership explicitly. The implementation may use
+different names, but the following lifecycle states are normative:
+
+- `ReservedForBinding`: a worker lease is opening, resuming, or replacing an adapter binding.
+- `PinnedAwaitingExecution`: binding resolution succeeded and the binding is waiting for the run's execution lease.
+- `Executing`: the worker is executing the authoritative attempt for the binding.
+- `IdlePinned`: the binding is active in the store and pinned to an idle worker.
+- `Protected`: an active binding is temporarily non-evictable because execution or replacement handoff is in progress.
+- `Evicted`: a worker has released a process-local binding for reassignment.
+- `Stale`: the store records that a process-local binding must not be resumed.
+- `Closed`: the binding is permanently closed and no longer a continuity candidate.
+
+Invariants:
+
+1. A `resume_fidelity = 'none'` active binding MUST either be pinned to its process-local worker or be in a bounded protected handoff to execution.
+2. A newly opened or resumed process-local binding MUST NOT be evicted between binding resolution and the execution lease for the same attempt.
+3. Evicting an active process-local binding for replacement MUST mark the old binding stale before a replacement open can fail.
+4. Failed binding resolution MUST NOT leak protected pins or waiters; retries must either observe a valid pinned binding, mark it stale, or fail loudly with capacity.
+5. Worker-pool capacity checks MUST treat currently protected idle pins as unavailable rather than assuming they are evictable.
+6. Reassigning a single process-local worker MUST preserve owner, request, run, attempt, and binding correlation; it MUST NOT silently move a live binding to another owner or run.
+
 ## 11. Event model
 
 ### 11.1 Canonical event envelope
@@ -850,7 +883,57 @@ Cancellation acknowledgement:
 }
 ```
 
-### 13.6 v1 compatibility window
+### 13.6 Request and control context propagation
+
+Every owner-scoped control operation runs under a canonical Omi control context:
+
+```ts
+type ControlContext = {
+  ownerId: string;       // Omi/Firebase owner from the active request context
+  clientId: string;      // bridge/client handle identity
+  requestId: string;     // request identity scoped by clientId
+  sessionId?: string;    // canonical Omi session ID
+  runId?: string;        // canonical Omi run ID
+  attemptId?: string;    // canonical Omi attempt ID
+  adapterId?: string;    // runtime adapter handling the request
+  source: "jsonl" | "omi-tools" | "mcp" | "kernel";
+}
+```
+
+Rules:
+
+- `ownerId` is authority only when it comes from the active Omi request/control context.
+- A tool-supplied or adapter-supplied `ownerId` is only a guard. If present, it must match the active context owner or the operation is rejected.
+- No owner-scoped path may fall back to process-global mutable owner state when `clientId`/`requestId` context is expected but absent.
+- Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
+- `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
+- Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
+- Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
+- Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
+- Missing request context for an owner-scoped control tool is a hard error unless the operation is explicitly unscoped and safe by design.
+
+The local implementation may store this as plain objects rather than a named class, but tests MUST assert the complete context survives each boundary:
+
+1. Swift JSONL query/control message.
+2. Node compatibility facade.
+3. Adapter `executeAttempt` context.
+4. MCP server environment construction.
+5. Adapter tool relay back to the daemon.
+6. Kernel control-tool dispatch.
+
+### 13.7 Async request lifecycle cleanup
+
+Each async request or relay path MUST complete exactly once:
+
+- query continuations complete with result, error, cancellation, send failure, process exit, or timeout;
+- direct control-tool requests complete with result, scoped error, send failure, process exit, or timeout;
+- adapter tool relay calls complete with result, abort, timeout, pipe close, or process exit.
+
+Cleanup MUST remove request maps before or atomically with resuming continuations/promises. Late results after cleanup
+MUST be dropped or logged without reauthorizing a request. Tests SHOULD use fake adapters, temp state, and deterministic
+continuations to cover these terminal paths without depending on wall-clock ordering.
+
+### 13.8 v1 compatibility window
 
 For one release, the Node facade SHOULD accept current v1 `query`, `interrupt`, `warmup`, and `invalidate_session` messages.
 
@@ -932,7 +1015,7 @@ inspect_agent_artifacts
 
 ### 16.2 Implementation decision
 
-Do not build capability-manifest code generation in the first persistence/kernel slice.
+Phase 1 did not build capability-manifest code generation in the first persistence/kernel slice.
 
 Implement the tools as thin, hand-written TypeScript wrappers against the kernel in one module with one set of Zod schemas. They MUST NOT be independently reimplemented in Swift, MCP, and each adapter.
 
@@ -941,16 +1024,40 @@ Required sequence:
 1. Stabilize session/run/attempt/event APIs.
 2. Implement `list_agent_sessions`, `get_agent_run`, `cancel_agent_run`, and `inspect_agent_artifacts`.
 3. Implement `send_agent_message`; it creates a new run in an existing session.
-4. Implement `delegate_agent` only after child session/run/delegation creation is transactional and the scheduler supports it.
+4. Implement `delegate_agent` after child session/run/delegation creation is transactional and the scheduler supports it.
 5. Generate MCP, Swift, documentation, and permission metadata from a capability manifest in the later capability-consolidation phase.
+
+The Phase 1 baseline includes all six hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
+`cancel_agent_run`, `inspect_agent_artifacts`, `send_agent_message`, and `delegate_agent`. `send_agent_message`
+creates a follow-up run in an existing Omi session. `delegate_agent` creates or continues a distinct child Omi
+session linked to a parent run and records the delegation through kernel-owned state.
 
 ### 16.3 Delegation semantics
 
 - `call`: create a child session/run and suspend the parent until a structured result is available.
-- `spawn`: create an asynchronous child session/run and immediately return handles.
+- `spawn`: create an asynchronous canonical child session/run and immediately return handles. This is not the
+  legacy floating-pill `spawn_agent` tool and does not create or manage floating UI.
 - `continue`: create another run in an existing child session.
 
 A child result returns a summary, artifacts, verified effects, usage, and open questions. The parent does not receive the entire child transcript by default.
+
+### 16.4 Delegation versus floating-pill tools
+
+`delegate_agent` is the canonical control-plane delegation path. It creates or continues an Omi child
+`AgentSession`, `AgentRun`, and `Delegation` through kernel-owned state.
+
+The existing `spawn_agent` and `manage_agent_pills` tools remain the floating-bar UI workflow for now. They start and
+manage circular floating agent pills and MUST NOT be documented as aliases for canonical delegation. Conversely,
+`delegate_agent` spawn mode returns canonical child handles and MUST NOT imply that a floating pill appears.
+
+Until a later UX migration, models should choose explicitly:
+
+- use `delegate_agent` for canonical child runs that need durable session/run/delegation tracking;
+- use `spawn_agent` for the legacy floating-pill product surface and other-app/background UI workflow;
+- use `manage_agent_pills` only to list, dismiss, or clear floating pill UI state.
+
+Any status bridge between these surfaces is projection-only. Kernel sessions, runs, attempts, artifacts, and
+delegations remain the source of truth for control-plane state.
 
 ## 17. Phase 0 permission policy
 
@@ -1094,10 +1201,12 @@ No external standard may redefine Omi session, run, attempt, grant, or artifact 
 
 ### Step 7 — delegation controls
 
-1. Add read/control tools against the kernel.
-2. Add `send_agent_message`.
-3. Add transactional delegation and `delegate_agent`.
-4. Add artifacts and structured child results to the product UI.
+Phase 1 baseline:
+
+1. Read/control tools run against the kernel.
+2. `send_agent_message` creates a follow-up run in an existing Omi session.
+3. Transactional delegation and `delegate_agent` create or continue child Omi sessions.
+4. Artifact metadata is exposed through local kernel tools; richer product UI for artifacts remains a later phase.
 
 ## 21. First code files to change
 
@@ -1149,6 +1258,9 @@ The immediate next wave is:
    - follow-up creates a new run;
    - only one active attempt is allowed;
    - usage aggregates across attempts.
+   - pinned process-local bindings cannot be evicted between binding resolution and execution;
+   - eviction stale-marks bindings before replacement resolution can fail;
+   - failed binding resolution does not leak protected worker state.
 
 4. **`adapter-binding.test.ts`**
    - legacy ACP ID adoption creates generation 1;
@@ -1174,13 +1286,27 @@ The immediate next wave is:
    - `resume` becomes an ACP binding only;
    - current outbound callbacks still receive expected message types;
    - `invalidate_session` invalidates a binding, not the Omi session.
+   - owner isolation is enforced for missing IDs, duplicate request IDs, duplicate request IDs across clients, and run-id-only interrupts.
 
 8. **Update `pi-mono-adapter.test.ts`**
    - `SESSION_RESUME` is false;
    - worker binding pinning is enforced;
    - abort dispatch result is represented honestly.
+   - pi-mono refreshes the active request/run/attempt context before each long-lived worker execution;
+   - pi-mono `callSwiftTool` serializes request/client/run/attempt correlation from the active context channel for long-lived workers, falling back to `OMI_*` environment variables only when no active context file is present.
 
-9. **Replace `session-lifecycle.test.ts` replication tests**
+9. **`control-context-property.test.ts`**
+   - generate owner/client/request/run/attempt combinations across query, interrupt, control-tool, and relay paths;
+   - assert owner-scoped operations either use the active Omi owner or reject;
+   - assert tool-supplied `ownerId` never becomes authority;
+   - assert request context maps are keyed by `(clientId, requestId)`.
+
+10. **`worker-pool-state-machine.test.ts`**
+   - exercise the pinned-worker states listed in section 10.4;
+   - assert no DB-active `resume_fidelity = 'none'` binding can be orphaned from its pinned worker;
+   - assert protected pins are temporary and never block stale replacement forever.
+
+11. **Replace `session-lifecycle.test.ts` replication tests**
    - test the real kernel and fake adapter instead of copying `index.ts` control flow.
 
 ### 22.2 Swift tests
@@ -1208,7 +1334,8 @@ The immediate next wave is:
 
 ## 23. Phase 1 acceptance criteria
 
-Phase 1 is complete only when all of the following are true:
+These acceptance criteria describe the Phase 1 baseline contract and remain the regression guard for the merged
+implementation:
 
 1. Every main-chat, task-chat, and floating-pill query returns durable Omi `session_id`, `run_id`, and `attempt_id` values.
 2. Restarting the Node daemon preserves canonical sessions, runs, bindings, events, and terminal statuses.
@@ -1228,16 +1355,28 @@ Phase 1 is complete only when all of the following are true:
 The following are not Phase 1 blockers:
 
 - a new user-facing approval UX;
-- full capability-manifest code generation;
 - cloud synchronization and cross-device leases;
 - AgentVM placement and failover;
 - Hermes, OpenClaw, and A2A adapters;
 - automatic context reconstruction across adapters;
 - durable pi-mono native resume;
-- full artifact browser UX;
 - automatic memory ingestion from child results;
 - Rust control-plane implementation;
 - complete event sourcing or CQRS.
+
+Phase 2 may accept local consolidation that reuses Phase 1 authority without changing the architecture:
+
+- local capability-manifest consolidation for the existing Omi control tools from one canonical source;
+- artifact write/lifecycle APIs over the existing `artifacts` table;
+- a minimal desktop artifact projection that exposes references and metadata already owned by the kernel;
+- prompt and discoverability alignment that keeps canonical `delegate_agent` delegation distinct from the existing
+  floating-pill tools.
+
+Still deferred beyond that local consolidation:
+
+- broad capability generation across cloud directories, remote runtimes, and future standards;
+- full artifact browser UX, arbitrary artifact-content browsing, cloud artifact sync, and cross-device artifact leases.
+- migrating floating pills into canonical child-session projections or replacing the legacy floating-pill tool UX.
 
 ## 25. Long-term direction
 

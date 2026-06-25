@@ -9387,6 +9387,10 @@ class AppLocalizationsFr extends AppLocalizations {
       'Fonctionne uniquement avec les appareils Omi pour l\'instant, et s\'améliore en continu.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Le mode arrière-plan n’est pas disponible, car aucun appareil compatible n’est connecté. Connectez un appareil Omi, OpenGlass ou Friend Pendant pour utiliser cette fonctionnalité.';
+
+  @override
   String get regenerateRecap => 'Régénérer le récapitulatif';
 
   @override

@@ -1156,6 +1156,7 @@ workflows:
       vars:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+        DMGBUILD_VERSION: "1.6.7"
       flutter: 3.35.3
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1572,7 +1573,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install --break-system-packages dmgbuild
+          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
@@ -1975,6 +1976,7 @@ workflows:
         CLOUD_RUN_SERVICE: "desktop-backend"
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
+        DMGBUILD_VERSION: "1.6.7"
       xcode: 16.4
     triggering:
       events:
@@ -2368,6 +2370,8 @@ workflows:
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
             cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2538,7 +2542,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install --break-system-packages dmgbuild
+          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
 
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
           mkdir -p "$STAGING_DIR"

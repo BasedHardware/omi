@@ -88,7 +88,13 @@ omi --json local task delete task_123 --yes
 ```
 
 `omi local screenshot SCREENSHOT_ID --output PATH` writes the screenshot to
-disk and still prints JSON to stdout for scripts.
+disk and still prints JSON to stdout for scripts. The screenshot ID usually
+comes from `local search-screen` or SQL over the `screenshots` table. If Desktop
+returns a structured failure such as `screenshot_pending`, `screenshot_file_missing`,
+or `screenshot_chunk_corrupted`, JSON mode preserves the `reason`, `hint`, and
+`screenshot_id` fields on stderr so agents can retry an older ID or report the
+exact blocker. Validate successful outputs with `file PATH` before passing them
+to vision tools.
 
 ## Worked example: Python agent loop
 

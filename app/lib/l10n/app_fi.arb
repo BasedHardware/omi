@@ -3061,5 +3061,6 @@
     "recordingMode": "Tallennustila",
     "captureModeLater": "Myöhemmin",
     "captureModeLiveDescription": "Litteroi reaaliajassa puhuessasi.",
-    "captureModeLaterDescription": "Tallenna ääni nyt ja litteroi milloin haluat."
+    "captureModeLaterDescription": "Tallenna ääni nyt ja litteroi milloin haluat.",
+    "backgroundModeUnavailable": "Taustatila ei ole käytettävissä, koska yhteensopivaa laitetta ei ole yhdistetty. Yhdistä Omi-, OpenGlass- tai Friend Pendant -laite käyttääksesi tätä ominaisuutta."
 }

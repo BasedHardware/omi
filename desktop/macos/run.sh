@@ -19,6 +19,7 @@ Options (via environment variables):
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
+  OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
@@ -142,35 +143,11 @@ export PORT="$BACKEND_PORT"
 
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
-APP_NAME="${OMI_APP_NAME:-Omi Dev}"
+source "$SCRIPT_DIR/scripts/app-config.sh"
+derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
-if [ "$LOCAL_PROFILE" = true ]; then
-    APP_NAME="${OMI_APP_NAME:-Omi Dev}"
-fi
-IS_NAMED_BUNDLE=false
-if [ "$APP_NAME" != "Omi Dev" ]; then
-    IS_NAMED_BUNDLE=true
-fi
 
-slugify_identifier() {
-    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
-}
-
-if [ "$IS_NAMED_BUNDLE" = false ]; then
-    EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
-    EXPECTED_URL_SCHEME="omi-computer-dev"
-else
-    APP_SLUG="$(slugify_identifier "$APP_NAME")"
-    if [ -z "$APP_SLUG" ]; then
-        echo "ERROR: OMI_APP_NAME must contain at least one letter or number"
-        exit 1
-    fi
-    EXPECTED_BUNDLE_ID="com.omi.$APP_SLUG"
-    EXPECTED_URL_SCHEME="omi-$APP_SLUG"
-fi
-
-BUNDLE_ID="${OMI_BUNDLE_ID:-$EXPECTED_BUNDLE_ID}"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
@@ -181,17 +158,6 @@ AGENT_DIR="$SCRIPT_DIR/agent"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
-URL_SCHEME="${OMI_URL_SCHEME:-$EXPECTED_URL_SCHEME}"
-
-if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use bundle ID '$EXPECTED_BUNDLE_ID' (got '$BUNDLE_ID')"
-    exit 1
-fi
-
-if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use URL scheme '$EXPECTED_URL_SCHEME' (got '$URL_SCHEME')"
-    exit 1
-fi
 if [ "$LOCAL_PROFILE" = true ]; then
     if [ "$BUNDLE_ID" = "com.omi.desktop-dev" ] || { [ "$IS_NAMED_BUNDLE" = false ] && [ "$APP_NAME" = "Omi Dev" ]; }; then
         echo "ERROR: OMI_DESKTOP_LOCAL_PROFILE=1 cannot target Omi Dev (com.omi.desktop-dev)."
@@ -580,6 +546,8 @@ if [ -d "$AGENT_DIR/dist" ]; then
     macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
     macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
@@ -826,6 +794,15 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
         AUTH_CACHE=""
     else
         echo "Warning: could not create temporary auth cache. Launching cold."
+    fi
+fi
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
+    step "Seeding shortcuts/settings from Omi Dev..."
+    if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
+        auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
+    else
+        echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
     fi
 fi
 

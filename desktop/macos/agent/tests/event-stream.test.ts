@@ -55,6 +55,31 @@ describe("AgentRuntimeKernel event stream", () => {
     expect(JSON.parse(String(textEvents[0].payload_json)).text).not.toBe("late");
     store.close();
   });
+
+  it("publishes adapter artifact events before terminal run events", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.nextArtifacts = [{
+      kind: "json",
+      role: "result",
+      uri: "adapter://fake/result",
+      metadata: { adapterArtifactId: "result" },
+    }];
+
+    await kernel.executeRun(baseRunInput);
+
+    expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
+      "run.created",
+      "attempt.created",
+      "binding.created",
+      "attempt.started",
+      "run.running",
+      "adapter.text_delta",
+      "artifact.created",
+      "attempt.succeeded",
+      "run.succeeded",
+    ]);
+    store.close();
+  });
 });
 
 function newDatabasePath(): string {

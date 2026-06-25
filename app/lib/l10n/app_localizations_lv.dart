@@ -9325,6 +9325,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.';
+
+  @override
   String get regenerateRecap => 'Atjaunot kopsavilkumu';
 
   @override

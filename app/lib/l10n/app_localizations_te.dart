@@ -9352,6 +9352,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get backgroundModeNote => 'ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'అనుకూలమైన పరికరం కనెక్ట్ కాలేదు కాబట్టి బ్యాక్‌గ్రౌండ్ మోడ్ అందుబాటులో లేదు. ఈ ఫీచర్‌ను ఉపయోగించడానికి Omi, OpenGlass లేదా Friend Pendant పరికరాన్ని కనెక్ట్ చేయండి.';
+
+  @override
   String get regenerateRecap => 'సారాంశాన్ని పునరుత్పత్తి చేయండి';
 
   @override

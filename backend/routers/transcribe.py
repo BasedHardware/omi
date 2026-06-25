@@ -63,6 +63,7 @@ from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from models.message_event import (
     ConversationEvent,
+    ConversationSessionEvent,
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     LastConversationEvent,
@@ -925,6 +926,7 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         current_conversation_id = new_conversation_id
+        _send_message_event(ConversationSessionEvent(conversation_id=new_conversation_id))
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -963,6 +965,7 @@ async def _stream_handler(
 
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
+            _send_message_event(ConversationSessionEvent(conversation_id=current_conversation_id))
             logger.info(
                 f"Resuming conversation {current_conversation_id}. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s {uid} {session_id}"
             )
