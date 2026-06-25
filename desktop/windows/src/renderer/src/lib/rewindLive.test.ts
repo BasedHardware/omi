@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { fromPartial } from '@total-typescript/shoehorn'
 import { mergeFrames, isFollowingLive } from './rewindLive'
 import type { RewindFrame } from '../../../shared/types'
 
-const f = (id: number, ts: number): RewindFrame => ({ id, ts }) as RewindFrame
+const f = (id: number, ts: number): RewindFrame => fromPartial({ id, ts })
 
 describe('mergeFrames', () => {
   it('appends newer frames in timestamp order', () => {
