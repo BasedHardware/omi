@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added Notch Mode for a MacBook notch-integrated floating bar with compact voice, chat, and agent controls"
+  ],
   "releases": [
     {
       "version": "0.11.527",
