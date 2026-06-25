@@ -29,17 +29,16 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await getDailySummarySettings();
-    if (settings != null && mounted) {
-      setState(() {
-        _enabled = settings.enabled;
-        _selectedHour = settings.hour;
-        _isLoading = false;
-      });
-    } else if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    try {
+      final settings = await getDailySummarySettings();
+      if (settings != null && mounted) {
+        setState(() {
+          _enabled = settings.enabled;
+          _selectedHour = settings.hour;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
