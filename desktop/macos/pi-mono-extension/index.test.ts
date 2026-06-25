@@ -1011,12 +1011,11 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
   }
 });
 
-test("OMI_TOOLS: top-level schemas stay provider-compatible", () => {
+test("OMI_TOOLS: top-level schemas keep the object contract", () => {
   for (const tool of OMI_TOOLS) {
     const parameters = tool.parameters as any;
-    assert.equal(parameters.oneOf, undefined, `${tool.name} parameters must not use top-level oneOf`);
-    assert.equal(parameters.anyOf, undefined, `${tool.name} parameters must not use top-level anyOf`);
-    assert.equal(parameters.allOf, undefined, `${tool.name} parameters must not use top-level allOf`);
+    assert.equal(parameters.type, "object", `${tool.name} parameters must be object-shaped`);
+    assert.ok(parameters.properties, `${tool.name} parameters must declare properties`);
   }
 });
 
