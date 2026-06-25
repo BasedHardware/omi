@@ -231,3 +231,6 @@ builds-snapshot.md
 
 # Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
 .dev/
+
+# Agent planning artifacts (ephemeral; do not commit)
+.cursor/plans/
