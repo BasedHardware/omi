@@ -68,14 +68,13 @@ enum DesktopConversationMatchPolicy {
   static func shouldBindConversationSession(
     incomingBackendId: String,
     activeBackendId: String?,
-    ignoredRotatedBackendId: String?
+    ignoredRotatedBackendIds: Set<String>
   ) -> Bool {
     guard !incomingBackendId.isEmpty else { return false }
     if let activeBackendId, !activeBackendId.isEmpty {
       return incomingBackendId == activeBackendId
     }
-    if let ignoredRotatedBackendId,
-       incomingBackendId == ignoredRotatedBackendId {
+    if ignoredRotatedBackendIds.contains(incomingBackendId) {
       return false
     }
     return true
@@ -463,8 +462,8 @@ class AppState: ObservableObject {
   private var currentBackendConversationId: String?
   /// Backend id received before the local DB session exists; consumed once startSession completes.
   private var pendingBackendConversationId: String?
-  /// Backend id from the session just rotated by finishConversation(); ignore fast-reconnect resumes of it.
-  private var ignoredRotatedBackendConversationId: String?
+  /// Backend ids from recently rotated/rejected sessions; ignore fast-reconnect resumes of them.
+  private var ignoredRotatedBackendConversationIds: Set<String> = []
   /// Session ID captured before rotation in finishConversation(), consumed by memory_created handler
   private var finishedSessionId: Int64?
   /// Recording start time captured before rotation, used by memory_created handler for accurate duration analytics
@@ -1693,7 +1692,7 @@ class AppState: ObservableObject {
       recordingStartTime = Date()
       currentBackendConversationId = nil
       pendingBackendConversationId = nil
-      ignoredRotatedBackendConversationId = nil
+      ignoredRotatedBackendConversationIds = []
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -1721,14 +1720,14 @@ class AppState: ObservableObject {
             return DesktopConversationMatchPolicy.shouldBindConversationSession(
               incomingBackendId: candidate,
               activeBackendId: self.currentBackendConversationId,
-              ignoredRotatedBackendId: self.ignoredRotatedBackendConversationId
+              ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
             ) ? candidate : nil
           }) {
             try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
             await MainActor.run {
               self.currentBackendConversationId = backendId
               self.pendingBackendConversationId = nil
-              self.ignoredRotatedBackendConversationId = nil
+              self.ignoredRotatedBackendConversationIds = []
             }
           }
           log("Transcription: Created DB session \(sessionId)")
@@ -2145,7 +2144,8 @@ class AppState: ObservableObject {
           // timestamp/source matching for older backend sessions that did not emit the event.
           if let sessionId = capturedSessionId,
              let backendConversationId = capturedBackendConversationId,
-             conversation.id == backendConversationId {
+             conversation.id == backendConversationId,
+             conversation.source == .desktop {
             try? await TranscriptionStorage.shared.markSessionCompleted(
               id: sessionId, backendId: conversation.id)
             log("Transcription: Force-processed bound conversation \(conversation.id), session \(sessionId) completed")
@@ -2254,6 +2254,10 @@ class AppState: ObservableObject {
           let conversation = try await APIClient.shared.getConversation(id: backendConversationId)
           guard conversation.status != .inProgress else {
             log("Transcription: Exact backend conversation \(backendConversationId) is still in progress; falling back to timestamp")
+            throw APIError.invalidResponse
+          }
+          guard conversation.source == .desktop else {
+            log("Transcription: Exact backend conversation \(backendConversationId) has source \(conversation.source?.rawValue ?? "nil"); falling back to timestamp")
             throw APIError.invalidResponse
           }
           try await TranscriptionStorage.shared.markSessionCompleted(
@@ -2416,7 +2420,9 @@ class AppState: ObservableObject {
     // conversation, it can briefly re-emit the old conversation id; do not bind the
     // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
-    ignoredRotatedBackendConversationId = ignoredRotatedBackendConversationId ?? currentBackendConversationId
+    if let currentBackendConversationId {
+      ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
+    }
     currentBackendConversationId = nil
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
@@ -2503,14 +2509,14 @@ class AppState: ObservableObject {
           return DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: candidate,
             activeBackendId: self.currentBackendConversationId,
-            ignoredRotatedBackendId: self.ignoredRotatedBackendConversationId
+            ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
           ) ? candidate : nil
         }) {
           try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
           await MainActor.run {
             self.currentBackendConversationId = backendId
             self.pendingBackendConversationId = nil
-            self.ignoredRotatedBackendConversationId = nil
+            self.ignoredRotatedBackendConversationIds = []
           }
         }
         log("Transcription: Created new DB session \(sessionId) for next conversation")
@@ -3175,17 +3181,17 @@ class AppState: ObservableObject {
     guard DesktopConversationMatchPolicy.shouldBindConversationSession(
       incomingBackendId: backendId,
       activeBackendId: currentBackendConversationId,
-      ignoredRotatedBackendId: ignoredRotatedBackendConversationId
+      ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
     ) else {
       pendingBackendConversationId = nil
       if let currentBackendConversationId, currentBackendConversationId != backendId {
-        ignoredRotatedBackendConversationId = backendId
+        ignoredRotatedBackendConversationIds.insert(backendId)
       }
       log("Transcription: Ignoring rotated backend conversation id \(backendId) for fresh local session")
       return
     }
 
-    ignoredRotatedBackendConversationId = nil
+    ignoredRotatedBackendConversationIds = []
     currentBackendConversationId = backendId
 
     guard let sessionId = currentSessionId else {

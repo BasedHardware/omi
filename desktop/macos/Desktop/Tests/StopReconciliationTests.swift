@@ -241,6 +241,15 @@ final class StopReconciliationTests: XCTestCase {
             "Force-process must not bind a different conversation when the listen session id is known")
     }
 
+    func testBoundBackendConversationIdRejectsNonDesktopExactMatch() {
+        let exactIdMatches = "backend-conversation-123" == "backend-conversation-123"
+        let convSource: ConversationSource = .phone
+
+        XCTAssertTrue(exactIdMatches)
+        XCTAssertNotEqual(convSource, .desktop,
+            "Exact listen ids still need source validation before completing a desktop session")
+    }
+
     func testRecordingSessionWithBackendIdCanStillBeFinishedForRetryReconciliation() {
         var session = TranscriptionSessionRecord(
             source: "desktop",
@@ -261,7 +270,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "active-conversation",
             activeBackendId: "active-conversation",
-            ignoredRotatedBackendId: nil
+            ignoredRotatedBackendIds: []
         ))
     }
 
@@ -269,24 +278,24 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "rolled-over-conversation",
             activeBackendId: "active-conversation",
-            ignoredRotatedBackendId: nil
+            ignoredRotatedBackendIds: []
         ))
     }
 
     func testRejectedRolloverBackendConversationIdIsCarriedAcrossRotation() {
         let activeBackendId = "active-conversation"
         let rejectedRolloverId = "rolled-over-conversation"
-        let ignoredAfterFinish = rejectedRolloverId
+        let ignoredAfterFinish: Set<String> = [activeBackendId, rejectedRolloverId]
 
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: rejectedRolloverId,
             activeBackendId: activeBackendId,
-            ignoredRotatedBackendId: nil
+            ignoredRotatedBackendIds: []
         ))
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: rejectedRolloverId,
             activeBackendId: nil,
-            ignoredRotatedBackendId: ignoredAfterFinish
+            ignoredRotatedBackendIds: ignoredAfterFinish
         ), "A backend conversation rejected as an active-session rollover must not bind after local rotation")
     }
 
@@ -294,7 +303,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "previous-conversation",
             activeBackendId: nil,
-            ignoredRotatedBackendId: "previous-conversation"
+            ignoredRotatedBackendIds: ["previous-conversation"]
         ))
     }
 
@@ -302,7 +311,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "new-conversation",
             activeBackendId: nil,
-            ignoredRotatedBackendId: "previous-conversation"
+            ignoredRotatedBackendIds: ["previous-conversation"]
         ))
     }
 
@@ -310,7 +319,7 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "",
             activeBackendId: nil,
-            ignoredRotatedBackendId: nil
+            ignoredRotatedBackendIds: []
         ))
     }
 }

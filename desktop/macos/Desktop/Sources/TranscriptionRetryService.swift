@@ -224,6 +224,10 @@ class TranscriptionRetryService {
                             id: sessionId, error: "Bound backend conversation is still in progress")
                         return
                     }
+                    guard conversation.source == .desktop else {
+                        log("TranscriptionRetryService: Backend conversation \(backendId) has source \(conversation.source?.rawValue ?? "nil"), falling back to timestamp")
+                        throw APIError.invalidResponse
+                    }
                     log("TranscriptionRetryService: Session \(sessionId) found by exact backend id \(conversation.id), marking completed")
                     try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
                     return
