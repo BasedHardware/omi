@@ -9334,6 +9334,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get backgroundModeNote => 'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'ಹೊಂದಾಣಿಕೆಯ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲದ ಕಾರಣ ಹಿನ್ನೆಲೆ ಮೋಡ್ ಲಭ್ಯವಿಲ್ಲ. ಈ ವೈಶಿಷ್ಟ್ಯವನ್ನು ಬಳಸಲು Omi, OpenGlass ಅಥವಾ Friend Pendant ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
   String get regenerateRecap => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ';
 
   @override

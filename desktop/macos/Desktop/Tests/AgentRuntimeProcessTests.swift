@@ -30,6 +30,17 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["adapterAcknowledged"] as? Bool, false)
   }
 
+  func testControlToolResultRoutesByRequestId() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"control_tool_result","protocolVersion":2,"requestId":"control-1","clientId":"client-1","name":"inspect_agent_artifacts","result":"{\"ok\":true,\"artifacts\":[]}"}"#
+    )
+
+    XCTAssertEqual(message?.kind, .controlToolResult)
+    XCTAssertEqual(message?.routingKey, "control-1")
+    XCTAssertEqual(message?.payload["name"] as? String, "inspect_agent_artifacts")
+    XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
+  }
+
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
@@ -110,11 +121,26 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("guard activeRequests.isEmpty else"))
+    XCTAssertTrue(source.contains("guard activeRequests.isEmpty, activeControlRequests.isEmpty else"))
     XCTAssertTrue(source.contains("isRestarting = true"))
     XCTAssertTrue(source.contains("guard !isRestarting else"))
     XCTAssertTrue(source.contains("BridgeError.restarting"))
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
+  }
+
+  func testControlToolRequestsAreRequestScopedAndOwnerGuarded() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains(#""type": "control_tool""#))
+    XCTAssertTrue(source.contains("activeControlRequests[requestId]"))
+    XCTAssertTrue(source.contains(#"dict["ownerId"] = ownerId"#))
+    XCTAssertTrue(source.contains("completeControlRequest(message)"))
+    XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestId)"))
+    XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
   }
 
   func testStartupTimeoutResumesInitContinuations() throws {

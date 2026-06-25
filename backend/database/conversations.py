@@ -228,12 +228,31 @@ def get_conversations(
     return conversations
 
 
-def get_conversations_count(uid: str, include_discarded: bool = False, statuses: List[str] = []):
+def get_conversations_count(
+    uid: str,
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
     return int(result[0][0].value)
 

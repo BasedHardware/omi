@@ -120,6 +120,7 @@ Key rules:
 ### Desktop (macOS — Swift app + Rust backend)
 
 The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
+- For user-visible desktop changes, follow `desktop/macos/AGENTS.md` → Changelog Entries and add a one-line `desktop/macos/CHANGELOG.json` `unreleased` entry.
 
 #### Building & Running
 

@@ -9301,6 +9301,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Chế độ nền không khả dụng vì chưa có thiết bị tương thích nào được kết nối. Kết nối thiết bị Omi, OpenGlass hoặc Friend Pendant để sử dụng tính năng này.';
+
+  @override
   String get regenerateRecap => 'Tạo lại tóm tắt';
 
   @override

@@ -4,6 +4,27 @@
   ],
   "releases": [
     {
+      "version": "0.11.533",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.531",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.530",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.11.529",
       "date": "2026-06-25",
       "changes": [

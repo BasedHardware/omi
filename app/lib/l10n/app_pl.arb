@@ -3096,5 +3096,6 @@
     "recordingMode": "Tryb nagrywania",
     "captureModeLater": "Później",
     "captureModeLiveDescription": "Transkrybuj w czasie rzeczywistym podczas mówienia.",
-    "captureModeLaterDescription": "Zapisz dźwięk teraz i transkrybuj, kiedy chcesz."
+    "captureModeLaterDescription": "Zapisz dźwięk teraz i transkrybuj, kiedy chcesz.",
+    "backgroundModeUnavailable": "Tryb w tle jest niedostępny, ponieważ nie podłączono zgodnego urządzenia. Podłącz urządzenie Omi, OpenGlass lub Friend Pendant, aby użyć tej funkcji."
 }

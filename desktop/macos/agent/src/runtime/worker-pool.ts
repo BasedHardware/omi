@@ -4,12 +4,21 @@ import type {
 } from "../adapters/interface.js";
 
 export const DEFAULT_MAX_WORKERS = 8;
+export const DEFAULT_PI_MONO_MAX_WORKERS = 2;
 
 export function configuredMaxWorkers(env = process.env): number {
   const raw = env.OMI_AGENT_MAX_WORKERS;
   if (!raw) return DEFAULT_MAX_WORKERS;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_WORKERS;
+  return parsed;
+}
+
+export function configuredPiMonoMaxWorkers(env = process.env): number {
+  const raw = env.OMI_PI_MONO_MAX_WORKERS;
+  if (!raw) return DEFAULT_PI_MONO_MAX_WORKERS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_PI_MONO_MAX_WORKERS;
   return parsed;
 }
 
@@ -42,6 +51,11 @@ export class AdapterWorker {
 
   hasPinnedBinding(bindingId: string): boolean {
     return this.pinnedBindingId === bindingId;
+  }
+
+  get idlePinnedBindingId(): string | null {
+    if (this.isBusy) return null;
+    return this.pinnedBindingId;
   }
 
   releaseIdlePinnedBinding(): string | null {
@@ -112,9 +126,15 @@ export class AdapterWorker {
 type AdapterFactory = () => RuntimeAdapter;
 type WorkerLeaseResolver = (worker: AdapterWorker) => void;
 
+interface WorkerLeaseOptions {
+  onIdlePinnedBindingEvicted?: (bindingId: string) => void;
+  protectPinnedBindingAfterWork?: boolean;
+}
+
 interface PendingWorkerLease {
   binding?: AdapterBindingHandle;
   attemptId: string;
+  options?: WorkerLeaseOptions;
   resolve: WorkerLeaseResolver;
   reject: (error: Error) => void;
 }
@@ -124,6 +144,7 @@ export class AdapterWorkerPool {
   private readonly adapterFactory: AdapterFactory;
   private readonly workers: AdapterWorker[] = [];
   private readonly waiters: PendingWorkerLease[] = [];
+  private readonly protectedPinnedBindingIds = new Set<string>();
   private nextWorkerId = 1;
 
   constructor(adapterFactory: AdapterFactory, maxWorkers = configuredMaxWorkers()) {
@@ -142,14 +163,35 @@ export class AdapterWorkerPool {
     return this.maxWorkers;
   }
 
+  get requiresPinnedWorkers(): boolean {
+    return this.workers.some((worker) => worker.adapter.capabilities.requiresPinnedWorker);
+  }
+
   releaseIdlePinnedBinding(): string | null {
     for (const worker of this.workers) {
+      const idlePinnedBindingId = worker.idlePinnedBindingId;
+      if (idlePinnedBindingId && this.protectedPinnedBindingIds.has(idlePinnedBindingId)) {
+        continue;
+      }
       const bindingId = worker.releaseIdlePinnedBinding();
       if (bindingId) {
         return bindingId;
       }
     }
     return null;
+  }
+
+  protectPinnedBinding(bindingId: string | null | undefined): void {
+    if (bindingId) {
+      this.protectedPinnedBindingIds.add(bindingId);
+    }
+  }
+
+  unprotectPinnedBinding(bindingId: string | null | undefined): void {
+    if (bindingId) {
+      this.protectedPinnedBindingIds.delete(bindingId);
+      this.drainWaiters();
+    }
   }
 
   acquire(binding?: AdapterBindingHandle): AdapterWorker | null {
@@ -187,34 +229,52 @@ export class AdapterWorkerPool {
   async runExclusiveQueued<T>(
     binding: AdapterBindingHandle | undefined,
     attemptId: string,
-    work: (worker: AdapterWorker) => Promise<T>
+    work: (worker: AdapterWorker) => Promise<T>,
+    options?: WorkerLeaseOptions
   ): Promise<T> {
-    const worker = await this.acquireQueued(binding, attemptId);
+    const worker = await this.acquireQueued(binding, attemptId, options);
+    let succeeded = false;
     try {
-      return await worker.runExclusive(attemptId, binding, () => work(worker));
+      const result = await worker.runExclusive(attemptId, binding, () => work(worker));
+      succeeded = true;
+      return result;
     } finally {
+      if (succeeded && options?.protectPinnedBindingAfterWork) {
+        this.protectPinnedBinding(worker.idlePinnedBindingId);
+      }
       this.drainWaiters();
     }
   }
 
-  private acquireQueued(binding: AdapterBindingHandle | undefined, attemptId: string): Promise<AdapterWorker> {
-    const worker = this.acquire(binding);
+  private acquireQueued(
+    binding: AdapterBindingHandle | undefined,
+    attemptId: string,
+    options?: WorkerLeaseOptions
+  ): Promise<AdapterWorker> {
+    const worker = this.acquire(binding) ?? this.acquireByEvictingIdlePinnedBinding(binding, options);
     if (worker) {
       worker.reserve(attemptId, binding);
       return Promise.resolve(worker);
     }
-    if (!this.canEventuallyAcquire(binding)) {
+    if (!this.canEventuallyAcquire(binding, options)) {
       return Promise.reject(this.noCapacityError(binding));
     }
     return new Promise((resolve, reject) => {
-      this.waiters.push({ binding, attemptId, resolve, reject });
+      this.waiters.push({ binding, attemptId, options, resolve, reject });
     });
   }
 
   private drainWaiters(): void {
     for (let i = 0; i < this.waiters.length;) {
       const waiter = this.waiters[i]!;
-      const worker = this.acquire(waiter.binding);
+      let worker: AdapterWorker | null;
+      try {
+        worker = this.acquire(waiter.binding) ?? this.acquireByEvictingIdlePinnedBinding(waiter.binding, waiter.options);
+      } catch (error) {
+        this.waiters.splice(i, 1);
+        waiter.reject(error instanceof Error ? error : new Error(String(error)));
+        continue;
+      }
       if (!worker) {
         i += 1;
         continue;
@@ -225,7 +285,7 @@ export class AdapterWorkerPool {
     }
     for (let i = 0; i < this.waiters.length;) {
       const waiter = this.waiters[i]!;
-      if (this.canEventuallyAcquire(waiter.binding)) {
+      if (this.canEventuallyAcquire(waiter.binding, waiter.options)) {
         i += 1;
         continue;
       }
@@ -234,11 +294,33 @@ export class AdapterWorkerPool {
     }
   }
 
-  private canEventuallyAcquire(binding?: AdapterBindingHandle): boolean {
+  private acquireByEvictingIdlePinnedBinding(
+    binding: AdapterBindingHandle | undefined,
+    options: WorkerLeaseOptions | undefined
+  ): AdapterWorker | null {
+    if (binding || !options?.onIdlePinnedBindingEvicted) {
+      return null;
+    }
+    for (const worker of this.workers) {
+      const evictedBindingId = worker.idlePinnedBindingId;
+      if (!evictedBindingId) continue;
+      if (this.protectedPinnedBindingIds.has(evictedBindingId)) continue;
+      const releasedBindingId = worker.releaseIdlePinnedBinding();
+      if (releasedBindingId !== evictedBindingId) {
+        throw new Error(`Worker ${worker.workerId} failed to release pinned binding ${evictedBindingId}`);
+      }
+      options.onIdlePinnedBindingEvicted(evictedBindingId);
+      return worker;
+    }
+    return null;
+  }
+
+  private canEventuallyAcquire(binding?: AdapterBindingHandle, options?: WorkerLeaseOptions): boolean {
     if (this.workers.length < this.maxWorkers) return true;
     const bindingId = binding?.bindingId;
     return this.workers.some((worker) => {
       if (!worker.adapter.capabilities.requiresPinnedWorker) return true;
+      if (!bindingId && options?.onIdlePinnedBindingEvicted) return true;
       return Boolean(bindingId && worker.hasPinnedBinding(bindingId));
     });
   }

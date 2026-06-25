@@ -9,12 +9,14 @@ import {
 } from "../src/adapters/pi-mono.js";
 import {
   ADAPTER_CAPABILITY_MATRIX,
+  PLACEHOLDER_RUNTIME_ADAPTERS,
 } from "../src/adapters/interface.js";
 import type {
   AdapterAttemptContext,
   RuntimeAdapter,
 } from "../src/adapters/interface.js";
-import { AdapterWorkerPool, configuredMaxWorkers } from "../src/runtime/worker-pool.js";
+import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { AdapterWorkerPool, configuredMaxWorkers, configuredPiMonoMaxWorkers } from "../src/runtime/worker-pool.js";
 import { FakeRuntimeAdapter } from "./kernel-fakes.js";
 
 vi.mock("child_process", async () => {
@@ -195,6 +197,11 @@ describe("adapter capability matrix", () => {
 
     for (const adapterId of ["hermes", "openclaw", "a2a"] as const) {
       expect(ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter).toBe(false);
+      expect(PLACEHOLDER_RUNTIME_ADAPTERS[adapterId]).toMatchObject({
+        adapterId,
+        productionAdapter: false,
+        implementationFactory: null,
+      });
       expect(Object.values(ADAPTER_CAPABILITY_MATRIX[adapterId].expectations).every(
         (expectation) => expectation.status === "known_limitation" && Boolean(expectation.followUpTicket),
       )).toBe(true);
@@ -230,6 +237,28 @@ describe("adapter capability matrix", () => {
       supportsTools: true,
       restartBehavior: "process_local_bindings_stale",
     });
+  });
+});
+
+describe("AdapterRegistry", () => {
+  it("rejects known placeholder adapters on the production registration path", () => {
+    const registry = new AdapterRegistry();
+
+    for (const adapterId of ["hermes", "openclaw", "a2a"] as const) {
+      expect(() => registry.register(adapterId, () => fakeAdapter(adapterId))).toThrow(
+        `Adapter ${adapterId} is a placeholder and cannot be registered as a production adapter without an implementation factory`
+      );
+      expect(registry.has(adapterId)).toBe(false);
+    }
+  });
+
+  it("continues to allow unlisted test adapters", () => {
+    const registry = new AdapterRegistry();
+
+    registry.register("fake", () => fakeAdapter("fake"), 1);
+
+    expect(registry.has("fake")).toBe(true);
+    expect(registry.capacity("fake")).toBe(1);
   });
 });
 
@@ -290,6 +319,9 @@ describe("fake runtime adapter contract fixture", () => {
     expect(opened.sessionId).toBe("omi-session");
     expect(opened.adapterNativeSessionId).toBe("native-1");
     expect(opened.adapterNativeSessionId).not.toBe(opened.sessionId);
+    expect(resumed.sessionId).toBe("omi-session");
+    expect(resumed.adapterNativeSessionId).toBe("native-1");
+    expect(resumed.adapterNativeSessionId).not.toBe(resumed.sessionId);
     expect(adapter.resumed[0].adapterNativeSessionId).toBe("native-1");
     expect(adapter.executed[0]).toMatchObject({
       sessionId: "omi-session",
@@ -305,6 +337,10 @@ describe("fake runtime adapter contract fixture", () => {
       adapterSessionId: "native-1",
       artifacts: [expect.objectContaining({ uri: "adapter://contract-fake/native-artifact" })],
     });
+    expect(result.sessionId).toBe("native-1");
+    expect(result.sessionId).not.toBe(adapter.executed[0].sessionId);
+    expect(result.adapterSessionId).toBe("native-1");
+    expect(result.adapterSessionId).toBe(adapter.executed[0].binding.adapterNativeSessionId);
     expect(cancel).toMatchObject({
       accepted: true,
       dispatchAttempted: true,
@@ -318,6 +354,12 @@ describe("AdapterWorkerPool", () => {
     expect(configuredMaxWorkers({} as NodeJS.ProcessEnv)).toBe(8);
     expect(configuredMaxWorkers({ OMI_AGENT_MAX_WORKERS: "3" } as NodeJS.ProcessEnv)).toBe(3);
     expect(configuredMaxWorkers({ OMI_AGENT_MAX_WORKERS: "0" } as NodeJS.ProcessEnv)).toBe(8);
+  });
+
+  it("gives pi-mono enough workers for a parent turn to spawn a visible child agent", () => {
+    expect(configuredPiMonoMaxWorkers({} as NodeJS.ProcessEnv)).toBe(2);
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: "4" } as NodeJS.ProcessEnv)).toBe(4);
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: "0" } as NodeJS.ProcessEnv)).toBe(2);
   });
 
   it("caps worker creation", () => {

@@ -9352,6 +9352,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get backgroundModeNote => 'Засега работи само со уреди Omi и постојано се подобрува.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.';
+
+  @override
   String get regenerateRecap => 'Регенерирај резиме';
 
   @override

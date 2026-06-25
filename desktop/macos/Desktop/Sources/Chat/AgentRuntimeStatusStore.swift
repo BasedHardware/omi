@@ -167,7 +167,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .unknown:
+    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
       break
     }
   }
@@ -216,7 +216,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       ?? (payload["legacyAdapterSessionId"] as? String)
       ?? projection.adapterSessionId
     projection.status = status
-    projection.statusText = statusText
+    projection.statusText = terminal ? nil : statusText
     projection.errorMessage = errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil

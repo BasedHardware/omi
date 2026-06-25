@@ -9314,6 +9314,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.';
+
+  @override
   String get regenerateRecap => 'Özeti yeniden oluştur';
 
   @override

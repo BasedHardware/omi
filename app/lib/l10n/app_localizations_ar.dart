@@ -9248,6 +9248,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get backgroundModeNote => 'يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'وضع الخلفية غير متاح لأنه لا يوجد جهاز متوافق متصل. وصّل جهاز Omi أو OpenGlass أو Friend Pendant لاستخدام هذه الميزة.';
+
+  @override
   String get regenerateRecap => 'إعادة إنشاء الملخص';
 
   @override

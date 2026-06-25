@@ -9308,6 +9308,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Bakgrundsläge är inte tillgängligt eftersom ingen kompatibel enhet är ansluten. Anslut en Omi-, OpenGlass- eller Friend Pendant-enhet för att använda den här funktionen.';
+
+  @override
   String get regenerateRecap => 'Återskapa sammanfattningen';
 
   @override

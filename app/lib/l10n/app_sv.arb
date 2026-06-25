@@ -3061,5 +3061,6 @@
     "recordingMode": "Inspelningsläge",
     "captureModeLater": "Senare",
     "captureModeLiveDescription": "Transkribera i realtid medan du talar.",
-    "captureModeLaterDescription": "Spara ljudet nu och transkribera när du vill."
+    "captureModeLaterDescription": "Spara ljudet nu och transkribera när du vill.",
+    "backgroundModeUnavailable": "Bakgrundsläge är inte tillgängligt eftersom ingen kompatibel enhet är ansluten. Anslut en Omi-, OpenGlass- eller Friend Pendant-enhet för att använda den här funktionen."
 }

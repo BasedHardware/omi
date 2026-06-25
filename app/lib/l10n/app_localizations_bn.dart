@@ -9310,6 +9310,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
 
   @override
+  String get backgroundModeUnavailable =>
+      'কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।';
+
+  @override
   String get regenerateRecap => 'রিক্যাপ পুনরায় তৈরি করুন';
 
   @override
