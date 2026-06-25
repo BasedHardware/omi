@@ -18,6 +18,7 @@ import type {
   AgentRun,
   AgentSession,
   AgentStore,
+  ArtifactLifecycleState,
   ArtifactRole,
   AttemptStatus,
   NewAgentArtifact,
@@ -126,6 +127,23 @@ export interface InspectArtifactsInput {
   limit?: number;
 }
 
+export interface UpdateArtifactLifecycleInput {
+  artifactId: string;
+  state: ArtifactLifecycleState;
+  ownerId?: string;
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateArtifactLifecycleResult {
+  artifact: AgentArtifact;
+  changed: boolean;
+  event: AgentEvent | null;
+}
+
 export interface PersistArtifactInput {
   sessionId?: string;
   runId?: string | null;
@@ -164,6 +182,7 @@ export interface SendAgentMessageInput {
   adapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
 }
 
@@ -183,6 +202,7 @@ export interface DelegateAgentInput {
   defaultAdapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   runMode?: RunMode;
   context?: string;
   maxDepth?: number;
@@ -276,6 +296,7 @@ export class AgentRuntimeKernel {
       adapterId: input.adapterId ?? session.defaultAdapterId,
       cwd: input.cwd ?? session.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       metadata: input.metadata,
     });
   }
@@ -304,6 +325,7 @@ export class AgentRuntimeKernel {
       mode: input.runMode ?? "ask",
       cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       parentRunId: parentRun.runId,
       metadata: {
         ...(input.metadata ?? {}),
@@ -353,7 +375,7 @@ export class AgentRuntimeKernel {
         sessionId: session.sessionId,
         runId: run.runId,
         type: "run.created",
-        payload: { runId: run.runId, requestId: run.requestId },
+        payload: { runId: run.runId, requestId: run.requestId, clientId: run.clientId },
       });
       return { session, run };
     });
@@ -393,37 +415,48 @@ export class AgentRuntimeKernel {
 
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
+      let bindingResolutionProtectedBindingId: string | null = null;
       try {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          if (!bindingQueueKey) {
-            const evictedBindingId = pool.releaseIdlePinnedBinding();
-            if (evictedBindingId) {
-              this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
-            }
-          }
-          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
-            const resolved = await this.resolveBindingForAttempt({
-              input,
-              session: accepted.session,
-              adapter: worker.adapter,
-              attempt,
-              adapterId,
-            });
-            if (worker.adapter.capabilities.requiresPinnedWorker) {
-              if (resolved.replacesBindingId) {
-                worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
-              } else {
-                worker.pinBinding(resolved.handle);
+          return pool.runExclusiveQueued(
+            bindingQueueKey,
+            `${attempt.attemptId}:binding`,
+            async (worker) => {
+              const resolved = await this.resolveBindingForAttempt({
+                input,
+                session: accepted.session,
+                adapter: worker.adapter,
+                attempt,
+                adapterId,
+              });
+              if (worker.adapter.capabilities.requiresPinnedWorker) {
+                if (resolved.replacesBindingId) {
+                  worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
+                } else {
+                  worker.pinBinding(resolved.handle);
+                }
               }
-            }
-            return resolved;
-          });
+              return resolved;
+            },
+            {
+              ...(bindingQueueKey
+                ? {}
+                : {
+                    onIdlePinnedBindingEvicted: (evictedBindingId: string) => {
+                      this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
+                    },
+                  }),
+              protectPinnedBindingAfterWork: true,
+            },
+          );
         });
         binding = resolved.binding;
         handle = resolved.handle;
+        bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
+        pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
         if (isStaleBindingError(error)) {
           this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
           retryReason = "stale_binding";
@@ -440,6 +473,8 @@ export class AgentRuntimeKernel {
       }
 
       const abortController = new AbortController();
+      const protectedPinnedBindingId = pool.requiresPinnedWorkers ? handle.bindingId : null;
+      pool.protectPinnedBinding(protectedPinnedBindingId);
 
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
@@ -457,6 +492,8 @@ export class AgentRuntimeKernel {
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
+              requestId: accepted.run.requestId,
+              clientId: accepted.run.clientId,
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               binding: handle,
@@ -498,6 +535,8 @@ export class AgentRuntimeKernel {
           errorMessage: wasCancelling ? null : messageFrom(error),
         });
         break;
+      } finally {
+        pool.unprotectPinnedBinding(protectedPinnedBindingId);
       }
     }
 
@@ -687,6 +726,40 @@ export class AgentRuntimeKernel {
     return this.readArtifacts(input);
   }
 
+  updateArtifactLifecycle(input: UpdateArtifactLifecycleInput): UpdateArtifactLifecycleResult {
+    return this.withTransaction(() => {
+      const artifact = this.readArtifact(input.artifactId);
+      this.assertArtifactScope(artifact, input);
+      if (input.ownerId) {
+        this.assertSessionOwner(this.readSession(artifact.sessionId), input.ownerId);
+      }
+      if (artifact.lifecycleState === input.state) {
+        return { artifact, changed: false, event: null };
+      }
+
+      const now = Date.now();
+      this.store.execute(
+        "UPDATE artifacts SET lifecycle_state = ?, lifecycle_updated_at_ms = ? WHERE artifact_id = ?",
+        [input.state, now, artifact.artifactId],
+      );
+      const updatedArtifact = this.readArtifact(artifact.artifactId);
+      const event = this.appendEvent({
+        sessionId: updatedArtifact.sessionId,
+        runId: updatedArtifact.runId,
+        attemptId: updatedArtifact.attemptId,
+        type: `artifact.${input.state}`,
+        payload: {
+          artifactId: updatedArtifact.artifactId,
+          previousState: artifact.lifecycleState,
+          state: updatedArtifact.lifecycleState,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {},
+        },
+      });
+      return { artifact: updatedArtifact, changed: true, event };
+    });
+  }
+
   persistArtifact(input: PersistArtifactInput): AgentArtifact {
     return this.withTransaction(() => this.persistArtifactInTransaction(input));
   }
@@ -848,6 +921,7 @@ export class AgentRuntimeKernel {
         payload: {
           runId: run.runId,
           requestId: run.requestId,
+          clientId: run.clientId,
           parentRunId: parentRun.runId,
           delegationId: delegation.delegationId,
         },
@@ -1480,6 +1554,7 @@ export class AgentRuntimeKernel {
         mimeType: artifact.mimeType,
         contentHash: artifact.contentHash,
         sizeBytes: artifact.sizeBytes,
+        lifecycleState: artifact.lifecycleState,
       },
     });
     return artifact;
@@ -1731,6 +1806,25 @@ export class AgentRuntimeKernel {
         [...values, limit],
       )
       .map(artifactFromRow);
+  }
+
+  private readArtifact(artifactId: string): AgentArtifact {
+    return artifactFromRow(this.store.getRow("SELECT * FROM artifacts WHERE artifact_id = ?", [artifactId]));
+  }
+
+  private assertArtifactScope(
+    artifact: AgentArtifact,
+    input: Pick<UpdateArtifactLifecycleInput, "sessionId" | "runId" | "attemptId">
+  ): void {
+    if (input.sessionId && input.sessionId !== artifact.sessionId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to session ${artifact.sessionId}, not ${input.sessionId}`);
+    }
+    if (input.runId && input.runId !== artifact.runId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to run ${artifact.runId ?? "none"}, not ${input.runId}`);
+    }
+    if (input.attemptId && input.attemptId !== artifact.attemptId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to attempt ${artifact.attemptId ?? "none"}, not ${input.attemptId}`);
+    }
   }
 
   private readDelegation(delegationId: string): AgentDelegation {
@@ -2026,6 +2120,8 @@ function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
     mimeType: nullableText(row.mime_type),
     contentHash: nullableText(row.content_hash),
     sizeBytes: nullableNumber(row.size_bytes),
+    lifecycleState: text(row.lifecycle_state) as ArtifactLifecycleState,
+    lifecycleUpdatedAtMs: nullableNumber(row.lifecycle_updated_at_ms),
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
   };

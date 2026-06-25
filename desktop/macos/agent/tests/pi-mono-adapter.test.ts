@@ -1,11 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { spawn } from "child_process";
-import { PiMonoAdapter } from "../src/adapters/pi-mono.js";
-import { HarnessFeature, type HarnessConfig } from "../src/adapters/interface.js";
+import { PiMonoAdapter, PiMonoRuntimeAdapter } from "../src/adapters/pi-mono.js";
+import { HarnessFeature, type AdapterAttemptContext, type HarnessConfig } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
 // Mock child_process.spawn so start() doesn't launch a real subprocess.
@@ -73,6 +73,94 @@ function makeTurnEndEvent(text: string, totalCost = 1.25) {
 }
 
 describe("PiMonoAdapter prompt correlation", () => {
+  it("writes the active runtime attempt context before prompt execution", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const attemptContext: AdapterAttemptContext = {
+      sessionId: "ses_runtime",
+      requestId: "request-runtime",
+      clientId: "client-runtime",
+      runId: "run_runtime",
+      attemptId: "att_runtime",
+      binding: {
+        bindingId: "bind-runtime",
+        sessionId: "ses_runtime",
+        adapterId: "pi-mono",
+        adapterNativeSessionId: "session-1",
+        resumeFidelity: "none",
+        cwd: "/tmp",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "act",
+      metadata: {
+        protocolVersion: 2,
+        legacyAdapterSessionId: "legacy-runtime",
+        disableSwiftBackedTools: true,
+      },
+    };
+
+    const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
+    const relayContext = JSON.parse(readFileSync((adapter as any).contextFilePath, "utf8"));
+    expect(relayContext).toMatchObject({
+      adapterId: "pi-mono",
+      protocolVersion: 2,
+      requestId: "request-runtime",
+      clientId: "client-runtime",
+      sessionId: "ses_runtime",
+      runId: "run_runtime",
+      attemptId: "att_runtime",
+      adapterSessionId: "session-1",
+      legacyAdapterSessionId: "legacy-runtime",
+      disableSwiftBackedTools: true,
+    });
+
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+  });
+
+  it("clears stale relay context when direct prompt execution has no runtime context", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+
+    const runtime = new PiMonoRuntimeAdapter(adapter);
+    const attemptContext: AdapterAttemptContext = {
+      sessionId: "ses_runtime",
+      requestId: "request-runtime",
+      clientId: "client-runtime",
+      runId: "run_runtime",
+      attemptId: "att_runtime",
+      binding: {
+        bindingId: "bind-runtime",
+        sessionId: "ses_runtime",
+        adapterId: "pi-mono",
+        adapterNativeSessionId: "session-1",
+        resumeFidelity: "none",
+        cwd: "/tmp",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "act",
+    };
+
+    const execution = runtime.executeAttempt(attemptContext, () => {}, new AbortController().signal);
+    expect(existsSync((adapter as any).contextFilePath)).toBe(true);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("done"));
+    await expect(execution).resolves.toMatchObject({ terminalStatus: "succeeded" });
+
+    const directPrompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "direct" }],
+      [],
+      "act",
+      () => {},
+      async () => ""
+    );
+
+    expect(existsSync((adapter as any).contextFilePath)).toBe(false);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("direct done"));
+    await expect(directPrompt).resolves.toMatchObject({ text: "direct done" });
+  });
+
   it("rejects the previous prompt when a new generation supersedes it", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1", "session-2");

@@ -30,11 +30,13 @@
 import { createInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { randomUUID } from "crypto";
 import { createServer as createNetServer, type Socket } from "net";
 import { homedir, tmpdir } from "os";
 import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
+  ControlToolRequestMessage,
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
@@ -51,7 +53,15 @@ import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
-import { handleAgentControlToolCall, isAgentControlToolName, type AgentControlToolContext } from "./runtime/control-tools.js";
+import {
+  activeControlToolOwnerId,
+  controlRequestKey,
+  handleAgentControlToolCall,
+  isAgentControlToolName,
+  resolveControlRequestContext,
+  type AgentControlToolContext,
+  withMergedOwnerGuard,
+} from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -117,6 +127,7 @@ function agentStateDir(): string {
 let omiToolsPipePath = "";
 let omiToolsClients: Socket[] = [];
 let agentControlToolContext: AgentControlToolContext | undefined;
+const activeControlToolOwnersByRequest = new Map<string, string>();
 let toolCallCorrelation:
   | ((input: { requestId?: string; adapterId?: string }) => Partial<QueryScopedOutbound>)
   | undefined;
@@ -180,10 +191,24 @@ function startOmiToolsRelay(): Promise<string> {
             };
 
             if (msg.type === "tool_use") {
+              const protocolVersion: ProtocolVersion | undefined =
+                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
               if (isAgentControlToolName(msg.name)) {
                 void (async () => {
-                  const result = agentControlToolContext
-                    ? await handleAgentControlToolCall(agentControlToolContext, msg.name, msg.input ?? {})
+                  const controlToolContext = agentControlToolContext
+                    ? {
+                        ...agentControlToolContext,
+                        getProtocolVersion: () => protocolVersion,
+                        getOwnerId: () =>
+                          activeControlToolOwnerId({
+                            requestKey: controlRequestKey(msg),
+                            ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
+                            fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
+                          }),
+                      }
+                    : undefined;
+                  const result = controlToolContext
+                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
                     : JSON.stringify({
                         ok: false,
                         error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
@@ -204,8 +229,6 @@ function startOmiToolsRelay(): Promise<string> {
               }
 
               // Forward tool call to Swift via stdout
-              const protocolVersion: ProtocolVersion | undefined =
-                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
               const resolvedCorrelation =
                 toolCallCorrelation?.({ requestId: msg.requestId, adapterId: msg.adapterId }) ?? {};
               const messageRequestIsActive = Boolean(
@@ -459,36 +482,38 @@ function buildMcpServers(
 ): McpServerConfig[] {
   const servers: McpServerConfig[] = [];
 
-  // omi-tools (stdio, connects back via Unix socket)
-  const omiToolsEnv: Array<{ name: string; value: string }> = [
-    { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
-    { name: "OMI_QUERY_MODE", value: mode },
-    { name: "OMI_ADAPTER_ID", value: "acp" },
-  ];
-  if (context) {
-    omiToolsEnv.push(
-      { name: "OMI_REQUEST_ID", value: context.requestId },
-      { name: "OMI_CLIENT_ID", value: context.clientId }
-    );
-    if (context.protocolVersion) {
-      omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+  if (context?.includeSwiftBackedTools !== false) {
+    // omi-tools (stdio, connects back via Unix socket)
+    const omiToolsEnv: Array<{ name: string; value: string }> = [
+      { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
+      { name: "OMI_QUERY_MODE", value: mode },
+      { name: "OMI_ADAPTER_ID", value: "acp" },
+    ];
+    if (context) {
+      omiToolsEnv.push(
+        { name: "OMI_REQUEST_ID", value: context.requestId },
+        { name: "OMI_CLIENT_ID", value: context.clientId }
+      );
+      if (context.protocolVersion) {
+        omiToolsEnv.push({ name: "OMI_PROTOCOL_VERSION", value: String(context.protocolVersion) });
+      }
+      if (context.sessionId) {
+        omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+      }
     }
-    if (context.sessionId) {
-      omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
+    if (cwd) {
+      omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
     }
+    if (sessionKey === "onboarding") {
+      omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
+    }
+    servers.push({
+      name: "omi-tools",
+      command: process.execPath,
+      args: [omiToolsStdioScript],
+      env: omiToolsEnv,
+    });
   }
-  if (cwd) {
-    omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
-  }
-  if (sessionKey === "onboarding") {
-    omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
-  }
-  servers.push({
-    name: "omi-tools",
-    command: process.execPath,
-    args: [omiToolsStdioScript],
-    env: omiToolsEnv,
-  });
 
   // Playwright MCP server
   const playwrightArgs = [playwrightCli];
@@ -510,6 +535,40 @@ function buildMcpServers(
   });
 
   return servers;
+}
+
+function withControlRunCorrelation(
+  name: string,
+  input: Record<string, unknown>,
+  fallbackRequestId: string | undefined,
+  fallbackClientId: string | undefined
+): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
+    return { input };
+  }
+  const inputRequestId = typeof input.requestId === "string" && input.requestId.trim() ? input.requestId.trim() : undefined;
+  const inputClientId = typeof input.clientId === "string" && input.clientId.trim() ? input.clientId.trim() : undefined;
+  const requestId = inputRequestId ?? fallbackRequestId ?? randomUUID();
+  const clientId = inputClientId ?? fallbackClientId ?? "omi-control-tools";
+  return {
+    input: {
+      ...input,
+      requestId,
+      clientId,
+    },
+    requestId,
+    clientId,
+  };
+}
+
+function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
+  if (name !== "send_agent_message" && name !== "delegate_agent") {
+    return undefined;
+  }
+  const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
+  const defaultFromInput =
+    typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
+  return adapterId ?? defaultFromInput ?? defaultAdapterId;
 }
 
 // --- Error handling ---
@@ -656,7 +715,11 @@ async function main(): Promise<void> {
     send({ type: "error", message: msg });
     process.exit(1);
   }
-  agentControlToolContext = { kernel, getOwnerId: () => currentOwnerId };
+  agentControlToolContext = {
+    kernel,
+    getOwnerId: () => currentOwnerId,
+    buildMcpServers,
+  };
   const facade = new JsonlCompatibilityFacade({
     kernel,
     send,
@@ -706,16 +769,29 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
+          const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          query.requestId = requestIdFor(query) ?? randomUUID();
+          const queryRequestId = requestIdFor(query);
+          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
+          if (queryOwnerKey) {
+            activeControlToolOwnersByRequest.set(queryOwnerKey, queryOwnerId);
+          }
           if (query.ownerId) {
-            currentOwnerId = query.ownerId;
+            currentOwnerId = queryOwnerId;
             if (adapterId === "pi-mono") {
-              piMonoOwnerId = query.ownerId;
+              piMonoOwnerId = queryOwnerId;
             }
           }
-          if (adapterId === "acp") {
-            await initializeAcp();
+          try {
+            if (adapterId === "acp") {
+              await initializeAcp();
+            }
+            await facade.handleQuery(query);
+          } finally {
+            if (queryOwnerKey) {
+              activeControlToolOwnersByRequest.delete(queryOwnerKey);
+            }
           }
-          await facade.handleQuery(query);
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
           const query = msg as QueryMessage;
@@ -738,6 +814,118 @@ async function main(): Promise<void> {
       case "tool_result":
         resolveToolCall(msg);
         break;
+
+      case "control_tool": {
+        const control = msg as ControlToolRequestMessage;
+        const requestId = requestIdFor(control);
+        let controlContext;
+        try {
+          controlContext = resolveControlRequestContext({
+            ownerGuard: control.ownerId,
+            fallbackOwnerId: currentOwnerId,
+            requestId,
+            clientId: control.clientId,
+          });
+        } catch {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_owner_id", message: "ownerId cannot be empty" },
+            }),
+          });
+          break;
+        }
+        const controlOwnerKey = controlContext.requestKey;
+        let controlInput;
+        let controlRunCorrelation: { requestId?: string; clientId?: string } = {};
+        try {
+          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+          const correlated = withControlRunCorrelation(control.name, controlInput, requestId, control.clientId);
+          controlInput = correlated.input;
+          controlRunCorrelation = { requestId: correlated.requestId, clientId: correlated.clientId };
+          const adapterId = controlRunAdapterId(control.name, controlInput, defaultAdapterId);
+          if (adapterId && correlated.requestId && correlated.clientId) {
+            facade.registerExternalRequestContext({
+              protocolVersion: control.protocolVersion,
+              requestId: correlated.requestId,
+              clientId: correlated.clientId,
+              ownerId: controlContext.activeOwnerId,
+              adapterId,
+            });
+          }
+        } catch (error) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+        if (controlOwnerKey) {
+          activeControlToolOwnersByRequest.set(controlOwnerKey, controlContext.activeOwnerId);
+        }
+        const result = agentControlToolContext
+          ? await (async () => {
+              try {
+                return await handleAgentControlToolCall(
+                  {
+                    ...agentControlToolContext,
+                    getProtocolVersion: () => control.protocolVersion,
+                    getOwnerId: () =>
+                      activeControlToolOwnerId({
+                        requestKey: controlOwnerKey,
+                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+                        fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
+                      }),
+                  },
+                  control.name,
+                  controlInput,
+                );
+              } finally {
+                if (controlOwnerKey) {
+                  activeControlToolOwnersByRequest.delete(controlOwnerKey);
+                }
+                if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                  facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                }
+              }
+            })()
+          : (() => {
+              if (controlOwnerKey) {
+                activeControlToolOwnersByRequest.delete(controlOwnerKey);
+              }
+              if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+              }
+              return JSON.stringify({
+                ok: false,
+                error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+              });
+            })();
+        send({
+          type: "control_tool_result",
+          protocolVersion: control.protocolVersion,
+          requestId,
+          clientId: control.clientId,
+          name: control.name,
+          result,
+        });
+        break;
+      }
 
       case "interrupt":
         logErr("Interrupt requested by user");

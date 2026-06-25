@@ -173,6 +173,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
             "get_agent_run",
             "cancel_agent_run",
             "inspect_agent_artifacts",
+            "update_agent_artifact_lifecycle",
             "send_agent_message",
             "delegate_agent",
         ])
