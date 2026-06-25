@@ -243,7 +243,7 @@ class TestMcpRestScopes:
             rest.get_chat_messages: rest.get_uid_with_mcp_chat_read,
             rest.get_people: rest.get_uid_with_mcp_people_read,
             rest.get_screen_activity: rest.get_uid_with_mcp_screen_activity_read,
-            rest.get_daily_summaries: rest.get_uid_with_mcp_memories_read,
+            rest.get_daily_summaries: rest.get_uid_with_mcp_conversations_read,
         }
 
         for endpoint, dependency in expected.items():

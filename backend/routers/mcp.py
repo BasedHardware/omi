@@ -549,7 +549,7 @@ def get_daily_summaries(
     offset: int = 0,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    uid: str = Depends(get_uid_with_mcp_memories_read),
+    uid: str = Depends(get_uid_with_mcp_conversations_read),
 ):
     logger.info(f"get_daily_summaries {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 100))
