@@ -149,6 +149,7 @@ enum ConversationReconciliationPolicy {
       finishedAt: serverConversation.finishedAt,
       structured: structured,
       transcriptSegments: serverConversation.transcriptSegments,
+      transcriptSegmentsIncluded: serverConversation.transcriptSegmentsIncluded,
       geolocation: serverConversation.geolocation,
       photos: serverConversation.photos,
       appsResults: serverConversation.appsResults,
