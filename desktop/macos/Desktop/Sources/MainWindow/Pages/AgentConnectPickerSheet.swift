@@ -1,98 +1,93 @@
 import SwiftUI
 
-/// A tiny "which one do you want to connect?" picker that opens when a grouped
-/// AI tile (Claude, ChatGPT) is tapped. Deliberately minimal text — just the
-/// brand mark and one button per option. Claude Code / Codex are listed first
-/// (the prioritized path); the cloud app second; "Both" optional.
-struct AgentConnectPicker: Identifiable, Equatable {
-  let id: String
-  let brand: ConnectorBrand
-  let title: String
-  /// Ordered options shown as buttons. First = the prioritized (CLI) path.
-  let options: [Option]
-  /// If set, a "Connect both" button runs these in order.
-  let both: [MemoryExportDestination]?
+/// In-sheet "which one?" for grouped agents — Claude → Claude Code / Cloud,
+/// ChatGPT → Codex / Cloud. Replaces the old standalone picker popup: the
+/// choice now lives at the top of the connect sheet itself (no extra popup).
+/// Claude Code / Codex are the default (prioritized); "Connect both" wires the
+/// CLI and the cloud in one tap.
+struct ConnectDestinationSheet: View {
+  let destination: MemoryExportDestination
+  @Binding var statuses: [MemoryExportDestination: MemoryExportStatus]
+  let onDismiss: () -> Void
 
-  struct Option: Identifiable, Equatable {
-    let id: String
-    let label: String
-    let destination: MemoryExportDestination
+  @State private var active: MemoryExportDestination
+  @State private var bothStatus: String?
+
+  init(
+    destination: MemoryExportDestination,
+    statuses: Binding<[MemoryExportDestination: MemoryExportStatus]>,
+    onDismiss: @escaping () -> Void
+  ) {
+    self.destination = destination
+    self._statuses = statuses
+    self.onDismiss = onDismiss
+    _active = State(initialValue: Self.group(for: destination).first ?? destination)
   }
 
-  static let claude = AgentConnectPicker(
-    id: "claude",
-    brand: .claude,
-    title: "Connect Claude",
-    options: [
-      Option(id: "claudeCode", label: "Claude Code", destination: .claudeCode),
-      Option(id: "claude", label: "Claude (cloud)", destination: .claude),
-    ],
-    both: [.claudeCode, .claude]
-  )
+  /// The grouped CLI+cloud pair for an anchor destination (CLI first).
+  static func group(for d: MemoryExportDestination) -> [MemoryExportDestination] {
+    switch d {
+    case .claude, .claudeCode: return [.claudeCode, .claude]
+    case .chatgpt, .codex: return [.codex, .chatgpt]
+    default: return [d]
+    }
+  }
 
-  static let chatgpt = AgentConnectPicker(
-    id: "chatgpt",
-    brand: .chatgpt,
-    title: "Connect ChatGPT",
-    options: [
-      Option(id: "codex", label: "Codex", destination: .codex),
-      Option(id: "chatgpt", label: "ChatGPT (cloud)", destination: .chatgpt),
-    ],
-    both: [.codex, .chatgpt]
-  )
-}
+  private var members: [MemoryExportDestination] { Self.group(for: destination) }
 
-struct AgentConnectPickerSheet: View {
-  let picker: AgentConnectPicker
-  /// Called with the destinations to connect, in order (one for a single
-  /// option, two for "Both"). The presenter dismisses + routes to setup.
-  let onChoose: ([MemoryExportDestination]) -> Void
-  let onClose: () -> Void
+  private func segmentLabel(_ d: MemoryExportDestination) -> String {
+    switch d {
+    case .claudeCode: return "Claude Code"
+    case .codex: return "Codex"
+    case .claude, .chatgpt: return "Cloud"
+    default: return d.title
+    }
+  }
 
   var body: some View {
-    VStack(spacing: 16) {
-      ConnectorBrandIcon(brand: picker.brand, size: 44, cornerRadius: 11)
-        .padding(.top, 8)
+    if members.count > 1 {
+      VStack(spacing: 0) {
+        Picker("", selection: $active) {
+          ForEach(members, id: \.self) { d in Text(segmentLabel(d)).tag(d) }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
 
-      Text(picker.title)
-        .scaledFont(size: 17, weight: .semibold)
-        .foregroundColor(OmiColors.textPrimary)
-
-      VStack(spacing: 10) {
-        ForEach(picker.options) { option in
-          pickerButton(option.label, primary: option.id == picker.options.first?.id) {
-            onChoose([option.destination])
+        HStack(spacing: 8) {
+          Button("Connect both") { connectBoth() }
+            .buttonStyle(.plain)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.purplePrimary)
+          if let bothStatus {
+            Text(bothStatus)
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.success)
           }
         }
-        if let both = picker.both {
-          pickerButton("Connect both", primary: false) { onChoose(both) }
-        }
-      }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.top, 8)
 
-      Button("Cancel", action: onClose)
-        .buttonStyle(.plain)
-        .scaledFont(size: 13, weight: .medium)
-        .foregroundColor(OmiColors.textSecondary)
-        .padding(.top, 2)
+        // Re-create the inner sheet when the selection flips so its per-client
+        // model (key, steps, command) refreshes.
+        MemoryExportDestinationSheet(destination: active, statuses: $statuses, onDismiss: onDismiss)
+          .id(active)
+      }
+    } else {
+      MemoryExportDestinationSheet(
+        destination: destination, statuses: $statuses, onDismiss: onDismiss)
     }
-    .padding(24)
-    .frame(width: 320)
   }
 
-  private func pickerButton(_ label: String, primary: Bool, action: @escaping () -> Void)
-    -> some View
-  {
-    Button(action: action) {
-      Text(label)
-        .scaledFont(size: 14, weight: .semibold)
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 11)
-        .foregroundColor(primary ? Color.black : OmiColors.textPrimary)
-        .background(
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(primary ? Color.white : OmiColors.backgroundTertiary)
-        )
+  private func connectBoth() {
+    bothStatus = "Connecting…"
+    Task { @MainActor in
+      for d in members {
+        _ = try? await MemoryExportExecutor.run(d)
+      }
+      bothStatus = "Both connected."
     }
-    .buttonStyle(.plain)
   }
 }
