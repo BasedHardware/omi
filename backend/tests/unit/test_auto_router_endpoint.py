@@ -11,7 +11,6 @@ from routers.auto_router import reset_registry_cache_for_testing
 from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.task_registry import TaskRegistry
 
-
 # ---------------------------------------------------------------------------
 # Test fixtures
 # ---------------------------------------------------------------------------

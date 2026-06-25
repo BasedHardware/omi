@@ -31,7 +31,6 @@ from utils.auto_router.model_registry import ModelRegistry  # noqa: E402
 from utils.auto_router.scoring import score  # noqa: E402
 from utils.auto_router.task_registry import TaskRegistry  # noqa: E402
 
-
 BENCHMARKS = _BACKEND / "utils" / "auto_router" / "benchmarks.example.json"
 ITERATIONS = 100_000
 

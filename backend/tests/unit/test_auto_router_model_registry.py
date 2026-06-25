@@ -10,7 +10,6 @@ from utils.auto_router.model_registry import (
 )
 from utils.auto_router.scoring import ModelSpec
 
-
 # ---------------------------------------------------------------------------
 # Empty registry
 # ---------------------------------------------------------------------------

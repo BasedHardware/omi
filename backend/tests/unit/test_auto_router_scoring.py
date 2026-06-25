@@ -8,7 +8,6 @@ import pytest
 
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score, _clamp_0_1
 
-
 # ---------------------------------------------------------------------------
 # Test fixtures
 # ---------------------------------------------------------------------------
