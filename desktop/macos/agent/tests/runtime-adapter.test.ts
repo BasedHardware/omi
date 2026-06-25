@@ -340,7 +340,7 @@ describe("AdapterWorkerPool", () => {
     await active;
   });
 
-  it("reuses idle pi-mono-style workers for later bindings", () => {
+  it("keeps idle pi-mono-style workers pinned to their live bindings", () => {
     const pinnedAdapter = {
       ...fakeAdapter("pi-mono"),
       capabilities: {
@@ -374,7 +374,7 @@ describe("AdapterWorkerPool", () => {
     });
 
     expect(first?.workerId).toBe("worker-1");
-    expect(second?.workerId).toBe("worker-1");
-    expect(pool.size).toBe(1);
+    expect(second?.workerId).toBe("worker-2");
+    expect(pool.size).toBe(2);
   });
 });

@@ -93,6 +93,7 @@ describe("agent control tools", () => {
     const inspected = parseToolResult(
       await handleAgentControlToolCall({ kernel }, "get_agent_run", {
         runId: result.run.runId,
+        ownerId: "owner",
       }),
     );
     expect(inspected.run).toMatchObject({
@@ -127,6 +128,70 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("rejects run inspection, cancellation, and artifact inspection outside the active owner", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const ownerRun = await kernel.executeRun({ ...baseRunInput, ownerId: "owner-from-context" });
+    const otherRun = await kernel.executeRun({
+      ...baseRunInput,
+      ownerId: "other-owner",
+      externalRefId: "task-other",
+      requestId: "request-other",
+    });
+    kernel.persistArtifact({
+      attemptId: otherRun.attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "omi-artifact://other-owner-result",
+    });
+
+    const context: AgentControlToolContext = {
+      kernel,
+      getOwnerId: () => "owner-from-context",
+    };
+
+    const inspected = parseToolResult(
+      await handleAgentControlToolCall(context, "get_agent_run", {
+        runId: otherRun.run.runId,
+      }),
+    );
+    expect(inspected).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(inspected.error.message).toContain("not visible to the active owner");
+
+    const cancelled = parseToolResult(
+      await handleAgentControlToolCall(context, "cancel_agent_run", {
+        runId: otherRun.run.runId,
+      }),
+    );
+    expect(cancelled).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(cancelled.error.message).toContain("not visible to the active owner");
+
+    const artifacts = parseToolResult(
+      await handleAgentControlToolCall(context, "inspect_agent_artifacts", {
+        attemptId: otherRun.attempt.attemptId,
+      }),
+    );
+    expect(artifacts).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(artifacts.error.message).toContain("not visible to the active owner");
+
+    const ownInspected = parseToolResult(
+      await handleAgentControlToolCall(context, "get_agent_run", {
+        runId: ownerRun.run.runId,
+      }),
+    );
+    expect(ownInspected.ok).toBe(true);
+    expect(ownInspected.run.runId).toBe(ownerRun.run.runId);
+    store.close();
+  });
+
   it("returns canonical artifact references without reading artifact contents", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = await kernel.executeRun(baseRunInput);
@@ -146,6 +211,7 @@ describe("agent control tools", () => {
     const inspected = parseToolResult(
       await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
         runId: result.run.runId,
+        ownerId: "owner",
       }),
     );
     expect(inspected.artifacts).toEqual([
@@ -199,6 +265,7 @@ describe("agent control tools", () => {
     const runFiltered = parseToolResult(
       await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
         runId: first.run.runId,
+        ownerId: "owner",
         role: "result",
       }),
     );
@@ -208,6 +275,7 @@ describe("agent control tools", () => {
       await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
         sessionId: first.session.sessionId,
         attemptId: first.attempt.attemptId,
+        ownerId: "owner",
         role: "log",
       }),
     );
@@ -234,6 +302,7 @@ describe("agent control tools", () => {
     const inspected = parseToolResult(
       await handleAgentControlToolCall({ kernel }, "inspect_agent_artifacts", {
         attemptId: result.attempt.attemptId,
+        ownerId: "owner",
       }),
     );
 
@@ -526,9 +595,13 @@ describe("agent control tools", () => {
     expect(row.parent_run_id).toBe(parent.run.runId);
     expect(row.child_run_id).toBe(delegated.childRun.runId);
 
-    const parentInspect = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: parent.run.runId }));
+    const parentInspect = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: parent.run.runId, ownerId: "owner" }),
+    );
     expect(parentInspect.parentDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
-    const childInspect = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: delegated.childRun.runId }));
+    const childInspect = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: delegated.childRun.runId, ownerId: "owner" }),
+    );
     expect(childInspect.childDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
     store.close();
   });
@@ -555,7 +628,9 @@ describe("agent control tools", () => {
     expect(spawned.childRun.status).toBe("queued");
     await waitUntil(() => adapter.executed.length === 2);
 
-    const running = parseToolResult(await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: spawned.childRun.runId }));
+    const running = parseToolResult(
+      await handleAgentControlToolCall({ kernel }, "get_agent_run", { runId: spawned.childRun.runId, ownerId: "owner" }),
+    );
     expect(["starting", "running"]).toContain(running.run.status);
     expect(running.childDelegations[0].delegationId).toBe(spawned.delegation.delegationId);
 
@@ -702,14 +777,14 @@ describe("agent control tools", () => {
     const listed = parseToolResult((await sendToolUse(sockPath, "list_agent_sessions", { ownerId: "owner" })).result);
     expect(listed.sessions[0].activeRun.runId).toBe(runId);
 
-    const inspected = parseToolResult((await sendToolUse(sockPath, "get_agent_run", { runId })).result);
+    const inspected = parseToolResult((await sendToolUse(sockPath, "get_agent_run", { runId, ownerId: "owner" })).result);
     expect(inspected.run.status).toBe("running");
     expect(inspected.attempts[0].attemptId).toBe(attemptId);
 
-    const artifacts = parseToolResult((await sendToolUse(sockPath, "inspect_agent_artifacts", { runId })).result);
+    const artifacts = parseToolResult((await sendToolUse(sockPath, "inspect_agent_artifacts", { runId, ownerId: "owner" })).result);
     expect(artifacts.artifacts[0]).toMatchObject({ artifactId: "art_relay", uri: "omi-artifact://art_relay" });
 
-    const cancelled = parseToolResult((await sendToolUse(sockPath, "cancel_agent_run", { runId })).result);
+    const cancelled = parseToolResult((await sendToolUse(sockPath, "cancel_agent_run", { runId, ownerId: "owner" })).result);
     expect(cancelled.cancellation).toMatchObject({
       accepted: true,
       dispatchAttempted: true,

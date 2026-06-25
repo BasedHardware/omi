@@ -18,12 +18,14 @@ const listAgentSessionsSchema = z.object({
 
 const getAgentRunSchema = z.object({
   runId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
   includeEvents: z.boolean().default(true),
   eventLimit: z.coerce.number().int().positive().max(500).default(100),
 });
 
 const cancelAgentRunSchema = z.object({
   runId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
 });
 
 const inspectAgentArtifactsSchema = z
@@ -31,6 +33,7 @@ const inspectAgentArtifactsSchema = z
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
+    ownerId: z.string().min(1).optional(),
     role: artifactRoleSchema.optional(),
     limit: z.coerce.number().int().positive().max(200).default(50),
   })
@@ -141,13 +144,17 @@ export async function handleAgentControlToolCall(
       }
       case "get_agent_run": {
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
-        const details = context.kernel.getRun(parsed);
+        const details = context.kernel.getRun({
+          ...parsed,
+          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+        });
         return stringifyToolResult(serializeRunDetails(details));
       }
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);
-        const cancellation = await context.kernel.cancelRun(parsed.runId);
-        const details = context.kernel.getRun({ runId: parsed.runId, includeEvents: true, eventLimit: 100 });
+        const ownerId = parsed.ownerId ?? controlToolOwnerId(context);
+        const cancellation = await context.kernel.cancelRun(parsed.runId, { ownerId });
+        const details = context.kernel.getRun({ runId: parsed.runId, ownerId, includeEvents: true, eventLimit: 100 });
         return stringifyToolResult({
           cancellation,
           run: serializeRun(details.run),
@@ -156,7 +163,10 @@ export async function handleAgentControlToolCall(
       }
       case "inspect_agent_artifacts": {
         const parsed = agentControlToolSchemas.inspect_agent_artifacts.parse(input);
-        const artifacts = context.kernel.inspectArtifacts(parsed);
+        const artifacts = context.kernel.inspectArtifacts({
+          ...parsed,
+          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+        });
         return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
       }
       case "send_agent_message": {

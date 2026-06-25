@@ -50,8 +50,14 @@ function pinnedAdapter(): RuntimeAdapter {
 }
 
 describe("AdapterWorkerPool pinned workers", () => {
-  it("lets an idle pinned worker open a new binding when capacity is one", async () => {
+  it("lets an unpinned idle worker open a first binding when capacity is one", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+
+    await expect(
+      pool.runExclusiveQueued(undefined, "attempt-open-binding-1", async (worker) => {
+        expect(worker.workerId).toBe("worker-1");
+      }),
+    ).resolves.toBeUndefined();
 
     await pool.runExclusiveQueued(
       {
@@ -67,15 +73,9 @@ describe("AdapterWorkerPool pinned workers", () => {
         expect(worker.workerId).toBe("worker-1");
       },
     );
-
-    await expect(
-      pool.runExclusiveQueued(undefined, "attempt-open-binding-2", async (worker) => {
-        expect(worker.workerId).toBe("worker-1");
-      }),
-    ).resolves.toBeUndefined();
   });
 
-  it("repins an idle worker for a later binding without creating a second worker", async () => {
+  it("does not repin an idle worker to a different live binding", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
 
     await pool.runExclusiveQueued(
@@ -91,22 +91,46 @@ describe("AdapterWorkerPool pinned workers", () => {
       async () => {},
     );
 
-    await pool.runExclusiveQueued(
-      {
-        bindingId: "binding-2",
-        sessionId: "session-2",
-        adapterId: "pi-mono",
-        adapterNativeSessionId: "native-2",
-        resumeFidelity: "none",
-        cwd: "/tmp",
-      },
-      "attempt-2",
-      async (worker) => {
-        expect(worker.workerId).toBe("worker-1");
-      },
-    );
-
+    expect(pool.acquire({
+      bindingId: "binding-2",
+      sessionId: "session-2",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-2",
+      resumeFidelity: "none",
+      cwd: "/tmp",
+    })).toBeNull();
     expect(pool.size).toBe(1);
+  });
+
+  it("keeps a first-binding creation lease pinned before the execution lease", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 2);
+    const createdBinding = {
+      bindingId: "binding-1",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+    const otherBinding = {
+      bindingId: "binding-2",
+      sessionId: "session-2",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-2",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+
+    await pool.runExclusiveQueued(undefined, "attempt-1:binding", async (worker) => {
+      expect(worker.workerId).toBe("worker-1");
+      worker.pinBinding(createdBinding);
+    });
+
+    const executionWorker = pool.acquire(createdBinding);
+    expect(executionWorker?.workerId).toBe("worker-1");
+    const otherWorker = pool.acquire(otherBinding);
+    expect(otherWorker?.workerId).toBe("worker-2");
+    expect(pool.size).toBe(2);
   });
 
   it("prefers the idle worker already pinned to a requested binding", async () => {

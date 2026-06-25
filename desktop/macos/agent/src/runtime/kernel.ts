@@ -101,6 +101,7 @@ export interface KernelSessionSummary {
 
 export interface GetRunInput {
   runId: string;
+  ownerId?: string;
   includeEvents?: boolean;
   eventLimit?: number;
 }
@@ -120,6 +121,7 @@ export interface InspectArtifactsInput {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  ownerId?: string;
   role?: ArtifactRole;
   limit?: number;
 }
@@ -395,15 +397,19 @@ export class AgentRuntimeKernel {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
-            this.resolveBindingForAttempt({
+          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
+            const resolved = await this.resolveBindingForAttempt({
               input,
               session: accepted.session,
               adapter: worker.adapter,
               attempt,
               adapterId,
-            })
-          );
+            });
+            if (worker.adapter.capabilities.requiresPinnedWorker) {
+              worker.pinBinding(resolved.handle);
+            }
+            return resolved;
+          });
         });
         binding = resolved.binding;
         handle = resolved.handle;
@@ -497,9 +503,12 @@ export class AgentRuntimeKernel {
     };
   }
 
-  async cancelRun(runId: string): Promise<CancelRunResult> {
+  async cancelRun(runId: string, input: { ownerId?: string } = {}): Promise<CancelRunResult> {
     const active = this.activeExecutions.get(runId);
     const run = this.readRun(runId);
+    if (input.ownerId) {
+      this.assertRunOwner(run, input.ownerId);
+    }
     if (TERMINAL_STATUSES.includes(run.status)) {
       return {
         accepted: false,
@@ -643,6 +652,9 @@ export class AgentRuntimeKernel {
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);
+    if (input.ownerId) {
+      this.assertSessionOwner(session, input.ownerId);
+    }
     return {
       session,
       run,
@@ -656,6 +668,9 @@ export class AgentRuntimeKernel {
   }
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    if (input.ownerId) {
+      this.assertArtifactSelectorOwner(input, input.ownerId);
+    }
     return this.readArtifacts(input);
   }
 
@@ -1562,6 +1577,32 @@ export class AgentRuntimeKernel {
 
   private readRun(runId: string): AgentRun {
     return runFromRow(this.store.getRow("SELECT * FROM runs WHERE run_id = ?", [runId]));
+  }
+
+  private assertSessionOwner(session: AgentSession, ownerId: string): void {
+    if (session.ownerId !== ownerId) {
+      throw new Error("Agent session is not visible to the active owner");
+    }
+  }
+
+  private assertRunOwner(run: AgentRun, ownerId: string): void {
+    this.assertSessionOwner(this.readSession(run.sessionId), ownerId);
+  }
+
+  private assertAttemptOwner(attempt: RunAttempt, ownerId: string): void {
+    this.assertRunOwner(this.readRun(attempt.runId), ownerId);
+  }
+
+  private assertArtifactSelectorOwner(input: InspectArtifactsInput, ownerId: string): void {
+    if (input.sessionId) {
+      this.assertSessionOwner(this.readSession(input.sessionId), ownerId);
+    }
+    if (input.runId) {
+      this.assertRunOwner(this.readRun(input.runId), ownerId);
+    }
+    if (input.attemptId) {
+      this.assertAttemptOwner(this.readAttempt(input.attemptId), ownerId);
+    }
   }
 
   private readLatestRunForSession(sessionId: string): AgentRun | undefined {
