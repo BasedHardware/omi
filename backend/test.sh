@@ -94,10 +94,17 @@ pytest tests/unit/test_firestore_rules_iam_proof.py -v
 pytest tests/unit/test_pinecone_repair_validation_readiness.py -v
 pytest tests/unit/test_shared_ns2_legacy_isolation_readiness.py -v
 pytest tests/unit/test_vector_search_provider_readiness.py -v
-# Consolidated memory rollout readiness gates (replaces per-script p1_3/t2x shape tests).
-pytest tests/unit/readiness/test_readiness_gates_schema.py -v
-pytest tests/unit/readiness/test_readiness_gates_invariants.py -v
-pytest tests/unit/readiness/test_readiness_doc_linkage.py -v
+# /v3 router behavioral probes (replaces readiness gate framework).
+pytest tests/unit/test_v3_fastapi_route_contract.py -v
+pytest tests/unit/test_v3_get_dependency_auth.py -v
+pytest tests/unit/test_v3_real_router_dependency_map.py -v
+pytest tests/unit/test_v3_real_router_get_testclient.py -v
+pytest tests/unit/test_v3_real_router_fail_closed_matrix.py -v
+pytest tests/unit/test_v3_route_signature_integration.py -v
+pytest tests/unit/test_v3_canary_approval_production_read.py -v
+pytest tests/unit/test_v3_cursor_secret_production_read.py -v
+pytest tests/unit/test_v3_projection_write_convergence_read.py -v
+pytest tests/unit/test_v3_runtime_config_source_read.py -v
 pytest tests/unit/test_v3_compatibility.py -v
 pytest tests/unit/test_v3_cursor.py -v
 pytest tests/unit/test_v3_projection_readiness.py -v
