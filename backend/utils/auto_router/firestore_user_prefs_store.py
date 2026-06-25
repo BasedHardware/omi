@@ -36,7 +36,7 @@ from database.firestore_cache import (
     get_or_fetch,
     invalidate,
 )
-from database._client import db as default_db
+from database._client import db as default_db_client
 
 from utils.auto_router.user_prefs import UserPrefs
 from utils.auto_router.user_prefs_store_protocol import StoredPrefs
@@ -75,7 +75,7 @@ class FirestoreUserPrefsStore:
         cache: Optional[CachePolicy] = None,
         clock: Any = None,
     ) -> None:
-        self._db = db_client if db_client is not None else default_db()
+        self._db = db_client if db_client is not None else default_db_client
         self._cache = cache if cache is not None else _AUTO_ROUTER_PREFS_CACHE
         self._clock = clock if clock is not None else time.time
 

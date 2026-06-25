@@ -285,3 +285,36 @@ singleton is cached). To switch at runtime:
 
 For tests, `reset_user_prefs_store_for_testing()` drops the singleton
 so the next `get_user_prefs_store()` call picks up the current env var.
+
+## Benchmark data sources (v5)
+
+The committed `benchmarks.example.json` is the source of truth for all 5 task types:
+
+| Task | Candidates | Notes |
+|---|---|---|
+| `ptt_response` | 4 | Real-time voice. Latency-critical. (Gemini Flash, GPT-Realtime, Claude Sonnet, Claude Haiku) |
+| `screenshot_understanding` | 3 | Vision-language. Quality-critical. (Claude Sonnet, GPT-4o, Gemini Pro) |
+| `screenshot_embedding` | 5 | Embedding pipeline. Cost-critical. (3 OpenAI + Voyage + Cohere) |
+| `general_assistant` | 4 | General chat. Balanced. (Claude Sonnet, Claude Haiku, GPT-4o, Gemini Pro) |
+| `transcription` | 4 | Speech-to-text. Latency-critical. (Parakeet, Deepgram, Whisper, AssemblyAI) |
+
+### Score sources (curated, not measured)
+
+**STT (transcription):**
+- Parakeet STT v2 (NVIDIA): high quality + low latency, popular for real-time
+- Deepgram Nova-2: strong accuracy + reasonable cost
+- Whisper Large v3 (OpenAI): open-source baseline, lower latency
+- **AssemblyAI Universal (v5):** WER ~8.4% on LibriSpeech test-clean, ~800ms median latency, $0.00027/sec (public pricing)
+
+**Embeddings (screenshot_embedding):**
+- **OpenAI text-embedding-3-small (v5 updated):** MTEB avg 62.3%, $0.02/1M tokens, fast
+- **OpenAI text-embedding-3-large (v5 new):** MTEB avg 64.6%, $0.13/1M tokens, slower
+- **OpenAI text-embedding-ada-002 (v5 new):** MTEB avg 61.0%, $0.10/1M tokens, legacy
+- Voyage Large 2: MTEB-leading quality, mid-tier cost
+- Cohere Embed English v3: balanced quality + cost
+
+> **Note:** These scores are EDUCATED ESTIMATES curated from public benchmarks
+> (MTEB leaderboard for embeddings, LibriSpeech for STT, public pricing pages).
+> They are sufficient for development and demo. For production, replace with
+> your own measurements (latency from load tests, quality from your eval set,
+> cost from your actual usage).

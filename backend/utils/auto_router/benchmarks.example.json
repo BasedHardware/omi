@@ -50,7 +50,9 @@
       {"id": "gemini-1-5-pro", "provider": "google", "quality_score": 0.88, "latency_score": 0.75, "cost_score": 0.55}
     ],
     "screenshot_embedding": [
-      {"id": "text-embedding-3-small", "provider": "openai", "quality_score": 0.75, "latency_score": 0.85, "cost_score": 0.95},
+      {"id": "text-embedding-3-small", "provider": "openai", "quality_score": 0.82, "latency_score": 0.85, "cost_score": 0.95},
+      {"id": "text-embedding-3-large", "provider": "openai", "quality_score": 0.88, "latency_score": 0.75, "cost_score": 0.70},
+      {"id": "text-embedding-ada-002", "provider": "openai", "quality_score": 0.72, "latency_score": 0.85, "cost_score": 0.95},
       {"id": "voyage-large-2", "provider": "voyage", "quality_score": 0.90, "latency_score": 0.60, "cost_score": 0.70},
       {"id": "cohere-embed-english-v3", "provider": "cohere", "quality_score": 0.85, "latency_score": 0.75, "cost_score": 0.85}
     ],
@@ -63,7 +65,8 @@
     "transcription": [
       {"id": "parakeet-stt-v2", "provider": "nvidia", "quality_score": 0.85, "latency_score": 0.95, "cost_score": 0.95},
       {"id": "deepgram-nova-2", "provider": "deepgram", "quality_score": 0.90, "latency_score": 0.85, "cost_score": 0.75},
-      {"id": "whisper-large-v3", "provider": "openai", "quality_score": 0.88, "latency_score": 0.65, "cost_score": 0.70}
+      {"id": "whisper-large-v3", "provider": "openai", "quality_score": 0.88, "latency_score": 0.65, "cost_score": 0.70},
+      {"id": "assemblyai-universal", "provider": "assemblyai", "quality_score": 0.91, "latency_score": 0.80, "cost_score": 0.65}
     ]
   }
 }

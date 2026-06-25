@@ -331,3 +331,62 @@ class TestEdgeCases:
         path.write_text(json.dumps({"other_key": {}}))
         with pytest.raises(ModelValidationError, match="must contain a top-level 'models' key"):
             ModelRegistry.from_json(path)
+
+
+# ---------------------------------------------------------------------------
+# AC: v5 benchmarks expansion — new STT + OpenAI embedding models
+# ---------------------------------------------------------------------------
+
+
+class TestV5BenchmarksExpansion:
+    """v5 added 1 STT model (assemblyai-universal) and updated/expanded
+    OpenAI embedding models (text-embedding-3-small updated to MTEB-based
+    scores; text-embedding-3-large + text-embedding-ada-002 added)."""
+
+    @pytest.fixture
+    def example(self) -> Path:
+        path = Path(__file__).parent.parent.parent / "utils" / "auto_router" / "benchmarks.example.json"
+        if not path.exists():
+            pytest.skip("benchmarks.example.json not present")
+        return path
+
+    def test_assemblyai_universal_present_in_transcription(self, example):
+        """v5 added assemblyai-universal as a STT option (WER ~8.4%)."""
+        reg = ModelRegistry.from_json(example)
+        ids = [m.id for m in reg.candidates_for("transcription")]
+        assert "assemblyai-universal" in ids
+        # Verify it has valid scores (the spec's MTEB-based defaults)
+        aai = next(m for m in reg.candidates_for("transcription") if m.id == "assemblyai-universal")
+        assert 0.0 <= aai.quality_score <= 1.0
+        assert 0.0 <= aai.latency_score <= 1.0
+        assert 0.0 <= aai.cost_score <= 1.0
+        # Quality should be the highest in the set (it's the most accurate)
+        assert aai.quality_score >= 0.85, f"AssemblyAI quality should be high: {aai.quality_score}"
+
+    def test_transcription_has_4_candidates(self, example):
+        """After v5: parakeet + deepgram + whisper + assemblyai = 4 candidates."""
+        reg = ModelRegistry.from_json(example)
+        assert len(reg.candidates_for("transcription")) == 4
+
+    def test_openai_embedding_models_present(self, example):
+        """v5 has all 3 OpenAI embedding models."""
+        reg = ModelRegistry.from_json(example)
+        ids = [m.id for m in reg.candidates_for("screenshot_embedding")]
+        assert "text-embedding-3-small" in ids
+        assert "text-embedding-3-large" in ids
+        assert "text-embedding-ada-002" in ids
+
+    def test_text_embedding_3_large_has_highest_quality_among_openai(self, example):
+        """text-embedding-3-large should have higher quality than the other two."""
+        reg = ModelRegistry.from_json(example)
+        models = {m.id: m for m in reg.candidates_for("screenshot_embedding")}
+        large = models["text-embedding-3-large"]
+        small = models["text-embedding-3-small"]
+        ada = models["text-embedding-ada-002"]
+        assert large.quality_score > small.quality_score
+        assert large.quality_score > ada.quality_score
+
+    def test_screenshot_embedding_has_5_candidates(self, example):
+        """After v5: 3 OpenAI + voyage + cohere = 5 candidates."""
+        reg = ModelRegistry.from_json(example)
+        assert len(reg.candidates_for("screenshot_embedding")) == 5
