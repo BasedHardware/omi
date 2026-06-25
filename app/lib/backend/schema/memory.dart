@@ -55,6 +55,8 @@ class Memory {
   bool isLocked;
   final MemoryLayer? layer;
   final bool layerIsExplicit;
+  final String? primaryCaptureDevice;
+  final List<String> captureDeviceIds;
 
   Memory({
     required this.id,
@@ -73,6 +75,8 @@ class Memory {
     this.isLocked = false,
     this.layer,
     this.layerIsExplicit = false,
+    this.primaryCaptureDevice,
+    this.captureDeviceIds = const [],
   });
 
   factory Memory.fromJson(Map<String, dynamic> json) {
@@ -101,6 +105,8 @@ class Memory {
       isLocked: json['is_locked'] ?? false,
       layer: resolvedLayer,
       layerIsExplicit: layerIsExplicit,
+      primaryCaptureDevice: json['primary_capture_device'] as String?,
+      captureDeviceIds: (json['capture_device_ids'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
     );
   }
 
