@@ -632,8 +632,12 @@ function withControlRunCorrelation(
   if (name !== "send_agent_message" && name !== "delegate_agent") {
     return { input };
   }
-  const requestId = randomUUID();
-  const clientId = fallbackClientId ?? "omi-control-tools";
+  const inputRequestId =
+    typeof input.requestId === "string" && input.requestId.trim() ? input.requestId.trim() : undefined;
+  const inputClientId =
+    typeof input.clientId === "string" && input.clientId.trim() ? input.clientId.trim() : undefined;
+  const requestId = inputRequestId ?? randomUUID();
+  const clientId = inputClientId ?? fallbackClientId ?? "omi-control-tools";
   return {
     input: {
       ...input,
