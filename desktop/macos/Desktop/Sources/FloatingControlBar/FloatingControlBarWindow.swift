@@ -33,6 +33,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchChromeHeight: CGFloat = 34
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
+    static let notchInputPanelVerticalPadding: CGFloat = 37
+    static let notchInputPanelMinimumContentHeight: CGFloat = 40
+    static let notchInputPanelHeight: CGFloat =
+        notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
     static let notchCompactSize = NSSize(
@@ -138,7 +142,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
     private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
-    private var inputPanelHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight + 62 : 120 }
+    private var inputPanelHeight: CGFloat { notchModeEnabled ? Self.notchInputPanelHeight : 120 }
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -385,7 +389,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     ) -> NSSize {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
             let hasBakedInGlow = usesNotchIsland && (frameIncludesVoiceGlow ?? previousVoiceResponseGlowActive)
             // Only subtract a glow inset that is already baked into the current
             // frame. On the first voice-response frame the glow does not exist
@@ -419,7 +423,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
-            let panelHeight = usesNotchIsland ? Self.notchChromeHeight + 62 : 120
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize

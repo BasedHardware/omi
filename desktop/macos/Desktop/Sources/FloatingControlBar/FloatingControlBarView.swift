@@ -702,11 +702,11 @@ struct FloatingControlBarView: View {
             onEscape: onEscape,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-            let totalHeight = state.usesNotchIsland
-                ? notchChromeHeight + height + 22
-                : 50 + height + 24
-            state.inputViewHeight = totalHeight
-        }
+                let totalHeight = state.usesNotchIsland
+                    ? notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+                    : 50 + height + 24
+                state.inputViewHeight = totalHeight
+            }
         )
         .transition(
             .asymmetric(
