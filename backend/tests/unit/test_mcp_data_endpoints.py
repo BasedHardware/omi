@@ -184,6 +184,24 @@ class TestMcpKeys:
 
         mock_db.create_mcp_key.assert_called_once_with(UID, 'Agent', ['people.read'])
 
+    @patch('routers.mcp.mcp_api_key_db')
+    def test_create_key_preserves_explicit_empty_scopes(self, mock_db):
+        api_key_data = MagicMock()
+        api_key_data.model_dump.return_value = {
+            'id': 'key-1',
+            'name': 'Agent',
+            'key_prefix': 'omi_mcp_test',
+            'created_at': NOW,
+            'last_used_at': None,
+            'scopes': [],
+        }
+        mock_db.create_mcp_key.return_value = ('omi_mcp_secret', api_key_data)
+
+        result = rest.create_key(rest.McpApiKeyCreate(name='Agent', scopes=[]), uid=UID)
+
+        mock_db.create_mcp_key.assert_called_once_with(UID, 'Agent', [])
+        assert result.scopes == []
+
 
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):
     return {
@@ -356,6 +374,15 @@ class TestPeople:
                 sse.execute_tool(UID, tool_name, arguments, granted_scopes=['people.read'])
             assert exc_info.value.code == -32003
         mock_db.get_person.assert_not_called()
+
+    @patch('routers.mcp_sse.chat_db')
+    def test_read_tools_require_their_advertised_scope(self, mock_db):
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_chat_messages', {'limit': 1}, granted_scopes=['memories.read'])
+
+        assert exc_info.value.code == -32003
+        assert 'chat.read' in exc_info.value.message
+        mock_db.get_messages.assert_not_called()
 
 
 class TestScreenActivity:

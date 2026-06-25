@@ -38,6 +38,18 @@ from utils.mcp_memories import (
 )
 import database.mcp_api_key as mcp_api_key_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
+
+MCP_DEFAULT_API_KEY_SCOPES = [
+    "memories.read",
+    "memories.write",
+    "conversations.read",
+    "action_items.read",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
+    "people.write",
+]
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,17 +67,9 @@ def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id
     if not key_data.name or len(key_data.name.strip()) == 0:
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
-    scopes = key_data.scopes or [
-        "memories.read",
-        "memories.write",
-        "conversations.read",
-        "action_items.read",
-        "goals.read",
-        "chat.read",
-        "screen_activity.read",
-        "people.read",
-        "people.write",
-    ]
+    scopes = MCP_DEFAULT_API_KEY_SCOPES if key_data.scopes is None else key_data.scopes
+    if invalid_scopes := sorted(set(scopes) - set(MCP_DEFAULT_API_KEY_SCOPES)):
+        raise HTTPException(status_code=422, detail={"invalid_scopes": invalid_scopes})
     raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip(), scopes)
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 

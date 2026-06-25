@@ -497,6 +497,13 @@ MCP_TOOLS = [
     },
 ]
 
+TOOL_REQUIRED_SCOPES = {
+    tool["name"]: sorted(
+        {scope for security_scheme in tool.get("securitySchemes", []) for scope in security_scheme.get("scopes", [])}
+    )
+    for tool in MCP_TOOLS
+}
+
 
 @router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
 def oauth_protected_resource_metadata():
@@ -563,8 +570,11 @@ def _validated_person_name(arguments: dict) -> str:
 
 def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: Optional[List[str]] = None) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
-    if tool_name in PEOPLE_WRITE_TOOLS and PEOPLE_WRITE_SCOPE not in (granted_scopes or []):
-        raise ToolExecutionError(f"Insufficient permissions. Required scope: {PEOPLE_WRITE_SCOPE}", code=-32003)
+    granted_scope_set = set(MCP_SCOPES_SUPPORTED if granted_scopes is None else granted_scopes)
+    required_scopes = TOOL_REQUIRED_SCOPES.get(tool_name, [])
+    missing_scopes = [scope for scope in required_scopes if scope not in granted_scope_set]
+    if missing_scopes:
+        raise ToolExecutionError(f"Insufficient permissions. Required scope: {', '.join(missing_scopes)}", code=-32003)
 
     if tool_name == "get_user_profile":
         profile = users_db.get_ai_user_profile(user_id)
