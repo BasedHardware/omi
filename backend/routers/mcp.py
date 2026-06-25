@@ -82,6 +82,14 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        memory.category = identify_category_for_memory(memory.content)
+        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        MemoryService(db_client=db).write(uid, memory_db.model_dump())
+        postprocess_executor.submit(update_personas_async, uid)
+        return memory_db
+
     memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
     memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         memory_rollout,
@@ -145,6 +153,11 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        _validate_mcp_memory(uid, memory_id)
+        MemoryService(db_client=db).update_content(uid, memory_id, value)
+        return {"status": "ok"}
+
     memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
     memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
         memory_rollout,
