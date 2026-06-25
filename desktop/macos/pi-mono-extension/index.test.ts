@@ -10,7 +10,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, writeFile, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile, unlink } from "node:fs/promises";
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
@@ -1199,6 +1199,20 @@ test("callSwiftTool: returns error when not connected", async () => {
   __resetOmiPipeForTest();
   const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
   assert.equal(result, "Error: not connected to Omi bridge");
+});
+
+test("callSwiftTool: rechecks abort after async correlation before writing to Swift", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const callSwiftToolBody = source.slice(
+    source.indexOf("async function callSwiftTool"),
+    source.indexOf("async function omiRelayCorrelation"),
+  );
+  assert.match(callSwiftToolBody, /const correlation = await omiRelayCorrelation\(\);\n\s+if \(signal\?\.aborted\)/);
+  assert.ok(
+    callSwiftToolBody.indexOf("if (signal?.aborted)", callSwiftToolBody.indexOf("await omiRelayCorrelation()")) <
+      callSwiftToolBody.indexOf("connection.write"),
+    "abort must be rechecked before emitting tool_use to Swift",
+  );
 });
 
 test("callSwiftTool: receives result via pipe", async () => {
