@@ -212,7 +212,8 @@ class TestMemoryLifecycle:
 
         assert len(db.evidence) == 1
         evidence = db.evidence[0]
-        assert evidence.source_id is None
+        assert evidence.source_id == f'external:{db.id}'
+        assert evidence.independence_group == f'external:{db.id}'
         assert evidence.source_type == 'developer_api'
         assert evidence.source_signal == 'manual'
         assert evidence.capture_confidence == 0.95
