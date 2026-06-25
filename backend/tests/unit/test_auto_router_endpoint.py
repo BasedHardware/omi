@@ -573,23 +573,27 @@ class TestGetPrefsEndpoint:
         assert r.status_code == 200
         body = r.json()
         assert body["uid"] == "test-uid"
-        assert body["prefs"] == {}
+        # v6: nested format with both overrides and model_overrides.
+        assert body["prefs"] == {"overrides": {}, "model_overrides": {}}
         assert body["updated_at"] is None
 
     def test_authenticated_returns_stored_prefs(self, client):
         from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
 
         reset_user_prefs_store_for_endpoint_testing()
-        # PUT first
+        # PUT first (legacy wire format accepted via from_dict backward compat)
         client.put(
             "/v1/auto-router/prefs",
             json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
         )
-        # Then GET
+        # Then GET — v6 returns nested format
         r = client.get("/v1/auto-router/prefs")
         assert r.status_code == 200
         body = r.json()
-        assert body["prefs"] == {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}
+        assert body["prefs"] == {
+            "overrides": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}},
+            "model_overrides": {},
+        }
         assert body["updated_at"] is not None
 
 
@@ -611,7 +615,11 @@ class TestPutPrefsEndpoint:
         )
         assert r.status_code == 200
         body = r.json()
-        assert body["prefs"] == {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}
+        # v6: nested format returned
+        assert body["prefs"] == {
+            "overrides": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}},
+            "model_overrides": {},
+        }
         assert body["updated_at"] is not None
 
     def test_empty_prefs_clears_overrides(self, client):
@@ -626,7 +634,7 @@ class TestPutPrefsEndpoint:
         # Then clear
         r = client.put("/v1/auto-router/prefs", json={"prefs": {}})
         assert r.status_code == 200
-        assert r.json()["prefs"] == {}
+        assert r.json()["prefs"] == {"overrides": {}, "model_overrides": {}}
 
     def test_invalid_weights_returns_400(self, client):
         from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
@@ -689,8 +697,10 @@ class TestPutPrefsEndpoint:
         get_resp = client.get("/v1/auto-router/prefs")
         assert get_resp.status_code == 200
         body = get_resp.json()
-        assert body["prefs"]["ptt_response"] == {"quality": 0.1, "latency": 0.8, "cost": 0.1}
-        assert body["prefs"]["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}
+        # v6: nested format — overrides at body['prefs']['overrides']
+        assert body["prefs"]["overrides"]["ptt_response"] == {"quality": 0.1, "latency": 0.8, "cost": 0.1}
+        assert body["prefs"]["overrides"]["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}
+        assert body["prefs"]["model_overrides"] == {}
 
 
 # ---------------------------------------------------------------------------
@@ -798,9 +808,9 @@ class TestPickWeightsQueryParam:
 
         weights_str = urllib.parse.quote('{"quality": 0.0, "latency": 0.0, "cost": 1.0}')
         client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
-        # Stored prefs unchanged
+        # Stored prefs unchanged (v6: nested format)
         r = client.get("/v1/auto-router/prefs")
-        assert r.json()["prefs"]["ptt_response"] == {"quality": 0.5, "latency": 0.3, "cost": 0.2}
+        assert r.json()["prefs"]["overrides"]["ptt_response"] == {"quality": 0.5, "latency": 0.3, "cost": 0.2}
 
     def test_invalid_weights_json_returns_400(self, client):
         import urllib.parse

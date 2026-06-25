@@ -120,11 +120,15 @@ class TestUserPrefsConstruction:
 
 class TestUserPrefsSerialization:
     def test_to_dict_empty(self):
-        assert UserPrefs.empty().to_dict() == {}
+        # v6: nested format with both overrides and model_overrides keys.
+        assert UserPrefs.empty().to_dict() == {"overrides": {}, "model_overrides": {}}
 
     def test_to_dict_single(self):
         p = UserPrefs(overrides={"ptt_response": TaskWeights(0.2, 0.7, 0.1)})
-        assert p.to_dict() == {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}
+        assert p.to_dict() == {
+            "overrides": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}},
+            "model_overrides": {},
+        }
 
     def test_to_dict_multiple(self):
         p = UserPrefs(
@@ -134,16 +138,53 @@ class TestUserPrefsSerialization:
             }
         )
         out = p.to_dict()
-        assert out["ptt_response"] == {"quality": 0.2, "latency": 0.7, "cost": 0.1}
-        assert out["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}
+        assert out["overrides"]["ptt_response"] == {"quality": 0.2, "latency": 0.7, "cost": 0.1}
+        assert out["overrides"]["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}
+        assert out["model_overrides"] == {}
 
     def test_from_dict_roundtrip(self):
+        # Legacy format input (top-level IS the overrides dict, v3 wire format).
+        # Roundtrip via the new nested format.
         original = {
             "ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1},
             "screenshot_understanding": {"quality": 0.9, "latency": 0.05, "cost": 0.05},
         }
         p = UserPrefs.from_dict(original)
-        assert p.to_dict() == original
+        assert p.to_dict() == {
+            "overrides": original,
+            "model_overrides": {},
+        }
+
+    def test_from_dict_accepts_new_nested_format(self):
+        # v6 wire format: {"overrides": {...}, "model_overrides": {...}}
+        data = {
+            "overrides": {"ptt_response": {"quality": 0.4, "latency": 0.5, "cost": 0.1}},
+            "model_overrides": {"ptt_response": "gpt-realtime-2"},
+        }
+        p = UserPrefs.from_dict(data)
+        assert p.overrides["ptt_response"] == TaskWeights(0.4, 0.5, 0.1)
+        assert p.model_overrides == {"ptt_response": "gpt-realtime-2"}
+
+    def test_from_dict_accepts_partial_new_format(self):
+        # Only overrides key — model_overrides defaults to empty.
+        data = {"overrides": {"ptt_response": {"quality": 0.4, "latency": 0.5, "cost": 0.1}}}
+        p = UserPrefs.from_dict(data)
+        assert p.overrides["ptt_response"] == TaskWeights(0.4, 0.5, 0.1)
+        assert p.model_overrides == {}
+
+        # Only model_overrides key — overrides defaults to empty.
+        data = {"model_overrides": {"ptt_response": "whisper"}}
+        p = UserPrefs.from_dict(data)
+        assert p.overrides == {}
+        assert p.model_overrides == {"ptt_response": "whisper"}
+
+    def test_from_dict_rejects_non_dict_overrides_value(self):
+        with pytest.raises(ValueError, match="'overrides' must be a dict"):
+            UserPrefs.from_dict({"overrides": "not a dict"})
+
+    def test_from_dict_rejects_non_dict_model_overrides_value(self):
+        with pytest.raises(ValueError, match="'model_overrides' must be a dict"):
+            UserPrefs.from_dict({"model_overrides": "not a dict"})
 
     def test_from_dict_rejects_invalid_weights(self):
         # Sum not 1.0 — should raise (TaskWeights validation runs on construction)
@@ -278,3 +319,95 @@ class TestUserPrefsBoolBypass:
     def test_from_dict_rejects_nan_weight(self):
         with pytest.raises(ValueError, match=r"finite"):
             UserPrefs.from_dict({"ptt_response": {"quality": float("nan"), "latency": 0.5, "cost": 0.5}})
+
+
+# ---------------------------------------------------------------------------
+# UserPrefs.model_overrides (v6) — per-task model pinning
+# ---------------------------------------------------------------------------
+
+
+class TestModelOverrides:
+    """v6: per-task model pinning lets users lock the auto-router to a
+    specific model for a specific task (instead of trusting the pick)."""
+
+    def test_default_empty(self):
+        # New field defaults to empty (backward-compat with v3/v4 callers).
+        assert UserPrefs().model_overrides == {}
+        assert UserPrefs.empty().model_overrides == {}
+
+    def test_construction_with_model_overrides(self):
+        p = UserPrefs(model_overrides={"ptt_response": "gpt-realtime-2"})
+        assert p.model_overrides == {"ptt_response": "gpt-realtime-2"}
+
+    def test_construction_with_both_overrides_and_model_overrides(self):
+        p = UserPrefs(
+            overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)},
+            model_overrides={"ptt_response": "gpt-realtime-2"},
+        )
+        assert p.overrides["ptt_response"] == TaskWeights(0.4, 0.5, 0.1)
+        assert p.model_overrides == {"ptt_response": "gpt-realtime-2"}
+
+    def test_construction_rejects_empty_task_name(self):
+        with pytest.raises(ValueError, match="model_override key must be a non-empty string"):
+            UserPrefs(model_overrides={"": "whisper"})
+
+    def test_construction_rejects_non_string_task_name(self):
+        with pytest.raises(ValueError, match="model_override key must be a non-empty string"):
+            UserPrefs(model_overrides={123: "whisper"})  # type: ignore[dict-item]
+
+    def test_construction_rejects_empty_model_id(self):
+        with pytest.raises(ValueError, match="model_override for .* must be a non-empty string"):
+            UserPrefs(model_overrides={"ptt_response": ""})
+
+    def test_construction_rejects_non_string_model_id(self):
+        with pytest.raises(ValueError, match="model_override for .* must be a non-empty string"):
+            UserPrefs(model_overrides={"ptt_response": 123})  # type: ignore[dict-item]
+
+    def test_to_dict_includes_model_overrides(self):
+        p = UserPrefs(model_overrides={"ptt_response": "gpt-realtime-2"})
+        d = p.to_dict()
+        assert d["model_overrides"] == {"ptt_response": "gpt-realtime-2"}
+
+    def test_to_dict_empty_model_overrides_serializes_as_empty(self):
+        # Even when empty, model_overrides appears in the dict for forward-compat
+        # (clients that know about model_overrides can rely on the key existing).
+        d = UserPrefs.empty().to_dict()
+        assert "model_overrides" in d
+        assert d["model_overrides"] == {}
+
+    def test_from_dict_parses_model_overrides(self):
+        data = {
+            "overrides": {},
+            "model_overrides": {
+                "ptt_response": "gpt-realtime-2",
+                "transcription": "assemblyai-universal",
+            },
+        }
+        p = UserPrefs.from_dict(data)
+        assert p.model_overrides == {
+            "ptt_response": "gpt-realtime-2",
+            "transcription": "assemblyai-universal",
+        }
+
+    def test_roundtrip_with_both_fields(self):
+        original = UserPrefs(
+            overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)},
+            model_overrides={"ptt_response": "gpt-realtime-2"},
+        )
+        restored = UserPrefs.from_dict(original.to_dict())
+        assert restored == original
+
+    def test_equality_includes_model_overrides(self):
+        # Two UserPrefs with same overrides but different model_overrides are NOT equal.
+        a = UserPrefs(model_overrides={"ptt_response": "gpt-realtime-2"})
+        b = UserPrefs(model_overrides={"ptt_response": "claude-haiku"})
+        assert a != b
+
+    def test_equality_with_empty_model_overrides(self):
+        # A UserPrefs with no model_overrides equals one with empty model_overrides.
+        a = UserPrefs(overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)})
+        b = UserPrefs(
+            overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)},
+            model_overrides={},
+        )
+        assert a == b

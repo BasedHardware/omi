@@ -82,21 +82,31 @@ class TaskWeights:
 
 @dataclass(frozen=True)
 class UserPrefs:
-    """Per-user weight overrides for one or more tasks.
+    """Per-user preferences for one or more tasks.
 
-    Empty `overrides` means "use task defaults for everything" — no
-    behavior change. Adding an entry for a task overrides that task's
-    default weights in the scoring path.
+    Two kinds of overrides per task:
+
+    1. **Weight overrides** (`overrides`): per-task weights (quality/latency/cost)
+       used by the `/pick` endpoint when computing the score. Empty means
+       "use the task's default weights from TaskRegistry".
+
+    2. **Model overrides** (`model_overrides`): explicit model pin per task
+       (added in v6). When set, `/pick` returns this model directly with
+       `attribution: "user_override"` instead of computing a pick. Empty
+       means "let the auto-router choose".
+
+    Both default to empty. Construction is additive — old callers passing
+    only `overrides={...}` continue to work (backward compatible).
 
     Frozen: mutating after construction is not allowed (caller should
     construct a new UserPrefs with updated values).
     """
 
     overrides: Mapping[str, TaskWeights] = field(default_factory=dict)
+    model_overrides: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self):
-        # Validate every entry's weights (TaskWeights.__post_init__ runs
-        # on construction). Also ensure task names are non-empty strings.
+        # Validate weight overrides.
         for task_name, weights in self.overrides.items():
             if not isinstance(task_name, str) or not task_name:
                 raise ValueError(f"UserPrefs override key must be a non-empty string, got {task_name!r}")
@@ -104,11 +114,23 @@ class UserPrefs:
                 raise TypeError(
                     f"UserPrefs override for {task_name!r} must be a TaskWeights, " f"got {type(weights).__name__}"
                 )
+        # Validate model overrides (v6). Each task name must be a non-empty
+        # string; each model ID must be a non-empty string. We don't
+        # validate the model exists in the candidate set here — that's
+        # done at /pick time so users can pin models before they're
+        # registered (forward-compat).
+        for task_name, model_id in self.model_overrides.items():
+            if not isinstance(task_name, str) or not task_name:
+                raise ValueError(f"UserPrefs model_override key must be a non-empty string, got {task_name!r}")
+            if not isinstance(model_id, str) or not model_id:
+                raise ValueError(
+                    f"UserPrefs model_override for {task_name!r} must be a non-empty string, got {model_id!r}"
+                )
 
     @classmethod
     def empty(cls) -> "UserPrefs":
-        """An empty UserPrefs (no overrides — use task defaults)."""
-        return cls(overrides={})
+        """An empty UserPrefs (no overrides — use task defaults + auto-router picks)."""
+        return cls(overrides={}, model_overrides={})
 
     def merged_with(self, defaults: Mapping[str, TaskWeights]) -> Dict[str, TaskWeights]:
         """Return the effective weights for each task: defaults + overrides.
@@ -126,31 +148,72 @@ class UserPrefs:
             merged[task_name] = user_weights
         return merged
 
-    def to_dict(self) -> Dict[str, Dict[str, float]]:
+    def to_dict(self) -> Dict[str, Any]:
         """Serialize to a JSON-friendly nested dict.
 
-        Returns: {task_name: {quality, latency, cost}, ...}
-        Empty overrides serialize as an empty dict.
+        Returns a dict with two keys:
+            - "overrides": {task_name: {quality, latency, cost}, ...}
+            - "model_overrides": {task_name: model_id, ...}  (v6)
+
+        Both serialize as empty dicts when empty. Always includes both
+        keys for forward-compat (clients that only know about "overrides"
+        can ignore the new key; clients that know about model_overrides
+        can use them).
         """
-        return {task_name: weights.as_dict() for task_name, weights in self.overrides.items()}
+        return {
+            "overrides": {task_name: weights.as_dict() for task_name, weights in self.overrides.items()},
+            "model_overrides": dict(self.model_overrides),
+        }
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Dict[str, float]]]) -> "UserPrefs":
+    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "UserPrefs":
         """Parse a JSON-friendly nested dict into a UserPrefs.
 
         Returns an empty UserPrefs if `data` is None or empty.
+
+        Backward-compat: if `data` is a flat dict (legacy v3 format with
+        only weight overrides, no "overrides" / "model_overrides" keys),
+        we treat it as the `overrides` field. If `data` is the new format
+        with both keys, we use them.
+
+        Format detection:
+        - Legacy: `{"ptt_response": {"quality": 0.4, ...}}` (no wrapper key)
+        - New:    `{"overrides": {...}, "model_overrides": {...}}` (wrapped)
         """
         if not data:
             return cls.empty()
-        overrides: Dict[str, TaskWeights] = {}
-        for task_name, weights_dict in data.items():
-            if not isinstance(weights_dict, dict):
+
+        # New format detection: top-level has the wrapper keys.
+        if "overrides" in data or "model_overrides" in data:
+            raw_overrides = data.get("overrides") or {}
+            raw_model_overrides = data.get("model_overrides") or {}
+            if not isinstance(raw_overrides, dict):
+                raise ValueError(f"UserPrefs 'overrides' must be a dict, got {type(raw_overrides).__name__}")
+            if not isinstance(raw_model_overrides, dict):
                 raise ValueError(
-                    f"UserPrefs entry for {task_name!r} must be a dict, " f"got {type(weights_dict).__name__}"
+                    f"UserPrefs 'model_overrides' must be a dict, got {type(raw_model_overrides).__name__}"
                 )
-            overrides[task_name] = TaskWeights(
-                quality=_safe_to_float(weights_dict["quality"], "quality", task_name),
-                latency=_safe_to_float(weights_dict["latency"], "latency", task_name),
-                cost=_safe_to_float(weights_dict["cost"], "cost", task_name),
+            return cls(
+                overrides=_parse_legacy_overrides(raw_overrides),
+                model_overrides=dict(raw_model_overrides),
             )
-        return cls(overrides=overrides)
+
+        # Legacy format: top-level IS the overrides dict.
+        return cls(overrides=_parse_legacy_overrides(data), model_overrides={})
+
+
+def _parse_legacy_overrides(data: Dict[str, Any]) -> Dict[str, TaskWeights]:
+    """Parse the v3-format `{task: {quality, latency, cost}}` dict.
+
+    Used both for legacy top-level input and the new `overrides` field.
+    """
+    overrides: Dict[str, TaskWeights] = {}
+    for task_name, weights_dict in data.items():
+        if not isinstance(weights_dict, dict):
+            raise ValueError(f"UserPrefs entry for {task_name!r} must be a dict, " f"got {type(weights_dict).__name__}")
+        overrides[task_name] = TaskWeights(
+            quality=_safe_to_float(weights_dict["quality"], "quality", task_name),
+            latency=_safe_to_float(weights_dict["latency"], "latency", task_name),
+            cost=_safe_to_float(weights_dict["cost"], "cost", task_name),
+        )
+    return overrides
