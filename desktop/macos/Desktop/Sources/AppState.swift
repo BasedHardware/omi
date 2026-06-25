@@ -2416,7 +2416,7 @@ class AppState: ObservableObject {
     // conversation, it can briefly re-emit the old conversation id; do not bind the
     // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
-    ignoredRotatedBackendConversationId = currentBackendConversationId
+    ignoredRotatedBackendConversationId = ignoredRotatedBackendConversationId ?? currentBackendConversationId
     currentBackendConversationId = nil
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
@@ -3178,6 +3178,9 @@ class AppState: ObservableObject {
       ignoredRotatedBackendId: ignoredRotatedBackendConversationId
     ) else {
       pendingBackendConversationId = nil
+      if let currentBackendConversationId, currentBackendConversationId != backendId {
+        ignoredRotatedBackendConversationId = backendId
+      }
       log("Transcription: Ignoring rotated backend conversation id \(backendId) for fresh local session")
       return
     }

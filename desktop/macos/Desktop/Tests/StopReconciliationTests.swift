@@ -273,6 +273,23 @@ final class StopReconciliationTests: XCTestCase {
         ))
     }
 
+    func testRejectedRolloverBackendConversationIdIsCarriedAcrossRotation() {
+        let activeBackendId = "active-conversation"
+        let rejectedRolloverId = "rolled-over-conversation"
+        let ignoredAfterFinish = rejectedRolloverId
+
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: rejectedRolloverId,
+            activeBackendId: activeBackendId,
+            ignoredRotatedBackendId: nil
+        ))
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: rejectedRolloverId,
+            activeBackendId: nil,
+            ignoredRotatedBackendId: ignoredAfterFinish
+        ), "A backend conversation rejected as an active-session rollover must not bind after local rotation")
+    }
+
     func testRotatedBackendConversationIdIsNotBoundToFreshSession() {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "previous-conversation",
