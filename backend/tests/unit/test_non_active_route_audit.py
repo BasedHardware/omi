@@ -21,62 +21,7 @@ from database.memory_non_active_routes import (
 from utils.memory.non_active_route_audit import build_non_active_route_audit_report
 
 
-class _FakeSnapshot:
-    def __init__(self, data, exists=True):
-        self._data = data
-        self.exists = exists
-
-    def to_dict(self):
-        return self._data
-
-
-class _FakeDocumentRef:
-    def __init__(self, path, db):
-        self.path = path
-        self._db = db
-
-    def get(self, transaction=None):
-        if self.path not in self._db.docs:
-            return _FakeSnapshot(None, exists=False)
-        return _FakeSnapshot(self._db.docs[self.path], exists=True)
-
-
-class _FakeTransaction:
-    def __init__(self, db):
-        self._db = db
-        self.sets = []
-        self._read_only = False
-        self._max_attempts = 1
-        self._id = None
-
-    def set(self, ref, data):
-        self.sets.append((ref.path, data))
-
-    def _begin(self, retry_id=None):
-        self._id = retry_id or "txn-1"
-        self.sets = []
-
-    def _commit(self):
-        for path, data in self.sets:
-            self._db.docs[path] = data
-
-    def _rollback(self):
-        self._id = None
-
-    def _clean_up(self):
-        self._id = None
-
-
-class _FakeDb:
-    def __init__(self):
-        self.docs = {}
-        self.transaction_obj = _FakeTransaction(self)
-
-    def transaction(self):
-        return self.transaction_obj
-
-    def document(self, path):
-        return _FakeDocumentRef(path, self)
+from tests.unit.fixtures.non_active_firestore import TransactionalFakeDb as _FakeDb
 
 
 def _persisted_route(route, source_id):
