@@ -256,6 +256,30 @@ final class StopReconciliationTests: XCTestCase {
         XCTAssertEqual(session.status, .pendingUpload,
             "Binding the backend id is not completion; stop flow must still be able to mark the session pending")
     }
+
+    func testRotatedBackendConversationIdIsNotBoundToFreshSession() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "previous-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendId: "previous-conversation"
+        ))
+    }
+
+    func testNewBackendConversationIdAfterRotationCanBindFreshSession() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "new-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendId: "previous-conversation"
+        ))
+    }
+
+    func testEmptyConversationSessionIdIsRejected() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "",
+            activeBackendId: nil,
+            ignoredRotatedBackendId: nil
+        ))
+    }
 }
 
 private extension Date {
