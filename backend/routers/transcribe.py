@@ -57,6 +57,7 @@ from database.redis_db import check_credits_invalidation
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from utils.conversations.factory import deserialize_conversation
+from utils.client_device import resolve_client_device_from_headers
 from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
@@ -273,6 +274,8 @@ async def _stream_handler(
     create_speakers: bool = True,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
+    client_device_id: Optional[str] = None,
+    client_platform: Optional[str] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
@@ -878,6 +881,8 @@ async def _stream_handler(
             source=conversation_source,
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
+            client_device_id=client_device_id,
+            client_platform=client_platform,
         )
         conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
@@ -3003,6 +3008,8 @@ async def _listen(
         logger.error(f"_listen: accept error {e} {uid}")
         return
 
+    device_ctx = resolve_client_device_from_headers(websocket.headers)
+
     await _stream_handler(
         websocket,
         uid,
@@ -3020,6 +3027,8 @@ async def _listen(
         create_speakers=create_speakers,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
+        client_device_id=device_ctx.client_device_id,
+        client_platform=device_ctx.platform,
     )
     logger.info(f"_listen ended {uid}")
 
