@@ -43,6 +43,7 @@ class AudioCaptureService: @unchecked Sendable {
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
     private var isCapturing = false
+    private var isTrackingOverrideDevice = false
 
     /// Optional explicit device to open instead of the system default input.
     /// Used by the silent-mic fallback path to bind directly to the built-in mic.
@@ -269,6 +270,7 @@ class AudioCaptureService: @unchecked Sendable {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
+        isTrackingOverrideDevice = false
 
         // AudioDeviceStop can block waiting for the IO thread — run off main thread
         if let procID = procID, devID != kAudioObjectUnknown {
@@ -336,6 +338,7 @@ class AudioCaptureService: @unchecked Sendable {
         if let override = overrideDeviceID {
             if Self.isAvailableInputDevice(override) {
                 log("AudioCapture: Using override device ID \(override)")
+                isTrackingOverrideDevice = true
                 return override
             }
             log("AudioCapture: Override device ID \(override) is unavailable; falling back to default input")
@@ -344,6 +347,7 @@ class AudioCaptureService: @unchecked Sendable {
         guard let defaultDeviceID = Self.currentDefaultInputDeviceID() else {
             throw AudioCaptureError.noInputAvailable
         }
+        isTrackingOverrideDevice = false
         return defaultDeviceID
     }
 
@@ -547,10 +551,11 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
-        // Listen for default input device changes — only when we're tracking the
-        // system default. If we're using an explicit override (silent-mic fallback path)
-        // we deliberately ignore default-device changes so we stay pinned to our target.
-        if overrideDeviceID == nil {
+        // Listen for default input device changes when the resolved capture device
+        // is the system default. If an explicit override was requested but is
+        // unavailable, capture falls back to the default and must still observe
+        // default-device changes.
+        if !isTrackingOverrideDevice {
             var defaultDeviceAddress = AudioObjectPropertyAddress(
                 mSelector: kAudioHardwarePropertyDefaultInputDevice,
                 mScope: kAudioObjectPropertyScopeGlobal,
