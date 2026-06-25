@@ -162,8 +162,10 @@ export interface ResolvedControlRequestContext {
   ownerGuard?: string;
 }
 
+export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
+
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
-  return input.requestId ? JSON.stringify([input.clientId ?? "", input.requestId]) : undefined;
+  return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
 }
 
 export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {

@@ -181,6 +181,9 @@ describe("agent control tools", () => {
     });
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
+    expect(controlRequestKey({ requestId: "legacy-request" })).toBe(
+      JSON.stringify(["legacy-jsonl-client", "legacy-request"]),
+    );
   });
 
   it("allows cold direct control calls to use the signed-in envelope owner", async () => {
