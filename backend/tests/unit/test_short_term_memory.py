@@ -657,6 +657,11 @@ def test_review_queue_reject_uses_projection_writer(monkeypatch):
         'mark_consolidated',
         lambda uid, short_term_id, commit_id: marked_short_term.append((short_term_id, commit_id)),
     )
+    monkeypatch.setattr(
+        review_queue,
+        'persist_non_active_route_outcome',
+        lambda outcome: outcome,
+    )
 
     def fake_append_commit(uid, parent, mutations, **kwargs):
         kwargs['projection_writer'](Transaction())
