@@ -1,35 +1,19 @@
-import importlib.util
 import json
 from pathlib import Path
 
+from tests.unit.readiness._harness import assert_readiness_safe_by_default, build_readiness_report
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_account_generation_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+_ARTIFACT = "p1_3_v3_account_generation_readiness"
+_SCRIPT = "p1_3_v3_account_generation_readiness.py"
 
 
 def _report(execute=False):
-    root = Path(__file__).resolve().parents[2]
-    module = _load_module(root / "scripts" / "p1_3_v3_account_generation_readiness.py")
-    return module.build_report(execute=execute)
+    return build_readiness_report(_SCRIPT, execute=execute)
 
 
 def test_account_generation_readiness_is_safe_and_blocked_by_default():
     report = _report(execute=False)
-
-    assert report["artifact"] == "p1_3_v3_account_generation_readiness"
-    assert report["status"] == "BLOCKED"
-    assert report["proof_status"] == "NOT_RUN"
-    assert report["read_only"] is True
-    assert report["mutation_allowed"] is False
-    assert report["runtime_wiring_changed"] is False
-    assert report["routers_memories_modified"] is False
-    assert report["firestore_reads_executed"] is False
-    assert report["firestore_writes_executed"] is False
-    assert report["network_or_provider_calls_executed"] is False
-    assert report["production_rollout_approved"] is False
+    assert_readiness_safe_by_default(report, artifact=_ARTIFACT)
 
 
 def test_account_generation_readiness_identifies_independent_state_head_and_remaining_blocker():
