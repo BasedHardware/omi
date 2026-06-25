@@ -14,6 +14,7 @@ from utils.memory.atom_keyword_index import (
     purge_user_atom_keyword_index,
     sync_atom_keyword_index_for_item,
 )
+from utils.memory.device_scope_filter import filter_items_by_device_scope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import apply_long_term_patch_firestore, atomic_bump_source_generation
@@ -122,6 +123,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
                 "independence_group": evidence.source_id or evidence.source_type,
                 "redaction_status": evidence.redaction_status.value,
                 "created_at": item.captured_at,
+                "client_device_id": evidence.client_device_id,
             }
         )
         if evidence.source_type == "conversation" and evidence.source_id:
@@ -142,6 +144,8 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         evidence=evidence_payload,
         memory_tier=item.tier,
         valid_at=item.captured_at,
+        primary_capture_device=item.primary_capture_device,
+        capture_device_ids=item.capture_device_ids or [],
     )
 
 
@@ -151,6 +155,8 @@ def read_canonical_memories(
     limit: int = 100,
     offset: int = 0,
     db_client=None,
+    device_scope: str = "all",
+    client_device_id: Optional[str] = None,
 ) -> List[MemoryDB]:
     """Read default-visible canonical items using the shared product-memory filter."""
     client = db_client if db_client is not None else default_db_client
@@ -158,6 +164,11 @@ def read_canonical_memories(
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
     visible = filter_canonical_default_visible_items(items, policy=policy, now=now)
+    visible = filter_items_by_device_scope(
+        visible,
+        device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+        client_device_id=client_device_id,
+    )
     paged = visible[offset : offset + limit]
     return [memory_item_to_memorydb(item) for item in paged]
 
@@ -169,6 +180,8 @@ def search_canonical_memories(
     limit: int = 5,
     db_client=None,
     vector_query=None,
+    device_scope: str = "all",
+    client_device_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid keyword (Typesense) + vector search over canonical long-term atoms."""
     client = db_client if db_client is not None else default_db_client
@@ -212,6 +225,13 @@ def search_canonical_memories(
             continue
         if item.tier != MemoryLayer.long_term or item.status != MemoryItemStatus.active:
             continue
+        scoped = filter_items_by_device_scope(
+            [item],
+            device_scope=device_scope if device_scope in ("current", "all", "explicit") else "all",
+            client_device_id=client_device_id,
+        )
+        if not scoped:
+            continue
         candidates.append(
             {
                 "id": item.memory_id,
@@ -252,6 +272,10 @@ def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
 
 def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
     source_id = evidence_data.get("source_id") or conversation_id
+    client_device_id = evidence_data.get("client_device_id")
+    if not client_device_id:
+        artifact_ref = evidence_data.get("artifact_ref") or {}
+        client_device_id = artifact_ref.get("client_device_id")
     return MemoryEvidence(
         evidence_id=evidence_data["evidence_id"],
         source_type=evidence_data.get("source_type") or "conversation",
@@ -261,6 +285,7 @@ def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id
             conversation_id if (evidence_data.get("source_type") or "conversation") == "conversation" else None
         ),
         artifact_preservation=ArtifactPreservationState.preserved,
+        client_device_id=client_device_id,
     )
 
 
@@ -396,6 +421,22 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
             physical_status_to_record_status(item.status.value),
             MemoryProcessingState(item.processing_state.value),
         )
+        device_ids = sorted({ev.client_device_id for ev in evidence_items if ev.client_device_id})
+        if device_ids:
+            item_ref = client.document(f"{MemoryCollections(uid=uid).memory_items}/{item.memory_id}")
+            item_ref.set(
+                {
+                    "capture_device_ids": device_ids,
+                    "primary_capture_device": device_ids[0],
+                },
+                merge=True,
+            )
+            item = item.model_copy(
+                update={
+                    "capture_device_ids": device_ids,
+                    "primary_capture_device": device_ids[0],
+                }
+            )
         sync_atom_keyword_index_for_item(item, db_client=client)
         sync_canonical_memory_vector(item)
 
