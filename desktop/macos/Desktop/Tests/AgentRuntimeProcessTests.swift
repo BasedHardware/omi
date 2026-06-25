@@ -139,6 +139,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("activeControlRequests[requestId]"))
     XCTAssertTrue(source.contains(#"dict["ownerId"] = ownerId"#))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
+    XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestId)"))
+    XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
   }
 
   func testStartupTimeoutResumesInitContinuations() throws {

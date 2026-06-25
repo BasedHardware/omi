@@ -55,6 +55,18 @@ final class AgentArtifactProjectionTests: XCTestCase {
     XCTAssertTrue(request.toolInput.isEmpty)
   }
 
+  func testProjectionStoreGatesStaleLoadResults() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentArtifactProjection.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("private var loadGeneration = 0"))
+    XCTAssertTrue(source.contains("let generation = loadGeneration"))
+    XCTAssertTrue(source.contains("guard loadGeneration == generation else { return }"))
+  }
+
   func testProjectionBuildsScopedControlToolInput() {
     let request = AgentArtifactProjectionRequest(
       sessionId: "session-1",
