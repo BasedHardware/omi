@@ -719,7 +719,17 @@ actor AgentRuntimeProcess {
   }
 
   private func handleToolUse(_ message: RuntimeMessage) {
+    let callId = message.payload["callId"] as? String ?? ""
+    let name = message.payload["name"] as? String ?? ""
     guard let request = routedRequest(for: message) else {
+      if let requestId = message.routingKey, activeControlRequests[requestId] != nil {
+        log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
+        completeToolCall(
+          callId: callId,
+          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs"
+        )
+        return
+      }
       log("AgentRuntimeProcess: dropping unroutable tool call")
       return
     }
@@ -727,8 +737,6 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: skipping tool call after interrupt")
       return
     }
-    let callId = message.payload["callId"] as? String ?? ""
-    let name = message.payload["name"] as? String ?? ""
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
       let result = await request.onToolCall(callId, name, input)
