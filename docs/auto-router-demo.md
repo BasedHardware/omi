@@ -5,7 +5,7 @@ Three concrete demonstrations of the auto-router's behavior under different per-
 ## How to run
 
 ```bash
-cd /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1/backend
+cd backend
 PYENV_VERSION=3.11.11 python -m utils.auto_router.demo.run
 ```
 
