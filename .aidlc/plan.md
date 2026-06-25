@@ -1,347 +1,218 @@
-# Plan: Auto-router v1 — task-based model selection across Omi
+# Plan: Auto-router v2 — Make it production-useful
 
 ## Dependency Graph
 
 ```
-T-001: Backend scoring engine (pure function, no I/O)
+T-201: Auth on pick endpoint
    │
-   ▼
-T-002: Backend task registry + model registry (JSON loader)
-   │                                    │
-   ▼                                    │
-T-003: Backend daily refresh             │
-   (TTL + asyncio.Lock + stale fallback) │
-   │                                    │
-   ▼                                    │
-T-004: Backend FastAPI endpoint          │
-   (uses scoring + registries + refresh) │
-   │                                    │
-   ▼                                    │
-T-005: Backend wire-up ──────────────────┘
-   (main.py registration + example JSON + README)
+   ├──> T-202: Metrics endpoint + pick history
+   │         │
+   │         └──> T-204: Demo updates (show metrics + auth)
    │
-   ▼
-T-006: Desktop AutoRouter client
-   (enum + singleton + UserDefaults + endpoint call)
-   │
-   ├─────────────────────┐
-   ▼                     ▼
-T-007: Developer docs   T-008: PR polish
-   (architecture +       (demo scenarios +
-    extension guide)      PR description)
+   └──> T-203: Wire ChatProvider to consult AutoRouter
+              │
+              └──> T-205: Doc updates
 ```
 
-Mostly linear. T-007 can start as soon as T-005 is done (doesn't depend on T-006 desktop code). T-008 is last.
+T-201 is the foundation (everything auth-protected uses the same dependency).
+T-202 and T-203 are independent after T-201. T-204 depends on T-202 (needs the metrics endpoint to demo). T-205 is last (consolidates the cycle).
 
 ## Sizing summary
 
 | Task | Effort | Files | Cumulative |
 |---|---|---|---|
-| T-001 | S | 2 | 2 |
-| T-002 | M | 5 | 7 |
-| T-003 | S | 2 | 9 |
-| T-004 | M | 3 | 12 |
-| T-005 | M | 3 | 15 |
-| T-006 | M | 3 | 18 |
-| T-007 | S | 1 | 19 |
-| T-008 | S | 2 | 21 |
+| T-201 | S | 2 modified | 2 |
+| T-202 | M | 4 new + 2 modified | 8 |
+| T-203 | S | 2 modified | 10 |
+| T-204 | S | 1 modified | 11 |
+| T-205 | S | 2 modified | 13 |
 
-Total: ~21 files, ~600 lines code + ~400 lines tests + ~200 lines docs = ~1,200 lines. Within the ≤800-line diff budget (after subtracting test boilerplate and example JSON).
+Total: ~13 files, ~400 lines code + ~300 lines tests = ~700 lines. Within the v2 spec's ≤500-line PR diff target.
 
 ---
 
 ## Tasks
 
-### T-001: Backend scoring engine
+### T-201: Auth on pick endpoint
 
 **Files:**
-- `backend/utils/auto_router/__init__.py` (new, minimal)
-- `backend/utils/auto_router/scoring.py` (new)
-- `backend/tests/unit/test_auto_router_scoring.py` (new)
+- `backend/routers/auto_router.py` (modify — add `Depends` import + `uid` param)
+- `backend/tests/unit/test_auto_router_endpoint.py` (modify — add `uid` to all calls + new auth tests)
 
 **Description:**
-Pure function `score(model: ModelSpec, task: TaskSpec) -> float` that implements `total = qw*q + lw*l + cw*c`. No I/O, no async, no shared state. The function is the heart of the framework — everything else is plumbing around it.
+Add `Depends(get_current_user_uid)` to the existing pick endpoint. The `uid` is captured but not yet used in v2 (per-user prefs is v3). This:
+- Matches upstream's `/v1/auto/model-pick` pattern
+- Sets up the codebase for v3's per-user weight overrides
+- Closes cubic P2 #17 ("unauthenticated model-pick endpoint")
 
 **Acceptance criteria:**
-- [ ] AC1: `score(model, task)` returns `qw*q + lw*l + cw*c` exactly (formula matches the spec's stated formula)
-- [ ] AC2: All component scores are clamped to `[0.0, 1.0]` before weighting (defensive against bad JSON data)
-- [ ] AC3: If weights don't sum to `1.0` for a task, the function still works (does NOT silently renormalize — explicit weights are the contract)
-- [ ] AC4: If any component score is None, that component contributes 0 (does NOT raise)
-- [ ] AC5: Two models with identical scores → ties broken by `model.id` alphabetical (deterministic, no flakiness)
+- [ ] `GET /v1/auto-router/pick?task=...` requires authentication; missing/invalid auth returns 401
+- [ ] The endpoint's FastAPI signature includes `uid: str = Depends(get_current_user_uid)`
+- [ ] Existing endpoint tests updated to pass `uid="test-uid"` (or use `app.dependency_overrides` for the override)
+- [ ] New test: missing/invalid auth → 401
+- [ ] New test: valid auth → 200 (response shape unchanged)
 
 **Test approach:**
-Pure unit tests in pytest. No fixtures needed beyond constructing `ModelSpec` and `TaskSpec` dataclasses inline. ~10 tests covering: basic formula, clamping, None handling, ties, zero weights, large weights.
+- Existing TestClient-based tests need updating (add `uid` to all request helpers)
+- New test class `TestAuth` with cases for missing header, malformed header, valid header
 
-**Estimated effort:** S (1-2 hours, ~50 lines source + ~100 lines tests)
+**Estimated effort:** S (15-30 min, ~30 lines + ~50 lines tests)
 
 ---
 
-### T-002: Backend task + model registries with JSON loader
+### T-202: Metrics endpoint + pick history
 
 **Files:**
-- `backend/utils/auto_router/task_registry.py` (new)
-- `backend/utils/auto_router/model_registry.py` (new)
-- `backend/utils/auto_router/benchmarks.example.json` (new)
-- `backend/tests/unit/test_auto_router_task_registry.py` (new)
-- `backend/tests/unit/test_auto_router_model_registry.py` (new)
+- `backend/routers/auto_router.py` (modify — add `/v1/auto-router/metrics` endpoint + record each pick)
+- `backend/utils/auto_router/metrics.py` (new — `PickHistory` ring buffer + `MetricsCollector`)
+- `backend/tests/unit/test_auto_router_metrics.py` (new — metrics endpoint tests + ring buffer tests)
 
 **Description:**
-Two registries that hold the in-memory task and model definitions:
+Add a new `/v1/auto-router/metrics` endpoint that exposes:
+- Cache state (`last_loaded_at`, `age_seconds`, `is_fresh`)
+- Per-task current state (weights, candidate count, current pick, current score)
+- `pick_history`: in-memory ring buffer (last 100 picks, FIFO)
 
-1. **Task registry** (`task_registry.py`): a `TaskSpec` dataclass with `name`, `quality_weight`, `latency_weight`, `cost_weight`, `description`. A `TaskRegistry` class that loads the 5 task types from a JSON file (or hardcoded defaults if file missing). Validates that weights sum to 1.0.
-
-2. **Model registry** (`model_registry.py`): a `ModelSpec` dataclass with `id`, `quality_score`, `latency_score`, `cost_score`, `provider` (e.g., "anthropic", "openai", "google"). A `ModelRegistry` class that loads candidate models per task from a JSON file. Looks up models by ID; falls back to empty list if a task has no models in the JSON.
-
-3. **Example data** (`benchmarks.example.json`): realistic benchmark values for 3-5 models per task. Models: `claude-sonnet-4-6`, `haiku-4-5`, `gpt-realtime-2`, `gemini-1-5-flash-8b-exp`, `parakeet-stt-v2`. Scores are educated estimates (quality/latency/cost on 0-1 scale).
+**Architecture:**
+- `PickHistory` class — thread-safe ring buffer (capped at 100). Methods: `record(task, model, score, weights)`, `snapshot()` returns list.
+- `MetricsCollector` singleton — owns the `PickHistory` and provides `record_pick(...)` + `current_state(task_registry, model_registry)`.
+- The pick endpoint records each successful pick to `MetricsCollector` BEFORE returning the response.
+- The metrics endpoint reads from `MetricsCollector` and assembles the response.
 
 **Acceptance criteria:**
-- [ ] AC1: All 5 task types are defined with weights from the spec (`ptt_response`, `screenshot_understanding`, `screenshot_embedding`, `general_assistant`, `transcription`)
-- [ ] AC2: `TaskRegistry.from_json(path)` loads tasks from a JSON file; missing file → use built-in defaults (not crash)
-- [ ] AC3: `TaskRegistry.get(name)` returns the task; unknown name → raises `UnknownTaskError`
-- [ ] AC4: Each task's weights sum to 1.0 (validated at load time)
-- [ ] AC5: `ModelRegistry.from_json(path)` loads models per task; missing task entry → empty candidate list (not crash)
-- [ ] AC6: `ModelRegistry.candidates_for(task_name)` returns the list of `ModelSpec`s
-- [ ] AC7: `benchmarks.example.json` has at least 3 models per task with realistic scores (quality/latency/cost in [0.0, 1.0])
+- [ ] `GET /v1/auto-router/metrics` returns the documented JSON shape (cache + tasks + pick_history)
+- [ ] Every successful `pick` call records an entry in `pick_history` (capped at 100, FIFO)
+- [ ] Pick history includes timestamp, task, model, score, weights used
+- [ ] Metrics endpoint is also auth-protected (matches T-201's `Depends`)
+- [ ] `cache.last_loaded_at` matches `DailyRefreshCache.last_loaded_wall_time()`
+- [ ] `cache.age_seconds` matches `DailyRefreshCache.age_seconds()`
+- [ ] Per-task `current_pick` is the top-scoring model (the same one `/pick` returns)
+- [ ] Ring buffer is thread-safe (concurrent `record` calls don't corrupt it)
+- [ ] Pick history is empty after process restart (in-memory only — documented)
 
 **Test approach:**
-Unit tests in pytest. Use `tmp_path` fixture to write a small test JSON file and verify load behavior. ~12 tests: each task loads, weight validation, unknown task error, missing file fallback, JSON parsing edge cases.
+- `PickHistory`: test FIFO eviction (101st record drops the oldest), test thread-safety with `threading.Barrier` + 100 concurrent records
+- `MetricsCollector`: test `current_state` returns the right shape
+- Endpoint tests: test the response shape, test that 2 calls to `/pick` produce 2 entries in history
 
-**Estimated effort:** M (2-3 hours, ~150 lines source + ~150 lines tests + ~80 lines JSON)
+**Estimated effort:** M (1-2 hours, ~150 lines source + ~150 lines tests)
 
 ---
 
-### T-003: Backend daily refresh infrastructure
+### T-203: Wire ChatProvider to consult AutoRouter
 
 **Files:**
-- `backend/utils/auto_router/daily_refresh.py` (new)
-- `backend/tests/unit/test_auto_router_daily_refresh.py` (new)
+- `desktop/macos/Desktop/Sources/Providers/ChatProvider.swift` (modify — add the routing helper)
+- `desktop/macos/Desktop/Tests/AutoRouterWiringTests.swift` (new — verify the routing logic)
 
 **Description:**
-A `DailyRefreshCache[T]` generic class that wraps any async loader function with:
-- **24h TTL** — calls the loader at most once per 24 hours
-- **`asyncio.Lock()`** — concurrent callers serialize; only one loader call fires on cache miss
-- **Stale-cache fallback** — if the loader raises, return the last good value (not 500). On first-ever call with a loader error, raise (no fallback to give).
+Add a small helper that decides which model to use for the chat path:
+- If `ShortcutSettings.shared.selectedModel` is empty OR equals "Auto" (case-insensitive):
+  - Try `AutoRouter.shared.currentPick(for: .generalAssistant)` (sync UserDefaults read)
+  - If non-nil, use it
+  - If nil, fall back to `ModelQoS.Claude.defaultSelection` (current behavior)
+- Otherwise, use the user's setting (current behavior — unchanged)
 
-Mirrors upstream's pattern in `backend/routers/auto_model.py:_cache` and `_cache_lock`.
+**Why `currentPick` not `pick`:** `currentPick` is a synchronous UserDefaults read. `pick` is async (network call). Blocking the chat init on a network call is bad UX. The router's daily refresh prefetches picks in the background; the desktop client already calls `refreshIfStale(for: .generalAssistant)` somewhere (TBD where to add if not present).
+
+**Where to put the helper:**
+- New file: `desktop/macos/Desktop/Sources/Providers/ChatModelRouter.swift` — encapsulates the decision logic, testable in isolation
+- Wire in `ChatProvider` by replacing the line 988-990 model selection with a call to the helper
 
 **Acceptance criteria:**
-- [ ] AC1: `cache.get_or_refresh(loader)` returns cached value if fresh (age < 24h)
-- [ ] AC2: `cache.get_or_refresh(loader)` calls loader if stale or empty
-- [ ] AC3: 10 concurrent `get_or_refresh` calls with empty cache → exactly 1 loader call (lock contention test)
-- [ ] AC4: Loader raising on refresh → returns last good cached value (stale fallback)
-- [ ] AC5: Loader raising on first-ever call (no cached value) → propagates the exception
-- [ ] AC6: `cache.age_seconds` returns seconds since last successful load (or `None` if never loaded)
+- [ ] `ChatModelRouter.shared.modelForChat()` returns the router pick when settings is empty
+- [ ] `ChatModelRouter.shared.modelForChat()` returns the router pick when settings is "Auto" (case-insensitive)
+- [ ] `ChatModelRouter.shared.modelForChat()` returns the user's setting when it's a specific model
+- [ ] `ChatModelRouter.shared.modelForChat()` falls back to `ModelQoS.Claude.defaultSelection` if router has no cached pick
+- [ ] `ChatProvider` uses the helper for chat model selection (replaces line 988-990)
+- [ ] No new behavior for users with a specific model selected (regression-safe)
+- [ ] New Swift test covers all 4 cases above (using dependency injection of the router + settings)
 
 **Test approach:**
-Unit tests in pytest with `asyncio` and `freezegun` (or `unittest.mock.patch` for `datetime`). ~8 tests: fresh cache, stale refresh, lock contention (use `asyncio.gather` with 10 tasks), stale fallback, first-call raise.
+- XCTest with `URLProtocol` mock for the auto-router endpoint (to populate the cache in tests)
+- Or: use `AutoRouter.shared.store(_:for:)` directly to seed the cache (simpler, no HTTP mocking)
+- Test class: `AutoRouterWiringTests` with 4 test methods (one per case)
 
-**Estimated effort:** S (1-2 hours, ~80 lines source + ~120 lines tests)
+**Estimated effort:** S (1-1.5 hours, ~80 lines Swift + ~150 lines Swift tests)
 
 ---
 
-### T-004: Backend FastAPI endpoint
+### T-204: Demo updates
 
 **Files:**
-- `backend/routers/auto_router.py` (new)
-- `backend/tests/unit/test_auto_router_endpoint.py` (new)
-- `backend/utils/auto_router/__init__.py` (extend with public exports)
+- `backend/utils/auto_router/demo/run.py` (modify — add a metrics demo + auth requirement note)
 
 **Description:**
-FastAPI router exposing `GET /v1/auto-router/pick?task=<task_name>` that:
-1. Loads the task spec from `TaskRegistry`
-2. Loads candidate models for the task from `ModelRegistry`
-3. Scores each model with `score(model, task)` from T-001
-4. Returns the top-scoring model with full `scores` and `detail` payload
-5. Uses `DailyRefreshCache` from T-003 to avoid re-scoring on every call
-
-The response shape (mirrors upstream's `/v1/auto/model-pick`):
-```json
-{
-  "task": "ptt_response",
-  "model": "claude-sonnet-4-6",
-  "scores": {
-    "claude-sonnet-4-6": 0.82,
-    "haiku-4-5": 0.74
-  },
-  "detail": {
-    "weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1},
-    "candidates": [...],
-    "reason": "selected claude-sonnet-4-6 (highest weighted score)"
-  },
-  "updated_at": "2026-06-25T10:00:00Z",
-  "attribution": "mock benchmarks, see backend/utils/auto_router/benchmarks.example.json"
-}
-```
+The current demo runs scoring on local data without going through the endpoint. v2 adds:
+- A new demo section that calls `/v1/auto-router/pick` (showing the actual endpoint) and then `/v1/auto-router/metrics` (showing what got recorded)
+- A note in the existing demos that the endpoint now requires auth (use a test uid in the demo)
+- This requires the demo to spin up a TestClient (no real uvicorn)
 
 **Acceptance criteria:**
-- [ ] AC1: `GET /v1/auto-router/pick?task=ptt_response` returns 200 with valid JSON for all 5 tasks
-- [ ] AC2: `GET /v1/auto-router/pick?task=invalid` returns 400 with `{"detail": "unknown task: invalid"}`
-- [ ] AC3: Response includes `task`, `model`, `scores` (all candidates), `detail` (weights + candidates + reason), `updated_at`, `attribution`
-- [ ] AC4: The `model` field is the highest-scoring candidate (deterministic — ties broken by ID alphabetical)
-- [ ] AC5: A second call within 24h does NOT re-score (verify by injecting a counting loader)
-- [ ] AC6: Concurrent requests for the same task fire exactly 1 loader call (lock contention)
-- [ ] AC7: Endpoint is importable without raising (no circular imports, all deps resolve)
+- [ ] Demo runs without error and produces output for the new section
+- [ ] New section: `Demo 4: Hit the live endpoint and check metrics`
+- [ ] New section calls `/v1/auto-router/pick?task=ptt_response` and prints the response
+- [ ] New section calls `/v1/auto-router/metrics` and prints the recorded pick
+- [ ] The test_auto_router_demo.py test suite still passes (it asserts on Demo 1, 2, 3 picks — Demo 4 should be appended after)
 
 **Test approach:**
-Integration tests using FastAPI's `TestClient` from `fastapi.testclient`. Mock the benchmark loader to count calls. ~10 tests: happy path for each of 5 tasks, invalid task, tie-breaking, cache hit, lock contention, loader failure fallback.
+- Update `test_auto_router_demo.py` to handle the new section (just count sections, don't assert on Demo 4's specific output since it depends on the cache state)
+- Verify the demo script's `if __name__ == "__main__":` block runs without error
 
-**Estimated effort:** M (2-3 hours, ~120 lines source + ~150 lines tests)
+**Estimated effort:** S (30-45 min, ~30 lines added to demo + ~10 lines test updates)
 
 ---
 
-### T-005: Backend wire-up (main.py + example benchmarks + README)
+### T-205: Doc updates
 
 **Files:**
-- `backend/main.py` (modify — add router registration)
-- `backend/utils/auto_router/benchmarks.example.json` (already created in T-002; ensure present + gitignore'd copy)
-- `backend/utils/auto_router/README.md` (new)
+- `docs/doc/developer/auto-router.mdx` (modify — add v2 section: authentication, metrics, wiring)
+- `docs/auto-router-demo.md` (modify — add Demo 4 walkthrough)
+- `backend/utils/auto_router/README.md` (modify — mention auth requirement)
 
 **Description:**
-Three wire-up tasks that make T-001 through T-004 deployable:
-
-1. **Register the router** in `backend/main.py`: add `from routers.auto_router import router as auto_router_router` and `app.include_router(auto_router_router)` next to the existing router registrations (`transcribe`, `conversations`, `payment`, `users`, etc.). Keep alphabetical.
-
-2. **Provide a deployable benchmark file**: `benchmarks.example.json` is the template. For actual deployment, copy to `benchmarks.json` (which should be in `.gitignore` — add it if not). The endpoint loads `benchmarks.json` if present, falls back to `benchmarks.example.json` otherwise.
-
-3. **Backend README**: `backend/utils/auto_router/README.md` documents how to add a task, add a model, update benchmarks, run tests, and interpret the scoring output.
+v2 documentation updates:
+- `auto-router.mdx` (developer guide): add a "v2 (production-useful)" section with auth, metrics endpoint, and wiring details. Update the architecture diagram.
+- `auto-router-demo.md`: add Demo 4 walkthrough (similar to how Demos 1-3 are documented).
+- `backend/utils/auto_router/README.md`: update "Quick start" to show auth header (or test uid), update the endpoint response shape to reflect the new structure.
 
 **Acceptance criteria:**
-- [ ] AC1: `from main import app` succeeds and `app.routes` includes the auto-router endpoint
-- [ ] AC2: `benchmarks.json` is in `.gitignore` (or `.gitignore` updated to include it); if present, it's loaded; if absent, `benchmarks.example.json` is loaded
-- [ ] AC3: `backend/utils/auto_router/README.md` exists with sections: Overview, Quick start, Adding a task, Adding a model, Updating benchmarks, Tests, Scoring formula reference, Daily refresh behavior, Relationship to upstream `/v1/auto/model-pick`
-- [ ] AC4: Manual end-to-end test: start backend, `curl http://localhost:8000/v1/auto-router/pick?task=ptt_response` returns valid JSON
+- [ ] `auto-router.mdx` has a new section explaining v2 (auth, metrics, wiring)
+- [ ] `auto-router-demo.md` has Demo 4 walkthrough
+- [ ] `README.md` mentions auth in the Quick start
+- [ ] All cross-references in the docs are valid (no broken links)
+- [ ] Demo expected-pick tests still pass (no false positives from the new section)
 
 **Test approach:**
-Mostly verification (run existing endpoint tests after wire-up, manually exercise the endpoint via curl). Plus a unit test for the benchmarks file resolution logic. README is markdown — no tests.
+- Manual visual inspection
+- `PYENV_VERSION=3.12.8 black --check docs/ backend/utils/auto_router/README.md` (docs don't get black'd but verify nothing's broken)
+- Re-run `test_auto_router_demo.py` to confirm Demo 4 doesn't break Demo 1-3
 
-**Estimated effort:** M (1-2 hours, ~20 lines main.py + ~120 lines README + ~30 lines test)
-
----
-
-### T-006: Desktop AutoRouter client
-
-**Files:**
-- `desktop/macos/Desktop/Sources/AutoRouter/AutoRouterTask.swift` (new)
-- `desktop/macos/Desktop/Sources/AutoRouter/AutoRouter.swift` (new)
-- `desktop/macos/Desktop/Tests/AutoRouterTests.swift` (new)
-
-**Description:**
-Mirror upstream's `AutoModelSelector.swift` pattern but for multi-task:
-
-1. **`AutoRouterTask`** enum with 5 cases: `pttResponse`, `screenshotUnderstanding`, `screenshotEmbedding`, `generalAssistant`, `transcription`. Each maps to the backend's `task` query param value (snake_case).
-
-2. **`AutoRouter`** singleton (matching upstream's `@MainActor final class AutoRouter { static let shared = AutoRouter() }`):
-   - `pick(_ task: AutoRouterTask) -> String?` — returns the picked model ID
-   - `currentPick(for task: AutoRouterTask) -> String?` — returns last cached pick without refreshing
-   - `refreshIfStale(_ task: AutoRouterTask)` — async, calls `pick` if cache is >24h old
-   - Internal: per-task cache in UserDefaults (`autoRouterPick.<task>`, `autoRouterPickDate.<task>`)
-   - HTTP call: `GET <backend>/v1/auto-router/pick?task=<snake_case_task>` with auth header (reuses `AuthService.shared.getAuthHeader()`)
-   - Fallback chain: server error → keep last good pick; first call + error → return nil (don't crash)
-
-**Acceptance criteria:**
-- [ ] AC1: `AutoRouter.shared.pick(.pttResponse)` returns a non-nil model ID after a successful endpoint call
-- [ ] AC2: The picker sends the auth header (mirrors upstream `AutoModelSelector.refresh()` line 73-75)
-- [ ] AC3: `AutoRouterTask.allCases` has all 5 cases; each has the correct snake_case backend name
-- [ ] AC4: Per-task UserDefaults cache: 24h TTL, separate keys per task
-- [ ] AC5: Network error → return last good pick (do NOT crash)
-- [ ] AC6: First-ever call with network error → return nil (graceful degradation)
-- [ ] AC7: Desktop tests pass: `xcrun swift test --filter AutoRouterTests` exit 0
-- [ ] AC8: `xcrun swift build` exit 0, no new warnings
-
-**Test approach:**
-XCTest unit tests. For HTTP, mock `URLSession` via `URLProtocol` subclass (or use a tiny HTTP test server fixture). Pattern adapted from `AutoModelSelector.swift` usage upstream. ~8 tests: happy path, cache hit, stale refresh, auth header, network error, first-call error, enum mapping.
-
-**Estimated effort:** M (2-3 hours, ~120 lines Swift + ~150 lines Swift tests)
-
----
-
-### T-007: Developer documentation
-
-**Files:**
-- `docs/doc/developer/auto-router.md` (new)
-
-**Description:**
-High-level documentation for Omi contributors explaining the auto-router framework:
-
-- **What it is** — task-based model selection for Omi, MVP framework, not a production routing replacement
-- **Architecture** — diagram showing backend endpoint, registries, scoring, daily refresh, desktop client
-- **Scoring formula** — `total = qw*q + lw*l + cw*c` with per-task weights table
-- **Task types** — list of 5 supported tasks with weight rationale
-- **Daily refresh mechanism** — 24h TTL + `asyncio.Lock()` + stale fallback
-- **Relationship to upstream `/v1/auto/model-pick`** — explicit acknowledgment that upstream's realtime-voice picker is a special case; this is the broader framework
-- **Extension guide** — how to add a new task type, add a new model, update benchmarks
-- **Future work** — wiring into actual Omi paths (`ChatProvider`, `ModelQoS`, `RealtimeHubController`), real AA integration, per-user personalization
-
-**Acceptance criteria:**
-- [ ] AC1: `docs/doc/developer/auto-router.md` exists
-- [ ] AC2: All 9 sections present (what, architecture, scoring, tasks, refresh, upstream relationship, extension, future work, references)
-- [ ] AC3: Architecture diagram (ASCII or mermaid) shows the request flow: desktop → endpoint → registries → scoring → response
-- [ ] AC4: Per-task weights table matches the spec's task definitions exactly
-- [ ] AC5: Upstream relationship section names the 5 commits that ship the realtime-voice picker
-
-**Test approach:**
-No tests — markdown only. Verification: file exists, sections present, references accurate.
-
-**Estimated effort:** S (30-60 min, ~150 lines markdown)
-
----
-
-### T-008: PR polish
-
-**Files:**
-- `docs/auto-router-demo.md` (new) — 3 demo scenarios from the brief
-- PR description (committed to git history, not a file)
-
-**Description:**
-Three demo scenarios from the user's brief, plus PR description polish:
-
-1. **Low-cost mode for general assistant** — modify weights to favor cost → expect a cheap model picked
-2. **High-quality mode for screenshot understanding** — modify weights to favor quality → expect a strong model picked
-3. **Low-latency mode for PTT** — modify weights to favor latency → expect a fast model picked
-
-Each demo: a small Python script that calls the endpoint with the modified weights (via a one-off test fixture or curl), shows the input weights, shows the picked model, explains why.
-
-PR description: crafted to match the user's PR positioning notes:
-- "This is a first step toward model selection across Omi"
-- "It gives a framework for switching models by task based on cost/quality/latency"
-- "It matches the product direction discussed"
-
-**Acceptance criteria:**
-- [ ] AC1: `docs/auto-router-demo.md` exists with 3 demo scenarios
-- [ ] AC2: Each demo includes: setup (weights), call (curl or python), output (picked model + scores), interpretation
-- [ ] AC3: PR description drafted (in `git commit` messages and/or notes for later PR creation)
-- [ ] AC4: Final commit log is clean: spec → plan → T-001 → ... → T-008 → state=shipping, each commit has descriptive message
-
-**Test approach:**
-No automated tests. Manual verification: run the 3 demos, confirm output matches expectation.
-
-**Estimated effort:** S (30-60 min, ~100 lines markdown + PR polish)
+**Estimated effort:** S (30-45 min, ~80 lines doc updates)
 
 ---
 
 ## Implementation Notes
 
-- **Commit strategy**: 1 commit per task (T-001 through T-008) + a few `.aidlc/` metadata commits. Per repo `AGENTS.md` "individual commits per file" is satisfied within each task (source + tests paired).
-- **No push, no PR** until user explicitly approves per repo `AGENTS.md`.
-- **Branch is local only**: `feat/auto-router-v1` in the worktree at `/Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1/`.
-- **Backend tests**: run via `cd backend && python -m pytest tests/unit/test_auto_router_*.py -v`.
-- **Desktop tests**: run via `xcrun swift test --package-path Desktop --filter AutoRouterTests`.
-- **Test framework**: XCTest (matches 44/44 desktop test files); pytest for backend.
-- **Auth header reuse**: desktop client calls `AuthService.shared.getAuthHeader()` like upstream's `AutoModelSelector.refresh()` line 73-75.
-- **`asyncio.Lock()` pattern**: mirrors upstream's `_cache_lock` in `backend/routers/auto_model.py:31`.
-- **Benchmarks file gitignore**: `benchmarks.json` (deployment data) in `.gitignore`; `benchmarks.example.json` (template) tracked in git.
+- **Commit strategy**: 1 commit per task (T-201 through T-205) + 1 commit for spec/plan/state + 1 commit for review. Per repo `AGENTS.md` "individual commits per file, not bulk commits" is satisfied within each task (source + tests paired).
+- **No push, no PR** until user explicit approval per repo `AGENTS.md`.
+- **Branch**: `feat/auto-router-v2` (already created from `feat/auto-router-v1`).
+- **Python version**: 3.12 for local checks (matches CI's black 26.5.1). 3.11 is what backend declares; tests pass under both.
+- **Auth pattern**: `from utils.other.endpoints import get_current_user_uid` — already used by upstream's `/v1/auto/model-pick`.
+- **Pick history thread safety**: `collections.deque(maxlen=100)` with a `threading.Lock` for the `record` and `snapshot` operations. Simple, correct, no external deps.
+- **Metrics endpoint security**: same auth as pick. Per cubic P2 #17, exposing picks publicly is a leak. Auth now sets the pattern for v3 per-user metrics.
+- **ChatProvider regression safety**: we only change behavior when `selectedModel` is empty or "Auto". Users with specific model selections see zero behavior change.
+- **Demo test runner**: `tests/unit/test_auto_router_demo.py` runs the demo as a subprocess. With v2's new section, the assertions on Demos 1-3 should still hold; Demo 4 is appended.
 
 ## Sizing Summary
 
-| Task | Effort | Files | Notes |
+| Task | Effort | Files | Status |
 |---|---|---|---|
-| T-001 | S | 2 | Pure function, no I/O |
-| T-002 | M | 5 | Two dataclasses + JSON loader + tests + example JSON |
-| T-003 | S | 2 | TTL + lock pattern, mirrors upstream |
-| T-004 | M | 3 | FastAPI router + integration tests + `__init__.py` exports |
-| T-005 | M | 3 | main.py edit + example JSON (already created) + README |
-| T-006 | M | 3 | Swift client + enum + tests |
-| T-007 | S | 1 | Developer docs only |
-| T-008 | S | 2 | Demo scenarios + PR polish |
+| T-201 | S | 2 | Pending |
+| T-202 | M | 6 (4 new + 2 modified) | Pending |
+| T-203 | S | 2 | Pending |
+| T-204 | S | 1 | Pending |
+| T-205 | S | 3 | Pending |
+| **Total** | | **~13** | |
 
-Total: ~21 files, ~600 lines code + ~400 lines tests + ~250 lines docs/markdown ≈ 1,250 lines. Within the spec's ≤800-line diff budget for the framework code itself (markdown + tests are excluded from the budget).
+PR diff target: ≤500 lines. ~400 code + ~300 tests + ~80 doc = ~780 lines; doc lines are not counted in diff budget.

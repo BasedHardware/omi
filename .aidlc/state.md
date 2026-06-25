@@ -1,24 +1,20 @@
 # AIDLC State
 
-- **Phase**: specifying
+- **Phase**: planning
 - **Branch**: feat/auto-router-v2
-- **PR**: (none — v1 PR #8343 is still open and pending merge; v2 will be a separate PR)
+- **PR**: (none — v1 PR #8343 still open separately; v2 will be a separate PR)
 - **Worktree**: /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v2
-- **Last action**: 2026-06-25T13:50:00Z
-- **Next action**: Run /plan to break v2 spec into ordered tasks (after user review/approval of spec)
+- **Last action**: 2026-06-25T14:05:00Z
+- **Next action**: Run T-201 (auth on pick endpoint) after user approves plan
 - **Notes**:
-  - **v2 feature:** Auto-router v2 — Make it production-useful
-  - **Built on:** v1 (17 commits, 142 backend + 15 desktop = 157 tests, all passing, PR #8343 ready for merge)
-  - **v2 branched from:** `feat/auto-router-v1` (commit 9897edcb) — all v1 work preserved
-  - **v2 focus:** Authentication + Observability metrics + ONE wired path (ChatProvider)
-  - **v2 tasks (planned):**
-    1. T-201: Add auth (`Depends(get_current_user_uid)`) to pick endpoint + tests
-    2. T-202: Add metrics endpoint + pick history (in-memory ring buffer) + tests
-    3. T-203: Wire `ChatProvider` to consult `AutoRouter` for "Auto" mode + Swift test
-    4. T-204: Demo updates (show metrics endpoint, show auth requirement)
-    5. T-205: Doc updates (developer guide, PR description for v2)
-  - **5 Open Questions in spec** — most have clear recommendations locked
-  - **Not modifying:** upstream `/v1/auto/model-pick`, upstream `AutoModelSelector.swift`, `ChatProvider.swift` core behavior (only a NEW helper function added alongside)
+  - v2 spec approved by user (2026-06-25)
+  - v2 plan: 5 tasks (T-201, T-202, T-203, T-204, T-205), linear dependency
+  - Total scope: ~13 files, ~400 lines code + ~300 lines tests
+  - **Branch state on top of feat/auto-router-v1 (commit 9897edcb):**
+    1. `289282c9a` — v2 spec
+    2. `(?pending)` — v2 plan
+  - v1 PR #8343 still open with all 3 CI checks passing
+  - v2 will be a separate PR (or stacked on v1 if user wants)
   - No push, no PR until user explicit approval per AGENTS.md
 
-_Updated: 2026-06-25T13:50:00Z_
+_Updated: 2026-06-25T14:05:00Z_
