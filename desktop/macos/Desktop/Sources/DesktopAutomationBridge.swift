@@ -468,7 +468,9 @@ final class DesktopAutomationActionRegistry {
       }
       return await MainActor.run { () -> [String: String] in
         guard
-          let window = NSApp.windows.first(where: { $0.isVisible && $0.title.contains("Omi") }),
+          let window = NSApp.windows.first(where: {
+            $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
+          }),
           let contentView = window.contentView
         else {
           return ["error": "no_visible_window"]
