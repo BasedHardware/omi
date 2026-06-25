@@ -539,3 +539,144 @@ class TestConcurrency:
         results = asyncio.run(hit_three_times())
         assert all(r == "v1" for r in results)
         assert loader_calls == 1
+
+
+# ---------------------------------------------------------------------------
+# AC: GET /v1/auto-router/prefs (v3)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPrefsEndpoint:
+    """GET /v1/auto-router/prefs returns the current user's stored prefs."""
+
+    def test_unauthenticated_returns_error(self, client_no_auth):
+        r = client_no_auth.get("/v1/auto-router/prefs")
+        # auth_dependency raises HTTPException(401) when override is absent
+        assert r.status_code in (401, 500)
+
+    def test_authenticated_returns_empty_prefs_for_new_user(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.get("/v1/auto-router/prefs")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["uid"] == "test-uid"
+        assert body["prefs"] == {}
+        assert body["updated_at"] is None
+
+    def test_authenticated_returns_stored_prefs(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # PUT first
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
+        )
+        # Then GET
+        r = client.get("/v1/auto-router/prefs")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["prefs"] == {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}
+        assert body["updated_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# AC: PUT /v1/auto-router/prefs (v3)
+# ---------------------------------------------------------------------------
+
+
+class TestPutPrefsEndpoint:
+    """PUT /v1/auto-router/prefs validates + stores user's prefs."""
+
+    def test_valid_prefs_returns_200(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["prefs"] == {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}
+        assert body["updated_at"] is not None
+
+    def test_empty_prefs_clears_overrides(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Set first
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
+        )
+        # Then clear
+        r = client.put("/v1/auto-router/prefs", json={"prefs": {}})
+        assert r.status_code == 200
+        assert r.json()["prefs"] == {}
+
+    def test_invalid_weights_returns_400(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.5, "latency": 0.5, "cost": 0.5}}},
+        )
+        assert r.status_code == 400
+        assert "expected 1.0" in r.json()["detail"]["message"]
+
+    def test_negative_weight_returns_400(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": -0.1, "latency": 0.7, "cost": 0.4}}},
+        )
+        assert r.status_code == 400
+
+    def test_missing_prefs_key_returns_400(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.put("/v1/auto-router/prefs", json={"wrong_key": {}})
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "missing_prefs"
+
+    def test_non_dict_prefs_returns_400(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.put("/v1/auto-router/prefs", json={"prefs": "not a dict"})
+        assert r.status_code == 400
+        assert r.json()["detail"]["code"] == "invalid_prefs_type"
+
+    def test_unauthenticated_returns_error(self, client_no_auth):
+        r = client_no_auth.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.4, "latency": 0.4, "cost": 0.2}}},
+        )
+        assert r.status_code in (401, 500)
+
+    def test_put_then_get_roundtrip(self, client):
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        put_resp = client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "ptt_response": {"quality": 0.1, "latency": 0.8, "cost": 0.1},
+                    "screenshot_understanding": {"quality": 0.9, "latency": 0.05, "cost": 0.05},
+                }
+            },
+        )
+        assert put_resp.status_code == 200
+        get_resp = client.get("/v1/auto-router/prefs")
+        assert get_resp.status_code == 200
+        body = get_resp.json()
+        assert body["prefs"]["ptt_response"] == {"quality": 0.1, "latency": 0.8, "cost": 0.1}
+        assert body["prefs"]["screenshot_understanding"] == {"quality": 0.9, "latency": 0.05, "cost": 0.05}

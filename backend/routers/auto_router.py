@@ -45,6 +45,11 @@ from utils.auto_router.metrics import MetricsCollector
 from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
 from utils.auto_router.task_registry import TaskRegistry, UnknownTaskError
+from utils.auto_router.user_prefs import UserPrefs
+from utils.auto_router.user_prefs_store import (
+    get_user_prefs_store,
+    reset_user_prefs_store_for_testing,
+)
 from utils.executors import run_blocking
 
 # Module-level metrics collector singleton. Reset between tests via
@@ -276,6 +281,104 @@ async def auto_router_metrics(uid: str = Depends(auth_dependency)):
     return state
 
 
+# ---------------------------------------------------------------------------
+# Per-user prefs endpoints (v3)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/auto-router/prefs")
+async def auto_router_get_prefs(uid: str = Depends(auth_dependency)):
+    """Return the current user's per-task weight overrides.
+
+    Empty prefs (the default) means the user has not set any overrides;
+    the picker uses task defaults. Response shape:
+
+        {
+          "uid": "<uid>",
+          "prefs": {"<task_name>": {"quality": ..., "latency": ..., "cost": ...}, ...},
+          "updated_at": "2026-06-25T12:00:00Z"   // ISO 8601, null if never set
+        }
+
+    Requires authentication (matches `/pick`).
+    """
+    store = get_user_prefs_store()
+    entry = store.get(uid)
+    updated_at_iso = (
+        datetime.fromtimestamp(entry.updated_at, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        if entry.updated_at > 0.0
+        else None
+    )
+    return {
+        "uid": uid,
+        "prefs": entry.prefs.to_dict(),
+        "updated_at": updated_at_iso,
+    }
+
+
+@router.put("/v1/auto-router/prefs")
+async def auto_router_set_prefs(
+    body: Dict[str, Any],
+    uid: str = Depends(auth_dependency),
+):
+    """Set the current user's per-task weight overrides.
+
+    Request body shape:
+        {
+          "prefs": {
+            "<task_name>": {"quality": ..., "latency": ..., "cost": ...},
+            ...
+          }
+        }
+
+    Each task's weights must sum to 1.0 (tolerance 1e-3, matches TaskSpec).
+    Empty `prefs: {}` clears all overrides (returns empty prefs).
+
+    Returns 200 with the updated prefs and `updated_at`.
+    Returns 400 if any task's weights are invalid.
+    """
+    if "prefs" not in body:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "missing_prefs",
+                "message": "request body must include 'prefs' key",
+            },
+        )
+
+    raw_prefs = body["prefs"]
+    if raw_prefs is None:
+        raw_prefs = {}
+    if not isinstance(raw_prefs, dict):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_prefs_type",
+                "message": f"'prefs' must be a dict, got {type(raw_prefs).__name__}",
+            },
+        )
+
+    # Parse + validate. UserPrefs.from_dict raises ValueError/TypeError on bad input.
+    try:
+        prefs = UserPrefs.from_dict(raw_prefs)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "invalid_prefs",
+                "message": str(e),
+            },
+        )
+
+    # Persist.
+    store = get_user_prefs_store()
+    entry = store.set(uid, prefs)
+    return {
+        "uid": uid,
+        "prefs": entry.prefs.to_dict(),
+        "updated_at": datetime.fromtimestamp(entry.updated_at, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
 def reset_registry_cache_for_testing() -> None:
     """Clear the module-level registry cache. Test-only helper."""
     global _registry_cache
@@ -288,3 +391,8 @@ def reset_metrics_collector_for_testing() -> None:
 
     global _metrics_collector
     _metrics_collector = MetricsCollector(PickHistory())
+
+
+def reset_user_prefs_store_for_endpoint_testing() -> None:
+    """Reset the user prefs store singleton. Test-only helper."""
+    reset_user_prefs_store_for_testing()
