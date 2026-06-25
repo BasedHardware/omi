@@ -50,14 +50,9 @@ final class FloatingBarNotchTransitionTests: XCTestCase {
         let target = CGRect(x: 721, y: 1073, width: 268, height: 34)
 
         for step in 1...29 {
-            let reveal = FloatingBarNotchTransition.revealProgress(CGFloat(step) / 29)
-            let visibleWidth = target.width * reveal
-            let visibleHeight = target.height * reveal
-            let visible = CGRect(
-                x: target.midX - visibleWidth / 2,
-                y: target.maxY - visibleHeight,
-                width: visibleWidth,
-                height: visibleHeight
+            let visible = FloatingBarNotchTransition.growFrame(
+                targetFrame: target,
+                progress: CGFloat(step) / 29
             )
 
             XCTAssertEqual(target.origin.x, 721, accuracy: 0.001)
