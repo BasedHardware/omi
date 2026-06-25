@@ -152,7 +152,8 @@ def main() -> int:
         else args.out.with_name(f"{args.out.stem}.fit.png")
     )
     rendered_png.parent.mkdir(parents=True, exist_ok=True)
-    render_dots(dots, width, height).save(rendered_png)
+    rendered_image = render_dots(dots, width, height)
+    rendered_image.save(rendered_png)
     rendered_mask = white_alpha_mask(Image.open(rendered_png))
 
     intersection = len(original_mask & rendered_mask)
