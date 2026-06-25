@@ -626,8 +626,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         brief, model: model, fromVoice: false,
         preFetchedTitle: (title?.isEmpty == false) ? title : nil)
       log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) titled=\(title?.isEmpty == false)")
-      if !audioReceivedThisTurn && assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        let ack = "Starting a background agent."
+      if !audioReceivedThisTurn {
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck
         assistantText = ack
         barState?.isVoiceResponseActive = true
         speak(ack)
