@@ -110,30 +110,9 @@ export PORT="$BACKEND_PORT"
 
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
-APP_NAME="${OMI_APP_NAME:-Omi Dev}"
-IS_NAMED_BUNDLE=false
-if [ "$APP_NAME" != "Omi Dev" ]; then
-    IS_NAMED_BUNDLE=true
-fi
+source "$SCRIPT_DIR/scripts/app-config.sh"
+derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}"
 
-slugify_identifier() {
-    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
-}
-
-if [ "$IS_NAMED_BUNDLE" = false ]; then
-    EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
-    EXPECTED_URL_SCHEME="omi-computer-dev"
-else
-    APP_SLUG="$(slugify_identifier "$APP_NAME")"
-    if [ -z "$APP_SLUG" ]; then
-        echo "ERROR: OMI_APP_NAME must contain at least one letter or number"
-        exit 1
-    fi
-    EXPECTED_BUNDLE_ID="com.omi.$APP_SLUG"
-    EXPECTED_URL_SCHEME="omi-$APP_SLUG"
-fi
-
-BUNDLE_ID="${OMI_BUNDLE_ID:-$EXPECTED_BUNDLE_ID}"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
@@ -144,17 +123,6 @@ AGENT_DIR="$SCRIPT_DIR/agent"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
-URL_SCHEME="${OMI_URL_SCHEME:-$EXPECTED_URL_SCHEME}"
-
-if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use bundle ID '$EXPECTED_BUNDLE_ID' (got '$BUNDLE_ID')"
-    exit 1
-fi
-
-if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use URL scheme '$EXPECTED_URL_SCHEME' (got '$URL_SCHEME')"
-    exit 1
-fi
 AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
 AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
 AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
