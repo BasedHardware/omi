@@ -2975,6 +2975,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             var isFirstResponse = true
             var isGenerating = false
             let currentChatMode = chatMode
+            let currentLegacyClientScope = legacyClientScope
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 if isFirstResponse {
                     isFirstResponse = false
@@ -2994,7 +2995,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
                 let toolStart = ContinuousClock.now
-                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
+                let result = await ChatToolExecutor.execute(
+                    toolCall,
+                    originatingChatMode: currentChatMode,
+                    originatingClientScope: currentLegacyClientScope)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =

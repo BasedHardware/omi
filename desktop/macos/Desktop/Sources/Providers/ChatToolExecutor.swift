@@ -37,7 +37,11 @@ class ChatToolExecutor {
   }
 
   /// Execute a tool call and return the result as a string
-  static func execute(_ toolCall: ToolCall, originatingChatMode: ChatMode? = nil) async -> String {
+  static func execute(
+    _ toolCall: ToolCall,
+    originatingChatMode: ChatMode? = nil,
+    originatingClientScope: String? = nil
+  ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
@@ -48,7 +52,11 @@ class ChatToolExecutor {
       return await executeTaskAgentStatus()
 
     case "spawn_agent":
-      return await executeSpawnAgent(toolCall.arguments, originatingChatMode: originatingChatMode)
+      return await executeSpawnAgent(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
 
     case "manage_agent_pills":
       return await executeManageAgentPills(toolCall.arguments)
@@ -435,9 +443,16 @@ class ChatToolExecutor {
     return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
   }
 
-  private static func executeSpawnAgent(_ args: [String: Any], originatingChatMode: ChatMode?) async -> String {
+  private static func executeSpawnAgent(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
     if originatingChatMode == .ask {
       return "Error: spawn_agent is unavailable in Ask mode. Switch to Act mode before starting a background agent."
+    }
+    if originatingClientScope == "floating-pill" {
+      return "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
     let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)

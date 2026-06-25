@@ -22,7 +22,13 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testFallbackFailurePathsRecordCompletionTime() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("pill.status = .failed(errorText)\n            pill.completedAt = Date()"))
+    XCTAssertTrue(
+      source.contains(
+        """
+        pill.status = .failed(errorText)
+                    pill.latestActivity = errorText
+                    pill.completedAt = Date()
+        """))
     XCTAssertTrue(
       source.contains(
         "pill.status = .failed(\"Agent ended before reporting a final result\")\n            pill.completedAt = Date()"))
