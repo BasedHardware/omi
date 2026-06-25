@@ -174,7 +174,7 @@ def test_build_memory_vector_metadata_uses_neutral_keys_not_memory():
 
     assert metadata["memory_schema_version"] == MEMORY_VECTOR_SCHEMA_VERSION
     assert metadata["memory_layer"] == "long_term"
-    assert "memory_schema_version" not in metadata
+    assert "memory" not in metadata
     assert "memory_tier" not in metadata
     assert metadata["memory_id"] == "mem_abc123"
     assert metadata["uid"] == "uid-canonical"
@@ -188,16 +188,18 @@ def test_neutral_filters_use_memory_layer_and_schema_version():
     assert {"memory_layer": {"$eq": "archive"}} in archive_filter["$and"]
     for pinecone_filter in (default_filter, archive_filter):
         assert {"memory_schema_version": {"$eq": MEMORY_VECTOR_SCHEMA_VERSION}} in pinecone_filter["$and"]
-        assert {"memory_schema_version": {"$eq": 1}} not in pinecone_filter["$and"]
+        assert not any("memory_tier" in clause for clause in pinecone_filter["$and"])
 
 
-def test_parse_memory_search_vector_hit_rejects_memory_metadata():
-    memory_metadata = build_memory_vector_metadata(
-        _item(),
-        projection_commit_id="commit-ledger",
-        vector_updated_at=datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc),
-    )
-    parsed = parse_memory_search_vector_hit({"score": 0.9, "metadata": memory_metadata})
+def test_parse_memory_search_vector_hit_rejects_legacy_memory_tier_metadata():
+    legacy_metadata = {
+        "uid": "uid-canonical",
+        "memory_id": "mem_abc123",
+        "memory_tier": "short_term",
+        "projection_commit_id": "commit-ledger",
+        "vector_updated_at": datetime(2026, 6, 24, 12, 5, tzinfo=timezone.utc).isoformat(),
+    }
+    parsed = parse_memory_search_vector_hit({"score": 0.9, "metadata": legacy_metadata})
     assert parsed.hit is None
     assert parsed.decision == SearchDecision.stale_vector
 
@@ -486,7 +488,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
         return_value=None,
     ):
-        promote_short_term_item_via_apply(
+        promoted, _ = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -523,7 +525,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
         return_value=None,
     ):
-        promote_short_term_item_via_apply(
+        promoted, _ = promote_short_term_item_via_apply(
             uid,
             short_item,
             control=control,
@@ -540,3 +542,43 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
     assert fake_index.upserts[2]["vectors"][0]["metadata"]["memory_layer"] == "long_term"
     assert len(fake_index._vectors) == 1
     assert fake_index._vectors[memory_id]["metadata"]["memory_layer"] == "long_term"
+
+
+def test_promotion_vector_sync_failure_increments_report(monkeypatch):
+    from datetime import datetime, timezone
+
+    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
+
+    vector_db = _load_vector_db_with_stubs()
+    monkeypatch.setattr(vector_db, "index", _FailingIndex())
+    monkeypatch.setattr(vector_db, "embeddings", _FakeEmbeddings())
+    sys.modules["database.vector_db"] = vector_db
+
+    from tests.unit.test_ws_b_short_term_lifecycle import (
+        _canonical_db_with_control,
+        _seed_canonical_short_term,
+        _set_canonical_cohort,
+    )
+
+    now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
+    uid = "uid-canonical-vector-fail"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    threshold = 25
+    for index in range(threshold):
+        _seed_canonical_short_term(
+            db,
+            uid=uid,
+            conversation_id=f"conv-vector-fail-{index}",
+            content=f"Fact {index}",
+            monkeypatch=monkeypatch,
+        )
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=now, run_id="promo-vector-fail")
+
+    assert report.trigger_reason == "batch_threshold"
+    assert report.promoted_count == threshold
+    assert report.vector_sync_failures == threshold
+    for memory_id in report.promoted_memory_ids:
+        stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
+        assert stored["tier"] == MemoryTier.long_term.value
