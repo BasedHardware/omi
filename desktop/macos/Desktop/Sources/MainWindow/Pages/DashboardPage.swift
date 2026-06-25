@@ -546,7 +546,7 @@ struct DashboardPage: View {
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
                 navigate(to: .chat)
             }
-            HomeAIChoiceButton(title: "More", brand: .agents) {
+            HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
             }
         }

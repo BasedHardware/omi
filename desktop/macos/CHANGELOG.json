@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons"
+  ],
   "releases": [
     {
       "version": "0.11.535",
