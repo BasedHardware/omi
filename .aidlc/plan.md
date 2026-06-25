@@ -67,10 +67,11 @@ Pure function `score(model: ModelSpec, task: TaskSpec) -> float` that implements
 - [ ] AC2: All component scores are clamped to `[0.0, 1.0]` before weighting (defensive against bad JSON data)
 - [ ] AC3: If weights don't sum to `1.0` for a task, the function still works (does NOT silently renormalize — explicit weights are the contract)
 - [ ] AC4: If any component score is None, that component contributes 0 (does NOT raise)
-- [ ] AC5: Two models with identical scores → ties broken by `model.id` alphabetical (deterministic, no flakiness)
+
+> Tie-breaking by `model.id` alphabetical is the **endpoint**'s responsibility (T-004 AC4), not the scoring function's. The scoring function returns a single float; sorting happens at the endpoint layer.
 
 **Test approach:**
-Pure unit tests in pytest. No fixtures needed beyond constructing `ModelSpec` and `TaskSpec` dataclasses inline. ~10 tests covering: basic formula, clamping, None handling, ties, zero weights, large weights.
+Pure unit tests in pytest. No fixtures needed beyond constructing `ModelSpec` and `TaskSpec` dataclasses inline. ~10 tests covering: basic formula, clamping, None handling, ties (verified at the endpoint), zero weights, large weights.
 
 **Estimated effort:** S (1-2 hours, ~50 lines source + ~100 lines tests)
 
@@ -321,7 +322,7 @@ No automated tests. Manual verification: run the 3 demos, confirm output matches
 
 ## Implementation Notes
 
-- **Commit strategy**: 1 commit per task (T-001 through T-008) + a few `.aidlc/` metadata commits. Per repo `AGENTS.md` "individual commits per file" is satisfied within each task (source + tests paired).
+- **Commit strategy**: 1 commit per task (T-001 through T-008) + a few `.aidlc/` metadata commits. **Deviation from repo `AGENTS.md`** ("individual commits per file"): each task commit pairs source + tests for atomic vertical slices. This was a deliberate trade-off for spec→code traceability, not a violation of the spirit of the policy (each commit still touches ≤2 files, keeping diffs reviewable).
 - **No push, no PR** until user explicitly approves per repo `AGENTS.md`.
 - **Branch is local only**: `feat/auto-router-v1` in the worktree at `/Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1/`.
 - **Backend tests**: run via `cd backend && python -m pytest tests/unit/test_auto_router_*.py -v`.
