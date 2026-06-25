@@ -1,6 +1,7 @@
 """Listen/STT websocket seam coverage."""
 
 import json
+import uuid
 
 from fakes.firestore import get_mock_firestore, read_conversation
 from fakes.stt import fake_suggested_transcript_event
@@ -33,6 +34,10 @@ def _receive_until(websocket, predicate, *, limit=20):
 
 def _is_ready_event(payload):
     return isinstance(payload, dict) and payload.get("type") == "service_status" and payload.get("status") == "ready"
+
+
+def _is_conversation_session_event(payload):
+    return isinstance(payload, dict) and payload.get("type") == "conversation_session"
 
 
 def _is_segment_batch(payload):
@@ -121,6 +126,9 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
         websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
         auth_response = websocket.receive_json()
         assert auth_response == {"type": "auth_response", "success": True}
+        session_event = _receive_until(websocket, _is_conversation_session_event)
+        uuid.UUID(session_event["conversation_id"])
+        assert session_event["status"] == "in_progress"
         _receive_until(websocket, _is_ready_event)
 
         websocket.send_bytes(b"\x80" * 320)
@@ -151,6 +159,7 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     assert len(conversations) == 1
     conversation = read_conversation(test_uid, conversations[0].id)
     assert conversation is not None
+    assert conversations[0].id == session_event["conversation_id"]
     assert getattr(conversation["source"], "value", conversation["source"]) == "desktop"
     assert getattr(conversation["status"], "value", conversation["status"]) == "in_progress"
     assert isinstance(conversation["transcript_segments"], str)
@@ -161,3 +170,31 @@ def test_web_listen_custom_stt_suggested_transcript_is_emitted_and_persisted(cli
     assert persisted_conversation["source"] == "desktop"
     assert persisted_conversation["status"] == "in_progress"
     assert persisted_conversation["transcript_segments"] == emitted_segments
+
+
+def test_web_listen_reconnect_emits_existing_conversation_session_id(client, test_uid):
+    """A fast reconnect should expose the same active conversation id instead of making clients infer it."""
+    _seed_listen_user(test_uid)
+
+    with client.websocket_connect(
+        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        first_event = _receive_until(websocket, _is_conversation_session_event)
+        uuid.UUID(first_event["conversation_id"])
+        _receive_until(websocket, _is_ready_event)
+
+    with client.websocket_connect(
+        "/v4/web/listen?custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        second_event = _receive_until(websocket, _is_conversation_session_event)
+        _receive_until(websocket, _is_ready_event)
+
+    assert second_event["conversation_id"] == first_event["conversation_id"]
+    conversations = list(
+        get_mock_firestore().collection("users").document(test_uid).collection("conversations").stream()
+    )
+    assert [conversation.id for conversation in conversations] == [first_event["conversation_id"]]

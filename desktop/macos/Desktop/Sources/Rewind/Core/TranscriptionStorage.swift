@@ -70,7 +70,7 @@ actor TranscriptionStorage {
         return record.id!
     }
 
-    /// Mark session as finished (recording complete, ready for upload)
+    /// Mark session as finished (recording complete, ready for upload/reconciliation)
     func finishSession(id: Int64) async throws {
         let db = try await ensureInitialized()
 
@@ -79,8 +79,8 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
-            guard !record.hasSyncedBackendIdentity else {
-                log("TranscriptionStorage: Skipping finishSession for backend-synced session \(id)")
+            guard record.status != .completed && !record.backendSynced else {
+                log("TranscriptionStorage: Skipping finishSession for completed backend-synced session \(id)")
                 return false
             }
 
@@ -94,6 +94,30 @@ actor TranscriptionStorage {
         if didFinish {
             log("TranscriptionStorage: Finished session \(id)")
         }
+    }
+
+    /// Bind a local recording session to the backend conversation id announced by `/v4/listen`.
+    /// This is not completion: the backend conversation may still be `in_progress` until stop/finalize.
+    func bindBackendConversation(id: Int64, backendId: String) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try TranscriptionSessionRecord.fetchOne(database, key: id) else {
+                throw TranscriptionStorageError.sessionNotFound
+            }
+
+            guard record.canAcceptCompletion(backendId: backendId) else {
+                log("TranscriptionStorage: Skipping conflicting backend bind for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))")
+                return
+            }
+
+            record.backendId = backendId
+            record.conversationStatus = .inProgress
+            record.updatedAt = Date()
+            try record.update(database)
+        }
+
+        log("TranscriptionStorage: Bound session \(id) to backend conversation \(backendId)")
     }
 
     /// Mark session as pending upload
@@ -150,8 +174,8 @@ actor TranscriptionStorage {
                 log("TranscriptionStorage: Skipping markSessionFailed for already-completed session \(id)")
                 return
             }
-            guard !record.hasSyncedBackendIdentity else {
-                log("TranscriptionStorage: Skipping markSessionFailed for backend-synced session \(id)")
+            guard record.status != .completed && !record.backendSynced else {
+                log("TranscriptionStorage: Skipping markSessionFailed for completed backend-synced session \(id)")
                 return
             }
 
@@ -179,8 +203,8 @@ actor TranscriptionStorage {
                 log("TranscriptionStorage: Skipping incrementRetryCount for already-completed session \(id)")
                 return
             }
-            guard !record.hasSyncedBackendIdentity else {
-                log("TranscriptionStorage: Skipping incrementRetryCount for backend-synced session \(id)")
+            guard record.status != .completed && !record.backendSynced else {
+                log("TranscriptionStorage: Skipping incrementRetryCount for completed backend-synced session \(id)")
                 return
             }
 
@@ -215,8 +239,8 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
-            guard !record.hasSyncedBackendIdentity else {
-                log("TranscriptionStorage: Skipping status update for backend-synced session \(id)")
+            guard record.status != .completed && !record.backendSynced else {
+                log("TranscriptionStorage: Skipping status update for completed backend-synced session \(id)")
                 return
             }
 
@@ -528,7 +552,6 @@ actor TranscriptionStorage {
             try TranscriptionSessionRecord
                 .filter(Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -543,7 +566,6 @@ actor TranscriptionStorage {
                 .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
                 .filter(Column("retryCount") < maxRetries)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("updatedAt").asc)
                 .fetchAll(database)
         }
@@ -557,7 +579,6 @@ actor TranscriptionStorage {
             try TranscriptionSessionRecord
                 .filter(Column("status") == TranscriptionSessionStatus.recording.rawValue)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -574,7 +595,6 @@ actor TranscriptionStorage {
                 .filter(Column("status") == TranscriptionSessionStatus.uploading.rawValue)
                 .filter(Column("updatedAt") < cutoff)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -610,7 +630,6 @@ actor TranscriptionStorage {
                     (Column("status") == TranscriptionSessionStatus.failed.rawValue && Column("retryCount") < 5)
                 )
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }

@@ -214,6 +214,33 @@ class TranscriptionRetryService {
         log("TranscriptionRetryService: Reconciling session \(sessionId) (retryCount: \(session.retryCount))")
 
         do {
+            if let backendId = session.backendId, !backendId.isEmpty {
+                do {
+                    let conversation = try await APIClient.shared.getConversation(id: backendId)
+                    guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+                        id: conversation.id,
+                        boundBackendId: backendId,
+                        status: conversation.status,
+                        source: conversation.source
+                    ) else {
+                        if conversation.status == .inProgress {
+                            log("TranscriptionRetryService: Backend conversation \(backendId) is still in progress, will retry")
+                            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+                            try await TranscriptionStorage.shared.markSessionFailed(
+                                id: sessionId, error: "Bound backend conversation is still in progress")
+                            return
+                        }
+                        log("TranscriptionRetryService: Backend conversation \(backendId) is not a completed desktop session, falling back to timestamp")
+                        throw APIError.invalidResponse
+                    }
+                    log("TranscriptionRetryService: Session \(sessionId) found by exact backend id \(conversation.id), marking completed")
+                    try await TranscriptionStorage.shared.markSessionCompleted(id: sessionId, backendId: conversation.id)
+                    return
+                } catch {
+                    logError("TranscriptionRetryService: Exact backend id lookup failed for session \(sessionId), falling back to timestamp", error: error)
+                }
+            }
+
             // Check if backend already has a conversation for this time window
             let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
             if let existing = try? await APIClient.shared.getConversations(
