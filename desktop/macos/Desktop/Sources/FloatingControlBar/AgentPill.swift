@@ -48,6 +48,14 @@ final class AgentPill: ObservableObject, Identifiable {
             default: return false
             }
         }
+
+        var indicatorColor: Color {
+            switch self {
+            case .queued: return Color(red: 0.85, green: 0.78, blue: 0.30)
+            case .starting, .running, .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+            case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+            }
+        }
     }
 
     let id = UUID()
