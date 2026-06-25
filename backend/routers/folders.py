@@ -91,12 +91,23 @@ def delete_folder(
     if folder.get('is_system'):
         raise HTTPException(status_code=400, detail="Cannot delete system folder")
 
+    if move_to_folder_id:
+        if move_to_folder_id == folder_id:
+            raise HTTPException(status_code=400, detail="Cannot move conversations to the folder being deleted")
+        if not folders_db.get_folder(uid, move_to_folder_id):
+            raise HTTPException(status_code=404, detail="Target folder not found")
+
     folders_db.delete_folder(uid, folder_id, move_to_folder_id)
 
 
 @router.post('/v1/folders/reorder', tags=['folders'])
 def reorder_folders(request: ReorderFoldersRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Reorder folders by providing an ordered list of folder IDs."""
+    existing_ids = {folder['id'] for folder in folders_db.get_folders(uid)}
+    unknown_ids = [folder_id for folder_id in request.folder_ids if folder_id not in existing_ids]
+    if unknown_ids:
+        raise HTTPException(status_code=422, detail={"message": "Unknown folder IDs", "folder_ids": unknown_ids})
+
     folders_db.reorder_folders(uid, request.folder_ids)
     return {"status": "ok"}
 
