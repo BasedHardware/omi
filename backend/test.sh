@@ -213,6 +213,12 @@ pytest tests/unit/test_auto_router_task_registry.py -v
 pytest tests/unit/test_auto_router_model_registry.py -v
 pytest tests/unit/test_auto_router_daily_refresh.py -v
 pytest tests/unit/test_auto_router_endpoint.py -v
+pytest tests/unit/test_auto_router_metrics.py -v
+pytest tests/unit/test_auto_router_user_prefs.py -v
+pytest tests/unit/test_auto_router_benchmarks_fetcher.py -v
+pytest tests/unit/test_auto_router_user_prefs_store_protocol.py -v
+pytest tests/unit/test_auto_router_firestore_user_prefs_store.py -v
+pytest tests/unit/test_auto_router_prefs_store_factory.py -v
 pytest tests/unit/test_auto_router_demo.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
