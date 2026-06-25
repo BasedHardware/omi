@@ -198,8 +198,10 @@ def main() -> None:
         app(standalone_mode=False)
     except CliError as exc:
         # If the error happens before the root callback ran, ``ctx.obj`` might
-        # not exist — fall back to a default Renderer reading the env.
-        renderer = _LAST_RENDERER or Renderer(json_mode=False)
+        # not exist — fall back to a default Renderer preserving --json.
+        renderer = _LAST_RENDERER or Renderer(
+            json_mode="--json" in sys.argv,
+        )
         sys.exit(_exit_with_cli_error(exc, renderer))
     except click.ClickException as exc:
         # Click's own usage errors (unknown flag, missing argument, etc.).

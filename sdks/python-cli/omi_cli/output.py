@@ -142,7 +142,8 @@ class Renderer:
                 payload["detail"] = detail
             if extra:
                 payload.update(dict(extra))
-            self._stderr.print(json.dumps(payload))
+            sys.stderr.write(json.dumps(payload) + "\n")
+            sys.stderr.flush()
         else:
             line = f"[red]✗[/red] {message}"
             if detail:
