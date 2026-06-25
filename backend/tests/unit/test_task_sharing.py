@@ -669,7 +669,9 @@ class TestSyncBatchSkipsLocked:
                 {"id": "t1", "description": "OK", "is_locked": False},
                 {"id": "t2", "description": "Secret", "is_locked": True},
             ]
-            mock_db.batch_sync_update_action_items = MagicMock()
+            # The helper returns the set of ids actually written; the router
+            # uses that for updated_count and to gate vector upserts.
+            mock_db.batch_sync_update_action_items = MagicMock(return_value={"t1"})
 
             request = SyncBatchRequest(
                 items=[

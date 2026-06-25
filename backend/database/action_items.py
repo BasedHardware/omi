@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Optional, List, Set
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -635,16 +635,22 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
     return {"pending_export": pending_export, "synced_items": synced_items}
 
 
-def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
+def batch_sync_update_action_items(uid: str, updates: List[dict]) -> Set[str]:
     """
     Batch update action items during reminders sync. Single Firestore batch commit.
 
     Args:
         uid: User ID
         updates: List of {'id': str, 'data': dict} entries
+
+    Returns:
+        The set of ids that were actually written. Missing/stale ids are skipped
+        (see below), so callers must use this to compute updated counts and to
+        gate downstream side effects (e.g. vector upserts) on confirmed updates
+        rather than assuming every requested id was updated.
     """
     if not updates:
-        return
+        return set()
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
@@ -652,6 +658,7 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
 
     batch = db.batch()
     count = 0
+    updated_ids: Set[str] = set()
 
     # batch.update() on a missing doc raises google NotFound, which would
     # 500 the whole sync batch on one stale/deleted reminder id. Pre-filter
@@ -674,6 +681,7 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
             update_data['sync_requested'] = False
         doc_ref = action_items_ref.document(entry['id'])
         batch.update(doc_ref, update_data)
+        updated_ids.add(entry['id'])
         count += 1
 
         if count >= 499:
@@ -683,6 +691,8 @@ def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
 
     if count > 0:
         batch.commit()
+
+    return updated_ids
 
 
 def unlock_all_action_items(uid: str):

@@ -198,3 +198,37 @@ def test_all_existing_ids_all_updated():
         mod.batch_sync_update_action_items('uid-xyz', updates)
 
     assert set(batch.updated_ids) == existing
+
+
+def test_returns_only_actually_updated_ids():
+    """The helper must report exactly the ids it wrote, not the requested set.
+
+    Callers use the return value to compute ``updated_count`` and to gate vector
+    upserts. If skipped (missing) ids leaked into the return, the router would
+    over-report updates and upsert vectors for action items that no longer exist
+    (cross-system data-consistency drift). Pre-fix the helper returned ``None``,
+    so the router fell back to ``len(updates)`` and upserted every description.
+    """
+    existing = {'alive-1', 'alive-2'}
+    updates = [
+        {'id': 'alive-1', 'data': {'description': 'one'}},
+        {'id': 'ghost', 'data': {'description': 'gone'}},  # does not exist anymore
+        {'id': 'alive-2', 'data': {'description': 'two'}},
+    ]
+
+    db, batch = _make_db(existing)
+    with _PatchDb(mod, db):
+        updated_ids = mod.batch_sync_update_action_items('uid-xyz', updates)
+
+    # Exactly the existing ids are reported back — the missing id is excluded.
+    assert updated_ids == existing
+    assert 'ghost' not in updated_ids
+    # And it stays consistent with what was actually written.
+    assert updated_ids == set(batch.updated_ids)
+
+
+def test_empty_updates_returns_empty_set():
+    """No updates means an empty set (not None) so callers can len() it safely."""
+    db, _ = _make_db(set())
+    with _PatchDb(mod, db):
+        assert mod.batch_sync_update_action_items('uid-xyz', []) == set()
