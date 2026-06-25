@@ -75,6 +75,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var responseHeightCancellable: AnyCancellable?
     private var agentPillsCancellable: AnyCancellable?
     private var voiceResponseGlowCancellable: AnyCancellable?
+    private var previousVoiceResponseGlowActive = false
     private var resizeWorkItem: DispatchWorkItem?
     /// Saved center point from before chat opened, used to restore position on close.
     private var preChatCenter: NSPoint?
@@ -491,10 +492,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         voiceResponseGlowCancellable = state.$isVoiceResponseActive
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] isActive in
                 guard let self else { return }
+                let wasActive = self.previousVoiceResponseGlowActive
+                self.previousVoiceResponseGlowActive = isActive
+                var targetSize = self.currentSurfaceSizeForCurrentScreen()
+                if wasActive,
+                   !isActive,
+                   self.notchModeEnabled,
+                   self.state.showingAIConversation {
+                    targetSize.height = max(self.inputPanelHeight, targetSize.height - Self.notchGlowOutsetBottom)
+                }
                 self.resizeAnchored(
-                    to: self.currentSurfaceSizeForCurrentScreen(),
+                    to: targetSize,
                     makeResizable: self.styleMask.contains(.resizable),
                     animated: true,
                     animationDuration: 0.18,
