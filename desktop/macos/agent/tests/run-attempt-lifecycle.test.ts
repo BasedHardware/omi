@@ -67,7 +67,51 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
-  it("replaces an active binding when MCP server configuration changes", async () => {
+  it("reuses an active binding when only request-scoped MCP env changes", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      mcpServers: [
+        {
+          name: "omi-tools",
+          command: "node",
+          args: ["tools.js"],
+          env: [
+            { name: "OMI_REQUEST_ID", value: "request-1" },
+            { name: "OMI_CLIENT_ID", value: "client-a" },
+            { name: "OMI_QUERY_MODE", value: "act" },
+          ],
+        },
+      ],
+    });
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-2",
+      clientId: "client-b",
+      mcpServers: [
+        {
+          command: "node",
+          name: "omi-tools",
+          env: [
+            { value: "request-2", name: "OMI_REQUEST_ID" },
+            { value: "client-b", name: "OMI_CLIENT_ID" },
+            { value: "act", name: "OMI_QUERY_MODE" },
+          ],
+          args: ["tools.js"],
+        },
+      ],
+    });
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    store.close();
+  });
+
+  it("replaces an active binding when stable MCP server configuration changes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 
     await kernel.executeRun({

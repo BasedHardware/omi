@@ -42,8 +42,58 @@ function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
+const REQUEST_SCOPED_MCP_ENV_KEYS = new Set(["OMI_REQUEST_ID", "OMI_CLIENT_ID"]);
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJsonStringify(entry)).join(",")}]`;
+  }
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(object[key])}`)
+    .join(",")}}`;
+}
+
+function stableMcpServerConfig(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((server) => {
+    if (!server || typeof server !== "object" || Array.isArray(server)) {
+      return server;
+    }
+    const normalized: Record<string, unknown> = { ...(server as Record<string, unknown>) };
+    if (Array.isArray(normalized.env)) {
+      normalized.env = normalized.env
+        .filter((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return true;
+          }
+          const name = (entry as Record<string, unknown>).name;
+          return typeof name !== "string" || !REQUEST_SCOPED_MCP_ENV_KEYS.has(name);
+        })
+        .sort((left, right) => {
+          const leftName =
+            left && typeof left === "object" && !Array.isArray(left)
+              ? String((left as Record<string, unknown>).name ?? "")
+              : "";
+          const rightName =
+            right && typeof right === "object" && !Array.isArray(right)
+              ? String((right as Record<string, unknown>).name ?? "")
+              : "";
+          return leftName.localeCompare(rightName);
+        });
+    }
+    return normalized;
+  });
+}
+
 function stableJsonHash(value: unknown): string {
-  return stableHash(JSON.stringify(value ?? null));
+  return stableHash(stableJsonStringify(value ?? null));
 }
 
 function parseJsonObject(value: string | null | undefined): Record<string, unknown> {
@@ -58,7 +108,7 @@ function parseJsonObject(value: string | null | undefined): Record<string, unkno
 
 function bindingMetadata(input: ExecuteAgentRunInput): string {
   return JSON.stringify({
-    mcpServersHash: stableJsonHash(input.mcpServers ?? []),
+    mcpServersHash: stableJsonHash(stableMcpServerConfig(input.mcpServers ?? [])),
   });
 }
 
@@ -1260,7 +1310,7 @@ export class AgentRuntimeKernel {
       return false;
     }
     const metadata = parseJsonObject(binding.metadataJson);
-    const expectedMcpServersHash = stableJsonHash(input.input.mcpServers ?? []);
+    const expectedMcpServersHash = stableJsonHash(stableMcpServerConfig(input.input.mcpServers ?? []));
     return metadata.mcpServersHash === expectedMcpServersHash;
   }
 

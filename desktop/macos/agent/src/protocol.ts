@@ -49,7 +49,7 @@ export interface ToolResultMessage {
   result: string;
   requestId?: string;
   clientId?: string;
-  protocolVersion?: number;
+  protocolVersion?: ProtocolVersion;
 }
 
 export interface ControlToolRequestMessage extends ProtocolEnvelope {

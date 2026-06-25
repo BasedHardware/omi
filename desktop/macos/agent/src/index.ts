@@ -970,7 +970,7 @@ async function main(): Promise<void> {
             requestId,
             clientId: control.clientId,
           });
-        } catch {
+        } catch (error) {
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -979,7 +979,10 @@ async function main(): Promise<void> {
             name: control.name,
             result: JSON.stringify({
               ok: false,
-              error: { code: "invalid_owner_id", message: "ownerId cannot be empty" },
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
             }),
           });
           break;
