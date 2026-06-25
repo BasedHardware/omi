@@ -20,8 +20,12 @@ from utils.auto_router.task_registry import TaskRegistry
 def _clear_cache_between_tests():
     """Each test gets a fresh registry cache (so test order doesn't matter)."""
     reset_registry_cache_for_testing()
+    from routers.auto_router import reset_metrics_collector_for_testing
+
+    reset_metrics_collector_for_testing()
     yield
     reset_registry_cache_for_testing()
+    reset_metrics_collector_for_testing()
 
 
 @pytest.fixture
@@ -253,6 +257,103 @@ class TestAuth:
 # ---------------------------------------------------------------------------
 # AC: Empty model registry → model is None
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# AC: Metrics endpoint (v2)
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsEndpoint:
+    """GET /v1/auto-router/metrics returns cache + tasks + pick_history."""
+
+    def test_metrics_endpoint_returns_200(self, client):
+        resp = client.get("/v1/auto-router/metrics")
+        assert resp.status_code == 200
+
+    def test_metrics_response_shape(self, client):
+        resp = client.get("/v1/auto-router/metrics")
+        data = resp.json()
+        for key in ("cache", "tasks", "pick_history", "generated_at"):
+            assert key in data, f"missing key {key!r} in metrics response"
+
+    def test_metrics_cache_state_present(self, client):
+        resp = client.get("/v1/auto-router/metrics")
+        cache = resp.json()["cache"]
+        for key in ("last_loaded_at", "age_seconds", "is_fresh"):
+            assert key in cache
+
+    def test_metrics_tasks_have_all_5_task_types(self, client):
+        resp = client.get("/v1/auto-router/metrics")
+        tasks = resp.json()["tasks"]
+        assert set(tasks.keys()) == {
+            "ptt_response",
+            "screenshot_understanding",
+            "screenshot_embedding",
+            "general_assistant",
+            "transcription",
+        }
+
+    def test_metrics_tasks_include_weights_and_pick(self, client):
+        resp = client.get("/v1/auto-router/metrics")
+        for task_name, task_state in resp.json()["tasks"].items():
+            assert "weights" in task_state, f"{task_name} missing weights"
+            assert "candidate_count" in task_state
+            assert "current_pick" in task_state
+            assert "current_score" in task_state
+
+    def test_metrics_requires_auth(self, client_no_auth):
+        resp = client_no_auth.get("/v1/auto-router/metrics")
+        # No auth override → 401 or 500 (auth fails or firebase not initialized).
+        assert resp.status_code in (401, 500), f"expected 401 or 500, got {resp.status_code}"
+
+    def test_metrics_records_pick_after_pick_call(self, client):
+        from routers.auto_router import reset_metrics_collector_for_testing
+
+        reset_metrics_collector_for_testing()
+
+        # Empty initially.
+        resp = client.get("/v1/auto-router/metrics")
+        assert resp.json()["pick_history"] == []
+
+        # Make a pick call.
+        client.get("/v1/auto-router/pick?task=ptt_response")
+
+        # History should now have 1 entry.
+        resp = client.get("/v1/auto-router/metrics")
+        history = resp.json()["pick_history"]
+        assert len(history) == 1
+        assert history[0]["task"] == "ptt_response"
+        assert history[0]["model"] is not None
+        assert isinstance(history[0]["score"], float)
+        assert history[0]["weights_used"] == {"quality": 0.4, "latency": 0.5, "cost": 0.1}
+
+    def test_metrics_picks_are_capped_at_100(self, client):
+        from routers.auto_router import reset_metrics_collector_for_testing
+
+        reset_metrics_collector_for_testing()
+
+        # Make 105 pick calls (capped at 100).
+        for _ in range(105):
+            client.get("/v1/auto-router/pick?task=ptt_response")
+
+        resp = client.get("/v1/auto-router/metrics")
+        assert len(resp.json()["pick_history"]) == 100
+
+    def test_metrics_picks_recorded_across_tasks(self, client):
+        from routers.auto_router import reset_metrics_collector_for_testing
+
+        reset_metrics_collector_for_testing()
+
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        client.get("/v1/auto-router/pick?task=general_assistant")
+        client.get("/v1/auto-router/pick?task=transcription")
+
+        resp = client.get("/v1/auto-router/metrics")
+        history = resp.json()["pick_history"]
+        assert len(history) == 3
+        tasks_picked = {h["task"] for h in history}
+        assert tasks_picked == {"ptt_response", "general_assistant", "transcription"}
 
 
 class TestNoCandidates:

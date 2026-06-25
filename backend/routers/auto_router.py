@@ -41,10 +41,15 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from utils.auto_router.daily_refresh import DailyRefreshCache
+from utils.auto_router.metrics import MetricsCollector
 from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
 from utils.auto_router.task_registry import TaskRegistry, UnknownTaskError
 from utils.executors import run_blocking
+
+# Module-level metrics collector singleton. Reset between tests via
+# reset_metrics_collector_for_testing().
+_metrics_collector = MetricsCollector()
 
 # Auth: use a thin local wrapper instead of importing get_current_user_uid
 # at module level. The upstream auth function pulls in firebase_admin + stripe
@@ -224,10 +229,56 @@ async def auto_router_pick(
         ),
         "attribution": _ATTRIBUTION,
     }
+
+    # Record this pick in the metrics history (process-local, in-memory).
+    # v3 may persist this to Redis/DB.
+    if winner is not None and winner_score is not None:
+        _metrics_collector.record_pick(
+            task=task_spec.name,
+            model=winner.id,
+            score=winner_score,
+            weights_used={
+                "quality": task_spec.quality_weight,
+                "latency": task_spec.latency_weight,
+                "cost": task_spec.cost_weight,
+            },
+        )
+
     return response
+
+
+# ---------------------------------------------------------------------------
+# Metrics endpoint
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/auto-router/metrics")
+async def auto_router_metrics(uid: str = Depends(auth_dependency)):
+    """Expose cache state, per-task current state, and pick history.
+
+    Requires authentication (matches pick endpoint).
+    The `uid` is captured but not used in v2 (per-user metrics is v3).
+
+    Process-local only — pick_history is in-memory and resets on restart.
+    """
+    cache = _get_registry_cache()
+    task_registry, model_registry = await cache.get_or_refresh(_get_loader())
+
+    state = _metrics_collector.current_state(task_registry, model_registry, cache)
+    state["pick_history"] = _metrics_collector.pick_history_snapshot()
+    state["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return state
 
 
 def reset_registry_cache_for_testing() -> None:
     """Clear the module-level registry cache. Test-only helper."""
     global _registry_cache
     _registry_cache = None
+
+
+def reset_metrics_collector_for_testing() -> None:
+    """Reset the metrics collector (clears pick history). Test-only helper."""
+    from utils.auto_router.metrics import MetricsCollector, PickHistory
+
+    global _metrics_collector
+    _metrics_collector = MetricsCollector(PickHistory())
