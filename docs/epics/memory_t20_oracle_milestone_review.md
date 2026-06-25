@@ -16,7 +16,7 @@ Review the memory memory T19/T20/T21 default-read and vector integration milesto
 
 ## Files reviewed
 
-- `docs/epics/memory_t20_vector_readiness_remaining_gates.md`
+- T20 vector readiness milestone artifact (ephemeral; removed during PR slim-down)
 - `docs/epics/memory_implementation_tickets.md`
 - `backend/utils/memory/vector_search_service.py`
 - `backend/database/memory_vector_metadata.py`
