@@ -198,9 +198,10 @@ struct ConversationDetailView: View {
                 return
             }
 
-            // Load segments from local database if not already present
-            // Segments are stored locally but not loaded with the list view for performance
-            if conversation.transcriptSegments.isEmpty {
+            // Load detail-only transcript data only when the list response omitted it.
+            // An explicit empty transcript means either genuinely empty or locked/redacted;
+            // do not refetch forever just because the decoded array is empty.
+            if conversation.shouldFetchDetailForTranscript {
                 isLoadingConversation = true
                 do {
                     // First try local database (faster, works offline)
@@ -211,6 +212,7 @@ struct ConversationDetailView: View {
                             let segments = segmentRecords.map { $0.toTranscriptSegment() }
                             var updatedConversation = conversation
                             updatedConversation.transcriptSegments = segments
+                            updatedConversation.transcriptSegmentsIncluded = true
                             loadedConversation = updatedConversation
                             log("ConversationDetail: Loaded \(segments.count) segments from local database")
                         } else {
@@ -678,7 +680,18 @@ struct ConversationDetailView: View {
             .background(OmiColors.backgroundTertiary.opacity(0.5))
 
             // Drawer content
-            if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
+            if displayConversation.transcriptPresenceState == .lockedOrRedacted && !isLoadingConversation {
+                VStack(spacing: 12) {
+                    Image(systemName: "lock")
+                        .scaledFont(size: 40)
+                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+
+                    Text("Transcript locked")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
                 // Empty state
                 VStack(spacing: 12) {
                     Image(systemName: "text.quote")
