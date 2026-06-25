@@ -1,36 +1,24 @@
 # AIDLC State
 
-- **Phase**: shipping
-- **Branch**: feat/auto-router-v1
-- **PR**: (none — not yet opened per AGENTS.md: "Never push or create PRs unless explicitly asked")
-- **Worktree**: /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1
-- **Last action**: 2026-06-25T11:20:00Z
-- **Next action**: PAUSE — awaiting user approval to push + open PR (per AGENTS.md "Nothing lands on main until the user explicitly says so")
+- **Phase**: specifying
+- **Branch**: feat/auto-router-v2
+- **PR**: (none — v1 PR #8343 is still open and pending merge; v2 will be a separate PR)
+- **Worktree**: /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v2
+- **Last action**: 2026-06-25T13:50:00Z
+- **Next action**: Run /plan to break v2 spec into ordered tasks (after user review/approval of spec)
 - **Notes**:
-  - Feature: Auto-router v1 — task-based model selection across Omi
-  - **All 8 implementation tasks DONE; /test DONE; /review DONE; QA-tester subagent pass DONE**
-  - **QA tester verdict:** READY-WITH-FIXES (2 medium, 5 low). Medium issues fixed.
-  - **Final verdict after QA fixes:** READY
-  - **Test count:** 110 backend + 10 desktop = **120 tests, all passing**
-  - **Branch history on top of upstream/main `ed0096b89`:**
-    1. `641574797` — spec
-    2. `78446808d` — plan
-    3. `b51c109eb` — T-001: backend scoring engine
-    4. `6ae4a9b58` — T-002: task + model registries
-    5. `fe98b605a` — T-003: daily-refresh cache
-    6. `2f4869d3d` — T-004: FastAPI endpoint
-    7. `d38b57d2d` — T-005: backend wire-up
-    8. `acd83603e` — T-006: desktop AutoRouter client
-    9. `16a7a8c8d` — T-007: developer documentation
-    10. `9ec631067` — T-008: 3 demo scenarios + demo script
-    11. `7f2f8990f` — aidlc: phase=testing
-    12. `b4ca2bb96` — review (author)
-    13. `bafbd5b54` — fix: UAT findings (HTTP 400 leak, NaN weights, doc cross-ref)
-    14. `(?pending)` — state update + review-report.md update
-  - **QA artifacts:** `UAT-REPORT.md` + `uat-findings.json` in worktree root
-  - **BLOCKED on user approval to merge PR** — per AGENTS.md, no auto-merge
-  - Demo proves mechanism works: Demo 2 (high-quality for screenshots) CHANGES winner from gemini-pro to claude-sonnet; Demos 1 & 3 amplify rankings
-  - Upstream-overlap acknowledged in spec/README/developer docs (3 places)
-  - Does NOT modify or extend upstream's `/v1/auto/model-pick` or `AutoModelSelector.swift` (verified by QA tester via `git diff`)
+  - **v2 feature:** Auto-router v2 — Make it production-useful
+  - **Built on:** v1 (17 commits, 142 backend + 15 desktop = 157 tests, all passing, PR #8343 ready for merge)
+  - **v2 branched from:** `feat/auto-router-v1` (commit 9897edcb) — all v1 work preserved
+  - **v2 focus:** Authentication + Observability metrics + ONE wired path (ChatProvider)
+  - **v2 tasks (planned):**
+    1. T-201: Add auth (`Depends(get_current_user_uid)`) to pick endpoint + tests
+    2. T-202: Add metrics endpoint + pick history (in-memory ring buffer) + tests
+    3. T-203: Wire `ChatProvider` to consult `AutoRouter` for "Auto" mode + Swift test
+    4. T-204: Demo updates (show metrics endpoint, show auth requirement)
+    5. T-205: Doc updates (developer guide, PR description for v2)
+  - **5 Open Questions in spec** — most have clear recommendations locked
+  - **Not modifying:** upstream `/v1/auto/model-pick`, upstream `AutoModelSelector.swift`, `ChatProvider.swift` core behavior (only a NEW helper function added alongside)
+  - No push, no PR until user explicit approval per AGENTS.md
 
-_Updated: 2026-06-25T11:20:00Z_
+_Updated: 2026-06-25T13:50:00Z_

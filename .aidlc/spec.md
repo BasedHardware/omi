@@ -1,251 +1,169 @@
-# Auto-router v1 — Task-based model selection across Omi
+# Auto-router v2 — Make it production-useful
 
 ## Objective
 
-Build a **v1 auto-router** for Omi that selects the best model per task type using a configurable weighted scoring across **quality / latency / cost**. The router defines a small set of representative Omi task categories (push-to-talk response, screenshot understanding, screenshot embedding, general assistant reply, transcription), assigns candidate models to each, scores them, and returns the recommended model per task — with a daily-refreshable benchmark input flow.
+v1 delivered a framework (scoring, registries, daily refresh, endpoint, desktop client, demo, tests). v2 makes the auto-router actually **used** and **measurable** in production:
 
-This is a **foundation / MVP**, not a production routing replacement. It is intended to demonstrate the mechanism and structure the conversation Nik signaled interest in: extending dynamic model selection across Omi rather than handling model choices in isolated parts of the product.
+1. **Authentication** — the v1 endpoint is unauthenticated (cubic P2 #17). Upstream's `/v1/auto/model-pick` requires auth (`Depends(get_current_user_uid)`). v2 matches that pattern.
+2. **Observability metrics endpoint** — `/v1/auto-router/metrics` exposes pick history (last N picks, counts per model, score distribution, cache age). Without this, we can't measure if the router is improving things.
+3. **Wire one Omi path** — `ChatProvider` consults `AutoRouter` for chat model selection when "Auto" mode is active. Demonstrates end-to-end value: a real Omi feature path uses the router to pick a model.
 
-The user-facing benefit (Nik's framing): **"an auto-router that switched EVERY ai model in omi daily to the most optimal based on value/cost benchmarks"** — applied across tasks, not just realtime voice.
+This is still a **foundation / MVP** — not a full production rollout. The goal is one wired path + the metrics to measure it, not all 5 paths wired.
 
-## Upstream context (important — read before implementing)
+## Upstream context (unchanged from v1)
 
-The maintainer has already shipped a **narrow realtime-voice auto-router** that does similar work for ONE task type. The new MVP does NOT replace or extend it; it complements it with a broader, multi-task framework.
+v2 still does NOT modify:
+- `backend/routers/auto_model.py` (upstream's narrow realtime-voice picker)
+- `desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift` (upstream's desktop client)
+- `ChatProvider.swift` (we add a NEW helper function alongside; we don't replace existing behavior)
 
-| Upstream has | Commit | Scope |
+v2 only EXTENDS the auto-router we built in v1. It does not touch upstream code.
+
+## What's new in v2
+
+| Area | v1 (already done) | v2 (this cycle) |
 |---|---|---|
-| `GET /v1/auto/model-pick` endpoint (backend FastAPI) | `e316decbb` | Realtime-voice only — 2 providers (`geminiFlashLive`, `gptRealtime2`) |
-| `AutoModelSelector.swift` (desktop client, 188 lines) | `368523e67` | Reads the endpoint, daily cache with `applyServerPick` |
-| `auto_model.py` router registration | `0ca5027ea` | Single `APIRouter` |
-| Security: auth required + refresh lock + proxy slug → real AA models | `8a1c2a724`, `dcb33ea59` | Defense in depth |
-| Artificial Analysis benchmark ingestion | `e316decbb` | Server-side, AA key never shipped to client |
+| Endpoint | `GET /v1/auto-router/pick?task=...` (UNAUTHENTICATED) | Same endpoint, now requires auth via `Depends(get_current_user_uid)` |
+| Observability | None | New `GET /v1/auto-router/metrics` endpoint |
+| Desktop client | `AutoRouter` singleton with per-task UserDefaults cache | (unchanged — desktop already has its own auth via AuthService) |
+| Wiring | None — endpoint exists but no Omi code calls it | `ChatProvider` consults `AutoRouter` for the "Auto" model pick when `selectedModel` is empty/"Auto" |
+| Tests | 142 backend + 15 desktop = 157 | +metrics endpoint tests, +auth tests, +wiring tests |
 
-**What this MVP adds that upstream does NOT have:**
+## Detailed design
 
-1. **Task-type parameter** — upstream picks one model unconditionally. This MVP picks per task (ptt_response / screenshot_understanding / screenshot_embedding / general_assistant / transcription).
-2. **Cost dimension** — upstream scores only `quality + speed`. This MVP scores `quality + latency + cost` with explicit weights.
-3. **Per-task weights** — upstream hardcodes `0.65 / 0.35`. This MVP makes weights configurable per task (latency-heavy for PTT, quality-heavy for screenshots, cost-heavy for embeddings).
-4. **Multi-domain framework** — upstream's auto-router is realtime-voice-only. This MVP covers 5 task types that today each pick independently (RealtimeHubController for voice, ModelQoS for chat, vision models for screenshot, embedding models for retrieval, STT models for transcription).
-5. **Pluggable benchmark source** — mock JSON initially; future AA integration without rewrite.
+### 1. Authentication
 
-**Architectural decision:** STANDALONE MVP, not an extension of `/v1/auto/model-pick`. Reasons: (a) the user's brief explicitly asks for "smallest version that already looks strategic" + "first step toward model selection across Omni" — a framework, not a tweak; (b) upstream's realtime-voice picker is tightly coupled to `RealtimeOmniProvider` (audio variants, ALPN workarounds) — absorbing other tasks into it would require a schema migration; (c) standing rule per repo `AGENTS.md` "don't duplicate upstream work" + "be honest about what's new" — a parallel implementation with explicit acknowledgment is the honest path.
+The v1 endpoint accepts any `?task=...` request. v2 requires the same `uid` parameter that upstream uses:
 
-Future integration is possible (the upstream auto-router could become a special case of this broader framework) but out of scope for v1.
-
-## Commands
-
-Per repo `backend/CLAUDE.md` and `desktop/macos/test.sh`:
-
-```bash
-# Backend tests (Python, pytest)
-cd backend && python -m pytest tests/unit/test_auto_router_*.py -v
-
-# Backend lint
-cd backend && black --line-length 120 --check utils/auto_router/ routers/auto_router.py tests/unit/test_auto_router_*.py
-cd backend && python scripts/scan_async_blockers.py
-
-# Desktop build + test
-cd desktop && xcrun swift build -c debug --package-path desktop/macos/Desktop
-cd desktop/macos && bash test.sh
-
-# Backend dev server (for manual testing)
-cd backend && uvicorn main:app --reload --port 8000
-# Then: curl http://localhost:8000/v1/auto-router/pick?task=ptt_response
-
-# Desktop dev launch
-cd desktop && OMI_APP_NAME="omi-auto-router-test" ./run.sh
-```
-
-No push / no PR until user explicitly approves (per repo `AGENTS.md`).
-
-## Project Structure
-
-```
-backend/
-├── routers/
-│   └── auto_router.py                       # NEW: FastAPI router, GET /v1/auto-router/pick
-├── utils/
-│   └── auto_router/                         # NEW: framework package
-│       ├── __init__.py
-│       ├── task_registry.py                 # task definitions + per-task weights
-│       ├── model_registry.py                # candidate models per task + quality/latency/cost
-│       ├── scoring.py                       # weighted scoring engine
-│       ├── benchmark_source.py              # JSON loader (mock; AA-ready)
-│       ├── daily_refresh.py                 # TTL cache + asyncio.Lock (mirror upstream pattern)
-│       ├── benchmarks.example.json          # example data
-│       └── README.md                        # how to add a task / model
-└── tests/
-    └── unit/
-        ├── test_auto_router_scoring.py       # NEW
-        ├── test_auto_router_task_registry.py # NEW
-        ├── test_auto_router_model_registry.py # NEW
-        ├── test_auto_router_daily_refresh.py # NEW
-        └── test_auto_router_endpoint.py     # NEW
-
-desktop/macos/Desktop/
-├── Sources/
-│   └── AutoRouter/                           # NEW: Swift client
-│       ├── AutoRouter.swift                 # multi-task picker (analogous to AutoModelSelector.swift)
-│       └── AutoRouterTask.swift             # task enum
-└── Tests/
-    └── AutoRouterTests.swift                 # NEW
-
-docs/
-└── doc/developer/
-    └── auto-router.md                        # NEW: high-level overview for contributors
-```
-
-Module name choice: `auto_router` (underscore) for the new framework, distinct from upstream's `auto_model` (singular, narrow). Endpoint at `/v1/auto-router/pick` (hyphen, distinct from upstream's `/v1/auto/model-pick`) — no namespace collision.
-
-## Code Style
-
-Existing patterns to follow:
-
-**Backend router pattern** (`backend/routers/transcribe.py`):
 ```python
-router = APIRouter()
-
-@router.websocket("/v1/transcribe")
-async def transcribe(websocket: WebSocket):
+@router.get("/v1/auto-router/pick")
+async def auto_router_pick(
+    task: str = Query(..., description="Task name to pick a model for"),
+    uid: str = Depends(get_current_user_uid),  # NEW
+):
     ...
 ```
 
-**Backend utility pattern** (`backend/utils/llm/providers.py`):
-```python
-"""LLM provider registry — exposes ModelRegistry.get(task) -> ModelSpec."""
-from dataclasses import dataclass
+The `uid` is currently unused (the response doesn't depend on the user) but matching upstream's pattern sets us up for per-user preferences in v3. Tests that call the endpoint need to pass `uid="test-uid"` or use FastAPI's `app.dependency_overrides`.
 
-@dataclass
-class ModelSpec:
-    id: str
-    quality_score: float  # 0-1
-    latency_score: float  # 0-1
-    cost_score: float      # 0-1
-```
+### 2. Observability metrics endpoint
 
-**Desktop selector pattern** (`desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift`):
-```swift
-@MainActor
-final class AutoModelSelector {
-    static let shared = AutoModelSelector()
-    private let pickKey = "realtimeOmniAutoPick"
-    private let pickDateKey = "realtimeOmniAutoPickDate"
-    private let refreshInterval: TimeInterval = 24 * 60 * 60
+`GET /v1/auto-router/metrics` returns:
+
+```json
+{
+  "generated_at": "2026-06-25T13:00:00Z",
+  "cache": {
+    "last_loaded_at": "2026-06-25T10:00:00Z",
+    "age_seconds": 10800,
+    "is_fresh": true
+  },
+  "tasks": {
+    "ptt_response": {
+      "weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1},
+      "candidate_count": 4,
+      "current_pick": "gemini-1-5-flash-8b-exp",
+      "current_score": 0.865
+    },
     ...
+  },
+  "pick_history": [
+    {
+      "timestamp": "2026-06-25T12:59:42Z",
+      "task": "ptt_response",
+      "model": "gemini-1-5-flash-8b-exp",
+      "score": 0.865,
+      "weights_used": {"quality": 0.4, "latency": 0.5, "cost": 0.1}
+    },
+    ...up to 100 most recent picks
+  ]
 }
 ```
 
-**Do NOT do this:**
-```python
-# Inlining the formula — hard to test, hard to extend
-def pick_model(task, models):
-    return max(models, key=lambda m: m.quality * 0.6 + m.latency * 0.3 + m.cost * 0.1)
+`pick_history` is an in-memory ring buffer (capped at 100 entries). It records every successful pick made by the endpoint. This is **process-local** — for production observability, the user would integrate with a metrics system (Prometheus, etc.) which is out of scope for v2.
+
+**Why this matters:** Without metrics, we can't answer "is the router actually picking the best model?" or "how often does the pick change day-to-day?" v2 adds the bare minimum to answer those questions.
+
+### 3. ChatProvider wiring
+
+The current `ChatProvider.swift` line 988-990 picks the model like this:
+
+```swift
+let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
+    ? ModelQoS.Claude.defaultSelection
+    : ShortcutSettings.shared.selectedModel
 ```
 
-## Testing Strategy
+For `general_assistant` (chat), this either:
+- Returns a hardcoded default (`ModelQoS.Claude.defaultSelection`), or
+- Returns whatever the user picked in settings
 
-| Layer | Framework | Coverage target |
-|---|---|---|
-| Scoring (unit) | pytest | All formula edges: ties, zeros, missing scores, NaN |
-| Task registry (unit) | pytest | All 5 tasks defined; weights sum to 1.0 per task |
-| Model registry (unit) | pytest | All candidate models loaded; missing-model fallback works |
-| Daily refresh (unit) | pytest | TTL behavior, lock contention, stale-cache fallback |
-| Endpoint (integration) | pytest + FastAPI TestClient | All 5 tasks return valid pick; invalid task → 400 |
-| Desktop selector (unit) | XCTest | Enum → URL param; response → cache; auth header present |
+v2 adds: if the user's setting is empty/blank/equals "Auto" (case-insensitive), consult `AutoRouter.shared.pick(.generalAssistant)` instead. Falls back to the current behavior if the router returns nil.
 
-Pre-existing test patterns to follow:
-- `backend/tests/unit/test_conversation_model_split.py` — model registry testing pattern
-- `desktop/macos/Desktop/Tests/CaptureScreenToolTests.swift` — source-file regex guard test pattern (for "no call site uses the old API" style checks)
-- `desktop/macos/Desktop/Tests/FloatingBarSpringAnimationTests.swift` — XCTest test bundle pattern
+```swift
+let floatingModel: String
+let settingsModel = ShortcutSettings.shared.selectedModel
+if settingsModel.isEmpty || settingsModel.lowercased() == "auto" {
+    // Consult the auto-router for chat model selection.
+    if let routerPick = AutoRouter.shared.currentPick(for: .generalAssistant) {
+        floatingModel = routerPick
+    } else {
+        // No cached pick yet — fall back to the existing default.
+        // (Don't block on the network here; AutoRouter caches in background.)
+        floatingModel = ModelQoS.Claude.defaultSelection
+    }
+} else {
+    floatingModel = settingsModel
+}
+```
 
-Coverage target: 90%+ on `backend/utils/auto_router/` (the framework code); endpoint test covers happy paths for all 5 tasks.
+**Why `currentPick` not `pick`:** `currentPick` is a synchronous UserDefaults read (no network). Calling `pick` would be async and would block the chat init. The desktop client prefetches picks in the background (next AIDLC task — out of scope for v2).
 
-## Boundaries
+**What if the router is empty?** Fall back to the current default. No behavior change for users who haven't enabled Auto mode.
 
-**Always do:**
-- Use the weighted scoring formula `total = qw*q + lw*l + cw*c` — per-task weights defined in `task_registry.py`, NOT hardcoded in `scoring.py`
-- Mirror upstream's daily-cache pattern: `asyncio.Lock()` + TTL check + stale fallback to last-good-pick
-- Include unit tests with implementation
-- Build the project after changes; run backend tests + desktop tests
-- `git fetch upstream main` before committing — re-confirm no upstream commit landed since last check
-- Individual commits per file
-- Keep the PR diff ≤800 lines (larger than the 200-line cap for the small spring-animations PR, because this is a foundational framework; but still bounded)
-- Commit locally only — no `git push` without explicit user approval
+## Out of scope (v2)
 
-**Ask first:**
-- Push the branch to remote
-- Open a PR
-- Modify upstream's `auto_model.py` or `AutoModelSelector.swift` (intentionally out of scope for v1)
-- Add a new dependency (e.g., a scoring library like `numpy`)
-- Wire auto-router into any actual Omi feature path (e.g., have `ChatProvider` consult the auto-router for model selection) — that's a Day-7 follow-up, not MVP scope
+- **Real Artificial Analysis integration** — `benchmarks.json` stays as the source. AA key handling is a v3 task.
+- **Wiring into `RealtimeHubController` (PTT), screenshot understanding, transcription, embedding** — these are v3+ tasks. v2 only wires ONE path (chat) to demonstrate the pattern.
+- **Per-user personalization** — `uid` is captured but unused in v2. v3 can add per-user weights.
+- **Per-task pick history persistence** — in-memory only. v3 can add Redis/DB persistence.
+- **Production observability integration** (Prometheus, DataDog, etc.) — v2 exposes the data; v3 integrates with actual monitoring.
+- **Modifying upstream `/v1/auto/model-pick`** — still out of scope; both routers coexist.
 
-**Never do:**
-- Touch upstream's `/v1/auto/model-pick` endpoint or `AutoModelSelector.swift` — they're intentionally untouched in v1
-- Wire into the existing `RealtimeHubController` provider failover — different concern
-- Wire into `ModelQoS.Claude` / `ModelQoS.Haiku` selection — different concern
-- Use real AA API keys in this PR (mock JSON only — AA key handling is a follow-up)
-- Auto-merge to main
-- Squash-merge if/when a PR is opened (regular merge per repo `AGENTS.md`)
+## Acceptance criteria
 
-## Acceptance Criteria
+### Backend (v2 additions)
+1. `GET /v1/auto-router/pick?task=...` requires `uid` (verified by `Depends(get_current_user_uid)`); missing/invalid auth → 401
+2. The endpoint continues to work for authenticated callers (backward compatible with v1 callers that have a uid)
+3. `GET /v1/auto-router/metrics` returns the documented JSON shape
+4. Every successful `pick` call records an entry in `pick_history` (capped at 100, FIFO)
+5. Pick history includes timestamp, task, model, score, weights used
+6. `cache.last_loaded_at` matches `DailyRefreshCache.last_loaded_wall_time()` (consistent)
+7. `cache.age_seconds` matches `DailyRefreshCache.age_seconds()` (consistent)
+8. Metrics endpoint is also auth-protected (matches upstream pattern)
+9. Test counts: +6 endpoint tests (auth, metrics, pick history); +2 new tests
+10. `bash backend/test.sh` passes (the new tests are wired into the script)
 
-### Backend
-1. `GET /v1/auto-router/pick?task=ptt_response` returns `{"task": "ptt_response", "model": "<id>", "scores": {...}, "detail": {...}, "updated_at": <ts>}` with HTTP 200
-2. Same endpoint with `task=screenshot_understanding`, `task=screenshot_embedding`, `task=general_assistant`, `task=transcription` each return valid picks (one per task type)
-3. Same endpoint with `task=invalid` returns HTTP 400 with `{"detail": "unknown task: invalid"}`
-4. Weights per task are loaded from `task_registry.py` and used in scoring (assertion test: changing weights in `benchmarks.example.json` changes the picked model for at least one task)
-5. Daily cache: a second request within 24h does NOT re-score (verify by spying on `benchmark_source.load()`)
-6. Lock contention: 10 concurrent requests for the same task result in exactly 1 `benchmark_source.load()` call (asyncio.Lock pattern)
-7. Stale-cache fallback: if benchmark source raises on refresh, return last good pick (not 500)
-8. Endpoint is registered in `backend/main.py` (verify by importing `main.app` and checking routes)
-9. Backend tests pass: `pytest tests/unit/test_auto_router_*.py` exit 0
-10. `python scripts/scan_async_blockers.py` passes (no async blockers introduced)
-11. `black --check` passes on new files
+### Desktop (v2 addition)
+11. `ChatProvider` consults `AutoRouter.shared.currentPick(for: .generalAssistant)` when settings is empty or "Auto"
+12. Falls back to `ModelQoS.Claude.defaultSelection` if router has no cached pick
+13. No network call in the chat-init path (currentPick is sync UserDefaults)
+14. New Swift test verifies the routing logic (empty settings → router pick; "Auto" → router pick; "claude-sonnet-4-6" → user's choice)
 
-### Desktop
-12. `AutoRouter.shared.pick(.pttResponse)` returns a non-nil model ID after a successful endpoint call
-13. The picker reads `http://<backend>/v1/auto-router/pick?task=<task>` and sends the auth header
-14. Daily cache in UserDefaults: a second call within 24h does NOT re-fetch (verified by intercepting URLSession)
-15. Stale-cache fallback: network error → return last good pick, do NOT crash
-16. `AutoRouterTask` enum has all 5 cases matching backend task names (snake_case encoded)
-17. Desktop tests pass: `xcrun swift test --filter AutoRouterTests` exit 0
-18. `xcrun swift build` exit 0, no new warnings
+### Cross-cutting
+15. v1 tests still pass (no regressions)
+16. Black --check clean
+17. `git diff upstream/main -- backend/routers/auto_model.py desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift` is empty (we don't touch upstream)
+18. PR diff is ≤500 lines (smaller than v1 because we're extending not building from scratch)
 
-### Documentation
-19. `backend/utils/auto_router/README.md` exists with: how to add a task, how to add a model, how to update benchmarks
-20. `docs/doc/developer/auto-router.md` exists with: architecture overview, scoring formula, daily refresh mechanism, relationship to upstream `/v1/auto/model-pick`
-21. Example benchmarks JSON has at least 2 models per task with realistic quality/latency/cost values
+## Open questions
 
-### Diff hygiene
-22. PR diff ≤800 lines (sum of additions across all files)
-23. ≤6 commits on the branch (one per logical unit: spec, plan, scoring, registries, endpoint, refresh, desktop, docs, polish)
-24. No `git push` to remote — local only — until user explicit approval
+1. **Pick history retention**: ring buffer at 100 entries in-memory, or persistent (Redis)? **Recommendation: in-memory for v2; persistent for v3.** Persistent adds operational complexity (Redis dependency for the auto-router) that v1 explicitly avoided.
 
-## Out of Scope
+2. **Authentication for the metrics endpoint**: should it be the same as the pick endpoint? **Recommendation: yes — same `Depends(get_current_user_uid)`.** Metrics expose per-user data in the future; auth now sets the pattern.
 
-- **Wiring into existing Omi paths** — auto-router is a STANDALONE service in v1. `ChatProvider` / `ModelQoS` / `RealtimeHubController` do NOT consult it yet. That's a Day-7+ follow-up.
-- **Real Artificial Analysis integration** — mock JSON only. AA key handling, rate limiting, schema migration — all follow-ups.
-- **Modifying upstream `/v1/auto/model-pick`** — out of scope. Upstream's realtime-voice picker keeps working unchanged.
-- **More than 5 task types** — the spec is bounded to the 5 from the brief. Adding more (e.g., "image generation", "translation") is straightforward (one line in `task_registry.py`) but not done in v1.
-- **Per-user personalization** — all users get the same pick for a given task. Personalization would require user-history tracking (follow-up).
-- **Online learning** — no feedback loop. Picks are pure functions of the current benchmark file.
-- **Cross-task dependency** — each task picks independently. "If PTT just ran, prefer cheap model for followup" — out of scope.
-- **Performance optimizations** — first request may take ~100ms (benchmark file load); cached requests are sub-ms. No pre-warming or async prefetch in v1.
+3. **Where to record the pick**: in the endpoint after the scoring loop, or in a separate observer? **Recommendation: in the endpoint directly** (simpler; metrics are a side effect of the pick). A separate observer would add an import / abstraction that v2 doesn't need.
 
-## Open Questions
+4. **ChatProvider wiring: do we break the current `selectedModel` semantics?** **Recommendation: NO.** We only change behavior when `selectedModel` is empty OR equals "auto" (case-insensitive). Users with a specific model selected continue to get that model.
 
-1. **Endpoint path**: `/v1/auto-router/pick?task=...` (chosen) vs `/v1/auto_router/pick?task=...` (underscore, but FastAPI sometimes handles underscores awkwardly) vs `/v1/auto/router/pick?task=...` (nested under upstream's `/auto/`). **Recommendation: hyphen `auto-router`** — distinct namespace, no collision with upstream, greppable.
-
-2. **Benchmark source format**: JSON file (chosen, simple) vs YAML (more readable for human-edited benchmarks) vs SQLite (queryable but heavier). **Recommendation: JSON** — mirrors upstream's `PROXY` dict style, easy to edit, diff-friendly in PRs.
-
-3. **Where the desktop module lives**: `desktop/macos/Desktop/Sources/AutoRouter/` (chosen) vs `desktop/macos/Desktop/Sources/RealtimeOmni/AutoRouter.swift` (next to upstream's AutoModelSelector). **Recommendation: separate folder** — different concern (multi-task vs realtime-voice), easier to maintain independently.
-
-4. **Should this be a Python package or single files?**: Package (`backend/utils/auto_router/__init__.py` + 6 files) vs single file (`backend/utils/auto_router.py`). **Recommendation: package** — cleaner imports (`from utils.auto_router.scoring import score`), easier to test individual components.
-
-5. **Naming the Swift class**: `AutoRouter` (chosen) vs `TaskBasedModelSelector` (descriptive but verbose) vs `OmniModelRouter` (brand-aligned). **Recommendation: `AutoRouter`** — short, matches the backend module name, mirrors upstream's `AutoModelSelector` naming style.
-
-6. **Should the auto-router be the SINGLE source of truth for "Auto" mode in the UI?**: That is, when a user picks "Auto" in chat settings, should it go through this new router or upstream's `/v1/auto/model-pick`? **Recommendation: NOT in v1** — upstream's picker keeps handling realtime-voice "Auto"; this new router is for backend use / future wiring. Explicit separation avoids accidentally breaking the realtime-voice path.
-
-7. **Should the spec include a 5th task type "general_speech"** (separate from `transcription` and `ptt_response`)? **Recommendation: NO** — keep to 5 task types as in the brief; "general_speech" can be added later if needed.
-
-8. **Daily refresh TTL**: 24h (matching upstream) vs 6h (fresher but more network) vs configurable via env var. **Recommendation: 24h** — matches upstream's pattern; daily freshness is sufficient per the brief.
+5. **Should `currentPick` block on first call to trigger a refresh?** **Recommendation: NO.** The first call returns nil (cache empty); ChatProvider falls back to the default. The user gets the chat working immediately, and the next time they make a request, the router will have populated the cache. This matches the pattern of "default behavior is good enough; the router optimizes when it can."
