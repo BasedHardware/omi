@@ -25,6 +25,15 @@ from utils.retrieval.hybrid import rrf_rerank
 logger = logging.getLogger(__name__)
 
 
+class DeviceScopeNotSupportedError(ValueError):
+    """device_scope filtering is only supported on the canonical memory backend."""
+
+
+def _reject_legacy_device_scope(device_scope: str) -> None:
+    if device_scope and device_scope != "all":
+        raise DeviceScopeNotSupportedError("device_scope filtering is only supported for canonical memory users")
+
+
 @dataclass(frozen=True)
 class MemorySearchMatch:
     memory: MemoryDB
@@ -151,6 +160,7 @@ class LegacyMemoryBackend:
         device_scope: str = "all",
         client_device_id: Optional[str] = None,
     ) -> List[MemoryDB]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_read_memories(uid, limit=limit, offset=offset)
 
     def search(
@@ -162,6 +172,7 @@ class LegacyMemoryBackend:
         device_scope: str = "all",
         client_device_id: Optional[str] = None,
     ) -> List[MemorySearchMatch]:
+        _reject_legacy_device_scope(device_scope)
         return _legacy_search_memories(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> None:
