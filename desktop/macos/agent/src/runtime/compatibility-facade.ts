@@ -259,9 +259,21 @@ export class JsonlCompatibilityFacade {
       return;
     }
 
-    const ack = await this.kernel.cancelRun(runId);
-    context.runId = ack.runId;
-    context.attemptId = ack.attemptId ?? context.attemptId;
+    const cancellationOwnerId = message.ownerId ?? context.ownerId ?? ownerId;
+    let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
+    try {
+      ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });
+      context.runId = ack.runId;
+      context.attemptId = ack.attemptId ?? context.attemptId;
+    } catch (error) {
+      this.log(`Compatibility interrupt error: ${error instanceof Error ? error.message : String(error)}`);
+      ack = {
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+        runId,
+      };
+    }
     if (message.protocolVersion === 2) {
       const cancelAck: CancelAckMessage = {
         type: "cancel_ack",

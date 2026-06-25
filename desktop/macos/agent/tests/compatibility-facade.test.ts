@@ -312,6 +312,56 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("rejects v2 interrupt when the supplied owner does not match the active request owner", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel cross-owner" }),
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      ownerId: "owner-a",
+      legacySessionKey: "owner-guard-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      ownerId: "owner-b",
+    });
+
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+    expect(adapter.cancelled).toHaveLength(0);
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
   it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
