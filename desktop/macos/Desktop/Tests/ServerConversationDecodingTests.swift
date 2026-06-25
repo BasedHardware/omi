@@ -49,6 +49,15 @@ final class ServerConversationDecodingTests: XCTestCase {
         XCTAssertFalse(conversation.shouldFetchDetailForTranscript)
     }
 
+    func testLockedOmittedTranscriptIsRedactedAndDoesNotFetchDetail() throws {
+        let conversation = try decodeConversation(",\n\"is_locked\": true")
+
+        XCTAssertFalse(conversation.transcriptSegmentsIncluded)
+        XCTAssertTrue(conversation.transcriptSegments.isEmpty)
+        XCTAssertEqual(conversation.transcriptPresenceState, .lockedOrRedacted)
+        XCTAssertFalse(conversation.shouldFetchDetailForTranscript)
+    }
+
     func testLockedExplicitEmptyTranscriptIsRedacted() throws {
         let conversation = try decodeConversation(",\n\"is_locked\": true,\n\"transcript_segments\": []")
 

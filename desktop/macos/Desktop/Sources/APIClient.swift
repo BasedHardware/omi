@@ -828,11 +828,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   var transcriptPresenceState: TranscriptPresenceState {
-    if !transcriptSegmentsIncluded {
-      return .omittedFromResponse
-    }
     if isLocked {
       return .lockedOrRedacted
+    }
+    if !transcriptSegmentsIncluded {
+      return .omittedFromResponse
     }
     if transcriptSegments.isEmpty {
       return .includedEmpty
