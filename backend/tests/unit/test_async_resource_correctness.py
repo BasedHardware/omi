@@ -49,6 +49,7 @@ def gmail_module(monkeypatch):
     database.__path__ = []
     users_db = types.ModuleType("database.users")
     users_db.get_integration = MagicMock()
+    users_db.set_integration = MagicMock()
     monkeypatch.setitem(sys.modules, "database", database)
     monkeypatch.setitem(sys.modules, "database.users", users_db)
 
@@ -160,6 +161,50 @@ async def test_retry_on_auth_async_preserves_refresh_flow(gmail_module):
 
     assert (result, err) == ("ok", None)
     assert attempts == ["old-token", "new-token"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_google_token_offloads_firestore_write(gmail_module, monkeypatch):
+    """refresh_google_token must offload the sync Firestore set_integration
+    call to the DB executor so it does not block the event loop."""
+    google_utils = sys.modules["utils.retrieval.tools.google_utils"]
+
+    # Fake auth client that returns a successful token refresh response.
+    fake_response = MagicMock()
+    fake_response.status_code = 200
+    fake_response.json.return_value = {"access_token": "fresh-token"}
+    fake_response.text = ""
+
+    async def fake_post(*args, **kwargs):
+        return fake_response
+
+    fake_client = MagicMock()
+    fake_client.post = fake_post
+    monkeypatch.setattr(google_utils, "get_auth_client", lambda: fake_client)
+
+    # Capture run_blocking calls to verify the Firestore write is offloaded.
+    captured = []
+
+    async def fake_run_blocking(executor, fn, *args, **kwargs):
+        captured.append((executor, fn, args, kwargs))
+        return fn(*args, **kwargs)  # execute synchronously for the test
+
+    monkeypatch.setattr(google_utils, "run_blocking", fake_run_blocking)
+    monkeypatch.setattr(google_utils, "db_executor", "db-exec-mock")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client-id")
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+
+    # users_db.set_integration is already a MagicMock from the fixture.
+    integration = {"connected": True, "access_token": "old", "refresh_token": "rt"}
+    token = await google_utils.refresh_google_token("uid-1", integration)
+
+    assert token == "fresh-token"
+    # Verify the Firestore write was offloaded via run_blocking with db_executor.
+    assert len(captured) == 1
+    executor, fn, args, kwargs = captured[0]
+    assert executor == "db-exec-mock"
+    assert fn == google_utils.users_db.set_integration
+    assert args[0] == "uid-1"
 
 
 def test_speech_profile_closes_audio_file_handle(monkeypatch, tmp_path):
