@@ -48,6 +48,7 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
@@ -468,10 +469,31 @@ def create_memory(
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
-    # Auto-categorize if no category provided
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    # Create Memory object
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        memory = Memory(
+            content=request.content.strip(),
+            category=category,
+            visibility=request.visibility,
+            tags=request.tags,
+        )
+        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        MemoryService(db_client=db).write(uid, memory_db.dict())
+        if memory.visibility == 'public':
+            postprocess_executor.submit(update_personas_async, uid)
+        return MemoryResponse(
+            id=memory_db.id,
+            content=memory_db.content,
+            category=memory_db.category,
+            visibility=memory_db.visibility,
+            tags=memory_db.tags,
+            created_at=memory_db.created_at,
+            updated_at=memory_db.updated_at,
+            manually_added=memory_db.manually_added,
+            scoring=memory_db.scoring,
+        )
+
     memory = Memory(
         content=request.content.strip(),
         category=category,
@@ -526,9 +548,43 @@ def create_memories_batch(
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
-    # Prepare memories
     memory_dbs = []
     has_public = False
+
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        memory_service = MemoryService(db_client=db)
+        for mem_req in request.memories:
+            if not mem_req.content or len(mem_req.content.strip()) == 0:
+                raise HTTPException(status_code=422, detail="All memories must have non-empty content")
+            category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
+            memory = Memory(
+                content=mem_req.content.strip(),
+                category=category,
+                visibility=mem_req.visibility,
+                tags=mem_req.tags,
+            )
+            memory_db = MemoryDB.from_memory(memory, uid, None, True)
+            memory_dbs.append(memory_db)
+            if memory.visibility == 'public':
+                has_public = True
+        memory_service.write_batch(uid, [mem.dict() for mem in memory_dbs])
+        if has_public:
+            postprocess_executor.submit(update_personas_async, uid)
+        created_memories = [
+            MemoryResponse(
+                id=mem.id,
+                content=mem.content,
+                category=mem.category,
+                visibility=mem.visibility,
+                tags=mem.tags,
+                created_at=mem.created_at,
+                updated_at=mem.updated_at,
+                manually_added=mem.manually_added,
+                scoring=mem.scoring,
+            )
+            for mem in memory_dbs
+        ]
+        return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
     for mem_req in request.memories:
         if not mem_req.content or len(mem_req.content.strip()) == 0:
@@ -654,6 +710,19 @@ def update_memory(
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
+
+    memory_service = MemoryService(db_client=db)
+    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+        if request.content is not None:
+            memory_service.update_content(uid, memory_id, request.content.strip())
+        if request.visibility is not None:
+            if request.visibility not in ['public', 'private']:
+                raise HTTPException(status_code=422, detail="visibility must be 'public' or 'private'")
+            memory_service.update_visibility(uid, memory_id, request.visibility)
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
 
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
