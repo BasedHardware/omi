@@ -36,21 +36,16 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
 )
-import database.mcp_api_key as mcp_api_key_db
-from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
-
-MCP_DEFAULT_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-    "people.write",
-]
 import logging
+
+import database.mcp_api_key as mcp_api_key_db
+from models.mcp_api_key import (
+    MCP_DEFAULT_API_KEY_SCOPES,
+    MCP_SCOPES_SUPPORTED,
+    McpApiKey,
+    McpApiKeyCreate,
+    McpApiKeyCreated,
+)
 
 logger = logging.getLogger(__name__)
 

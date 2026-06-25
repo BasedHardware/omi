@@ -486,7 +486,7 @@ def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
 @try_catch_decorator
 def cache_mcp_api_key_auth(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
     """Caches the user_id and explicit scopes for a given MCP API key."""
-    cache_data = {"user_id": user_id, "scopes": scopes}
+    cache_data = {"user_id": user_id, "scopes": scopes or []}
     r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 

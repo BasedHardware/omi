@@ -343,13 +343,13 @@ class TestPeople:
         assert exc_info.value.code == -32001
         mock_db.update_person.assert_not_called()
 
-    @patch('routers.mcp_sse.delete_user_person_speech_samples')
+    @patch('routers.mcp_sse.storage_executor')
     @patch('routers.mcp_sse.users_db')
-    def test_delete_person_tool_deletes_existing_person(self, mock_db, mock_delete_samples):
+    def test_delete_person_tool_deletes_existing_person(self, mock_db, mock_storage_executor):
         mock_db.get_person.return_value = self._person()
         result = sse.execute_tool(UID, 'delete_person', {'person_id': ' p1 '}, granted_scopes=['people.write'])
         assert result == {'success': True}
-        mock_delete_samples.assert_called_once_with(UID, 'p1')
+        mock_storage_executor.submit.assert_called_once_with(sse._delete_person_speech_samples_async, UID, 'p1')
         mock_db.delete_person.assert_called_once_with(UID, 'p1')
 
     @patch('routers.mcp_sse.users_db')

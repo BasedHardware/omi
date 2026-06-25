@@ -138,6 +138,8 @@ def get_auth_by_api_key(api_key: str) -> Optional[McpApiKeyAuth]:
         return None
 
     scopes = key_data.get("scopes")
+    if scopes is None:
+        scopes = []
     key_doc.reference.update({"last_used_at": datetime.utcnow()})
     redis_db.cache_mcp_api_key_auth(hashed_key, user_id, scopes)
     return {"user_id": user_id, "scopes": scopes}

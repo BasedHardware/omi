@@ -31,7 +31,9 @@ import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
 from models.memories import MemoryDB, Memory, MemoryCategory
+from models.mcp_api_key import MCP_SCOPES_SUPPORTED
 from utils.conversations.render import redact_conversation_for_list
+from utils.executors import storage_executor
 from utils.other.storage import delete_user_person_speech_samples
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
@@ -45,6 +47,7 @@ from utils.mcp_memories import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # Store active sessions
 active_sessions: dict = {}
@@ -56,17 +59,6 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-    "people.write",
-]
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -95,8 +87,6 @@ CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 PEOPLE_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["people.write"]}]
-PEOPLE_WRITE_SCOPE = "people.write"
-PEOPLE_WRITE_TOOLS = {"rename_person", "delete_person"}
 
 
 class McpAuth(TypedDict):
@@ -568,6 +558,13 @@ def _validated_person_name(arguments: dict) -> str:
     return name
 
 
+def _delete_person_speech_samples_async(user_id: str, person_id: str) -> None:
+    try:
+        delete_user_person_speech_samples(user_id, person_id)
+    except Exception:
+        logger.exception("Failed to delete person speech samples uid=%s person_id=%s", user_id, person_id)
+
+
 def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: Optional[List[str]] = None) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     granted_scope_set = set(MCP_SCOPES_SUPPORTED if granted_scopes is None else granted_scopes)
@@ -917,7 +914,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict, granted_scopes: 
         person_id = _required_mcp_string(arguments, "person_id")
         if not users_db.get_person(user_id, person_id):
             raise ToolExecutionError("Person not found", code=-32001)
-        delete_user_person_speech_samples(user_id, person_id)
+        storage_executor.submit(_delete_person_speech_samples_async, user_id, person_id)
         users_db.delete_person(user_id, person_id)
         return {"success": True}
 

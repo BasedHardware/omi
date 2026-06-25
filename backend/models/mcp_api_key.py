@@ -3,6 +3,19 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+MCP_SCOPES_SUPPORTED = [
+    "memories.read",
+    "memories.write",
+    "conversations.read",
+    "action_items.read",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
+    "people.write",
+]
+MCP_DEFAULT_API_KEY_SCOPES = MCP_SCOPES_SUPPORTED
+
 
 class McpApiKey(BaseModel):
     id: str
