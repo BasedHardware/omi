@@ -186,24 +186,33 @@ def test_speech_profile_closes_audio_file_handle(monkeypatch, tmp_path):
     log_sanitizer.sanitize = lambda value: value
     monkeypatch.setitem(sys.modules, "utils.log_sanitizer", log_sanitizer)
 
-    module = _load_module("utils.stt.speech_profile", BACKEND_DIR / "utils" / "stt" / "speech_profile.py")
-    audio_path = tmp_path / "sample.wav"
-    audio_path.write_bytes(b"RIFF....WAVEfmt ")
-    captured = {}
+    pydub = types.ModuleType("pydub")
+    setattr(pydub, "AudioSegment", MagicMock())
+    monkeypatch.setitem(sys.modules, "pydub", pydub)
 
-    def fake_post(url, data=None, files=None, **kwargs):
-        captured["fh"] = files[0][1][1]
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = [False]
-        return response
+    module_name = "utils.stt.speech_profile"
+    module = _load_module(module_name, BACKEND_DIR / "utils" / "stt" / "speech_profile.py")
+    try:
+        audio_path = tmp_path / "sample.wav"
+        audio_path.write_bytes(b"RIFF....WAVEfmt ")
+        captured = {}
 
-    monkeypatch.setenv("HOSTED_SPEECH_PROFILE_API_URL", "http://speech.test/match")
-    monkeypatch.setattr(module.httpx, "post", fake_post)
+        def fake_post(url, data=None, files=None, **kwargs):
+            assert files is not None
+            captured["fh"] = files[0][1][1]
+            response = MagicMock()
+            response.status_code = 200
+            response.json.return_value = [False]
+            return response
 
-    module.get_speech_profile_matching_predictions("uid-1", str(audio_path), [{"text": "hi"}])
+        monkeypatch.setenv("HOSTED_SPEECH_PROFILE_API_URL", "http://speech.test/match")
+        monkeypatch.setattr(module.httpx, "post", fake_post)
 
-    assert captured["fh"].closed is True
+        module.get_speech_profile_matching_predictions("uid-1", str(audio_path), [{"text": "hi"}])
+
+        assert captured["fh"].closed is True
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 def test_scan_async_blockers_treats_run_blocking_lambda_as_safe():
