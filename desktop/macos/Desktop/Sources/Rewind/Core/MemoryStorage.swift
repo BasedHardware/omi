@@ -383,9 +383,13 @@ actor MemoryStorage {
                 if var existingRecord = try MemoryRecord
                     .filter(Column("backendId") == memory.id)
                     .fetchOne(database) {
-                    // Skip if local record is newer than incoming API data
-                    // This prevents auto-refresh from overwriting recent local changes
+                    // Skip full merge if local record is newer than incoming API data.
+                    // This prevents auto-refresh from overwriting recent local edits,
+                    // but tier is server-authoritative and must still be reconciled.
                     if existingRecord.updatedAt > memory.updatedAt {
+                        if existingRecord.mergeAuthoritativeTierFrom(memory) {
+                            try existingRecord.update(database)
+                        }
                         skipped += 1
                         continue
                     }
@@ -485,7 +489,6 @@ actor MemoryStorage {
             var mutableRecord = record
             mutableRecord.backendId = backendId
             mutableRecord.backendSynced = true
-            mutableRecord.updatedAt = Date()
             try mutableRecord.update(database)
         }
 
