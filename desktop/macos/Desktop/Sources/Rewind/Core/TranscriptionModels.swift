@@ -515,6 +515,7 @@ extension TranscriptionSessionRecord {
                 events: events
             ),
             transcriptSegments: transcriptSegments,
+            transcriptSegmentsIncluded: !segments.isEmpty,
             geolocation: geolocation,
             photos: photos,
             appsResults: appsResults,
