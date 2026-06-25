@@ -368,6 +368,37 @@ describe("AdapterRegistry", () => {
       () => {},
       new AbortController().signal,
     )).rejects.toThrow("bad-execute.executeAttempt conflated Omi sessionId omi-session with adapter native session id");
+
+    const driftExecuteRegistry = new AdapterRegistry();
+    driftExecuteRegistry.register("drift-execute", () => ({
+      ...fakeAdapter("drift-execute"),
+      executeAttempt: async () => ({
+        text: "",
+        sessionId: "other-native-session",
+        adapterSessionId: "other-native-session",
+        terminalStatus: "succeeded" as const,
+      }),
+    }), 1);
+    await expect(driftExecuteRegistry.get("drift-execute").acquire()!.adapter.executeAttempt(
+      {
+        sessionId: "omi-session",
+        requestId: "request",
+        clientId: "client",
+        runId: "run",
+        attemptId: "attempt",
+        binding: {
+          sessionId: "omi-session",
+          adapterId: "drift-execute",
+          adapterNativeSessionId: "native-session",
+          resumeFidelity: "native",
+          cwd: "/tmp/work",
+        },
+        prompt: [{ type: "text", text: "hello" }],
+        mode: "ask",
+      },
+      () => {},
+      new AbortController().signal,
+    )).rejects.toThrow("drift-execute.executeAttempt returned adapterSessionId other-native-session for binding native-session");
   });
 });
 

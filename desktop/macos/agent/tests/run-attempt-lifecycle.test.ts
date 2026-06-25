@@ -399,7 +399,12 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     await Promise.resolve();
     expect(adapter.opened).toHaveLength(1);
 
-    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "first done" });
+    adapter.resolveDeferred({
+      terminalStatus: "succeeded",
+      text: "first done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
     const [first, second] = await Promise.all([firstRun, secondRun]);
 
     expect(first.run.status).toBe("succeeded");
@@ -445,7 +450,12 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
 
     await waitUntil(() => adapter.executed.length === 1);
     expect(adapter.opened).toHaveLength(1);
-    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "first done" });
+    adapter.resolveDeferred({
+      terminalStatus: "succeeded",
+      text: "first done",
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
     const [first, second] = await Promise.all([firstRun, secondRun]);
 
     expect(first.run.status).toBe("succeeded");
@@ -491,7 +501,12 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     });
 
     await waitUntil(() => adapter.executed.length === 2);
-    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "existing done" });
+    adapter.resolveDeferred({
+      terminalStatus: "succeeded",
+      text: "existing done",
+      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+    });
     const [existing, next] = await Promise.all([existingBindingRun, newBindingRun]);
 
     expect(existing.run.status).toBe("succeeded");

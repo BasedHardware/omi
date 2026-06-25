@@ -9,6 +9,7 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
+  legacyControlRequestKey,
   resolveControlRequestContext,
   type AgentControlToolContext,
   withDefaultOwnerGuard,
@@ -164,8 +165,16 @@ describe("agent control tools", () => {
         requestKey: "request-missing",
         ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
         fallbackOwnerId: mutableFallbackOwner,
+        allowFallbackOwner: true,
       }),
     ).toBe("owner-b");
+    expect(() =>
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toThrow("Owner-scoped control tools require active request, run, or attempt context");
     expect(
       activeControlToolOwnerId({
         requestKey: "request-missing",
@@ -203,7 +212,8 @@ describe("agent control tools", () => {
     });
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
-    expect(controlRequestKey({ requestId: "legacy-request" })).toBe(
+    expect(controlRequestKey({ requestId: "legacy-request" })).toBeUndefined();
+    expect(legacyControlRequestKey({ requestId: "legacy-request" })).toBe(
       JSON.stringify(["legacy-jsonl-client", "legacy-request"]),
     );
   });
@@ -299,6 +309,7 @@ describe("agent control tools", () => {
           requestKey: requestId,
           ownerIdForRequest: (id) => ownerByRequest.get(id),
           fallbackOwnerId: mutableFallbackOwner,
+          allowFallbackOwner: true,
         }),
     });
 
@@ -325,6 +336,35 @@ describe("agent control tools", () => {
       error: { code: "control_tool_failed" },
     });
     expect(guarded.error.message).toContain("does not match the active control owner");
+    store.close();
+  });
+
+  it("rejects owner-scoped adapter-originated tools without active request, run, or attempt context", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        {
+          kernel,
+          getOwnerId: () =>
+            activeControlToolOwnerId({
+              requestKey: controlRequestKey({ requestId: "missing-request" }),
+              ownerIdForRequest: () => undefined,
+              fallbackOwnerId: "signed-in-owner",
+            }),
+        },
+        "list_agent_sessions",
+        {},
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+      },
+    });
+    expect(result.error.message).toContain("Owner-scoped control tools require active request, run, or attempt context");
     store.close();
   });
 

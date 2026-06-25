@@ -148,6 +148,7 @@ export interface ActiveControlToolOwnerInput {
   ownerIdForRun?: (runId: string) => string | undefined;
   ownerIdForAttempt?: (attemptId: string) => string | undefined;
   fallbackOwnerId?: string;
+  allowFallbackOwner?: boolean;
 }
 
 export interface ControlRequestKeyInput {
@@ -169,6 +170,10 @@ export interface ResolvedControlRequestContext {
 export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
 
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
+}
+
+export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
 }
 
@@ -395,6 +400,9 @@ export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): st
   const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
   if (runOwnerId) {
     return runOwnerId;
+  }
+  if (!input.allowFallbackOwner) {
+    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
   return fallbackOwnerId || "desktop-local-user";

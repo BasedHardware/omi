@@ -422,4 +422,9 @@ export function assertAdapterAttemptResultContract(
       `${operation} conflated Omi sessionId ${context.sessionId} with adapter native session id`
     );
   }
+  if (result.adapterSessionId !== context.binding.adapterNativeSessionId) {
+    throw new Error(
+      `${operation} returned adapterSessionId ${result.adapterSessionId} for binding ${context.binding.adapterNativeSessionId}`
+    );
+  }
 }

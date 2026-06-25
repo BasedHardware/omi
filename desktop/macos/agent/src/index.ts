@@ -212,7 +212,6 @@ function startOmiToolsRelay(): Promise<string> {
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                             ownerIdForRun: (runId) => activeControlToolOwnersByRun.get(runId),
                             ownerIdForAttempt: (attemptId) => activeControlToolOwnersByAttempt.get(attemptId),
-                            fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
                           }),
                       }
                     : undefined;
@@ -947,6 +946,7 @@ async function main(): Promise<void> {
                         requestKey: controlOwnerKey,
                         ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
                         fallbackOwnerId: agentControlToolContext?.getOwnerId?.(),
+                        allowFallbackOwner: true,
                       }),
                   },
                   control.name,
