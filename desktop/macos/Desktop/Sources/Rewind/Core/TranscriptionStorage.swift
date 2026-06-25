@@ -552,7 +552,6 @@ actor TranscriptionStorage {
             try TranscriptionSessionRecord
                 .filter(Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -567,7 +566,6 @@ actor TranscriptionStorage {
                 .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
                 .filter(Column("retryCount") < maxRetries)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("updatedAt").asc)
                 .fetchAll(database)
         }
@@ -581,7 +579,6 @@ actor TranscriptionStorage {
             try TranscriptionSessionRecord
                 .filter(Column("status") == TranscriptionSessionStatus.recording.rawValue)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -598,7 +595,6 @@ actor TranscriptionStorage {
                 .filter(Column("status") == TranscriptionSessionStatus.uploading.rawValue)
                 .filter(Column("updatedAt") < cutoff)
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
@@ -634,7 +630,6 @@ actor TranscriptionStorage {
                     (Column("status") == TranscriptionSessionStatus.failed.rawValue && Column("retryCount") < 5)
                 )
                 .filter(Column("backendSynced") == false)
-                .filter((Column("backendId") == nil) || (Column("backendId") == ""))
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
         }
