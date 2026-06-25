@@ -145,4 +145,4 @@ class TestDemoRunsV3:
         assert "benchmarks_last_refresh: None" in demo_output
 
     def test_demo_runs_all_six_demos(self, demo_output: str):
-        assert "All 6 demos complete" in demo_output
+        assert "All 7 demos complete" in demo_output

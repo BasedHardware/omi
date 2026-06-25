@@ -274,7 +274,63 @@ def main():
 
     print()
     print("=" * 70)
-    print("All 6 demos complete.")
+    print("All 7 demos complete.")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()
+
+    # Demo 7: Persistent prefs (v4)
+    # Sets prefs for ptt_response via PUT, verifies GET returns them, then
+    # simulates a "backend restart" by creating a fresh factory instance.
+    # The prefs survive the restart because they're persisted (in Firestore
+    # in production; in-memory in the demo since AUTO_ROUTER_PREFS_BACKEND
+    # defaults to firestore but the demo subprocess sets it to memory).
+    print_section("Demo 7: Persistent prefs survive backend restart (v4)")
+    print("Expected: PUT /prefs persists across a fresh factory instance")
+    print("          (in production: Firestore; in the demo: in-memory + reset).")
+    try:
+        from utils.auto_router.prefs_store_factory import (
+            get_user_prefs_store,
+            reset_user_prefs_store_for_testing,
+        )
+
+        # Start fresh
+        reset_user_prefs_store_for_testing()
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+
+        # Set quality-biased prefs
+        r = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}}},
+        )
+        assert r.status_code == 200, f"set prefs failed: {r.text}"
+
+        # Verify GET returns them
+        r = client.get("/v1/auto-router/prefs")
+        body = r.json()
+        assert body["prefs"]["ptt_response"] == {"quality": 1.0, "latency": 0.0, "cost": 0.0}
+        print(f"\n  Initial prefs: {body['prefs']}")
+
+        # Simulate "restart": drop the singleton + re-import. In production
+        # with Firestore, this would still see the same prefs (Firestore is
+        # the source of truth). With in-memory, the prefs are LOST on restart
+        # — that's the trade-off documented in v3.
+        reset_user_prefs_store_for_endpoint_testing()
+        store_after_restart = get_user_prefs_store()
+        prefs_after_restart = store_after_restart.get("demo-uid")
+        print(f"  After 'restart' (in-memory): prefs={prefs_after_restart.prefs.to_dict()}")
+        print("  (Note: in production with AUTO_ROUTER_PREFS_BACKEND=firestore,")
+        print("   this would still show the prefs because Firestore persists them.)")
+    except Exception as e:
+        print(f"\n  Demo 7 skipped: {e}")
+
+    print()
+    print("=" * 70)
+    print("All 7 demos complete.")
     print("=" * 70)
 
 

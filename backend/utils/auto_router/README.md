@@ -220,3 +220,68 @@ Measured on macOS Darwin, Python 3.12.8, single-threaded:
 - AIDLC state: `.aidlc/state.md`
 - Upstream auto-router (DO NOT MODIFY): `backend/routers/auto_model.py`
 - Upstream desktop client (DO NOT MODIFY): `desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift`
+
+
+## Storage backends (v4)
+
+Per-user prefs are stored by `UserPrefsStoreProtocol` (see
+`user_prefs_store_protocol.py`). Two implementations exist:
+
+| Backend | `AUTO_ROUTER_PREFS_BACKEND` | Persistence | When to use |
+|---|---|---|---|
+| **Firestore** (default) | `firestore` | Survives restarts; backed by `users/{uid}.auto_router_prefs` sub-map | Production |
+| **In-memory** | `memory` | Process-local; lost on restart | Tests + dev without Firestore |
+
+Invalid values fall back to `firestore` (safe default) with a WARNING log.
+
+### Firestore schema
+
+```
+users/{uid} {
+  ...existing fields...
+  auto_router_prefs: {
+    overrides: {
+      "ptt_response": {quality: 0.4, latency: 0.5, cost: 0.1},
+      "screenshot_understanding": {quality: 0.9, latency: 0.05, cost: 0.05}
+    },
+    updated_at: <datetime UTC>
+  }
+}
+```
+
+Empty `overrides` = no user overrides (use task defaults).
+
+Mirrors the `transcription_preferences` schema pattern (see
+`database/users.py`).
+
+### Read cache
+
+Firestore reads are cached via the existing `firestore_cache.CachePolicy`
+pattern (5-minute TTL, matches `_USER_TRANSCRIPTION_PREFS_CACHE`).
+
+Read path: cache hit → return immediately. Cache miss → fetch from
+Firestore → store in cache → return.
+
+Firestore unreachable on read → fail-open with WARNING + return empty
+prefs. The user still gets a valid pick (using task defaults).
+
+Firestore unreachable on write → fail-loud (raise). The endpoint
+returns 503; the user retries.
+
+### Cache invalidation
+
+Write path: write to Firestore FIRST → invalidate cache AFTER.
+
+If the write fails, the cache stays valid (might serve stale data briefly
+— that's safer than invalidating before write and having the write fail,
+leaving the cache empty for the next read).
+
+### Switching backends
+
+The factory reads `AUTO_ROUTER_PREFS_BACKEND` on first call only (the
+singleton is cached). To switch at runtime:
+1. Update the env var
+2. Restart the backend process (the singleton is per-process)
+
+For tests, `reset_user_prefs_store_for_testing()` drops the singleton
+so the next `get_user_prefs_store()` call picks up the current env var.

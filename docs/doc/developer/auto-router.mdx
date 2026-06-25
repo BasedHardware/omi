@@ -319,3 +319,60 @@ The `uid` is captured but **not used in v2** — per-user personalization is v3.
 - Backend README: `backend/utils/auto_router/README.md` (usage-focused)
 - Upstream auto-router (DO NOT MODIFY): `backend/routers/auto_model.py`
 - Upstream desktop client (DO NOT MODIFY): `desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift`
+
+
+## v4 — Persistent prefs (current)
+
+v3 stored per-user prefs in-memory — lost on backend restart. v4 persists them to Firestore so prefs survive restarts.
+
+### What v4 adds
+
+| Area | v3 | v4 |
+|---|---|---|
+| **Prefs storage** | In-memory dict (lost on restart) | Firestore (`users/{uid}.auto_router_prefs` sub-map) with 5-min Redis read cache |
+| **Env var** | N/A | `AUTO_ROUTER_PREFS_BACKEND=memory|firestore` (firestore default) |
+| **Firestore errors** | N/A | Read fail-open + WARNING; write fail-loud (503) |
+| **Tests** | 336 (backend + desktop) | **~320 backend** (v4 adds 13 Firestore-specific; desktop unchanged) |
+
+### Files added (v4)
+
+- `utils/auto_router/user_prefs_store_protocol.py` — `UserPrefsStoreProtocol` + `StoredPrefs`
+- `utils/auto_router/firestore_user_prefs_store.py` — `FirestoreUserPrefsStore`
+- `utils/auto_router/prefs_store_factory.py` — env-var-based factory
+- `fixtures/firestore_user_prefs_mock.py` — test mock (no external deps)
+- `tests/unit/test_auto_router_user_prefs_store_protocol.py`
+- `tests/unit/test_auto_router_firestore_user_prefs_store.py`
+- `tests/unit/test_auto_router_prefs_store_factory.py`
+
+### Why a factory
+
+The router imports a factory, not a concrete store. The factory reads
+`AUTO_ROUTER_PREFS_BACKEND` and returns the matching implementation.
+This makes it trivial to switch backends at deploy time + test both
+without code changes.
+
+### Why shallow merge (`update()`) instead of deep merge (`set(merge=True)`)
+
+Firestore's `set(merge=True)` does DEEP merge on nested maps. With deep
+merge, PUT `{"overrides": {"a": ...}}` then `{"overrides": {"b": ...}}`
+would keep BOTH `a` and `b` (deep merge preserves unspecified nested
+fields). That contradicts the PUT semantics ("this is my complete prefs now").
+
+`update()` does SHALLOW merge at the document level — the top-level
+`auto_router_prefs` field is replaced entirely with the new value.
+Nested `overrides` is part of the new value, replaced wholesale.
+
+### Trade-offs accepted
+
+- **In-memory backend (tests):** Prefs are lost on process restart. Documented in v3 spec.
+- **Firestore quota:** Each `/prefs` PUT is 1 Firestore write + 1 cache invalidate. For production with many users setting prefs, this is well within free tier.
+- **Cache TTL:** 5 minutes. If a user changes prefs on one device, another device sees the change within 5 minutes. v5 may lower this if real users hit the lag.
+- **Cache invalidation is best-effort:** Redis errors are logged and swallowed. If Redis is down, the cache may serve stale data until TTL expires.
+
+### Out of scope (v5+)
+
+- Settings UI for prefs (per-task weight sliders)
+- STT/embedding benchmarks data source
+- Persistent Firestore emulator for tests (currently uses in-memory mock)
+- Per-user prefs encryption
+- Versioned prefs (rollback)
