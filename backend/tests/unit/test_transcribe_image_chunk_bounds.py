@@ -127,3 +127,28 @@ def test_valid_index_still_stored():
     assert cache['img-3']['chunks'] == ['first', None, 'third']
     # Not all chunks present yet -> not dispatched.
     assert spawn_calls == []
+
+
+def test_later_chunk_with_larger_total_does_not_raise_index_error():
+    """A later chunk reporting a larger `total` than the buffer must be ignored.
+
+    The buffer is sized once from the FIRST chunk's `total`. If the bounds
+    check trusts each chunk's reported `total` (instead of the cached buffer
+    length), a malformed later chunk with a larger `total` and an index past
+    the buffer raises IndexError -> tears down the listen WebSocket.
+    """
+    spawn_calls = []
+    handler = _build_handle_image_chunk(spawn_calls)
+    cache = {}
+
+    # First chunk sizes the buffer at length 2.
+    _call(handler, {'id': 'img-4', 'index': 0, 'total': 2, 'data': 'first'}, cache)
+
+    # Later chunk lies about `total` (9) and points past the real buffer.
+    # On code that trusts per-chunk `total`, `0 <= 5 < 9` passes and
+    # chunks_data[5] raises IndexError. Must not raise.
+    _call(handler, {'id': 'img-4', 'index': 5, 'total': 9, 'data': 'overflow'}, cache)
+
+    # Buffer is unchanged (still length 2) and the bogus slot was never written.
+    assert cache['img-4']['chunks'] == ['first', None]
+    assert spawn_calls == []

@@ -2431,7 +2431,10 @@ async def _stream_handler(
             image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
         chunks_data = image_chunks_cache[temp_id]['chunks']
-        if 0 <= index < total and chunks_data[index] is None:
+        # Bound against the cached buffer length, not the per-chunk `total`: a
+        # malformed later chunk can report a larger `total` than the one that
+        # sized the buffer, so trusting it would index past the buffer.
+        if 0 <= index < len(chunks_data) and chunks_data[index] is None:
             chunks_data[index] = data
 
         if all(chunk is not None for chunk in chunks_data):
