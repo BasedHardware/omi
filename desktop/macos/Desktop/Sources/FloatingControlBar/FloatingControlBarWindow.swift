@@ -125,6 +125,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
     }
+    private func currentResponseSurfaceHeight() -> CGFloat {
+        guard state.isVoiceResponseActive else { return frame.height }
+        if notchModeEnabled {
+            return max(0, frame.height - Self.notchGlowOutsetBottom)
+        }
+        return frame.height
+    }
     private var notchCollapsedSize: NSSize {
         NSSize(width: Self.notchHiddenCenterWidth + notchSideWidth * 2, height: Self.notchChromeHeight)
     }
@@ -1132,10 +1139,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 else { return }
                 let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
                 let clampedHeight = min(max(targetHeight, Self.minResponseHeight), maxHeight)
-                // Only expand, never auto-shrink.
-                guard clampedHeight > self.frame.height + 2 else { return }
+                let currentSurfaceHeight = self.frame.height
+                    - (self.notchModeEnabled && self.state.isVoiceResponseActive ? Self.notchGlowOutsetBottom : 0)
+                // Only expand, never auto-shrink. In notch mode an active voice
+                // response glow inflates the window frame, so compare content
+                // growth against the underlying response surface height rather
+                // than the glow-padded window height.
+                guard clampedHeight > currentSurfaceHeight + 2 else { return }
                 self.resizeAnchored(
-                    to: NSSize(width: self.expandedContentWidth, height: clampedHeight),
+
                     makeResizable: true,
                     animated: true,
                     anchorTop: true
