@@ -95,3 +95,7 @@ assert report.verified is True
 - **Provenance:** backfilled rows set `user_asserted=False`, `visibility=private`, `captured_at=now` (legacy `created_at` is not copied).
 - **Fingerprint:** checkpoint fingerprint is legacy **id-set only**; editing legacy content under the same id does not re-copy (staleness, not data loss).
 - **Vectors:** backfill syncs Pinecone via `sync_canonical_memory_vector`; vector sync failures increment `vector_sync_failures` but do not roll back Firestore writes.
+
+## Short-term promotion (canonical cohort)
+
+Scheduled maintenance (`canonical_short_term_maintenance_cron`) promotes short-term items via the same vector sync path. After a promotion run, check `promotion.vector_sync_failures` on the maintenance report (and `vector_sync_failures_total` on the cron summary). Non-zero values mean Firestore tier flips succeeded but Pinecone metadata may still show `memory_layer=short_term` — investigate vector sync logs; re-run promotion does not re-upsert already-long-term items, so repair may require a targeted vector re-sync.
