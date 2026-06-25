@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
 from omi_cli import config as cfg
@@ -353,6 +354,43 @@ def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Pa
     assert not output.exists()
     assert isinstance(result.exception, CliError)
     payload = result.exception.extra
+    assert payload["status_code"] == 422
+    assert payload["ok"] is False
+    assert payload["error"] == "screenshot_pending"
+    assert payload["reason"] == error_payload["reason"]
+    assert payload["hint"] == error_payload["hint"]
+    assert payload["screenshot_id"] == 123
+
+
+def test_main_json_screenshot_error_preserves_structured_stderr(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "pending.jpg"
+    error_payload = {
+        "ok": False,
+        "error": "screenshot_pending",
+        "reason": "The frame is in the active recording segment that has not been flushed to disk yet.",
+        "hint": "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized.",
+        "screenshot_id": 123,
+    }
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(422, json=error_payload))
+        monkeypatch.setattr(
+            "sys.argv",
+            ["omi", "--json", "local", "screenshot", "123", "--output", str(output)],
+        )
+        from omi_cli.main import main
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code != 0
+    assert not output.exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
     assert payload["status_code"] == 422
     assert payload["ok"] is False
     assert payload["error"] == "screenshot_pending"
