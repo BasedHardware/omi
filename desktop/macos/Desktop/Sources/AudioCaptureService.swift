@@ -551,31 +551,45 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
+    }
+
+    private func updateDefaultDeviceListener() {
+        if isTrackingOverrideDevice {
+            removeDefaultDeviceListener()
+            return
+        }
+
+        guard defaultDeviceListenerBlock == nil else { return }
+
         // Listen for default input device changes when the resolved capture device
         // is the system default. If an explicit override was requested but is
         // unavailable, capture falls back to the default and must still observe
         // default-device changes.
-        if !isTrackingOverrideDevice {
-            var defaultDeviceAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
+        var defaultDeviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
 
-            let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-                self?.audioQueue.async {
-                    self?.handleConfigurationChange()
-                }
+        let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            self?.audioQueue.async {
+                self?.handleConfigurationChange()
             }
-            self.defaultDeviceListenerBlock = deviceBlock
-
-            AudioObjectAddPropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject),
-                &defaultDeviceAddress,
-                listenerQueue,
-                deviceBlock
-            )
         }
+        self.defaultDeviceListenerBlock = deviceBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultDeviceAddress,
+            listenerQueue,
+            deviceBlock
+        )
+    }
+
+    private func installDeviceFormatListener() {
+        guard deviceFormatListenerBlock == nil else { return }
 
         // Listen for format changes on current device
         var formatAddress = AudioObjectPropertyAddress(
@@ -600,6 +614,11 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     private func removePropertyListeners() {
+        removeDefaultDeviceListener()
+        removeDeviceFormatListener()
+    }
+
+    private func removeDefaultDeviceListener() {
         if let block = defaultDeviceListenerBlock {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -614,7 +633,9 @@ class AudioCaptureService: @unchecked Sendable {
             )
             defaultDeviceListenerBlock = nil
         }
+    }
 
+    private func removeDeviceFormatListener() {
         if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyStreamFormat,
@@ -648,21 +669,8 @@ class AudioCaptureService: @unchecked Sendable {
             ioProcID = nil
         }
 
-        // Remove old format listener (device may have changed)
-        if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyStreamFormat,
-                mScope: kAudioDevicePropertyScopeInput,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(
-                deviceID,
-                &address,
-                listenerQueue,
-                block
-            )
-            deviceFormatListenerBlock = nil
-        }
+        // Remove old format listener (device may have changed).
+        removeDeviceFormatListener()
 
         // Delay to let the audio hardware settle after device change
         audioQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -745,26 +753,8 @@ class AudioCaptureService: @unchecked Sendable {
             return
         }
 
-        // Install format listener on new device
-        var formatAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreamFormat,
-            mScope: kAudioDevicePropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            self?.audioQueue.async {
-                self?.handleConfigurationChange()
-            }
-        }
-        self.deviceFormatListenerBlock = formatBlock
-
-        AudioObjectAddPropertyListenerBlock(
-            deviceID,
-            &formatAddress,
-            listenerQueue,
-            formatBlock
-        )
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
