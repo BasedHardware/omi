@@ -316,7 +316,11 @@ def _ordered_capture_devices_from_evidence(raw_evidence: list) -> tuple[List[str
 
 
 def _legacy_evidence_to_memory(evidence_data: Dict[str, Any], *, conversation_id: Optional[str]) -> MemoryEvidence:
-    source_id = evidence_data.get("source_id") or conversation_id
+    source_id = (
+        evidence_data.get("source_id")
+        or conversation_id
+        or (f"external:{evidence_data['evidence_id']}" if evidence_data.get("evidence_id") else None)
+    )
     client_device_id = evidence_data.get("client_device_id")
     if not client_device_id:
         artifact_ref = evidence_data.get("artifact_ref") or {}

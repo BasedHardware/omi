@@ -610,7 +610,10 @@ class MemoryDB(Memory):
         )
         if resolved_subject == 'user' and resolved_attribution == SubjectAttribution.unknown:
             resolved_attribution = SubjectAttribution.user
+        memory_id = document_id_from_seed(memory.content)
         evidence_source_id = source_id if source_id is not None else conversation_id
+        if not evidence_source_id:
+            evidence_source_id = f"external:{memory_id}"
         evidence_source_type = source_type or ("conversation" if conversation_id else "developer_api")
         evidence_source_signal = source_signal or ("manual" if manually_added else "transcription")
         evidence = Evidence.from_source(
@@ -627,7 +630,7 @@ class MemoryDB(Memory):
         )
         confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
         memory_db = MemoryDB(
-            id=document_id_from_seed(memory.content),
+            id=memory_id,
             uid=uid,
             content=memory.content,
             category=memory.category,
