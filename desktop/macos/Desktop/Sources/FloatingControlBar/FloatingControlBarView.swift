@@ -928,6 +928,7 @@ private struct NotchAgentPillsRowView: View {
     // A notched lobe has 64 pt of usable row width (76 - 12 padding); four
     // direct 17 pt orbs plus gaps need 74 pt, so group before the fourth orb.
     private let directAgentLimit = 3
+    private let groupedStatusLimit = 4
 
     private var pillsNewestFirst: [AgentPill] {
         Array(manager.pills.reversed())
@@ -947,7 +948,7 @@ private struct NotchAgentPillsRowView: View {
                     NotchAgentPillOrbItem(pill: pill, manager: manager)
                 }
             } else {
-                ForEach(groups.prefix(directAgentLimit)) { group in
+                ForEach(groups.prefix(groupedStatusLimit)) { group in
                     NotchAgentOrbButton(
                         group: group,
                         count: pills(for: group).count,
