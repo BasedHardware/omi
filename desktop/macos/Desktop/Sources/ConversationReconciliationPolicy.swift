@@ -5,32 +5,72 @@ import Foundation
 ///
 /// The reconciliation layer treats these as short-lived overlays. Everything
 /// else in the server list remains authoritative over cache data.
+///
+/// Each field carries its own `recordedAt` so that a later star or folder change
+/// does not accidentally refresh the TTL of an older title overlay (and vice-versa).
 struct ConversationPendingMutation: Equatable {
   var title: String?
   var starred: Bool?
-  var recordedAt: Date = Date()
+  var titleRecordedAt: Date?
+  var starredRecordedAt: Date?
   private(set) var folderId: String?
   private(set) var hasFolderIdMutation: Bool = false
+  private(set) var folderIdRecordedAt: Date?
 
   var isEmpty: Bool {
     title == nil && starred == nil && !hasFolderIdMutation
   }
 
+  mutating func setTitle(_ title: String?) {
+    self.title = title
+    titleRecordedAt = Date()
+  }
+
+  mutating func setStarred(_ starred: Bool) {
+    self.starred = starred
+    starredRecordedAt = Date()
+  }
+
   mutating func setFolderId(_ folderId: String?) {
     self.folderId = folderId
     hasFolderIdMutation = true
+    folderIdRecordedAt = Date()
+  }
+
+  /// Expire individual fields whose TTL has elapsed. The whole mutation is
+  /// removed once every field has either resolved or expired.
+  mutating func expireFields(now: Date, ttl: TimeInterval) {
+    if title != nil, let recorded = titleRecordedAt,
+       now.timeIntervalSince(recorded) > ttl {
+      title = nil
+      titleRecordedAt = nil
+    }
+    if starred != nil, let recorded = starredRecordedAt,
+       now.timeIntervalSince(recorded) > ttl {
+      starred = nil
+      starredRecordedAt = nil
+    }
+    if hasFolderIdMutation, let recorded = folderIdRecordedAt,
+       now.timeIntervalSince(recorded) > ttl {
+      folderId = nil
+      hasFolderIdMutation = false
+      folderIdRecordedAt = nil
+    }
   }
 
   mutating func clearResolvedFields(matching server: ServerConversation) {
     if title == server.structured.title {
       title = nil
+      titleRecordedAt = nil
     }
     if starred == server.starred {
       starred = nil
+      starredRecordedAt = nil
     }
     if hasFolderIdMutation && folderId == server.folderId {
       folderId = nil
       hasFolderIdMutation = false
+      folderIdRecordedAt = nil
     }
   }
 }
@@ -52,8 +92,15 @@ enum ConversationReconciliationPolicy {
     pendingMutationTTL: TimeInterval = 120
   ) -> ConversationReconciliationResult {
     let serverIds = Set(server.map(\.id))
-    var nextPending = pendingMutations.filter { _, mutation in
-      now.timeIntervalSince(mutation.recordedAt) <= pendingMutationTTL
+    var nextPending = pendingMutations
+
+    // Per-field TTL expiration: each overlay field is independently evaluated
+    // so a recent star change doesn't keep an older title overlay alive.
+    for id in nextPending.keys {
+      nextPending[id]?.expireFields(now: now, ttl: pendingMutationTTL)
+      if nextPending[id]?.isEmpty ?? true {
+        nextPending.removeValue(forKey: id)
+      }
     }
 
     var merged = server.map { serverConversation in

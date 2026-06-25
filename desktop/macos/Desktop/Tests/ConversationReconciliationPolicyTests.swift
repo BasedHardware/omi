@@ -38,7 +38,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     let local = makeConversation(id: "c1", title: "Optimistic local")
     let serverLagging = makeConversation(id: "c1", title: "Server old")
     var mutation = ConversationPendingMutation()
-    mutation.title = "Optimistic local"
+    mutation.setTitle("Optimistic local")
 
     let lagging = ConversationReconciliationPolicy.mergeList(
       server: [serverLagging],
@@ -65,8 +65,8 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     let local = makeConversation(id: "c1", title: "Optimistic local")
     let serverSuperseded = makeConversation(id: "c1", title: "Server from another client")
     var mutation = ConversationPendingMutation()
-    mutation.title = "Optimistic local"
-    mutation.recordedAt = baseTime
+    mutation.setTitle("Optimistic local")
+    mutation.titleRecordedAt = baseTime
 
     let result = ConversationReconciliationPolicy.mergeList(
       server: [serverSuperseded],
@@ -84,8 +84,8 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     let baseTime = Date(timeIntervalSince1970: 10_000)
     let server = makeConversation(id: "server-row")
     var expired = ConversationPendingMutation()
-    expired.title = "Never returned again"
-    expired.recordedAt = baseTime
+    expired.setTitle("Never returned again")
+    expired.titleRecordedAt = baseTime
 
     let result = ConversationReconciliationPolicy.mergeList(
       server: [server],
@@ -103,7 +103,7 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     let local = makeConversation(id: "c1", starred: true, folderId: "local-folder")
     let serverLagging = makeConversation(id: "c1", starred: false, folderId: "server-folder")
     var mutation = ConversationPendingMutation()
-    mutation.starred = true
+    mutation.setStarred(true)
     mutation.setFolderId("local-folder")
 
     let lagging = ConversationReconciliationPolicy.mergeList(
@@ -126,6 +126,63 @@ final class ConversationReconciliationPolicyTests: XCTestCase {
     XCTAssertTrue(caughtUp.conversations[0].starred)
     XCTAssertEqual(caughtUp.conversations[0].folderId, "local-folder")
     XCTAssertNil(caughtUp.pendingMutations["c1"])
+  }
+
+  // MARK: - Per-field TTL independence (review feedback)
+
+  /// A later star change must NOT refresh the TTL of an older title overlay.
+  func testLaterStarMutationDoesNotRefreshOlderTitleOverlayTTL() {
+    let baseTime = Date(timeIntervalSince1970: 10_000)
+    let server = makeConversation(id: "c1", title: "Server title", starred: false)
+
+    var mutation = ConversationPendingMutation()
+    mutation.setTitle("Optimistic title")
+    mutation.titleRecordedAt = baseTime  // title recorded at T+0
+
+    // 60 seconds later, user also stars the conversation — title is 60s old
+    mutation.setStarred(true)
+    // setStarred stamps starredRecordedAt, but does NOT touch titleRecordedAt
+
+    // At T+121, title is expired (121 > 120) but star is only 61s old (not expired)
+    let result = ConversationReconciliationPolicy.mergeList(
+      server: [server],
+      current: [server],
+      pendingMutations: ["c1": mutation],
+      now: baseTime.addingTimeInterval(121),
+      pendingMutationTTL: 120
+    )
+
+    // Title overlay should have expired — server title wins
+    XCTAssertEqual(result.conversations[0].structured.title, "Server title")
+    // Star overlay is still within TTL — pending star still wins
+    XCTAssertTrue(result.conversations[0].starred)
+    XCTAssertEqual(result.pendingMutations["c1"]?.starred, true)
+    XCTAssertNil(result.pendingMutations["c1"]?.title)
+  }
+
+  /// Each field expires independently; when all fields are expired the
+  /// whole mutation entry is removed even if the conversation is in the server list.
+  func testAllFieldsExpiredRemovesMutationEvenWhenConversationPresent() {
+    let baseTime = Date(timeIntervalSince1970: 10_000)
+    let server = makeConversation(id: "c1", title: "Server title", starred: false)
+
+    var mutation = ConversationPendingMutation()
+    mutation.setTitle("Old title")
+    mutation.titleRecordedAt = baseTime
+    mutation.setStarred(true)
+    mutation.starredRecordedAt = baseTime
+
+    let result = ConversationReconciliationPolicy.mergeList(
+      server: [server],
+      current: [server],
+      pendingMutations: ["c1": mutation],
+      now: baseTime.addingTimeInterval(121),
+      pendingMutationTTL: 120
+    )
+
+    XCTAssertTrue(result.pendingMutations.isEmpty)
+    XCTAssertEqual(result.conversations[0].structured.title, "Server title")
+    XCTAssertFalse(result.conversations[0].starred)
   }
 
   func testServerOrderIsPreservedAndSyncedCacheRowsMissingFromServerAreDropped() {
