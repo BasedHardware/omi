@@ -19,6 +19,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("pill.latestActivity = pill.latestActivity.isEmpty ? \"Finished\" : pill.latestActivity"))
   }
 
+  func testFallbackFailurePathsRecordCompletionTime() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("pill.status = .failed(errorText)\n            pill.completedAt = Date()"))
+    XCTAssertTrue(
+      source.contains(
+        "pill.status = .failed(\"Agent ended before reporting a final result\")\n            pill.completedAt = Date()"))
+  }
+
   func testLateMessageActivityCannotOverwriteTerminalPillStatus() throws {
     let source = try agentPillSource()
 
