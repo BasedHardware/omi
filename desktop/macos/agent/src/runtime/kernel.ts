@@ -1243,6 +1243,12 @@ export class AgentRuntimeKernel {
       metadata: input.input.metadata,
     });
     const binding = this.withTransaction(() => {
+      this.closeConflictingNativeBinding(
+        input.adapterId,
+        opened.adapterNativeSessionId,
+        input.attempt,
+        "native_session_reused"
+      );
       const created = this.store.insertAdapterBinding({
         sessionId: input.session.sessionId,
         adapterId: input.adapterId,
@@ -1483,6 +1489,42 @@ export class AgentRuntimeKernel {
         retentionClass: event.type === "text_delta" || event.type === "thinking_delta" ? "transient" : "core",
         payload: event,
       });
+    });
+  }
+
+  private closeConflictingNativeBinding(
+    adapterId: string,
+    adapterNativeSessionId: string | null | undefined,
+    attempt: RunAttempt,
+    reason: string
+  ): void {
+    if (!adapterNativeSessionId) {
+      return;
+    }
+    const row = this.store.getOptionalRow(
+      `SELECT binding_id, session_id, status
+       FROM adapter_bindings
+       WHERE adapter_id = ? AND adapter_native_session_id = ? AND status NOT IN ('active', 'closed')
+       ORDER BY updated_at_ms DESC
+       LIMIT 1`,
+      [adapterId, adapterNativeSessionId]
+    );
+    if (!row) {
+      return;
+    }
+    const now = Date.now();
+    const bindingId = String(row.binding_id);
+    this.updateBinding(bindingId, {
+      status: "closed",
+      invalidatedAtMs: now,
+      updatedAtMs: now,
+    });
+    this.appendEvent({
+      sessionId: String(row.session_id),
+      runId: attempt.runId,
+      attemptId: attempt.attemptId,
+      type: "binding.closed",
+      payload: { bindingId, adapterId, adapterNativeSessionId, reason },
     });
   }
 

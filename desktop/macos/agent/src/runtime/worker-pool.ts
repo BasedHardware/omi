@@ -4,12 +4,21 @@ import type {
 } from "../adapters/interface.js";
 
 export const DEFAULT_MAX_WORKERS = 8;
+export const DEFAULT_PI_MONO_MAX_WORKERS = 2;
 
 export function configuredMaxWorkers(env = process.env): number {
   const raw = env.OMI_AGENT_MAX_WORKERS;
   if (!raw) return DEFAULT_MAX_WORKERS;
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_WORKERS;
+  return parsed;
+}
+
+export function configuredPiMonoMaxWorkers(env = process.env): number {
+  const raw = env.OMI_PI_MONO_MAX_WORKERS;
+  if (!raw) return DEFAULT_PI_MONO_MAX_WORKERS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_PI_MONO_MAX_WORKERS;
   return parsed;
 }
 
