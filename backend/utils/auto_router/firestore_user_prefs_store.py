@@ -100,13 +100,17 @@ class FirestoreUserPrefsStore:
         if not data:
             return StoredPrefs(prefs=UserPrefs.empty(), updated_at=0.0)
 
-        # Parse overrides + updated_at from the Firestore sub-map.
-        overrides_dict = data.get("overrides", {}) or {}
+        # Parse overrides + model_overrides + updated_at from the Firestore sub-map.
+        # v6: pass the WHOLE sub-map (not just "overrides") so UserPrefs.from_dict
+        # can parse both fields. Backward-compat — old docs (pre-v6) only have
+        # "overrides" and "updated_at"; UserPrefs.from_dict will treat that as
+        # the legacy flat format (top-level IS overrides) and default
+        # model_overrides to empty {}.
         try:
-            prefs = UserPrefs.from_dict(overrides_dict)
+            prefs = UserPrefs.from_dict(data)
         except (ValueError, TypeError) as e:
             logger.warning(
-                "FirestoreUserPrefsStore: invalid overrides for uid=%s (%s), " "returning empty prefs",
+                "FirestoreUserPrefsStore: invalid prefs for uid=%s (%s), " "returning empty prefs",
                 uid,
                 e,
             )
@@ -135,8 +139,11 @@ class FirestoreUserPrefsStore:
         cache empty for the next read).
         """
         now_dt = datetime.now(timezone.utc)
+        # v6: serialize BOTH overrides and model_overrides so the Firestore
+        # sub-map stores the complete UserPrefs. prefs.to_dict() returns
+        # {"overrides": {...}, "model_overrides": {...}}.
         payload = {
-            "overrides": prefs.to_dict(),
+            **prefs.to_dict(),
             "updated_at": now_dt,
         }
 

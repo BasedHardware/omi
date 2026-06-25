@@ -1114,3 +1114,137 @@ class TestFirestoreWriteReturns503OnError:
         # But the router's reset helper resets to memory on next call.
         # So this test is tricky. Let me verify by skipping for now.
         pass  # covered by direct FirestoreUserPrefsStore tests
+
+
+# ---------------------------------------------------------------------------
+# AC: /pick respects model overrides (v6, T-602)
+# ---------------------------------------------------------------------------
+
+
+class TestPickRespectsModelOverrides:
+    """v6: GET /v1/auto-router/pick returns the user's pinned model
+    directly with `attribution: "user_override"` when model_overrides[task]
+    is set AND that model is in the candidate set."""
+
+    def test_no_model_override_uses_auto_router(self, client):
+        """Without model override, /pick returns the auto-router's pick."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["attribution"] != "user_override"
+
+    def test_valid_model_override_returns_pinned_model(self, client):
+        """When user has pinned a model, /pick returns it directly."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Pin gemini-1-5-flash-8b-exp for ptt_response
+        client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {},
+                    "model_overrides": {"ptt_response": "gemini-1-5-flash-8b-exp"},
+                }
+            },
+        )
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model"] == "gemini-1-5-flash-8b-exp"
+        assert body["attribution"] == "user_override"
+        assert body["weights_source"] == "user_override"
+        # detail.override_model surfaces the pinned model
+        assert body["detail"]["override_model"] == "gemini-1-5-flash-8b-exp"
+
+    def test_invalid_model_override_falls_through_to_auto_router(self, client):
+        """If user pins a model NOT in the candidate set, fall through."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Pin a model that doesn't exist in the candidate set
+        client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {},
+                    "model_overrides": {"ptt_response": "not-a-real-model"},
+                }
+            },
+        )
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        # Falls through to auto-router pick (highest score)
+        assert body["model"] != "not-a-real-model"
+        assert body["attribution"] != "user_override"
+
+    def test_model_override_takes_precedence_over_user_prefs(self, client):
+        """When user has BOTH weight override AND model override, model wins."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Weight override says "all quality" → would pick claude-sonnet-4-6
+        # Model override says "use gemini" → gemini wins
+        client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {"ptt_response": {"quality": 1.0, "latency": 0.0, "cost": 0.0}},
+                    "model_overrides": {"ptt_response": "gemini-1-5-flash-8b-exp"},
+                }
+            },
+        )
+        r = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model"] == "gemini-1-5-flash-8b-exp"
+        assert body["attribution"] == "user_override"
+
+    def test_model_override_ignored_when_weights_query_param_present(self, client):
+        """Call-only weights= override takes precedence over stored model override."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+        import urllib.parse
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Pin haiku-4-5 (low quality, high latency)
+        client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {},
+                    "model_overrides": {"ptt_response": "haiku-4-5"},
+                }
+            },
+        )
+        # But caller asks for all-quality weights → claude-sonnet-4-6 wins
+        weights_str = urllib.parse.quote('{"quality": 1.0, "latency": 0.0, "cost": 0.0}')
+        r = client.get(f"/v1/auto-router/pick?task=ptt_response&weights={weights_str}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model"] == "claude-sonnet-4-6"
+        assert body["attribution"] != "user_override"
+
+    def test_model_override_does_not_affect_other_tasks(self, client):
+        """Pinning ptt_response doesn't change transcription picks."""
+        from routers.auto_router import reset_user_prefs_store_for_endpoint_testing
+
+        reset_user_prefs_store_for_endpoint_testing()
+        # Pin a model for ptt_response only
+        client.put(
+            "/v1/auto-router/prefs",
+            json={
+                "prefs": {
+                    "overrides": {},
+                    "model_overrides": {"ptt_response": "haiku-4-5"},
+                }
+            },
+        )
+        # Transcription should still use auto-router pick (no override for it)
+        r = client.get("/v1/auto-router/pick?task=transcription")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["attribution"] != "user_override"

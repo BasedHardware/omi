@@ -255,9 +255,48 @@ async def auto_router_pick(
     # Sort by score desc, then by id asc for deterministic tie-breaking.
     scored.sort(key=lambda pair: (-pair[1], pair[0].id))
 
+    # v6: model override short-circuit. If the user has pinned a specific
+    # model for this task AND that model is in the candidate set, return it
+    # directly with `attribution: "user_override"` and `weights_source:
+    # "user_override"`. Otherwise fall through to the auto-router pick.
+    #
+    # Only honored when no `weights` query param is given (call-only overrides
+    # take precedence; the user is explicitly asking for a one-off scoring).
+    override_model_id: Optional[str] = None
+    if weights is None:
+        pinned_id = (stored.prefs.model_overrides or {}).get(task_spec.name)
+        if pinned_id and any(m.id == pinned_id for m in candidates):
+            override_model_id = pinned_id
+
     # Pick the winner (None if no candidates).
-    winner: Optional[ModelSpec] = scored[0][0] if scored else None
-    winner_score: Optional[float] = scored[0][1] if scored else None
+    if override_model_id is not None:
+        # Override: re-sort so the pinned model is first.
+        scored.sort(
+            key=lambda pair: (
+                0 if pair[0].id == override_model_id else 1,
+                -pair[1],
+                pair[0].id,
+            )
+        )
+        winner = scored[0][0] if scored else None
+        winner_score = scored[0][1] if scored else None
+        attribution = "user_override"
+        reason = (
+            f"user pinned {winner.id} for {task_spec.name} (model_override)"
+            if winner
+            else "no candidates registered for this task"
+        )
+        weights_source = "user_override"
+    else:
+        winner = scored[0][0] if scored else None
+        winner_score = scored[0][1] if scored else None
+        attribution = _ATTRIBUTION
+        reason = (
+            f"selected {winner.id} (highest weighted score {winner_score:.4f})"
+            if winner
+            else "no candidates registered for this task"
+        )
+        # weights_source unchanged from above (query_param / user_prefs / task_default)
 
     # updated_at should reflect when the BENCHMARKS were last loaded (not the
     # current response time) — that's what the consumer cares about for
@@ -287,19 +326,18 @@ async def auto_router_pick(
                 }
                 for m, _ in scored
             ],
-            "reason": (
-                f"selected {winner.id} (highest weighted score {winner_score:.4f})"
-                if winner
-                else "no candidates registered for this task"
-            ),
+            "reason": reason,
+            # v6: surface the override model in detail so clients can show
+            # "pinned by you" in the UI.
+            **({"override_model": override_model_id} if override_model_id else {}),
         },
         "updated_at": (
             cache_last_loaded.isoformat().replace("+00:00", "Z")
             if cache_last_loaded is not None
             else datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         ),
-        "attribution": _ATTRIBUTION,
-        "weights_source": weights_source,  # "query_param" | "user_prefs" | "task_default"
+        "attribution": attribution,
+        "weights_source": weights_source,  # "query_param" | "user_prefs" | "task_default" | "user_override"
     }
 
     # Record this pick in the metrics history (process-local, in-memory).
@@ -318,6 +356,104 @@ async def auto_router_pick(
         )
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Candidates endpoint (v6) — list all models for a task with scores
+# ---------------------------------------------------------------------------
+
+
+@router.get("/v1/auto-router/candidates")
+async def auto_router_candidates(
+    task: str = Query(..., description="Task name to list candidates for"),
+    uid: str = Depends(auth_dependency),
+):
+    """Return ALL candidates for `task` with their scores + default weights.
+
+    v6 endpoint that powers the Settings UI's model picker. Lets the user
+    see "what could the auto-router pick?" with full transparency — every
+    candidate + its quality/latency/cost scores + the task's default
+    weights (so the UI can show what the auto-router would use).
+
+    Response shape:
+
+        {
+          "task": "ptt_response",
+          "candidates": [
+            {
+              "id": "gemini-1-5-flash-8b-exp",
+              "provider": "google",
+              "scores": {"quality": 0.75, "latency": 0.95, "cost": 0.90},
+              "total": 0.9375
+            },
+            ...
+          ],
+          "default_weights": {"quality": 0.4, "latency": 0.5, "cost": 0.1}
+        }
+
+    `total` is the candidate's weighted score using the task's default
+    weights (matches the auto-router's scoring). Sorted desc by `total`.
+
+    Requires authentication (matches `/pick`).
+    Returns 422 if `task` query param is missing (handled by FastAPI).
+    Returns 400 if `task` is unknown.
+    """
+    cache = _get_registry_cache()
+    task_registry, model_registry = await cache.get_or_refresh(_get_loader())
+
+    try:
+        task_spec = task_registry.get(task)
+    except UnknownTaskError:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "unknown_task",
+                "message": f"unknown task: {task!r}",
+                "docs": "see docs/doc/developer/auto-router.mdx#supported-task-types-v1",
+            },
+        )
+
+    # Compute scores using task's default weights (matches what the
+    # auto-router would use if the user has no overrides).
+    default_weights = TaskWeights(
+        quality=task_spec.quality_weight,
+        latency=task_spec.latency_weight,
+        cost=task_spec.cost_weight,
+    )
+    default_task_spec = TaskSpec(
+        name=task_spec.name,
+        quality_weight=default_weights.quality,
+        latency_weight=default_weights.latency,
+        cost_weight=default_weights.cost,
+        description=task_spec.description,
+    )
+
+    candidates = model_registry.candidates_for(task)
+    scored: List[tuple[ModelSpec, float]] = [(m, score(m, default_task_spec)) for m in candidates]
+    # Sort by score desc, then by id asc for deterministic ordering.
+    scored.sort(key=lambda pair: (-pair[1], pair[0].id))
+
+    return {
+        "task": task_spec.name,
+        "candidates": [
+            {
+                "id": m.id,
+                "provider": m.provider,
+                "scores": {
+                    "quality": m.quality_score,
+                    "latency": m.latency_score,
+                    "cost": m.cost_score,
+                },
+                "total": round(s, 4),  # 4 decimal places; matches /pick's display
+            }
+            for m, s in scored
+        ],
+        "default_weights": {
+            "quality": default_weights.quality,
+            "latency": default_weights.latency,
+            "cost": default_weights.cost,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------

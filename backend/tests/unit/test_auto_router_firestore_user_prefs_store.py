@@ -327,3 +327,96 @@ class TestFirestoreStoreProtocolConformance:
 
         store = FirestoreUserPrefsStore(db_client=MockFirestore())
         assert isinstance(store, UserPrefsStoreProtocol)
+
+
+# ---------------------------------------------------------------------------
+# v6 model_overrides — Firestore R/W + backward compat
+# ---------------------------------------------------------------------------
+
+
+class TestFirestoreStoreModelOverridesV6:
+    """v6: FirestoreUserPrefsStore reads/writes the model_overrides field.
+    Backward-compat: old docs (pre-v6) that only have "overrides" load with
+    model_overrides={}."""
+
+    def test_set_then_get_model_overrides(self):
+        store = FirestoreUserPrefsStore(db_client=MockFirestore())
+        prefs = UserPrefs(
+            model_overrides={
+                "ptt_response": "gpt-realtime-2",
+                "transcription": "assemblyai-universal",
+            }
+        )
+        store.set("uid-1", prefs)
+        result = store.get("uid-1")
+        assert result.prefs.model_overrides == {
+            "ptt_response": "gpt-realtime-2",
+            "transcription": "assemblyai-universal",
+        }
+
+    def test_set_writes_model_overrides_field_to_firestore(self):
+        """Verify the payload sent to Firestore includes model_overrides."""
+        mock_db = MockFirestore()
+        store = FirestoreUserPrefsStore(db_client=mock_db)
+        prefs = UserPrefs(
+            overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)},
+            model_overrides={"ptt_response": "gpt-realtime-2"},
+        )
+        store.set("uid-1", prefs)
+        # Inspect what was written to Firestore.
+        user_doc = mock_db.docs.get("users", {}).get("uid-1", {})
+        assert "auto_router_prefs" in user_doc
+        payload = user_doc["auto_router_prefs"]
+        assert "model_overrides" in payload
+        assert payload["model_overrides"] == {"ptt_response": "gpt-realtime-2"}
+        # And overrides was also written (sanity).
+        assert "overrides" in payload
+        assert "ptt_response" in payload["overrides"]
+
+    def test_set_then_get_roundtrip_with_both_fields(self):
+        store = FirestoreUserPrefsStore(db_client=MockFirestore())
+        prefs = UserPrefs(
+            overrides={"ptt_response": TaskWeights(0.4, 0.5, 0.1)},
+            model_overrides={
+                "ptt_response": "gpt-realtime-2",
+                "transcription": "whisper",
+            },
+        )
+        store.set("uid-1", prefs)
+        result = store.get("uid-1")
+        assert result.prefs.overrides == prefs.overrides
+        assert result.prefs.model_overrides == prefs.model_overrides
+
+    def test_backward_compat_old_doc_without_model_overrides(self):
+        """Old Firestore docs (pre-v6) only have "overrides" + "updated_at".
+        Loading them must succeed with model_overrides={}."""
+        mock_db = MockFirestore()
+        # Write a v3-shape doc directly (no model_overrides key).
+        mock_db.docs.setdefault("users", {})["uid-legacy"] = {
+            "auto_router_prefs": {
+                "overrides": {"ptt_response": {"quality": 0.4, "latency": 0.5, "cost": 0.1}},
+                "updated_at": datetime.now(timezone.utc),
+            }
+        }
+        store = FirestoreUserPrefsStore(db_client=mock_db)
+        result = store.get("uid-legacy")
+        # Weights load correctly.
+        assert result.prefs.overrides["ptt_response"] == TaskWeights(0.4, 0.5, 0.1)
+        # model_overrides defaults to empty (legacy doc had no such field).
+        assert result.prefs.model_overrides == {}
+
+    def test_invalid_model_overrides_falls_back_to_empty(self):
+        """If model_overrides field has a non-dict value, fall back to empty."""
+        mock_db = MockFirestore()
+        mock_db.docs.setdefault("users", {})["uid-bad"] = {
+            "auto_router_prefs": {
+                "overrides": {},
+                "model_overrides": "not a dict",  # bad type
+                "updated_at": datetime.now(timezone.utc),
+            }
+        }
+        store = FirestoreUserPrefsStore(db_client=mock_db)
+        # Should not raise — fall back to empty prefs (fail-safe).
+        result = store.get("uid-bad")
+        assert result.prefs.overrides == {}
+        assert result.prefs.model_overrides == {}
