@@ -133,7 +133,140 @@ export interface AdapterCapabilities {
   readonly resumeFidelity: ResumeFidelity;
   readonly supportsNativeResume: boolean;
   readonly supportsCancellation: boolean;
-  readonly requiresPinnedWorker?: boolean;
+  readonly acknowledgesCancellation: boolean;
+  readonly requiresPinnedWorker: boolean;
+  readonly supportsModelSwitching: boolean;
+  readonly supportsArtifactEmission: boolean;
+  readonly supportsTools: boolean;
+  readonly restartBehavior: "native_bindings_survive" | "process_local_bindings_stale" | "attempts_orphaned";
+}
+
+export type AdapterCapabilityKey =
+  | "nativeResume"
+  | "cancellationDispatch"
+  | "cancellationAck"
+  | "pinnedWorker"
+  | "modelSwitching"
+  | "artifactEmission"
+  | "toolSupport"
+  | "restartOrphanSemantics";
+
+export type AdapterCapabilityExpectationStatus = "required" | "unsupported" | "known_limitation";
+
+export interface AdapterCapabilityExpectation {
+  readonly status: AdapterCapabilityExpectationStatus;
+  readonly reason: string;
+  readonly followUpTicket?: string;
+}
+
+export interface AdapterCapabilityMatrixEntry {
+  readonly adapterId: string;
+  readonly productionAdapter: boolean;
+  readonly expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>;
+}
+
+const required = (reason: string): AdapterCapabilityExpectation => ({ status: "required", reason });
+const unsupported = (reason: string): AdapterCapabilityExpectation => ({ status: "unsupported", reason });
+const knownLimitation = (reason: string, followUpTicket: string): AdapterCapabilityExpectation => ({
+  status: "known_limitation",
+  reason,
+  followUpTicket,
+});
+
+export const ADAPTER_CAPABILITY_MATRIX = {
+  acp: {
+    adapterId: "acp",
+    productionAdapter: true,
+    expectations: {
+      nativeResume: required("ACP exposes native session ids and session/resume."),
+      cancellationDispatch: required("ACP exposes session/cancel dispatch."),
+      cancellationAck: knownLimitation("ACP cancellation is fire-and-forget; no terminal ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("ACP bindings are resumable by native session id and do not require process-local pinning."),
+      modelSwitching: required("ACP supports session/set_model during open and resume."),
+      artifactEmission: unsupported("ACP adapter does not emit artifact references yet."),
+      toolSupport: required("ACP session/update tool events are projected into canonical adapter events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable bindings."),
+    },
+  },
+  "pi-mono": {
+    adapterId: "pi-mono",
+    productionAdapter: true,
+    expectations: {
+      nativeResume: unsupported("pi-mono session ids are process-local and are stale after daemon restart."),
+      cancellationDispatch: required("pi-mono supports abort dispatch for the active prompt."),
+      cancellationAck: knownLimitation("pi-mono abort resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("pi-mono keeps session state in the adapter process and must stay worker-pinned while active."),
+      modelSwitching: required("pi-mono maps desktop model ids and sends set_model."),
+      artifactEmission: unsupported("pi-mono runtime does not emit artifact references yet."),
+      toolSupport: required("pi-mono uses the Omi extension/tool relay path for tools."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks non-resumable bindings stale."),
+    },
+  },
+  hermes: {
+    adapterId: "hermes",
+    productionAdapter: false,
+    expectations: {
+      nativeResume: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      cancellationDispatch: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      cancellationAck: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      pinnedWorker: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      modelSwitching: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      artifactEmission: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      toolSupport: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+      restartOrphanSemantics: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
+    },
+  },
+  openclaw: {
+    adapterId: "openclaw",
+    productionAdapter: false,
+    expectations: {
+      nativeResume: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      cancellationDispatch: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      cancellationAck: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      pinnedWorker: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      modelSwitching: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      artifactEmission: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      toolSupport: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+      restartOrphanSemantics: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
+    },
+  },
+  a2a: {
+    adapterId: "a2a",
+    productionAdapter: false,
+    expectations: {
+      nativeResume: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      cancellationDispatch: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      cancellationAck: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      pinnedWorker: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      modelSwitching: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      artifactEmission: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      toolSupport: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+      restartOrphanSemantics: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
+    },
+  },
+} as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
+
+export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
+export type ProductionAdapterId = "acp" | "pi-mono";
+
+const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
+  acp: "native_bindings_survive",
+  "pi-mono": "process_local_bindings_stale",
+};
+
+export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {
+  const expectations = ADAPTER_CAPABILITY_MATRIX[adapterId].expectations;
+  return {
+    resumeFidelity: expectations.nativeResume.status === "required" ? "native" : "none",
+    supportsNativeResume: expectations.nativeResume.status === "required",
+    supportsCancellation: expectations.cancellationDispatch.status === "required",
+    acknowledgesCancellation: expectations.cancellationAck.status === "required",
+    requiresPinnedWorker: expectations.pinnedWorker.status === "required",
+    supportsModelSwitching: expectations.modelSwitching.status === "required",
+    supportsArtifactEmission: expectations.artifactEmission.status === "required",
+    supportsTools: expectations.toolSupport.status === "required",
+    restartBehavior: PRODUCTION_ADAPTER_RESTART_BEHAVIOR[adapterId],
+  };
 }
 
 export interface OpenBindingInput {

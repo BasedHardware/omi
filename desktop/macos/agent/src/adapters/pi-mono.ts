@@ -9,7 +9,8 @@
 import { ChildProcess, spawn } from "child_process";
 import { existsSync } from "fs";
 import { createInterface, Interface as ReadlineInterface } from "readline";
-import {
+import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
+import type {
   HarnessAdapter,
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -19,7 +20,6 @@ import {
   CancelAttemptContext,
   CancelDispatchResult,
   HarnessConfig,
-  HarnessFeature,
   OpenBindingInput,
   OpenedBinding,
   ResumeBindingInput,
@@ -861,12 +861,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = "pi-mono";
-  readonly capabilities: AdapterCapabilities = {
-    resumeFidelity: "none",
-    supportsNativeResume: false,
-    supportsCancellation: true,
-    requiresPinnedWorker: true,
-  };
+  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("pi-mono");
 
   private readonly harness: PiMonoAdapter;
   private readonly cancelledAttempts = new Set<string>();
