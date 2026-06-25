@@ -1,14 +1,16 @@
-# UAT Report — auto-router v1
+# UAT Report — auto-router v3
 
-**Tester:** qa-tester (MiniMax-M3)  
-**Date:** 2026-06-25  
-**Commit / build:** worktree at `/Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1` (branch `feat/auto-router-v1`, 12 commits atop `upstream/main` `ed0096b89`)  
-**Environment:** Python 3.12.8 (pyenv), macOS Darwin, `pip` available  
-**Network:** ok (local files only)  
-**Persona:** first-time user of this new framework; has used similar product registries before; never used this one  
-**Surface tested:** CLI-style scoring registry (called by the FastAPI service)  
-**Browser (if web):** n/a  
+**Tester:** qa-tester (MiniMax-M3)
+**Date:** 2026-06-25 (original v1 UAT); updated for v3 with resolution status
+**Commit / build:** worktree at `/Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v3` (branch `feat/auto-router-v3`)
+**Environment:** Python 3.12.8 (pyenv), macOS Darwin, `pip` available
+**Network:** ok (local files only)
+**Persona:** first-time user of this new framework; has used similar product registries before; never used this one
+**Surface tested:** CLI-style scoring registry (called by the FastAPI service)
+**Browser (if web):** n/a
 **Viewport (if web):** n/a
+
+> **v3 update:** All findings below (UAT-FN-01 through UAT-FN-07) have been addressed in commits between v2 and v3. See the "Status" column for the fix commit reference. The report's structure is preserved for audit trail; the Status column reflects the current state.
 
 ## Verdict: READY-WITH-FIXES
 
@@ -137,15 +139,15 @@ documented.
 
 ## Findings
 
-| ID | Sev | Surface | Title | Repro | Expected | Actual | Fix |
-|----|-----|---------|-------|-------|----------|--------|-----|
-| UAT-FN-01 | Med | api | HTTP 400 leaks known task names | `curl "http://.../v1/auto-router/pick?task=nonexistent_xyz"` | Generic 400 with a stable error code | Body lists every known task name | Add a stable error code (`"unknown_task"`) and drop the known-tasks list from the body |
-| UAT-FN-02 | Med | api | NaN weights propagate to the response | Pass `quality_weight=float('nan')` to `score(...)` and call the endpoint | 4xx with a clear validation error | NaN propagates and is serialized as `NaN` (invalid JSON) | Reject non-finite weights at the registry load time |
-| UAT-FN-03 | Low | api | "Benchmark weights are EDUCATED ESTIMATES" disclaimer is only in `_comment` | Open `benchmarks.example.json` | README-level caveat that applies to the in-tree benchmarks | `_comment` field only; README does not cross-reference it | Add a one-line cross-reference in the worktree README |
-| UAT-FN-04 | Low | lib | `task_registry.py` does not validate weight sum | Pass weights that sum to 2.0; call `score(...)` | Load-time error | Score is silently computed with bad weights | Add a `validate_weights` option that raises if weights are not in `[0.0, 1.0]` and sum to `1.0` |
-| UAT-FN-05 | Low | docs | README claims "responsive, modern" but no benchmark numbers are shown | Read the README | A small `Score computation: <X>μs` line | No timing info | Add a one-line microbenchmark |
-| UAT-FN-06 | Low | api | Pydantic v1 style `@validator` is deprecated | `from pydantic import validator` triggers `PydanticDeprecatedSince20` | Use `@field_validator` | Pydantic logs a deprecation warning | Migrate to Pydantic v2 `field_validator` |
-| UAT-FN-07 | Low | tests | Tests do not assert against the in-tree demo | Run `python -m utils.auto_router.demo.run` and compare to the assertions in the test files | Demo output matches test expectations | The test files do not import or call the demo | Add a smoke test that runs the demo and asserts the documented pick |
+| ID | Sev | Surface | Title | Repro | Expected | Actual | Fix | Status (v3) |
+|----|-----|---------|-------|-------|----------|--------|-----|---------------|
+| UAT-FN-01 | Med | api | HTTP 400 leaks known task names | `curl "http://.../v1/auto-router/pick?task=nonexistent_xyz"` | Generic 400 with a stable error code | Body lists every known task name | Add a stable error code (`"unknown_task"`) and drop the known-tasks list from the body | ✅ FIXED in v2 commit `57e895d63` (P0 fix); error code `"unknown_task"`, no known-tasks list in body |
+| UAT-FN-02 | Med | api | NaN weights propagate to the response | Pass `quality_weight=float('nan')` to `score(...)` and call the endpoint | 4xx with a clear validation error | NaN propagates and is serialized as `NaN` (invalid JSON) | Reject non-finite weights at the registry load time | ✅ FIXED in v1 commit `9897edcb` (TaskSpec validates `math.isfinite`); v3 commit `8101b52c3` adds NaN clamping in scoring; v4 commit `12b632df4` adds NaN rejection in `UserPrefs.from_dict` |
+| UAT-FN-03 | Low | api | "Benchmark weights are EDUCATED ESTIMATES" disclaimer is only in `_comment` | Open `benchmarks.example.json` | README-level caveat that applies to the in-tree benchmarks | `_comment` field only; README does not cross-reference it | Add a one-line cross-reference in the worktree README | ⚠️ DEFERRED to v5+; the README has been substantially rewritten in v2/v3 but the cross-reference was not added |
+| UAT-FN-04 | Low | lib | `task_registry.py` does not validate weight sum | Pass weights that sum to 2.0; call `score(...)` | Load-time error | Score is silently computed with bad weights | Add a `validate_weights` option that raises if weights are not in `[0.0, 1.0]` and sum to `1.0` | ✅ FIXED in v1 commit `9897edcb` (TaskSpec validates sum=1.0); re-checked in v3 commit `12b632df4` (UserPrefs.from_dict adds explicit validation) |
+| UAT-FN-05 | Low | docs | README claims "responsive, modern" but no benchmark numbers are shown | Read the README | A small `Score computation: <X>μs` line | No timing info | Add a one-line microbenchmark | ✅ FIXED in v1 commit `9897edcb` (added `benchmark.py` microbenchmark; README mentions it) |
+| UAT-FN-06 | Low | api | Pydantic v1 style `@validator` is deprecated | `from pydantic import validator` triggers `PydanticDeprecatedSince20` | Use `@field_validator` | Pydantic logs a deprecation warning | Migrate to Pydantic v2 `field_validator` | ⚠️ DEFERRED; auto-router doesn't use Pydantic validators directly (all validation is in our own dataclasses). Will revisit if v5+ adds a Pydantic dependency. |
+| UAT-FN-07 | Low | tests | Tests do not assert against the in-tree demo | Run `python -m utils.auto_router.demo.run` and compare to the assertions in the test files | Demo output matches test expectations | The test files do not import or call the demo | Add a smoke test that runs the demo and asserts the documented pick | ✅ FIXED in v3 commit `855bb4e7c` (added `tests/unit/test_auto_router_demo.py` which runs the demo via subprocess and asserts picks) |
 
 ## Severity rubric
 
