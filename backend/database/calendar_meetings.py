@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import transactional
 
 from ._client import db, document_id_from_seed
 
@@ -9,6 +10,21 @@ from ._client import db, document_id_from_seed
 def _get_meetings_collection(uid: str):
     """Get user's meetings collection reference"""
     return db.collection('users').document(uid).collection('meetings')
+
+
+@transactional
+def _create_meeting_transaction(transaction, doc_ref, meeting_data: Dict, now: datetime) -> None:
+    """Atomically upsert a meeting, stamping created_at only on first creation.
+
+    Running the existence check and the write inside one Firestore transaction
+    closes the TOCTOU window: concurrent creates for the same natural key are
+    serialized (Firestore retries on contention), so created_at is set exactly
+    once and a racing write can never reset it.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        meeting_data['created_at'] = now
+    transaction.set(doc_ref, meeting_data, merge=True)
 
 
 def create_meeting(uid: str, meeting_data: Dict) -> str:
@@ -31,12 +47,10 @@ def create_meeting(uid: str, meeting_data: Dict) -> str:
         # get_meeting_id_by_calendar_event check-then-create).
         doc_id = document_id_from_seed(f'{uid}:{source}:{event_id}')
         doc_ref = _get_meetings_collection(uid).document(doc_id)
-        # Only set created_at when the doc doesn't already exist so a racing
-        # write doesn't reset it; merge=True makes concurrent creates idempotent.
-        snapshot = doc_ref.get()
-        if not snapshot.exists:
-            meeting_data['created_at'] = now
-        doc_ref.set(meeting_data, merge=True)
+        # Stamp created_at only when the doc doesn't already exist, and do the
+        # existence check + write atomically in a transaction so a racing create
+        # can't reset created_at; merge=True keeps concurrent creates idempotent.
+        _create_meeting_transaction(db.transaction(), doc_ref, meeting_data, now)
         return doc_ref.id
 
     # Fallback: no natural key -> preserve old random-id behavior.
