@@ -12,11 +12,15 @@ from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
     delete_all_canonical_memories,
     delete_canonical_memory,
+    memory_item_to_memorydb,
     read_canonical_memories,
     retract_conversation_sourced_memories,
     search_canonical_memories,
     search_result_to_memorydb,
+    update_canonical_memory_content,
+    update_canonical_memory_visibility,
     write_canonical_extraction_memory,
+    write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import resolve_pinned_memory_system
@@ -148,8 +152,21 @@ class LegacyMemoryBackend:
     def search(self, uid: str, query: str, *, limit: int = 5) -> List[MemorySearchMatch]:
         return _legacy_search_memories(uid, query, limit=limit)
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
         memories_db.create_memory(uid, data)
+        return str(data.get("id") or "")
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        memories_db.save_memories(uid, items)
+        return [str(item.get("id") or "") for item in items]
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        memories_db.edit_memory(uid, memory_id, content)
+        memory = memories_db.get_memory(uid, memory_id)
+        return MemoryDB.model_validate(memory)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        memories_db.change_memory_visibility(uid, memory_id, visibility)
 
     def delete(self, uid: str, memory_id: str) -> None:
         memories_db.delete_memory(uid, memory_id)
@@ -175,8 +192,18 @@ class CanonicalMemoryBackend:
             results.append(MemorySearchMatch(memory=memory_obj, score=1.0))
         return results
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
-        write_canonical_extraction_memory(uid, data, db_client=self._db_client)
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
+        write_canonical_external_memory(uid, data, db_client=self._db_client)
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        return [self.write(uid, item) for item in items]
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        item = update_canonical_memory_content(uid, memory_id, content, db_client=self._db_client)
+        return memory_item_to_memorydb(item)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        update_canonical_memory_visibility(uid, memory_id, visibility, db_client=self._db_client)
 
     def delete(self, uid: str, memory_id: str) -> None:
         delete_canonical_memory(uid, memory_id, db_client=self._db_client)
@@ -209,8 +236,17 @@ class MemoryService:
             return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 
-    def write(self, uid: str, data: Dict[str, Any]) -> None:
-        self._resolve_backend(uid).write(uid, data)
+    def write(self, uid: str, data: Dict[str, Any]) -> str:
+        return self._resolve_backend(uid).write(uid, data)
+
+    def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
+        return self._resolve_backend(uid).write_batch(uid, items)
+
+    def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
+        return self._resolve_backend(uid).update_content(uid, memory_id, content)
+
+    def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
+        self._resolve_backend(uid).update_visibility(uid, memory_id, visibility)
 
     def delete(self, uid: str, memory_id: str) -> None:
         self._resolve_backend(uid).delete(uid, memory_id)
