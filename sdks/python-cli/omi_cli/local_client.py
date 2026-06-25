@@ -110,9 +110,31 @@ class LocalOmiClient:
 
     def _error_from_response(self, response: httpx.Response) -> CliError:
         detail = _extract_detail(response)
+        body = _safe_parse_json(response)
+        extra = _structured_local_error(response.status_code, body)
         if 500 <= response.status_code < 600:
-            return ServerError(message=f"Local Omi Desktop API error ({response.status_code})", detail=detail)
-        return from_status(response.status_code, detail=detail)
+            return ServerError(
+                message=f"Local Omi Desktop API error ({response.status_code})",
+                detail=detail,
+                extra=extra,
+            )
+        error = from_status(response.status_code, detail=detail)
+        return CliError(
+            message=f"Local Omi Desktop API error ({response.status_code})",
+            detail=detail,
+            exit_code=error.exit_code,
+            extra=extra,
+        )
+
+
+def _structured_local_error(status_code: int, body: Any) -> dict[str, Any]:
+    """Preserve Desktop-local structured error payloads for JSON-mode agents."""
+    payload: dict[str, Any] = {"status_code": status_code}
+    if isinstance(body, Mapping):
+        for key in ("ok", "error", "reason", "hint", "screenshot_id", "name"):
+            if key in body:
+                payload[key] = body[key]
+    return payload
 
 
 def _unwrap_tool_response(body: Any) -> Any:

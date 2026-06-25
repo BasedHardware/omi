@@ -332,3 +332,47 @@ def test_screenshot_writes_base64_output_and_keeps_json_stdout(config_path: Path
     assert payload["screenshot_id"] == "9"
     assert "image_base64" not in payload["result"]
     assert payload["result"]["image_base64_redacted"] is True
+
+
+def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "pending.jpg"
+    error_payload = {
+        "ok": False,
+        "error": "screenshot_pending",
+        "reason": "The frame is in the active recording segment that has not been flushed to disk yet.",
+        "hint": "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized.",
+        "screenshot_id": 123,
+    }
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(422, json=error_payload))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+
+    assert result.exit_code != 0
+    assert not output.exists()
+    assert isinstance(result.exception, CliError)
+    payload = result.exception.extra
+    assert payload["status_code"] == 422
+    assert payload["ok"] is False
+    assert payload["error"] == "screenshot_pending"
+    assert payload["reason"] == error_payload["reason"]
+    assert payload["hint"] == error_payload["hint"]
+    assert payload["screenshot_id"] == 123
+
+
+def test_screenshot_non_json_local_api_error_has_status_code(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "failed.jpg"
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(500, text="plain failure"))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+
+    assert result.exit_code != 0
+    assert not output.exists()
+    assert isinstance(result.exception, CliError)
+    payload = result.exception.extra
+    assert result.exception.message == "Local Omi Desktop API error (500)"
+    assert result.exception.detail == "plain failure"
+    assert payload["status_code"] == 500

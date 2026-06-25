@@ -167,7 +167,7 @@ app.add_typer(local_cmd.app, name="local", help="Local Omi Desktop API tools.")
 
 
 def _exit_with_cli_error(error: CliError, renderer: Renderer) -> int:
-    renderer.error(error.message, detail=error.detail)
+    renderer.error(error.message, detail=error.detail, extra=error.extra)
     return error.exit_code
 
 

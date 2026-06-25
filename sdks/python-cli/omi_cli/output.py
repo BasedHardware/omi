@@ -132,13 +132,15 @@ class Renderer:
             return
         self._stderr.print(f"[yellow]![/yellow] {message}")
 
-    def error(self, message: str, *, detail: Optional[str] = None) -> None:
+    def error(self, message: str, *, detail: Optional[str] = None, extra: Optional[Mapping[str, Any]] = None) -> None:
         # Errors are emitted in BOTH modes — JSON mode keeps stdout pristine,
         # but error messages still need to reach the user via stderr.
         if self.json_mode:
             payload: dict[str, Any] = {"error": message}
             if detail:
                 payload["detail"] = detail
+            if extra:
+                payload.update(dict(extra))
             self._stderr.print(json.dumps(payload))
         else:
             line = f"[red]✗[/red] {message}"
