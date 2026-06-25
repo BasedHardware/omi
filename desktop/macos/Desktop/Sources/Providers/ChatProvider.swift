@@ -2707,6 +2707,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
+    @discardableResult
     func sendMessage(
         _ text: String,
         model: String? = nil,
@@ -2720,16 +2721,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         legacyClientScope: String? = nil,
         resume: String? = nil,
         imageData: Data? = nil
-    ) async {
+    ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        guard !trimmedText.isEmpty else { return nil }
 
         // Guard against concurrent sendMessage calls.
         // The bridge uses a single message continuation, so concurrent queries
         // would cause responses to be consumed by the wrong caller.
         guard !isSending else {
             log("ChatProvider: sendMessage called while already sending, ignoring")
-            return
+            return nil
         }
 
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
@@ -2744,7 +2745,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     object: nil,
                     userInfo: ["reason": "chat"]
                 )
-                return
+                return nil
             }
             usageLimiter.recordQuery()
         }
@@ -2761,7 +2762,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
-            return
+            return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
@@ -2784,7 +2785,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-                return
+                return nil
             }
             sessionId = sid
         }
@@ -2823,7 +2824,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 isSending = false
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-                return
+                return nil
             }
             attachmentsForMessage = pendingAttachments
             pendingAttachments.removeAll()
@@ -2914,6 +2915,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var toolStartTimes: [String: Date] = [:]
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
+        var completedResponseText: String?
 
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
@@ -3324,6 +3326,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             Task.detached(priority: .background) {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
+            completedResponseText = messageText
         } catch {
             // QueryTracer: error path — close spans and write the (partial) trace
             // so failed/timed-out queries still show up in benchmarks.
@@ -3420,6 +3423,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatProvider: chaining follow-up query")
             await sendMessage(followUp, isFollowUp: true)
         }
+        return completedResponseText
     }
 
     /// Generate a title for the session using LLM

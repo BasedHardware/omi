@@ -25,6 +25,7 @@ export interface McpServerBuildContext {
   clientId: string;
   protocolVersion?: ProtocolVersion;
   sessionId?: string;
+  includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
   mode: RunMode,
@@ -75,6 +76,15 @@ export interface UnscopedToolCallContext {
   adapterSessionId?: string;
   legacyAdapterSessionId?: string;
   isRunning?: boolean;
+}
+
+export interface ExternalRequestContextInput {
+  protocolVersion?: ProtocolVersion;
+  requestId: string;
+  clientId: string;
+  ownerId: string;
+  adapterId: string;
+  sessionId?: string;
 }
 
 interface WarmupHint {
@@ -162,6 +172,26 @@ export class JsonlCompatibilityFacade {
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
   }
 
+  registerExternalRequestContext(input: ExternalRequestContextInput): void {
+    const context: ActiveRequestContext = {
+      protocolVersion: input.protocolVersion,
+      requestId: input.requestId,
+      clientId: input.clientId,
+      ownerId: input.ownerId,
+      adapterId: input.adapterId,
+      sessionId: input.sessionId,
+    };
+    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
+  }
+
+  releaseExternalRequestContext(requestId: string, clientId: string): void {
+    const key = this.activeRequestKey(requestId, clientId);
+    const context = this.activeByRequest.get(key);
+    if (context && !context.runId) {
+      this.activeByRequest.delete(key);
+    }
+  }
+
   async handleQuery(message: QueryMessage): Promise<void> {
     const input = this.buildRunInput(message);
     const context: ActiveRequestContext = {
@@ -173,7 +203,7 @@ export class JsonlCompatibilityFacade {
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
     };
-    this.activeByRequest.set(context.requestId, context);
+    this.activeByRequest.set(this.activeRequestKey(context.requestId, context.clientId), context);
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -210,7 +240,7 @@ export class JsonlCompatibilityFacade {
       const errorMessage: ErrorMessage = { type: "error", message: messageText };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
-      this.activeByRequest.delete(context.requestId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {
         this.activeByRun.delete(context.runId);
         const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
@@ -227,14 +257,20 @@ export class JsonlCompatibilityFacade {
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
-    const ownerId = message.ownerId ?? this.ownerId;
+    const hasExplicitClientId = message.clientId !== undefined;
+    const activeRequestContext = requestId
+      ? (hasExplicitClientId
+        ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
+        : this.singleActiveRequestContext(requestId))
+      : undefined;
+    const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     const runId =
       message.runId ??
-      (requestId ? this.activeByRequest.get(requestId)?.runId : undefined) ??
+      activeRequestContext?.runId ??
       this.latestRunByClient.get(this.latestRunByClientKey(ownerId, clientId)) ??
       this.latestRunByOwner.get(ownerId);
     const context =
-      (requestId ? this.activeByRequest.get(requestId) : undefined) ??
+      activeRequestContext ??
       (runId ? this.activeByRun.get(runId) : undefined) ?? {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
@@ -259,9 +295,21 @@ export class JsonlCompatibilityFacade {
       return;
     }
 
-    const ack = await this.kernel.cancelRun(runId);
-    context.runId = ack.runId;
-    context.attemptId = ack.attemptId ?? context.attemptId;
+    const cancellationOwnerId = message.ownerId ?? activeRequestContext?.ownerId ?? ownerId;
+    let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
+    try {
+      ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });
+      context.runId = ack.runId;
+      context.attemptId = ack.attemptId ?? context.attemptId;
+    } catch (error) {
+      this.log(`Compatibility interrupt error: ${error instanceof Error ? error.message : String(error)}`);
+      ack = {
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+        runId,
+      };
+    }
     if (message.protocolVersion === 2) {
       const cancelAck: CancelAckMessage = {
         type: "cancel_ack",
@@ -355,7 +403,7 @@ export class JsonlCompatibilityFacade {
   }
 
   toolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
-    const context = this.activeByRequest.get(requestId);
+    const context = this.singleActiveRequestContext(requestId);
     if (!context || context.protocolVersion !== 2) return {};
     return {
       protocolVersion: 2,
@@ -391,7 +439,13 @@ export class JsonlCompatibilityFacade {
     const payload = parsePayload(event.payloadJson);
     if (event.type === "run.created") {
       const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
-      const context = requestId ? this.activeByRequest.get(requestId) : undefined;
+      const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
+      const context =
+        requestId && clientId
+          ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
+          : requestId
+            ? this.singleActiveRequestContext(requestId)
+            : undefined;
       if (context) {
         context.sessionId = event.sessionId;
         context.runId = event.runId;
@@ -415,6 +469,15 @@ export class JsonlCompatibilityFacade {
       TERMINAL_RUN_EVENT_STATUSES.has(event.type.slice("run.".length))
     ) {
       context.isRunning = false;
+      this.activeByRun.delete(event.runId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
+      const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
+      if (this.latestRunByClient.get(clientKey) === event.runId) {
+        this.latestRunByClient.delete(clientKey);
+      }
+      if (this.latestRunByOwner.get(context.ownerId) === event.runId) {
+        this.latestRunByOwner.delete(context.ownerId);
+      }
     }
     if (!event.type.startsWith("adapter.")) return;
 
@@ -488,6 +551,15 @@ export class JsonlCompatibilityFacade {
 
   private latestRunByClientKey(ownerId: string, clientId: string): string {
     return JSON.stringify([ownerId, clientId]);
+  }
+
+  private activeRequestKey(requestId: string, clientId: string): string {
+    return JSON.stringify([clientId, requestId]);
+  }
+
+  private singleActiveRequestContext(requestId: string): ActiveRequestContext | undefined {
+    const contexts = [...this.activeByRequest.values()].filter((context) => context.requestId === requestId);
+    return contexts.length === 1 ? contexts[0] : undefined;
   }
 
   private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {

@@ -9308,6 +9308,10 @@ class AppLocalizationsPt extends AppLocalizations {
       'Por enquanto funciona apenas com dispositivos Omi e está em constante aprimoramento.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'O modo em segundo plano não está disponível porque nenhum dispositivo compatível está conectado. Conecte um dispositivo Omi, OpenGlass ou Friend Pendant para usar este recurso.';
+
+  @override
   String get regenerateRecap => 'Regenerar resumo';
 
   @override

@@ -9348,6 +9348,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție.';
+
+  @override
   String get regenerateRecap => 'Regenerează rezumatul';
 
   @override

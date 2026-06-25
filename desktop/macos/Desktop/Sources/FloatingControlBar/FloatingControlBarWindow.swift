@@ -26,8 +26,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let sizeKey = "FloatingControlBarSize"
     private static let defaultSize = NSSize(width: 40, height: 14)
     private static let minBarSize = NSSize(width: 40, height: 14)
-    /// Physical notch dead zone. Do not place controls here; it is hidden by the MacBook camera housing.
-    static let notchHiddenCenterWidth: CGFloat = 172
+    /// Fallback physical notch dead zone. Prefer `notchHiddenCenterWidth(for:)`,
+    /// which reads macOS' actual top auxiliary areas for the current screen.
+    static let fallbackNotchHiddenCenterWidth: CGFloat = 172
+    static let notchHiddenCenterSafetyPadding: CGFloat = 34
+    static var notchHiddenCenterWidth: CGFloat {
+        fallbackNotchHiddenCenterWidth + notchHiddenCenterSafetyPadding
+    }
     static let notchCompactSideWidth: CGFloat = 48
     static let notchActiveSideWidth: CGFloat = 76
     static let notchChromeHeight: CGFloat = 34
@@ -106,9 +111,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
         return Self.notchActiveSideWidth
     }
+    private var notchHiddenCenterWidthForCurrentScreen: CGFloat {
+        Self.notchHiddenCenterWidth(for: screenForPlacement)
+    }
     private func notchSize(active: Bool) -> NSSize {
         let sideWidth = active ? Self.notchActiveSideWidth : Self.notchCompactSideWidth
-        return NSSize(width: Self.notchHiddenCenterWidth + sideWidth * 2, height: Self.notchChromeHeight)
+        return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: Self.notchChromeHeight)
     }
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
         guard state.isVoiceResponseActive else { return size }
@@ -137,7 +145,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return frame.height
     }
     private var notchCollapsedSize: NSSize {
-        NSSize(width: Self.notchHiddenCenterWidth + notchSideWidth * 2, height: Self.notchChromeHeight)
+        NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: Self.notchChromeHeight)
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
@@ -157,7 +165,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     ) {
         let initialSize = ShortcutSettings.shared.notchModeEnabled
             && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
-            ? FloatingControlBarWindow.notchCompactSize
+            ? NSSize(
+                width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
+                    + FloatingControlBarWindow.notchCompactSideWidth * 2,
+                height: FloatingControlBarWindow.notchChromeHeight
+            )
             : FloatingControlBarWindow.minBarSize
         let initialRect = NSRect(origin: .zero, size: initialSize)
 
@@ -230,6 +242,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             return screen.safeAreaInsets.top > 0
         }
         return false
+    }
+
+    static func notchHiddenCenterWidth(for screen: NSScreen?) -> CGFloat {
+        guard let screen else { return notchHiddenCenterWidth }
+        if #available(macOS 12.0, *),
+           let leftArea = screen.auxiliaryTopLeftArea,
+           let rightArea = screen.auxiliaryTopRightArea,
+           !leftArea.isEmpty,
+           !rightArea.isEmpty {
+            let measuredGap = rightArea.minX - leftArea.maxX
+            if measuredGap > 0 {
+                return max(notchHiddenCenterWidth, measuredGap + notchHiddenCenterSafetyPadding)
+            }
+        }
+        return notchHiddenCenterWidth
     }
 
     private func updateNotchIslandState() {
@@ -468,26 +495,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeWorkItem = nil
         frameAnimationToken += 1
         let token = frameAnimationToken
-        let steps = max(1, Int((duration * 120).rounded()))
         isResizingProgrammatically = true
         alphaValue = 1
         state.notchRevealProgress = 0.001
         setFrame(targetFrame, display: true, animate: false)
 
-        for step in 1...steps {
-            let delay = duration * Double(step) / Double(steps)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.frameAnimationToken == token else { return }
-                self.state.notchRevealProgress = FloatingBarNotchTransition.revealProgress(
-                    CGFloat(step) / CGFloat(steps)
-                )
-                if step == steps {
-                    self.setFrame(targetFrame, display: true, animate: false)
-                    self.state.notchRevealProgress = 1
-                    self.alphaValue = 1
-                    self.isResizingProgrammatically = false
-                }
-            }
+        withAnimation(.easeOut(duration: duration)) {
+            state.notchRevealProgress = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.frameAnimationToken == token else { return }
+            self.setFrame(targetFrame, display: true, animate: false)
+            self.state.notchRevealProgress = 1
+            self.alphaValue = 1
+            self.isResizingProgrammatically = false
         }
     }
 
@@ -807,19 +829,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         frameAnimationToken += 1
         let token = frameAnimationToken
-        let steps = max(1, Int((duration * 120).rounded()))
         state.notchRevealProgress = startProgress
 
-        for step in 1...steps {
-            let delay = duration * Double(step) / Double(steps)
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                guard let self, self.frameAnimationToken == token else { return }
-                let progress = FloatingBarNotchTransition.revealProgress(CGFloat(step) / CGFloat(steps))
-                self.state.notchRevealProgress = startProgress + (1 - startProgress) * progress
-                if step == steps {
-                    self.state.notchRevealProgress = 1
-                }
-            }
+        withAnimation(.easeOut(duration: duration)) {
+            state.notchRevealProgress = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self, self.frameAnimationToken == token else { return }
+            self.state.notchRevealProgress = 1
         }
     }
 

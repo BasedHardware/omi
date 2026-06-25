@@ -65,6 +65,30 @@ enum DesktopConversationMatchPolicy {
     return abs(memoryStartedAt.timeIntervalSince(sessionStartedAt)) < startedAtTolerance
   }
 
+  static func shouldBindConversationSession(
+    incomingBackendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>
+  ) -> Bool {
+    guard !incomingBackendId.isEmpty else { return false }
+    if let activeBackendId, !activeBackendId.isEmpty {
+      return incomingBackendId == activeBackendId
+    }
+    if ignoredRotatedBackendIds.contains(incomingBackendId) {
+      return false
+    }
+    return true
+  }
+
+  static func canCompleteBoundBackendConversation(
+    id conversationId: String,
+    boundBackendId: String,
+    status: ConversationStatus,
+    source: ConversationSource?
+  ) -> Bool {
+    conversationId == boundBackendId && source == .desktop && status != .inProgress
+  }
+
   static func parseMemoryEventDate(_ value: Any?) -> Date? {
     if let date = value as? Date {
       return date
@@ -122,6 +146,10 @@ class AppState: ObservableObject {
   // Access via RecordingTimer.shared.duration
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
+  private var hasActiveConversationFilters: Bool {
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+  }
+
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
   // Access via LiveTranscriptMonitor.shared.segments
   var liveSpeakerSegments: [SpeakerSegment] { LiveTranscriptMonitor.shared.segments }
@@ -130,7 +158,8 @@ class AppState: ObservableObject {
   @Published var conversations: [ServerConversation] = []
   @Published var isLoadingConversations: Bool = false
   @Published var conversationsError: String? = nil
-  @Published var totalConversationsCount: Int? = nil  // Total count (fetched separately)
+  @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
+  @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -443,6 +472,12 @@ class AppState: ObservableObject {
 
   // Crash-safe transcription storage
   private var currentSessionId: Int64?
+  /// Backend conversation id announced by `/v4/listen` for the active recording session.
+  private var currentBackendConversationId: String?
+  /// Backend id received before the local DB session exists; consumed once startSession completes.
+  private var pendingBackendConversationId: String?
+  /// Backend ids from recently rotated/rejected sessions; ignore fast-reconnect resumes of them.
+  private var ignoredRotatedBackendConversationIds: Set<String> = []
   /// Session ID captured before rotation in finishConversation(), consumed by memory_created handler
   private var finishedSessionId: Int64?
   /// Recording start time captured before rotation, used by memory_created handler for accurate duration analytics
@@ -1669,6 +1704,9 @@ class AppState: ObservableObject {
       liveSpeakerPersonMap = [:]
       LiveTranscriptMonitor.shared.clear()
       recordingStartTime = Date()
+      currentBackendConversationId = nil
+      pendingBackendConversationId = nil
+      ignoredRotatedBackendConversationIds = []
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -1689,6 +1727,22 @@ class AppState: ObservableObject {
             self.currentSessionId = sessionId
             // Start live notes session
             LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+          }
+          if let backendId = await MainActor.run(body: { () -> String? in
+            let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
+            guard let candidate else { return nil }
+            return DesktopConversationMatchPolicy.shouldBindConversationSession(
+              incomingBackendId: candidate,
+              activeBackendId: self.currentBackendConversationId,
+              ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+            ) ? candidate : nil
+          }) {
+            try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            await MainActor.run {
+              self.currentBackendConversationId = backendId
+              self.pendingBackendConversationId = nil
+              self.ignoredRotatedBackendConversationIds = []
+            }
           }
           log("Transcription: Created DB session \(sessionId)")
         } catch {
@@ -2077,6 +2131,7 @@ class AppState: ObservableObject {
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
+    let capturedBackendConversationId = currentBackendConversationId
     let generationAtStop = recordingGeneration
 
     stopAudioCapture()
@@ -2099,9 +2154,21 @@ class AppState: ObservableObject {
 
       do {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
-          // Validate the returned conversation matches the session we just stopped
-          if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-             DesktopConversationMatchPolicy.matchesDesktopConversation(
+          // Prefer the exact backend conversation id announced by /v4/listen; fall back to
+          // timestamp/source matching for older backend sessions that did not emit the event.
+          if let sessionId = capturedSessionId,
+             let backendConversationId = capturedBackendConversationId,
+             DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+               id: conversation.id,
+               boundBackendId: backendConversationId,
+               status: conversation.status,
+               source: conversation.source) {
+            try? await TranscriptionStorage.shared.markSessionCompleted(
+              id: sessionId, backendId: conversation.id)
+            log("Transcription: Force-processed bound conversation \(conversation.id), session \(sessionId) completed")
+          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime,
+                    capturedBackendConversationId == nil,
+                    DesktopConversationMatchPolicy.matchesDesktopConversation(
               startedAt: conversation.startedAt,
               source: conversation.source,
               sessionStartedAt: startTime) {
@@ -2111,13 +2178,19 @@ class AppState: ObservableObject {
           } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
             // Force-process returned a different conversation — fall back to reconciliation
             log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
-            await reconcileSession(sessionId: sessionId, startTime: startTime)
+            await reconcileSession(
+              sessionId: sessionId,
+              startTime: startTime,
+              backendConversationId: capturedBackendConversationId)
           }
         } else {
           // 404: No in-progress conversation — WS close handler already processed it.
-          // Reconcile by checking if a matching conversation exists on the backend.
+          // Reconcile by exact backend id when available, otherwise by timestamp/source.
           if let sessionId = capturedSessionId, let startTime = capturedStartTime {
-            await reconcileSession(sessionId: sessionId, startTime: startTime)
+            await reconcileSession(
+              sessionId: sessionId,
+              startTime: startTime,
+              backendConversationId: capturedBackendConversationId)
           }
         }
       } catch {
@@ -2187,8 +2260,33 @@ class AppState: ObservableObject {
 
   /// Reconcile a local session by checking if a matching conversation exists on the backend.
   /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
-  private func reconcileSession(sessionId: Int64, startTime: Date) async {
+  private func reconcileSession(
+    sessionId: Int64,
+    startTime: Date,
+    backendConversationId: String? = nil
+  ) async {
     do {
+      if let backendConversationId, !backendConversationId.isEmpty {
+        do {
+          let conversation = try await APIClient.shared.getConversation(id: backendConversationId)
+          guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: conversation.id,
+            boundBackendId: backendConversationId,
+            status: conversation.status,
+            source: conversation.source
+          ) else {
+            log("Transcription: Exact backend conversation \(backendConversationId) is not a completed desktop session; falling back to timestamp")
+            throw APIError.invalidResponse
+          }
+          try await TranscriptionStorage.shared.markSessionCompleted(
+            id: sessionId, backendId: conversation.id)
+          log("Transcription: Reconciled session \(sessionId) by exact backend conversation \(conversation.id)")
+          return
+        } catch {
+          logError("Transcription: Exact backend conversation reconciliation failed for session \(sessionId), falling back to timestamp", error: error)
+        }
+      }
+
       let conversations = try await APIClient.shared.getConversations(
         limit: 5,
         includeDiscarded: true,
@@ -2335,8 +2433,16 @@ class AppState: ObservableObject {
     LiveNotesMonitor.shared.endSession()
     LiveNotesMonitor.shared.clear()
 
-    // Reset the recording start time for the next conversation
+    // Reset the recording start time and backend binding for the next conversation.
+    // If the new WebSocket fast-reconnects before the backend finalizes the prior
+    // conversation, it can briefly re-emit the old conversation id; do not bind the
+    // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
+    if let currentBackendConversationId {
+      ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
+    }
+    currentBackendConversationId = nil
+    pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 
     // Restart the 4-hour max recording timer
@@ -2414,6 +2520,22 @@ class AppState: ObservableObject {
         await MainActor.run {
           self.currentSessionId = sessionId
           LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+        }
+        if let backendId = await MainActor.run(body: { () -> String? in
+          let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
+          guard let candidate else { return nil }
+          return DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: candidate,
+            activeBackendId: self.currentBackendConversationId,
+            ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+          ) ? candidate : nil
+        }) {
+          try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+          await MainActor.run {
+            self.currentBackendConversationId = backendId
+            self.pendingBackendConversationId = nil
+            self.ignoredRotatedBackendConversationIds = []
+          }
         }
         log("Transcription: Created new DB session \(sessionId) for next conversation")
       } catch {
@@ -2538,6 +2660,21 @@ class AppState: ObservableObject {
 
   // MARK: - Conversations
 
+  private func updateConversationCount(_ count: Int, filtered: Bool) {
+    if filtered {
+      if filteredConversationsCount != count {
+        filteredConversationsCount = count
+      }
+    } else {
+      if totalConversationsCount != count {
+        totalConversationsCount = count
+      }
+      if filteredConversationsCount != nil {
+        filteredConversationsCount = nil
+      }
+    }
+  }
+
   /// Load conversations - first from local cache (instant), then from API (background refresh)
   func loadConversations() async {
     guard !isLoadingConversations else { return }
@@ -2545,51 +2682,69 @@ class AppState: ObservableObject {
     isLoadingConversations = true
     conversationsError = nil
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Step 1: Load from local cache first (instant display)
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
-    do {
-      let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) {
-        group in
-        group.addTask {
-          try await TranscriptionStorage.shared.getLocalConversations(
-            limit: 50,
-            starredOnly: self.showStarredOnly,
-            folderId: self.selectedFolderId
-          )
+    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
+    // The local cache currently supports starred/folder filters but not server date ranges;
+    // skip it for date-filtered views so the visible list and total count share semantics.
+    if requestSelectedDateFilter == nil {
+      do {
+        let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) { group in
+          group.addTask {
+            try await TranscriptionStorage.shared.getLocalConversations(
+              limit: 50,
+              starredOnly: requestShowStarredOnly,
+              folderId: requestSelectedFolderId
+            )
+          }
+          group.addTask {
+            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
+            throw CancellationError()
+          }
+          let result = try await group.next()!
+          group.cancelAll()
+          return result
         }
-        group.addTask {
-          try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-          throw CancellationError()
+
+        if !cachedConversations.isEmpty && requestFiltersAreCurrent() {
+          conversations = cachedConversations
+          log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
+
+          // Get local count
+          let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
+            starredOnly: requestShowStarredOnly,
+            folderId: requestSelectedFolderId)
+          updateConversationCount(localCount, filtered: requestHasActiveFilters)
+
+          // Stop loading state so UI shows cached data immediately
+          isLoadingConversations = false
+          // Notify sidebar immediately so loading indicator clears with cached data
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
         }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
+      } catch {
+        log("Conversations: Local cache unavailable, falling back to API")
+        // Continue to API fetch even if local fails
       }
-
-      if !cachedConversations.isEmpty {
-        conversations = cachedConversations
-        log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
-
-        // Get local count
-        let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
-          starredOnly: showStarredOnly)
-        totalConversationsCount = localCount
-
-        // Stop loading state so UI shows cached data immediately
-        isLoadingConversations = false
-        // Notify sidebar immediately so loading indicator clears with cached data
-        NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-      }
-    } catch {
-      log("Conversations: Local cache unavailable, falling back to API")
-      // Continue to API fetch even if local fails
+    } else {
+      conversations = []
+      filteredConversationsCount = 0
     }
 
     // Step 2: Fetch from API in background to get fresh data
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2606,16 +2761,27 @@ class AppState: ObservableObject {
       includeDiscarded: false,
       startDate: startDate,
       endDate: endDate,
-      folderId: selectedFolderId,
-      starred: showStarredOnly ? true : nil
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
     )
-    async let countTask = APIClient.shared.getConversationsCount(includeDiscarded: false)
+    async let countTask = APIClient.shared.getConversationsCount(
+      includeDiscarded: false,
+      statuses: [.completed, .processing],
+      startDate: startDate,
+      endDate: endDate,
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
+    )
 
     do {
       let fetchedConversations = try await conversationsTask
-      conversations = fetchedConversations
+      if requestFiltersAreCurrent() {
+        conversations = fetchedConversations
+      } else {
+        log("Conversations: Ignoring stale response for superseded filters")
+      }
       log(
-        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(showStarredOnly), date=\(selectedDateFilter?.description ?? "nil"))"
+        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(requestShowStarredOnly), date=\(requestSelectedDateFilter?.description ?? "nil"))"
       )
 
       // DEBUG: Log any conversations with empty titles
@@ -2653,8 +2819,12 @@ class AppState: ObservableObject {
     // Update total count from API (more accurate than local)
     do {
       let count = try await countTask
-      totalConversationsCount = count
-      log("Conversations: Total count from API = \(count)")
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
+        log("Conversations: Count from API = \(count) (filtered=\(requestHasActiveFilters))")
+      } else {
+        log("Conversations: Ignoring stale count for superseded filters")
+      }
     } catch {
       logError("Conversations: Failed to get count from API", error: error)
       // Keep local count if API fails
@@ -2662,6 +2832,9 @@ class AppState: ObservableObject {
 
     isLoadingConversations = false
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
+    if !requestFiltersAreCurrent() {
+      await loadConversations()
+    }
   }
 
   /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
@@ -2674,10 +2847,21 @@ class AppState: ObservableObject {
     // Skip if currently doing a full load
     guard !isLoadingConversations else { return }
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2694,15 +2878,19 @@ class AppState: ObservableObject {
         includeDiscarded: false,
         startDate: startDate,
         endDate: endDate,
-        folderId: selectedFolderId,
-        starred: showStarredOnly ? true : nil
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
       )
 
-      // Merge in-place: update existing, add new, remove gone
-      let merged = mergeConversations(source: fetchedConversations, current: conversations)
-      if merged != conversations {
-        conversations = merged
-        log("Conversations: Auto-refresh updated (\(merged.count) items)")
+      if requestFiltersAreCurrent() {
+        // Merge in-place: update existing, add new, remove gone
+        let merged = mergeConversations(source: fetchedConversations, current: conversations)
+        if merged != conversations {
+          conversations = merged
+          log("Conversations: Auto-refresh updated (\(merged.count) items)")
+        }
+      } else {
+        log("Conversations: Ignoring stale auto-refresh response for superseded filters")
       }
 
       // Sync to local database in background
@@ -2727,9 +2915,16 @@ class AppState: ObservableObject {
     }
 
     do {
-      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
-      if totalConversationsCount != count {
-        totalConversationsCount = count
+      let count = try await APIClient.shared.getConversationsCount(
+        includeDiscarded: false,
+        statuses: [.completed, .processing],
+        startDate: startDate,
+        endDate: endDate,
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
+      )
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
       }
     } catch {
       // Keep existing count
@@ -3073,12 +3268,52 @@ class AppState: ObservableObject {
     }
   }
 
+  private func bindActiveSessionToBackendConversation(_ backendId: String) {
+    guard DesktopConversationMatchPolicy.shouldBindConversationSession(
+      incomingBackendId: backendId,
+      activeBackendId: currentBackendConversationId,
+      ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
+    ) else {
+      pendingBackendConversationId = nil
+      if let currentBackendConversationId, currentBackendConversationId != backendId {
+        ignoredRotatedBackendConversationIds.insert(backendId)
+      }
+      log("Transcription: Ignoring rotated backend conversation id \(backendId) for fresh local session")
+      return
+    }
+
+    ignoredRotatedBackendConversationIds = []
+    currentBackendConversationId = backendId
+
+    guard let sessionId = currentSessionId else {
+      pendingBackendConversationId = backendId
+      log("Transcription: Deferred backend conversation bind until local DB session exists (backend: \(backendId))")
+      return
+    }
+
+    pendingBackendConversationId = nil
+    Task {
+      do {
+        try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+      } catch {
+        logError("Transcription: Failed to bind DB session \(sessionId) to backend conversation \(backendId)", error: error)
+      }
+    }
+  }
+
   /// Handle message events from Python backend `/v4/listen`
   private func handleListenEvent(_ event: TranscriptionService.ListenEvent) {
     switch event.type {
     case "service_status":
       let status = event.raw["status"] as? String ?? "unknown"
       log("Transcription: Backend service status: \(status)")
+
+    case "conversation_session":
+      guard let backendId = event.raw["conversation_id"] as? String, !backendId.isEmpty else {
+        log("Transcription: Ignoring conversation_session event without conversation_id")
+        break
+      }
+      bindActiveSessionToBackendConversation(backendId)
 
     case "memory_processing_started":
       // ConversationEvent: conversation is nested under "memory"

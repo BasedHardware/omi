@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// Main floating control bar SwiftUI view composing all sub-views.
@@ -21,6 +22,9 @@ struct FloatingControlBarView: View {
     @State private var notchSettingsHoverReady = false
     @State private var notchHoverGeneration = 0
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
+    private var notchHiddenCenterWidth: CGFloat {
+        FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+    }
     private var notchSideWidth: CGFloat {
         if agentPills.pills.isEmpty && !state.isVoiceListening {
             return FloatingControlBarWindow.notchCompactSideWidth
@@ -28,7 +32,7 @@ struct FloatingControlBarView: View {
         return FloatingControlBarWindow.notchActiveSideWidth
     }
     private var notchChromeWidth: CGFloat {
-        FloatingControlBarWindow.notchHiddenCenterWidth + notchSideWidth * 2
+        notchHiddenCenterWidth + notchSideWidth * 2
     }
     private var notchChromeLayoutWidth: CGFloat {
         state.showingAIConversation
@@ -138,14 +142,14 @@ struct FloatingControlBarView: View {
                 notchAgentLobe
                     .frame(width: notchSideWidth, height: notchChromeHeight)
 
-                Spacer(minLength: FloatingControlBarWindow.notchHiddenCenterWidth)
+                Spacer(minLength: notchHiddenCenterWidth)
 
                 notchControlLobe
                     .frame(width: notchSideWidth, height: notchChromeHeight)
             }
 
             Color.clear
-                .frame(width: FloatingControlBarWindow.notchHiddenCenterWidth, height: notchChromeHeight)
+                .frame(width: notchHiddenCenterWidth, height: notchChromeHeight)
                 .allowsHitTesting(false)
         }
         .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
@@ -917,82 +921,132 @@ private struct NotchOmiMark: View {
 private struct NotchAgentPillsRowView: View {
     @ObservedObject var manager: AgentPillsManager
     weak var barWindow: NSWindow?
+    @State private var presentedGroup: NotchAgentStatusGroup?
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    private let directAgentLimit = 4
 
     private var pillsNewestFirst: [AgentPill] {
         Array(manager.pills.reversed())
     }
 
+    private var groups: [NotchAgentStatusGroup] {
+        NotchAgentStatusGroup.displayOrder.filter { group in
+            !pills(for: group).isEmpty
+        }
+    }
+
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 4) {
+        let _ = pillStatusChangeToken
+        HStack(spacing: 2) {
+            if pillsNewestFirst.count <= directAgentLimit {
                 ForEach(pillsNewestFirst) { pill in
-                    NotchAgentPillIcon(pill: pill, manager: manager, barWindow: barWindow)
+                    NotchAgentPillOrbItem(pill: pill, manager: manager)
+                }
+            } else {
+                ForEach(groups.prefix(directAgentLimit)) { group in
+                    NotchAgentOrbButton(
+                        group: group,
+                        count: pills(for: group).count,
+                        isPresented: presentedGroup == group
+                    ) {
+                        withAnimation(.easeOut(duration: 0.14)) {
+                            presentedGroup = presentedGroup == group ? nil : group
+                        }
+                    }
+                    .popover(isPresented: groupPopoverBinding(for: group), arrowEdge: .bottom) {
+                        NotchAgentStatusGroupPopover(
+                            group: group,
+                            pills: pills(for: group),
+                            onSelect: { pill in
+                                presentedGroup = nil
+                                DispatchQueue.main.async {
+                                    manager.hoveredPillID = pill.id
+                                }
+                            }
+                        )
+                    }
                 }
             }
-            .frame(maxHeight: .infinity, alignment: .center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        .popover(isPresented: selectedPillPopoverBinding, arrowEdge: .bottom) {
+            if let pill = selectedPill {
+                AgentPillPopover(
+                    pill: pill,
+                    isRecording: manager.recordingPillID == pill.id,
+                    onDismiss: { manager.dismiss(pillID: pill.id) },
+                    onOpenInChat: { openPillInChat(pill) },
+                    onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
+                    onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
+                )
+            }
+        }
         .accessibilityLabel("Agent pills")
-        .accessibilityHint("Scroll horizontally to reach older agents")
-    }
-}
-
-private struct NotchAgentPillIcon: View {
-    @ObservedObject var pill: AgentPill
-    @ObservedObject var manager: AgentPillsManager
-    weak var barWindow: NSWindow?
-
-    var body: some View {
-        Button {
-            if manager.hoveredPillID == pill.id {
-                manager.hoveredPillID = nil
-            } else {
-                manager.hoveredPillID = pill.id
-            }
-        } label: {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(Color.white.opacity(0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.6)
-                    )
-                    .overlay(
-                        NotchOmiMark()
-                            .frame(width: 11, height: 11)
-                    )
-
-                Circle()
-                    .fill(pill.status.tintColor)
-                    .frame(width: 4, height: 4)
-                    .offset(x: 1.5, y: -1.5)
-            }
+        .accessibilityHint("Select a status to inspect agents")
+        .onAppear { syncPillStatusObservers() }
+        .onChange(of: manager.pills.map(\.id)) { _, _ in
+            syncPillStatusObservers()
+            reconcilePresentedState()
         }
-        .buttonStyle(.plain)
-        .frame(width: 18, height: 18)
-        .accessibilityLabel("\(pill.title) - \(pill.status.displayLabel)")
-        .popover(isPresented: popoverBinding, arrowEdge: .bottom) {
-            AgentPillPopover(
-                pill: pill,
-                isRecording: manager.recordingPillID == pill.id,
-                onDismiss: { manager.dismiss(pillID: pill.id) },
-                onOpenInChat: { openPillInChat() },
-                onSendFollowUp: { text in manager.continueAgent(from: pill, text: text) },
-                onToggleVoice: { manager.toggleFollowUpVoice(for: pill) }
-            )
+        .onChange(of: pillStatusChangeToken) { _, _ in
+            reconcilePresentedState()
         }
     }
 
-    private var popoverBinding: Binding<Bool> {
+    private func reconcilePresentedState() {
+        if let presentedGroup, pills(for: presentedGroup).isEmpty {
+            self.presentedGroup = nil
+        }
+        if manager.hoveredPillID != nil, selectedPill == nil {
+            manager.hoveredPillID = nil
+        }
+        if pillsNewestFirst.count <= directAgentLimit {
+            presentedGroup = nil
+        }
+    }
+
+    private var selectedPill: AgentPill? {
+        guard let selectedID = manager.hoveredPillID else { return nil }
+        return manager.pills.first { $0.id == selectedID }
+    }
+
+    private var selectedPillPopoverBinding: Binding<Bool> {
         Binding(
-            get: { manager.hoveredPillID == pill.id },
+            get: { selectedPill != nil },
             set: { isPresented in
-                manager.hoveredPillID = isPresented ? pill.id : nil
+                if !isPresented { manager.hoveredPillID = nil }
             }
         )
     }
 
-    private func openPillInChat() {
+    private func groupPopoverBinding(for group: NotchAgentStatusGroup) -> Binding<Bool> {
+        Binding(
+            get: { presentedGroup == group },
+            set: { isPresented in
+                presentedGroup = isPresented ? group : nil
+            }
+        )
+    }
+
+    private func pills(for group: NotchAgentStatusGroup) -> [AgentPill] {
+        pillsNewestFirst.filter { group.contains($0.status) }
+    }
+
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
+                }
+        }
+    }
+
+    private func openPillInChat(_ pill: AgentPill) {
         manager.hoveredPillID = nil
         barWindow?.makeKeyAndOrderFront(nil)
         NotificationCenter.default.post(
@@ -1000,5 +1054,338 @@ private struct NotchAgentPillIcon: View {
             object: nil,
             userInfo: ["query": pill.query]
         )
+    }
+}
+
+private struct NotchAgentPillOrbItem: View {
+    @ObservedObject var pill: AgentPill
+    @ObservedObject var manager: AgentPillsManager
+
+    var body: some View {
+        NotchAgentOrbButton(
+            group: NotchAgentStatusGroup(status: pill.status),
+            count: nil,
+            isPresented: manager.hoveredPillID == pill.id
+        ) {
+            manager.hoveredPillID = manager.hoveredPillID == pill.id ? nil : pill.id
+        }
+    }
+}
+
+private enum NotchAgentStatusGroup: String, Identifiable {
+    case running
+    case queued
+    case failed
+    case done
+
+    static let displayOrder: [NotchAgentStatusGroup] = [.running, .queued, .failed, .done]
+
+    var id: String { rawValue }
+
+    init(status: AgentPill.Status) {
+        switch status {
+        case .starting, .running:
+            self = .running
+        case .queued:
+            self = .queued
+        case .failed:
+            self = .failed
+        case .done:
+            self = .done
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .running: return "Running"
+        case .queued: return "Queued"
+        case .failed: return "Failed"
+        case .done: return "Done"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .running: return Color(red: 0.74, green: 0.32, blue: 1.0)
+        case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
+        case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+        case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+        }
+    }
+
+    var highlightColor: Color {
+        switch self {
+        case .running: return Color(red: 1.0, green: 0.20, blue: 0.86)
+        case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
+        case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
+        case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
+        }
+    }
+
+    var shadowColor: Color {
+        switch self {
+        case .running: return Color(red: 0.36, green: 0.06, blue: 0.86)
+        case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
+        case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
+        case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .running: return "sparkle"
+        case .queued: return "clock"
+        case .failed: return "exclamationmark"
+        case .done: return "checkmark"
+        }
+    }
+
+    var breathes: Bool {
+        switch self {
+        case .running: return true
+        case .queued, .failed, .done: return false
+        }
+    }
+
+    var swirlDuration: TimeInterval {
+        switch self {
+        case .running: return 0.9
+        case .queued: return 3.8
+        case .failed: return 4.6
+        case .done: return 5.2
+        }
+    }
+
+    func contains(_ status: AgentPill.Status) -> Bool {
+        switch (self, status) {
+        case (.running, .starting), (.running, .running):
+            return true
+        case (.queued, .queued):
+            return true
+        case (.failed, .failed):
+            return true
+        case (.done, .done):
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private struct NotchAgentOrbButton: View {
+    let group: NotchAgentStatusGroup
+    let count: Int?
+    let isPresented: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .topTrailing) {
+                NotchAgentStatusOrb(
+                    group: group,
+                    isActive: isPresented
+                )
+
+                if let count, count > 1 {
+                    Text("\(min(count, 9))")
+                        .scaledFont(size: 7, weight: .bold)
+                        .foregroundColor(.white.opacity(0.94))
+                        .frame(width: 10, height: 10)
+                        .background(Color.black.opacity(0.82))
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .strokeBorder(group.highlightColor.opacity(0.75), lineWidth: 0.7)
+                        )
+                        .offset(x: 4, y: -4)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .frame(width: 17, height: 26)
+        .contentShape(Rectangle())
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        guard let count else {
+            return "\(group.title) agent"
+        }
+        return "\(count) \(group.title.lowercased()) agent\(count == 1 ? "" : "s")"
+    }
+}
+
+private struct NotchAgentStatusOrb: View {
+    let group: NotchAgentStatusGroup
+    let isActive: Bool
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let duration = group.swirlDuration
+            let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration) / duration)
+            NotchAgentSwirlSphere(group: group, isActive: isActive, phase: phase)
+        }
+        .frame(width: 22, height: 22)
+    }
+}
+
+private struct NotchAgentSwirlSphere: View {
+    let group: NotchAgentStatusGroup
+    let isActive: Bool
+    let phase: CGFloat
+
+    var body: some View {
+        Canvas { context, size in
+            drawSwirl(context: &context, size: size)
+        }
+        .frame(width: 16, height: 16)
+        .clipShape(Circle())
+        .shadow(color: group.color.opacity(isActive ? 0.94 : 0.74), radius: isActive ? 8 : 6)
+        .shadow(color: group.highlightColor.opacity(isActive ? 0.68 : 0.46), radius: isActive ? 14 : 10)
+    }
+
+    private func drawSwirl(context: inout GraphicsContext, size: CGSize) {
+        let rect = CGRect(origin: .zero, size: size)
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = min(size.width, size.height) / 2
+        let circle = Path(ellipseIn: rect)
+        context.clip(to: circle)
+        context.fill(circle, with: .color(group.shadowColor.opacity(0.94)))
+
+        for index in 0..<3 {
+            drawBand(index: index, rect: rect, center: center, radius: radius, context: &context)
+        }
+
+        drawColorLift(size: size, context: &context)
+    }
+
+    private func drawBand(
+        index: Int,
+        rect: CGRect,
+        center: CGPoint,
+        radius: CGFloat,
+        context: inout GraphicsContext
+    ) {
+        let turn = phase * .pi * 2 + CGFloat(index) * (.pi * 2 / 3)
+        let sweepCenter = CGPoint(
+            x: center.x + cos(turn) * radius * 0.28,
+            y: center.y + sin(turn * 0.86) * radius * 0.24
+        )
+        let start = CGPoint(
+            x: sweepCenter.x - cos(turn) * radius * 1.35,
+            y: sweepCenter.y - sin(turn) * radius * 1.35
+        )
+        let end = CGPoint(
+            x: sweepCenter.x + cos(turn) * radius * 1.35,
+            y: sweepCenter.y + sin(turn) * radius * 1.35
+        )
+        let stops = [
+            Gradient.Stop(color: group.color.opacity(index == 1 ? 1.0 : 0.78), location: 0),
+            Gradient.Stop(color: group.highlightColor.opacity(index == 0 ? 1.0 : 0.90), location: 0.52),
+            Gradient.Stop(color: group.color.opacity(index == 2 ? 1.0 : 0.78), location: 1),
+        ]
+        let gradient = Gradient(stops: stops)
+        let bandRect = rect
+            .insetBy(dx: -radius * 0.35, dy: radius * (0.06 + CGFloat(index) * 0.04))
+            .offsetBy(dx: cos(turn) * radius * 0.20, dy: sin(turn) * radius * 0.18)
+        context.fill(Path(ellipseIn: bandRect), with: .linearGradient(gradient, startPoint: start, endPoint: end))
+    }
+
+    private func drawColorLift(size: CGSize, context: inout GraphicsContext) {
+        let liftRect = CGRect(
+            x: size.width * (0.18 + 0.08 * cos(phase * .pi * 2)),
+            y: size.height * 0.14,
+            width: size.width * 0.42,
+            height: size.height * 0.34
+        )
+        let gradient = Gradient(colors: [
+            group.highlightColor.opacity(0.48),
+            group.color.opacity(0.20),
+            .clear,
+        ])
+        context.fill(
+            Path(ellipseIn: liftRect),
+            with: .radialGradient(
+                gradient,
+                center: CGPoint(x: liftRect.midX, y: liftRect.midY),
+                startRadius: 0,
+                endRadius: liftRect.width * 0.72
+            )
+        )
+    }
+}
+
+private struct NotchAgentStatusGroupPopover: View {
+    let group: NotchAgentStatusGroup
+    let pills: [AgentPill]
+    let onSelect: (AgentPill) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(group.color)
+                    .frame(width: 8, height: 8)
+                Text("\(group.title) agents")
+                    .scaledFont(size: 12, weight: .bold)
+                    .foregroundColor(.white)
+                Spacer(minLength: 8)
+                Text("\(pills.count)")
+                    .scaledFont(size: 10, weight: .bold)
+                    .foregroundColor(group.color)
+            }
+
+            VStack(spacing: 3) {
+                ForEach(pills) { pill in
+                    NotchAgentStatusGroupPopoverRow(group: group, pill: pill, onSelect: onSelect)
+                }
+            }
+        }
+        .padding(10)
+        .frame(width: 240, alignment: .leading)
+        .floatingBackground(cornerRadius: 13)
+    }
+}
+
+private struct NotchAgentStatusGroupPopoverRow: View {
+    let group: NotchAgentStatusGroup
+    @ObservedObject var pill: AgentPill
+    let onSelect: (AgentPill) -> Void
+
+    var body: some View {
+        Button {
+            onSelect(pill)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: group.symbolName)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(group.color)
+                    .frame(width: 16, height: 16)
+                    .background(group.color.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pill.title)
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.92))
+                        .lineLimit(1)
+                    Text(pill.latestActivity)
+                        .scaledFont(size: 10)
+                        .foregroundColor(.white.opacity(0.55))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.36))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.055))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }

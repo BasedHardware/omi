@@ -473,9 +473,15 @@ fi
 substep "Copying pi-mono-extension (for piMono harness)"
 PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
 if [ -d "$PI_MONO_EXT_DIR" ]; then
+    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
+        substep "Installing pi-mono-extension dependencies"
+        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
+    fi
     mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi

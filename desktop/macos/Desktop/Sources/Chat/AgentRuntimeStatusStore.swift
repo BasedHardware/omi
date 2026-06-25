@@ -157,7 +157,14 @@ final class AgentRuntimeStatusStore: ObservableObject {
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)
     case .result:
       let terminalStatus = AgentRunProjectionStatus.fromWire(message.payload["terminalStatus"] as? String) ?? .succeeded
-      update(surface: surface, status: terminalStatus, statusText: nil, terminal: true, payload: message.payload)
+      let text = (message.payload["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      update(
+        surface: surface,
+        status: terminalStatus,
+        statusText: text?.isEmpty == false ? text : nil,
+        terminal: true,
+        payload: message.payload
+      )
     case .error:
       update(
         surface: surface,
@@ -167,7 +174,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .unknown:
+    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
       break
     }
   }
@@ -216,7 +223,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       ?? (payload["legacyAdapterSessionId"] as? String)
       ?? projection.adapterSessionId
     projection.status = status
-    projection.statusText = statusText
+    projection.statusText = terminal ? nil : statusText
     projection.errorMessage = errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil

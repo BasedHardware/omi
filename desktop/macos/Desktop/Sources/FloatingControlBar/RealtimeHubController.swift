@@ -116,6 +116,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
+  /// the realtime model sometimes continues with meta/control text; never speak it.
+  private var suppressAssistantOutputForCurrentTurn = false
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
@@ -369,6 +372,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
+    suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
     pcmPlayer?.stop()  // stop any prior reply locally
@@ -460,6 +464,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
+    guard !suppressAssistantOutputForCurrentTurn else { return }
     audioReceivedThisTurn = true
     // If PTT muted music/system output while listening, make sure the model's
     // reply is audible even if capture teardown restore is delayed by hardware.
@@ -469,6 +474,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool) {
+    guard !suppressAssistantOutputForCurrentTurn else { return }
     if !text.isEmpty { assistantText += text }
     if isFinal {
       let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -685,11 +691,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         brief, model: model, fromVoice: false,
         preFetchedTitle: (title?.isEmpty == false) ? title : nil)
       log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) titled=\(title?.isEmpty == false)")
-      // Terse directive (not speakable content): the model already said its one-line ack
-      // BEFORE calling, so it should NOT generate a slow second utterance after this.
+      if !audioReceivedThisTurn {
+        let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck
+        assistantText = ack
+        barState?.isVoiceResponseActive = true
+        speak(ack)
+      }
+      suppressAssistantOutputForCurrentTurn = true
       session?.sendToolResult(
         callId: callId, name: name,
-        output: "Agent started. Acknowledged before the call — do not say anything else.")
+        output: "Agent started.")
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call

@@ -3062,5 +3062,6 @@
     "recordingMode": "録音モード",
     "captureModeLater": "後で",
     "captureModeLiveDescription": "話しながらリアルタイムで文字起こしします。",
-    "captureModeLaterDescription": "今すぐ音声を保存して、好きなときに文字起こしできます。"
+    "captureModeLaterDescription": "今すぐ音声を保存して、好きなときに文字起こしできます。",
+    "backgroundModeUnavailable": "互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。"
 }

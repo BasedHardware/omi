@@ -110,7 +110,11 @@ async function requestSwiftTool(
       requestId: process.env.OMI_REQUEST_ID,
       clientId: process.env.OMI_CLIENT_ID,
       sessionId: process.env.OMI_SESSION_ID,
+      runId: process.env.OMI_RUN_ID,
+      attemptId: process.env.OMI_ATTEMPT_ID,
       adapterId: process.env.OMI_ADAPTER_ID,
+      adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
+      legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
     });
     pipeConnection!.write(msg + "\n");
   });

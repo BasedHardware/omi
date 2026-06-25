@@ -9300,6 +9300,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade.';
+
+  @override
   String get regenerateRecap => 'Loo kokkuvõte uuesti';
 
   @override

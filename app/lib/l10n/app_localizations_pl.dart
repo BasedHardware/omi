@@ -9328,6 +9328,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Tryb w tle jest niedostępny, ponieważ nie podłączono zgodnego urządzenia. Podłącz urządzenie Omi, OpenGlass lub Friend Pendant, aby użyć tej funkcji.';
+
+  @override
   String get regenerateRecap => 'Wygeneruj podsumowanie ponownie';
 
   @override

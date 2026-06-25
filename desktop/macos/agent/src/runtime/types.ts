@@ -27,6 +27,8 @@ export type EventVisibility = "ui" | "internal";
 
 export type ArtifactRole = "input" | "result" | "checkpoint" | "tool_output" | "log" | "other";
 
+export type ArtifactLifecycleState = "retained" | "dismissed" | "opened";
+
 export type DelegationMode = "call" | "spawn" | "continue";
 
 export type DelegationStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
@@ -156,6 +158,8 @@ export interface AgentArtifact {
   mimeType: string | null;
   contentHash: string | null;
   sizeBytes: number | null;
+  lifecycleState: ArtifactLifecycleState;
+  lifecycleUpdatedAtMs: number | null;
   metadataJson: string;
   createdAtMs: number;
 }

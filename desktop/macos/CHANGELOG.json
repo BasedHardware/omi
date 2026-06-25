@@ -1,9 +1,40 @@
 {
   "unreleased": [
     "Added Notch Mode for a MacBook notch-integrated floating bar with compact voice, chat, and agent controls",
-    "Fixed Notch Mode voice response audio and glow stability during streamed playback"
+    "Fixed Notch Mode voice response audio and glow stability during streamed playback",
+    "Improved Notch Mode Ask Omi responsiveness by reducing main-thread animation work",
+    "Refined Notch Mode subagent indicators into direct and grouped glowing status orbs",
+    "Improved Notch Mode notch-safe layout measurement and subagent status refresh"
   ],
   "releases": [
+    {
+      "version": "0.11.533",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.531",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.530",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.529",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.11.527",
       "date": "2026-06-25",

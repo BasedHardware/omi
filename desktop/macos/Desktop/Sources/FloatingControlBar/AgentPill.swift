@@ -25,8 +25,8 @@ final class AgentPill: ObservableObject, Identifiable {
 
         var tintColor: Color {
             switch self {
-            case .queued: return Color(red: 0.85, green: 0.78, blue: 0.30)
-            case .starting, .running: return Color(red: 0.27, green: 0.92, blue: 0.46)
+            case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
+            case .starting, .running: return Color(red: 0.74, green: 0.32, blue: 1.0)
             case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
             case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
             }
@@ -117,6 +117,12 @@ final class AgentPillsManager: ObservableObject {
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var bootChain: Task<Void, Never> = Task {}
+
+    private static let backgroundAgentSystemPromptSuffix = """
+    You are running inside a visible floating background agent pill. Do the requested work now; do not merely acknowledge, promise, or say that you are working on it. Use the available tools when the task requires local data, browser/app/file actions, or multi-step investigation. Finish only after you have either completed the task or hit a concrete blocker, then give a concise final summary of the outcome.
+
+    This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
+    """
 
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
@@ -432,17 +438,17 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .running
             pill.completedAt = nil
             pill.suggestedFollowUps = []
-            await provider.sendMessage(
+            let finalText = await provider.sendMessage(
                 pill.query,
                 model: pill.model,
-                systemPromptSuffix: systemPromptSuffix,
+                systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
                 legacyClientScope: "floating-pill"
             )
             guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider)
+            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
 
@@ -483,13 +489,15 @@ final class AgentPillsManager: ObservableObject {
         let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-            await provider.sendMessage(
-                text, model: pill.model, systemPromptStyle: .floating,
+            let finalText = await provider.sendMessage(
+                text, model: pill.model,
+                systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
+                systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
                 legacyClientScope: "floating-pill")
             guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider)
+            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
     }
@@ -613,6 +621,10 @@ final class AgentPillsManager: ObservableObject {
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
 
+        if pill.status.isFinished {
+            return
+        }
+
         if pill.status == .starting {
             pill.status = .running
         }
@@ -654,7 +666,11 @@ final class AgentPillsManager: ObservableObject {
         return "Working…"
     }
 
-    private func complete(pill: AgentPill, provider: ChatProvider) {
+    private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
+        let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            pill.latestActivity = String(trimmedFinalText.prefix(140))
+        }
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
             Self.apply(projection: projection, to: pill)
             if projection.status.isTerminal {
@@ -665,8 +681,14 @@ final class AgentPillsManager: ObservableObject {
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
+            pill.completedAt = Date()
+        } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            pill.status = .done
+            pill.completedAt = Date()
         } else {
-            pill.latestActivity = pill.latestActivity.isEmpty ? "Finished" : pill.latestActivity
+            pill.status = .failed("Agent ended before reporting a final result")
+            pill.completedAt = Date()
+            pill.latestActivity = "Agent ended before reporting a final result"
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         // Keep the provider + stream alive after completion so a voice/text follow-up
@@ -684,11 +706,14 @@ final class AgentPillsManager: ObservableObject {
         case .succeeded:
             pill.status = .done
             pill.completedAt = projection.completedAt ?? Date()
-            if let last = pill.aiMessage, !last.text.isEmpty {
+            if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !statusText.isEmpty {
+                pill.latestActivity = String(statusText.prefix(140))
+            } else if let last = pill.aiMessage {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                pill.latestActivity = String(trimmed.prefix(140))
-            } else {
-                pill.latestActivity = "Done"
+                if !trimmed.isEmpty {
+                    pill.latestActivity = String(trimmed.prefix(140))
+                }
             }
         case .failed, .timedOut, .orphaned:
             let message = projection.errorMessage ?? "Agent failed"
@@ -702,7 +727,7 @@ final class AgentPillsManager: ObservableObject {
         case .idle:
             break
         }
-        if let statusText = projection.statusText, !statusText.isEmpty {
+        if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
             pill.latestActivity = statusText
         }
     }

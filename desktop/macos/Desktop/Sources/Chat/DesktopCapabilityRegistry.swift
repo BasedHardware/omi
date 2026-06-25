@@ -244,6 +244,17 @@ enum DesktopCapabilityRegistry {
         "Use after get_agent_run when the user asks what files or outputs an agent produced."
       ]),
     Capability(
+      toolName: "update_agent_artifact_lifecycle",
+      title: "Update Agent Artifact Lifecycle",
+      latency: .fastLocal,
+      surfaces: [.desktopChat],
+      summary: "Update metadata-only lifecycle state for one canonical Omi agent artifact.",
+      bullets: [
+        "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
+        "Pass sessionId, runId, or attemptId when available as a scope guard.",
+        "This never reads artifact contents and has no OS side effects."
+      ]),
+    Capability(
       toolName: "send_agent_message",
       title: "Send Agent Message",
       latency: .asyncBackground,
