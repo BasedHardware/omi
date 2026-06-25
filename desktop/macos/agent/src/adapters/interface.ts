@@ -194,6 +194,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   acp: {
     adapterId: "acp",
     productionAdapter: true,
+    // Production ACP: native session ids survive adapter process restarts.
     expectations: {
       nativeResume: required("ACP exposes native session ids and session/resume."),
       cancellationDispatch: required("ACP exposes session/cancel dispatch."),
@@ -208,6 +209,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   "pi-mono": {
     adapterId: "pi-mono",
     productionAdapter: true,
+    // Production pi-mono: native ids are process-local and require worker pinning.
     expectations: {
       nativeResume: unsupported("pi-mono session ids are process-local and are stale after daemon restart."),
       cancellationDispatch: required("pi-mono supports abort dispatch for the active prompt."),
@@ -238,6 +240,22 @@ export const ADAPTER_CAPABILITY_MATRIX = {
 
 export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
 export type ProductionAdapterId = "acp" | "pi-mono";
+export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
+
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono"] as const satisfies readonly ProductionAdapterId[];
+export const PLACEHOLDER_ADAPTER_IDS = ["hermes", "openclaw", "a2a"] as const satisfies readonly PlaceholderAdapterId[];
+
+export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
+  return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId);
+}
+
+export function isProductionAdapterId(adapterId: string): adapterId is ProductionAdapterId {
+  return isKnownAdapterId(adapterId) && ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
+}
+
+export function isPlaceholderAdapterId(adapterId: string): adapterId is PlaceholderAdapterId {
+  return isKnownAdapterId(adapterId) && !ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
+}
 
 const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
   acp: "native_bindings_survive",
@@ -359,8 +377,6 @@ export interface RuntimeAdapter {
   closeBinding?(binding: AdapterBindingHandle): Promise<void>;
 }
 
-export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
-
 export interface PlaceholderRuntimeAdapter {
   readonly adapterId: PlaceholderAdapterId;
   readonly productionAdapter: false;
@@ -381,3 +397,29 @@ export const PLACEHOLDER_RUNTIME_ADAPTERS = Object.fromEntries(
       },
     ])
 ) as Record<PlaceholderAdapterId, PlaceholderRuntimeAdapter>;
+
+export function assertAdapterBindingContract(binding: AdapterBindingHandle, operation: string): void {
+  if (!binding.adapterNativeSessionId) {
+    throw new Error(`${operation} returned an empty adapterNativeSessionId`);
+  }
+  if (binding.adapterNativeSessionId === binding.sessionId) {
+    throw new Error(
+      `${operation} conflated Omi sessionId ${binding.sessionId} with adapterNativeSessionId`
+    );
+  }
+}
+
+export function assertAdapterAttemptResultContract(
+  context: AdapterAttemptContext,
+  result: AdapterAttemptResult,
+  operation: string
+): void {
+  if (!result.adapterSessionId) {
+    throw new Error(`${operation} returned an empty adapterSessionId`);
+  }
+  if (result.adapterSessionId === context.sessionId || result.sessionId === context.sessionId) {
+    throw new Error(
+      `${operation} conflated Omi sessionId ${context.sessionId} with adapter native session id`
+    );
+  }
+}
