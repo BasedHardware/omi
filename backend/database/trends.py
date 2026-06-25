@@ -30,17 +30,21 @@ def get_trends_data() -> List[Dict]:
             category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
             topics_docs = [topic.to_dict() for topic in category_topics_ref.stream(retry=Retry())]
             cleaned_topics = []
-            # Sort by memory count, tolerating topics missing 'memory_ids'.
-            topics = sorted(topics_docs, key=lambda e: len(e.get('memory_ids') or []), reverse=True)
+            # Drop topics with a missing/invalid shape (non-dict, or 'memory_ids' not a list) up front so the
+            # sort key below can never throw and take the whole category down with it.
+            valid_topic_docs = [
+                topic for topic in topics_docs if isinstance(topic, dict) and isinstance(topic.get('memory_ids'), list)
+            ]
+            # Sort by memory count; every entry now has a list 'memory_ids', so len(...) is safe.
+            topics = sorted(valid_topic_docs, key=lambda e: len(e['memory_ids']), reverse=True)
             for topic in topics:
                 try:
                     if topic.get('topic') not in valid_items:
                         continue
-                    memory_ids = topic.get('memory_ids') or []
-                    topic['memories_count'] = len(memory_ids)
+                    topic['memories_count'] = len(topic['memory_ids'])
                     topic.pop('memory_ids', None)
                     cleaned_topics.append(topic)
-                except Exception as e:
+                except (AttributeError, TypeError, KeyError) as e:
                     logger.warning('skipping malformed trend topic in category %s: %s', category_data.get('id'), e)
                     continue
 

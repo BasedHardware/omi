@@ -143,7 +143,9 @@ def test_malformed_topic_does_not_drop_whole_category():
     # 'OpenAI' is in valid_items (company_options); use it as the good topic.
     good_topic = {'id': 't_good', 'topic': 'OpenAI', 'memory_ids': ['m1', 'm2']}
     # Malformed sibling: missing 'memory_ids' entirely -> on main the sort key len(e['memory_ids'])
-    # raises KeyError, which the outer except swallows, dropping the whole category.
+    # raises KeyError, which the outer except swallows, dropping the whole category. After the fix it
+    # has an invalid 'memory_ids' shape (absent), so it must be SKIPPED rather than emitted with a
+    # misleading memories_count=0.
     bad_topic = {'id': 't_bad', 'topic': 'OpenAI'}
 
     category = {'id': 'cat1', 'category': 'company'}
@@ -164,7 +166,36 @@ def test_malformed_topic_does_not_drop_whole_category():
     returned_topic_ids = [t['id'] for t in topics]
     # The good topic must still be present.
     assert 't_good' in returned_topic_ids, "the valid topic was lost when a sibling was malformed"
+    # The malformed topic (no valid 'memory_ids' list) must be excluded, not leaked into the response.
+    assert 't_bad' not in returned_topic_ids, "the malformed topic (missing memory_ids) leaked into output"
 
     good = next(t for t in topics if t['id'] == 't_good')
     assert good['memories_count'] == 2
     assert 'memory_ids' not in good
+
+
+def test_non_dict_topic_does_not_crash_sort_and_drop_category():
+    # A topic doc that is not a dict (e.g. Firestore .to_dict() returning None for an empty doc) makes
+    # the sort key len(e['memory_ids']) / e.get(...) raise on main, escaping the per-topic guard and
+    # tripping the OUTER except -> the whole category (and its valid topics) is discarded. After the
+    # fix, non-dict entries are filtered out before the sort, so the valid topic survives.
+    good_topic = {'id': 't_good', 'topic': 'OpenAI', 'memory_ids': ['m1', 'm2', 'm3']}
+    none_topic = None
+
+    category = {'id': 'cat1', 'category': 'company'}
+    fake_db = _FakeDB(
+        category_docs=[_Doc(category)],
+        # Put the bad (None) topic first so it is hit early during sorting.
+        topic_docs_by_category_id={'cat1': [_Doc(none_topic), _Doc(good_topic)]},
+    )
+
+    with patch.object(trends_mod, 'db', fake_db):
+        result = trends_mod.get_trends_data()
+
+    assert len(result) == 1, "the category was dropped entirely because a sibling topic was non-dict"
+    topics = result[0]['topics']
+    returned_topic_ids = [t['id'] for t in topics]
+    assert 't_good' in returned_topic_ids, "the valid topic was lost when a sibling was a non-dict topic"
+    assert len(topics) == 1, "the non-dict topic leaked into output instead of being skipped"
+    good = next(t for t in topics if t['id'] == 't_good')
+    assert good['memories_count'] == 3
