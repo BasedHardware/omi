@@ -778,13 +778,13 @@ async function main(): Promise<void> {
         const control = msg as ControlToolRequestMessage;
         const requestId = requestIdFor(control);
         const controlOwnerKey = controlOwnerMapKey(requestId, control.clientId);
-        const controlOwnerId = currentOwnerId;
+        const controlOwnerId = control.ownerId?.trim() || currentOwnerId;
         if (controlOwnerKey) {
           activeControlToolOwnersByRequest.set(controlOwnerKey, controlOwnerId);
         }
         const controlInput =
           control.ownerId && !Object.hasOwn(control.input ?? {}, "ownerId")
-            ? { ...(control.input ?? {}), ownerId: control.ownerId.trim() }
+            ? { ...(control.input ?? {}), ownerId: controlOwnerId }
             : (control.input ?? {});
         const result = agentControlToolContext
           ? await (async () => {
