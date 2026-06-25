@@ -503,6 +503,52 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("treats an explicit empty client id as scoped rather than omitted", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel with empty explicit client" }),
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      clientId: "client-a",
+      ownerId: "owner-a",
+      legacySessionKey: "empty-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      clientId: "",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      clientId: "",
+      accepted: false,
+    });
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
   it("keeps duplicate request ids isolated by client when interrupting", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();

@@ -28,7 +28,6 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { readFileSync } from "node:fs";
 import { appendFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
@@ -477,10 +476,11 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
+async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
   if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
+  const correlation = await omiRelayCorrelation();
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
@@ -505,13 +505,13 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
       callId,
       name,
       input,
-      ...omiRelayCorrelation(),
+      ...correlation,
     }) + "\n");
   });
 }
 
-function omiRelayCorrelation(): Record<string, string | number> {
-  const correlation: Record<string, string | number> = omiContextFileCorrelation();
+async function omiRelayCorrelation(): Promise<Record<string, string | number>> {
+  const correlation: Record<string, string | number> = {};
   if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
   if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
   if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
@@ -524,14 +524,15 @@ function omiRelayCorrelation(): Record<string, string | number> {
   }
   const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
   if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  Object.assign(correlation, await omiContextFileCorrelation());
   return correlation;
 }
 
-function omiContextFileCorrelation(): Record<string, string | number> {
+async function omiContextFileCorrelation(): Promise<Record<string, string | number>> {
   const path = process.env.OMI_CONTEXT_FILE;
   if (!path) return {};
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     const correlation: Record<string, string | number> = {};
     for (const key of [
       "adapterId",

@@ -1290,7 +1290,7 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
     assert.equal(result, "ok");
-    assert.deepEqual(__omiRelayCorrelationForTest(), {
+    assert.deepEqual(await __omiRelayCorrelationForTest(), {
       adapterId: "pi-mono",
       requestId: "request-relay",
       clientId: "client-relay",
@@ -1351,6 +1351,10 @@ test("callSwiftTool: reads per-attempt Omi correlation from the context file", a
     delete process.env[key];
   }
   process.env.OMI_CONTEXT_FILE = contextPath;
+  process.env.OMI_REQUEST_ID = "stale-env-request";
+  process.env.OMI_CLIENT_ID = "stale-env-client";
+  process.env.OMI_RUN_ID = "stale-env-run";
+  process.env.OMI_ATTEMPT_ID = "stale-env-attempt";
   await writeFile(contextPath, JSON.stringify({
     adapterId: "pi-mono",
     protocolVersion: 2,
@@ -1381,6 +1385,16 @@ test("callSwiftTool: reads per-attempt Omi correlation from the context file", a
     await __connectOmiPipeForTest(sockPath);
     const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
     assert.equal(result, "ok");
+    assert.deepEqual(await __omiRelayCorrelationForTest(), {
+      adapterId: "pi-mono",
+      protocolVersion: 2,
+      requestId: "request-file",
+      clientId: "client-file",
+      sessionId: "ses_file",
+      runId: "run_file",
+      attemptId: "att_file",
+      adapterSessionId: "native_file",
+    });
     const msg = await received;
     assert.deepEqual({
       adapterId: msg.adapterId,

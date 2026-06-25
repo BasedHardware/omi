@@ -227,8 +227,9 @@ export class JsonlCompatibilityFacade {
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
     const requestId = requestIdFor(message);
     const clientId = message.clientId ?? this.defaultClientId;
+    const hasExplicitClientId = message.clientId !== undefined;
     const activeRequestContext = requestId
-      ? (message.clientId
+      ? (hasExplicitClientId
         ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
         : this.singleActiveRequestContext(requestId))
       : undefined;

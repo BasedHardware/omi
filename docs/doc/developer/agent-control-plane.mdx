@@ -1293,7 +1293,7 @@ The immediate next wave is:
    - worker binding pinning is enforced;
    - abort dispatch result is represented honestly.
    - pi-mono refreshes the active request/run/attempt context before each long-lived worker execution;
-   - pi-mono `callSwiftTool` serializes request/client/run/attempt correlation from `OMI_*` environment variables or the active context channel onto the daemon relay message.
+   - pi-mono `callSwiftTool` serializes request/client/run/attempt correlation from the active context channel for long-lived workers, falling back to `OMI_*` environment variables only when no active context file is present.
 
 9. **`control-context-property.test.ts`**
    - generate owner/client/request/run/attempt combinations across query, interrupt, control-tool, and relay paths;
