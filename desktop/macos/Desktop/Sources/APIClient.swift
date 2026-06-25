@@ -436,6 +436,7 @@ extension APIClient {
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
     try await delete("v1/conversations/\(id)")
+    invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation
@@ -611,7 +612,9 @@ extension APIClient {
     }
 
     let body = MergeRequest(conversationIds: ids, reprocess: reprocess)
-    return try await post("v1/conversations/merge", body: body)
+    let response: MergeConversationsResponse = try await post("v1/conversations/merge", body: body)
+    invalidateConversationsCountCache()
+    return response
   }
 
   // MARK: - Folder API
@@ -645,6 +648,7 @@ extension APIClient {
       endpoint += "?move_to_folder_id=\(moveToId)"
     }
     try await delete(endpoint)
+    invalidateConversationsCountCache()
   }
 
   /// Moves a conversation to a folder
@@ -1431,7 +1435,10 @@ extension APIClient {
   func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
     async throws -> CreateConversationFromSegmentsResponse
   {
-    return try await post("v1/conversations/from-segments", body: request, customBaseURL: nil)
+    let response: CreateConversationFromSegmentsResponse = try await post(
+      "v1/conversations/from-segments", body: request, customBaseURL: nil)
+    invalidateConversationsCountCache()
+    return response
   }
 }
 

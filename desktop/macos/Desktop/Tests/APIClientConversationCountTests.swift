@@ -61,4 +61,36 @@ final class APIClientConversationCountTests: XCTestCase {
       "starred=false",
     ])
   }
+
+  func testConversationMutationsInvalidateCountCache() throws {
+    let testFile = URL(fileURLWithPath: #filePath)
+    let sourceURL = testFile
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/APIClient.swift")
+    let source = try String(contentsOf: sourceURL)
+
+    for method in [
+      "deleteConversation(id:",
+      "setConversationStarred(id:",
+      "mergeConversations(ids:",
+      "deleteFolder(id:",
+      "moveConversationToFolder(conversationId:",
+      "createConversationFromSegments(_ request:",
+    ] {
+      guard let methodRange = source.range(of: method) else {
+        XCTFail("Missing method \(method)")
+        continue
+      }
+      let suffix = source[methodRange.upperBound...]
+      guard let nextMethodRange = suffix.range(of: "\n  ///") ?? suffix.range(of: "\n}") else {
+        XCTFail("Could not find end of method \(method)")
+        continue
+      }
+      let methodBody = suffix[..<nextMethodRange.lowerBound]
+      XCTAssertTrue(
+        methodBody.contains("invalidateConversationsCountCache()"),
+        "\(method) should clear the filtered count cache after mutating conversations or folder membership")
+    }
+  }
 }
