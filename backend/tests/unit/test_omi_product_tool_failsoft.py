@@ -23,6 +23,7 @@ GREEN (after fix): a graceful "Error: ..." string is returned.
 """
 
 import importlib.util
+import logging
 import os
 import sys
 import types
@@ -124,6 +125,48 @@ def test_returns_error_string_when_docs_fetch_raises():
 
     assert isinstance(result, str)
     assert result.startswith("Error"), f"expected a fail-soft 'Error...' string, got: {result!r}"
+
+
+class _RecordingHandler(logging.Handler):
+    """Captures emitted LogRecords so we can assert on exc_info/traceback."""
+
+    def __init__(self):
+        super().__init__()
+        self.records = []
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+def test_docs_fetch_failure_logs_with_traceback():
+    """The failure path must log via logger.exception (exc_info set) so the
+    traceback is preserved for debugging, not a bare logger.error("...{e}")
+    that drops the stack and interpolates the raw exception text."""
+
+    class _Boom(Exception):
+        pass
+
+    handler = _RecordingHandler()
+    _MOD.logger.addHandler(handler)
+    previous_level = _MOD.logger.level
+    _MOD.logger.setLevel(logging.DEBUG)
+    try:
+        with patch.object(_MOD, "get_github_docs_content", side_effect=_Boom("connect failed")):
+            result = _MOD.get_omi_product_info_tool.invoke({"query": "How does the device connect?"})
+    finally:
+        _MOD.logger.removeHandler(handler)
+        _MOD.logger.setLevel(previous_level)
+
+    assert result.startswith("Error")
+    # Exactly one error record for the failed docs fetch.
+    error_records = [r for r in handler.records if r.levelno >= logging.ERROR]
+    assert error_records, "expected an error-level log record on docs fetch failure"
+    record = error_records[0]
+    # logger.exception(...) attaches the active exception tuple; logger.error(f"...{e}") does not.
+    assert record.exc_info is not None, "failure must be logged with traceback (logger.exception/exc_info)"
+    assert record.exc_info[0] is _Boom
+    # The raw exception text must not be interpolated into the log message itself.
+    assert "connect failed" not in record.getMessage()
 
 
 def test_returns_error_string_when_docs_unavailable_empty():

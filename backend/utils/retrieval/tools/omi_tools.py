@@ -44,8 +44,8 @@ def get_omi_product_info_tool(query: str) -> str:
     # Get GitHub docs content (fail soft like the sibling retrieval tools)
     try:
         context = get_github_docs_content()
-    except Exception as e:
-        logger.error(f"get_omi_product_info_tool - failed to load product docs: {e}")
+    except Exception:
+        logger.exception("get_omi_product_info_tool - failed to load product docs")
         return "Error: Could not load Omi/Friend product documentation right now. Please try again later."
 
     if not isinstance(context, dict) or not context:
