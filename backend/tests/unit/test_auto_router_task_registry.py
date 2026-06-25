@@ -190,3 +190,26 @@ class TestFromJson:
             pytest.skip("benchmarks.example.json not present (test runs from a different cwd)")
         reg = TR.from_json(example)
         assert len(reg) == 5
+
+    def test_top_level_must_be_object(self, tmp_path: Path):
+        # If someone writes `"tasks": [...]` (a top-level list), we should
+        # raise a clean TaskValidationError, not crash with AttributeError.
+        path = tmp_path / "wrong-shape.json"
+        path.write_text(json.dumps([{"name": "x", "quality_weight": 0.5, "latency_weight": 0.5, "cost_weight": 0}]))
+        with pytest.raises(TaskValidationError, match="JSON object at the top level"):
+            TaskRegistry.from_json(path)
+
+    def test_tasks_must_be_list(self, tmp_path: Path):
+        # If `tasks` is a dict instead of a list, raise a clean error.
+        path = tmp_path / "wrong-shape.json"
+        path.write_text(
+            json.dumps({"tasks": {"name": "x", "quality_weight": 0.5, "latency_weight": 0.5, "cost_weight": 0}})
+        )
+        with pytest.raises(TaskValidationError, match="'tasks' must be a list"):
+            TaskRegistry.from_json(path)
+
+    def test_tasks_key_missing(self, tmp_path: Path):
+        path = tmp_path / "wrong-shape.json"
+        path.write_text(json.dumps({"other_key": []}))
+        with pytest.raises(TaskValidationError, match="must contain a top-level 'tasks' key"):
+            TaskRegistry.from_json(path)

@@ -6,7 +6,7 @@ Three concrete demonstrations of the auto-router's behavior under different per-
 
 ```bash
 cd /Users/choguun/Documents/workspaces/cool-projects/omi-worktrees/auto-router-v1/backend
-PYENV_VERSION=3.12.8 python -m utils.auto_router.demo.run
+PYENV_VERSION=3.11.11 python -m utils.auto_router.demo.run
 ```
 
 Or to call the actual HTTP endpoint (with default weights from `benchmarks.example.json`):

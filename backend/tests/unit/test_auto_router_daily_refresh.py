@@ -9,6 +9,7 @@ The cache has three behaviors to pin:
 
 import asyncio
 import pytest
+from datetime import datetime, timezone
 
 from utils.auto_router.daily_refresh import DailyRefreshCache
 
@@ -305,3 +306,30 @@ class TestInvalidate:
         # The cached value is still set; age_seconds is None (no successful load).
         assert cache.has_value
         assert cache.age_seconds is None
+
+
+# ---------------------------------------------------------------------------
+# AC: last_loaded_wall_time (used by endpoint for updated_at)
+# ---------------------------------------------------------------------------
+
+
+class TestLastLoadedWallTime:
+    """Endpoint uses cache.last_loaded_wall_time() to set updated_at."""
+
+    async def test_last_loaded_wall_time_none_before_load(self):
+        cache: DailyRefreshCache[str] = DailyRefreshCache(ttl_seconds=60)
+        assert cache.last_loaded_wall_time() is None
+        assert cache.last_loaded_at is None
+
+    async def test_last_loaded_wall_time_set_after_load(self):
+        cache: DailyRefreshCache[str] = DailyRefreshCache(ttl_seconds=60)
+
+        async def loader() -> str:
+            return "value"
+
+        await cache.get_or_refresh(loader)
+        # Should be a recent datetime (within last few seconds).
+        wall_time = cache.last_loaded_wall_time()
+        assert wall_time is not None
+        elapsed = (datetime.now(timezone.utc) - wall_time).total_seconds()
+        assert 0 <= elapsed < 5, f"last_loaded_wall_time should be very recent, got {elapsed}s ago"

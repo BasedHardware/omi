@@ -139,7 +139,7 @@ backend/tests/unit/
 ## Tests
 
 ```bash
-cd backend && PYENV_VERSION=3.12.8 python -m pytest tests/unit/test_auto_router_*.py -v
+cd backend && PYENV_VERSION=3.11.11 python -m pytest tests/unit/test_auto_router_*.py -v
 ```
 
 118 tests across 6 files:
@@ -156,7 +156,7 @@ cd backend && PYENV_VERSION=3.12.8 python -m pytest tests/unit/test_auto_router_
 Run from the backend directory:
 
 ```bash
-cd backend && PYENV_VERSION=3.12.8 python -m utils.auto_router.benchmark
+cd backend && PYENV_VERSION=3.11.11 python -m utils.auto_router.benchmark
 ```
 
 Measured on macOS Darwin, Python 3.12.8, single-threaded:

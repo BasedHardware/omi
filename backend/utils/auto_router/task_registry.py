@@ -128,6 +128,7 @@ class TaskRegistry:
 
         Missing file → returns the built-in defaults (logs a warning, doesn't raise).
         Malformed JSON → raises TaskValidationError.
+        Top-level shape wrong (not a dict, or 'tasks' missing/not a list) → raises TaskValidationError.
         """
         path = Path(path)
         if not path.exists():
@@ -137,8 +138,16 @@ class TaskRegistry:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             raise TaskValidationError(f"TaskRegistry: malformed JSON in {path}: {e}") from e
-        if not isinstance(data, dict) or "tasks" not in data:
-            raise TaskValidationError(f"TaskRegistry: {path} must contain a top-level 'tasks' key with a list")
+        if not isinstance(data, dict):
+            raise TaskValidationError(
+                f"TaskRegistry: {path} must be a JSON object at the top level, got {type(data).__name__}"
+            )
+        if "tasks" not in data:
+            raise TaskValidationError(f"TaskRegistry: {path} must contain a top-level 'tasks' key")
+        if not isinstance(data["tasks"], list):
+            raise TaskValidationError(
+                f"TaskRegistry: {path} 'tasks' must be a list, got {type(data['tasks']).__name__}"
+            )
         return cls.from_task_dicts(data["tasks"])
 
     # ---- Lookups -----------------------------------------------------------

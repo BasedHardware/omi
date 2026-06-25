@@ -61,6 +61,7 @@ class ModelRegistry:
 
         Missing file → returns an empty registry (logs a warning).
         Malformed JSON → raises ModelValidationError.
+        Top-level shape wrong → raises ModelValidationError.
         """
         path = Path(path)
         if not path.exists():
@@ -70,10 +71,18 @@ class ModelRegistry:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as e:
             raise ModelValidationError(f"ModelRegistry: malformed JSON in {path}: {e}") from e
-        if not isinstance(data, dict) or "models" not in data:
+        if not isinstance(data, dict):
+            raise ModelValidationError(
+                f"ModelRegistry: {path} must be a JSON object at the top level, got {type(data).__name__}"
+            )
+        if "models" not in data:
             raise ModelValidationError(
                 f"ModelRegistry: {path} must contain a top-level 'models' key "
                 f"with a dict mapping task_name → list of model dicts"
+            )
+        if not isinstance(data["models"], dict):
+            raise ModelValidationError(
+                f"ModelRegistry: {path} 'models' must be a dict (task_name → list), got {type(data['models']).__name__}"
             )
         return cls.from_model_dicts(data["models"])
 

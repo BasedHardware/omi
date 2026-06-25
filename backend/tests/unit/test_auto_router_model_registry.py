@@ -312,3 +312,23 @@ class TestEdgeCases:
         reg = ModelRegistry.from_json(path)
         assert len(reg.candidates_for("task_with_models")) == 1
         assert len(reg.candidates_for("task_without_models")) == 0
+
+    def test_top_level_must_be_object(self, tmp_path: Path):
+        # Top-level array → clean error, not AttributeError.
+        path = tmp_path / "wrong.json"
+        path.write_text(json.dumps([{"task": []}]))
+        with pytest.raises(ModelValidationError, match="JSON object at the top level"):
+            ModelRegistry.from_json(path)
+
+    def test_models_must_be_dict(self, tmp_path: Path):
+        # `models` as a list → clean error, not AttributeError on .values().
+        path = tmp_path / "wrong.json"
+        path.write_text(json.dumps({"models": []}))
+        with pytest.raises(ModelValidationError, match="'models' must be a dict"):
+            ModelRegistry.from_json(path)
+
+    def test_models_key_missing(self, tmp_path: Path):
+        path = tmp_path / "wrong.json"
+        path.write_text(json.dumps({"other_key": {}}))
+        with pytest.raises(ModelValidationError, match="must contain a top-level 'models' key"):
+            ModelRegistry.from_json(path)

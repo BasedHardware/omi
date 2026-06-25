@@ -120,6 +120,39 @@ final class AutoRouterTests: XCTestCase {
     XCTAssertEqual(paths.first, "/v1/auto-router/pick")
   }
 
+  // MARK: - Cache key uniqueness
+
+  func testEachTaskHasDistinctUserDefaultsKey() {
+    // The desktop client uses per-task UserDefaults keys (prefix + rawValue).
+    // Verify the prefix is applied — we don't have direct access to the
+    // private keys, but we can verify that store() then currentPick() for one
+    // task does NOT bleed into another task's currentPick().
+    //
+    // Note: this test relies on UserDefaults.standard which is shared with
+    // other parts of the app. We use a unique store value to detect pollution.
+    let sentinel = "sentinel-\(UUID().uuidString)"
+    AutoRouter.shared.store(sentinel, for: .pttResponse)
+    XCTAssertEqual(AutoRouter.shared.currentPick(for: .pttResponse), sentinel)
+    XCTAssertNil(AutoRouter.shared.currentPick(for: .transcription), "transcription should not have ptt's pick")
+    XCTAssertNil(AutoRouter.shared.currentPick(for: .screenshotUnderstanding), "screenshotUnderstanding should not have ptt's pick")
+    // Clean up.
+    AutoRouter.shared.invalidate(task: .pttResponse)
+  }
+
+  func testInvalidateClearsBothValueAndDate() {
+    // UAT finding (P2): invalidate() previously only cleared the date key,
+    // leaving the cached pick readable via currentPick(for:). Now it should
+    // clear BOTH so callers don't see a stale model after invalidation.
+    let sentinel = "sentinel-\(UUID().uuidString)"
+    AutoRouter.shared.store(sentinel, for: .generalAssistant)
+    XCTAssertEqual(AutoRouter.shared.currentPick(for: .generalAssistant), sentinel)
+    AutoRouter.shared.invalidate(task: .generalAssistant)
+    XCTAssertNil(
+      AutoRouter.shared.currentPick(for: .generalAssistant),
+      "invalidate() must clear the cached pick (not just the date)"
+    )
+  }
+
   // MARK: - Cache key generation (via store / currentPick)
 
   /// AutoRouter.store uses UserDefaults.standard — for these tests we

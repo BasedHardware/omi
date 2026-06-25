@@ -19,6 +19,7 @@ The clock function is injectable for testability (default `time.monotonic`).
 import asyncio
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, Generic, Optional, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,33 @@ class DailyRefreshCache(Generic[T]):
         if self._last_loaded_at is None:
             return None
         return max(0.0, self._clock() - self._last_loaded_at)
+
+    @property
+    def last_loaded_at(self) -> Optional[float]:
+        """Monotonic timestamp of the last successful load, or None if never loaded.
+
+        Combine with the clock function to convert to wall-clock time:
+            wall_time = last_loaded_at + (monotonic_now() - last_loaded_at)
+        For most use cases, prefer `last_loaded_wall_time()` which does this for you.
+        """
+        return self._last_loaded_at
+
+    def last_loaded_wall_time(self) -> Optional[datetime]:
+        """Wall-clock time of the last successful load (UTC), or None if never loaded.
+
+        Returns a `datetime` (UTC) by converting from the monotonic clock.
+        Note: monotonic clock has no wall-clock meaning, so we use the wall clock
+        at construction + elapsed time as an approximation. For exact wall-clock
+        timestamps, the loader itself should record `time.time()` and store it.
+        """
+        if self._last_loaded_at is None:
+            return None
+        # Approximation: the wall clock at "monotonic = self._last_loaded_at"
+        # is roughly wall_at_init + (self._last_loaded_at - monotonic_at_init).
+        # We didn't capture init times, so this is best-effort.
+        # For most use cases (display), ±a few seconds is fine.
+        elapsed = self._clock() - self._last_loaded_at
+        return datetime.now(timezone.utc) - timedelta(seconds=elapsed)
 
     @property
     def has_value(self) -> bool:

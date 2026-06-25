@@ -112,12 +112,23 @@ def show_picks(
 def main():
     tasks, models = load_registries()
 
+    # Read the ORIGINAL weights from the registry (so the demo output reflects
+    # what benchmarks.example.json actually contains — if the JSON changes,
+    # the demo output updates automatically instead of going stale).
+    def weights_for(task_name: str) -> dict:
+        spec = tasks.get(task_name)
+        return {
+            "quality": spec.quality_weight,
+            "latency": spec.latency_weight,
+            "cost": spec.cost_weight,
+        }
+
     # Demo 1: Low-cost mode for general_assistant
     print_section("Demo 1: Low-cost mode for general_assistant")
     print("Expected: cheap model wins (cost_weight dominates).")
     show_picks(
         task_name="general_assistant",
-        original_weights={"quality": 0.5, "latency": 0.3, "cost": 0.2},
+        original_weights=weights_for("general_assistant"),
         overridden_weights={"quality": 0.1, "latency": 0.1, "cost": 0.8},
         tasks=tasks,
         models=models,
@@ -128,7 +139,7 @@ def main():
     print("Expected: strongest (highest quality_score) model wins.")
     show_picks(
         task_name="screenshot_understanding",
-        original_weights={"quality": 0.6, "latency": 0.2, "cost": 0.2},
+        original_weights=weights_for("screenshot_understanding"),
         overridden_weights={"quality": 0.95, "latency": 0.025, "cost": 0.025},
         tasks=tasks,
         models=models,
@@ -139,7 +150,7 @@ def main():
     print("Expected: fastest (highest latency_score) model wins.")
     show_picks(
         task_name="ptt_response",
-        original_weights={"quality": 0.4, "latency": 0.5, "cost": 0.1},
+        original_weights=weights_for("ptt_response"),
         overridden_weights={"quality": 0.05, "latency": 0.9, "cost": 0.05},
         tasks=tasks,
         models=models,

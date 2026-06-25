@@ -44,6 +44,7 @@ from utils.auto_router.daily_refresh import DailyRefreshCache
 from utils.auto_router.model_registry import ModelRegistry
 from utils.auto_router.scoring import ModelSpec, TaskSpec, score
 from utils.auto_router.task_registry import TaskRegistry, UnknownTaskError
+from utils.executors import run_blocking
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,26 @@ def _load_registries() -> tuple[TaskRegistry, ModelRegistry]:
     return tasks, models
 
 
+# Wrap the file I/O in a threadpool to avoid blocking the event loop.
+# Per repo CLAUDE.md: never call sync DB/storage/file functions directly inside
+# async def — wrap with `await run_blocking(sync_executor, ...)`.
+_load_registries_async = None  # set lazily so we don't require executors at import time
+
+
+def _get_loader():
+    """Return an async loader that runs the sync file I/O in a threadpool."""
+    from utils.executors import sync_executor
+
+    global _load_registries_async
+    if _load_registries_async is None:
+
+        async def _async_load():
+            return await run_blocking(sync_executor, _load_registries)
+
+        _load_registries_async = _async_load
+    return _load_registries_async
+
+
 def _get_registry_cache() -> DailyRefreshCache[tuple[TaskRegistry, ModelRegistry]]:
     """Return the process-wide registry cache, creating it on first access."""
     global _registry_cache
@@ -105,10 +126,7 @@ async def auto_router_pick(task: str = Query(..., description="Task name to pick
     """
     cache = _get_registry_cache()
 
-    async def loader() -> tuple[TaskRegistry, ModelRegistry]:
-        return _load_registries()
-
-    task_registry, model_registry = await cache.get_or_refresh(loader)
+    task_registry, model_registry = await cache.get_or_refresh(_get_loader())
 
     # Validate task.
     try:
@@ -135,6 +153,11 @@ async def auto_router_pick(task: str = Query(..., description="Task name to pick
     # Pick the winner (None if no candidates).
     winner: Optional[ModelSpec] = scored[0][0] if scored else None
     winner_score: Optional[float] = scored[0][1] if scored else None
+
+    # updated_at should reflect when the BENCHMARKS were last loaded (not the
+    # current response time) — that's what the consumer cares about for
+    # "is this data fresh?". DailyRefreshCache exposes last_loaded_wall_time().
+    cache_last_loaded = cache.last_loaded_wall_time()
 
     # Build response.
     response: Dict[str, Any] = {
@@ -165,7 +188,11 @@ async def auto_router_pick(task: str = Query(..., description="Task name to pick
                 else "no candidates registered for this task"
             ),
         },
-        "updated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "updated_at": (
+            cache_last_loaded.isoformat().replace("+00:00", "Z")
+            if cache_last_loaded is not None
+            else datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        ),
         "attribution": _ATTRIBUTION,
     }
     return response

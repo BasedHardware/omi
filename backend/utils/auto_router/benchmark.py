@@ -72,26 +72,32 @@ def bench_endpoint_load():
 
 
 def bench_endpoint_cached(cache):
-    """Measure time for a cached endpoint call (registry already loaded)."""
+    """Measure time for a cached endpoint call (registry already loaded).
+
+    Important: uses the RETURN VALUE of get_or_refresh, not `nonlocal` side
+    effects. On a cache hit, the loader doesn't run, so `nonlocal` assignments
+    would never happen. Capturing the return value is the only way to get the
+    loaded data on the first call when the cache is empty AND on every
+    subsequent cached call.
+    """
     durations = []
-    tasks, models = None, None
 
     async def loader():
-        nonlocal tasks, models
-        tasks, models = TaskRegistry.from_json(BENCHMARKS), ModelRegistry.from_json(BENCHMARKS)
-        return tasks, models
+        return TaskRegistry.from_json(BENCHMARKS), ModelRegistry.from_json(BENCHMARKS)
 
-    # Prime the cache once.
     import asyncio
 
-    asyncio.run(cache.get_or_refresh(loader))
-
-    for _ in range(ITERATIONS // 100):
-        t0 = time.perf_counter_ns()
+    async def prime_and_bench():
+        # First call: cache miss, loader runs, returns (tasks, models).
+        tasks, models = await cache.get_or_refresh(loader)
         # Simulate the endpoint's score loop (this is what runs on every request).
         for task_spec in tasks.all():
             for model in models.candidates_for(task_spec.name):
                 _ = score(model, task_spec)
+
+    for _ in range(ITERATIONS // 100):
+        t0 = time.perf_counter_ns()
+        asyncio.run(prime_and_bench())
         durations.append(time.perf_counter_ns() - t0)
     return durations
 

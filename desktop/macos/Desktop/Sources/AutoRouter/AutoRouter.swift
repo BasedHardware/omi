@@ -103,12 +103,20 @@ final class AutoRouter {
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let raw = obj["model"] as? String else {
-                log("AutoRouter: non-success or missing 'model' for \(task.rawValue)")
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                log("AutoRouter: non-success response for \(task.rawValue)")
                 return
             }
-            store(raw, for: task)
+            // The endpoint may legitimately return `"model": null` when no candidates are
+            // registered for a task. In that case, CLEAR the cached pick so callers
+            // don't keep using a stale model — the absence of a candidate today should
+            // not be masked by a model that was valid yesterday.
+            if let raw = obj["model"] as? String {
+                store(raw, for: task)
+            } else {
+                UserDefaults.standard.removeObject(forKey: pickKey(for: task))
+                log("AutoRouter: no model available for \(task.rawValue) (cleared stale cache)")
+            }
         } catch {
             log("AutoRouter: refresh failed for \(task.rawValue): \(error.localizedDescription)")
             // Keep last good pick (if any) — graceful degradation.
@@ -127,7 +135,10 @@ final class AutoRouter {
     }
 
     /// Clear the cached pick for `task` (forces the next `refreshIfStale` to fetch).
+    /// Clears both the model ID AND the refresh date — callers should not see a
+    /// stale pick after invalidation.
     func invalidate(task: AutoRouterTask) {
+        UserDefaults.standard.removeObject(forKey: pickKey(for: task))
         UserDefaults.standard.removeObject(forKey: pickDateKey(for: task))
     }
 
