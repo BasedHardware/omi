@@ -1,6 +1,7 @@
-import importlib.util
 import json
 from pathlib import Path
+
+from tests.unit.readiness._harness import build_readiness_report
 
 REQUIRED_GATE_IDS = [
     "real_memory_control_read_fail_closed",
@@ -53,17 +54,8 @@ REQUIRED_EXISTING_PROOF_KEYS = {
 }
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_get_runtime_wiring_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _report(execute=False):
-    root = Path(__file__).resolve().parents[2]
-    module = _load_module(root / "scripts" / "p1_3_v3_get_runtime_wiring_readiness.py")
-    return module.build_report(execute=execute)
+    return build_readiness_report("p1_3_v3_get_runtime_wiring_readiness.py", execute=execute)
 
 
 def test_get_runtime_wiring_readiness_runner_exists_and_is_safe_by_default():

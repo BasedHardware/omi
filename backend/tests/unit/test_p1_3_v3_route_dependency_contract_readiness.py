@@ -1,6 +1,7 @@
-import importlib.util
 import json
 from pathlib import Path
+
+from tests.unit.readiness._harness import build_readiness_report
 
 REQUIRED_CONTRACT_EVIDENCE = [
     "authenticated_subject_binding_required_before_any_read",
@@ -13,17 +14,8 @@ REQUIRED_CONTRACT_EVIDENCE = [
 ]
 
 
-def _load_module(script_path: Path):
-    spec = importlib.util.spec_from_file_location("p1_3_v3_route_dependency_contract_readiness", script_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def _report(execute=False):
-    root = Path(__file__).resolve().parents[2]
-    module = _load_module(root / "scripts" / "p1_3_v3_route_dependency_contract_readiness.py")
-    return module.build_report(execute=execute)
+    return build_readiness_report("p1_3_v3_route_dependency_contract_readiness.py", execute=execute)
 
 
 def test_route_dependency_contract_runner_exists_and_is_safe_by_default():
