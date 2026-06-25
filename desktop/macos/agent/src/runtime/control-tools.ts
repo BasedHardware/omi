@@ -138,7 +138,7 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
         const sessions = context.kernel.listSessions({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult({ sessions: sessions.map(serializeSessionSummary) });
       }
@@ -146,13 +146,13 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
         const details = context.kernel.getRun({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult(serializeRunDetails(details));
       }
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);
-        const ownerId = parsed.ownerId ?? controlToolOwnerId(context);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const cancellation = await context.kernel.cancelRun(parsed.runId, { ownerId });
         const details = context.kernel.getRun({ runId: parsed.runId, ownerId, includeEvents: true, eventLimit: 100 });
         return stringifyToolResult({
@@ -165,7 +165,7 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.inspect_agent_artifacts.parse(input);
         const artifacts = context.kernel.inspectArtifacts({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
       }
@@ -175,7 +175,7 @@ export async function handleAgentControlToolCall(
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
           requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         });
         return stringifyToolResult({
@@ -198,7 +198,7 @@ export async function handleAgentControlToolCall(
         }
         const result = await context.kernel.delegateAgent({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
           requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         });
         return stringifyToolResult({
@@ -231,6 +231,14 @@ export async function handleAgentControlToolCall(
 function controlToolOwnerId(context: AgentControlToolContext): string {
   const ownerId = context.getOwnerId?.().trim();
   return ownerId || "desktop-local-user";
+}
+
+function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {
+  const activeOwnerId = controlToolOwnerId(context);
+  if (requestedOwnerId && requestedOwnerId !== activeOwnerId) {
+    throw new Error("Requested ownerId does not match the active control owner");
+  }
+  return activeOwnerId;
 }
 
 function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string, sessionId?: string): void {

@@ -173,6 +173,23 @@ const knownLimitation = (reason: string, followUpTicket: string): AdapterCapabil
   followUpTicket,
 });
 
+const placeholderExpectations = (
+  adapterName: string,
+  followUpTicket: string
+): Record<AdapterCapabilityKey, AdapterCapabilityExpectation> => {
+  const reason = `No production ${adapterName} adapter exists in this ticket.`;
+  return {
+    nativeResume: knownLimitation(reason, followUpTicket),
+    cancellationDispatch: knownLimitation(reason, followUpTicket),
+    cancellationAck: knownLimitation(reason, followUpTicket),
+    pinnedWorker: knownLimitation(reason, followUpTicket),
+    modelSwitching: knownLimitation(reason, followUpTicket),
+    artifactEmission: knownLimitation(reason, followUpTicket),
+    toolSupport: knownLimitation(reason, followUpTicket),
+    restartOrphanSemantics: knownLimitation(reason, followUpTicket),
+  };
+};
+
 export const ADAPTER_CAPABILITY_MATRIX = {
   acp: {
     adapterId: "acp",
@@ -205,44 +222,17 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   hermes: {
     adapterId: "hermes",
     productionAdapter: false,
-    expectations: {
-      nativeResume: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      cancellationDispatch: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      cancellationAck: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      pinnedWorker: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      modelSwitching: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      artifactEmission: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      toolSupport: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-      restartOrphanSemantics: knownLimitation("No production Hermes adapter exists in this ticket.", "TICKET-hermes-adapter"),
-    },
+    expectations: placeholderExpectations("Hermes", "TICKET-hermes-adapter"),
   },
   openclaw: {
     adapterId: "openclaw",
     productionAdapter: false,
-    expectations: {
-      nativeResume: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      cancellationDispatch: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      cancellationAck: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      pinnedWorker: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      modelSwitching: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      artifactEmission: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      toolSupport: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-      restartOrphanSemantics: knownLimitation("No production OpenClaw adapter exists in this ticket.", "TICKET-openclaw-adapter"),
-    },
+    expectations: placeholderExpectations("OpenClaw", "TICKET-openclaw-adapter"),
   },
   a2a: {
     adapterId: "a2a",
     productionAdapter: false,
-    expectations: {
-      nativeResume: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      cancellationDispatch: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      cancellationAck: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      pinnedWorker: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      modelSwitching: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      artifactEmission: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      toolSupport: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-      restartOrphanSemantics: knownLimitation("No production A2A adapter exists in this ticket.", "TICKET-a2a-adapter"),
-    },
+    expectations: placeholderExpectations("A2A", "TICKET-a2a-adapter"),
   },
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
 

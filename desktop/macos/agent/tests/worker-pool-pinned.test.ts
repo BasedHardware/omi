@@ -102,6 +102,27 @@ describe("AdapterWorkerPool pinned workers", () => {
     expect(pool.size).toBe(1);
   });
 
+  it("rejects unbound first-binding waiters when all pinned workers are occupied by live bindings", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+
+    await pool.runExclusiveQueued(
+      {
+        bindingId: "binding-1",
+        sessionId: "session-1",
+        adapterId: "pi-mono",
+        adapterNativeSessionId: "native-1",
+        resumeFidelity: "none",
+        cwd: "/tmp",
+      },
+      "attempt-1",
+      async () => {},
+    );
+
+    await expect(pool.runExclusiveQueued(undefined, "attempt-new-binding", async () => {})).rejects.toThrow(
+      "No adapter worker capacity available for a new binding",
+    );
+  });
+
   it("keeps a first-binding creation lease pinned before the execution lease", async () => {
     const pool = new AdapterWorkerPool(() => pinnedAdapter(), 2);
     const createdBinding = {
@@ -131,6 +152,33 @@ describe("AdapterWorkerPool pinned workers", () => {
     const otherWorker = pool.acquire(otherBinding);
     expect(otherWorker?.workerId).toBe("worker-2");
     expect(pool.size).toBe(2);
+  });
+
+  it("allows an explicit stale-binding replacement to move a worker pin", async () => {
+    const pool = new AdapterWorkerPool(() => pinnedAdapter(), 1);
+    const oldBinding = {
+      bindingId: "binding-old",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-old",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+    const newBinding = {
+      bindingId: "binding-new",
+      sessionId: "session-1",
+      adapterId: "pi-mono",
+      adapterNativeSessionId: "native-new",
+      resumeFidelity: "none" as const,
+      cwd: "/tmp",
+    };
+
+    const worker = pool.acquire(oldBinding);
+    expect(worker?.workerId).toBe("worker-1");
+    worker!.replacePinnedBinding("binding-old", newBinding);
+
+    expect(pool.acquire(oldBinding)).toBeNull();
+    expect(pool.acquire(newBinding)?.workerId).toBe("worker-1");
   });
 
   it("prefers the idle worker already pinned to a requested binding", async () => {

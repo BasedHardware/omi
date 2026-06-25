@@ -250,7 +250,7 @@ enum DesktopCapabilityRegistry {
       surfaces: [.desktopChat],
       summary: "Send a follow-up message to an existing canonical Omi agent session.",
       bullets: [
-        "Use when continuing a multi-turn conversation with an Omi-managed agent by omiSessionId.",
+        "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
         "Creates a new run in the existing session; do not use it to create a delegated child."
       ]),
     Capability(

@@ -123,6 +123,55 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("replaces a stale process-local pinned binding through the pinned worker", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono", 1);
+    Object.assign(adapter.capabilities, {
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      requiresPinnedWorker: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
+
+    const first = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+    });
+    const firstBinding = store.getRow(
+      "SELECT binding_id, binding_generation FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? ORDER BY binding_generation DESC LIMIT 1",
+      [first.session.sessionId, "pi-mono"],
+    );
+    const firstBindingId = firstBinding.binding_id;
+    store.execute("UPDATE adapter_bindings SET status = 'stale', invalidated_at_ms = ?, updated_at_ms = ? WHERE binding_id = ?", [
+      Date.now(),
+      Date.now(),
+      firstBindingId,
+    ]);
+
+    const second = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "pi-mono",
+      defaultAdapterId: "pi-mono",
+      requestId: "request-replace-stale",
+    });
+
+    expect(second.run.status).toBe("succeeded");
+    const secondBinding = store.getRow(
+      "SELECT binding_id, binding_generation FROM adapter_bindings WHERE session_id = ? AND adapter_id = ? AND status = 'active'",
+      [second.session.sessionId, "pi-mono"],
+    );
+    expect(secondBinding.binding_id).not.toBe(firstBindingId);
+    expect(secondBinding.binding_generation).toBe(firstBinding.binding_generation + 1);
+    expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBindingId]).status).toBe("stale");
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.replaced'").payload_json)).toMatchObject({
+      bindingId: secondBinding.binding_id,
+      replacesBindingId: firstBindingId,
+    });
+    expect(adapter.opened).toHaveLength(2);
+    expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
   it("reconciles active attempts as orphaned and keeps restart semantics adapter-scoped", () => {
     const databasePath = newDatabasePath();
     let now = 100;

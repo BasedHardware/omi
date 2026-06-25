@@ -144,10 +144,10 @@ Returns metadata and references only. It does not read arbitrary artifact conten
     label: "Send Agent Message",
     description: `Send a follow-up message to an existing canonical Omi agent session.
 
-Creates a new run in that session through the runtime kernel. Use this for multi-turn conversations with Omi-managed agents when you already have an omiSessionId.`,
+Creates a new run in that session through the runtime kernel. Use this for multi-turn conversations with Omi-managed agents when you already have a sessionId.`,
     promptSnippet: "send_agent_message - Continue an Omi-managed agent session",
     promptGuidelines: [
-      "Use when continuing a multi-turn conversation with an Omi-managed agent by omiSessionId.",
+      "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
       "Creates a new run in the existing session; do not use it to create a delegated child.",
     ],
     latency: "async background",

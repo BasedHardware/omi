@@ -56,6 +56,18 @@ export class AdapterWorker {
     this.pinnedBindingId = binding.bindingId;
   }
 
+  replacePinnedBinding(replacesBindingId: string, binding: AdapterBindingHandle): void {
+    if (!binding.bindingId) {
+      throw new Error("Pinned adapter workers require a bindingId");
+    }
+    if (this.pinnedBindingId && this.pinnedBindingId !== replacesBindingId) {
+      throw new Error(
+        `Worker ${this.workerId} is pinned to binding ${this.pinnedBindingId}, not replacement source ${replacesBindingId}`
+      );
+    }
+    this.pinnedBindingId = binding.bindingId;
+  }
+
   async runExclusive<T>(attemptId: string, binding: AdapterBindingHandle | undefined, work: () => Promise<T>): Promise<T> {
     if (this.activeAttemptId && this.activeAttemptId !== attemptId) {
       throw new Error(
@@ -95,6 +107,7 @@ interface PendingWorkerLease {
   binding?: AdapterBindingHandle;
   attemptId: string;
   resolve: WorkerLeaseResolver;
+  reject: (error: Error) => void;
 }
 
 export class AdapterWorkerPool {
@@ -171,8 +184,11 @@ export class AdapterWorkerPool {
       worker.reserve(attemptId, binding);
       return Promise.resolve(worker);
     }
-    return new Promise((resolve) => {
-      this.waiters.push({ binding, attemptId, resolve });
+    if (!this.canEventuallyAcquire(binding)) {
+      return Promise.reject(this.noCapacityError(binding));
+    }
+    return new Promise((resolve, reject) => {
+      this.waiters.push({ binding, attemptId, resolve, reject });
     });
   }
 
@@ -188,5 +204,28 @@ export class AdapterWorkerPool {
       worker.reserve(waiter.attemptId, waiter.binding);
       waiter.resolve(worker);
     }
+    for (let i = 0; i < this.waiters.length;) {
+      const waiter = this.waiters[i]!;
+      if (this.canEventuallyAcquire(waiter.binding)) {
+        i += 1;
+        continue;
+      }
+      this.waiters.splice(i, 1);
+      waiter.reject(this.noCapacityError(waiter.binding));
+    }
+  }
+
+  private canEventuallyAcquire(binding?: AdapterBindingHandle): boolean {
+    if (this.workers.length < this.maxWorkers) return true;
+    const bindingId = binding?.bindingId;
+    return this.workers.some((worker) => {
+      if (!worker.adapter.capabilities.requiresPinnedWorker) return true;
+      return Boolean(bindingId && worker.hasPinnedBinding(bindingId));
+    });
+  }
+
+  private noCapacityError(binding?: AdapterBindingHandle): Error {
+    const bindingLabel = binding?.bindingId ? `binding ${binding.bindingId}` : "a new binding";
+    return new Error(`No adapter worker capacity available for ${bindingLabel}`);
   }
 }

@@ -131,6 +131,8 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     if (this.pendingResult && (!this.deferOnlyPromptIncludes || promptText.includes(this.deferOnlyPromptIncludes))) {
       return this.pendingResult.promise;
     }
+    const artifacts = this.nextArtifacts;
+    this.nextArtifacts = undefined;
     return {
       text: `done-${context.attemptId}`,
       sessionId: context.binding.adapterNativeSessionId,
@@ -138,7 +140,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       terminalStatus: "succeeded",
       inputTokens: 1,
       outputTokens: 2,
-      artifacts: this.nextArtifacts,
+      artifacts,
     };
   }
 

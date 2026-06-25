@@ -395,7 +395,9 @@ export class AgentRuntimeKernel {
       let handle: AdapterBindingHandle;
       try {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
-          const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
+          const existingBinding =
+            this.readActiveBinding(accepted.session.sessionId, adapterId) ??
+            this.readLatestBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
           return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, async (worker) => {
             const resolved = await this.resolveBindingForAttempt({
@@ -406,7 +408,11 @@ export class AgentRuntimeKernel {
               adapterId,
             });
             if (worker.adapter.capabilities.requiresPinnedWorker) {
-              worker.pinBinding(resolved.handle);
+              if (resolved.replacesBindingId) {
+                worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
+              } else {
+                worker.pinBinding(resolved.handle);
+              }
             }
             return resolved;
           });
@@ -668,6 +674,9 @@ export class AgentRuntimeKernel {
   }
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    if (!input.sessionId && !input.runId && !input.attemptId) {
+      throw new Error("Inspecting artifacts requires sessionId, runId, or attemptId");
+    }
     if (input.ownerId) {
       this.assertArtifactSelectorOwner(input, input.ownerId);
     }
@@ -1023,11 +1032,11 @@ export class AgentRuntimeKernel {
     adapter: RuntimeAdapter;
     attempt: RunAttempt;
     adapterId: string;
-  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const active = this.readActiveBinding(input.session.sessionId, input.adapterId);
     if (active) {
       const handle = await this.resumeOrReplaceBinding(active, input);
-      return { binding: this.readBinding(handle.bindingId!), handle };
+      return { binding: this.readBinding(handle.bindingId!), handle, replacesBindingId: handle.replacesBindingId };
     }
 
     const nextGeneration = this.nextBindingGeneration(input.session.sessionId, input.adapterId);
@@ -1087,7 +1096,7 @@ export class AgentRuntimeKernel {
       attempt: RunAttempt;
       adapterId: string;
     }
-  ): Promise<AdapterBindingHandle> {
+  ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
     const canUseProcessLocalBinding =
       binding.adapterInstanceId === this.runtimeNodeId &&
       binding.adapterNativeSessionId &&
@@ -1095,7 +1104,7 @@ export class AgentRuntimeKernel {
     if (!binding.adapterNativeSessionId || (!input.adapter.capabilities.supportsNativeResume && !canUseProcessLocalBinding)) {
       this.markBindingStale(binding, input.attempt, "binding_not_resumable");
       const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
-      return opened.handle;
+      return { ...opened.handle, replacesBindingId: opened.replacesBindingId };
     }
     try {
       const resumed = await input.adapter.resumeBinding({
@@ -1146,7 +1155,7 @@ export class AgentRuntimeKernel {
     },
     generation: number,
     replacesBindingId: string | null
-  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const opened = await input.adapter.openBinding({
       sessionId: input.session.sessionId,
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
@@ -1185,6 +1194,7 @@ export class AgentRuntimeKernel {
     });
     return {
       binding,
+      replacesBindingId: replacesBindingId ?? undefined,
       handle: {
         ...opened,
         bindingId: binding.bindingId,

@@ -9,7 +9,6 @@ import {
 } from "../src/adapters/pi-mono.js";
 import {
   ADAPTER_CAPABILITY_MATRIX,
-  adapterCapabilitiesFor,
 } from "../src/adapters/interface.js";
 import type {
   AdapterAttemptContext,
@@ -209,8 +208,28 @@ describe("adapter capability matrix", () => {
     });
     const pi = new PiMonoRuntimeAdapter(new PiMonoAdapter({ authToken: "token" }));
 
-    expect(acp.capabilities).toEqual(adapterCapabilitiesFor("acp"));
-    expect(pi.capabilities).toEqual(adapterCapabilitiesFor("pi-mono"));
+    expect(acp.capabilities).toEqual({
+      resumeFidelity: "native",
+      supportsNativeResume: true,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: false,
+      supportsModelSwitching: true,
+      supportsArtifactEmission: false,
+      supportsTools: true,
+      restartBehavior: "native_bindings_survive",
+    });
+    expect(pi.capabilities).toEqual({
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: true,
+      supportsModelSwitching: true,
+      supportsArtifactEmission: false,
+      supportsTools: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
   });
 });
 
