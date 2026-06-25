@@ -114,9 +114,16 @@ async def auto_router_pick(task: str = Query(..., description="Task name to pick
     try:
         task_spec = task_registry.get(task)
     except UnknownTaskError:
+        # Note: don't leak the full list of known task names in the response
+        # body — clients can enumerate them via probing. The list is in the
+        # public docs anyway (`docs/doc/developer/auto-router.mdx`).
         raise HTTPException(
             status_code=400,
-            detail=f"unknown task: {task!r}. Known tasks: {sorted(task_registry.names())}",
+            detail={
+                "code": "unknown_task",
+                "message": f"unknown task: {task!r}",
+                "docs": "see docs/doc/developer/auto-router.mdx#supported-task-types-v1",
+            },
         )
 
     # Score candidates.

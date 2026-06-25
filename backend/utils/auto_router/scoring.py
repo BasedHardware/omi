@@ -20,6 +20,7 @@ state. The daily-refresh cache wraps this function for the endpoint layer.
 """
 
 from dataclasses import dataclass
+import math
 from typing import Optional
 
 
@@ -51,10 +52,15 @@ class ModelSpec:
 class TaskSpec:
     """A task type with per-dimension weights.
 
-    Weights are expected to sum to 1.0 (validated at registry load time).
-    They are NOT renormalized by the scoring function — explicit weights
-    are the contract. To bias a task toward quality, set
+    Weights are expected to sum to 1.0 (validated at construction time and at
+    registry load time). They are NOT renormalized by the scoring function —
+    explicit weights are the contract. To bias a task toward quality, set
     quality_weight higher; the other weights drop accordingly.
+
+    Validation in __post_init__ catches three failure modes:
+      1. NaN / inf weights (would propagate to the response as invalid JSON)
+      2. Negative or >1.0 weights (semantically wrong; out-of-contract)
+      3. Weights that don't sum to 1.0 (defensive — registry also enforces this)
     """
 
     name: str
@@ -66,8 +72,28 @@ class TaskSpec:
     def __post_init__(self):
         if not self.name:
             raise ValueError("TaskSpec.name must be non-empty")
-        # Weights are validated at the registry layer (sum to 1.0); the scoring
-        # function itself accepts any non-negative values without renormalizing.
+        for label, w in (
+            ("quality_weight", self.quality_weight),
+            ("latency_weight", self.latency_weight),
+            ("cost_weight", self.cost_weight),
+        ):
+            # bool is a subclass of int in Python — reject it FIRST so we don't
+            # silently treat True as 1.0 / False as 0.0.
+            if isinstance(w, bool):
+                raise TypeError(f"TaskSpec.{label} must be a number, got bool")
+            if not isinstance(w, (int, float)):
+                raise TypeError(f"TaskSpec.{label} must be a number, got {type(w).__name__}")
+            if not math.isfinite(w):
+                raise ValueError(f"TaskSpec.{label} must be a finite number, got {w!r}")
+            if w < 0.0 or w > 1.0:
+                raise ValueError(f"TaskSpec.{label} must be in [0.0, 1.0], got {w}")
+        total = self.quality_weight + self.latency_weight + self.cost_weight
+        if abs(total - 1.0) > 1e-3:
+            raise ValueError(
+                f"TaskSpec weights sum to {total:.4f}, expected 1.0 (tolerance 1e-3); "
+                f"quality={self.quality_weight}, latency={self.latency_weight}, "
+                f"cost={self.cost_weight}"
+            )
 
 
 def _clamp_0_1(value: Optional[float]) -> float:

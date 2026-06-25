@@ -139,26 +139,80 @@ class TestClamping:
 
 
 class TestWeightHandling:
-    """Explicit weights are the contract. The function does not silently renormalize."""
+    """Weights must sum to 1.0 (enforced at TaskSpec construction).
+    These tests verify the validation rejects bad weights."""
 
-    def test_weights_summing_to_less_than_one_preserved(self):
-        # Weights 0.3 + 0.3 + 0.1 = 0.7 (not 1.0). Score reflects this exactly.
-        m = _model(q=1.0, l=1.0, c=1.0)
-        t = _task(qw=0.3, lw=0.3, cw=0.1)
-        # 0.3*1 + 0.3*1 + 0.1*1 = 0.7 (NOT renormalized to 1.0)
-        assert score(m, t) == pytest.approx(0.7)
+    def test_weights_summing_to_less_than_one_rejected_at_construction(self):
+        # Weights 0.3 + 0.3 + 0.1 = 0.7 (not 1.0). TaskSpec now refuses to construct.
+        with pytest.raises(ValueError, match="weights sum to"):
+            TaskSpec(name="bad", quality_weight=0.3, latency_weight=0.3, cost_weight=0.1)
 
-    def test_weights_summing_to_more_than_one_preserved(self):
-        # Weights 0.5 + 0.5 + 0.5 = 1.5 (not 1.0). Score exceeds 1.0.
-        m = _model(q=1.0, l=1.0, c=1.0)
-        t = _task(qw=0.5, lw=0.5, cw=0.5)
-        # 0.5 + 0.5 + 0.5 = 1.5 (explicitly preserved, NOT renormalized)
-        assert score(m, t) == pytest.approx(1.5)
+    def test_weights_summing_to_more_than_one_rejected_at_construction(self):
+        # Weights 0.5 + 0.5 + 0.5 = 1.5 (not 1.0). TaskSpec now refuses to construct.
+        with pytest.raises(ValueError, match="weights sum to"):
+            TaskSpec(name="bad", quality_weight=0.5, latency_weight=0.5, cost_weight=0.5)
 
-    def test_zero_weights_produce_zero(self):
-        m = _model(q=1.0, l=1.0, c=1.0)
-        t = _task(qw=0.0, lw=0.0, cw=0.0)
-        assert score(m, t) == pytest.approx(0.0)
+    def test_zero_weights_rejected_at_construction(self):
+        # All-zero weights sum to 0.0 (not 1.0). TaskSpec now refuses to construct.
+        with pytest.raises(ValueError, match="weights sum to"):
+            TaskSpec(name="bad", quality_weight=0.0, latency_weight=0.0, cost_weight=0.0)
+
+    def test_valid_weights_summing_to_one_are_accepted(self):
+        # Sanity: valid weights still construct fine.
+        t = TaskSpec(name="ok", quality_weight=0.5, latency_weight=0.3, cost_weight=0.2)
+        assert t.name == "ok"
+
+    def test_valid_weights_within_tolerance_accepted(self):
+        # Weights 0.5 + 0.3 + 0.2 = 1.0 exactly — within tolerance.
+        t = TaskSpec(name="ok", quality_weight=0.5, latency_weight=0.3, cost_weight=0.2)
+        assert abs(t.quality_weight + t.latency_weight + t.cost_weight - 1.0) < 1e-9
+
+    def test_valid_weights_within_tolerance_but_not_exact_accepted(self):
+        # Weights sum to 1.0005 — within tolerance 1e-3.
+        t = TaskSpec(name="ok", quality_weight=0.5, latency_weight=0.3, cost_weight=0.2005)
+        assert t.name == "ok"
+
+
+class TestWeightValidation:
+    """TaskSpec rejects non-finite and out-of-range weights (UAT-FN-02 fix)."""
+
+    def test_nan_quality_weight_rejected(self):
+        with pytest.raises(ValueError, match="finite"):
+            TaskSpec(name="bad", quality_weight=float("nan"), latency_weight=0.5, cost_weight=0.5)
+
+    def test_nan_latency_weight_rejected(self):
+        with pytest.raises(ValueError, match="finite"):
+            TaskSpec(name="bad", quality_weight=0.5, latency_weight=float("nan"), cost_weight=0.5)
+
+    def test_nan_cost_weight_rejected(self):
+        with pytest.raises(ValueError, match="finite"):
+            TaskSpec(name="bad", quality_weight=0.5, latency_weight=0.5, cost_weight=float("nan"))
+
+    def test_positive_infinity_rejected(self):
+        with pytest.raises(ValueError, match="finite"):
+            TaskSpec(name="bad", quality_weight=float("inf"), latency_weight=0.5, cost_weight=0.5)
+
+    def test_negative_infinity_rejected(self):
+        with pytest.raises(ValueError, match="finite"):
+            TaskSpec(name="bad", quality_weight=-float("inf"), latency_weight=0.5, cost_weight=0.5)
+
+    def test_negative_weight_rejected(self):
+        with pytest.raises(ValueError, match=r"\[0\.0, 1\.0\]"):
+            TaskSpec(name="bad", quality_weight=-0.1, latency_weight=0.6, cost_weight=0.5)
+
+    def test_weight_above_one_rejected(self):
+        with pytest.raises(ValueError, match=r"\[0\.0, 1\.0\]"):
+            TaskSpec(name="bad", quality_weight=1.5, latency_weight=-0.2, cost_weight=-0.3)
+
+    def test_bool_weight_rejected(self):
+        # bool is a subclass of int in Python — must explicitly reject (otherwise
+        # True would be silently treated as 1.0).
+        with pytest.raises(TypeError, match="bool"):
+            TaskSpec(name="bad", quality_weight=True, latency_weight=0.5, cost_weight=0.5)
+
+    def test_string_weight_rejected(self):
+        with pytest.raises(TypeError, match="must be a number"):
+            TaskSpec(name="bad", quality_weight="0.5", latency_weight=0.3, cost_weight=0.2)
 
 
 # ---------------------------------------------------------------------------

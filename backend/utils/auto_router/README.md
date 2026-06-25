@@ -32,6 +32,8 @@ If you have a real `benchmarks.json` (deployment data), the endpoint loads it. O
 
 These are the v1 starting points. Tune per your workload; the scoring function applies weights exactly as specified (no renormalization).
 
+> **⚠️ The example model scores in `benchmarks.example.json` are EDUCATED ESTIMATES** — not measured benchmarks. They are illustrative numbers to make the framework runnable out of the box. For production deployment, replace `benchmarks.json` with real measurements (e.g., from Artificial Analysis for LLM providers, in-house benchmarks for STT/embedding).
+
 ## Scoring formula
 
 For a candidate model `m` and task `t`:

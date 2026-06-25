@@ -94,12 +94,22 @@ class TestInvalidTask:
         resp = client.get("/v1/auto-router/pick?task=invalid_task")
         assert resp.status_code == 400
 
-    def test_400_includes_known_tasks_in_detail(self, client: TestClient):
+    def test_400_includes_stable_error_code_and_does_not_leak_task_list(self, client: TestClient):
+        # UAT-FN-01 fix: the 400 body now uses a stable error code and does NOT
+        # leak the full list of known task names (clients can enumerate them
+        # via probing). The docs link is still included for legitimate clients.
         resp = client.get("/v1/auto-router/pick?task=invalid_task")
+        assert resp.status_code == 400
         detail = resp.json()["detail"]
-        # The error message should mention the unknown task and list known ones.
-        assert "invalid_task" in detail
-        assert "ptt_response" in detail  # at least one known task is mentioned
+        # Stable error code for client switch-cases.
+        assert detail.get("code") == "unknown_task"
+        # Mentions the offending task name.
+        assert "invalid_task" in detail.get("message", "")
+        # Does NOT list other known task names (e.g., 'ptt_response', 'transcription').
+        assert "ptt_response" not in str(detail)
+        assert "transcription" not in str(detail)
+        # Includes a docs pointer.
+        assert "docs" in detail
 
     def test_missing_task_param_returns_422(self, client: TestClient):
         # FastAPI's Query(...) makes `task` required; missing it returns 422.
