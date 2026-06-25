@@ -117,6 +117,8 @@ class MemoryItem(BaseModel):
     content_hash: Optional[str] = None
     account_generation: int = 0
     promotion: Optional[Dict[str, Any]] = None
+    capture_device_ids: List[str] = Field(default_factory=list)
+    primary_capture_device: Optional[str] = None
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
