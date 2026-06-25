@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Literal, Optional
 import database._client as db_client_module
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
 from pydantic import BaseModel, Field, ValidationError
 
 import database.memories as memories_db
@@ -21,6 +21,7 @@ from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.memory_service import MemoryService
+from utils.client_device import resolve_client_device
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
@@ -278,11 +279,28 @@ def get_memories(
     limit: int = 100,
     offset: int = 0,
     cursor: Optional[str] = None,
+    device_scope: str = Query('all'),
+    client_device_id: Optional[str] = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
     memory_runtime: V3GetRuntime = Depends(get_v3_get_runtime),
+    x_app_platform: str = Header(None, alias='X-App-Platform'),
+    x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
+    resolved_device_id = client_device_id
+    if device_scope == 'current':
+        resolved_device_id = resolve_client_device(
+            x_app_platform=x_app_platform,
+            x_device_id_hash=x_device_id_hash,
+        ).client_device_id
+
     if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
-        return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(uid, limit=limit, offset=offset)
+        return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
+            uid,
+            limit=limit,
+            offset=offset,
+            device_scope=device_scope,
+            client_device_id=resolved_device_id,
+        )
 
     if not memory_runtime.enabled or memory_runtime.source_decision == 'disabled':
         return _legacy_get_memories(uid, limit, offset)
