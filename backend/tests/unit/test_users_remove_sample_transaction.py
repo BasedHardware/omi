@@ -146,6 +146,9 @@ def test_remove_sample_transaction_sample_not_found():
     result = users_db._remove_sample_transaction(transaction, person_ref, "missing.wav")
 
     assert result is False
+    # The read still has to go through the transaction, not a bare get(), so a
+    # regression on this error path is caught.
+    assert person_ref.get_transactions == [transaction]
     assert transaction.updated_data is None
     assert person_ref.direct_updates == []
 
@@ -157,5 +160,8 @@ def test_remove_sample_transaction_person_not_found():
     result = users_db._remove_sample_transaction(transaction, person_ref, "a.wav")
 
     assert result is False
+    # The existence check still has to read inside the transaction, not a bare
+    # get(), so a regression on this error path is caught.
+    assert person_ref.get_transactions == [transaction]
     assert transaction.updated_data is None
     assert person_ref.direct_updates == []
