@@ -155,12 +155,18 @@ const pendingToolCalls = new Map<
 const TERMINAL_RUN_EVENT_TYPES = new Set(["run.succeeded", "run.failed", "run.cancelled", "run.timed_out", "run.orphaned"]);
 const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.succeeded", "attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
 
-function registerActiveControlOwner(requestKey: string, ownerId: string): void {
+function registerActiveControlOwner(requestKey: string, ownerId: string): boolean {
   const existingOwnerId = activeControlToolOwnersByRequest.get(requestKey);
   if (existingOwnerId && existingOwnerId !== ownerId) {
     throw new Error("Request owner context already active for clientId/requestId");
   }
+  // Return whether THIS call created the mapping so the caller only releases
+  // its own registration. A duplicate query (same key + owner) reuses the
+  // existing entry and must not clear the original in-flight request's owner
+  // when it finishes, which would break owner resolution for that run.
+  const inserted = !existingOwnerId;
   activeControlToolOwnersByRequest.set(requestKey, ownerId);
+  return inserted;
 }
 
 function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
@@ -929,16 +935,22 @@ async function main(): Promise<void> {
           const queryOwnerKey =
             controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
             (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
-          if (queryOwnerKey) {
-            registerActiveControlOwner(queryOwnerKey, queryOwnerId);
-          }
+          // Track whether THIS query created the request→owner mapping so that
+          // a duplicate query (same clientId/requestId) does not clear the
+          // original in-flight request's owner context on cleanup.
+          const insertedOwner = queryOwnerKey
+            ? registerActiveControlOwner(queryOwnerKey, queryOwnerId)
+            : false;
           try {
             if (adapterId === "acp") {
               await initializeAcp();
             }
             await facade.handleQuery(query);
           } finally {
-            if (queryOwnerKey) {
+            // Only release the request→owner mapping if we were the one that
+            // registered it. A duplicate query reuses the original's entry and
+            // must leave it intact for the still-active run's MCP control tools.
+            if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
             }
           }
