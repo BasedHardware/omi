@@ -211,7 +211,6 @@ struct DashboardPage: View {
     @State private var memoryCount: Int?
     @State private var taskCount: Int?
     @State private var isCaptureMonitoring = false
-    @State private var connectPicker: AgentConnectPicker? = nil
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
@@ -258,23 +257,6 @@ struct DashboardPage: View {
                 }
             )
             .frame(minWidth: 500, minHeight: 500)
-        }
-        .sheet(item: $connectPicker) { picker in
-            AgentConnectPickerSheet(
-                picker: picker,
-                onChoose: { destinations in
-                    connectPicker = nil
-                    // Prioritize the first option (Claude Code / Codex). "Both"
-                    // connects the CLI first; the cloud connector stays one tap
-                    // away in Apps.
-                    if let first = destinations.first {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            openExportDestination(first)
-                        }
-                    }
-                },
-                onClose: { connectPicker = nil }
-            )
         }
         .overlay {
             if isLoadingCitation {
@@ -561,11 +543,11 @@ struct DashboardPage: View {
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude", brand: .claude) {
-                connectPicker = .claude
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude) {
+                openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT", brand: .chatgpt) {
-                connectPicker = .chatgpt
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt) {
+                openExportDestination(.codex)
             }
             HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw) {
                 openExportDestination(.openclaw)
