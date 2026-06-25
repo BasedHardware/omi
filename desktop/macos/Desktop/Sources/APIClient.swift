@@ -751,7 +751,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     finishedAt: Date?,
     structured: Structured,
     transcriptSegments: [TranscriptSegment],
-    transcriptSegmentsIncluded: Bool = true,
+    transcriptSegmentsIncluded: Bool,
     geolocation: Geolocation?,
     photos: [ConversationPhoto],
     appsResults: [AppResponse],

@@ -435,6 +435,7 @@ struct ConversationDetailView: View {
                     )
             }
             .buttonStyle(.plain)
+            .disabled(!canCopyTranscript)
             .help("Copy transcript")
 
             // Move to folder button (menu)
@@ -493,9 +494,15 @@ struct ConversationDetailView: View {
         }
     }
 
+    private var canCopyTranscript: Bool {
+        displayConversation.transcriptPresenceState != .lockedOrRedacted
+    }
+
     // MARK: - Actions
 
     private func copyTranscript() {
+        guard canCopyTranscript else { return }
+
         let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
             let speakerName: String
