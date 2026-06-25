@@ -9,6 +9,7 @@ import {
   isAgentControlToolName,
   type AgentControlToolContext,
 } from "../src/runtime/control-tools.js";
+import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -45,6 +46,16 @@ describe("agent control tools", () => {
       expect(isAgentControlToolName(tool.name)).toBe(true);
       expect(tool.inputSchema).toMatchObject({ type: "object" });
     }
+  });
+
+  it("generates ACP/MCP tool definitions from the canonical manifest", () => {
+    expect(agentControlToolDefinitions).toEqual(
+      agentControlCapabilityManifest.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: agentControlInputSchema(tool),
+      })),
+    );
   });
 
   it("lists sessions and inspects runs using canonical runtime ids", async () => {

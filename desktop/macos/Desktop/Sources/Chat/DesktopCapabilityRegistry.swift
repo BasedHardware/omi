@@ -208,7 +208,7 @@ enum DesktopCapabilityRegistry {
       title: "List Agent Sessions",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "List canonical Omi-managed agent sessions and latest run state.",
+      summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
         "Use for current or recent Omi agents/subagents across main chat, task chat, and floating pills.",
         "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
@@ -228,7 +228,7 @@ enum DesktopCapabilityRegistry {
       title: "Cancel Agent Run",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "Request cancellation for an Omi agent run through the runtime kernel.",
+      summary: "Request cancellation for one canonical Omi agent run through the runtime kernel.",
       bullets: [
         "Use when the user asks to stop a running Omi agent/subagent.",
         "Returns whether cancellation was accepted, dispatched, and acknowledged."
@@ -238,7 +238,7 @@ enum DesktopCapabilityRegistry {
       title: "Inspect Agent Artifacts",
       latency: .fastLocal,
       surfaces: [.desktopChat],
-      summary: "List canonical artifact metadata for an Omi agent session, run, or attempt.",
+      summary: "Inspect canonical artifact metadata for an Omi agent session, run, or attempt.",
       bullets: [
         "Returns artifact references and metadata only.",
         "Use after get_agent_run when the user asks what files or outputs an agent produced."
@@ -258,7 +258,7 @@ enum DesktopCapabilityRegistry {
       title: "Delegate Agent",
       latency: .asyncBackground,
       surfaces: [.desktopChat],
-      summary: "Create or continue a distinct child agent session linked to a parent run.",
+      summary: "Create or continue a distinct delegated child agent session linked to a parent run.",
       bullets: [
         "Use call for a structured child result, spawn for immediate child handles, and continue for another run in an existing child session.",
         "Pass a concise objective and optional short context; do not pass full transcripts by default."

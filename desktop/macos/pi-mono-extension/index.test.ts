@@ -32,6 +32,7 @@ import {
   __resetOmiPipeForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
+import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
@@ -1025,6 +1026,50 @@ test("OMI_TOOLS: agent control schemas encode runtime preconditions", () => {
       then: { required: ["childSessionId"] },
     },
   ]);
+});
+
+test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
+  const controlTools = OMI_TOOLS.filter((tool) =>
+    agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
+  );
+  assert.deepEqual(
+    controlTools.map((tool) => tool.name),
+    agentControlCapabilityManifest.map((tool) => tool.name),
+  );
+
+  for (const manifestTool of agentControlCapabilityManifest) {
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
+    assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
+    assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
+    assert.equal(tool!.description, manifestTool.description, `${manifestTool.name} description drifted`);
+    assert.equal(tool!.promptSnippet, manifestTool.promptSnippet, `${manifestTool.name} promptSnippet drifted`);
+    assert.deepEqual(tool!.promptGuidelines ?? [], manifestTool.promptGuidelines, `${manifestTool.name} promptGuidelines drifted`);
+    assert.deepEqual(
+      [...((tool!.parameters as any).required ?? [])].sort(),
+      [...manifestTool.required].sort(),
+      `${manifestTool.name} required fields drifted`
+    );
+    assert.deepEqual((tool!.parameters as any).anyOf, (manifestTool.jsonSchemaOptions as any)?.anyOf, `${manifestTool.name} anyOf drifted`);
+    assert.deepEqual((tool!.parameters as any).allOf, (manifestTool.jsonSchemaOptions as any)?.allOf, `${manifestTool.name} allOf drifted`);
+
+    for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
+      const property = (tool!.parameters as any).properties[propertyName];
+      assert.ok(property, `${manifestTool.name}.${propertyName} missing`);
+      const schemas = property.anyOf ?? [property];
+      const typedSchema = schemas.find((candidate: any) => candidate.type === manifestProperty.type);
+      assert.ok(typedSchema, `${manifestTool.name}.${propertyName} type drifted`);
+      assert.equal(typedSchema.description, manifestProperty.description, `${manifestTool.name}.${propertyName} description drifted`);
+      assert.deepEqual(typedSchema.enum, manifestProperty.enum, `${manifestTool.name}.${propertyName} enum drifted`);
+    }
+  }
+});
+
+test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
+  for (const manifestTool of agentControlCapabilityManifest) {
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
+    const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
+    assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
+  }
 });
 
 test("OMI_TOOLS: all declared properties have TypeBox type metadata", () => {
