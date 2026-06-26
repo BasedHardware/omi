@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 struct WAIncomingMessage: Equatable, Sendable {
@@ -155,7 +156,7 @@ struct WAIncomingMessage: Equatable, Sendable {
 }
 
 @MainActor
-final class WhatsAppReplyCoordinator {
+final class WhatsAppReplyCoordinator: ObservableObject {
   static let shared = WhatsAppReplyCoordinator()
 
   static let systemPrompt = """
@@ -171,6 +172,7 @@ final class WhatsAppReplyCoordinator {
     """
 
   private let bridge = AgentBridge(harnessMode: "piMono")
+  @Published private(set) var pendingDrafts: [WhatsAppDraft] = []
   private var processedMessageIDs = Set<String>()
   private var latestDrafts: [String: WhatsAppDraft] = [:]
 
@@ -192,6 +194,39 @@ final class WhatsAppReplyCoordinator {
     latestDrafts[messageID]
   }
 
+  func approveDraft(id: String, editedText: String? = nil) async -> String {
+    guard let draft = pendingDrafts.first(where: { $0.id == id }) else {
+      return "Error: WhatsApp draft not found"
+    }
+    let text = editedText?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? draft.text
+    let result = await ChatToolExecutor.execute(ToolCall(
+      name: "wa_send_message",
+      arguments: [
+        "to": draft.chatJid,
+        "message": text,
+        "client_message_id": "draft:\(draft.messageID)",
+      ],
+      thoughtSignature: nil
+    ))
+    removePendingDraft(id: id)
+    appendAudit(for: draft.withText(text), outcome: "draft_sent", reason: result)
+    return result
+  }
+
+  func dismissDraft(id: String) {
+    guard let draft = pendingDrafts.first(where: { $0.id == id }) else { return }
+    removePendingDraft(id: id)
+    appendAudit(for: draft, outcome: "dismissed", reason: nil)
+  }
+
+  func alwaysAutoReplyAndApproveDraft(id: String) async -> String {
+    guard let draft = pendingDrafts.first(where: { $0.id == id }) else {
+      return "Error: WhatsApp draft not found"
+    }
+    WhatsAppReplySettings.shared.addAllowlistedJid(draft.senderJid)
+    return await approveDraft(id: id)
+  }
+
   private func shouldProcess(_ message: WAIncomingMessage) -> Bool {
     guard WhatsAppReplySettings.shared.mode != .off else { return false }
     guard !WhatsAppReplySettings.shared.killSwitchEnabled else { return false }
@@ -209,7 +244,7 @@ final class WhatsAppReplyCoordinator {
       log("WhatsAppReplyCoordinator: ignored message \(message.id), reason=\(reason)")
 
     case .draft(let reason):
-      latestDrafts[message.id] = draft
+      enqueueDraft(draft)
       appendAudit(for: draft, outcome: "drafted", reason: reason)
       log("WhatsAppReplyCoordinator: drafted reply for \(message.chatJid), reason=\(reason): \(draft.text.prefix(160))")
 
@@ -240,6 +275,37 @@ final class WhatsAppReplyCoordinator {
       outcome: outcome,
       reason: reason
     ))
+  }
+
+  private func enqueueDraft(_ draft: WhatsAppDraft) {
+    latestDrafts[draft.messageID] = draft
+    pendingDrafts.removeAll { $0.messageID == draft.messageID }
+    pendingDrafts.insert(draft, at: 0)
+    showDraftNotification(draft)
+  }
+
+  private func removePendingDraft(id: String) {
+    pendingDrafts.removeAll { $0.id == id }
+  }
+
+  private func showDraftNotification(_ draft: WhatsAppDraft) {
+    let sender = draft.senderName?.nilIfEmpty ?? draft.senderJid
+    FloatingControlBarManager.shared.showNotification(
+      title: "WhatsApp draft for \(sender)",
+      message: draft.text,
+      assistantId: "whatsapp",
+      sound: .default,
+      context: FloatingBarNotificationContext(
+        sourceTitle: "WhatsApp",
+        assistantId: "whatsapp",
+        sourceApp: "WhatsApp",
+        windowTitle: nil,
+        contextSummary: "Incoming: \(draft.incomingText)",
+        currentActivity: nil,
+        reasoning: "Omi drafted a WhatsApp reply for approval.",
+        detail: "Open Settings -> WhatsApp to send, edit, dismiss, or always auto-reply to this sender."
+      )
+    )
   }
 
   private func draftReply(for message: WAIncomingMessage) async throws -> WhatsAppDraft {
@@ -307,6 +373,20 @@ struct WhatsAppDraft: Identifiable, Equatable, Sendable {
   let text: String
   let createdAt: Date
   let mode: String
+
+  func withText(_ newText: String) -> WhatsAppDraft {
+    WhatsAppDraft(
+      id: id,
+      messageID: messageID,
+      chatJid: chatJid,
+      senderJid: senderJid,
+      senderName: senderName,
+      incomingText: incomingText,
+      text: newText,
+      createdAt: createdAt,
+      mode: mode
+    )
+  }
 }
 
 private extension String {
