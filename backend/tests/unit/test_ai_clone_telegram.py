@@ -31,6 +31,14 @@ _telethon_stub = types.ModuleType('telethon')
 _sessions_stub = types.ModuleType('telethon.sessions')
 _types_stub = types.ModuleType('telethon.tl.types')
 _tl_stub = types.ModuleType('telethon.tl')
+_errors_stub = types.ModuleType('telethon.errors')
+
+
+class _FakeSessionPasswordNeededError(Exception):
+    pass
+
+
+_errors_stub.SessionPasswordNeededError = _FakeSessionPasswordNeededError
 
 
 class _FakeStringSession:
@@ -56,6 +64,7 @@ sys.modules['telethon'] = _telethon_stub
 sys.modules['telethon.sessions'] = _sessions_stub
 sys.modules['telethon.tl'] = _tl_stub
 sys.modules['telethon.tl.types'] = _types_stub
+sys.modules['telethon.errors'] = _errors_stub
 
 # ── Stub database.ai_clone ─────────────────────────────────────────────────────
 
@@ -120,6 +129,8 @@ def _make_fake_client(*, connected=True, authorized=True):
     client.send_message = AsyncMock()
     client.get_me = AsyncMock(return_value=_FakeUser())
     client.session = _FakeStringSession('saved-session')
+    # Passthrough: entity resolution returns the same id for simplicity in tests
+    client.get_input_entity = AsyncMock(side_effect=lambda x: x)
     return client
 
 

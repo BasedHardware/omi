@@ -521,6 +521,7 @@ struct DesktopHomeView: View {
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
     // Conversations replaced Chat in the sidebar; tier 1 unlocks it.
     if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.conversations.rawValue) }
+    if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.aiClone.rawValue) }
 
     if !visibleRawValues.contains(selectedIndex) {
       selectedIndex = SidebarNavItem.dashboard.rawValue

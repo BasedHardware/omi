@@ -39,6 +39,10 @@ final class AICloneService: ObservableObject {
     @Published var telegramVerifying: Bool = false
     @Published var telegramError: String = ""
 
+    // WhatsApp — Cloud API bot state
+    @Published var whatsAppConfigured: Bool = false
+    @Published var whatsAppBotPhone: String = ""
+
     private var pollingTask: Task<Void, Never>?
     private var lastIMessageDate: Double = 0
     private var lastTelegramPollTime: Double = 0
@@ -55,16 +59,30 @@ final class AICloneService: ObservableObject {
         telegramDisplayName = UserDefaults.standard.string(forKey: "aiCloneTelegramName") ?? ""
         telegramPhone = UserDefaults.standard.string(forKey: "aiCloneTelegramPhone") ?? ""
         iMessageConnected = checkIMessagePermission()
+        whatsAppConfigured = UserDefaults.standard.bool(forKey: "aiCloneWhatsAppConfigured")
+        whatsAppBotPhone = UserDefaults.standard.string(forKey: "aiCloneWhatsAppBotPhone") ?? ""
+        // Resume polling if AI Clone was enabled before the app was quit.
+        if isEnabled { startPolling() }
+    }
+
+    func configureWhatsApp(botPhone: String) {
+        whatsAppBotPhone = botPhone
+        whatsAppConfigured = !botPhone.isEmpty
+        UserDefaults.standard.set(whatsAppConfigured, forKey: "aiCloneWhatsAppConfigured")
+        UserDefaults.standard.set(botPhone, forKey: "aiCloneWhatsAppBotPhone")
     }
 
     func enable(_ enabled: Bool) {
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: "aiCloneEnabled")
-        if enabled {
-            startPolling()
-        } else {
-            stopPolling()
-        }
+        Task { try? await APIClient.shared.updateCloneSettings(enabled: enabled, autoReply: autoReply) }
+        if enabled { startPolling() } else { stopPolling() }
+    }
+
+    func setAutoReply(_ value: Bool) {
+        autoReply = value
+        UserDefaults.standard.set(value, forKey: "aiCloneAutoReply")
+        Task { try? await APIClient.shared.updateCloneSettings(enabled: isEnabled, autoReply: value) }
     }
 
     func startPolling() {
@@ -136,8 +154,10 @@ final class AICloneService: ObservableObject {
             guard parts.count >= 4 else { continue }
             let handle = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
             let name = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
-            let text = parts[2].trimmingCharacters(in: .whitespacesAndNewlines)
-            let dateStr = parts[3].trimmingCharacters(in: .whitespacesAndNewlines)
+            // Rejoin middle parts in case the message itself contained "|||"
+            let text = parts[2..<(parts.count - 1)].joined(separator: "|||")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let dateStr = parts[parts.count - 1].trimmingCharacters(in: .whitespacesAndNewlines)
 
             let msgDate = parseAppleScriptDate(dateStr) ?? Date()
             if msgDate.timeIntervalSince1970 > lastIMessageDate {
@@ -234,8 +254,11 @@ final class AICloneService: ObservableObject {
     // MARK: - Handle Incoming
 
     private func handleIncoming(platform: String, sender: String, chatId: String, message: String) async {
+        // Only deduplicate against messages still awaiting action (status == .pending).
+        // Allowing the same text from the same chat after it has been sent/dismissed lets
+        // legitimate repeated short messages (e.g. "ok", "thanks") through.
         let isDuplicate = pendingMessages.contains {
-            $0.platform == platform && $0.chatIdentifier == chatId && $0.incoming == message
+            $0.status == .pending && $0.platform == platform && $0.chatIdentifier == chatId && $0.incoming == message
         }
         guard !isDuplicate else { return }
 
@@ -311,6 +334,8 @@ final class AICloneService: ObservableObject {
             await sendViaTelegram(chatId: msg.chatIdentifier, text: msg.draftReply)
         case "imessage":
             await sendViaIMessage(handle: msg.chatIdentifier, text: msg.draftReply)
+        case "whatsapp":
+            await sendViaWhatsApp(to: msg.chatIdentifier, text: msg.draftReply)
         default:
             break
         }
@@ -322,6 +347,14 @@ final class AICloneService: ObservableObject {
             try await APIClient.shared.telegramSend(chatId: id, text: text)
         } catch {
             log("AICloneService: Telegram send failed: \(error)")
+        }
+    }
+
+    private func sendViaWhatsApp(to: String, text: String) async {
+        do {
+            try await APIClient.shared.whatsappSend(to: to, text: text)
+        } catch {
+            log("AICloneService: WhatsApp send failed: \(error)")
         }
     }
 

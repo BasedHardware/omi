@@ -53,5 +53,10 @@ def get_platform_settings(uid: str, platform: str) -> Optional[dict]:
 def update_platform_settings(uid: str, platform: str, data: dict) -> None:
     """Update a single platform's settings without clobbering other platforms."""
     ref = db.collection('users').document(uid).collection('ai_clone').document('settings')
-    # Use Firestore .update() with dot-notation path so only this platform's sub-doc changes.
-    ref.update({f'platforms.{platform}': data})
+    try:
+        # Dot-notation path updates only this platform's sub-doc without clobbering others.
+        ref.update({f'platforms.{platform}': data})
+    except Exception:
+        # First write — document doesn't exist yet (Firestore NotFound).
+        # Create it via set+merge so subsequent updates work correctly.
+        ref.set({'platforms': {platform: data}}, merge=True)

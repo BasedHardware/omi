@@ -5,6 +5,7 @@ import SwiftUI
 struct AIClonePage: View {
   @StateObject private var service = AICloneService.shared
   @State private var showTelegramSetup = false
+  @State private var showWhatsAppSetup = false
   @State private var editingMessageId: String? = nil
   @State private var editText = ""
 
@@ -101,8 +102,9 @@ struct AIClonePage: View {
         )
         platformSetupCard(
           icon: "phone.fill", color: Color(red: 0.15, green: 0.7, blue: 0.3), name: "WhatsApp",
-          description: "Coming soon",
-          isConnected: false, isComingSoon: true, action: {}
+          description: "Bot via WhatsApp\nCloud API",
+          isConnected: service.whatsAppConfigured,
+          action: { showWhatsAppSetup = true }
         )
       }
 
@@ -119,6 +121,7 @@ struct AIClonePage: View {
     }
     .padding(.horizontal, 40)
     .sheet(isPresented: $showTelegramSetup) { telegramSetupSheet }
+    .sheet(isPresented: $showWhatsAppSetup) { whatsAppSetupSheet }
   }
 
   // MARK: - Platform Panel
@@ -152,7 +155,9 @@ struct AIClonePage: View {
 
         platformRow(
           icon: "phone.fill", color: Color(red: 0.15, green: 0.7, blue: 0.3), name: "WhatsApp",
-          isConnected: false, statusLabel: "Coming soon", isDisabled: true, action: {}
+          isConnected: service.whatsAppConfigured,
+          statusLabel: service.whatsAppConfigured ? service.whatsAppBotPhone : "Tap to set up bot",
+          action: { showWhatsAppSetup = true }
         )
 
         Divider().opacity(0.2).padding(.horizontal, 16)
@@ -164,7 +169,7 @@ struct AIClonePage: View {
             .padding(.horizontal, 16)
           Toggle(isOn: Binding(
             get: { service.autoReply },
-            set: { v in service.autoReply = v; UserDefaults.standard.set(v, forKey: "aiCloneAutoReply") }
+            set: { v in service.setAutoReply(v) }
           )) {
             VStack(alignment: .leading, spacing: 2) {
               Text("Send automatically")
@@ -191,6 +196,7 @@ struct AIClonePage: View {
       }
     }
     .sheet(isPresented: $showTelegramSetup) { telegramSetupSheet }
+    .sheet(isPresented: $showWhatsAppSetup) { whatsAppSetupSheet }
   }
 
   // MARK: - Platform Row
@@ -438,15 +444,26 @@ struct AIClonePage: View {
     .disabled(isComingSoon)
   }
 
+  private static let shortDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateStyle = .short
+    f.timeStyle = .none
+    return f
+  }()
+
   private func relativeTime(_ date: Date) -> String {
     let seconds = Int(-date.timeIntervalSinceNow)
     if seconds < 60 { return "just now" }
     if seconds < 3600 { return "\(seconds / 60)m ago" }
     if seconds < 86400 { return "\(seconds / 3600)h ago" }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .none
-    return formatter.string(from: date)
+    return AIClonePage.shortDateFormatter.string(from: date)
+  }
+
+  // MARK: - WhatsApp Setup Sheet
+
+  private var whatsAppSetupSheet: some View {
+    WhatsAppSetupSheet(isPresented: $showWhatsAppSetup)
+      .environmentObject(service)
   }
 
   // MARK: - Telegram Setup Sheet (Phone + OTP)
@@ -454,6 +471,96 @@ struct AIClonePage: View {
   private var telegramSetupSheet: some View {
     TelegramSetupSheet(isPresented: $showTelegramSetup)
       .environmentObject(service)
+  }
+}
+
+// MARK: - WhatsApp Setup Sheet
+
+private struct WhatsAppSetupSheet: View {
+  @Binding var isPresented: Bool
+  @EnvironmentObject var service: AICloneService
+  @State private var botPhoneDraft = ""
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      HStack {
+        Text(service.whatsAppConfigured ? "WhatsApp Bot" : "Set Up WhatsApp Bot")
+          .scaledFont(size: 18, weight: .bold).foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        Button(action: { isPresented = false }) {
+          Image(systemName: "xmark.circle.fill").scaledFont(size: 20).foregroundColor(OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+      }
+      .padding(24)
+
+      Divider().opacity(0.2)
+
+      if service.whatsAppConfigured {
+        // Connected state
+        VStack(spacing: 20) {
+          Image(systemName: "checkmark.circle.fill")
+            .scaledFont(size: 48).foregroundColor(OmiColors.success)
+          Text(service.whatsAppBotPhone)
+            .scaledFont(size: 15, weight: .semibold).foregroundColor(OmiColors.textPrimary)
+          Text("Omi is replying to WhatsApp messages sent to this bot number.")
+            .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary).multilineTextAlignment(.center)
+          Button(action: { service.configureWhatsApp(botPhone: ""); isPresented = false }) {
+            Text("Disconnect").scaledFont(size: 13).foregroundColor(OmiColors.warning)
+          }
+          .buttonStyle(.plain)
+        }
+        .padding(28)
+      } else {
+        VStack(alignment: .leading, spacing: 20) {
+          // How it works
+          VStack(alignment: .leading, spacing: 6) {
+            Label("How it works", systemImage: "info.circle")
+              .scaledFont(size: 12, weight: .semibold).foregroundColor(OmiColors.textTertiary)
+            Text("Omi uses a WhatsApp Cloud API bot number. Your contacts message the bot, and Omi replies using your memories.\n\nGet your phone number ID and access token at developers.facebook.com → WhatsApp.")
+              .scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
+          }
+          .padding(14)
+          .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary.opacity(0.5)))
+
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Bot phone number (E.164 format)")
+              .scaledFont(size: 13, weight: .semibold).foregroundColor(OmiColors.textSecondary)
+            TextField("+1 555 000 0000", text: $botPhoneDraft)
+              .textFieldStyle(.plain).scaledFont(size: 14).foregroundColor(OmiColors.textPrimary)
+              .padding(12)
+              .background(
+                RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary)
+                  .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.border.opacity(0.3), lineWidth: 1))
+              )
+            Text("Set WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN in your backend .env")
+              .scaledFont(size: 11).foregroundColor(OmiColors.textQuaternary)
+          }
+
+          HStack {
+            Spacer()
+            Button("Cancel") { isPresented = false }
+              .buttonStyle(.plain).foregroundColor(OmiColors.textSecondary)
+            Button(action: { service.configureWhatsApp(botPhone: botPhoneDraft); isPresented = false }) {
+              Text("Save")
+                .scaledFont(size: 13, weight: .semibold).foregroundColor(.white)
+                .padding(.horizontal, 20).padding(.vertical, 9)
+                .background(
+                  RoundedRectangle(cornerRadius: 10)
+                    .fill(botPhoneDraft.count > 5 ? OmiColors.purplePrimary : OmiColors.textQuaternary.opacity(0.3))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(botPhoneDraft.count < 6)
+          }
+        }
+        .padding(24)
+      }
+    }
+    .frame(width: 420)
+    .background(OmiColors.backgroundPrimary)
+    .preferredColorScheme(.dark)
+    .onAppear { botPhoneDraft = service.whatsAppBotPhone }
   }
 }
 

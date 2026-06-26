@@ -1634,6 +1634,22 @@ extension APIClient {
 
   // MARK: - PATCH helper
 
+  func put<T: Decodable, B: Encodable>(
+    _ endpoint: String,
+    body: B,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil
+  ) async throws -> T {
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.httpBody = try JSONEncoder().encode(body)
+
+    return try await performRequest(request)
+  }
+
   func patch<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -5316,6 +5332,23 @@ struct CloneTelegramUserInfo: Decodable {
 }
 
 extension APIClient {
+  func updateCloneSettings(enabled: Bool, autoReply: Bool) async throws {
+    struct Req: Encodable {
+      let enabled: Bool
+      let autoReply: Bool
+      let platforms: [String: String]
+      enum CodingKeys: String, CodingKey {
+        case enabled; case autoReply = "auto_reply"; case platforms
+      }
+    }
+    let _: CloneSimpleOK = try await put("/v1/ai-clone/settings", body: Req(enabled: enabled, autoReply: autoReply, platforms: [:]))
+  }
+
+  func whatsappSend(to: String, text: String) async throws {
+    struct Req: Encodable { let to: String; let text: String }
+    let _: CloneSimpleOK = try await post("/v1/ai-clone/whatsapp/send", body: Req(to: to, text: text))
+  }
+
   func generateCloneReply(platform: String, sender: String, message: String) async throws -> CloneGenerateReplyResponse {
     let body = CloneGenerateReplyRequest(platform: platform, sender: sender, message: message, conversationHistory: nil)
     return try await post("/v1/ai-clone/generate-reply", body: body)

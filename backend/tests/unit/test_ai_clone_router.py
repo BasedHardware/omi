@@ -101,8 +101,15 @@ _tg_stub.verify_code = AsyncMock(return_value={'display_name': 'Alice', 'phone':
 _tg_stub.disconnect = AsyncMock()
 _tg_stub.poll_new_messages = AsyncMock(return_value=[])
 _tg_stub.send_message = AsyncMock(return_value=True)
+
+# Stub whatsapp_client
+_wa_stub = types.ModuleType('utils.integrations.whatsapp_client')
+_wa_stub.VERIFY_TOKEN = 'test-verify-token'
+_wa_stub.send_message = AsyncMock(return_value=True)
+
 sys.modules.setdefault('utils.integrations', types.ModuleType('utils.integrations'))
 sys.modules['utils.integrations.telegram_client'] = _tg_stub
+sys.modules['utils.integrations.whatsapp_client'] = _wa_stub
 
 # Stub executors
 _exec_stub = types.ModuleType('utils.executors')
@@ -145,6 +152,7 @@ _router_mod.run_blocking = _run_blocking
 _router_mod.db_executor = _exec_stub.db_executor
 _router_mod.llm_executor = _exec_stub.llm_executor
 _router_mod.tg = _tg_stub
+_router_mod.wa = _wa_stub
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

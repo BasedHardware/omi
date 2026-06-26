@@ -15,6 +15,7 @@ import logging
 import os
 
 from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError
 from telethon.sessions import StringSession
 from telethon.tl.types import User
 
@@ -108,7 +109,12 @@ async def verify_code(uid: str, phone: str, code: str, phone_code_hash: str) -> 
         client = TelegramClient(StringSession(), API_ID, API_HASH)
         await client.connect()
 
-    await client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
+    try:
+        await client.sign_in(phone=phone, code=code, phone_code_hash=phone_code_hash)
+    except SessionPasswordNeededError:
+        # Account has two-step verification — caller must collect password and sign in separately.
+        _pending_clients[phone] = client  # preserve client for the 2FA step
+        raise ValueError('two_factor_required')
 
     me: User = await client.get_me()
     display_name = ' '.join(filter(None, [me.first_name, me.last_name])) or me.username or phone
@@ -147,7 +153,10 @@ async def send_message(uid: str, chat_id: int, text: str) -> bool:
     if not client:
         return False
     try:
-        await client.send_message(chat_id, text)
+        # Resolve entity explicitly — StringSession does not persist the access-hash cache
+        # across process restarts, so bare int chat_ids can raise ValueError after restart.
+        entity = await client.get_input_entity(chat_id)
+        await client.send_message(entity, text)
         return True
     except Exception as e:
         logger.error(f'Telegram send error for uid={uid}: {e}')
