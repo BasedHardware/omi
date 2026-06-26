@@ -234,12 +234,15 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func controlTool(
+  func directControlTool(
     clientId: String,
     harnessMode: String,
     name: String,
     input: [String: Any]
   ) async throws -> String {
+    guard let ownerId = currentOwnerId() else {
+      throw BridgeError.agentError("Agent control requires a signed-in owner")
+    }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
 
     let requestId = UUID().uuidString
@@ -250,20 +253,18 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         continuation: continuation
       )
-      var dict: [String: Any] = [
-        "type": "control_tool",
+      let dict: [String: Any] = [
+        "type": "direct_control_tool",
         "protocolVersion": 2,
         "requestId": requestId,
         "clientId": clientId,
         "name": name,
         "input": input,
+        "ownerId": ownerId,
       ]
-      if let ownerId = currentOwnerId() {
-        dict["ownerId"] = ownerId
-      }
       let sent = sendJson(dict)
       if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
-        request.continuation.resume(throwing: BridgeError.agentError("Failed to send control tool request"))
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
   }

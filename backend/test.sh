@@ -87,6 +87,7 @@ pytest tests/unit/test_file_upload_endpoint_security.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
+pytest tests/unit/utils/test_listen_pusher_session.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
@@ -105,6 +106,7 @@ pytest tests/unit/test_speech_profile_wav_decode.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
 pytest tests/unit/test_deferred_blob_janitor.py -v
 pytest tests/unit/test_audio_merge_tasks.py -v
+pytest tests/unit/test_sync_playback_service.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_import_jobs_malformed.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v

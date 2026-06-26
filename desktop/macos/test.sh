@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "=== Desktop Launcher Script Tests ==="
 cd "$SCRIPT_DIR"
 bash tests/test-app-config.sh
+bash tests/test-settings-seed.sh
 echo ""
 
 echo "=== Rust Backend Tests ==="

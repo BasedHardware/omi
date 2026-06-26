@@ -84,22 +84,65 @@ enum MemoryBankConnector {
       throw ConnectError.notInstalled(
         "Hermes not found locally (~/.hermes). Install Hermes, then try again.")
     }
+
+    // 1. Wire the Omi memory MCP into config.yaml (idempotent).
     let cfg = hermesDir.appendingPathComponent("config.yaml")
     var content = (try? String(contentsOf: cfg, encoding: .utf8)) ?? ""
-    if content.contains("omi-memory") {
-      return "Hermes already has the Omi memory MCP in ~/.hermes/config.yaml."
+    let alreadyWired = content.contains("omi-memory")
+    if !alreadyWired {
+      let entry = hermesEntry(key: key)
+      if let range = content.range(of: "mcp_servers:") {
+        // Insert as the first child under the existing mcp_servers: key.
+        content.replaceSubrange(range, with: "mcp_servers:\n" + entry)
+      } else {
+        if !content.isEmpty && !content.hasSuffix("\n") { content += "\n" }
+        content += "\nmcp_servers:\n" + entry
+      }
+      try content.write(to: cfg, atomically: true, encoding: .utf8)
     }
-    let entry = hermesEntry(key: key)
-    if let range = content.range(of: "mcp_servers:") {
-      // Insert as the first child under the existing mcp_servers: key.
-      content.replaceSubrange(range, with: "mcp_servers:\n" + entry)
-    } else {
-      if !content.isEmpty && !content.hasSuffix("\n") { content += "\n" }
-      content += "\nmcp_servers:\n" + entry
+
+    // 2. Tell the agent to *use* it — append a "search Omi first" note to the
+    //    Hermes system prompt (SOUL.md), matching OpenClaw's memory file. Having
+    //    the tool isn't enough; this makes the agent prefer Omi memory.
+    let noteAdded = ensureHermesSoulNote(hermesDir: hermesDir)
+
+    if alreadyWired {
+      return noteAdded
+        ? "Hermes already had the Omi MCP — added the 'search Omi first' note to SOUL.md."
+        : "Hermes already connected — Omi MCP in config.yaml, note in SOUL.md."
     }
-    try content.write(to: cfg, atomically: true, encoding: .utf8)
-    // Also drop a one-line "search Omi first" note next to the core prompt if present.
-    return "Connected Hermes — added the Omi memory MCP to ~/.hermes/config.yaml."
+    return "Connected Hermes — added the Omi MCP to config.yaml and a 'search Omi first' note to SOUL.md."
+  }
+
+  /// Appends the marked "search Omi first" block to the Hermes system prompt so
+  /// every user's agent is told to prefer Omi memory. Uses the first existing
+  /// prompt file, creating SOUL.md when none exists. Writes *through* a symlinked
+  /// prompt instead of replacing it. Idempotent; returns true only when it wrote.
+  @discardableResult
+  private static func ensureHermesSoulNote(hermesDir: URL) -> Bool {
+    let fm = FileManager.default
+    let candidates = ["SOUL.md", "soul.md", "AGENTS.md", "system.md"]
+    let rel =
+      candidates.first(where: {
+        fm.fileExists(atPath: hermesDir.appendingPathComponent($0).path)
+      }) ?? "SOUL.md"
+    let url = hermesDir.appendingPathComponent(rel)
+    var soul = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    if soul.contains(marker) { return false }
+    if !soul.isEmpty && !soul.hasSuffix("\n") { soul += "\n" }
+    soul += "\n" + hermesSoulBlock() + "\n"
+    let isSymlink = (try? fm.destinationOfSymbolicLink(atPath: url.path)) != nil
+    try? soul.write(to: url, atomically: !isSymlink, encoding: .utf8)
+    return true
+  }
+
+  private static func hermesSoulBlock() -> String {
+    """
+    <!-- \(marker) -->
+    ## OMI memory (search FIRST)
+    Omi is your memory bank. Before any task, search Omi memory first for context, then save durable new facts back to it. The `omi-memory` MCP server is configured for you — use it.
+    <!-- /\(marker) -->
+    """
   }
 
   private static func hermesEntry(key: String) -> String {

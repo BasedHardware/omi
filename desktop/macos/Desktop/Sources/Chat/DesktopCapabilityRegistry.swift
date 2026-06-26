@@ -207,17 +207,17 @@ enum DesktopCapabilityRegistry {
       toolName: "list_agent_sessions",
       title: "List Agent Sessions",
       latency: .fastLocal,
-      surfaces: [.desktopChat],
+      surfaces: [.desktopChat, .realtimeHub],
       summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
-        "Use for current or recent kernel-backed Omi agents/subagents across main chat, task chat, and any future migrated floating-pill sessions.",
+        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
         "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
       ]),
     Capability(
       toolName: "get_agent_run",
       title: "Get Agent Run",
       latency: .fastLocal,
-      surfaces: [.desktopChat],
+      surfaces: [.desktopChat, .realtimeHub],
       summary: "Inspect one canonical Omi agent run.",
       bullets: [
         "Use a runId from list_agent_sessions or a correlated Omi result.",
@@ -227,7 +227,7 @@ enum DesktopCapabilityRegistry {
       toolName: "cancel_agent_run",
       title: "Cancel Agent Run",
       latency: .fastLocal,
-      surfaces: [.desktopChat],
+      surfaces: [.desktopChat, .realtimeHub],
       summary: "Request cancellation for one canonical Omi agent run through the runtime kernel.",
       bullets: [
         "Use when the user asks to stop a running Omi agent/subagent.",
@@ -237,7 +237,7 @@ enum DesktopCapabilityRegistry {
       toolName: "inspect_agent_artifacts",
       title: "Inspect Agent Artifacts",
       latency: .fastLocal,
-      surfaces: [.desktopChat],
+      surfaces: [.desktopChat, .realtimeHub],
       summary: "Inspect canonical artifact metadata for an Omi agent session, run, or attempt.",
       bullets: [
         "Returns artifact references and metadata only.",
@@ -247,7 +247,7 @@ enum DesktopCapabilityRegistry {
       toolName: "update_agent_artifact_lifecycle",
       title: "Update Agent Artifact Lifecycle",
       latency: .fastLocal,
-      surfaces: [.desktopChat],
+      surfaces: [.desktopChat, .realtimeHub],
       summary: "Update metadata-only lifecycle state for one canonical Omi agent artifact.",
       bullets: [
         "Use to mark artifact metadata as retained, dismissed, or opened after a user-visible artifact decision.",
@@ -397,6 +397,8 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can inspect your local task-chat agents/subagents and floating agent pills with get_task_agent_status. If the user asks about your subagents, background agents, running agents, finished agents, or task-agent errors/timeouts, call it before answering.
+    - You can inspect and stop canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run. Use these for agents created in chat, PTT/realtime, task chat, or any other Omi surface when a canonical run id is available.
+    - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
     - You can manage circular floating agent pills with manage_agent_pills after checking status.
     - You can start a background agent with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
     """
