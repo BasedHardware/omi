@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
+from database import knowledge_graph as kg_db
 from utils.memory.atom_keyword_index import (
     delete_atom_keyword_doc,
     keyword_search_memory_ids,
@@ -57,17 +58,15 @@ def neutral_vector_id_for_memory(memory_id: str) -> str:
 
 
 def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str]) -> None:
-    """WS-J hook: KG nodes/edges track ``memory_ids`` but lack selective invalidation.
-
-    Full retract/reprocess defers to eventual ``rebuild_knowledge_graph`` until a targeted
-    purge lands. Account delete wipes KG subcollections via ``delete_user_data`` recursion.
-    """
+    """Prune retracted/superseded memory citations from the user's KG."""
     if not memory_ids:
         return
+    pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
     logger.info(
-        "kg_invalidation_deferred uid=%s retracted_memory_count=%d",
+        "kg_citations_pruned uid=%s retracted_memory_count=%d pruned_entities=%d",
         uid,
         len(memory_ids),
+        pruned,
     )
 
 
@@ -528,6 +527,12 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "visibility": _visibility_from_payload(data),
         "user_asserted": _user_asserted_from_payload(data),
     }
+    if data.get("subject_entity_id"):
+        patch_payload["subject_entity_id"] = data["subject_entity_id"]
+    if data.get("predicate"):
+        patch_payload["predicate"] = data["predicate"]
+    if data.get("arguments"):
+        patch_payload["arguments"] = data["arguments"]
 
     result = apply_long_term_patch_firestore(
         uid=uid,
