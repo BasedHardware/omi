@@ -380,6 +380,12 @@ struct FloatingControlBarView: View {
                     manager: agentPills,
                     onBackToOmi: {
                         state.leaveAgentSurface()
+                        // Reinstall the response-height observer for the restored
+                        // main surface. Without this the window keeps observing the
+                        // .agent surface and ignores subsequent .mainResponse
+                        // height reports, leaving the panel stuck at agent-chat size.
+                        (window as? FloatingControlBarWindow)?
+                            .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
                     },
                     onEscape: onEscape
                 )
@@ -651,13 +657,13 @@ struct FloatingControlBarView: View {
             .fill(compactPillFill)
             .frame(width: 28, height: 6)
             .shadow(
-                color: state.isVoiceResponseActive ? OmiColors.purpleAccent.opacity(0.95) : .clear,
+                color: state.isVoiceResponseActive ? Color.white.opacity(0.85) : .clear,
                 radius: state.isVoiceResponseActive ? 16 : 0,
                 x: 0,
                 y: 0
             )
             .shadow(
-                color: state.isVoiceResponseActive ? OmiColors.purplePrimary.opacity(0.72) : .clear,
+                color: state.isVoiceResponseActive ? Color.white.opacity(0.45) : .clear,
                 radius: state.isVoiceResponseActive ? 28 : 0,
                 x: 0,
                 y: 0
@@ -668,9 +674,9 @@ struct FloatingControlBarView: View {
                         .stroke(
                             LinearGradient(
                                 colors: [
-                                    OmiColors.purpleAccent,
+                                    Color.white.opacity(0.9),
                                     Color(red: 0.25, green: 0.75, blue: 1.0),
-                                    OmiColors.purplePrimary
+                                    Color.white.opacity(0.7)
                                 ],
                                 startPoint: .leading,
                                 endPoint: .trailing
@@ -688,9 +694,9 @@ struct FloatingControlBarView: View {
         if state.isVoiceResponseActive {
             return LinearGradient(
                 colors: [
-                    OmiColors.purpleAccent,
-                    Color(red: 0.50, green: 0.33, blue: 1.0),
-                    OmiColors.purplePrimary
+                    Color.white.opacity(0.9),
+                    Color(red: 0.50, green: 0.75, blue: 1.0),
+                    Color.white.opacity(0.7)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
@@ -922,10 +928,10 @@ private struct NotchResponseGlowView: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color(red: 0.45, green: 0.18, blue: 1.0).opacity(1.0),
-                                Color(red: 0.88, green: 0.22, blue: 1.0).opacity(1.0),
-                                Color(red: 0.22, green: 0.72, blue: 1.0).opacity(1.0),
-                                Color(red: 0.72, green: 0.16, blue: 1.0).opacity(1.0)
+                                Color.white.opacity(1.0),
+                                Color(red: 0.72, green: 0.88, blue: 1.0).opacity(1.0),
+                                Color(red: 0.88, green: 0.95, blue: 1.0).opacity(1.0),
+                                Color.white.opacity(1.0)
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
@@ -938,10 +944,10 @@ private struct NotchResponseGlowView: View {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.0),
-                                .init(color: OmiColors.purpleAccent.opacity(0.55), location: 0.28),
+                                .init(color: Color.white.opacity(0.55), location: 0.28),
                                 .init(color: Color(red: 0.22, green: 0.88, blue: 1.0).opacity(1.0), location: 0.45),
-                                .init(color: .white.opacity(1.0), location: 0.53),
-                                .init(color: Color(red: 1.0, green: 0.34, blue: 0.95).opacity(0.95), location: 0.70),
+                                .init(color: Color.white.opacity(1.0), location: 0.53),
+                                .init(color: Color(red: 1.0, green: 0.96, blue: 0.92).opacity(0.95), location: 0.70),
                                 .init(color: .clear, location: 1.0)
                             ],
                             startPoint: sweepStart,
@@ -1233,7 +1239,7 @@ private struct AgentMainChatView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(OmiColors.purplePrimary.opacity(0.12))
+        .background(Color.white.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -1244,7 +1250,7 @@ private struct AgentMainChatView: View {
             } label: {
                 Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
                     .scaledFont(size: 17, weight: .semibold)
-                    .foregroundColor(isRecording ? OmiColors.purpleAccent : .secondary)
+                    .foregroundColor(isRecording ? Color.white : .secondary)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
