@@ -1,0 +1,19 @@
+desktop/macos/CHANGELOG.json
+  s_838ede91b21776::t_246d06b3808ce0 3-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "16ad36ebded2128c662514af00085c130a9ada2b",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
