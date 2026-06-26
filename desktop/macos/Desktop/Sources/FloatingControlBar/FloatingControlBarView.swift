@@ -442,6 +442,12 @@ struct FloatingControlBarView: View {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
         if state.conversationSurface == .agent(pill.id) {
             state.leaveAgentSurface()
+            // Reinstall the response-height observer for the restored main surface,
+            // mirroring the Back-to-Omi button path. Without this the window keeps
+            // observing the .agent surface and ignores subsequent .mainResponse
+            // height reports, leaving the panel stuck at agent-chat size.
+            (window as? FloatingControlBarWindow)?
+                .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
             return
         }
         agentPills.markViewed(pillID: pill.id)
@@ -1628,7 +1634,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
 
     var color: Color {
         switch self {
-        case .running: return Color(red: 0.74, green: 0.32, blue: 1.0)
+        case .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
         case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
         case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
@@ -1637,7 +1643,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
 
     var highlightColor: Color {
         switch self {
-        case .running: return Color(red: 1.0, green: 0.20, blue: 0.86)
+        case .running: return Color(red: 1.0, green: 0.62, blue: 0.20)
         case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
         case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
@@ -1646,7 +1652,7 @@ private enum NotchAgentStatusGroup: String, Identifiable {
 
     var shadowColor: Color {
         switch self {
-        case .running: return Color(red: 0.36, green: 0.06, blue: 0.86)
+        case .running: return Color(red: 0.72, green: 0.36, blue: 0.04)
         case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
         case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
         case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
