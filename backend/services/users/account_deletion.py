@@ -143,6 +143,12 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         except Exception as e:
             logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
 
+    # Persist the pending-deletion marker FIRST, before any irreversible action
+    # (Stripe cancel, Firebase user delete). Retry transient Firestore failures.
+    # If the marker cannot be written, do NOT proceed — without it, a deploy/restart
+    # that cancels the queued wipe leaves no recovery path for the user's data.
+    _persist_wipe_marker_with_retry(uid)
+
     try:
         sub = users_db.get_user_subscription(uid)
         if sub and sub.stripe_subscription_id:
@@ -151,12 +157,6 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
                 logger.error(f'delete_account stripe cancel returned None for {uid}')
     except Exception as e:
         logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
-
-    # Persist the pending-deletion marker BEFORE the irreversible Firebase user
-    # deletion. Retry transient Firestore failures. If the marker cannot be
-    # written, do NOT proceed — without it, a deploy/restart that cancels the
-    # queued wipe leaves no recovery path for the user's Firestore/GCS/vector data.
-    _persist_wipe_marker_with_retry(uid)
 
     try:
         auth.delete_account(uid)

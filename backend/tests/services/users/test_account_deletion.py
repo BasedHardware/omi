@@ -84,9 +84,9 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
     assert calls == [
         ('feedback', 'uid1', 'unused', 'details'),
+        ('wipe_started', 'uid1'),
         ('sub', 'uid1'),
         ('stripe', 'sub_123'),
-        ('wipe_started', 'uid1'),
         ('auth', 'uid1'),
         ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
