@@ -19,7 +19,7 @@ def generate_clone_reply(
             role = sender if turn.get('role') == 'user' else user_name
             # Apply the same sanitization as the current message to prevent
             # stored malicious content from being replayed into future prompts.
-            content = turn.get('content', '').replace('```', "'''")
+            content = str(turn.get('content') or '').replace('```', "'''")
             history_lines.append(f'{role}: {content}')
         history_str = '\n'.join(history_lines) + '\n'
 
