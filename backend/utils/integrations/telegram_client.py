@@ -73,7 +73,7 @@ async def get_client(uid: str) -> TelegramClient | None:
     client = TelegramClient(StringSession(session_str), API_ID, API_HASH)
     await client.connect()
     if not await client.is_user_authorized():
-        del _clients[uid]
+        _clients.pop(uid, None)  # safe — uid may not be in cache yet
         return None
 
     _clients[uid] = client
