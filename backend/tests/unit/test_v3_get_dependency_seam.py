@@ -1,4 +1,4 @@
-from utils.memory.v3_get_dependency_seam import (
+from testing.memory.v3_get_dependency_seam import (
     LOW_CARDINALITY_DECISION_CODES,
     V3GetDependencyAdapters,
     V3GetDependencyContext,
