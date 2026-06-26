@@ -30,6 +30,11 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertTrue(summary.contains("running"))
     XCTAssertTrue(summary.contains("mode act"))
     XCTAssertFalse(summary.contains("completed"))
+    XCTAssertFalse(summary.contains("session_123"))
+    XCTAssertFalse(summary.contains("run_active"))
+    XCTAssertFalse(summary.contains("run_terminal"))
+    XCTAssertFalse(summary.contains("attempt_active"))
+    XCTAssertFalse(summary.contains("attempt_terminal"))
     XCTAssertEqual(resolved["runId"] as? String, "run_active")
     XCTAssertEqual(resolved["attemptId"] as? String, "attempt_active")
   }
