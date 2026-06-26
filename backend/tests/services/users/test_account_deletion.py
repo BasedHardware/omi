@@ -143,9 +143,11 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
 
 
 def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
-    """Firebase errors propagate. The marker IS written first (before auth.delete_account)."""
+    """Firebase errors propagate. The marker IS written first, then cancelled on failure."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
+    cancel_wipe = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'cancel_user_deletion_wipe', cancel_wipe)
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('permission denied')))
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
@@ -159,8 +161,10 @@ def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
         raise AssertionError('expected firebase error to propagate')
 
     submit.assert_not_called()
-    # Marker is written BEFORE Firebase deletion, so it IS called even when Firebase fails.
+    # Marker is written BEFORE Firebase deletion, so it IS called.
     account_deletion.users_db.mark_user_deletion_wipe_started.assert_called_once_with('uid1')
+    # On Firebase failure, the marker is cancelled so reconciliation won't wipe data.
+    cancel_wipe.assert_called_once_with('uid1')
 
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):

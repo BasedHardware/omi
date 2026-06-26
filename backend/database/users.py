@@ -264,27 +264,52 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
+def cancel_user_deletion_wipe(uid: str):
+    """Cancel a pending deletion-wipe marker.
+
+    Called when the Firebase auth deletion fails after the marker was already
+    persisted. Without this, the reconciliation worker would later wipe the
+    user's data even though their Firebase account still exists.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
 def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timedelta(minutes=10)) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``pending``/``failed`` records first (always actionable), then adds
-    stale ``retrying`` claims (worker probably crashed) only if room remains
-    under ``limit``. Non-stale ``retrying`` claims are excluded so they cannot
-    crowd out actionable work under backlog.
+    Queries ``failed`` records and ``pending`` records older than ``stale_after``
+    (always actionable), then adds stale ``retrying`` claims (worker probably
+    crashed) only if room remains under ``limit``. Fresh ``pending`` markers from
+    in-progress deletions are excluded so the reconciler doesn't double-enqueue a
+    wipe that is still running.
     """
-    docs = db.collection('account_deletions').where('wipe_status', 'in', ['pending', 'failed']).limit(limit).stream()
-    result = [doc.to_dict() | {'uid': doc.id} for doc in docs]
+    stale_cutoff = datetime.now(timezone.utc) - stale_after
+
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(limit).stream()
+    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
-        stale_cutoff = datetime.now(timezone.utc) - stale_after
-        stale_docs = (
+        stale_pending_docs = (
+            db.collection('account_deletions')
+            .where('wipe_status', '==', 'pending')
+            .where('wipe_queued_at', '<', stale_cutoff)
+            .limit(limit - len(result))
+            .stream()
+        )
+        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_pending_docs)
+
+    if len(result) < limit:
+        stale_retrying_docs = (
             db.collection('account_deletions')
             .where('wipe_status', '==', 'retrying')
             .where('wipe_claimed_at', '<', stale_cutoff)
             .limit(limit - len(result))
             .stream()
         )
-        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_docs)
+        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_retrying_docs)
 
     return result
 

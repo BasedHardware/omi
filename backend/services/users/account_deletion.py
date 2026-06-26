@@ -140,6 +140,13 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
             logger.info(f'delete_account firebase user already gone for {uid}')
         else:
+            # Auth deletion failed — cancel the pending marker so the
+            # reconciliation worker doesn't wipe data for a user whose
+            # Firebase account still exists.
+            try:
+                users_db.cancel_user_deletion_wipe(uid)
+            except Exception as cancel_err:
+                logger.error(f'delete_account marker cancel failed for {uid}: {sanitize(str(cancel_err))}')
             raise
 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
