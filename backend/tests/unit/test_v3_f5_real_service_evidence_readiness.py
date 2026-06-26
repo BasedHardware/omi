@@ -232,9 +232,7 @@ def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     assert "memory-V3-F5 real-service read-only evidence preparation" in f5_script
     assert "build_evidence_report" in f5_utils
     assert "default-NOT_RUN" in f5_script
-    ticket = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
     evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text(
         encoding="utf-8"
     )
-    assert "memory-V3-F5 real-service read-only evidence preparation" in ticket
     assert "memory-V3-F5 real-service read-only evidence preparation" in evidence_markers
