@@ -83,6 +83,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("sourceX - targetX"))
     XCTAssertTrue(source.contains("sourceY - targetY"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
+    XCTAssertTrue(source.contains(".spring(response: 0.46, dampingFraction: 0.82)"))
+    XCTAssertTrue(source.contains(".delay(Double(index) * 0.022)"))
+    XCTAssertTrue(source.contains("NotchDockShape(bottomRadius: 18)"))
     XCTAssertTrue(source.contains(".frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("group?.color ?? Color.white.opacity(0.94)"))
@@ -113,7 +116,19 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("initialWindowFrame.width + deltaX * 2"))
     XCTAssertTrue(source.contains("let newOriginX = initialWindowFrame.midX - newWidth / 2"))
     XCTAssertTrue(source.contains("NSRect(x: newOriginX, y: newOriginY, width: newWidth, height: newHeight)"))
+    XCTAssertTrue(source.contains("finishUserResponseResize()"))
     XCTAssertFalse(source.contains("NSRect(x: initialWindowFrame.minX, y: newOriginY"))
+  }
+
+  func testResponseResizePreservesUserSurfaceSize() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("private func currentResponseSurfaceWidth() -> CGFloat"))
+    XCTAssertTrue(source.contains("let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())"))
+    XCTAssertTrue(source.contains("let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())"))
+    XCTAssertTrue(source.contains("func finishUserResponseResize()"))
+    XCTAssertTrue(source.contains("persistCurrentResponseSurfaceSize()"))
+    XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
   }
 
   func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {

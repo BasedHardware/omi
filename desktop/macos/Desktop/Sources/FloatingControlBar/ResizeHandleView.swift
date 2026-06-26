@@ -35,7 +35,7 @@ class ResizeHandleNSView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        (targetWindow as? FloatingControlBarWindow)?.isUserResizing = false
+        (targetWindow as? FloatingControlBarWindow)?.finishUserResponseResize()
     }
 
     override func mouseDragged(with event: NSEvent) {

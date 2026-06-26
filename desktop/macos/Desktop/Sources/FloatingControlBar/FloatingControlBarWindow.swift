@@ -150,6 +150,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
         return frame.height
     }
+    private func currentResponseSurfaceWidth() -> CGFloat {
+        guard state.isVoiceResponseActive else { return frame.width }
+        if notchModeEnabled {
+            return max(0, frame.width - Self.notchGlowOutsetX * 2)
+        }
+        return frame.width
+    }
     private var notchCollapsedSize: NSSize {
         NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: Self.notchChromeHeight)
     }
@@ -1188,10 +1195,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
         let maxHeight = baseHeight * 2
 
-        // Start at the larger of minResponseHeight or current frame height so we never
-        // shrink the window (e.g. during follow-up exchanges where it's already expanded).
-        let startHeight = max(Self.minResponseHeight, frame.height)
-        let initialSize = NSSize(width: expandedContentWidth, height: startHeight)
+        // Preserve manual response sizing across follow-up sends. The window may
+        // include glow padding, so compare and resize using the underlying black
+        // response surface rather than the inflated NSWindow frame.
+        let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())
+        let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())
+        let initialSize = NSSize(width: startWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
         setupResponseHeightObserver(maxHeight: maxHeight)
     }
@@ -1372,10 +1381,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         if !isResizingProgrammatically && !isUserResizing && state.showingAIResponse {
-            UserDefaults.standard.set(
-                NSStringFromSize(self.frame.size), forKey: FloatingControlBarWindow.sizeKey
-            )
+            persistCurrentResponseSurfaceSize()
         }
+    }
+
+    func finishUserResponseResize() {
+        isUserResizing = false
+        if state.showingAIResponse {
+            persistCurrentResponseSurfaceSize()
+        }
+    }
+
+    private func persistCurrentResponseSurfaceSize() {
+        let size = NSSize(width: currentResponseSurfaceWidth(), height: currentResponseSurfaceHeight())
+        UserDefaults.standard.set(NSStringFromSize(size), forKey: FloatingControlBarWindow.sizeKey)
     }
 }
 

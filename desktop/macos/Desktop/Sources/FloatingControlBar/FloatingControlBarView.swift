@@ -1428,7 +1428,10 @@ private struct NotchAgentFanoutRow: View {
             .frame(width: rowWidth, height: rowHeight)
         }
         .frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)
-        .background(Color.black)
+        .background {
+            NotchDockShape(bottomRadius: 18)
+                .fill(Color.black)
+        }
         .onAppear {
             syncPillStatusObservers()
             didFanOut = false
@@ -1469,8 +1472,8 @@ private extension View {
             .scaleEffect(didFanOut ? 1 : 0.34)
             .opacity(didFanOut ? 1 : 0.96)
             .animation(
-                .spring(response: 0.28, dampingFraction: 0.78)
-                    .delay(Double(index) * 0.012),
+                .spring(response: 0.46, dampingFraction: 0.82)
+                    .delay(Double(index) * 0.022),
                 value: didFanOut
             )
     }
