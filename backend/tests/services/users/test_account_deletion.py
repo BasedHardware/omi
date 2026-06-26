@@ -228,6 +228,9 @@ def test_start_account_deletion_writes_intent_before_pending(monkeypatch):
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):
     calls = []
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_running', lambda uid: calls.append(('running', uid))
+    )
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', lambda uid: calls.append(('twilio', uid)))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', lambda uid: calls.append(('purge', uid)))
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', lambda uid: calls.append(('firestore', uid)))
@@ -237,10 +240,17 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
 
     account_deletion.background_wipe_user_data('uid1')
 
-    assert calls == [('twilio', 'uid1'), ('purge', 'uid1'), ('firestore', 'uid1'), ('wipe_done', 'uid1')]
+    assert calls == [
+        ('running', 'uid1'),
+        ('twilio', 'uid1'),
+        ('purge', 'uid1'),
+        ('firestore', 'uid1'),
+        ('wipe_done', 'uid1'),
+    ]
 
 
 def test_background_wipe_user_data_swallows_failures(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock(side_effect=Exception('twilio down')))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
@@ -254,6 +264,22 @@ def test_background_wipe_user_data_swallows_failures(monkeypatch):
     # On failure, mark as failed (not completed) so a reconciliation worker can retry.
     account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
     account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
+
+
+def test_background_wipe_continues_when_running_marker_persist_fails(monkeypatch):
+    """A failure to transition to ``running`` is non-fial — the wipe still runs."""
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock(side_effect=Exception('firestore down'))
+    )
+    monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
+
+    # Should not raise — the wipe proceeds even if the running marker can't be written.
+    account_deletion.background_wipe_user_data('uid1')
+
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_called_once_with('uid1')
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):

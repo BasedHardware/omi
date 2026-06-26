@@ -104,7 +104,7 @@ def _make_txn():
     return txn
 
 
-def _run_claim(data, stale_after=timedelta(minutes=10)):
+def _run_claim(data, stale_after=timedelta(minutes=10), running_stale_after=timedelta(minutes=30)):
     """Run the claim transaction with given doc data, return (result, updates).
 
     The @transactional decorator wraps the raw function in a _Transactional
@@ -120,7 +120,7 @@ def _run_claim(data, stale_after=timedelta(minutes=10)):
         def get(self, transaction=None):
             return snapshot
 
-    result = raw_fn(txn, FakeDocRef(), stale_after)
+    result = raw_fn(txn, FakeDocRef(), stale_after, running_stale_after)
     return result, txn._updates
 
 
@@ -212,6 +212,63 @@ def test_claim_txn_returns_none_for_unknown_status():
         'uid': 'uid1',
         'wipe_status': 'completed',
         'wipe_completed_at': datetime.now(timezone.utc),
+    }
+    result, updates = _run_claim(data)
+    assert result is None
+    assert len(updates) == 0
+
+
+# ---------------------------------------------------------------------------
+# running state tests (review P2: don't reclaim live wipes solely by age)
+# ---------------------------------------------------------------------------
+
+
+def test_claim_txn_skips_fresh_running_marker():
+    """A fresh ``running`` marker belongs to a live worker — must NOT be claimed.
+
+    This is the core fix for the review concern: a slow but live wipe should
+    not be duplicate-claimed just because it has been running for a while.
+    The ``running`` stale window (default 30 min) is much longer than the
+    ``pending`` stale window (10 min).
+    """
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'running',
+        'wipe_running_at': now - timedelta(minutes=12),  # 12 min: stale for pending, fresh for running
+    }
+    result, updates = _run_claim(data)
+    assert result is None
+    assert len(updates) == 0
+
+
+def test_claim_txn_claims_stale_running_marker():
+    """A ``running`` marker older than ``running_stale_after`` IS claimed.
+
+    The worker almost certainly crashed or the pod was killed mid-execution.
+    """
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'running',
+        'wipe_running_at': now - timedelta(minutes=45),  # 45 min: stale even for running window
+    }
+    result, updates = _run_claim(data)
+    assert result == 'uid1'
+    assert updates[0][1]['wipe_status'] == 'retrying'
+
+
+def test_claim_txn_skips_running_marker_near_stale_boundary():
+    """A ``running`` marker just under the stale boundary is NOT claimed.
+
+    Uses 29 min to avoid sub-second timing flakiness with the default
+    30 min ``running_stale_after``.
+    """
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'running',
+        'wipe_running_at': now - timedelta(minutes=29),  # 29 min: just under 30 min boundary
     }
     result, updates = _run_claim(data)
     assert result is None
@@ -319,3 +376,35 @@ def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
     uids = {r['uid'] for r in result}
     assert uids == {'fail1', 'fail2'}
     assert len(result) == 2
+
+
+def test_get_pending_deletion_wipes_includes_stale_running():
+    """Stale ``running`` records (worker crashed mid-execution) are recovered.
+
+    A ``running`` marker older than ``running_stale_after`` (default 30 min)
+    is included so the reconciler can re-enqueue a wipe whose worker died.
+    """
+    now = datetime.now(timezone.utc)
+
+    docs_by_status = {
+        'failed': [],
+        'pending': [],
+        'running': [
+            # Fresh running — worker is live, should NOT be recovered.
+            {'uid': 'live1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=12)},
+            # Stale running — worker probably crashed, SHOULD be recovered.
+            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=45)},
+        ],
+        'retrying': [],
+    }
+
+    fake_collection = _FakeCollection(docs_by_status)
+    fake_db = types.SimpleNamespace()
+    fake_db.collection = lambda name: fake_collection
+
+    with patch.object(users_db, 'db', fake_db):
+        result = users_db.get_pending_deletion_wipes(limit=100)
+
+    uids = [r['uid'] for r in result]
+    assert 'crashed1' in uids, 'stale running record must be recovered'
+    assert 'live1' not in uids, 'fresh running record must not be recovered'

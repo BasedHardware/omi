@@ -70,6 +70,14 @@ def purge_derived_user_data(uid: str):
 
 def background_wipe_user_data(uid: str):
     try:
+        # Transition to ``running`` so the reconciler can distinguish a
+        # genuinely orphaned ``pending`` marker (queued but never started)
+        # from a wipe that is actively executing. Without this, a slow wipe
+        # could be duplicate-claimed after the short ``pending`` stale window.
+        try:
+            users_db.mark_user_deletion_wipe_running(uid)
+        except Exception as e:
+            logger.warning(f'delete_account marker transition to running failed for {uid}: {sanitize(str(e))}')
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         delete_user_caller_ids(uid)
         purge_derived_user_data(uid)
