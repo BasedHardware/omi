@@ -15,7 +15,7 @@ CUTOVER_EVIDENCE_GATES: Dict[str, Dict[str, Any]] = {
         "status": CUTOVER_GATE_STATUS_BLOCKED,
         "summary": "Milestone-specific Oracle review exists, but final approval for memory production cutover is absent.",
         "required_proof_commands_or_artifacts": [
-            "docs/epics/archive/memory_t20_oracle_milestone_review.md updated with final approval section",
+            "docs/operational/memory_readiness_evidence_markers.md updated with final approval section",
             "Signed milestone/final approval artifact explicitly changing Oracle verdict from BLOCK production rollout to approved",
         ],
         "blockers": ["Oracle verdict remains BLOCK production rollout / NO-GO", "final approval not granted"],
