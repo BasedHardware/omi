@@ -659,7 +659,11 @@ export class JsonlCompatibilityFacade {
     if (message.sessions && message.sessions.length > 0) {
       return message.sessions;
     }
-    const models = message.models ?? (message.model ? [message.model] : [this.defaultModel() ?? "default"]);
+    const defaultModel = this.defaultModel();
+    const models = message.models ?? (message.model ? [message.model] : defaultModel ? [defaultModel] : []);
+    if (models.length === 0) {
+      return [{ key: "default" }];
+    }
     return models.map((model) => ({ key: model, model }));
   }
 
