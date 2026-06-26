@@ -119,6 +119,14 @@ class MemoryItem(BaseModel):
     promotion: Optional[Dict[str, Any]] = None
     capture_device_ids: List[str] = Field(default_factory=list)
     primary_capture_device: Optional[str] = None
+    corroboration_count: int = 0
+    last_corroborated_at: Optional[datetime] = None
+    confidence: Optional[float] = None
+    superseded_by: Optional[str] = None
+    subject_entity_id: Optional[str] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    kg_extracted: bool = False
 
     @field_validator("memory_id", "uid", "visibility")
     @classmethod
