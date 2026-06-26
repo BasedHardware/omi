@@ -119,8 +119,10 @@ class _FirestoreFake:
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+def _clear_canonical_cohort(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
 
@@ -185,8 +187,10 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
         )
         assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
 
-    def test_canonical_env_pins_cohort_without_memory_flags(self, monkeypatch):
-        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical")
+    def test_canonical_cohort_pins_without_memory_flags(self, monkeypatch):
+        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+        set_canonical_cohort(monkeypatch, "uid-canonical")
         assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
         assert resolve_memory_system("uid-legacy", db_client=_FirestoreFake()) == MemorySystem.LEGACY
 
@@ -318,7 +322,9 @@ class TestMemorySystemRequestPinning:
             resolve_pinned_memory_system,
         )
 
-        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-scope")
+        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+        set_canonical_cohort(monkeypatch, "uid-scope")
         with memory_system_request_scope("uid-scope") as pinned:
             assert pinned == MemorySystem.CANONICAL
             assert get_pinned_memory_system(uid="uid-scope") == MemorySystem.CANONICAL
@@ -328,10 +334,12 @@ class TestMemorySystemRequestPinning:
     def test_unpinned_resolve_matches_static_legacy_and_canonical(self, monkeypatch):
         from utils.memory.memory_system_pin import clear_memory_system_pin, resolve_pinned_memory_system
 
+        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
+
         clear_memory_system_pin()
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        clear_canonical_cohort(monkeypatch)
         assert resolve_pinned_memory_system("uid-legacy") == MemorySystem.LEGACY
 
-        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical")
+        set_canonical_cohort(monkeypatch, "uid-canonical")
         assert resolve_pinned_memory_system("uid-canonical") == MemorySystem.CANONICAL
         assert resolve_pinned_memory_system("uid-other") == MemorySystem.LEGACY
