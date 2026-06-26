@@ -21,6 +21,18 @@ class MemoryReadGateBlock(str, Enum):
     PROJECTION_NOT_READY = 'projection_not_ready'
 
 
+SUPPORTED_ENROLLED_CONTROL_STATES = frozenset({'valid'})
+ENROLLED_FAIL_CLOSED_CONTROL_STATES = frozenset(
+    {
+        'missing',
+        'malformed',
+        'uid_mismatch',
+        'unsupported_schema',
+        'control_timeout',
+    }
+)
+
+
 @dataclass(frozen=True)
 class ConsumerGrantSnapshot:
     default_memory: bool

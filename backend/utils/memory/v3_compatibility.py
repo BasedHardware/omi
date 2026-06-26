@@ -1,6 +1,9 @@
 """Canonical module for ``utils.memory.v3_compatibility`` (WS-G8b).
 
-Neutral ``v3_compatibility`` is the source of truth. Legacy ``v3_compatibility`` remains an importable alias.
+Planner/test-path `/v3` compatibility decisions. Production GET routing uses
+``v3_control_reader_contract.decide_v3_control_route`` instead; this module
+remains for ``plan_v3_memory_read`` and equivalence tests that document
+intentional divergence (e.g. ``rollout_write_ready`` coupling, archive 404).
 """
 
 from dataclasses import dataclass, field
@@ -8,19 +11,14 @@ from enum import Enum
 from typing import Any
 
 from utils.memory.memory_read_rollout_core import (
+    ENROLLED_FAIL_CLOSED_CONTROL_STATES,
     MemoryReadGateBlock,
+    SUPPORTED_ENROLLED_CONTROL_STATES,
     evaluate_enrolled_memory_read_gates,
     EnrolledMemoryReadGateContext,
 )
 
-SUPPORTED_ENROLLED_CONTROL_STATES = {'valid'}
-ENROLLED_FAIL_CLOSED_CONTROL_STATES = {
-    'missing',
-    'malformed',
-    'uid_mismatch',
-    'unsupported_schema',
-    'control_timeout',
-}
+# Neutral ``v3_compatibility`` is the source of truth. Legacy ``v3_compatibility`` remains an importable alias.
 
 
 class V3CompatibilityReadPath(str, Enum):
