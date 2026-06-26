@@ -15,7 +15,7 @@ def _load_script():
 
 
 def _load_utils():
-    from utils.memory import v3_f5_evidence
+    from testing.memory import v3_f5_evidence
 
     return v3_f5_evidence
 
@@ -48,7 +48,7 @@ def _approved_config(module, **overrides):
             "firestore index state",
             "audit read log metadata",
         ),
-        oracle_review_artifact="docs/epics/memory_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20",
+        oracle_review_artifact="docs/epics/archive/memory_t20_oracle_milestone_review.md#oracle-milestone-review-f4-before-f5-real-service-evidence-2026-06-20",
     )
     kwargs.update(overrides)
     return module.EvidenceRunConfig(**kwargs)
@@ -228,11 +228,11 @@ def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     root = ROOT.parent
     assert "test_v3_f5_real_service_evidence_readiness.py" in (ROOT / "test.sh").read_text(encoding="utf-8")
     f5_script = (ROOT / "scripts" / "v3_f5_real_service_evidence_readiness.py").read_text(encoding="utf-8")
-    f5_utils = (ROOT / "utils" / "memory" / "v3_f5_evidence.py").read_text(encoding="utf-8")
+    f5_utils = (ROOT / "testing" / "memory" / "v3_f5_evidence.py").read_text(encoding="utf-8")
     assert "memory-V3-F5 real-service read-only evidence preparation" in f5_script
     assert "build_evidence_report" in f5_utils
     assert "default-NOT_RUN" in f5_script
     ticket = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text(encoding="utf-8")
-    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
+    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text(encoding="utf-8")
     assert "memory-V3-F5 real-service read-only evidence preparation" in ticket
     assert "memory-V3-F5 real-service read-only evidence preparation" in oracle
