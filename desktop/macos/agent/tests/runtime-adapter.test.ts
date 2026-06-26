@@ -104,7 +104,13 @@ describe("AcpRuntimeAdapter bindings", () => {
         if (!line) continue;
         const request = JSON.parse(line);
         requests.push(request);
-        if (request.method === "session/new") {
+        if (request.method === "initialize") {
+          proc.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: { protocolVersion: 1 },
+          }) + "\n");
+        } else if (request.method === "session/new") {
           proc.stdout.write(JSON.stringify({
             jsonrpc: "2.0",
             id: request.id,
@@ -135,6 +141,7 @@ describe("AcpRuntimeAdapter bindings", () => {
       model: "claude-sonnet-4-6",
     });
     expect(requests.map((request) => request.method)).toEqual([
+      "initialize",
       "session/new",
       "session/set_model",
     ]);

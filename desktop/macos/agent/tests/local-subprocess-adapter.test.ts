@@ -3,8 +3,7 @@ import { PassThrough } from "node:stream";
 import { readFileSync } from "node:fs";
 import { spawn } from "child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { HermesRuntimeAdapter } from "../src/adapters/hermes.js";
-import { OpenClawRuntimeAdapter } from "../src/adapters/openclaw.js";
+import { LocalSubprocessRuntimeAdapter } from "../src/adapters/local-subprocess.js";
 import type { AdapterAttemptContext, AdapterBindingHandle } from "../src/adapters/interface.js";
 import type { OutboundMessage } from "../src/protocol.js";
 
@@ -82,7 +81,7 @@ describe("env-command local subprocess adapters", () => {
   });
 
   it("activates Hermes only from OMI_HERMES_ADAPTER_COMMAND or explicit command", async () => {
-    const adapter = new HermesRuntimeAdapter();
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND" });
     await expect(adapter.start()).rejects.toThrow("hermes adapter requires OMI_HERMES_ADAPTER_COMMAND");
 
     const proc = createMockProcess();
@@ -107,7 +106,7 @@ describe("env-command local subprocess adapters", () => {
   it("maps Hermes open, resume, events, result fields, and artifacts without native id leakage", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    const adapter = new HermesRuntimeAdapter({ command: "hermes-adapter" });
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND", command: "hermes-adapter" });
     const requests: Record<string, unknown>[] = [];
 
     collectRequests(proc, (request) => {
@@ -271,7 +270,7 @@ describe("env-command local subprocess adapters", () => {
   it("maps OpenClaw tool events and reports cancellation ack only when the adapter says so", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    const adapter = new OpenClawRuntimeAdapter({ command: "openclaw-adapter" });
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "openclaw", envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND", command: "openclaw-adapter" });
     let cancelCount = 0;
 
     collectRequests(proc, (request) => {
@@ -405,7 +404,7 @@ describe("env-command local subprocess adapters", () => {
   it("does not dispatch a second native cancel when the attempt signal aborts", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    const adapter = new HermesRuntimeAdapter({ command: "hermes-adapter" });
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND", command: "hermes-adapter" });
     let executeRequest: Record<string, unknown> | undefined;
     let cancelRequests = 0;
 
@@ -456,7 +455,7 @@ describe("env-command local subprocess adapters", () => {
   it("rejects missing or unknown terminal statuses instead of assuming success", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    const adapter = new HermesRuntimeAdapter({ command: "hermes-adapter" });
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND", command: "hermes-adapter" });
 
     collectRequests(proc, (request) => {
       if (request.type === "open") {

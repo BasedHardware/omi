@@ -3,7 +3,7 @@ import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { legacyPermissionPolicy } from "../legacy-permission-policy.js";
-import { adapterCapabilitiesFor } from "./interface.js";
+import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -37,16 +37,19 @@ export class AcpError extends Error {
 export type AcpNotificationHandler = (method: string, params: unknown) => void;
 
 export interface AcpRuntimeAdapterOptions {
+  adapterId?: ProductionAdapterId;
   log?: (message: string) => void;
   nodeBin?: string;
   acpEntry?: string;
+  command?: string;
+  envCommandName?: string;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class AcpRuntimeAdapter implements RuntimeAdapter {
-  readonly adapterId = "acp";
-  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("acp");
+  readonly adapterId: ProductionAdapterId;
+  readonly capabilities: AdapterCapabilities;
 
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
@@ -54,15 +57,23 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private responseHandlers = new Map<number, ResponseHandler>();
   private notificationHandler: AcpNotificationHandler | null = null;
   private nextRpcId = 1;
+  private initialized = false;
+  private initializePromise: Promise<void> | null = null;
   private readonly log: (message: string) => void;
   private readonly nodeBin: string;
   private readonly acpEntry: string;
+  private readonly command?: string;
+  private readonly envCommandName?: string;
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
+    this.adapterId = options.adapterId ?? "acp";
+    this.capabilities = adapterCapabilitiesFor(this.adapterId);
     this.log = options.log ?? (() => {});
     this.nodeBin = options.nodeBin ?? process.execPath;
     this.acpEntry =
       options.acpEntry ?? join(__dirname, "..", "patched-acp-entry.mjs");
+    this.command = options.command;
+    this.envCommandName = options.envCommandName;
   }
 
   async start(): Promise<void> {
@@ -74,9 +85,17 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     delete env.CLAUDECODE;
     env.NODE_NO_WARNINGS = "1";
 
-    this.log(`Starting ACP subprocess [Claude OAuth]: ${this.nodeBin} ${this.acpEntry}`);
+    const configuredCommand = this.command ?? (this.envCommandName ? process.env[this.envCommandName] : undefined);
+    const command = configuredCommand?.trim();
+    const spawnCommand = command ?? `${this.nodeBin} ${shellQuote(this.acpEntry)}`;
+    if (this.adapterId !== "acp" && !command) {
+      throw new Error(`${this.adapterId} adapter requires ${this.envCommandName ?? "command"}`);
+    }
 
-    this.process = spawn(this.nodeBin, [this.acpEntry], {
+    this.log(`Starting ${this.adapterId} ACP subprocess: ${spawnCommand}`);
+
+    this.process = spawn(spawnCommand, {
+      shell: true,
       env,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -89,6 +108,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       this.process = null;
       this.stdinWriter = null;
       this.readline = null;
+      this.initialized = false;
+      this.initializePromise = null;
       for (const [, handler] of this.responseHandlers) {
         handler.reject(new Error(reason));
       }
@@ -97,11 +118,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     };
 
     if (!proc.stdin || !proc.stdout || !proc.stderr) {
-      throw new Error("Failed to create ACP subprocess pipes");
+      throw new Error(`Failed to create ${this.adapterId} ACP subprocess pipes`);
     }
 
     proc.on("error", (err) => {
-      finalizeProcess(`ACP process error: ${err.message}`);
+      finalizeProcess(`${this.adapterId} ACP process error: ${err.message}`);
     });
 
     this.stdinWriter = (line: string) => {
@@ -152,6 +173,22 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     method: string,
     params: Record<string, unknown> = {}
   ): Promise<unknown> {
+    await this.start();
+    if (method !== "initialize") {
+      await this.ensureInitialized();
+    }
+    const result = await this.rawRequest(method, params);
+    if (method === "initialize") {
+      this.initialized = true;
+      this.initializePromise = null;
+    }
+    return result;
+  }
+
+  private async rawRequest(
+    method: string,
+    params: Record<string, unknown> = {}
+  ): Promise<unknown> {
     const id = this.nextRpcId++;
     const msg = JSON.stringify({ jsonrpc: "2.0", id, method, params });
 
@@ -161,9 +198,25 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.stdinWriter(msg);
       } else {
         this.responseHandlers.delete(id);
-        reject(new Error("ACP process stdin not available"));
+        reject(new Error(`${this.adapterId} ACP process stdin not available`));
       }
     });
+  }
+
+  private async ensureInitialized(): Promise<void> {
+    if (this.initialized) return;
+    if (!this.initializePromise) {
+      this.initializePromise = this.rawRequest("initialize", { protocolVersion: 1 })
+        .then(() => {
+          this.initialized = true;
+          this.initializePromise = null;
+        })
+        .catch((error) => {
+          this.initializePromise = null;
+          throw error;
+        });
+    }
+    await this.initializePromise;
   }
 
   notify(method: string, params: Record<string, unknown> = {}): void {
@@ -307,7 +360,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         this.notificationHandler?.(msg.method as string, msg.params);
       }
     } catch {
-      this.log(`Failed to parse ACP message: ${line.slice(0, 200)}`);
+      this.log(`Failed to parse ${this.adapterId} ACP message: ${line.slice(0, 200)}`);
     }
   }
 
@@ -486,4 +539,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const rawOutput = update.rawOutput as Record<string, unknown> | undefined;
     return rawOutput ? JSON.stringify(rawOutput) : "";
   }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }

@@ -1,11 +1,11 @@
-import { LocalSubprocessRuntimeAdapter } from "./local-subprocess.js";
+import { AcpRuntimeAdapter } from "./acp.js";
 
 export interface HermesRuntimeAdapterOptions {
   command?: string;
   log?: (message: string) => void;
 }
 
-export class HermesRuntimeAdapter extends LocalSubprocessRuntimeAdapter {
+export class HermesRuntimeAdapter extends AcpRuntimeAdapter {
   constructor(options: HermesRuntimeAdapterOptions = {}) {
     super({
       adapterId: "hermes",

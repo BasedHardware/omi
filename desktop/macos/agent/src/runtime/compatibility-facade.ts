@@ -450,7 +450,7 @@ export class JsonlCompatibilityFacade {
       surfaceKind: message.surfaceKind ?? "legacy_jsonl",
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
-      legacyClientScope: this.legacyClientScope(message),
+      legacyClientScope: legacySessionKey ? this.legacyClientScope(message) : undefined,
       legacySessionKey,
       defaultAdapterId: message.adapterId ?? this.defaultAdapterId,
       adapterId: message.adapterId ?? this.defaultAdapterId,
@@ -659,7 +659,7 @@ export class JsonlCompatibilityFacade {
     if (message.sessions && message.sessions.length > 0) {
       return message.sessions;
     }
-    const models = message.models ?? (message.model ? [message.model] : [this.defaultModel()]);
+    const models = message.models ?? (message.model ? [message.model] : [this.defaultModel() ?? "default"]);
     return models.map((model) => ({ key: model, model }));
   }
 
@@ -667,8 +667,10 @@ export class JsonlCompatibilityFacade {
     return message?.legacyClientScope ?? "default";
   }
 
-  private defaultModel(): string {
-    return this.defaultAdapterId === "pi-mono" ? "omi-sonnet" : "claude-sonnet-4-6";
+  private defaultModel(): string | undefined {
+    if (this.defaultAdapterId === "pi-mono") return "omi-sonnet";
+    if (this.defaultAdapterId === "acp") return "claude-sonnet-4-6";
+    return undefined;
   }
 
   private recoverAfterError(): ExecuteAgentRunInput["recoverAfterError"] | undefined {
