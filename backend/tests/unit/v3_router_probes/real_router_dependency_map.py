@@ -18,6 +18,8 @@ import textwrap
 from pathlib import Path
 from typing import Any
 
+from tests.unit.v3_router_probes.stubs import legacy_pin_stub_source
+
 TARGET_ROUTES = {
     ('GET', '/v3/memories'),
     ('POST', '/v3/memories'),
@@ -215,7 +217,8 @@ def inspect_static_routes(router_source_path: Path | None = None) -> list[dict[s
 
 
 def _probe_code() -> str:
-    return textwrap.dedent(
+    pin_stub_block = legacy_pin_stub_source()
+    template = textwrap.dedent(
         r'''
         import hashlib
         import importlib
@@ -324,9 +327,7 @@ def _probe_code() -> str:
         setattr(memory_pkg, "memory_service", memory_service_mod)
 
         surface_routing = types.ModuleType("utils.memory.surface_routing")
-        def pin_memory_system(uid, *, db_client=None):
-            return MemorySystem.LEGACY
-        surface_routing.pin_memory_system = pin_memory_system
+__PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
         sys.modules["utils.memory.surface_routing"] = surface_routing
         setattr(memory_pkg, "surface_routing", surface_routing)
 
@@ -382,6 +383,7 @@ def _probe_code() -> str:
         print(json.dumps({"import_ok": True, "pinned_routes": sorted(pinned, key=lambda item: item["route"])}))
         '''
     )
+    return template.replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 
 def probe_real_router_import_under_stubs() -> dict[str, Any]:

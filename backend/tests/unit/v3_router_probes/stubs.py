@@ -5,8 +5,98 @@ from __future__ import annotations
 import hashlib
 import importlib
 import sys
+import textwrap
 import types
 from typing import Any, Callable
+
+LEGACY_MEMORY_DOC_FIELDS = (
+    "id",
+    "uid",
+    "content",
+    "category",
+    "visibility",
+    "tags",
+    "created_at",
+    "updated_at",
+    "reviewed",
+    "manually_added",
+    "edited",
+    "is_locked",
+    "kg_extracted",
+    "evidence",
+    "arguments",
+    "subject_attribution",
+    "object_entity_ids",
+    "qualifiers",
+    "uncertainty_reasons",
+)
+
+
+def legacy_memory_doc(
+    memory_id: str,
+    content: str,
+    *,
+    uid: str = "stubbed-test-uid",
+    category: str = "system",
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Factory for legacy memory documents used by v3 router probe stubs."""
+    return {
+        "id": memory_id,
+        "uid": uid,
+        "content": content,
+        "category": category,
+        "visibility": "private",
+        "tags": tags or ["legacy"],
+        "created_at": "2026-06-19T12:00:00Z",
+        "updated_at": "2026-06-19T12:00:00Z",
+        "reviewed": True,
+        "manually_added": False,
+        "edited": False,
+        "is_locked": False,
+        "kg_extracted": False,
+        "evidence": [],
+        "arguments": {},
+        "subject_attribution": "legacy_assumed",
+        "object_entity_ids": [],
+        "qualifiers": {},
+        "uncertainty_reasons": [],
+    }
+
+
+def legacy_pin_stub_source() -> str:
+    """Return subprocess-safe source for pin_memory_system → LEGACY stub."""
+    return "        def pin_memory_system(uid, *, db_client=None):\n" "            return MemorySystem.LEGACY\n"
+
+
+def legacy_memory_doc_factory_source(*, stubbed_uid: str = "stubbed-test-uid") -> str:
+    """Return subprocess-safe legacy_item factory used by router probe scripts."""
+    return textwrap.dedent(
+        f'''
+        def legacy_item(memory_id, content, *, category="system", tags=None, uid=None):
+            return {{
+                "id": memory_id,
+                "uid": uid or "{stubbed_uid}",
+                "content": content,
+                "category": category,
+                "visibility": "private",
+                "tags": tags or ["legacy"],
+                "created_at": "2026-06-19T12:00:00Z",
+                "updated_at": "2026-06-19T12:00:00Z",
+                "reviewed": True,
+                "manually_added": False,
+                "edited": False,
+                "is_locked": False,
+                "kg_extracted": False,
+                "evidence": [],
+                "arguments": {{}},
+                "subject_attribution": "legacy_assumed",
+                "object_entity_ids": [],
+                "qualifiers": {{}},
+                "uncertainty_reasons": [],
+            }}
+        '''
+    ).strip()
 
 
 def _fail(name: str) -> Callable[..., Any]:
@@ -56,27 +146,7 @@ def install_router_import_stubs(
     memories = types.ModuleType("database.memories")
 
     def legacy_item(memory_id: str, content: str, *, uid: str | None = None) -> dict[str, Any]:
-        return {
-            "id": memory_id,
-            "uid": uid or stubbed_uid,
-            "content": content,
-            "category": "system",
-            "visibility": "private",
-            "tags": ["legacy"],
-            "created_at": "2026-06-19T12:00:00Z",
-            "updated_at": "2026-06-19T12:00:00Z",
-            "reviewed": True,
-            "manually_added": False,
-            "edited": False,
-            "is_locked": False,
-            "kg_extracted": False,
-            "evidence": [],
-            "arguments": {},
-            "subject_attribution": "legacy_assumed",
-            "object_entity_ids": [],
-            "qualifiers": {},
-            "uncertainty_reasons": [],
-        }
+        return legacy_memory_doc(memory_id, content, uid=uid or stubbed_uid)
 
     def get_memories(uid: str, limit: int, offset: int, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         get_calls.append({"uid": uid, "limit": limit, "offset": offset})

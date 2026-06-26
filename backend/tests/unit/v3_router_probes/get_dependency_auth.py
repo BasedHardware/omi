@@ -19,6 +19,7 @@ from typing import Any
 
 
 from tests.unit.v3_router_probes.real_router_dependency_map import REQUIRED_IMPORT_STUBS
+from tests.unit.v3_router_probes.stubs import legacy_memory_doc, legacy_pin_stub_source
 
 GET_DEPENDENCY_AUTH_READINESS_PROOF = {
     "service": "backend/scripts/p1_3_v3_get_dependency_auth_readiness.py",
@@ -44,7 +45,15 @@ def _repo_backend_root() -> Path:
 
 
 def _probe_code() -> str:
-    return textwrap.dedent(
+    auth_doc = legacy_memory_doc(
+        "legacy-auth-proof",
+        "legacy dependency/auth proof memory",
+        uid="stubbed-auth-uid",
+        tags=["legacy", "auth-proof"],
+    )
+    legacy_item_block = f"        def legacy_item():\n            return {auth_doc!r}\n"
+    pin_stub_block = legacy_pin_stub_source()
+    template = textwrap.dedent(
         r'''
         import hashlib
         import importlib
@@ -89,29 +98,7 @@ def _probe_code() -> str:
                 mutation_flags["executor_submit"] = True
                 raise AssertionError("stubbed executor submit executed")
 
-        def legacy_item():
-            return {
-                "id": "legacy-auth-proof",
-                "uid": stubbed_uid,
-                "content": "legacy dependency/auth proof memory",
-                "category": "system",
-                "visibility": "private",
-                "tags": ["legacy", "auth-proof"],
-                "created_at": "2026-06-19T12:00:00Z",
-                "updated_at": "2026-06-19T12:00:00Z",
-                "reviewed": True,
-                "manually_added": False,
-                "edited": False,
-                "is_locked": False,
-                "kg_extracted": False,
-                "evidence": [],
-                "arguments": {},
-                "subject_attribution": "legacy_assumed",
-                "object_entity_ids": [],
-                "qualifiers": {},
-                "uncertainty_reasons": [],
-            }
-
+__LEGACY_ITEM_BLOCK__
         database_pkg = types.ModuleType("database")
         database_pkg.__path__ = []
         sys.modules["database"] = database_pkg
@@ -216,9 +203,7 @@ def _probe_code() -> str:
         setattr(memory_pkg, "memory_service", memory_service_mod)
 
         surface_routing = types.ModuleType("utils.memory.surface_routing")
-        def pin_memory_system(uid, *, db_client=None):
-            return MemorySystem.LEGACY
-        surface_routing.pin_memory_system = pin_memory_system
+__PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
         sys.modules["utils.memory.surface_routing"] = surface_routing
         setattr(memory_pkg, "surface_routing", surface_routing)
 
@@ -333,6 +318,7 @@ def _probe_code() -> str:
         }, sort_keys=True))
         '''
     )
+    return template.replace("__LEGACY_ITEM_BLOCK__", legacy_item_block).replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 
 def probe_get_dependency_auth_under_stubs() -> dict[str, Any]:
