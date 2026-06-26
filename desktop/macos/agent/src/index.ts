@@ -37,6 +37,7 @@ import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
+  DirectControlToolRequestMessage,
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
@@ -60,15 +61,25 @@ import {
   handleAgentControlToolCall,
   isAgentControlToolName,
   legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
+  type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
+  "list_agent_sessions",
+  "get_agent_run",
+  "cancel_agent_run",
+  "inspect_agent_artifacts",
+  "update_agent_artifact_lifecycle",
+]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -1137,6 +1148,131 @@ async function main(): Promise<void> {
                 error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
               });
             })();
+        send({
+          type: "control_tool_result",
+          protocolVersion: control.protocolVersion,
+          requestId,
+          clientId: control.clientId,
+          name: control.name,
+          result,
+        });
+        break;
+      }
+
+      case "direct_control_tool": {
+        const control = msg as DirectControlToolRequestMessage;
+        if (control.protocolVersion === 2 && !control.clientId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires clientId" },
+            }),
+          });
+          break;
+        }
+        if (control.protocolVersion === 2 && !control.requestId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires requestId" },
+            }),
+          });
+          break;
+        }
+        const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
+        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "unsupported_direct_control_tool",
+                message: `Direct app control cannot execute ${control.name}`,
+              },
+            }),
+          });
+          break;
+        }
+
+        const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
+        let directControlOwnerInserted = registerSignedDirectControlOwner({
+          requestKey,
+          ownerGuard: control.ownerId,
+          ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+          registerOwner: registerActiveControlOwner,
+        });
+        const releaseDirectControlOwner = () => {
+          if (requestKey && directControlOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(requestKey);
+            directControlOwnerInserted = false;
+          }
+        };
+
+        let controlContext: ResolvedControlRequestContext;
+        let controlInput: Record<string, unknown>;
+        try {
+          controlContext = resolveControlRequestContext({
+            ownerGuard: control.ownerId,
+            activeOwnerId: requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined,
+            requireActiveOwner: true,
+            requireOwnerGuard: true,
+            requestId,
+            clientId: control.clientId,
+          });
+          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+        } catch (error) {
+          releaseDirectControlOwner();
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+
+        const result = await (async () => {
+          try {
+            return agentControlToolContext
+              ? await handleAgentControlToolCall(
+                  {
+                    ...agentControlToolContext,
+                    getProtocolVersion: () => control.protocolVersion,
+                    getOwnerId: () => controlContext.activeOwnerId,
+                  },
+                  control.name,
+                  controlInput,
+                )
+              : JSON.stringify({
+                  ok: false,
+                  error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+                });
+          } finally {
+            releaseDirectControlOwner();
+          }
+        })();
         send({
           type: "control_tool_result",
           protocolVersion: control.protocolVersion,

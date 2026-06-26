@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CancelAckMessage, InboundMessage, OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { requestIdFor } from "../src/protocol.js";
 
@@ -53,5 +56,38 @@ describe("protocol v2 compatibility", () => {
 
     const outbound: OutboundMessage = message;
     expect(outbound.type).toBe("cancel_ack");
+  });
+
+  it("defines direct app control as an owner-guarded inbound message", () => {
+    const message: InboundMessage = {
+      type: "direct_control_tool",
+      protocolVersion: 2,
+      requestId: "control-request",
+      clientId: "realtime-hub",
+      ownerId: "owner-1",
+      name: "list_agent_sessions",
+      input: { limit: 10 },
+    };
+
+    expect(message.type).toBe("direct_control_tool");
+    expect(requestIdFor(message)).toBe("control-request");
+  });
+
+  it("keeps signed direct-control owner registration out of legacy control_tool dispatch", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const legacyStart = source.indexOf('case "control_tool"');
+    const directStart = source.indexOf('case "direct_control_tool"');
+    const legacyBlock = source.slice(legacyStart, directStart);
+    const directBlock = source.slice(directStart);
+
+    expect(legacyStart).toBeGreaterThanOrEqual(0);
+    expect(directStart).toBeGreaterThan(legacyStart);
+    expect(source).toContain("protocol v2 direct control requires clientId");
+    expect(source).toContain("protocol v2 direct control requires requestId");
+    expect(source).toContain("const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control)");
+    expect(legacyBlock).not.toContain("registerSignedDirectControlOwner");
+    expect(directBlock).toContain("registerSignedDirectControlOwner");
+    expect(directBlock).toContain("releaseDirectControlOwner");
   });
 });

@@ -2,6 +2,29 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.542",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop startup stability by staging non-critical warmup work after the first usable window"
+      ]
+    },
+    {
+      "version": "0.11.541",
+      "date": "2026-06-26",
+      "changes": [
+        "Added PTT access to inspect and stop canonical Omi agent runs created from chat or other Omi surfaces"
+      ]
+    },
+    {
+      "version": "0.11.540",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages",
+        "Hermes connect now also adds a 'search Omi first' note to its system prompt, like OpenClaw",
+        "Cleaner Apps page (removed list borders, renamed Featured to Other) and dashboard polish (white + icons, subtle Connected labels, no purple)"
+      ]
+    },
+    {
       "version": "0.11.539",
       "date": "2026-06-26",
       "changes": [

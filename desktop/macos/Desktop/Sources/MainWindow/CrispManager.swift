@@ -49,6 +49,9 @@ class CrispManager: ObservableObject {
     var activationObserver: NSObjectProtocol?
     var refreshAllObserver: NSObjectProtocol?
 
+    /// Retained so a delayed startup poll cannot fire after sign-out/stop.
+    private var initialPollTask: Task<Void, Never>?
+
     /// Counter bumped at the top of `pollForMessages()`, before the auth-backoff
     /// guard and the network task. Lets `CrispManagerLifecycleTests` prove that
     /// posting `didBecomeActive` / `.refreshAllData` actually reaches the poll
@@ -62,11 +65,14 @@ class CrispManager: ObservableObject {
 
     /// Call once after sign-in to fetch Crisp messages and listen for activation/Cmd+R.
     ///
-    /// - Parameter performInitialPoll: If `true` (default), kicks off an immediate
-    ///   `pollForMessages()` call that hits `APIClient.shared`. Pass `false` only
-    ///   from lifecycle unit tests that want to exercise observer registration
-    ///   without touching the network, auth state, or firing real notifications.
-    func start(performInitialPoll: Bool = true) {
+    /// - Parameters:
+    ///   - performInitialPoll: If `true` (default), schedules an initial
+    ///     `pollForMessages()` call that hits `APIClient.shared`. Pass `false` only
+    ///     from lifecycle unit tests that want to exercise observer registration
+    ///     without touching the network, auth state, or firing real notifications.
+    ///   - initialPollDelay: Optional delay before the initial poll. Activation and
+    ///     Cmd+R events still poll immediately.
+    func start(performInitialPoll: Bool = true, initialPollDelay: TimeInterval = 0, sessionUserId: String? = nil) {
         guard !isStarted else { return }
         isStarted = true
 
@@ -78,7 +84,21 @@ class CrispManager: ObservableObject {
         }
 
         if performInitialPoll {
-            pollForMessages()
+            if initialPollDelay > 0 {
+                initialPollTask?.cancel()
+                initialPollTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(initialPollDelay * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+                    guard let self, self.isStarted else { return }
+                    guard StartupWarmupSessionScope(userId: sessionUserId).matches(
+                        currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+                        isSignedIn: AuthState.shared.isSignedIn
+                    ) else { return }
+                    self.pollForMessages()
+                }
+            } else {
+                pollForMessages()
+            }
         }
 
         // Refresh on app activation and Cmd+R (no periodic timer)
@@ -100,23 +120,28 @@ class CrispManager: ObservableObject {
     }
 
     /// Stop observing (called on sign-out)
-    func stop() {
+    func stop(preserveReadState: Bool = false) {
+        initialPollTask?.cancel()
+        initialPollTask = nil
         if let obs = activationObserver { NotificationCenter.default.removeObserver(obs) }
         if let obs = refreshAllObserver { NotificationCenter.default.removeObserver(obs) }
         activationObserver = nil
         refreshAllObserver = nil
         isStarted = false
         unreadCount = 0
-        // Clear persisted timestamps so next sign-in starts fresh
-        UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
-        UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
-        notifiedMessages.removeAll()
+        if !preserveReadState {
+            // Clear persisted timestamps so next sign-in starts fresh.
+            UserDefaults.standard.removeObject(forKey: "crisp_lastSeenTimestamp")
+            UserDefaults.standard.removeObject(forKey: "crisp_latestOperatorTimestamp")
+            notifiedMessages.removeAll()
+        }
     }
 
     // MARK: - Private
 
     private func pollForMessages() {
         pollInvocations += 1
+        guard !isRunningUnderXCTest else { return }
         Task {
             // Skip if in auth backoff period (recent 401 errors)
             guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
@@ -165,6 +190,11 @@ class CrispManager: ObservableObject {
         }
     }
 
+    private var isRunningUnderXCTest: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+    }
+
     private struct CrispUnreadResponse: Codable {
         let unread_count: Int
         let messages: [CrispOperatorMessage]
@@ -207,6 +237,10 @@ class CrispManager: ObservableObject {
         // 503 means Crisp is not configured - silently return empty
         if httpResponse.statusCode == 503 {
             return []
+        }
+
+        if httpResponse.statusCode == 401 {
+            throw APIError.unauthorized
         }
 
         guard httpResponse.statusCode == 200 else {
