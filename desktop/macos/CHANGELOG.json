@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Rewind screen activity sync now includes the capturing computer name so multi-Mac screenshots can be distinguished"
+  ],
   "releases": [
     {
       "version": "0.11.540",

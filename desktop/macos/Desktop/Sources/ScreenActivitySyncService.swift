@@ -11,6 +11,14 @@ import GRDB
 actor ScreenActivitySyncService {
     static let shared = ScreenActivitySyncService()
 
+    static let syncRowsSQL = """
+        SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName
+        FROM screenshots
+        WHERE id > ? AND embedding IS NOT NULL
+        ORDER BY id ASC
+        LIMIT ?
+        """
+
     // MARK: - State
 
     private var lastSyncedId: Int64 = 0
@@ -79,49 +87,8 @@ actor ScreenActivitySyncService {
         do {
             // Query screenshots that have embeddings and are newer than our cursor
             let rows: [[String: Any]] = try await dbPool.read { [lastSyncedId, batchSize] db in
-                let sql = """
-                    SELECT id, timestamp, appName, windowTitle, ocrText, embedding, deviceName
-                    FROM screenshots
-                    WHERE id > ? AND embedding IS NOT NULL
-                    ORDER BY id ASC
-                    LIMIT ?
-                    """
-                let dbRows = try Row.fetchAll(db, sql: sql, arguments: [lastSyncedId, batchSize])
-
-                return dbRows.compactMap { row -> [String: Any]? in
-                    guard let id = row["id"] as? Int64 else { return nil }
-
-                    var dict: [String: Any] = ["id": id]
-
-                    if let ts = row["timestamp"] as? String {
-                        dict["timestamp"] = ts
-                    } else if let ts = row["timestamp"] as? Double {
-                        let date = Date(timeIntervalSince1970: ts)
-                        dict["timestamp"] = ISO8601DateFormatter().string(from: date)
-                    }
-
-                    dict["appName"] = (row["appName"] as? String) ?? ""
-                    dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
-                    dict["ocrText"] = (row["ocrText"] as? String) ?? ""
-                    if let deviceName = row["deviceName"] as? String {
-                        dict["deviceName"] = deviceName
-                    }
-
-                    // Convert embedding BLOB to [Double] array
-                    let blobValue = row["embedding"] as DatabaseValue
-                    if case .blob(let data) = blobValue.storage {
-                        let floatCount = data.count / MemoryLayout<Float>.size
-                        let floats = data.withUnsafeBytes { ptr in
-                            Array(UnsafeBufferPointer(
-                                start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
-                                count: floatCount
-                            ))
-                        }
-                        dict["embedding"] = floats.map { Double($0) }
-                    }
-
-                    return dict
-                }
+                let dbRows = try Row.fetchAll(db, sql: Self.syncRowsSQL, arguments: [lastSyncedId, batchSize])
+                return dbRows.compactMap(Self.payloadRow)
             }
 
             guard !rows.isEmpty else { return }
@@ -147,6 +114,43 @@ actor ScreenActivitySyncService {
         } catch {
             log("ScreenActivitySync: read error — \(error.localizedDescription)")
         }
+    }
+
+    static func payloadRow(from row: Row) -> [String: Any]? {
+        guard let id = row["id"] as? Int64 else { return nil }
+
+        var dict: [String: Any] = ["id": id]
+
+        if let ts = row["timestamp"] as? String {
+            dict["timestamp"] = ts
+        } else if let ts = row["timestamp"] as? Double {
+            let date = Date(timeIntervalSince1970: ts)
+            dict["timestamp"] = ISO8601DateFormatter().string(from: date)
+        }
+
+        dict["appName"] = (row["appName"] as? String) ?? ""
+        dict["windowTitle"] = (row["windowTitle"] as? String) ?? ""
+        dict["ocrText"] = (row["ocrText"] as? String) ?? ""
+        // Intentionally syncs the optional system display computer/device name
+        // for multi-Mac disambiguation. Historical rows without provenance omit it.
+        if let deviceName = row["deviceName"] as? String {
+            dict["deviceName"] = deviceName
+        }
+
+        // Convert embedding BLOB to [Double] array.
+        let blobValue = row["embedding"] as DatabaseValue
+        if case .blob(let data) = blobValue.storage {
+            let floatCount = data.count / MemoryLayout<Float>.size
+            let floats = data.withUnsafeBytes { ptr in
+                Array(UnsafeBufferPointer(
+                    start: ptr.baseAddress?.assumingMemoryBound(to: Float.self),
+                    count: floatCount
+                ))
+            }
+            dict["embedding"] = floats.map { Double($0) }
+        }
+
+        return dict
     }
 
     // MARK: - HTTP push
