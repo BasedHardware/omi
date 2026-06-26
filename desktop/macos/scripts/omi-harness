@@ -267,8 +267,9 @@ def sample_process_power(ctx: HarnessContext, spec: dict[str, typing.Any], path:
     samples: list[dict[str, typing.Any]] = []
     while time.monotonic() < deadline:
         sample = read_process_sample(pid)
-        if sample:
-            samples.append(sample)
+        if sample is None:
+            raise RuntimeError(f"process {pid} died or became unreadable while sampling")
+        samples.append(sample)
         time.sleep(interval_ms / 1000)
 
     if not samples:
