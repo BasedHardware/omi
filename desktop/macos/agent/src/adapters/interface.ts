@@ -409,6 +409,19 @@ export interface RuntimeAdapter {
 
   cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>;
   closeBinding?(binding: AdapterBindingHandle): Promise<void>;
+
+  /**
+   * Return the MCP server configuration this adapter actually passes to its
+   * underlying session. Adapters that strip per-session MCP servers (e.g.
+   * OpenClaw with {@code sessionMcpServersMode: "empty"}) should return an
+   * empty array so the kernel's binding-compatibility hash reflects what the
+   * adapter truly saw, not the raw input. Adapters that pass MCP servers
+   * through unchanged can omit this method; the kernel treats absent
+   * implementations as identity (passthrough).
+   *
+   * @param mcpServers Raw MCP server list from the run input.
+   */
+  effectiveMcpServers?(mcpServers: Record<string, unknown>[]): Record<string, unknown>[];
 }
 
 export interface PlaceholderRuntimeAdapter {

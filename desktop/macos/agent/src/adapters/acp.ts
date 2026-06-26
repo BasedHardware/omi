@@ -436,6 +436,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     // ACP exposes no explicit close primitive in the compatibility protocol.
   }
 
+  /**
+   * OpenClaw (and any adapter configured with {@code sessionMcpServersMode:
+   * "empty"}) strips per-session MCP servers before creating a session, so the
+   * adapter-effective MCP set is always empty. Returning `[]` here lets the
+   * kernel's binding-compatibility hash reflect what the adapter actually saw,
+   * preventing spurious binding replacements when a request-scoped env var
+   * (e.g. OMI_QUERY_MODE) changes in the raw input.
+   */
+  effectiveMcpServers(mcpServers: Record<string, unknown>[]): Record<string, unknown>[] {
+    if (this.sessionMcpServersMode === "empty") {
+      return [];
+    }
+    return mcpServers;
+  }
+
   private binding(
     input: OpenBindingInput,
     adapterNativeSessionId: string,
