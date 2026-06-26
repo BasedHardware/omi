@@ -65,6 +65,12 @@ _endpoints.get_current_user_uid = lambda: 'uid1'
 _endpoints.with_rate_limit = lambda dependency, _policy: dependency
 _endpoints.delete_account = MagicMock()
 _endpoints.get_user = MagicMock()
+
+# Save the prior entry so it can be restored after the test module finishes —
+# otherwise this minimal shim leaks into sys.modules and can be reused by later
+# test modules (e.g. ones expecting the real _enforce_rate_limit), making
+# results depend on collection order.
+_prior_endpoints = sys.modules.get('utils.other.endpoints')
 sys.modules['utils.other.endpoints'] = _endpoints
 
 import firebase_admin.auth as _fa_auth  # noqa: E402
@@ -77,6 +83,15 @@ sys.meta_path.remove(_finder)
 for _module_name, _module in list(sys.modules.items()):
     if isinstance(_module, _AutoMockModule):
         del sys.modules[_module_name]
+
+
+@pytest.fixture(autouse=True, scope='module')
+def _restore_endpoints_shim():
+    yield
+    if _prior_endpoints is None:
+        sys.modules.pop('utils.other.endpoints', None)
+    else:
+        sys.modules['utils.other.endpoints'] = _prior_endpoints
 
 
 def _account_deletion_module(start_account_deletion):

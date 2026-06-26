@@ -313,18 +313,25 @@ def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timede
     result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
-        budget = limit - len(result)
-        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').limit(budget).stream()
+        # Over-fetch *all* pending docs and age-filter in Python. A tight
+        # ``.limit(budget)`` would cap the query before stale records beyond the
+        # first page of fresh pending docs, leaving them permanently unqueued.
+        # The ``account_deletions`` collection only holds deletion events so
+        # the full scan is bounded.
+        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').stream()
         for doc in pending_docs:
+            if len(result) >= limit:
+                break
             data = doc.to_dict()
             queued_at = data.get('wipe_queued_at')
             if queued_at and queued_at < stale_cutoff:
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        budget = limit - len(result)
-        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').limit(budget).stream()
+        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
         for doc in retrying_docs:
+            if len(result) >= limit:
+                break
             data = doc.to_dict()
             claimed_at = data.get('wipe_claimed_at')
             if claimed_at and claimed_at < stale_cutoff:

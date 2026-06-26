@@ -15,7 +15,7 @@ import os
 import sys
 import types
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -210,3 +210,106 @@ def test_claim_txn_returns_none_for_unknown_status():
     result, updates = _run_claim(data)
     assert result is None
     assert len(updates) == 0
+
+
+# ---------------------------------------------------------------------------
+# get_pending_deletion_wipes: over-fetch regression test (review P2)
+# ---------------------------------------------------------------------------
+
+
+class _FakeDocSnapshot:
+    def __init__(self, data):
+        self._data = data
+        self.id = data.get('uid')
+
+    def to_dict(self):
+        return self._data
+
+
+class _FakeCollection:
+    """Minimal Firestore collection mock that streams a list of doc dicts."""
+
+    def __init__(self, docs_by_status):
+        # docs_by_status: {'pending': [...], 'failed': [...], 'retrying': [...]}
+        self._docs_by_status = docs_by_status
+        self._status = None
+
+    def where(self, field, op, value):
+        # Only equality filters are used in get_pending_deletion_wipes.
+        assert op == '=='
+        self._status = value
+        return self
+
+    def limit(self, n):
+        # Should no longer be called for age-filtered queries after the fix.
+        # Record it but still return all docs so the test is robust.
+        return self
+
+    def stream(self):
+        for data in self._docs_by_status.get(self._status, []):
+            yield _FakeDocSnapshot(data)
+
+
+def test_get_pending_deletion_wipes_finds_stale_after_fresh_window():
+    """P2: stale pending docs beyond a fresh window must not be skipped.
+
+    Before the fix, ``.limit(budget)`` capped the query before the age filter,
+    so a page of fresh ``pending`` docs hid stale records that needed recovery.
+    After the fix the query over-fetches all docs of each status and ages them
+    in Python, breaking as soon as ``limit`` actionable records are collected.
+    """
+    now = datetime.now(timezone.utc)
+    stale_after = timedelta(minutes=10)
+
+    docs_by_status = {
+        'failed': [],
+        'pending': [
+            # Fresh pending docs come first — these would fill a tight limit.
+            {'uid': 'fresh1', 'wipe_status': 'pending', 'wipe_queued_at': now - timedelta(seconds=30)},
+            {'uid': 'fresh2', 'wipe_status': 'pending', 'wipe_queued_at': now - timedelta(seconds=60)},
+            # Stale pending doc beyond the fresh window — must be returned.
+            {'uid': 'stale1', 'wipe_status': 'pending', 'wipe_queued_at': now - timedelta(minutes=15)},
+        ],
+        'retrying': [],
+    }
+
+    fake_collection = _FakeCollection(docs_by_status)
+    fake_db = types.SimpleNamespace()
+    fake_db.collection = lambda name: fake_collection
+
+    with patch.object(users_db, 'db', fake_db):
+        result = users_db.get_pending_deletion_wipes(limit=100, stale_after=stale_after)
+
+    uids = [r['uid'] for r in result]
+    assert 'stale1' in uids, 'stale pending record must be found past the fresh window'
+    assert 'fresh1' not in uids
+    assert 'fresh2' not in uids
+
+
+def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
+    """The limit is still honoured even when over-fetching: only ``limit``
+    actionable records are returned (failed first, then stale pending)."""
+    now = datetime.now(timezone.utc)
+    stale_after = timedelta(minutes=10)
+
+    docs_by_status = {
+        'failed': [
+            {'uid': 'fail1', 'wipe_status': 'failed'},
+            {'uid': 'fail2', 'wipe_status': 'failed'},
+        ],
+        'pending': [
+            {'uid': 'stale1', 'wipe_status': 'pending', 'wipe_queued_at': now - timedelta(minutes=15)},
+        ],
+        'retrying': [],
+    }
+
+    fake_collection = _FakeCollection(docs_by_status)
+    fake_db = types.SimpleNamespace()
+    fake_db.collection = lambda name: fake_collection
+
+    with patch.object(users_db, 'db', fake_db):
+        result = users_db.get_pending_deletion_wipes(limit=2, stale_after=stale_after)
+
+    uids = {r['uid'] for r in result}
+    assert uids == {'fail1', 'fail2'}
+    assert len(result) == 2
