@@ -211,6 +211,10 @@ pytest tests/unit/test_delete_account_stripe_cancel.py -v
 pytest tests/unit/test_delete_account_purge_storage.py -v
 pytest tests/unit/test_apps_review_reply_validation.py -v
 pytest tests/unit/test_apps_create_app_json.py -v
+pytest tests/unit/test_ai_clone_database.py -v
+pytest tests/unit/test_ai_clone_llm.py -v
+pytest tests/unit/test_ai_clone_telegram.py -v
+pytest tests/unit/test_ai_clone_router.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
