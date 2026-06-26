@@ -131,7 +131,7 @@ def test_paid_user_subscription_is_canceled_before_wipe():
     get_sub.assert_called_once_with('uid1')
     cancel.assert_called_once_with('sub_123')
     fb_delete.assert_called_once()  # deletion still proceeds
-    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
@@ -143,7 +143,7 @@ def test_free_user_does_not_call_stripe():
     ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
     cancel.assert_not_called()
-    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
@@ -155,5 +155,5 @@ def test_stripe_error_does_not_block_deletion():
     ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
     fb_delete.assert_called_once()  # best-effort: Stripe failure must not abort deletion
-    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
