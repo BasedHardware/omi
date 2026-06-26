@@ -1,7 +1,7 @@
 import inspect
 
 from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
-from utils.memory.v3_route_planner import V3RoutePlanInput, plan_v3_memory_route
+from testing.memory.v3_route_planner import V3RoutePlanInput, plan_v3_memory_route
 from utils.memory.v3_write_convergence import V3ExternalWriteOperation, V3WriteConvergenceStatus
 
 
@@ -196,7 +196,7 @@ def test_route_planner_preserves_archive_default_unavailable_and_no_stale_short_
 
 
 def test_route_planner_is_pure_local_and_does_not_import_route_or_external_clients():
-    source = inspect.getsource(__import__('utils.memory.v3_route_planner', fromlist=['']))
+    source = inspect.getsource(__import__('testing.memory.v3_route_planner', fromlist=['']))
     forbidden = [
         'routers.memories',
         'FastAPI',
