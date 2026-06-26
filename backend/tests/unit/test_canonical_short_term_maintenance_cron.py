@@ -61,6 +61,7 @@ from utils.memory.short_term_promotion import (
     ShortTermPromotionReport,
     promotion_batch_threshold,
 )
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from tests.unit.test_ws_b_short_term_lifecycle import (
     _canonical_db_with_control,
     _seed_canonical_short_term,
@@ -74,14 +75,18 @@ LEGACY_UID = "uid-legacy-only"
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+def _clear_canonical_cohort(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", raising=False)
     monkeypatch.delenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", raising=False)
 
 
-def test_list_canonical_cohort_uids_reads_whitelist_only(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", f" {CANONICAL_B}, {CANONICAL_A} ")
+def test_list_canonical_cohort_uids_reads_code_cohort_only(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+    set_canonical_cohort(monkeypatch, CANONICAL_B, CANONICAL_A)
 
     assert list_canonical_cohort_uids() == [CANONICAL_A, CANONICAL_B]
 
@@ -90,13 +95,13 @@ def test_should_run_is_false_when_disabled_or_cohort_empty(monkeypatch):
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     assert should_run_canonical_short_term_maintenance_cron(now=NOW) is False
 
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
     assert should_run_canonical_short_term_maintenance_cron(now=NOW) is False
 
 
 def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS", "1")
 
@@ -110,7 +115,7 @@ def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatc
 
 
 def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", f"{CANONICAL_A},{CANONICAL_B}")
+    set_canonical_cohort(monkeypatch, CANONICAL_A, CANONICAL_B)
     db = _canonical_db_with_control(CANONICAL_A)
 
     invoked: list[str] = []
@@ -139,7 +144,7 @@ def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypat
 
 
 def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
 
     summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
@@ -151,7 +156,7 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
 
 
 def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     memory_id = _seed_canonical_short_term(
@@ -170,7 +175,7 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
 
 
 def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
@@ -190,7 +195,7 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch):
 
 
 def test_daily_cadence_after_first_promotion_run(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_A)
+    set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
