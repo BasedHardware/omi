@@ -185,10 +185,12 @@ def _seed_legacy_evidence(db: _PromotionFakeDb, rows: list[dict]) -> None:
 
 @pytest.fixture(autouse=True)
 def _canonical_cohort_for_backfill(monkeypatch, request):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
+
     if "test_gate_blocks_non_whitelisted_uid" in request.node.name:
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        clear_canonical_cohort(monkeypatch)
         return
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", LEGACY_UID)
+    set_canonical_cohort(monkeypatch, LEGACY_UID)
 
 
 @pytest.fixture
@@ -208,7 +210,7 @@ def test_gate_blocks_non_whitelisted_uid(_trusted_account):
 
     assert report.cohort_gated is True
     assert report.written_count == 0
-    assert report.errors == ["cohort_gate: uid not in MEMORY_CANONICAL_USERS (use allow_admin_override=True to bypass)"]
+    assert report.errors == ["cohort_gate: uid not in CANONICAL_MEMORY_USERS (use allow_admin_override=True to bypass)"]
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
 
 
@@ -287,7 +289,9 @@ def test_semantic_duplicate_skipped_in_run(_trusted_account):
 
 
 def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     uid = "uid-orphan-override"
     rows = [_legacy_row(legacy_id="leg-orphan", content="Orphan fact", conversation_id="conv-orphan")]
     rows[0]["uid"] = uid
@@ -314,7 +318,9 @@ def test_admin_override_without_ack_hard_fails(_trusted_account, monkeypatch):
 def test_admin_override_with_ack_writes_and_logs(_trusted_account, monkeypatch, caplog):
     import logging
 
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     uid = "uid-orphan-override-ok"
     rows = [_legacy_row(legacy_id="leg-orphan-ok", content="Orphan ok fact", conversation_id="conv-orphan-ok")]
     rows[0]["uid"] = uid
