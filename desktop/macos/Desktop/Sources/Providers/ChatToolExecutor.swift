@@ -30,8 +30,6 @@ class ChatToolExecutor {
 
   private static var fileScanFileCount = 0
   private static var followupContinuation: CheckedContinuation<String, Never>?
-  private static var waSentClientMessageIDs = Set<String>()
-
   static func resumeFollowup(with reply: String) {
     followupContinuation?.resume(returning: reply)
     followupContinuation = nil
@@ -1598,15 +1596,22 @@ class ChatToolExecutor {
       ])
     }
 
-    if let clientMessageID = nonEmptyString(args["client_message_id"] ?? args["dedupe_id"]) {
-      if waSentClientMessageIDs.contains(clientMessageID) {
-        return waJSON([
-          "status": "duplicate",
-          "client_message_id": clientMessageID,
-          "sent": false,
-        ])
-      }
-      waSentClientMessageIDs.insert(clientMessageID)
+    let clientMessageID = nonEmptyString(args["client_message_id"] ?? args["dedupe_id"])
+    switch WhatsAppReplySettings.shared.canAttemptManualSend(clientMessageID: clientMessageID) {
+    case .allowed:
+      break
+    case .duplicate:
+      return waJSON([
+        "status": "duplicate",
+        "client_message_id": clientMessageID ?? "",
+        "sent": false,
+      ])
+    case .blocked(let reason):
+      return waJSON([
+        "status": "blocked",
+        "error": reason,
+        "sent": false,
+      ])
     }
 
     if (args["queue_for_approval"] as? Bool) == true {

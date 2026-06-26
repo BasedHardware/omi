@@ -182,8 +182,7 @@ final class WhatsAppReplyCoordinator {
 
     do {
       let draft = try await draftReply(for: message)
-      latestDrafts[message.id] = draft
-      log("WhatsAppReplyCoordinator: drafted reply for \(message.chatJid): \(draft.text.prefix(160))")
+      await routeDraft(draft, for: message)
     } catch {
       log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(error.localizedDescription)")
     }
@@ -194,10 +193,53 @@ final class WhatsAppReplyCoordinator {
   }
 
   private func shouldProcess(_ message: WAIncomingMessage) -> Bool {
+    guard WhatsAppReplySettings.shared.mode != .off else { return false }
+    guard !WhatsAppReplySettings.shared.killSwitchEnabled else { return false }
     guard !message.fromMe else { return false }
     guard !message.isStatusOrBroadcast else { return false }
     guard !processedMessageIDs.contains(message.id) else { return false }
     return true
+  }
+
+  private func routeDraft(_ draft: WhatsAppDraft, for message: WAIncomingMessage) async {
+    let decision = WhatsAppReplySettings.shared.autoDecision(for: message, draftText: draft.text)
+    switch decision {
+    case .ignore(let reason):
+      appendAudit(for: draft, outcome: "ignored", reason: reason)
+      log("WhatsAppReplyCoordinator: ignored message \(message.id), reason=\(reason)")
+
+    case .draft(let reason):
+      latestDrafts[message.id] = draft
+      appendAudit(for: draft, outcome: "drafted", reason: reason)
+      log("WhatsAppReplyCoordinator: drafted reply for \(message.chatJid), reason=\(reason): \(draft.text.prefix(160))")
+
+    case .auto:
+      let result = await ChatToolExecutor.execute(ToolCall(
+        name: "wa_send_message",
+        arguments: [
+          "to": message.chatJid,
+          "message": draft.text,
+          "client_message_id": "auto:\(message.id)",
+        ],
+        thoughtSignature: nil
+      ))
+      WhatsAppReplySettings.shared.markAutoSent(to: message.senderJid)
+      appendAudit(for: draft, outcome: "auto_sent", reason: result)
+      log("WhatsAppReplyCoordinator: auto-sent reply for \(message.chatJid): \(result.prefix(200))")
+    }
+  }
+
+  private func appendAudit(for draft: WhatsAppDraft, outcome: String, reason: String?) {
+    WhatsAppReplySettings.shared.appendAuditEntry(WhatsAppAuditEntry(
+      id: UUID().uuidString,
+      createdAt: Date(),
+      chatJid: draft.chatJid,
+      senderJid: draft.senderJid,
+      messageID: draft.messageID,
+      text: draft.text,
+      outcome: outcome,
+      reason: reason
+    ))
   }
 
   private func draftReply(for message: WAIncomingMessage) async throws -> WhatsAppDraft {
