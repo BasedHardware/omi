@@ -11,7 +11,7 @@ from pathlib import Path
 
 REQUIRED_ASSETS = {"Omi.zip"}
 DMG_ASSETS = {"omi.dmg", "Omi.dmg"}
-TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?\+\d+)-macos$")
+TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
 
 
 def fail(message: str) -> None:
@@ -103,6 +103,7 @@ def main() -> int:
         {
             "release_channel": channel,
             "release_version": tag_match.group("version"),
+            "release_build_number": tag_match.group("build"),
             "firestore_doc_id": f"v{tag_match.group('version')}",
         },
     )

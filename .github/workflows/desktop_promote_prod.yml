@@ -133,6 +133,7 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           FIRESTORE_DOC_ID: ${{ steps.plan.outputs.firestore_doc_id }}
           EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}
+          EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}
         run: |
           set -euo pipefail
           ACCESS_TOKEN=$(gcloud auth print-access-token)
@@ -155,6 +156,9 @@ jobs:
           def bool_field(name):
               return fields.get(name, {}).get("booleanValue")
 
+          def int_field(name):
+              return fields.get(name, {}).get("integerValue")
+
           channel = string_field("channel")
           version = string_field("version")
           is_live = bool_field("is_live")
@@ -169,6 +173,13 @@ jobs:
           if version != os.environ["EXPECTED_VERSION"]:
               print(
                   f"Firestore bridge release version mismatch: expected {os.environ['EXPECTED_VERSION']!r}, got {version!r}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+          build_number = int_field("build_number")
+          if build_number is None or int(build_number) != int(os.environ["EXPECTED_BUILD_NUMBER"]):
+              print(
+                  f"Firestore bridge release build_number mismatch: expected {os.environ['EXPECTED_BUILD_NUMBER']!r}, got {build_number!r}",
                   file=sys.stderr,
               )
               sys.exit(1)
