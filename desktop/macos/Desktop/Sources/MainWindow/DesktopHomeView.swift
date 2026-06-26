@@ -145,7 +145,9 @@ struct DesktopHomeView: View {
               appState.checkAllPermissions()
 
               // For existing users who haven't indexed files yet, run a background scan
-              if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+              if !AppBuild.usesLazyDevPermissions
+                && !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
+              {
                 UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
                 Task {
                   log("DesktopHomeView: Running background file scan for existing user")
@@ -319,6 +321,7 @@ struct DesktopHomeView: View {
               while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3 * 60 * 60))
                 guard !Task.isCancelled else { break }
+                guard !AppBuild.usesLazyDevPermissions else { continue }
                 guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else {
                   continue
                 }

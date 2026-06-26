@@ -37,6 +37,7 @@ pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
+pytest tests/unit/test_mcp_profile_contact.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
@@ -65,6 +66,7 @@ pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
+pytest tests/unit/test_retrieval_semantics.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
@@ -85,6 +87,7 @@ pytest tests/unit/test_file_upload_endpoint_security.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
+pytest tests/unit/utils/test_listen_pusher_session.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
@@ -103,6 +106,7 @@ pytest tests/unit/test_speech_profile_wav_decode.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
 pytest tests/unit/test_deferred_blob_janitor.py -v
 pytest tests/unit/test_audio_merge_tasks.py -v
+pytest tests/unit/test_sync_playback_service.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_import_jobs_malformed.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v

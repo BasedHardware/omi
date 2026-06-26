@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
 
-from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -14,6 +13,8 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+import database.phone_calls as phone_calls_db
+from firebase_admin import auth as firebase_auth
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -22,7 +23,6 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
-from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -75,7 +75,6 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
         upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 
@@ -111,9 +110,36 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
 
 
 class UserProfile(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
     profile_text: Optional[str] = None
     generated_at: Optional[str] = None
     data_sources_used: Optional[int] = None
+
+
+def _get_user_contact(uid: str) -> dict:
+    """Best-effort name/email/phone for the profile. Never raises — a contact
+    lookup failure must not break the profile response."""
+    name = email = phone_number = None
+    try:
+        user = firebase_auth.get_user(uid)
+        name = user.display_name or None
+        email = user.email or None
+        phone_number = user.phone_number or None
+    except Exception as e:
+        # Expected for uids with no Firebase Auth record; warn (no traceback).
+        logger.warning("get_user_profile: firebase contact lookup failed uid=%s: %s", uid, e)
+    if not phone_number:
+        try:
+            # get_phone_numbers returns decrypted dicts; prefer the primary one.
+            numbers = phone_calls_db.get_phone_numbers(uid) or []
+            primary = next((n for n in numbers if n.get("is_primary")), None) or (numbers[0] if numbers else None)
+            if primary:
+                phone_number = primary.get("phone_number")
+        except Exception as e:
+            logger.warning("get_user_profile: phone_numbers lookup failed uid=%s: %s", uid, e)
+    return {"name": name, "email": email, "phone_number": phone_number}
 
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
@@ -121,7 +147,11 @@ def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
     """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
+    contact = _get_user_contact(uid)
     return UserProfile(
+        name=contact["name"],
+        email=contact["email"],
+        phone_number=contact["phone_number"],
         profile_text=profile.get("profile_text"),
         generated_at=str(generated_at) if generated_at is not None else None,
         data_sources_used=profile.get("data_sources_used"),

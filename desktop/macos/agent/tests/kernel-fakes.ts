@@ -113,7 +113,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     sink({
       type: "text_delta",
       text: `delta-${context.attemptId}`,
-      sessionId: context.binding.adapterNativeSessionId,
+      adapterSessionId: context.binding.adapterNativeSessionId,
     });
     if (this.failNextExecutionAsStale) {
       this.failNextExecutionAsStale = false;
@@ -135,7 +135,6 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     this.nextArtifacts = undefined;
     return {
       text: `done-${context.attemptId}`,
-      sessionId: context.binding.adapterNativeSessionId,
       adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
       inputTokens: 1,
@@ -166,7 +165,6 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     }
     this.pendingResult.resolve({
       text: result.text ?? "cancelled text",
-      sessionId: result.sessionId ?? "native-cancelled",
       adapterSessionId: result.adapterSessionId ?? "native-cancelled",
       terminalStatus: result.terminalStatus ?? "cancelled",
       ...result,

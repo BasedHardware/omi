@@ -32,6 +32,33 @@ describe("AgentRuntimeKernel adapter binding resolution", () => {
     store.close();
   });
 
+  it("treats legacy null cwd bindings as compatible with the default cwd", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const runInput = {
+      ...baseRunInput,
+      cwd: undefined,
+      legacyAdapterSessionId: "legacy-native",
+    };
+
+    await kernel.executeRun(runInput);
+    store.execute("UPDATE adapter_bindings SET cwd = NULL");
+
+    const result = await kernel.executeRun({
+      ...runInput,
+      requestId: "request-2",
+      legacyAdapterSessionId: undefined,
+    });
+
+    expect(result.adapterSessionId).toBe("legacy-native");
+    expect(adapter.opened).toHaveLength(0);
+    expect(adapter.resumed).toHaveLength(2);
+    expect(adapter.resumed[1]?.cwd).toBe(process.cwd());
+    expect(store.allRows("SELECT binding_generation, adapter_native_session_id, status FROM adapter_bindings ORDER BY binding_generation")).toEqual([
+      expect.objectContaining({ binding_generation: 1, adapter_native_session_id: "legacy-native", status: "active" }),
+    ]);
+    store.close();
+  });
+
   it("marks stale native bindings and retries under the same run with a new generation", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.failNextResume = true;
