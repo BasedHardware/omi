@@ -26,7 +26,7 @@ from utils.conversations.render import populate_speaker_names, redact_conversati
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_memory_default_memory_read_context
@@ -34,8 +34,8 @@ from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
-    assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_write_convergence_gate,
+    guard_legacy_memory_write,
+    read_default_read_rollout,
 )
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -49,7 +49,6 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    read_mcp_default_memory_rollout,
     search_default_mcp_memories_vector,
 )
 import database.mcp_api_key as mcp_api_key_db
@@ -94,12 +93,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
         postprocess_executor.submit(update_personas_async, uid)
         return memory_db
 
-    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
-    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        memory_rollout,
-        operation="mcp_memory_create",
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_create")
     if not memory_write_guard.allowed:
         raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
@@ -122,18 +116,7 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
 
 
 def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
-    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-        item = _read_canonical_memory_item(uid, memory_id, db_client=db)
-        if item is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
-
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-    return memory
+    return fetch_memory_dict(uid, memory_id, db_client=db)
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
@@ -143,12 +126,7 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
         MemoryService(db_client=db).delete(uid, memory_id)
         return {"status": "ok"}
 
-    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
-    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        memory_rollout,
-        operation="mcp_memory_delete",
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_delete")
     if not memory_write_guard.allowed:
         raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
@@ -168,12 +146,7 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
         MemoryService(db_client=db).update_content(uid, memory_id, value)
         return {"status": "ok"}
 
-    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
-    memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        memory_rollout,
-        operation="mcp_memory_edit",
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_edit")
     if not memory_write_guard.allowed:
         raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
 
@@ -246,7 +219,7 @@ def search_memories(
     if memory_system == MemorySystem.CANONICAL:
         return memory_service.search_mcp(uid, query, limit=limit)
 
-    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
     vector_search_results = search_default_mcp_memories_vector(
         uid=uid,
         query=query,
@@ -310,7 +283,7 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    memory_rollout = read_mcp_default_memory_rollout(uid=uid, db_client=db)
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
     memory_list_results = list_default_mcp_memories(
         uid=uid,
         limit=limit,
