@@ -66,6 +66,29 @@ describe("agent control tools", () => {
     );
   });
 
+  it("constrains canonical list surfaceKind to known surfaces", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "surprise_surface",
+      }),
+    );
+    const valid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "realtime",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_input" },
+    });
+    expect(valid.ok).toBe(true);
+    store.close();
+  });
+
   it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
     const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
     expect(delegateAgent?.description).toContain("canonical child handles");

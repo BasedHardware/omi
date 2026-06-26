@@ -5,6 +5,7 @@ import { agentControlCapabilityManifest, agentControlInputSchema } from "./contr
 import type { McpServerBuildContext } from "./compatibility-facade.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
+const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
@@ -13,7 +14,7 @@ const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 const listAgentSessionsSchema = z.object({
   ownerId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
-  surfaceKind: z.string().min(1).optional(),
+  surfaceKind: agentSurfaceKindSchema.optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
   beforeUpdatedAtMs: z.coerce.number().int().positive().optional(),
 });

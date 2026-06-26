@@ -54,4 +54,19 @@ describe("protocol v2 compatibility", () => {
     const outbound: OutboundMessage = message;
     expect(outbound.type).toBe("cancel_ack");
   });
+
+  it("defines direct app control as an owner-guarded inbound message", () => {
+    const message: InboundMessage = {
+      type: "direct_control_tool",
+      protocolVersion: 2,
+      requestId: "control-request",
+      clientId: "realtime-hub",
+      ownerId: "owner-1",
+      name: "list_agent_sessions",
+      input: { limit: 10 },
+    };
+
+    expect(message.type).toBe("direct_control_tool");
+    expect(requestIdFor(message)).toBe("control-request");
+  });
 });

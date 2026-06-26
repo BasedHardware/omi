@@ -37,6 +37,7 @@ import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
+  DirectControlToolRequestMessage,
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
@@ -65,11 +66,20 @@ import {
   withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
+  type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
+  "list_agent_sessions",
+  "get_agent_run",
+  "cancel_agent_run",
+  "inspect_agent_artifacts",
+  "update_agent_artifact_lifecycle",
+]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -1157,6 +1167,82 @@ async function main(): Promise<void> {
                 error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
               });
             })();
+        send({
+          type: "control_tool_result",
+          protocolVersion: control.protocolVersion,
+          requestId,
+          clientId: control.clientId,
+          name: control.name,
+          result,
+        });
+        break;
+      }
+
+      case "direct_control_tool": {
+        const control = msg as DirectControlToolRequestMessage;
+        const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
+        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "unsupported_direct_control_tool",
+                message: `Direct app control cannot execute ${control.name}`,
+              },
+            }),
+          });
+          break;
+        }
+
+        let controlContext: ResolvedControlRequestContext;
+        let controlInput: Record<string, unknown>;
+        try {
+          controlContext = resolveControlRequestContext({
+            ownerGuard: control.ownerId,
+            activeOwnerId: control.ownerId,
+            requireActiveOwner: true,
+            requireOwnerGuard: true,
+            requestId,
+            clientId: control.clientId,
+          });
+          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+        } catch (error) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+
+        const result = agentControlToolContext
+          ? await handleAgentControlToolCall(
+              {
+                ...agentControlToolContext,
+                getProtocolVersion: () => control.protocolVersion,
+                getOwnerId: () => controlContext.activeOwnerId,
+              },
+              control.name,
+              controlInput,
+            )
+          : JSON.stringify({
+              ok: false,
+              error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+            });
         send({
           type: "control_tool_result",
           protocolVersion: control.protocolVersion,

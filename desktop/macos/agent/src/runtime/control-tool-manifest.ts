@@ -51,7 +51,11 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
     properties: {
       ownerId: { type: "string", description: "Owner id to list. Defaults to the active signed-in owner." },
       status: { type: "string", enum: ["open", "archived", "closed"] },
-      surfaceKind: { type: "string", description: "Filter to a surface kind such as main_chat, task_chat, or floating_pill." },
+      surfaceKind: {
+        type: "string",
+        enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"],
+        description: "Filter to a canonical surface kind.",
+      },
       limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
       beforeUpdatedAtMs: { type: "number", description: "Pagination cursor: only sessions updated before this epoch-ms timestamp." },
     },
