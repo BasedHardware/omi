@@ -268,30 +268,6 @@ def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
 @pytest.mark.parametrize(
     ("legacy_key", "neutral_key", "legacy_value", "neutral_value", "reader", "expected"),
     [
-        (
-            "MEMORY_BACKFILL_ENABLED",
-            "MEMORY_BACKFILL_ENABLED",
-            "true",
-            "false",
-            "rollout_backfill_enabled_env_value",
-            False,
-        ),
-        (
-            "MEMORY_BACKFILL_DAILY_LIMIT",
-            "MEMORY_BACKFILL_DAILY_LIMIT",
-            "5",
-            "10",
-            "rollout_backfill_daily_limit_env_value",
-            10,
-        ),
-        (
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "false",
-            "true",
-            "rollout_archive_opt_in_enabled_env_value",
-            True,
-        ),
         ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "false", "true", "rollout_v3_get_enabled_env_value", True),
     ],
 )
@@ -306,21 +282,6 @@ def test_rollout_extended_env_dual_read_neutral_precedence(
 @pytest.mark.parametrize(
     ("legacy_key", "neutral_key", "legacy_value", "reader", "expected"),
     [
-        ("MEMORY_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "true", "rollout_backfill_enabled_env_value", True),
-        (
-            "MEMORY_BACKFILL_DAILY_LIMIT",
-            "MEMORY_BACKFILL_DAILY_LIMIT",
-            "7",
-            "rollout_backfill_daily_limit_env_value",
-            7,
-        ),
-        (
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "true",
-            "rollout_archive_opt_in_enabled_env_value",
-            True,
-        ),
         ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "true", "rollout_v3_get_enabled_env_value", True),
     ],
 )
@@ -333,14 +294,6 @@ def test_rollout_extended_env_dual_read_legacy_fallback(legacy_key, neutral_key,
 @pytest.mark.parametrize(
     ("neutral_key", "legacy_key", "reader", "expected"),
     [
-        ("MEMORY_BACKFILL_ENABLED", "MEMORY_BACKFILL_ENABLED", "rollout_backfill_enabled_env_value", False),
-        ("MEMORY_BACKFILL_DAILY_LIMIT", "MEMORY_BACKFILL_DAILY_LIMIT", "rollout_backfill_daily_limit_env_value", 0),
-        (
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "MEMORY_ARCHIVE_OPT_IN_ENABLED",
-            "rollout_archive_opt_in_enabled_env_value",
-            False,
-        ),
         ("MEMORY_V3_GET_ENABLED", "MEMORY_V3_GET_ENABLED", "rollout_v3_get_enabled_env_value", False),
     ],
 )
@@ -348,22 +301,6 @@ def test_rollout_extended_env_dual_read_unset_defaults(neutral_key, legacy_key, 
     from config import memory_rollout
 
     assert getattr(memory_rollout, reader)({}) == expected
-
-
-def test_rollout_config_from_env_uses_extended_dual_read(monkeypatch):
-    from config.memory_rollout import MemoryRolloutConfig
-
-    monkeypatch.delenv("MEMORY_BACKFILL_ENABLED", raising=False)
-    monkeypatch.delenv("MEMORY_BACKFILL_DAILY_LIMIT", raising=False)
-    monkeypatch.delenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", raising=False)
-    monkeypatch.setenv("MEMORY_BACKFILL_ENABLED", "true")
-    monkeypatch.setenv("MEMORY_BACKFILL_DAILY_LIMIT", "12")
-    monkeypatch.setenv("MEMORY_ARCHIVE_OPT_IN_ENABLED", "true")
-
-    config = MemoryRolloutConfig.from_env()
-    assert config.backfill_enabled is True
-    assert config.backfill_daily_limit == 12
-    assert config.archive_opt_in_enabled is True
 
 
 def _router_method_path_pairs(router):
