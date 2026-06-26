@@ -27,7 +27,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from utils.memory.v3_projection_readiness import DERIVED_COMPATIBILITY_PROJECTION_SOURCE
-from utils.memory.v3_route_planner import V3RouteExecutionPlan, V3RoutePlanInput, plan_v3_memory_route
+from testing.memory.v3_route_planner import V3RouteExecutionPlan, V3RoutePlanInput, plan_v3_memory_route
 
 REAL_ROUTER_FAIL_CLOSED_MATRIX_PROOF = {
     "service": "backend/scripts/p1_3_v3_real_router_fail_closed_matrix.py",
