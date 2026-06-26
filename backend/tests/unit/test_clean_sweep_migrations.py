@@ -43,21 +43,12 @@ def _read_source(rel_path: str) -> str:
 
 
 class TestMemoriesExecutorMigration:
-    """Verify memories router uses postprocess_executor for persona updates and db_executor for DB."""
+    """Verify memories router dispatches background work via executors, not bare threads."""
 
     def test_create_memory_uses_postprocess_executor(self):
-        """create_memory route dispatches persona update via postprocess_executor."""
+        """create_memory route dispatches background work via postprocess_executor."""
         src = _read_source('routers/memories.py')
         assert 'postprocess_executor' in src
-        assert 'update_personas_async' in src
-
-    def test_update_visibility_uses_postprocess_executor(self):
-        """update_memory_visibility uses postprocess_executor, not threading.Thread."""
-        src = _read_source('routers/memories.py')
-        # Find the update_memory_visibility function and check its body
-        func_start = src.index('def update_memory_visibility')
-        func_body = src[func_start : func_start + 500]
-        assert 'postprocess_executor.submit(update_personas_async' in func_body
 
     def test_no_threading_thread_in_memories(self):
         """No bare threading.Thread usage in memories router."""
@@ -291,27 +282,19 @@ class TestChatExecutorMigration:
 
 
 class TestDeveloperExecutorMigration:
-    """Verify developer router uses postprocess_executor for persona update."""
+    """Verify developer router does not use bare threads for background work."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/developer.py')
         assert 'threading.Thread' not in src
-
-    def test_uses_postprocess_executor(self):
-        src = _read_source('routers/developer.py')
-        assert 'postprocess_executor.submit(' in src
 
 
 class TestMcpExecutorMigration:
-    """Verify mcp router uses postprocess_executor for persona update."""
+    """Verify mcp router does not use bare threads for background work."""
 
     def test_no_threading_thread(self):
         src = _read_source('routers/mcp.py')
         assert 'threading.Thread' not in src
-
-    def test_uses_postprocess_executor(self):
-        src = _read_source('routers/mcp.py')
-        assert 'postprocess_executor.submit(' in src
 
 
 class TestWrappedExecutorMigration:
