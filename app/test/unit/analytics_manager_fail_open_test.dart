@@ -64,6 +64,13 @@ void main() {
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
   });
 
+  test('retry delay sequence starts with the first backoff slot', () {
+    expect(AnalyticsManager.retryDelayForTesting(1), const Duration(seconds: 1));
+    expect(AnalyticsManager.retryDelayForTesting(2), const Duration(seconds: 5));
+    expect(AnalyticsManager.retryDelayForTesting(3), const Duration(seconds: 30));
+    expect(AnalyticsManager.retryDelayForTesting(4), const Duration(seconds: 30));
+  });
+
   test('queue is bounded and drops oldest events under pressure', () {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);

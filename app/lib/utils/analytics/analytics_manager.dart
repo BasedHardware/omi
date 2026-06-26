@@ -67,6 +67,9 @@ class AnalyticsManager {
   static int get droppedEventCountForTesting => _droppedEvents;
 
   @visibleForTesting
+  static Duration retryDelayForTesting(int attempts) => _retryDelayForAttempt(attempts);
+
+  @visibleForTesting
   static void resetForTesting() {
     _adapter = null;
     _initStarted = false;
@@ -350,7 +353,8 @@ class AnalyticsManager {
   }
 
   static Duration _retryDelayForAttempt(int attempts) {
-    final delayIndex = attempts >= _retryDelays.length ? _retryDelays.length - 1 : attempts;
+    final delayIndex = attempts <= 1 ? 0 : attempts - 1;
+    if (delayIndex >= _retryDelays.length) return _retryDelays.last;
     return _retryDelays[delayIndex];
   }
 
