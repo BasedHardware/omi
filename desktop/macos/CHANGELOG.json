@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
-    "Improves update release safety checks"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.538",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
+        "Improves update release safety checks"
+      ]
+    },
     {
       "version": "0.11.537",
       "date": "2026-06-26",
