@@ -68,12 +68,11 @@ function get(): Database.Database {
   // never reads or writes the user's real omi.db.
   const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
   db = new Database(file)
-  // WAL mode: allows reads on the main thread to proceed concurrently while the
-  // KG write worker holds the write lock. NORMAL sync is crash-safe in WAL mode
-  // (may lose the last committed transaction on OS power-loss; acceptable for
-  // this derived cache). Previously bench-only; now unconditional.
+  // WAL mode: allows main-thread reads to proceed concurrently while the KG
+  // write worker holds the write lock. Synchronous stays at the default FULL so
+  // non-KG tables (local_conversation etc.) are not at power-loss risk.
+  // The worker sets synchronous=NORMAL only on its own connection.
   db.pragma('journal_mode = WAL')
-  db.pragma('synchronous = NORMAL')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
@@ -402,9 +401,9 @@ export function pruneAppUsage(cutoff: number): number {
 
 // --- Local knowledge graph (M2) ---
 
-// Full-replace the local graph: clear both tables and batch-insert in a single
-// transaction (matches replaceIndexedFiles cadence). 500-row batches keep
-// large graphs off a single mega-statement.
+// replaceLocalGraph — superseded by KgWriteQueue + kgWorker.ts (off-thread WAL
+// replace). Retained here so the schema initialisation path in get() and any
+// future rollback of the worker approach does not require re-adding this.
 export function replaceLocalGraph(graph: LocalKnowledgeGraph): void {
   const d = get()
   const insertNode = d.prepare(

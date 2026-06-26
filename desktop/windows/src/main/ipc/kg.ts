@@ -9,6 +9,7 @@ import {
   searchIndexedFiles
 } from './db'
 import { guardSelect } from '../../shared/sqlGuard'
+import { KgWriteQueue } from './kgWriteQueue'
 import type { LocalKnowledgeGraph } from '../../shared/types'
 
 // ---------------------------------------------------------------------------
@@ -17,20 +18,16 @@ import type { LocalKnowledgeGraph } from '../../shared/types'
 // Writes run in a worker_thread so the Electron main thread stays free for
 // IPC during the synchronous DELETE+INSERT transaction.
 //
-// Lifecycle:
+// Lifecycle (managed by KgWriteQueue):
 //   - Worker is created lazily on the first kg:saveGraph call.
 //   - At most one write runs at a time; subsequent kg:saveGraph calls are
 //     coalesced — only the latest pending graph is kept.
+//   - kg:saveGraph returns a Promise that resolves when the write commits and
+//     rejects on worker error or factory failure.
 //   - Reads (queryNodes / status) run on the main thread via WAL mode.
-//   - kgSnapshot caches the last successfully written graph so empty-query
-//     reads skip SQLite entirely.
+//   - The queue's snapshot caches the last successfully written graph so
+//     empty-query reads skip SQLite entirely.
 // ---------------------------------------------------------------------------
-
-let worker: Worker | null = null
-let workerBusy = false
-let pendingGraph: LocalKnowledgeGraph | null = null
-let lastDispatched: LocalKnowledgeGraph | null = null
-let kgSnapshot: LocalKnowledgeGraph | null = null
 
 function dbPath(): string {
   return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
@@ -45,56 +42,15 @@ function workerScriptPath(): string {
   return join(__dirname, 'kgWorker.js')
 }
 
-function ensureWorker(): Worker {
-  if (worker) return worker
-  worker = new Worker(workerScriptPath(), { workerData: { dbPath: dbPath() } })
-  worker.on('message', (msg: { type: string; ms?: number; message?: string }) => {
-    if (msg.type === 'done') {
-      kgSnapshot = lastDispatched
-    } else if (msg.type === 'error') {
-      console.error('[kg:worker] saveGraph error:', msg.message)
-    }
-    workerBusy = false
-    flushPending()
-  })
-  worker.on('error', (err) => {
-    console.error('[kg:worker] crash:', err.message)
-    worker = null
-    workerBusy = false
-    flushPending()
-  })
-  return worker
-}
+let writeQueue: KgWriteQueue | null = null
 
-function flushPending(): void {
-  if (pendingGraph !== null) {
-    const next = pendingGraph
-    pendingGraph = null
-    dispatch(next)
+function getQueue(): KgWriteQueue {
+  if (!writeQueue) {
+    writeQueue = new KgWriteQueue(
+      () => new Worker(workerScriptPath(), { workerData: { dbPath: dbPath() } })
+    )
   }
-}
-
-function dispatch(graph: LocalKnowledgeGraph): void {
-  workerBusy = true
-  lastDispatched = graph
-  try {
-    ensureWorker().postMessage({ type: 'replace', nodes: graph.nodes, edges: graph.edges })
-  } catch (err) {
-    // Worker construction failed (e.g. missing kgWorker.js in packaged build).
-    // Reset state so future saves can retry rather than being silently dropped.
-    console.error('[kg:worker] failed to dispatch:', (err as Error).message)
-    worker = null
-    workerBusy = false
-    flushPending()
-  }
-}
-
-function enqueueGraph(graph: LocalKnowledgeGraph): void {
-  if (workerBusy) {
-    pendingGraph = graph
-    return
-  }
-  dispatch(graph)
+  return writeQueue
 }
 
 // ---------------------------------------------------------------------------
@@ -104,9 +60,10 @@ function enqueueGraph(graph: LocalKnowledgeGraph): void {
 export function registerKgHandlers(): void {
   ipcMain.handle('kg:fileIndexDigest', async () => getFileIndexDigest())
 
-  // Offloaded to worker — returns immediately, write completes asynchronously.
+  // Returns a Promise that resolves after the worker commits the write and
+  // rejects on worker error or factory failure, so callers can await durability.
   ipcMain.handle('kg:saveGraph', (_e, graph: LocalKnowledgeGraph) => {
-    enqueueGraph(graph)
+    return getQueue().enqueue(graph)
   })
 
   ipcMain.handle('kg:status', () => getLocalKGStatus())
@@ -114,14 +71,15 @@ export function registerKgHandlers(): void {
   ipcMain.handle('kg:queryNodes', (_e, q: string, limit?: number) => {
     // Resolve cap once so snapshot and DB paths always return the same count.
     const cap = limit ?? 80
-    if (q === '' && kgSnapshot !== null) {
+    const snap = getQueue().snapshot
+    if (q === '' && snap !== null) {
       // Hot path: serve from in-memory snapshot, no SQLite access required.
-      const nodes = kgSnapshot.nodes
+      const nodes = snap.nodes
         .slice()
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, cap)
       const idSet = new Set(nodes.map((n) => n.id))
-      const edges = kgSnapshot.edges.filter((e) => idSet.has(e.sourceId) || idSet.has(e.targetId))
+      const edges = snap.edges.filter((e) => idSet.has(e.sourceId) || idSet.has(e.targetId))
       return { nodes, edges }
     }
     return queryKgNodes(q, cap)
