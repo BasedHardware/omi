@@ -142,6 +142,7 @@ _drop_stale_module("routers.developer", BACKEND_DIR / "routers" / "developer.py"
 _drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conversations" / "render.py")
 
 import database.conversations as conversations_db  # noqa: E402  (the stub)
+import database.vector_db as vector_db  # noqa: E402  (the stub)
 from models.conversation_enums import CategoryEnum  # noqa: E402  (real enum)
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -180,3 +181,26 @@ def test_malformed_conversation_skipped_not_500():
         resp = _build().get('/v1/dev/user/conversations')
     assert resp.status_code == 200
     assert [c['id'] for c in resp.json()] == ['c1', 'c2']
+
+
+def test_conversation_search_hydrates_scores_and_skips_locked():
+    locked = _valid('locked')
+    locked['is_locked'] = True
+    matches = [
+        {'conversation_id': 'c1', 'score': 0.91},
+        {'conversation_id': 'locked', 'score': 0.87},
+        {'conversation_id': 'c2', 'score': 0.74},
+    ]
+    with patch.object(vector_db, 'find_similar_conversations', return_value=matches) as mock_search, patch.object(
+        conversations_db, 'get_conversations_by_id', return_value=[_valid('c2'), locked, _valid('c1')]
+    ) as mock_get, patch.object(developer_module, 'populate_folder_names', lambda *a, **k: None), patch.object(
+        developer_module, 'populate_speaker_names', lambda *a, **k: None
+    ):
+        resp = _build().get('/v1/dev/user/conversations/search?query=roadmap&limit=3')
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert [(item['conversation']['id'], item['score']) for item in payload] == [('c1', 0.91), ('c2', 0.74)]
+    assert payload[0]['conversation']['transcript_segments'] is None
+    mock_search.assert_called_once_with(uid='uid1', query='roadmap', starts_at=None, ends_at=None, limit=3)
+    mock_get.assert_called_once_with('uid1', ['c1', 'locked', 'c2'])
