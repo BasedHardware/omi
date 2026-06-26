@@ -17,7 +17,10 @@ def generate_clone_reply(
         history_lines = []
         for turn in conversation_history[-6:]:
             role = sender if turn.get('role') == 'user' else user_name
-            history_lines.append(f'{role}: {turn.get("content", "")}')
+            # Apply the same sanitization as the current message to prevent
+            # stored malicious content from being replayed into future prompts.
+            content = turn.get('content', '').replace('```', "'''")
+            history_lines.append(f'{role}: {content}')
         history_str = '\n'.join(history_lines) + '\n'
 
     platform_context = {

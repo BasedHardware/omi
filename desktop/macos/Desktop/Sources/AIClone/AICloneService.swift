@@ -44,6 +44,7 @@ final class AICloneService: ObservableObject {
 
     @Published var recentMessages: [CloneActivityMessage] = []
 
+    private var isFetchingMessages = false
     private var pollingTask: Task<Void, Never>?
     private var lastIMessageDate: Double = 0
 
@@ -123,6 +124,9 @@ final class AICloneService: ObservableObject {
     }
 
     func fetchMessages() async {
+        guard !isFetchingMessages else { return }
+        isFetchingMessages = true
+        defer { isFetchingMessages = false }
         do {
             let msgs = try await APIClient.shared.getCloneMessages(limit: 20)
             recentMessages = msgs
@@ -259,7 +263,6 @@ final class AICloneService: ObservableObject {
             let signedReply = reply.reply + "\n— Omi"
             await sendViaIMessage(handle: handle, text: signedReply)
             try? await APIClient.shared.updateCloneMessage(id: reply.messageId, status: "sent", editedReply: nil)
-            await fetchMessages()
         } catch {
             log("AICloneService: Failed to handle iMessage: \(error)")
         }
