@@ -59,6 +59,11 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
         lambda uid, reason, details: calls.append(('feedback', uid, reason, details)),
     )
     monkeypatch.setattr(
+        account_deletion.users_db,
+        'mark_user_deletion_wipe_started',
+        lambda uid: calls.append(('wipe_started', uid)),
+    )
+    monkeypatch.setattr(
         account_deletion.users_db, 'get_user_subscription', lambda uid: calls.append(('sub', uid)) or sub
     )
     monkeypatch.setattr(
@@ -82,6 +87,7 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
         ('sub', 'uid1'),
         ('stripe', 'sub_123'),
         ('auth', 'uid1'),
+        ('wipe_started', 'uid1'),
         ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
 
@@ -89,6 +95,11 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
 def test_start_account_deletion_tolerates_best_effort_failures_and_missing_firebase_user(monkeypatch):
     monkeypatch.setattr(
         account_deletion.users_db, 'set_user_deletion_feedback', MagicMock(side_effect=Exception('db down'))
+    )
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'mark_user_deletion_wipe_started',
+        MagicMock(side_effect=Exception('marker down')),
     )
     monkeypatch.setattr(
         account_deletion.users_db, 'get_user_subscription', MagicMock(side_effect=Exception('read down'))
@@ -109,6 +120,7 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
 
 def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('permission denied')))
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
@@ -121,6 +133,7 @@ def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
         raise AssertionError('expected firebase error to propagate')
 
     submit.assert_not_called()
+    account_deletion.users_db.mark_user_deletion_wipe_started.assert_not_called()
 
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):
@@ -128,21 +141,28 @@ def test_background_wipe_user_data_preserves_order(monkeypatch):
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', lambda uid: calls.append(('twilio', uid)))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', lambda uid: calls.append(('purge', uid)))
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', lambda uid: calls.append(('firestore', uid)))
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_completed', lambda uid: calls.append(('wipe_done', uid))
+    )
 
     account_deletion.background_wipe_user_data('uid1')
 
-    assert calls == [('twilio', 'uid1'), ('purge', 'uid1'), ('firestore', 'uid1')]
+    assert calls == [('twilio', 'uid1'), ('purge', 'uid1'), ('firestore', 'uid1'), ('wipe_done', 'uid1')]
 
 
 def test_background_wipe_user_data_swallows_failures(monkeypatch):
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock(side_effect=Exception('twilio down')))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
     account_deletion.background_wipe_user_data('uid1')
 
     account_deletion.purge_derived_user_data.assert_not_called()
     account_deletion.users_db.delete_user_data.assert_not_called()
+    # wipe-completed is persisted in finally even when the wipe itself fails,
+    # so a reconciliation worker doesn't re-enqueue a wipe that already ran.
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_called_once_with('uid1')
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):

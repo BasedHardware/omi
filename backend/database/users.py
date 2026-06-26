@@ -234,6 +234,28 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
+def mark_user_deletion_wipe_started(uid: str):
+    """Mark that the background data wipe has been queued but not yet completed.
+
+    Persisted in the top-level ``account_deletions`` collection so it survives a
+    deploy or pod restart. A reconciliation worker can query for documents where
+    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes, ensuring the
+    in-process ``cleanup_executor`` backlog is not silently lost.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_completed(uid: str):
+    """Mark the background data wipe as finished."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)

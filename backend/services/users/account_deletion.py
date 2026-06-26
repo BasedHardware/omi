@@ -76,6 +76,13 @@ def background_wipe_user_data(uid: str):
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
+    finally:
+        # Persist final status so a reconciliation worker can distinguish completed
+        # wipes from those cancelled by a deploy/restart before they started.
+        try:
+            users_db.mark_user_deletion_wipe_completed(uid)
+        except Exception as e:
+            logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
 
 
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
@@ -102,6 +109,14 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
             logger.info(f'delete_account firebase user already gone for {uid}')
         else:
             raise
+
+    # Persist a pending-deletion marker before enqueueing so a deploy/restart that
+    # cancels the queued wipe future can be reconciled (the marker survives in
+    # Firestore; a worker can query for `wipe_status == 'pending'`).
+    try:
+        users_db.mark_user_deletion_wipe_started(uid)
+    except Exception as e:
+        logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
