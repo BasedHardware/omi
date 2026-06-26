@@ -53,8 +53,7 @@ final class AgentPillLifecycleTests: XCTestCase {
       glowRange.lowerBound,
       dockRange.lowerBound,
       "The response glow must be drawn behind the black dock fill so glow never cuts into the pure-black notch island.")
-    XCTAssertTrue(source.contains(".frame(width: notchSurfaceWidth)"))
-    XCTAssertTrue(source.contains(".frame(maxHeight: .infinity)"))
+    XCTAssertTrue(source.contains(".frame(maxWidth: .infinity, maxHeight: .infinity)"))
   }
 
   func testNotchAgentIndicatorUsesOmiDotsAndHorizontalFanout() throws {
@@ -95,6 +94,33 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
     XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
     XCTAssertTrue(source.contains("completeVisibleAgentHandoff("))
+  }
+
+  func testResizeGripKeepsNotchCentered() throws {
+    let source = try resizeHandleSource()
+
+    XCTAssertTrue(source.contains("initialWindowFrame.width + deltaX * 2"))
+    XCTAssertTrue(source.contains("let newOriginX = initialWindowFrame.midX - newWidth / 2"))
+    XCTAssertTrue(source.contains("NSRect(x: newOriginX, y: newOriginY, width: newWidth, height: newHeight)"))
+    XCTAssertFalse(source.contains("NSRect(x: initialWindowFrame.minX, y: newOriginY"))
+  }
+
+  func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {
+    let agentSource = try agentPillSource()
+    let viewSource = try floatingControlBarViewSource()
+    let popoverSource = try agentPillsViewSource()
+
+    XCTAssertTrue(agentSource.contains("@Published var viewedAt: Date?"))
+    XCTAssertTrue(agentSource.contains("private let viewedFinishedTTL: TimeInterval = 10 * 60"))
+    XCTAssertTrue(agentSource.contains("func markViewed(pillID: UUID)"))
+    XCTAssertTrue(agentSource.contains("scheduleViewedExpiration(for: pill)"))
+    XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
+    XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done })"))
+    XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
+    XCTAssertTrue(viewSource.contains("if pill.status == .done"))
+    XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
+    XCTAssertTrue(popoverSource.contains("if pill.status == .done"))
+    XCTAssertTrue(popoverSource.contains("Button(action: onDismiss)"))
   }
 
   func testFloatingPillDoesNotTreatMissingTerminalProjectionAsSuccess() throws {
@@ -147,6 +173,22 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func agentPillsViewSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func resizeHandleSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/ResizeHandleView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

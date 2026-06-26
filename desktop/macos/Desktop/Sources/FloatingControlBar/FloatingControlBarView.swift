@@ -46,12 +46,6 @@ struct FloatingControlBarView: View {
             ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
             : notchChromeWidth
     }
-    private var notchSurfaceWidth: CGFloat {
-        state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher
-            ? notchChromeLayoutWidth
-            : notchChromeWidth
-    }
-
     var body: some View {
         Group {
             if state.usesNotchIsland {
@@ -120,19 +114,16 @@ struct FloatingControlBarView: View {
                     NotchResponseGlowView(
                         bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                     )
-                    .frame(width: notchSurfaceWidth)
-                    .frame(maxHeight: .infinity)
                 }
 
                 if state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher {
                     NotchDockShape(bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18)
                         .fill(Color.black)
-                        .frame(width: notchSurfaceWidth)
-                        .frame(maxHeight: .infinity)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     NotchDockShape(bottomRadius: 18)
                         .fill(Color.black)
-                        .frame(width: notchSurfaceWidth, height: notchChromeHeight)
+                        .frame(width: notchChromeWidth, height: notchChromeHeight)
                 }
             }
         }
@@ -398,6 +389,7 @@ struct FloatingControlBarView: View {
 
     private func openAgentInChat(_ pill: AgentPill) {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        agentPills.markViewed(pillID: pill.id)
         (window as? FloatingControlBarWindow)?.makeKeyAndOrderFront(nil)
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             state.activeAgentChatPillID = pill.id
@@ -1039,6 +1031,7 @@ private struct AgentMainChatView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
+            manager.markViewed(pillID: pill.id)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                 isFollowUpFocused = true
             }
@@ -1072,6 +1065,23 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadge: some View {
+        Group {
+            if pill.status == .done {
+                Button {
+                    manager.dismiss(pillID: pill.id)
+                    onBackToOmi()
+                } label: {
+                    statusBadgeLabel
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss completed agent")
+            } else {
+                statusBadgeLabel
+            }
+        }
+    }
+
+    private var statusBadgeLabel: some View {
         Text(pill.status.displayLabel)
             .scaledFont(size: 9, weight: .bold)
             .foregroundColor(statusForeground)

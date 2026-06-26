@@ -62,6 +62,7 @@ final class AgentPill: ObservableObject, Identifiable {
     @Published var transcript: [String] = []
     @Published var aiMessage: ChatMessage?
     @Published var completedAt: Date?
+    @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
 
     /// Convenience: how long the agent has been running (or ran).
@@ -116,6 +117,7 @@ final class AgentPillsManager: ObservableObject {
     private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
     private static let backgroundAgentSystemPromptSuffix = """
@@ -127,6 +129,8 @@ final class AgentPillsManager: ObservableObject {
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
     @Published var recordingPillID: UUID?
+
+    private let viewedFinishedTTL: TimeInterval = 10 * 60
 
     private init() {}
 
@@ -445,13 +449,9 @@ final class AgentPillsManager: ObservableObject {
             pill.title = preFetchedTitle
         }
 
-        // Trim if we're at the cap — drop the oldest finished pill first.
+        trimForNewPillIfNeeded()
         if pills.count >= maxPills {
-            if let idx = pills.firstIndex(where: { isFinished($0.status) }) {
-                cleanup(pillID: pills[idx].id)
-            } else {
-                cleanup(pillID: pills[0].id)
-            }
+            cleanup(pillID: pills[0].id)
         }
 
         pills.append(pill)
@@ -600,6 +600,60 @@ final class AgentPillsManager: ObservableObject {
         if pinnedPillID == pillID { pinnedPillID = nil }
     }
 
+    func markViewed(pillID: UUID) {
+        guard let pill = pills.first(where: { $0.id == pillID }) else { return }
+        pill.viewedAt = Date()
+        scheduleViewedExpiration(for: pill)
+        expireViewedFinishedPills(now: Date())
+    }
+
+    private func scheduleViewedExpiration(for pill: AgentPill) {
+        viewedExpirationWorkItemsByPill[pill.id]?.cancel()
+        guard pill.status.isFinished else { return }
+
+        let pillID = pill.id
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.expireViewedFinishedPills(now: Date())
+                self?.viewedExpirationWorkItemsByPill[pillID] = nil
+            }
+        }
+        viewedExpirationWorkItemsByPill[pillID] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + viewedFinishedTTL, execute: workItem)
+    }
+
+    private func expireViewedFinishedPills(now: Date = Date()) {
+        let expiredIDs = pills
+            .filter { pill in
+                guard pill.status.isFinished, let viewedAt = pill.viewedAt else { return false }
+                return now.timeIntervalSince(viewedAt) >= viewedFinishedTTL
+            }
+            .map(\.id)
+        for id in expiredIDs {
+            cleanup(pillID: id)
+        }
+    }
+
+    private func trimForNewPillIfNeeded() {
+        expireViewedFinishedPills()
+        guard pills.count >= maxPills else { return }
+
+        if let oldestDoneID = pills
+            .filter({ $0.status == .done })
+            .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
+            .first?.id {
+            cleanup(pillID: oldestDoneID)
+            return
+        }
+
+        if let oldestFinishedID = pills
+            .filter({ $0.status.isFinished })
+            .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
+            .first?.id {
+            cleanup(pillID: oldestFinishedID)
+        }
+    }
+
     func dismiss(pillIdString: String) -> Bool {
         guard let id = findPillId(from: pillIdString) else { return false }
         dismiss(pillID: id)
@@ -613,6 +667,8 @@ final class AgentPillsManager: ObservableObject {
         }
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        viewedExpirationWorkItemsByPill[pillID]?.cancel()
+        viewedExpirationWorkItemsByPill[pillID] = nil
         providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil
@@ -766,6 +822,9 @@ final class AgentPillsManager: ObservableObject {
             Self.apply(projection: projection, to: pill)
             if projection.status.isTerminal {
                 pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+                if pill.viewedAt != nil {
+                    scheduleViewedExpiration(for: pill)
+                }
                 return
             }
         }
@@ -782,6 +841,9 @@ final class AgentPillsManager: ObservableObject {
             pill.latestActivity = "Agent ended before reporting a final result"
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        if pill.viewedAt != nil {
+            scheduleViewedExpiration(for: pill)
+        }
         // Keep the provider + stream alive after completion so a voice/text follow-up
         // can continue THIS agent's session with full context. They're torn down on
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).

@@ -242,13 +242,17 @@ struct AgentPillPopover: View {
 
             Spacer(minLength: 6)
 
-            Text(pill.status.displayLabel)
-                .scaledFont(size: 10, weight: .semibold)
-                .foregroundColor(statusBadgeForeground)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(statusBadgeBackground)
-                .clipShape(Capsule())
+            Group {
+                if pill.status == .done {
+                    Button(action: onDismiss) {
+                        statusBadge
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss completed agent")
+                } else {
+                    statusBadge
+                }
+            }
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -261,6 +265,16 @@ struct AgentPillPopover: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss agent")
         }
+    }
+
+    private var statusBadge: some View {
+        Text(pill.status.displayLabel)
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(statusBadgeForeground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(statusBadgeBackground)
+            .clipShape(Capsule())
     }
 
     private var statusBadgeForeground: Color {
