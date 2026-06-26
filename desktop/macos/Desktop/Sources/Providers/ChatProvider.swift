@@ -1014,9 +1014,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
             let mainWarmupModel = activeBridgeHarness == "hermes" ? nil : ModelQoS.Claude.chat
+            let floatingWarmupModel = activeBridgeHarness == "hermes" ? nil : floatingModel
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
-                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
+                .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
         } catch {
@@ -2988,7 +2989,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-            // Query the active bridge with streaming
+            // Query the active bridge with streaming. Hermes does not accept Omi's
+            // Claude model aliases, so leave model choice to the harness default.
+            let effectiveRequestModel = activeBridgeHarness == "hermes" ? nil : (model ?? modelOverride)
+
             // Callbacks for agent bridge
             //
             // QueryTracer: `isFirstResponse` marks TTFT on the very first output of
@@ -3110,7 +3114,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // message history) and open the request/TTFT spans. The clock starts
             // here so ttft measures input → first streamed output.
             if let tracer {
-                let tracedModel = model ?? modelOverride ?? "unknown"
+                let tracedModel = effectiveRequestModel ?? "unknown"
                 tracer.captureRequest(
                     systemPrompt: systemPrompt,
                     messages: Array(messages.suffix(40)).map {
@@ -3144,7 +3148,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 legacyClientScope: resolvedLegacyClientScope,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
-                model: model ?? modelOverride,
+                model: effectiveRequestModel,
                 resume: resume,
                 imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
@@ -3180,7 +3184,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 messages[index].metadata = MessageMetadata(
-                    model: model ?? modelOverride,
+                    model: effectiveRequestModel,
                     inputTokens: queryResult.inputTokens,
                     outputTokens: queryResult.outputTokens,
                     cacheReadTokens: queryResult.cacheReadTokens,
@@ -3209,7 +3213,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             tracer?.end("llm_request")
             tracer?.finalize(
                 tokenCount: queryResult.outputTokens,
-                model: model ?? modelOverride,
+                model: effectiveRequestModel,
                 inputTokens: queryResult.inputTokens,
                 outputTokens: queryResult.outputTokens,
                 cacheReadTokens: queryResult.cacheReadTokens,
@@ -3293,7 +3297,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: aiText,
                     step: "chat",
                     toolCalls: toolNames.isEmpty ? nil : toolNames,
-                    model: model ?? modelOverride
+                    model: effectiveRequestModel
                 )
             }
 
@@ -3315,11 +3319,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Skip client-side usage recording for piMono — the backend already
             // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count.
-            let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
-            let isPiMono = bridgeMode == BridgeMode.piMono.rawValue
-            if !isPiMono {
-                let accountType = isOmiMode ? "omi" : "personal"
+            // here would double-count. Use the actual harness, not @AppStorage
+            // bridgeMode, because directed Hermes/OpenClaw pills can override the
+            // harness without changing the user's global preference.
+            let effectiveHarness = activeBridgeHarness
+            let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
+            let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
+            if !isPiMonoHarness {
+                let accountType = isUserClaudeHarness ? "personal" : "local"
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -3333,7 +3340,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     )
                 }
             }
-            if isOmiMode {
+            if isPiMonoHarness {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
                 // Show the upgrade flow when the free Omi usage threshold is reached.
