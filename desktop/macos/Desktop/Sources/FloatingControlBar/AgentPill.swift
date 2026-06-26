@@ -64,6 +64,7 @@ final class AgentPill: ObservableObject, Identifiable {
     @Published var completedAt: Date?
     @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
+    @Published var contentRevision: Int = 0
 
     /// Convenience: how long the agent has been running (or ran).
     var elapsed: TimeInterval {
@@ -75,6 +76,10 @@ final class AgentPill: ObservableObject, Identifiable {
         self.model = model
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
+    }
+
+    func markContentChanged() {
+        contentRevision &+= 1
     }
 
     /// Pull a short uppercase title out of the query for the pill popover header.
@@ -767,6 +772,7 @@ final class AgentPillsManager: ObservableObject {
         let recent = Array(messages.suffix(from: since))
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
+        pill.markContentChanged()
 
         if pill.status.isFinished {
             return
@@ -780,6 +786,7 @@ final class AgentPillsManager: ObservableObject {
         if !activity.isEmpty && activity != pill.latestActivity {
             pill.latestActivity = activity
             pill.transcript.append(activity)
+            pill.markContentChanged()
         }
     }
 
@@ -817,6 +824,7 @@ final class AgentPillsManager: ObservableObject {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.latestActivity = String(trimmedFinalText.prefix(140))
+            pill.markContentChanged()
         }
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
             Self.apply(projection: projection, to: pill)
@@ -832,13 +840,16 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
+            pill.markContentChanged()
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
             pill.completedAt = Date()
+            pill.markContentChanged()
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()
             pill.latestActivity = "Agent ended before reporting a final result"
+            pill.markContentChanged()
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         if pill.viewedAt != nil {
@@ -862,10 +873,12 @@ final class AgentPillsManager: ObservableObject {
             if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !statusText.isEmpty {
                 pill.latestActivity = String(statusText.prefix(140))
+                pill.markContentChanged()
             } else if let last = pill.aiMessage {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     pill.latestActivity = String(trimmed.prefix(140))
+                    pill.markContentChanged()
                 }
             }
         case .failed, .timedOut, .orphaned:
@@ -873,15 +886,18 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .cancelled:
             pill.status = .failed("Stopped by user")
             pill.latestActivity = "Stopped by user"
             pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .idle:
             break
         }
         if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
             pill.latestActivity = statusText
+            pill.markContentChanged()
         }
     }
 

@@ -125,13 +125,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: Self.notchChromeHeight)
     }
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
-        guard state.isVoiceResponseActive else { return size }
         if usesNotchIsland {
             return NSSize(
                 width: size.width + Self.notchGlowOutsetX * 2,
                 height: size.height + Self.notchGlowOutsetBottom
             )
         }
+        guard state.isVoiceResponseActive else { return size }
         guard size.width <= Self.minBarSize.width + 0.5,
               size.height <= Self.minBarSize.height + 0.5
         else { return size }
@@ -144,14 +144,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
     }
     private func currentResponseSurfaceHeight() -> CGFloat {
-        guard state.isVoiceResponseActive else { return frame.height }
         if notchModeEnabled {
             return max(0, frame.height - Self.notchGlowOutsetBottom)
         }
         return frame.height
     }
     private func currentResponseSurfaceWidth() -> CGFloat {
-        guard state.isVoiceResponseActive else { return frame.width }
         if notchModeEnabled {
             return max(0, frame.width - Self.notchGlowOutsetX * 2)
         }
@@ -437,13 +435,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let panelHeight = usesNotchIsland
                 ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
                 : 120
-            let hasBakedInGlow = usesNotchIsland && (frameIncludesVoiceGlow ?? previousVoiceResponseGlowActive)
-            // Only subtract a glow inset that is already baked into the current
-            // frame. On the first voice-response frame the glow does not exist
-            // yet, so subtracting it here would shrink the Ask Omi content area
-            // before responseGlowWindowSize(...) adds the active glow.
-            let bakedInGlowOutset = hasBakedInGlow ? Self.notchGlowOutsetBottom : 0
-            let contentHeight = max(panelHeight, frame.height - bakedInGlowOutset)
+            let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
+            let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
         }
         if state.isVoiceListening {
@@ -561,17 +554,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isActive in
-                guard let self else { return }
-                let wasActive = self.previousVoiceResponseGlowActive
-                let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)
-                self.previousVoiceResponseGlowActive = isActive
-                self.resizeAnchored(
-                    to: targetSize,
-                    makeResizable: self.styleMask.contains(.resizable),
-                    animated: true,
-                    animationDuration: 0.18,
-                    anchorTop: true
-                )
+                self?.previousVoiceResponseGlowActive = isActive
             }
     }
 
@@ -1182,10 +1165,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     var hasSettledClosedForAutomation: Bool {
-        !state.showingAIConversation
+        let settledSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: collapsedBarSize)
+        return !state.showingAIConversation
             && !suppressHoverResize
             && pendingRestoreOrigin == nil
-            && NSEqualSizes(frame.size, collapsedBarSize)
+            && NSEqualSizes(frame.size, settledSize)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {

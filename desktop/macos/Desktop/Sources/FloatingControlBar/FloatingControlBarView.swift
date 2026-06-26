@@ -47,10 +47,10 @@ struct FloatingControlBarView: View {
             : notchChromeWidth
     }
     private var notchSurfaceHorizontalInset: CGFloat {
-        state.isVoiceResponseActive ? FloatingControlBarWindow.notchGlowOutsetX : 0
+        state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetX : 0
     }
     private var notchSurfaceBottomInset: CGFloat {
-        state.isVoiceResponseActive ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
+        state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
     }
     var body: some View {
         Group {
@@ -197,15 +197,10 @@ struct FloatingControlBarView: View {
     private var notchAgentLobe: some View {
         HStack(spacing: 0) {
             if state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation {
-                HStack(spacing: 4) {
-                    VoiceWaveformBars(isActive: true)
-                        .scaleEffect(0.76)
-                        .frame(width: 26, height: 15)
-                    Image(systemName: "mic.fill")
-                        .scaledFont(size: 10, weight: .semibold)
-                        .foregroundColor(.white)
-                }
-                .frame(width: 58, height: 27)
+                VoiceWaveformBars(isActive: true)
+                    .scaleEffect(0.72)
+                    .frame(width: 28, height: 15)
+                    .frame(width: 38, height: 27)
             } else {
                 NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                     .opacity(shouldShowAgentSwitcher ? 0 : 1)
@@ -1011,6 +1006,7 @@ private struct AgentMainChatView: View {
                         questionBubble
 
                         responseContent
+                            .id(pill.contentRevision)
 
                         if isRecording {
                             voiceFollowUpView
@@ -1033,6 +1029,9 @@ private struct AgentMainChatView: View {
                     scrollToBottom(proxy)
                 }
                 .onChange(of: pill.aiMessage?.text) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: pill.contentRevision) {
                     scrollToBottom(proxy)
                 }
                 .onChange(of: isRecording) {

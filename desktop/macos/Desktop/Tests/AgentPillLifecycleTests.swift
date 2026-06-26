@@ -41,6 +41,7 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testNotchResponseGlowStaysBehindDockSurface() throws {
     let source = try floatingControlBarViewSource()
+    let windowSource = try floatingControlBarWindowSource()
 
     guard let dockRange = source.range(of: "NotchDockShape(bottomRadius:") else {
       return XCTFail("Expected expanded notch dock surface")
@@ -54,10 +55,28 @@ final class AgentPillLifecycleTests: XCTestCase {
       dockRange.lowerBound,
       "The response glow must be drawn behind the black dock fill so glow never cuts into the pure-black notch island.")
     XCTAssertTrue(source.contains("private var notchSurfaceHorizontalInset: CGFloat"))
+    XCTAssertTrue(source.contains("state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetX : 0"))
+    XCTAssertTrue(source.contains("state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0"))
     XCTAssertTrue(source.contains("geometry.size.width - notchSurfaceHorizontalInset * 2"))
     XCTAssertTrue(source.contains("geometry.size.height - notchSurfaceBottomInset"))
     XCTAssertTrue(source.contains(".padding(.horizontal, notchSurfaceHorizontalInset)"))
     XCTAssertTrue(source.contains(".padding(.bottom, notchSurfaceBottomInset)"))
+    XCTAssertTrue(windowSource.contains("if usesNotchIsland {\n            return NSSize("))
+    XCTAssertFalse(windowSource.contains("let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)"))
+  }
+
+  func testNotchPTTUsesCompactWaveformOnly() throws {
+    let source = try floatingControlBarViewSource()
+
+    guard let lobeRange = source.range(of: "private var notchAgentLobe: some View"),
+      let controlRange = source.range(of: "private var notchControlLobe: some View")
+    else {
+      return XCTFail("Expected notch lobe sections")
+    }
+    let lobeSource = String(source[lobeRange.lowerBound..<controlRange.lowerBound])
+
+    XCTAssertTrue(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
+    XCTAssertFalse(lobeSource.contains("Image(systemName: \"mic.fill\")"))
   }
 
   func testNotchAgentIndicatorUsesOmiDotsAndHorizontalFanout() throws {
@@ -124,11 +143,24 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarWindowSource()
 
     XCTAssertTrue(source.contains("private func currentResponseSurfaceWidth() -> CGFloat"))
+    XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.height }"))
+    XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.width }"))
     XCTAssertTrue(source.contains("let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())"))
     XCTAssertTrue(source.contains("let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())"))
     XCTAssertTrue(source.contains("func finishUserResponseResize()"))
     XCTAssertTrue(source.contains("persistCurrentResponseSurfaceSize()"))
     XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
+  }
+
+  func testActiveSubagentChatRefreshesWhenAgentOutputChanges() throws {
+    let agentSource = try agentPillSource()
+    let viewSource = try floatingControlBarViewSource()
+
+    XCTAssertTrue(agentSource.contains("@Published var contentRevision: Int = 0"))
+    XCTAssertTrue(agentSource.contains("func markContentChanged()"))
+    XCTAssertTrue(agentSource.contains("pill.markContentChanged()"))
+    XCTAssertTrue(viewSource.contains(".id(pill.contentRevision)"))
+    XCTAssertTrue(viewSource.contains(".onChange(of: pill.contentRevision)"))
   }
 
   func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {
