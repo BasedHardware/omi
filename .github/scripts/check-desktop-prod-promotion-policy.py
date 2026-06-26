@@ -49,6 +49,8 @@ def main() -> int:
     require("release_tag:", text, "manual promotion must require an explicit release tag")
     require("confirm:", text, "manual promotion must require an explicit confirmation input")
     require("promote-stable", text, "manual promotion confirmation phrase must remain explicit")
+    if "\n      force:" in text or "inputs.force" in text:
+        fail("prod promotion must stay roll-forward only; do not expose a force rollback input")
 
     forbidden_triggers = [
         "\n  release:",
@@ -75,6 +77,7 @@ def main() -> int:
     require("mark-desktop-release-stable.py", text, "workflow must mark the release stable only after backend verification")
     require("Clear desktop update cache", text, "workflow should clear Python desktop update cache after stable metadata changes")
     require("Advance prod-tracking tag", text, "workflow must move the prod tracking tag after promotion succeeds")
+    require("This promotion workflow is roll-forward only", text, "workflow must reject older releases instead of force-rolling back")
     require("grep -qE '^v.+-macos$'", text, "prod deploys must be limited to macOS desktop release tags")
     require("OMI_DESKTOP_RELEASE_TAG=", text, "prod deploy must stamp release tag into Cloud Run")
     require("OMI_DESKTOP_RELEASE_SHA=", text, "prod deploy must stamp release sha into Cloud Run")
