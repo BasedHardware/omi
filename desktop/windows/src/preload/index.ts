@@ -17,6 +17,8 @@ import type {
   UsageSettings,
   RewindSettings,
   InsightPayload,
+  WindowsNotificationSettingsPatch,
+  WindowsNotificationTestKind,
   AutomationPlan,
   StepResult,
   McpKeyRecord,
@@ -181,6 +183,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('insight:payload', listener)
     return () => ipcRenderer.removeListener('insight:payload', listener)
   },
+  notificationsGetSettings: () => ipcRenderer.invoke('notifications:getSettings'),
+  notificationsSetSettings: (patch: WindowsNotificationSettingsPatch) =>
+    ipcRenderer.invoke('notifications:setSettings', patch),
+  notificationsTest: (kind?: WindowsNotificationTestKind) =>
+    ipcRenderer.invoke('notifications:test', kind),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
   perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),
