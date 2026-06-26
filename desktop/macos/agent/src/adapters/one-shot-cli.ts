@@ -246,7 +246,14 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
 }
 
 function promptText(prompt: AdapterAttemptContext["prompt"]): string {
-  return typeof prompt === "string" ? prompt : JSON.stringify(prompt);
+  if (typeof prompt === "string") return prompt;
+  return prompt
+    .filter(
+      (block): block is { type: "text"; text: string } =>
+        block.type === "text" && typeof block.text === "string",
+    )
+    .map((block) => block.text)
+    .join("\n");
 }
 
 function shellQuote(value: string): string {

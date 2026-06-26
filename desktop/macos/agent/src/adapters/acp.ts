@@ -87,7 +87,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
     const configuredCommand = this.command ?? (this.envCommandName ? process.env[this.envCommandName] : undefined);
     const command = configuredCommand?.trim();
-    const spawnCommand = command ?? `${this.nodeBin} ${shellQuote(this.acpEntry)}`;
+    const spawnCommand = command ?? `${shellQuote(this.nodeBin)} ${shellQuote(this.acpEntry)}`;
     if (this.adapterId !== "acp" && !command) {
       throw new Error(`${this.adapterId} adapter requires ${this.envCommandName ?? "command"}`);
     }

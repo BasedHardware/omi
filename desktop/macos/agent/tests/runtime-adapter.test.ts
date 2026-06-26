@@ -86,6 +86,42 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
   };
 }
 
+describe("AcpRuntimeAdapter shell quoting", () => {
+  beforeEach(() => {
+    vi.mocked(spawn).mockReset();
+  });
+
+  it("quotes the node binary path in the default spawn command so paths with spaces do not break shell execution", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "acp",
+      nodeBin: "/path with space/node",
+      acpEntry: "/acp entry.mjs",
+    });
+    proc.stdin.on("data", () => {});
+    await adapter.start();
+
+    const spawnArg = vi.mocked(spawn).mock.calls[0][0];
+    expect(spawnArg).toBe("'/path with space/node' '/acp entry.mjs'");
+  });
+
+  it("preserves a configured command override as-is (env command is responsible for its own quoting)", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "hermes",
+      command: "/usr/local/bin/hermes-agent",
+      envCommandName: "HERMES_COMMAND",
+    });
+    proc.stdin.on("data", () => {});
+    await adapter.start();
+
+    const spawnArg = vi.mocked(spawn).mock.calls[0][0];
+    expect(spawnArg).toBe("/usr/local/bin/hermes-agent");
+  });
+});
+
 describe("AcpRuntimeAdapter bindings", () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();
@@ -634,5 +670,63 @@ describe("AdapterWorkerPool", () => {
     expect(first?.workerId).toBe("worker-1");
     expect(second?.workerId).toBe("worker-2");
     expect(pool.size).toBe(2);
+  });
+});
+
+describe("OneShotCliRuntimeAdapter prompt serialization", () => {
+  it("flattens PromptBlock[] to joined text instead of JSON-stringifying", async () => {
+    vi.mocked(spawn).mockReset();
+    vi.mocked(spawn).mockImplementation((() => {
+      const proc = Object.assign(new EventEmitter(), {
+        stdin: new PassThrough(),
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        kill: vi.fn(),
+        pid: 12345,
+      });
+      // Resolve the run-prompt promise on next tick
+      process.nextTick(() => proc.emit("exit", 0));
+      return proc as any;
+    }) as any);
+
+    const { OneShotCliRuntimeAdapter } = await import("../src/adapters/one-shot-cli.js");
+    const adapter = new OneShotCliRuntimeAdapter({
+      adapterId: "openclaw",
+      envCommandName: "OPENCLAW_COMMAND",
+      promptFlag: "--message",
+    });
+    process.env.OPENCLAW_COMMAND = "openclaw";
+
+    await adapter.executeAttempt(
+      {
+        sessionId: "omi-session",
+        ownerId: "owner",
+        requestId: "request",
+        clientId: "client",
+        runId: "run",
+        attemptId: "attempt",
+        binding: {
+          sessionId: "omi-session",
+          adapterId: "openclaw",
+          adapterNativeSessionId: "openclaw:omi-session",
+          resumeFidelity: "none",
+          cwd: "/tmp",
+        },
+        prompt: [
+          { type: "text", text: "Hello" },
+          { type: "text", text: "world" },
+        ],
+        mode: "ask",
+      } as any,
+      () => {},
+      new AbortController().signal,
+    );
+
+    const spawnArg = vi.mocked(spawn).mock.calls[0][0] as string;
+    // The prompt text should be joined text, NOT a JSON array string
+    expect(spawnArg).toContain("'Hello\nworld'");
+    expect(spawnArg).not.toContain('[{"type":"text"');
+
+    delete process.env.OPENCLAW_COMMAND;
   });
 });
