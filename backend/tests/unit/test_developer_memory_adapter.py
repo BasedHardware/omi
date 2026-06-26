@@ -90,52 +90,69 @@ def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_r
 
 def test_developer_create_route_checks_split_brain_guard_before_legacy_write():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = developer_py.read_text(encoding='utf-8')
+    service_contents = memory_service_py.read_text(encoding='utf-8')
     route = '@router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])'
+    pin_call = 'pin_memory_system(uid, db_client=db)'
+    external_create = 'create_external_memory('
     guard_call = 'guard_legacy_memory_write('
-    legacy_write = 'memories_db.create_memory(uid, memory_db.dict())'
-    assert guard_call in contents
-    assert legacy_write in contents
+    assert pin_call in contents
+    assert external_create in contents
+    assert guard_call in service_contents
     route_index = contents.index(route)
-    assert route_index < contents.index(guard_call, route_index) < contents.index(legacy_write, route_index)
+    assert route_index < contents.index(pin_call, route_index) < contents.index(external_create, route_index)
 
 
 def test_developer_batch_create_route_checks_split_brain_guard_before_categorization_and_legacy_writes():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = developer_py.read_text(encoding='utf-8')
+    service_contents = memory_service_py.read_text(encoding='utf-8')
     route = '@router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])'
-    guard_call = 'guard_legacy_memory_write('
+    pin_call = 'pin_memory_system(uid, db_client=db)'
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
-    legacy_write = 'memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])'
+    external_batch = 'create_external_memory_batch('
+    guard_call = 'guard_legacy_memory_write('
+    legacy_write = 'memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])'
     vector_write = 'upsert_memory_vectors_batch('
-    assert guard_call in contents
+    assert pin_call in contents
     assert categorization in contents
-    assert legacy_write in contents
-    assert vector_write in contents
+    assert external_batch in contents
+    assert guard_call in service_contents
+    assert legacy_write in service_contents
+    assert vector_write in service_contents
     route_index = contents.index(route)
-    guard_index = contents.index(guard_call, route_index)
-    assert route_index < guard_index < contents.index(categorization, route_index)
-    assert guard_index < contents.index(legacy_write, route_index) < contents.index(vector_write, route_index)
+    pin_index = contents.index(pin_call, route_index)
+    categorization_index = contents.index(categorization, route_index)
+    assert route_index < categorization_index
+    assert pin_index < contents.index(external_batch, route_index)
+    guard_index = service_contents.index(guard_call)
+    assert guard_index < service_contents.index(legacy_write)
+    assert service_contents.index(legacy_write) < service_contents.index(vector_write)
 
 
 def test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy_delete():
     developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = developer_py.read_text(encoding='utf-8')
+    service_contents = memory_service_py.read_text(encoding='utf-8')
     route = '@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])'
+    pin_call = 'pin_memory_system(uid, db_client=db)'
+    external_delete = 'delete_external_memory('
     guard_call = 'guard_legacy_memory_write('
     legacy_read = 'memory = memories_db.get_memory(uid, memory_id)'
     legacy_delete = 'memories_db.delete_memory(uid, memory_id)'
-    assert guard_call in contents
-    assert legacy_read in contents
-    assert legacy_delete in contents
+    assert pin_call in contents
+    assert external_delete in contents
+    assert guard_call in service_contents
+    assert legacy_read in service_contents
+    assert legacy_delete in service_contents
     route_index = contents.index(route)
-    guard_index = contents.index(guard_call, route_index)
-    assert (
-        route_index
-        < guard_index
-        < contents.index(legacy_read, route_index)
-        < contents.index(legacy_delete, route_index)
-    )
+    pin_index = contents.index(pin_call, route_index)
+    assert route_index < pin_index < contents.index(external_delete, route_index)
+    guard_index = service_contents.index(guard_call)
+    assert guard_index < service_contents.index(legacy_read) < service_contents.index(legacy_delete)
 
 
 def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy_mutations():

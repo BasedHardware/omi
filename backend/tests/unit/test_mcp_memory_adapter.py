@@ -176,34 +176,32 @@ def test_mcp_sse_get_tool_only_reaches_legacy_after_explicit_legacy_safe_decisio
 
 def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
     mcp_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = mcp_py.read_text(encoding='utf-8')
-    assert 'guard_legacy_memory_write' in contents
-    guard = "guard_legacy_memory_write(uid, db, consumer='mcp', operation="
-    create_route = _legacy_branch_after_canonical(
-        contents[contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    service_contents = memory_service_py.read_text(encoding='utf-8')
+    guard = 'guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)'
+    assert guard in service_contents
+    create_route = contents[
+        contents.index('@router.post("/v1/mcp/memories"') : contents.index('def _validate_mcp_memory')
+    ]
+    assert 'pin_memory_system(uid, db_client=db)' in create_route
+    assert 'create_external_memory(' in create_route
     assert 'operation="mcp_memory_create"' in create_route
-    assert create_route.index(guard) < create_route.index('identify_category_for_memory(memory.content)')
-    assert create_route.index(guard) < create_route.index('memories_db.create_memory(uid, memory_db.model_dump())')
-    delete_route = _legacy_branch_after_canonical(
-        contents[
-            contents.index('@router.delete("/v1/mcp/memories/{memory_id}"') : contents.index(
-                '@router.patch("/v1/mcp/memories/{memory_id}"'
-            )
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    assert create_route.index('pin_memory_system') < create_route.index('create_external_memory')
+    assert 'memories_db.create_memory' in service_contents
+    delete_route = contents[
+        contents.index('@router.delete("/v1/mcp/memories/{memory_id}"') : contents.index(
+            '@router.patch("/v1/mcp/memories/{memory_id}"'
+        )
+    ]
+    assert 'delete_external_memory(' in delete_route
     assert 'operation="mcp_memory_delete"' in delete_route
-    assert delete_route.index(guard) < delete_route.index('_validate_mcp_memory(uid, memory_id)')
-    assert delete_route.index(guard) < delete_route.index('memories_db.delete_memory(uid, memory_id)')
-    edit_route = _legacy_branch_after_canonical(
-        contents[contents.index('@router.patch("/v1/mcp/memories/{memory_id}"') : contents.index('class UserProfile')],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    edit_route = contents[
+        contents.index('@router.patch("/v1/mcp/memories/{memory_id}"') : contents.index('class UserProfile')
+    ]
+    assert 'update_external_memory_content(' in edit_route
     assert 'operation="mcp_memory_edit"' in edit_route
-    assert edit_route.index(guard) < edit_route.index('_validate_mcp_memory(uid, memory_id)')
-    assert edit_route.index(guard) < edit_route.index('memories_db.edit_memory(uid, memory_id, value)')
+    assert 'memories_db.edit_memory' in service_contents
 
 
 def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():

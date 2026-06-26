@@ -523,7 +523,14 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
     )
 
     assert result == canonical_memories
-    service_read.assert_called_once_with("uid-canonical", limit=10, offset=0, device_scope="all", client_device_id=None)
+    from utils.client_device import DeviceScopeRequest
+
+    service_read.assert_called_once_with(
+        "uid-canonical",
+        limit=10,
+        offset=0,
+        device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
+    )
     legacy_get.assert_not_called()
 
 
@@ -643,9 +650,10 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
 def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
     source = (BACKEND_DIR / "routers" / "mcp.py").read_text(encoding="utf-8")
     section = source.split("def _validate_mcp_memory", 1)[1].split("@router.delete", 1)[0]
-    assert "MemorySystem.CANONICAL" in section
-    assert "_read_canonical_memory_item" in section
-    assert section.index("MemorySystem.CANONICAL") < section.index("memories_db.get_memory")
+    assert "fetch_memory_dict" in section
+    memory_service_source = (BACKEND_DIR / "utils" / "memory" / "memory_service.py").read_text(encoding="utf-8")
+    assert "MemorySystem.CANONICAL" in memory_service_source
+    assert "_read_canonical_memory_item" in memory_service_source
 
 
 _WRITER_FILES = [
