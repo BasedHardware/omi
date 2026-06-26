@@ -21,7 +21,7 @@ from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
-from utils.memory.memory_service import MemoryService
+from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.client_device import resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.memory.memory_system import MemorySystem
@@ -198,20 +198,7 @@ def _set_device_scope_capability_header(http_response: Response, *, supported: b
 
 
 def _validate_memory(uid: str, memory_id: str) -> dict:
-    if pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL:
-        item = _read_canonical_memory_item(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
-        if item is None:
-            raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
-
-    memory = memories_db.get_memory(uid, memory_id)
-    if memory is None:
-        raise HTTPException(status_code=404, detail="Memory not found")
-
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-
-    return memory
+    return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
 
 
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
@@ -398,13 +385,10 @@ def get_memories(
 
     _set_device_scope_capability_header(response, supported=False)
 
-    if not memory_runtime.enabled or memory_runtime.source_decision == 'disabled':
+    if memory_runtime.source_decision != 'memory_read':
         return _legacy_get_memories(uid, limit, offset)
 
-    if memory_runtime.source_decision == 'legacy_primary':
-        return _legacy_get_memories(uid, limit, offset)
-
-    if memory_runtime.source_decision != 'memory_read' or memory_runtime.service is None:
+    if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
         raise HTTPException(status_code=503, detail='infrastructure_failure')
 
