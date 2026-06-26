@@ -320,24 +320,37 @@ def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timede
 def _claim_deletion_wipe_txn(transaction, doc_ref, stale_after: timedelta) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
-    Transitions ``wipe_status`` from ``pending``/``failed``/``retrying`` (stale)
-    to ``retrying`` so concurrent workers cannot re-enqueue the same wipe. If the
-    wipe is already ``retrying`` and not yet stale, the claim is refused (another
-    worker owns it).
+    Transitions ``wipe_status`` from ``failed``, stale ``pending``, or stale
+    ``retrying`` to ``retrying`` so concurrent workers cannot re-enqueue the same
+    wipe. Fresh ``pending`` markers (recently queued by an in-progress deletion)
+    are left untouched to avoid wiping data before Firebase auth deletion
+    succeeds. ``retrying`` claims that are not yet stale are also refused (another
+    worker owns them).
     """
     snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
     data = snapshot.to_dict()
     status = data.get('wipe_status')
-    if status in ('pending', 'failed'):
-        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': datetime.now(timezone.utc)})
+    now = datetime.now(timezone.utc)
+    if status == 'pending':
+        # Re-validate the pending marker age *inside* the transaction. The
+        # reconciler query may have returned a stale record that was since
+        # refreshed by a new delete request; claiming a fresh marker could
+        # enqueue a wipe before Firebase auth deletion has succeeded.
+        queued_at = data.get('wipe_queued_at')
+        if queued_at and queued_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'failed':
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return snapshot.id
     if status == 'retrying':
         claimed_at = data.get('wipe_claimed_at')
-        if claimed_at and claimed_at < datetime.now(timezone.utc) - stale_after:
+        if claimed_at and claimed_at < now - stale_after:
             # Stale claim (worker probably crashed). Re-claim it.
-            transaction.update(doc_ref, {'wipe_claimed_at': datetime.now(timezone.utc)})
+            transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
     return None
 

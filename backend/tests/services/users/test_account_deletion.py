@@ -44,9 +44,17 @@ class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
-sys.meta_path.insert(0, _StubFinder())
-
-from services.users import account_deletion  # noqa: E402
+_finder = _StubFinder()
+sys.meta_path.insert(0, _finder)
+try:
+    from services.users import account_deletion  # noqa: E402
+finally:
+    # Remove the meta-path finder and clear stubbed modules so they don't
+    # leak into sys.modules and interfere with other tests collected in the
+    # same pytest process (e.g. utils.executors resolving to a MagicMock).
+    sys.meta_path.remove(_finder)
+    for _name in [n for n in sys.modules if _should_stub(n)]:
+        del sys.modules[_name]
 
 
 def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(monkeypatch):

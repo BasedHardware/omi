@@ -46,9 +46,17 @@ class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         pass
 
 
-sys.meta_path.insert(0, _StubFinder())
-
-from services.users import data_export  # noqa: E402
+_finder = _StubFinder()
+sys.meta_path.insert(0, _finder)
+try:
+    from services.users import data_export  # noqa: E402
+finally:
+    # Remove the meta-path finder and clear stubbed modules so they don't
+    # leak into sys.modules and interfere with other tests collected in the
+    # same pytest process (e.g. utils.executors resolving to a MagicMock).
+    sys.meta_path.remove(_finder)
+    for _name in [n for n in sys.modules if _should_stub(n)]:
+        del sys.modules[_name]
 
 
 def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):
