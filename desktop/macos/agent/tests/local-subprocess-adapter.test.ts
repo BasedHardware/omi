@@ -516,4 +516,35 @@ describe("env-command local subprocess adapters", () => {
     expect(source).toContain("await stopLocalAcpAdapters()");
     expect(source).toContain("void stopLocalAcpAdapters()");
   });
+
+  it("scrubs Omi credentials from the external adapter subprocess environment", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND", command: "hermes-adapter" });
+
+    // Simulate Omi injecting credentials into process.env (as AgentRuntimeProcess does for pi-mono).
+    const saved: Record<string, string | undefined> = {};
+    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM"]) {
+      saved[key] = process.env[key];
+      process.env[key] = "secret-value";
+    }
+    try {
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_ANTHROPIC");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_GEMINI");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_DEEPGRAM");
+      // Non-Omi env keys are preserved.
+      expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
 });

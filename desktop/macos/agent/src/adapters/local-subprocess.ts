@@ -89,6 +89,20 @@ const artifactRoles = new Set<ArtifactRole>([
   "other",
 ]);
 
+/**
+ * Omi-owned credentials that must not leak to external adapter subprocesses.
+ * The Firebase ID token and BYOK API keys are intended only for Omi's own
+ * pi-mono runtime; third-party adapters run user-installed commands and
+ * must not receive them.
+ */
+const OMI_CREDENTIAL_ENV_KEYS = [
+  "OMI_AUTH_TOKEN",
+  "OMI_BYOK_OPENAI",
+  "OMI_BYOK_ANTHROPIC",
+  "OMI_BYOK_GEMINI",
+  "OMI_BYOK_DEEPGRAM",
+] as const;
+
 export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId: ProductionAdapterId;
   readonly capabilities: AdapterCapabilities;
@@ -117,13 +131,18 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       throw new Error(`${this.adapterId} adapter requires ${this.envCommandName}`);
     }
 
+    // Scrub Omi-owned credentials before spawning user-installed external
+    // adapter commands. These subprocesses do not need the Firebase token or
+    // BYOK keys and must not receive them.
+    const scrubbedEnv: NodeJS.ProcessEnv = { ...process.env, OMI_ADAPTER_ID: this.adapterId };
+    for (const key of OMI_CREDENTIAL_ENV_KEYS) {
+      delete scrubbedEnv[key];
+    }
+
     this.process = spawn(command, {
       shell: true,
       stdio: ["pipe", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        OMI_ADAPTER_ID: this.adapterId,
-      },
+      env: scrubbedEnv,
     });
     const proc = this.process;
 

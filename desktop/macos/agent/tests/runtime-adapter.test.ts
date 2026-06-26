@@ -125,6 +125,71 @@ describe("AcpRuntimeAdapter process spawning", () => {
       expect.objectContaining({ shell: true, stdio: ["pipe", "pipe", "pipe"] }),
     ]);
   });
+
+  it("scrubs Omi credentials from external ACP adapter subprocess env", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "hermes",
+      command: "/usr/local/bin/hermes-agent",
+      envCommandName: "OMI_HERMES_ADAPTER_COMMAND",
+    });
+
+    const saved: Record<string, string | undefined> = {};
+    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM"]) {
+      saved[key] = process.env[key];
+      process.env[key] = "secret-value";
+    }
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_ANTHROPIC");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_GEMINI");
+      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_DEEPGRAM");
+      // Anthropic env keys that the adapter already scrubs are also absent.
+      expect(callEnv.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+      await adapter.stop();
+    } finally {
+      for (const [key, val] of Object.entries(saved)) {
+        if (val === undefined) delete process.env[key];
+        else process.env[key] = val;
+      }
+    }
+  });
+
+  it("does not scrub Omi credentials for the built-in ACP (Claude) subprocess", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    // adapterId "acp" uses the built-in nodeBin + acpEntry path (no external command).
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "acp",
+      nodeBin: "/node",
+      acpEntry: "/acp-entry.mjs",
+    });
+
+    const saved: Record<string, string | undefined> = {};
+    saved.OMI_AUTH_TOKEN = process.env.OMI_AUTH_TOKEN;
+    process.env.OMI_AUTH_TOKEN = "should-be-preserved";
+    try {
+      proc.stdin.on("data", () => {});
+      await adapter.start();
+
+      // Built-in path: spawn(nodeBin, [acpEntry], options) — options at index [2].
+      const callArgs = vi.mocked(spawn).mock.calls[0] as readonly unknown[];
+      const callEnv = callArgs[2] as { env: Record<string, string> };
+      // The built-in ACP subprocess is Omi's own Claude Code process; it may legitimately
+      // need OMI_AUTH_TOKEN (e.g. for pi-mono). Credential scrubbing is only for external commands.
+      expect(callEnv.env).toHaveProperty("OMI_AUTH_TOKEN", "should-be-preserved");
+      await adapter.stop();
+    } finally {
+      if (saved.OMI_AUTH_TOKEN === undefined) delete process.env.OMI_AUTH_TOKEN;
+      else process.env.OMI_AUTH_TOKEN = saved.OMI_AUTH_TOKEN;
+    }
+  });
 });
 
 describe("AcpRuntimeAdapter bindings", () => {

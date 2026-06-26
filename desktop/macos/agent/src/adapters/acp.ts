@@ -23,6 +23,20 @@ type ResponseHandler = {
   reject: (err: Error) => void;
 };
 
+/**
+ * Omi-owned credentials that must not leak to external adapter subprocesses.
+ * The Firebase ID token and BYOK API keys are intended only for Omi's own
+ * pi-mono runtime; third-party adapters (hermes, openclaw) run user-installed
+ * commands and must not receive them.
+ */
+const OMI_CREDENTIAL_ENV_KEYS = [
+  "OMI_AUTH_TOKEN",
+  "OMI_BYOK_OPENAI",
+  "OMI_BYOK_ANTHROPIC",
+  "OMI_BYOK_GEMINI",
+  "OMI_BYOK_DEEPGRAM",
+] as const;
+
 export class AcpError extends Error {
   code: number;
   data?: unknown;
@@ -98,6 +112,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     }
 
     if (command) {
+      // Scrub Omi-owned credentials before spawning user-installed external
+      // adapter commands (Hermes, OpenClaw). These subprocesses do not need
+      // the Firebase token or BYOK keys and must not receive them.
+      for (const key of OMI_CREDENTIAL_ENV_KEYS) {
+        delete env[key];
+      }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
       this.process = spawn(command, {
         shell: true,
