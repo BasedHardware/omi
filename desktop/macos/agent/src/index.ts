@@ -155,12 +155,14 @@ const pendingToolCalls = new Map<
 const TERMINAL_RUN_EVENT_TYPES = new Set(["run.succeeded", "run.failed", "run.cancelled", "run.timed_out", "run.orphaned"]);
 const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
 
-function registerActiveControlOwner(requestKey: string, ownerId: string): void {
+function registerActiveControlOwner(requestKey: string, ownerId: string): boolean {
   const existingOwnerId = activeControlToolOwnersByRequest.get(requestKey);
   if (existingOwnerId && existingOwnerId !== ownerId) {
     throw new Error("Request owner context already active for clientId/requestId");
   }
+  const inserted = !existingOwnerId;
   activeControlToolOwnersByRequest.set(requestKey, ownerId);
+  return inserted;
 }
 
 function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
@@ -954,9 +956,7 @@ async function main(): Promise<void> {
           const queryOwnerKey =
             controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
             (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
-          if (queryOwnerKey) {
-            registerActiveControlOwner(queryOwnerKey, queryOwnerId);
-          }
+          const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
@@ -964,7 +964,7 @@ async function main(): Promise<void> {
             }
             await facade.handleQuery(query);
           } finally {
-            if (queryOwnerKey) {
+            if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
             }
           }
@@ -1028,6 +1028,7 @@ async function main(): Promise<void> {
         let controlRunCorrelation: { requestId?: string; clientId?: string } = {};
         let controlRunOwnerKey: string | undefined;
         let preserveControlRunOwner = false;
+        let controlRunOwnerInserted = false;
         try {
           controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
           const correlated = withControlRunCorrelation(control.name, controlInput, control.clientId);
@@ -1037,7 +1038,7 @@ async function main(): Promise<void> {
           if (adapterId && correlated.requestId && correlated.clientId) {
             controlRunOwnerKey = controlRequestKey({ requestId: correlated.requestId, clientId: correlated.clientId });
             if (controlRunOwnerKey) {
-              registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
+              controlRunOwnerInserted = registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
             }
             facade.registerExternalRequestContext({
               protocolVersion: control.protocolVersion,
@@ -1048,10 +1049,10 @@ async function main(): Promise<void> {
             });
           }
         } catch (error) {
-          if (controlRunOwnerKey) {
+          if (controlRunOwnerKey && controlRunOwnerInserted) {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
-          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
             facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
@@ -1075,10 +1076,10 @@ async function main(): Promise<void> {
             throw new Error("Request owner context is not active for clientId/requestId");
           }
         } catch (error) {
-          if (controlRunOwnerKey) {
+          if (controlRunOwnerKey && controlRunOwnerInserted) {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
-          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+          if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
             facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
@@ -1105,10 +1106,10 @@ async function main(): Promise<void> {
                     ...agentControlToolContext,
                     getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
-	                      activeControlToolOwnerId({
-	                        requestKey: controlOwnerKey,
-	                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
-	                      }),
+                      activeControlToolOwnerId({
+                        requestKey: controlOwnerKey,
+                        ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+                      }),
                   },
                   control.name,
                   controlInput,
@@ -1116,19 +1117,19 @@ async function main(): Promise<void> {
                 preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
                 return toolResult;
               } finally {
-                if (controlRunOwnerKey && !preserveControlRunOwner) {
+                if (controlRunOwnerKey && !preserveControlRunOwner && controlRunOwnerInserted) {
                   activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
                 }
-                if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+                if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
                   facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
                 }
               }
             })()
           : (() => {
-              if (controlRunOwnerKey && !preserveControlRunOwner) {
+              if (controlRunOwnerKey && !preserveControlRunOwner && controlRunOwnerInserted) {
                 activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
               }
-              if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId) {
+              if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
                 facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
               return JSON.stringify({
