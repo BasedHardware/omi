@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
@@ -66,7 +67,8 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.executors import drain_background_tasks, log_executor_health
+from utils.executors import drain_background_tasks, log_executor_health, run_blocking, db_executor
+from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -171,6 +173,19 @@ app.add_middleware(BYOKMiddleware)
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(log_executor_health())
+    # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
+    # to db_executor so the blocking Firestore queries don't stall event-loop startup.
+    asyncio.create_task(run_blocking(db_executor, _drain_pending_deletion_wipes))
+
+
+def _drain_pending_deletion_wipes():
+    """Best-effort reconciliation of pending/failed account-deletion wipes on startup."""
+    try:
+        result = reconcile_pending_deletion_wipes()
+        if result.get('requeued'):
+            logger.info(f"Startup deletion-wipe reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup deletion-wipe reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")

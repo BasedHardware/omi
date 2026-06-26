@@ -131,8 +131,13 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     """Re-enqueue account-deletion wipes that were cancelled or failed.
 
     Called by a periodic worker (cron, Cloud Scheduler, or startup hook) to drain
-    the ``wipe_status in ('pending', 'failed')`` backlog left behind when a deploy
-    or restart cancels in-process ``cleanup_executor`` futures before they start.
+    the ``wipe_status in ('pending', 'failed', 'retrying')`` backlog left behind
+    when a deploy or restart cancels in-process ``cleanup_executor`` futures
+    before they start.
+
+    Each wipe is atomically claimed via a Firestore transaction before
+    re-enqueueing, so concurrent workers or overlapping scheduler runs cannot
+    double-enqueue the same wipe.
 
     Returns a summary dict with counts of re-enqueued and skipped wipes.
     """
@@ -147,6 +152,17 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     for record in pending:
         uid = record.get('uid')
         if not uid:
+            skipped += 1
+            continue
+        # Atomically claim the wipe to prevent concurrent re-enqueueing by
+        # multiple workers. If the claim fails, another worker owns it.
+        try:
+            claimed_uid = users_db.claim_deletion_wipe(uid)
+        except Exception as e:
+            logger.error(f'delete_account reconciliation claim failed for {uid}: {sanitize(str(e))}')
+            skipped += 1
+            continue
+        if claimed_uid is None:
             skipped += 1
             continue
         submit_with_context(cleanup_executor, background_wipe_user_data, uid)

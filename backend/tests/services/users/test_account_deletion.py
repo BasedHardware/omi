@@ -257,6 +257,7 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
 def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     pending = [{'uid': 'uid1', 'wipe_status': 'pending'}, {'uid': 'uid2', 'wipe_status': 'failed'}]
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
     enqueued = []
     monkeypatch.setattr(
         account_deletion,
@@ -272,9 +273,51 @@ def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     assert enqueued[1] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid2')
 
 
+def test_reconcile_pending_deletion_wipes_skips_already_claimed(monkeypatch):
+    """Wipes already claimed by another worker are skipped (no double-enqueue)."""
+    pending = [{'uid': 'uid1', 'wipe_status': 'pending'}, {'uid': 'uid2', 'wipe_status': 'failed'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    # uid1 claimable, uid2 already claimed by another worker.
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'claim_deletion_wipe',
+        lambda uid: uid if uid == 'uid1' else None,
+    )
+    enqueued = []
+    monkeypatch.setattr(
+        account_deletion,
+        'submit_with_context',
+        lambda executor, target, uid: enqueued.append(uid),
+    )
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 1, 'skipped': 1}
+    assert enqueued == ['uid1']
+
+
+def test_reconcile_pending_deletion_wipes_skips_claim_exception(monkeypatch):
+    """Claim exceptions are logged and skipped, not propagated."""
+    pending = [{'uid': 'uid1', 'wipe_status': 'pending'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'claim_deletion_wipe',
+        MagicMock(side_effect=Exception('txn conflict')),
+    )
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 1}
+    submit.assert_not_called()
+
+
 def test_reconcile_pending_deletion_wipes_skips_missing_uid(monkeypatch):
     pending = [{'uid': 'uid1'}, {'wipe_status': 'pending'}]  # second record has no uid
     monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
     enqueued = []
     monkeypatch.setattr(
         account_deletion,

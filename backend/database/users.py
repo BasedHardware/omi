@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from google.cloud import firestore
@@ -271,8 +271,51 @@ def get_pending_deletion_wipes(limit: int = 100) -> list[dict]:
     deploy/restart before the in-process cleanup_executor future started, or that
     failed and need re-enqueueing.
     """
-    docs = db.collection('account_deletions').where('wipe_status', 'in', ['pending', 'failed']).limit(limit).stream()
+    docs = (
+        db.collection('account_deletions')
+        .where('wipe_status', 'in', ['pending', 'failed', 'retrying'])
+        .limit(limit)
+        .stream()
+    )
     return [doc.to_dict() | {'uid': doc.id} for doc in docs]
+
+
+@transactional
+def _claim_deletion_wipe_txn(transaction, doc_ref, stale_after: timedelta) -> str | None:
+    """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
+
+    Transitions ``wipe_status`` from ``pending``/``failed``/``retrying`` (stale)
+    to ``retrying`` so concurrent workers cannot re-enqueue the same wipe. If the
+    wipe is already ``retrying`` and not yet stale, the claim is refused (another
+    worker owns it).
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    if status in ('pending', 'failed'):
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': datetime.now(timezone.utc)})
+        return snapshot.id
+    if status == 'retrying':
+        claimed_at = data.get('wipe_claimed_at')
+        if claimed_at and claimed_at < datetime.now(timezone.utc) - stale_after:
+            # Stale claim (worker probably crashed). Re-claim it.
+            transaction.update(doc_ref, {'wipe_claimed_at': datetime.now(timezone.utc)})
+            return snapshot.id
+    return None
+
+
+def claim_deletion_wipe(uid: str, stale_after: timedelta = timedelta(minutes=10)) -> str | None:
+    """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
+
+    Returns the uid if claimed (caller should enqueue the wipe), or ``None`` if
+    another worker already owns a non-stale claim. This prevents the same wipe
+    from being re-enqueued concurrently by multiple workers or scheduler runs.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after)
 
 
 def create_person(uid: str, data: dict):
