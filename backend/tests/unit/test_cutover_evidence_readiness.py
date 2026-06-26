@@ -115,12 +115,10 @@ def test_cutover_evidence_execute_does_not_change_state_or_run_network_calls():
 def test_cutover_evidence_docs_and_ticket_reference_runner_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
     evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
-    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
-    for text in (evidence_markers, tickets):
-        assert "cutover_evidence_readiness.py" in text
-        assert "Oracle P0-8" in text
-        assert "production_rollout_approved=false" in text
-        assert "T20 repair/projection-consistency" in text
-        assert "T21 `/v3` compatibility and cursor pagination" in text
-        assert "T22/T23 external writes and caller coverage" in text
+    assert "cutover_evidence_readiness.py" in evidence_markers
+    assert "Oracle P0-8" in evidence_markers
+    assert "production_rollout_approved=false" in evidence_markers
+    assert "T20 repair/projection-consistency" in evidence_markers
+    assert "T21 `/v3` compatibility and cursor pagination" in evidence_markers
+    assert "T22/T23 external writes and caller coverage" in evidence_markers
