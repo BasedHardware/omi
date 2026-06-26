@@ -73,15 +73,50 @@ final class AutoRouter {
 
     // MARK: - Refresh
 
+    /// In-flight refresh deduplication (cubic review). When multiple
+    /// callers invoke `refreshIfStale(for:)` concurrently, only the first
+    /// starts a network request; subsequent callers wait on the same Task.
+    /// Keyed by task; cleared when the Task completes.
+    private var inFlightRefreshes: [AutoRouterTask: Task<Void, Never>] = [:]
+
     /// Refresh the pick for `task` only if the cache is stale (>24h) or empty.
     /// No-op if a fresh pick already exists.
-    func refreshIfStale(for task: AutoRouterTask) {
+    /// `onComplete` is called when the refresh finishes (success OR failure).
+    /// Used by callers that need to re-warm their model state when the router
+    /// pick changes after a background refresh (cubic review).
+    func refreshIfStale(
+        for task: AutoRouterTask,
+        onComplete: ((AutoRouterTask) -> Void)? = nil
+    ) {
         if let last = lastRefresh(for: task),
            Date().timeIntervalSince(last) < Self.refreshInterval,
            currentPick(for: task) != nil {
+            // Cache is fresh — still fire onComplete so the caller can
+            // know there's nothing to update.
+            onComplete?(task)
             return
         }
-        Task { await refresh(task: task) }
+        // In-flight dedup (cubic review): if a refresh for this task is
+        // already running, don't start a second one. Subsequent callers
+        // either join the existing task (re-awaiting the same result) or
+        // skip if the task is already done. Avoids duplicate network
+        // round-trips when multiple callers invoke refreshIfStale
+        // concurrently.
+        if let existing = inFlightRefreshes[task] {
+            log("AutoRouter: refresh for \(task.rawValue) already in flight, joining")
+            Task { _ = await existing.value; onComplete?(task) }
+            return
+        }
+        let taskHandle = Task { [weak self] in
+            await self?.refresh(task: task)
+            onComplete?(task)
+        }
+        inFlightRefreshes[task] = taskHandle
+        // Clean up the dedup entry when the task completes (success or failure).
+        Task {
+            _ = await taskHandle.value
+            inFlightRefreshes[task] = nil
+        }
     }
 
     /// Force a refresh of the pick for `task`. Reads from the backend endpoint,

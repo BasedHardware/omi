@@ -327,19 +327,50 @@ async def auto_router_pick(
 
 
 @router.get("/v1/auto-router/metrics")
-async def auto_router_metrics(uid: str = Depends(auth_dependency)):
+async def auto_router_metrics(
+    uid: str = Depends(auth_dependency),
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key"),
+):
     """Expose cache state, per-task current state, and pick history.
 
     Requires authentication (matches pick endpoint).
     The `uid` is captured but not used in v2 (per-user metrics is v3).
 
     Process-local only — pick_history is in-memory and resets on restart.
+
+    Admin gating (cubic review): pick_history exposes *global* in-memory
+    state across ALL users. Any authenticated user shouldn't see other
+    users' picks. When ADMIN_KEY is configured, callers must present
+    it via X-Admin-Key (constant-time comparison). When ADMIN_KEY is
+    unset (default in dev/test), pick_history is open to all callers —
+    matches the dev workflow + keeps tests simple. Production
+    deployments should always set ADMIN_KEY.
     """
+    # Admin gate: required only when ADMIN_KEY is configured.
+    admin_key = os.environ.get("ADMIN_KEY", "").strip()
+    admin_required = bool(admin_key)
+    is_admin = (
+        admin_required
+        and x_admin_key is not None
+        and hmac.compare_digest(
+            x_admin_key.strip().encode("utf-8"),
+            admin_key.encode("utf-8"),
+        )
+    )
+
     cache = _get_registry_cache()
     task_registry, model_registry = await cache.get_or_refresh(_get_loader())
 
     state = _metrics_collector.current_state(task_registry, model_registry, cache)
-    state["pick_history"] = _metrics_collector.pick_history_snapshot()
+    # pick_history exposes global state across ALL users. Only include it
+    # for admin callers (cubic review). When ADMIN_KEY is unset, pick_history
+    # is open (dev-friendly). When set, non-admin callers get an empty list +
+    # a flag indicating admin is required.
+    if is_admin or not admin_required:
+        state["pick_history"] = _metrics_collector.pick_history_snapshot()
+    else:
+        state["pick_history"] = []
+        state["pick_history_admin_required"] = True
     state["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     # v3: report where the benchmarks came from (AA live data vs example mock).

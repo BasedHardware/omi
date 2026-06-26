@@ -212,17 +212,29 @@ final class AutoRouterSettingsViewModel: ObservableObject {
 
     /// Execute the save (called by the debounce timer).
     private func performSave(_ prefsToSave: UserPrefs) async {
+        // Cubic review: catch CancellationError separately so a cancelled
+        // save (caused by a newer debounced save superseding this one) is
+        // not surfaced as a real failure in the UI. Cancellation is normal
+        // (the newer save takes over) and shouldn't trigger the error banner.
         saveStatus = .saving
         errorState = nil
         do {
             let updated = try await client.save(prefs: prefsToSave)
+            // If a newer save was scheduled while we were awaiting, let IT
+            // run instead of clobbering the UI state with our stale result.
+            if Task.isCancelled { return }
             self.prefs = updated
             self.saveStatus = .saved
+        } catch is CancellationError {
+            // Expected — a newer save superseded us. Don't surface as a failure.
+            return
         } catch let err as PrefsError {
+            if Task.isCancelled { return }
             self.errorState = err
             self.saveStatus = .failed(err)
             NSLog("[AutoRouterSettingsViewModel] save failed: \(err)")
         } catch {
+            if Task.isCancelled { return }
             self.errorState = .transport(underlying: error.localizedDescription)
             self.saveStatus = .failed(.transport(underlying: error.localizedDescription))
             NSLog("[AutoRouterSettingsViewModel] save failed: \(error.localizedDescription)")

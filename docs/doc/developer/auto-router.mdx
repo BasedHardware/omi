@@ -6,7 +6,9 @@ description: "Task-based model selection across Omi — quality/latency/cost wei
 
 # Auto-router — Task-based model selection across Omi
 
-> **Current: v2 (production-useful).** Adds authentication, observability metrics, and a real wiring of the chat path. v1 (standalone framework) is preserved as the foundation.
+> **Current: v5 (Settings UI).** Adds a `Settings → Auto-router` page so users
+> can tune per-task weights (quality/latency/cost) without restarting the backend.
+> v1 (framework) and v2 (auth + metrics + wiring) are preserved as the foundation.
 >
 > A foundational framework that picks the best model per task type using weighted
 > scoring across quality / latency / cost, with a daily-refreshable benchmark input
@@ -215,7 +217,7 @@ v1 deliberately does NOT wire into `ChatProvider`, `ModelQoS`, or `RealtimeHubCo
 - **Online learning** — no feedback loop. Picks are pure functions of the current benchmarks file.
 - **More than 5 task types** — bounded to the 5 from the v1 brief. Adding more is straightforward (one line in `task_registry.py`) but not done in v1.
 
-## v2 — Production-useful (current)
+## v2 — Production-useful
 
 v2 builds on v1 with three additions: authentication, observability, and the first production wiring. This is still a foundation, not a full rollout — the goal is one wired path plus the metrics to measure it.
 
@@ -321,7 +323,7 @@ The `uid` is captured but **not used in v2** — per-user personalization is v3.
 - Upstream desktop client (DO NOT MODIFY): `desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift`
 
 
-## v4 — Persistent prefs (current)
+## v4 — Persistent prefs
 
 v3 stored per-user prefs in-memory — lost on backend restart. v4 persists them to Firestore so prefs survive restarts.
 
@@ -377,7 +379,7 @@ Nested `overrides` is part of the new value, replaced wholesale.
 - Per-user prefs encryption
 - Versioned prefs (rollback)
 
-## v5 — Settings UI for prefs + STT/embedding benchmarks
+## v5 — Settings UI for prefs + STT/embedding benchmarks (current)
 
 v5 lands the two features deferred from v4: a desktop Settings page for
 the user's per-task weight overrides, and an expanded benchmark data set

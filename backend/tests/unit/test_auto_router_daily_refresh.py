@@ -306,12 +306,15 @@ class TestInvalidate:
         # Next call: loader raises, stale fallback returns "first".
         result = await cache.get_or_refresh(loader)
         assert result == "first"
-        # The cached value is still set; timestamp was advanced even though
-        # the loader failed (so refreshIfStale respects the TTL and doesn't
-        # re-fire on every call — that's the fix).
+        # The cached value is still set (for stale fallback).
         assert cache.has_value
-        assert cache.age_seconds is not None
-        assert cache.age_seconds < 60  # just advanced, well within TTL
+        # NEW behavior (cubic fix): _last_loaded_at is NOT advanced on failure.
+        # The failure cooldown tracks when to retry — separate from the
+        # "last successful load" timestamp.
+        # After a failure: age_seconds is None (no successful load since invalidate).
+        assert cache.age_seconds is None
+        # _last_failed_at is set (will trigger retry after failure_cooldown elapses).
+        assert cache._last_failed_at == 1061.0
 
 
 # ---------------------------------------------------------------------------
@@ -339,3 +342,174 @@ class TestLastLoadedWallTime:
         assert wall_time is not None
         elapsed = (datetime.now(timezone.utc) - wall_time).total_seconds()
         assert 0 <= elapsed < 5, f"last_loaded_wall_time should be very recent, got {elapsed}s ago"
+
+
+# ---------------------------------------------------------------------------
+# Failure cooldown (cubic review)
+# ---------------------------------------------------------------------------
+
+
+class TestDailyRefreshFailureCooldown:
+    """Cubic review caught that failed refreshes would advance _last_loaded_at
+    to now(), causing the cache to be "fresh" for the full TTL (24h) even
+    though the data was stale. Now we use a separate _last_failed_at timestamp
+    + failure_cooldown to force a retry sooner than the full TTL after a
+    transient backend outage."""
+
+    @pytest.mark.asyncio
+    async def test_retry_after_failure_cooldown_not_full_ttl(self):
+        """After a failure, the next refresh fires after failure_cooldown
+        (5 min default), not after the full TTL (24h).
+
+        The cooldown is the NEW gate: previously, after a failure the
+        cache was marked fresh for the full TTL (24h of stale data). Now
+        after failure_cooldown elapses, the loader is called again.
+
+        We verify this by counting loader calls. Without the cooldown,
+        the old code would mark the cache fresh after the failure and
+        never call the loader again until the full TTL elapsed.
+        """
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        fake_clock = [1000.0]
+        cache = DailyRefreshCache(
+            ttl_seconds=24 * 60 * 60,  # 24h
+            clock=lambda: fake_clock[0],
+            failure_cooldown_seconds=5 * 60,  # 5 min
+        )
+
+        call_count = 0
+
+        async def loader():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return "first-success"
+            if call_count == 2:
+                raise RuntimeError("transient")
+            return f"recovered-{call_count}"
+
+        # First call: succeeds at t=1000.
+        result = await cache.get_or_refresh(loader)
+        assert result == "first-success"
+        assert cache._last_loaded_at == 1000.0
+        assert cache._last_failed_at is None
+        assert call_count == 1
+
+        # 1 minute later — still within TTL, cache is fresh.
+        fake_clock[0] += 60
+        result = await cache.get_or_refresh(loader)
+        assert result == "first-success"  # no loader call
+        assert call_count == 1
+
+        # 1 hour later — within TTL. Force a refresh via invalidate.
+        fake_clock[0] += 60 * 60
+        cache.invalidate()
+        result = await cache.get_or_refresh(loader)
+        # The loader was called (call 2), raised. Stale value returned.
+        assert result == "first-success"
+        assert call_count == 2
+        # _last_failed_at is set.
+        assert cache._last_failed_at == fake_clock[0]
+
+        # 1 minute after the failure — still in failure cooldown.
+        # Without the cooldown, this would also return stale (the previous
+        # bug). The cooldown ensures we don't retry too fast.
+        fake_clock[0] += 60
+        result = await cache.get_or_refresh(loader)
+        assert result == "first-success"  # stale value
+        assert call_count == 2  # loader NOT re-called (cooldown active)
+
+        # 6 minutes after the failure — past failure cooldown.
+        # NEW: the loader should be called again (cooldown has elapsed).
+        # OLD BUG: the cache would still be marked fresh from the failure
+        # (we set _last_loaded_at = now() in the old code), so the loader
+        # would NOT be called and stale data would persist for the full TTL.
+        fake_clock[0] += 5 * 60 + 1
+        result = await cache.get_or_refresh(loader)
+        assert call_count == 3, f"Loader should be called after cooldown elapses, but was called {call_count} times"
+        assert result == "recovered-3"
+
+    @pytest.mark.asyncio
+    async def test_failure_cooldown_capped_at_ttl(self):
+        """If failure_cooldown > ttl, cap it at ttl (would be silly to wait longer)."""
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        fake_clock = [1000.0]
+        cache = DailyRefreshCache(
+            ttl_seconds=60,  # 1 min TTL
+            clock=lambda: fake_clock[0],
+            failure_cooldown_seconds=10 * 60,  # 10 min requested
+        )
+        # Cooldown is capped at ttl_seconds (60).
+        assert cache._failure_cooldown == 60
+
+    @pytest.mark.asyncio
+    async def test_successful_refresh_clears_failure_state(self):
+        """A successful refresh clears _last_failed_at (so the cache
+        returns to "fresh" status and the failure cooldown is no longer
+        blocking subsequent reads)."""
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        fake_clock = [1000.0]
+        cache = DailyRefreshCache(
+            ttl_seconds=24 * 60 * 60,
+            clock=lambda: fake_clock[0],
+        )
+
+        async def good_loader():
+            return "fresh-value"
+
+        async def bad_loader():
+            raise RuntimeError("transient")
+
+        # First refresh succeeds (populates cache).
+        await cache.get_or_refresh(good_loader)
+        assert cache._last_failed_at is None
+
+        # Advance past TTL, then fail.
+        fake_clock[0] += 24 * 60 * 60 + 1
+        result = await cache.get_or_refresh(bad_loader)
+        assert result == "fresh-value"
+        assert cache._last_failed_at == fake_clock[0]
+
+        # Advance past failure cooldown.
+        fake_clock[0] += 5 * 60 + 1
+        # Next call succeeds — failure state cleared.
+        result2 = await cache.get_or_refresh(good_loader)
+        assert result2 == "fresh-value"
+        assert cache._last_failed_at is None, "Failure state should be cleared on success"
+        assert cache._is_fresh()
+
+    @pytest.mark.asyncio
+    async def test_invalidate_clears_failure_state(self):
+        """invalidate() clears _last_failed_at so the next call fires immediately
+        (caller is signaling "try again now", don't wait for cooldown)."""
+        from utils.auto_router.daily_refresh import DailyRefreshCache
+
+        fake_clock = [1000.0]
+        cache = DailyRefreshCache(
+            ttl_seconds=24 * 60 * 60,
+            clock=lambda: fake_clock[0],
+        )
+
+        # Populate with a good value first.
+        async def good_loader():
+            return "value"
+
+        await cache.get_or_refresh(good_loader)
+        assert cache._last_failed_at is None
+
+        # Advance past TTL, then fail.
+        fake_clock[0] += 24 * 60 * 60 + 1
+
+        async def bad_loader():
+            raise RuntimeError("transient")
+
+        await cache.get_or_refresh(bad_loader)
+        assert cache._last_failed_at == fake_clock[0]
+
+        # Invalidate.
+        cache.invalidate()
+        assert cache._last_failed_at is None
+        assert cache._last_loaded_at is None

@@ -64,8 +64,14 @@ final class UserPrefsClient {
         req.httpMethod = "GET"
         req.timeoutInterval = Self.requestTimeout
         req.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let auth = try? await AuthService.shared.getAuthHeader() {
+        // Use do/catch (NOT try?) so auth failures surface as a real error
+        // (cubic review). Silently sending an unauthenticated request would
+        // return 401 from the server and obscure the real failure cause.
+        do {
+            let auth = try await AuthService.shared.getAuthHeader()
             req.setValue(auth, forHTTPHeaderField: "Authorization")
+        } catch {
+            throw PrefsError.unauthorized
         }
 
         do {
@@ -108,8 +114,12 @@ final class UserPrefsClient {
         req.timeoutInterval = Self.requestTimeout
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if let auth = try? await AuthService.shared.getAuthHeader() {
+        // See note in fetch() — propagate auth errors instead of swallowing.
+        do {
+            let auth = try await AuthService.shared.getAuthHeader()
             req.setValue(auth, forHTTPHeaderField: "Authorization")
+        } catch {
+            throw PrefsError.unauthorized
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: ["prefs": prefs.toRawDict()])
 

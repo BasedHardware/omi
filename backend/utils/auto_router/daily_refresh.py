@@ -47,17 +47,33 @@ class DailyRefreshCache(Generic[T]):
 
     DEFAULT_TTL_SECONDS = 24 * 60 * 60  # 24h, matching upstream auto_model.py
 
+    # How long to wait before retrying a failed refresh (cubic review).
+    # Shorter than the full TTL so a transient backend outage self-heals
+    # quickly instead of serving stale data for the full TTL. Capped at
+    # `ttl_seconds` so we never wait longer than the freshness threshold.
+    DEFAULT_FAILURE_COOLDOWN_SECONDS = 5 * 60  # 5 minutes
+
     def __init__(
         self,
         ttl_seconds: float = DEFAULT_TTL_SECONDS,
         clock: Callable[[], float] = time.monotonic,
+        failure_cooldown_seconds: float = DEFAULT_FAILURE_COOLDOWN_SECONDS,
     ):
         if ttl_seconds <= 0:
             raise ValueError(f"ttl_seconds must be > 0, got {ttl_seconds}")
+        if failure_cooldown_seconds < 0:
+            raise ValueError(f"failure_cooldown_seconds must be >= 0, got {failure_cooldown_seconds}")
+        # Cap cooldown at TTL so we never wait longer than the freshness
+        # threshold (would be silly).
         self._ttl = ttl_seconds
+        self._failure_cooldown = min(failure_cooldown_seconds, ttl_seconds)
         self._clock = clock
         self._value: Optional[T] = None
         self._last_loaded_at: Optional[float] = None
+        # Set after a failed refresh. While this is set, _is_fresh() returns
+        # False until `_failure_cooldown` seconds have elapsed (cubic review:
+        # shorter retry interval than the full TTL).
+        self._last_failed_at: Optional[float] = None
         self._lock = asyncio.Lock()
         # Counter for tests to verify how many times loader was actually invoked.
         self.loader_call_count = 0
@@ -102,10 +118,49 @@ class DailyRefreshCache(Generic[T]):
         return self._value is not None
 
     def _is_fresh(self) -> bool:
-        """True if cache is non-empty AND within TTL window."""
-        if self._value is None or self._last_loaded_at is None:
+        """True if cache is non-empty AND within TTL window AND (no recent failure
+        OR we're still within the failure cooldown).
+
+        The failure cooldown window acts as a brief "quiet period" after a
+        failed refresh: during it, _is_fresh() returns True (so callers
+        get the stale value without re-firing the loader — prevents a tight
+        retry loop against a failing backend). After the cooldown elapses,
+        _is_fresh() returns False so the next call triggers a fresh attempt.
+
+        Cubic review: previously a failed refresh would set `_last_loaded_at
+        = now()`, marking the cache as fresh for the full TTL. This meant a
+        1-minute backend outage at the refresh boundary would result in
+        ~48 hours of stale model picks. Now we track `_last_failed_at`
+        separately and require the cooldown to elapse before treating the
+        cache as stale again. The cooldown is capped at the TTL so we
+        never wait longer than the freshness threshold.
+        """
+        # Must have a value to be "fresh".
+        if self._value is None:
             return False
-        return (self._clock() - self._last_loaded_at) < self._ttl
+        # Within the failure cooldown window, treat the cache as fresh
+        # (skip loader, return stale value) — this is the brief quiet period.
+        # NOTE: checked BEFORE _last_loaded_at because invalidate() may have
+        # cleared _last_loaded_at, but the cooldown should still apply.
+        if self._last_failed_at is not None and (self._clock() - self._last_failed_at) < self._failure_cooldown:
+            return True  # still "fresh" — don't hammer the failing backend
+        # Past the cooldown: check TTL. If we have a successful load timestamp
+        # and it's within TTL, we're fresh.
+        if self._last_loaded_at is None:
+            return False
+        if (self._clock() - self._last_loaded_at) >= self._ttl:
+            return False
+        return True
+
+    @property
+    def ttl_seconds(self) -> float:
+        """Public accessor for the cache TTL (in seconds).
+
+        Used by metrics.py + tests that need to know the freshness threshold
+        without reaching into a private attribute (cubic review: cross-file
+        access to `_ttl` is fragile coupling).
+        """
+        return self._ttl
 
     async def get_or_refresh(self, loader: Callable[[], Awaitable[T]]) -> T:
         """Return the cached value, refreshing if stale.
@@ -134,20 +189,24 @@ class DailyRefreshCache(Generic[T]):
             try:
                 self._value = await loader()
                 self._last_loaded_at = self._clock()
+                # Clear failure state on successful refresh.
+                self._last_failed_at = None
                 return self._value
             except Exception as e:
+                # Record the failure timestamp for the cooldown logic in
+                # _is_fresh() (cubic review: shorter retry interval than the
+                # full TTL — see _is_fresh docstring).
+                self._last_failed_at = self._clock()
                 if self._value is not None:
                     age_str = f"{self.age_seconds:.1f}s" if self.age_seconds is not None else "unknown"
                     logger.warning(
                         f"DailyRefreshCache: loader raised ({type(e).__name__}: {e}), "
-                        f"returning stale value (age {age_str})"
+                        f"returning stale value (age {age_str}); will retry in "
+                        f"{self._failure_cooldown}s"
                     )
-                    # Advance the timestamp so refreshIfStale respects the TTL
-                    # even after a failing refresh. Without this, every subsequent
-                    # call would re-fire the loader (the cache is stale AND
-                    # the timestamp is still old), creating a tight retry loop
-                    # against the failing backend.
-                    self._last_loaded_at = self._clock()
+                    # Don't update _last_loaded_at — let _is_fresh() return False
+                    # until the failure cooldown elapses, so the next call
+                    # triggers a retry sooner than the full TTL.
                     return self._value
                 # No prior value — propagate.
                 raise
@@ -157,3 +216,6 @@ class DailyRefreshCache(Generic[T]):
         next call may still fall back to it on loader failure).
         """
         self._last_loaded_at = None
+        # Also clear failure cooldown so the next refresh fires immediately
+        # (caller is signaling "try again now").
+        self._last_failed_at = None

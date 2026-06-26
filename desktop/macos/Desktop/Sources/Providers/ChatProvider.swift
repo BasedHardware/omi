@@ -701,6 +701,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// after session/new the ACP SDK tracks ongoing history natively.
     private var cachedMainSystemPrompt: String = ""
     private var cachedFloatingSystemPrompt: String = ""
+    /// The model that the floating session was warmed up with. Used to detect
+    /// when the auto-router's pick has changed and the session needs to be
+    /// re-warmed (cubic review P1).
+    private var cachedFloatingModelAtWarmup: String? = nil
 
     // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
@@ -907,6 +911,33 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         await agentBridge.invalidateSession(sessionKey: sessionKey)
     }
 
+    /// Re-warm the floating session if the auto-router's pick has changed
+    /// since the original warmup. Called as the onComplete callback for
+    /// `AutoRouter.shared.refreshIfStale(...)` (cubic review P1).
+    ///
+    /// Without this, an empty cache at startup locks the floating session
+    /// onto the fallback model even after a successful background refresh —
+    /// the user's first message would use the stale fallback instead of
+    /// the router's pick. This method detects the change and invalidates
+    /// the floating session, forcing a re-warm on the next query.
+    @MainActor
+    private func rewarmFloatingSessionIfNeeded() async {
+        guard agentBridgeStarted else { return }
+        guard let oldModel = cachedFloatingModelAtWarmup else { return }
+        // Re-compute what the floating model SHOULD be now (with fresh router pick).
+        let routerPick = AutoRouter.shared.currentPick(for: .generalAssistant)
+        let decision = ChatModelRouter.decide(
+            selectedModel: ShortcutSettings.shared.selectedModel,
+            routerPick: routerPick
+        )
+        let newModel = decision.model
+        if newModel != oldModel {
+            log("ChatProvider: router pick changed (\(oldModel) → \(newModel)), invalidating floating session")
+            cachedFloatingModelAtWarmup = newModel
+            await agentBridge.invalidateSession(sessionKey: "floating")
+        }
+    }
+
     /// Test that the Playwright Chrome extension is connected and working.
     /// Ensures the bridge is started (restarting if needed to pick up new token),
     /// then sends a lightweight test query that triggers a browser_snapshot tool call.
@@ -992,7 +1023,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // The first call still falls back to the default if the cache is
             // empty and there's no network — `refreshIfStale` returns immediately
             // and spawns a Task to refresh in the background.
-            AutoRouter.shared.refreshIfStale(for: .generalAssistant)
+            AutoRouter.shared.refreshIfStale(for: .generalAssistant) { [weak self] _ in
+                // Cubic review P1: when the background refresh completes,
+                // re-warm the floating session if the new pick differs from
+                // the one we used at warmup. Without this, an empty cache at
+                // startup locks the floating session onto the fallback model
+                // even after a successful background refresh.
+                Task { @MainActor [weak self] in
+                    await self?.rewarmFloatingSessionIfNeeded()
+                }
+            }
             let routerPick = AutoRouter.shared.currentPick(for: .generalAssistant)
             let floatingModelDecision = ChatModelRouter.decide(
                 selectedModel: ShortcutSettings.shared.selectedModel,
@@ -1001,6 +1041,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let floatingModel = floatingModelDecision.model
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
+            cachedFloatingModelAtWarmup = floatingModel
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
                 .init(key: "main", model: ModelQoS.Claude.chat, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)

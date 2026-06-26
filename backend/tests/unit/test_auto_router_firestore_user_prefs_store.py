@@ -9,7 +9,7 @@ from utils.auto_router.firestore_user_prefs_store import FirestoreUserPrefsStore
 from utils.auto_router.user_prefs import TaskWeights, UserPrefs
 from utils.auto_router.user_prefs_store_protocol import StoredPrefs
 
-from fixtures.firestore_user_prefs_mock import MockFirestore
+from fixtures.firestore_user_prefs_mock import MockDocumentReference, MockFirestore
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -327,3 +327,149 @@ class TestFirestoreStoreProtocolConformance:
 
         store = FirestoreUserPrefsStore(db_client=MockFirestore())
         assert isinstance(store, UserPrefsStoreProtocol)
+
+
+# ---------------------------------------------------------------------------
+# Mock correctness (cubic review fixes)
+# ---------------------------------------------------------------------------
+
+
+class TestMockErrorSimulation:
+    """Cubic review caught two issues in the mock error-simulation helpers:
+    1. simulate_get_error() was dead code — get() never checked raise_on_get.
+    2. Error flags were never cleared after raising (one-shot contract
+       violated). Tests here verify the mock behaves as documented.
+    """
+
+    def test_simulate_get_error_is_one_shot(self):
+        """After raise_on_get fires, subsequent get() calls succeed (flag cleared)."""
+        mock = MockFirestore()
+        # First get: should raise.
+        mock.simulate_get_error(ConnectionError("simulated firestore down"))
+        doc = mock.collection("users").document("uid-1")
+        with pytest.raises(ConnectionError, match="simulated firestore down"):
+            doc.get()
+
+        # Second get: same doc — should succeed (flag was cleared after raise).
+        result = doc.get()
+        assert result.exists is False  # doc not present
+
+    def test_simulate_set_error_is_one_shot(self):
+        """After raise_on_set fires, subsequent set() calls succeed (flag cleared)."""
+        mock = MockFirestore()
+        mock.simulate_set_error(ConnectionError("simulated firestore down"))
+        doc = mock.collection("users").document("uid-1")
+        with pytest.raises(ConnectionError, match="simulated firestore down"):
+            doc.set({"foo": "bar"})
+
+        # Second set: should succeed.
+        doc.set({"foo": "baz"})
+        assert mock.docs["users"]["uid-1"]["foo"] == "baz"
+
+    def test_simulate_get_error_via_get_handlers(self):
+        """The MockFirestore.simulate_get_error() contract works end-to-end."""
+        mock = MockFirestore()
+        mock.simulate_get_error(RuntimeError("first call fails"))
+        # First call fails.
+        with pytest.raises(RuntimeError, match="first call fails"):
+            mock.collection("users").document("u1").get()
+        # Second call succeeds (flag cleared).
+        result = mock.collection("users").document("u1").get()
+        assert result.exists is False
+
+    def test_simulate_set_error_via_set_and_update(self):
+        """Both set() and update() honor the one-shot raise_on_set flag."""
+        mock = MockFirestore()
+        mock.simulate_set_error(RuntimeError("first write fails"))
+
+        # set() raises.
+        with pytest.raises(RuntimeError):
+            mock.collection("users").document("u1").set({"x": 1})
+        # update() succeeds (flag was cleared after the set() raise).
+        mock.collection("users").document("u1").update({"y": 2})
+        assert mock.docs["users"]["u1"]["y"] == 2
+
+    def test_simulate_get_error_does_not_persist_state(self):
+        """After a raised error, the mock is fully usable for subsequent reads."""
+        mock = MockFirestore()
+        # Pre-populate some data.
+        mock.collection("users").document("u1").set({"name": "alice"}, merge=True)
+
+        # First read fails.
+        mock.simulate_get_error(ConnectionError("test"))
+        with pytest.raises(ConnectionError):
+            mock.collection("users").document("u1").get()
+
+        # Next read works AND returns the pre-populated data.
+        result = mock.collection("users").document("u1").get()
+        assert result.exists is True
+        assert result.to_dict()["name"] == "alice"
+
+
+# ---------------------------------------------------------------------------
+# TOCTOU recovery (cubic review)
+# ---------------------------------------------------------------------------
+
+
+class TestFirestoreStoreToctouRecovery:
+    """Cubic review caught a TOCTOU race in set() — if the user doc is
+    deleted between the get() and update() calls, update() raises NotFound.
+    The fix catches NotFound and falls back to set() to create the doc from
+    scratch."""
+
+    def test_set_recovers_from_update_not_found_race(self):
+        """Simulate doc delete between get() and update() → set() should succeed."""
+
+        class _RacyMock(MockFirestore):
+            """Mock that deletes the doc between get() and update()."""
+
+            class _RacyDocument(MockDocumentReference):
+                def update(self, data):
+                    # Simulate the doc being deleted between get() and update().
+                    # Clear the existing data and raise NotFound.
+                    self._store.docs[self._collection_id].pop(self._document_id, None)
+                    raise RuntimeError("NotFound: doc was deleted")
+
+            def document(self, document_id):
+                return self._RacyDocument(self, self._collection_id, document_id)
+
+        mock = _RacyMock()
+        store = _make_store(mock)
+        # Should NOT raise — fallback to set() creates the doc from scratch.
+        prefs = UserPrefs(overrides={"a": TaskWeights(0.4, 0.4, 0.2)})
+        result = store.set("uid-1", prefs)
+        assert result.prefs == prefs
+
+    def test_set_propagates_non_notfound_errors(self):
+        """Errors other than NotFound (e.g., ConnectionError) MUST propagate.
+        The fix should only catch the narrow NotFound race — not swallow
+        transport errors."""
+
+        class _ErrorDocument(MockDocumentReference):
+            def update(self, data):
+                raise ConnectionError("Firestore unreachable")
+
+        # Build the mock + force the document() call to return our error-raising subclass.
+        mock = MockFirestore()
+        original_collection = mock.collection
+
+        def _patched_collection(coll_id):
+            coll = original_collection(coll_id)
+            original_document = coll.document
+
+            def _patched_document(doc_id):
+                doc = original_document(doc_id)
+                doc.__class__ = _ErrorDocument
+                return doc
+
+            coll.document = _patched_document
+            return coll
+
+        mock.collection = _patched_collection
+        # Pre-populate so get() returns exists=True (forces the update() path).
+        mock.docs.setdefault("users", {})["uid-1"] = {"auto_router_prefs": {"overrides": {}}}
+
+        store = _make_store(mock)
+        prefs = UserPrefs(overrides={"a": TaskWeights(0.4, 0.4, 0.2)})
+        with pytest.raises(ConnectionError, match="Firestore unreachable"):
+            store.set("uid-1", prefs)

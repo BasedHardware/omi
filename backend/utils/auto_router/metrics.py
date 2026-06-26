@@ -142,7 +142,7 @@ class MetricsCollector:
         # Cache state
         last_loaded = cache.last_loaded_wall_time()
         age = cache.age_seconds
-        is_fresh = cache.has_value and (age is not None and age < cache._ttl)  # noqa: SLF001
+        is_fresh = cache.has_value and (age is not None and age < cache.ttl_seconds)
 
         # Per-task state
         tasks: Dict[str, Any] = {}

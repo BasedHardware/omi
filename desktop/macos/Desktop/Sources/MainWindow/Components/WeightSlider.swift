@@ -24,7 +24,8 @@ struct WeightSlider: View {
     /// should update `weights` in response (e.g., to `defaults`).
     let onReset: () -> Void
 
-    /// True when `weights` differ from `defaults` by more than 1% on any axis.
+    /// True when `weights` differ from `defaults` by more than 0.1% on any axis
+    /// (the `approximatelyEquals` tolerance is 1e-3 = 0.001 = 0.1%).
     /// Used to show/hide the "Reset to default" button.
     private var isCustomized: Bool {
         guard let defaults = defaults else { return false }
@@ -187,7 +188,9 @@ struct WeightSlider: View {
 
         let totalOther = other1.0 + other2.0
         if totalOther <= 1e-9 {
-            // Both others are zero — split the remaining mass 50/50.
+            // Both others are zero — split the remaining mass 50/50 between
+        // the two non-edited axes (the doc comment above says "the cost gets
+        // the full delta" — that was wrong; fixed as part of cubic review).
             switch axis {
             case .quality:
                 return TaskWeights.fromUnchecked(quality: clamped, latency: (1.0 - clamped) / 2.0, cost: (1.0 - clamped) / 2.0)

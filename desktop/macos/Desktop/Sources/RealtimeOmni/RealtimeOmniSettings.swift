@@ -110,7 +110,15 @@ final class RealtimeOmniSettings {
     /// (e.g., claude-sonnet-4-6 — not a realtime voice model).
     static func realtimeProvider(for modelId: String) -> RealtimeOmniProvider? {
         let id = modelId.lowercased()
-        if id.contains("gpt-realtime") || id.contains("gpt_realtime") {
+        // Cubic review: broadened to handle common OpenAI realtime variants
+        // (gpt-4o-realtime-preview, gpt-4o-mini-realtime, gpt-realtime-2,
+        // gpt_realtime_2 with underscores, etc.). We match the gpt- prefix
+        // OR the gpt_ prefix, and require "realtime" or "audio" in the name.
+        // OpenAI's realtime models all match this pattern; other gpt-* models
+        // (gpt-4o, gpt-4-turbo, etc.) don't have "realtime"/"audio" and are
+        // correctly NOT matched here.
+        let is_gpt = id.contains("gpt-") || id.contains("gpt_")
+        if is_gpt && (id.contains("realtime") || id.contains("audio")) {
             return .gptRealtime2
         }
         if id.contains("gemini") {

@@ -23,6 +23,12 @@ from dataclasses import dataclass
 import math
 from typing import Optional
 
+from utils.auto_router.user_prefs import (
+    WEIGHT_SUM_TOLERANCE,
+    _validate_weight,
+    _validate_weights_sum_to_one,
+)
+
 
 @dataclass(frozen=True)
 class ModelSpec:
@@ -72,28 +78,13 @@ class TaskSpec:
     def __post_init__(self):
         if not self.name:
             raise ValueError("TaskSpec.name must be non-empty")
-        for label, w in (
-            ("quality_weight", self.quality_weight),
-            ("latency_weight", self.latency_weight),
-            ("cost_weight", self.cost_weight),
-        ):
-            # bool is a subclass of int in Python — reject it FIRST so we don't
-            # silently treat True as 1.0 / False as 0.0.
-            if isinstance(w, bool):
-                raise TypeError(f"TaskSpec.{label} must be a number, got bool")
-            if not isinstance(w, (int, float)):
-                raise TypeError(f"TaskSpec.{label} must be a number, got {type(w).__name__}")
-            if not math.isfinite(w):
-                raise ValueError(f"TaskSpec.{label} must be a finite number, got {w!r}")
-            if w < 0.0 or w > 1.0:
-                raise ValueError(f"TaskSpec.{label} must be in [0.0, 1.0], got {w}")
-        total = self.quality_weight + self.latency_weight + self.cost_weight
-        if abs(total - 1.0) > 1e-3:
-            raise ValueError(
-                f"TaskSpec weights sum to {total:.4f}, expected 1.0 (tolerance 1e-3); "
-                f"quality={self.quality_weight}, latency={self.latency_weight}, "
-                f"cost={self.cost_weight}"
-            )
+        # Shared validation (avoids drift between TaskWeights and TaskSpec;
+        # see _validate_weight / _validate_weights_sum_to_one helpers).
+        # Use object.__setattr__ because the dataclass is frozen.
+        object.__setattr__(self, "quality_weight", _validate_weight(self.quality_weight, "TaskSpec.quality_weight"))
+        object.__setattr__(self, "latency_weight", _validate_weight(self.latency_weight, "TaskSpec.latency_weight"))
+        object.__setattr__(self, "cost_weight", _validate_weight(self.cost_weight, "TaskSpec.cost_weight"))
+        _validate_weights_sum_to_one(self.quality_weight, self.latency_weight, self.cost_weight, "TaskSpec")
 
 
 def _clamp_0_1(value: Optional[float]) -> float:

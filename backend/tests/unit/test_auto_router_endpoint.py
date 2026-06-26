@@ -368,11 +368,15 @@ class TestMetricsEndpoint:
         for _ in range(105):
             client.get("/v1/auto-router/pick?task=ptt_response")
 
-        resp = client.get("/v1/auto-router/metrics")
+        resp = client.get("/v1/auto-router/metrics", headers={"X-Admin-Key": "test-admin-key"})
         assert len(resp.json()["pick_history"]) == 100
 
-    def test_metrics_picks_recorded_across_tasks(self, client):
+    def test_metrics_picks_recorded_across_tasks(self, client, monkeypatch):
         from routers.auto_router import reset_metrics_collector_for_testing
+
+        # v5 admin gating (cubic review): pick_history is admin-only.
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-key")
+        admin_headers = {"X-Admin-Key": "test-admin-key"}
 
         reset_metrics_collector_for_testing()
 
@@ -380,7 +384,7 @@ class TestMetricsEndpoint:
         client.get("/v1/auto-router/pick?task=general_assistant")
         client.get("/v1/auto-router/pick?task=transcription")
 
-        resp = client.get("/v1/auto-router/metrics")
+        resp = client.get("/v1/auto-router/metrics", headers=admin_headers)
         history = resp.json()["pick_history"]
         assert len(history) == 3
         tasks_picked = {h["task"] for h in history}
@@ -1183,3 +1187,61 @@ class TestAdminKeyTimingSafe:
         assert hasattr(
             router_module, "hmac"
         ), "routers.auto_router must import hmac for constant-time admin key comparison"
+
+
+# ---------------------------------------------------------------------------
+# AC: /metrics pick_history admin gating (cubic review)
+# ---------------------------------------------------------------------------
+
+
+class TestMetricsAdminGating:
+    """When ADMIN_KEY is configured, pick_history requires X-Admin-Key.
+    When ADMIN_KEY is unset (default), pick_history is open to all callers
+    (dev-friendly)."""
+
+    def test_pick_history_open_when_admin_key_unset(self, client, monkeypatch):
+        """Default config (no ADMIN_KEY): pick_history is included for any caller."""
+        monkeypatch.delenv("ADMIN_KEY", raising=False)
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        resp = client.get("/v1/auto-router/metrics")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "pick_history" in body
+        assert len(body["pick_history"]) >= 1
+        assert body.get("pick_history_admin_required", False) is False
+
+    def test_pick_history_hidden_when_admin_key_set_and_no_header(self, client, monkeypatch):
+        """ADMIN_KEY set, no X-Admin-Key: pick_history is empty + flag is set."""
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-secret")
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        resp = client.get("/v1/auto-router/metrics")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["pick_history"] == []
+        assert body.get("pick_history_admin_required") is True
+
+    def test_pick_history_visible_when_admin_key_correct(self, client, monkeypatch):
+        """ADMIN_KEY set + correct X-Admin-Key: pick_history is included."""
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-secret")
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        resp = client.get(
+            "/v1/auto-router/metrics",
+            headers={"X-Admin-Key": "test-admin-secret"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["pick_history"]) >= 1
+        assert body.get("pick_history_admin_required", False) is False
+
+    def test_pick_history_hidden_when_admin_key_wrong(self, client, monkeypatch):
+        """ADMIN_KEY set + wrong X-Admin-Key: pick_history is empty + flag is set."""
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-secret")
+        client.get("/v1/auto-router/pick?task=ptt_response")
+        resp = client.get(
+            "/v1/auto-router/metrics",
+            headers={"X-Admin-Key": "wrong-key"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["pick_history"] == []
+        assert body.get("pick_history_admin_required") is True

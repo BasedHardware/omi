@@ -141,16 +141,36 @@ class FirestoreUserPrefsStore:
         }
 
         # Write to Firestore FIRST. If this raises, no cache change happens.
+        #
+        # We need SHALLOW merge at the user-doc level (replace the entire
+        # `auto_router_prefs` sub-map wholesale so old task overrides
+        # don't accumulate via deep-merge). That means `update()`, NOT
+        # `set(merge=True)`.
+        #
+        # The race window (cubic review): if the user doc is deleted between
+        # the get() and update() calls, update() raises NotFound. We catch
+        # that and retry with set() (one extra round-trip in the rare
+        # delete-during-write case).
         user_ref = self._db.collection("users").document(uid)
-        # Try update() first (shallow merge — replaces the entire
-        # auto_router_prefs field). Fall back to set() if the user doc
-        # doesn't exist yet (update() errors on missing docs).
-        doc = user_ref.get(["auto_router_prefs"])
-        if doc.exists:
-            user_ref.update({"auto_router_prefs": payload})
-        else:
-            # First-time write for this uid — set the top-level field.
+        try:
+            doc = user_ref.get(["auto_router_prefs"])
+            if doc.exists:
+                user_ref.update({"auto_router_prefs": payload})
+            else:
+                # First-time write for this uid — use set() to create the doc.
+                user_ref.set({"auto_router_prefs": payload}, merge=True)
+        except Exception as e:  # noqa: BLE001
+            # Catch the narrow NotFound race: doc was deleted between get()
+            # and update(). Fall back to set() to create the doc from scratch.
+            # For all OTHER errors (Firestore down, auth, etc.), propagate
+            # so the router returns 503 (don't swallow transport errors).
+            if "NotFound" not in type(e).__name__:
+                raise
             user_ref.set({"auto_router_prefs": payload}, merge=True)
+            logger.info(
+                "FirestoreUserPrefsStore: recovered from update() NotFound race for uid=%s",
+                uid,
+            )
 
         # THEN invalidate cache (race-safe: subsequent reads see fresh data).
         invalidate(self._cache, uid)

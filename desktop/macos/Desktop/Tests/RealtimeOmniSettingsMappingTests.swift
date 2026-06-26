@@ -63,3 +63,41 @@ final class RealtimeOmniSettingsMappingTests: XCTestCase {
     XCTAssertNil(RealtimeOmniSettings.realtimeProvider(for: ""))
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// v5 cubic review: broadened match
+// ---------------------------------------------------------------------------
+
+
+extension RealtimeOmniSettingsMappingTests {
+    /// Cubic review: match common OpenAI realtime variants that were missed
+    /// by the previous "gpt-realtime" substring check.
+    func test_realtimeProvider_gpt_4o_realtime_preview() {
+        XCTAssertEqual(RealtimeOmniSettings.realtimeProvider(for: "gpt-4o-realtime-preview"), .gptRealtime2)
+    }
+
+    func test_realtimeProvider_gpt_4o_realtime_lowercase() {
+        // Case insensitive.
+        XCTAssertEqual(RealtimeOmniSettings.realtimeProvider(for: "GPT-4O-REALTIME"), .gptRealtime2)
+    }
+
+    func test_realtimeProvider_gpt_audio_preview() {
+        // Audio preview also matches.
+        XCTAssertEqual(RealtimeOmniSettings.realtimeProvider(for: "gpt-4o-audio-preview"), .gptRealtime2)
+    }
+
+    func test_realtimeProvider_gpt_4o_does_not_match() {
+        // Plain gpt-4o (no realtime/audio suffix) must NOT match — otherwise
+        // we'd route chat queries to the realtime provider.
+        XCTAssertNil(RealtimeOmniSettings.realtimeProvider(for: "gpt-4o"))
+    }
+
+    func test_realtimeProvider_gpt_4_turbo_does_not_match() {
+        XCTAssertNil(RealtimeOmniSettings.realtimeProvider(for: "gpt-4-turbo"))
+    }
+
+    func test_realtimeProvider_empty_string_returns_nil() {
+        XCTAssertNil(RealtimeOmniSettings.realtimeProvider(for: ""))
+    }
+}

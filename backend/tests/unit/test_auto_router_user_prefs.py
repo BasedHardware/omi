@@ -1,5 +1,6 @@
 """Tests for the UserPrefs + TaskWeights dataclasses (T-301)."""
 
+import dataclasses
 import pytest
 
 from utils.auto_router.user_prefs import TaskWeights, UserPrefs
@@ -278,3 +279,157 @@ class TestUserPrefsBoolBypass:
     def test_from_dict_rejects_nan_weight(self):
         with pytest.raises(ValueError, match=r"finite"):
             UserPrefs.from_dict({"ptt_response": {"quality": float("nan"), "latency": 0.5, "cost": 0.5}})
+
+
+# ---------------------------------------------------------------------------
+# Frozen immutability (cubic review fix)
+# ---------------------------------------------------------------------------
+
+
+class TestUserPrefsFrozenDict:
+    """Cubic review caught that UserPrefs stored a mutable dict inside a
+    frozen dataclass. __post_init__ now wraps the dict in MappingProxyType
+    so external mutations raise TypeError instead of silently bypassing
+    __post_init__ validation."""
+
+    def test_mutating_overrides_dict_raises_type_error(self):
+        weights = TaskWeights(0.4, 0.5, 0.1)
+        prefs = UserPrefs(overrides={"ptt_response": weights})
+        # Attempting to add a new entry raises TypeError (read-only view).
+        with pytest.raises(TypeError):
+            prefs.overrides["new_task"] = weights
+
+    def test_mutating_existing_entry_raises_type_error(self):
+        original = TaskWeights(0.4, 0.5, 0.1)
+        prefs = UserPrefs(overrides={"ptt_response": original})
+        # Attempting to replace an existing value raises TypeError.
+        with pytest.raises(TypeError):
+            prefs.overrides["ptt_response"] = TaskWeights(1.0, 0.0, 0.0)
+
+    def test_overrides_iteration_still_works(self):
+        # MappingProxyType is iterable + supports .items() — used by to_dict().
+        weights = TaskWeights(0.4, 0.5, 0.1)
+        prefs = UserPrefs(overrides={"ptt_response": weights, "transcription": weights})
+        items = list(prefs.overrides.items())
+        assert len(items) == 2
+        assert prefs.overrides["ptt_response"] == weights
+
+    def test_reassignment_of_field_still_raises_frozen_error(self):
+        # The dataclass being frozen also prevents reassigning self.overrides.
+        prefs = UserPrefs()
+        with pytest.raises((AttributeError, dataclasses.FrozenInstanceError)):
+            prefs.overrides = {}
+
+    def test_empty_prefs_overrides_is_empty_mapping(self):
+        # MappingProxyType({}) is falsy + len 0.
+        prefs = UserPrefs()
+        assert len(prefs.overrides) == 0
+        assert not prefs.overrides  # bool check
+
+
+# ---------------------------------------------------------------------------
+# from_dict schema validation (cubic review fix)
+# ---------------------------------------------------------------------------
+
+
+class TestUserPrefsFromDictSchema:
+    """Cubic review caught that from_dict didn't defensively check the
+    input shape/required keys, leading to uncaught AttributeError /
+    KeyError on malformed data. Now we raise clear ValueErrors."""
+
+    def test_from_dict_rejects_non_dict_input(self):
+        with pytest.raises(ValueError, match="expects a dict"):
+            UserPrefs.from_dict("not a dict")  # type: ignore[arg-type]
+
+    def test_from_dict_rejects_none_entry(self):
+        with pytest.raises(ValueError, match="must be a dict"):
+            UserPrefs.from_dict({"ptt_response": None})  # type: ignore[dict-item]
+
+    def test_from_dict_rejects_missing_required_key(self):
+        # Missing 'cost' key.
+        with pytest.raises(ValueError, match="missing required key"):
+            UserPrefs.from_dict({"ptt_response": {"quality": 0.4, "latency": 0.5}})  # no 'cost'
+
+    def test_from_dict_rejects_empty_task_name(self):
+        with pytest.raises(ValueError, match="non-empty string"):
+            UserPrefs.from_dict({"": {"quality": 0.4, "latency": 0.5, "cost": 0.1}})
+
+    def test_from_dict_rejects_non_string_task_name(self):
+        with pytest.raises(ValueError, match="non-empty string"):
+            UserPrefs.from_dict({123: {"quality": 0.4, "latency": 0.5, "cost": 0.1}})  # type: ignore[dict-item]
+
+    def test_from_dict_with_valid_data_still_works(self):
+        # Regression: ensure the strict checks don't break the happy path.
+        prefs = UserPrefs.from_dict({"ptt_response": {"quality": 0.4, "latency": 0.5, "cost": 0.1}})
+        assert prefs.overrides["ptt_response"] == TaskWeights(0.4, 0.5, 0.1)
+
+    def test_from_dict_rejects_invalid_weight_in_field(self):
+        # Quality value out of range — raises during TaskWeights construction.
+        with pytest.raises(ValueError):
+            UserPrefs.from_dict({"ptt_response": {"quality": 1.5, "latency": 0.0, "cost": -0.5}})
+
+
+# ---------------------------------------------------------------------------
+# Shared validation helpers (cubic review fix)
+# ---------------------------------------------------------------------------
+
+
+class TestSharedWeightValidation:
+    """The per-axis validation logic was duplicated between TaskWeights
+    and TaskSpec. Now it's in user_prefs._validate_weight +
+    _validate_weights_sum_to_one. These tests verify the helpers work
+    correctly in isolation."""
+
+    def test_validate_weight_accepts_valid_floats(self):
+        from utils.auto_router.user_prefs import _validate_weight
+
+        assert _validate_weight(0.5, "test") == 0.5
+        assert _validate_weight(0, "test") == 0.0
+        assert _validate_weight(1, "test") == 1.0
+
+    def test_validate_weight_rejects_bool(self):
+        from utils.auto_router.user_prefs import _validate_weight
+
+        with pytest.raises(TypeError, match="must be a number, got bool"):
+            _validate_weight(True, "test")
+
+    def test_validate_weight_rejects_string(self):
+        from utils.auto_router.user_prefs import _validate_weight
+
+        with pytest.raises(TypeError, match="must be a number"):
+            _validate_weight("0.5", "test")  # type: ignore[arg-type]
+
+    def test_validate_weight_rejects_nan(self):
+        from utils.auto_router.user_prefs import _validate_weight
+
+        with pytest.raises(ValueError, match="finite"):
+            _validate_weight(float("nan"), "test")
+
+    def test_validate_weight_rejects_out_of_range(self):
+        from utils.auto_router.user_prefs import _validate_weight
+
+        with pytest.raises(ValueError, match="must be in"):
+            _validate_weight(1.5, "test")
+        with pytest.raises(ValueError, match="must be in"):
+            _validate_weight(-0.1, "test")
+
+    def test_validate_weights_sum_to_one_within_tolerance(self):
+        from utils.auto_router.user_prefs import _validate_weights_sum_to_one
+
+        # Should not raise — within 1e-3 tolerance.
+        _validate_weights_sum_to_one(0.4, 0.5, 0.1, "test")
+        _validate_weights_sum_to_one(0.34, 0.33, 0.33, "test")  # 1.00
+
+    def test_validate_weights_sum_to_one_out_of_tolerance(self):
+        from utils.auto_router.user_prefs import _validate_weights_sum_to_one
+
+        with pytest.raises(ValueError, match="sum to"):
+            _validate_weights_sum_to_one(0.5, 0.5, 0.5, "test")  # sum 1.5
+        with pytest.raises(ValueError, match="sum to"):
+            _validate_weights_sum_to_one(0.0, 0.0, 0.0, "test")  # sum 0.0
+
+    def test_weight_sum_tolerance_constant(self):
+        # The tolerance is exposed as a module constant for downstream use.
+        from utils.auto_router.user_prefs import WEIGHT_SUM_TOLERANCE
+
+        assert WEIGHT_SUM_TOLERANCE == 1e-3

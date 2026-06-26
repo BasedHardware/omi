@@ -60,7 +60,10 @@ enum ChatModelRouter {
     ) -> Decision {
         let trimmed = selectedModel.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty || trimmed.lowercased() == "auto" {
-            if let pick = routerPick, !pick.isEmpty {
+            // Trim routerPick too (cubic review): whitespace-only or unnormalized
+            // values would otherwise be treated as valid model selections.
+            let trimmedPick = routerPick?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let pick = trimmedPick, !pick.isEmpty {
                 return Decision(model: pick, reason: .routerPick, routerPick: pick)
             }
             return Decision(model: fallback, reason: .routerFallback, routerPick: nil)

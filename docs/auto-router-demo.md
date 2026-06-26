@@ -15,10 +15,17 @@ Or to call the actual HTTP endpoint (with default weights from `benchmarks.examp
 # Start the backend
 cd backend && uvicorn main:app --reload --port 8000
 
-# Hit the endpoint
-curl http://localhost:8000/v1/auto-router/pick?task=ptt_response
-curl http://localhost:8000/v1/auto-router/pick?task=general_assistant
-curl http://localhost:8000/v1/auto-router/pick?task=screenshot_understanding
+# Hit the endpoint (auth required — set the Authorization header to your
+# Firebase ID token; the example below uses a placeholder)
+curl -H "Authorization: Bearer YOUR_FIREBASE_ID_TOKEN" \
+  http://localhost:8000/v1/auto-router/pick?task=ptt_response
+curl -H "Authorization: Bearer YOUR_FIREBASE_ID_TOKEN" \
+  http://localhost:8000/v1/auto-router/pick?task=general_assistant
+curl -H "Authorization: Bearer YOUR_FIREBASE_ID_TOKEN" \
+  http://localhost:8000/v1/auto-router/pick?task=screenshot_understanding
+
+# Without an Authorization header you'll get 401 (cubic review caught this — the
+# endpoint is auth-protected via `auth_dependency` in routers/auto_router.py).
 ```
 
 The demo script (`backend/utils/auto_router/demo/run.py`) uses the framework's scoring function directly with overridden weights — Demos 1–3 do NOT call the HTTP endpoint; Demos 4–6 use FastAPI's TestClient against the live endpoints (auth + metrics + per-user prefs + AA fallback observability).

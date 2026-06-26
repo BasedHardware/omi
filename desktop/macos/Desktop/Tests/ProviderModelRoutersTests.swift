@@ -119,3 +119,53 @@ final class ProviderModelRoutersTests: XCTestCase {
     XCTAssertEqual(EmbeddingModelRouter.decide(selectedModel: "", routerPick: nil, fallback: "f").reason, .routerFallback)
   }
 }
+
+
+// ---------------------------------------------------------------------------
+// MARK: - v5 cubic review: ChatModelRouter whitespace trimming
+// ---------------------------------------------------------------------------
+
+
+extension ProviderModelRoutersTests {
+    /// Cubic review: whitespace-only or unnormalized `routerPick` values
+    /// would otherwise be treated as valid model selections. Now stripped
+    /// before use.
+    func test_chat_router_whitespace_only_router_pick_falls_back() {
+        let d = ChatModelRouter.decide(
+            selectedModel: "Auto",
+            routerPick: "   ",
+            fallback: "fallback-model"
+        )
+        // Whitespace-only router pick should be treated as no pick.
+        XCTAssertEqual(d.reason, .routerFallback)
+        XCTAssertEqual(d.model, "fallback-model")
+    }
+
+    func test_chat_router_router_pick_is_trimmed() {
+        let d = ChatModelRouter.decide(
+            selectedModel: "Auto",
+            routerPick: "  gpt-realtime-2  ",
+            fallback: "fallback"
+        )
+        XCTAssertEqual(d.reason, .routerPick)
+        XCTAssertEqual(d.model, "gpt-realtime-2", "routerPick should be trimmed")
+    }
+
+    func test_chat_router_empty_string_router_pick_falls_back() {
+        let d = ChatModelRouter.decide(
+            selectedModel: "Auto",
+            routerPick: "",
+            fallback: "fallback"
+        )
+        XCTAssertEqual(d.reason, .routerFallback)
+    }
+
+    func test_chat_router_newline_router_pick_falls_back() {
+        let d = ChatModelRouter.decide(
+            selectedModel: "Auto",
+            routerPick: "\t\n  ",
+            fallback: "fallback"
+        )
+        XCTAssertEqual(d.reason, .routerFallback)
+    }
+}

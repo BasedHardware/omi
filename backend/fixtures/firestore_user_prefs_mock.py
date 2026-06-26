@@ -44,6 +44,15 @@ class MockDocumentReference:
     def get(self, field_paths: Optional[List[str]] = None) -> MockDocumentSnapshot:
         """Fetch the document. Optionally project to specific field paths."""
         self._store.call_count_get += 1
+        # Honor the simulated get-error flag (one-shot). Cubic review caught
+        # that this flag was previously dead code: simulate_get_error() had
+        # no effect because get() never checked raise_on_get. Now we raise
+        # AND clear the flag so the next call succeeds (one-shot semantics,
+        # matching the documented contract).
+        if self._store.raise_on_get is not None:
+            exc = self._store.raise_on_get
+            self._store.raise_on_get = None
+            raise exc
         full_data = self._store.docs.get(self._collection_id, {}).get(self._document_id, {})
         if not full_data:
             return MockDocumentSnapshot(exists=False, data={})
@@ -68,7 +77,9 @@ class MockDocumentReference:
         """Write the document. With merge=True, only set the keys in `data`."""
         self._store.call_count_set += 1
         if self._store.raise_on_set is not None:
-            raise self._store.raise_on_set
+            exc = self._store.raise_on_set
+            self._store.raise_on_set = None
+            raise exc
         existing = self._store.docs.setdefault(self._collection_id, {}).setdefault(self._document_id, {})
         if merge:
             # Deep merge: sub-maps are merged, not replaced.
@@ -87,7 +98,9 @@ class MockDocumentReference:
         """
         self._store.call_count_set += 1
         if self._store.raise_on_set is not None:
-            raise self._store.raise_on_set
+            exc = self._store.raise_on_set
+            self._store.raise_on_set = None
+            raise exc
         existing = self._store.docs.setdefault(self._collection_id, {}).setdefault(self._document_id, {})
         # Shallow merge: top-level keys are overwritten entirely.
         existing.update(data)
