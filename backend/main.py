@@ -67,7 +67,13 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
-from utils.executors import drain_background_tasks, log_executor_health, run_blocking, db_executor
+from utils.executors import (
+    drain_background_tasks,
+    log_executor_health,
+    run_blocking,
+    db_executor,
+    start_background_task,
+)
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
@@ -175,7 +181,10 @@ async def startup_event():
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
-    asyncio.create_task(run_blocking(db_executor, _drain_pending_deletion_wipes))
+    start_background_task(
+        run_blocking(db_executor, _drain_pending_deletion_wipes),
+        name='startup_deletion_wipe_reconcile',
+    )
 
 
 def _drain_pending_deletion_wipes():

@@ -264,20 +264,29 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
-def get_pending_deletion_wipes(limit: int = 100) -> list[dict]:
-    """Return account_deletions documents whose wipe is pending or failed (needs retry).
+def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timedelta(minutes=10)) -> list[dict]:
+    """Return account_deletions documents whose wipe needs retry.
 
-    A reconciliation worker calls this to find wipes that were cancelled by a
-    deploy/restart before the in-process cleanup_executor future started, or that
-    failed and need re-enqueueing.
+    Queries ``pending``/``failed`` records first (always actionable), then adds
+    stale ``retrying`` claims (worker probably crashed) only if room remains
+    under ``limit``. Non-stale ``retrying`` claims are excluded so they cannot
+    crowd out actionable work under backlog.
     """
-    docs = (
-        db.collection('account_deletions')
-        .where('wipe_status', 'in', ['pending', 'failed', 'retrying'])
-        .limit(limit)
-        .stream()
-    )
-    return [doc.to_dict() | {'uid': doc.id} for doc in docs]
+    docs = db.collection('account_deletions').where('wipe_status', 'in', ['pending', 'failed']).limit(limit).stream()
+    result = [doc.to_dict() | {'uid': doc.id} for doc in docs]
+
+    if len(result) < limit:
+        stale_cutoff = datetime.now(timezone.utc) - stale_after
+        stale_docs = (
+            db.collection('account_deletions')
+            .where('wipe_status', '==', 'retrying')
+            .where('wipe_claimed_at', '<', stale_cutoff)
+            .limit(limit - len(result))
+            .stream()
+        )
+        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_docs)
+
+    return result
 
 
 @transactional
