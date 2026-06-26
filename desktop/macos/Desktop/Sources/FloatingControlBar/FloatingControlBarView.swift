@@ -381,7 +381,11 @@ struct FloatingControlBarView: View {
                     onBackToOmi: {
                         exitAgentSurface()
                     },
-                    onEscape: onEscape
+                    onEscape: onEscape,
+                    onSpawnSibling: { siblingID in
+                        (window as? FloatingControlBarWindow)?
+                            .resizeForActiveAgentChatPublic(pillID: siblingID, animated: false)
+                    }
                 )
                 .id(activeAgentChatPill.id)
                 .zIndex(1)
@@ -1017,6 +1021,7 @@ private struct AgentMainChatView: View {
     @ObservedObject var manager: AgentPillsManager
     let onBackToOmi: () -> Void
     let onEscape: () -> Void
+    let onSpawnSibling: (UUID) -> Void
 
     @State private var followUpText = ""
     @FocusState private var isFollowUpFocused: Bool
@@ -1293,6 +1298,11 @@ private struct AgentMainChatView: View {
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
             let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
             state.present(.agent(sibling.id))
+            // Route through the window resize/observer setup so the new
+            // sibling's reportContentHeight(.agent(sibling.id)) updates are
+            // observed. Without this the height observer stays keyed to the
+            // previous agent and the sibling's chat stays clipped.
+            onSpawnSibling(sibling.id)
             return
         }
         manager.continueAgent(from: pill, text: trimmed)

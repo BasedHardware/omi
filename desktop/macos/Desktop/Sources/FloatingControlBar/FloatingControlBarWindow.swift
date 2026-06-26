@@ -876,7 +876,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard state.showingAIConversation else { return }
 
         if state.activeAgentChatPillID != nil {
-            state.activeAgentChatPillID = nil
+            // Use the same leaveAgentSurface() + observer reset path used by the
+            // Back button. Only nil-ing activeAgentChatPillID leaves
+            // conversationSurface as .agent(id) with the response-height observer
+            // still keyed to that agent, so the view falls through to the main
+            // response UI and subsequent height reports are ignored.
+            state.leaveAgentSurface()
+            resizeForActiveAgentChatPublic(pillID: nil, animated: true)
             focusInputField()
             return
         }

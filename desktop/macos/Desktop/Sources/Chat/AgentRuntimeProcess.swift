@@ -938,6 +938,12 @@ actor AgentRuntimeProcess {
     stdoutPipe = nil
     stderrPipe = nil
     stdoutLineBuffer.removeAll(keepingCapacity: false)
+    // Advance the generation so that any readability callback that already
+    // captured the old generation is rejected by the generation guard in
+    // processStdoutData(_:generation:) the moment it fires. Without this, a
+    // callback that read an old init/result line can run during the awaits in
+    // startProcess with the still-current generation and mutate stale state.
+    processGeneration &+= 1
   }
 
   static func defaultStateDirectory(

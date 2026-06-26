@@ -118,7 +118,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains("handle.readabilityHandler = { [weak self] handle in"))
-    XCTAssertTrue(source.contains("processStdoutData(_ data: Data)"))
+    // The implementation now uses a generation-guarded signature; match the current
+    // function name without coupling the test to the exact parameter list.
+    XCTAssertTrue(source.contains("func processStdoutData("))
     XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
     XCTAssertFalse(source.contains("while !Task.isCancelled"))
   }
