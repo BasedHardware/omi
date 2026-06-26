@@ -8,27 +8,39 @@ import type { LocalKnowledgeGraph } from '../../shared/types'
 
 type MsgListener = (msg: { type: string; ms?: number; message?: string }) => void
 type ErrListener = (err: Error) => void
+type ExitListener = (code: number) => void
 
 class MockWorker {
   private msgListeners: MsgListener[] = []
   private errListeners: ErrListener[] = []
+  private exitListeners: ExitListener[] = []
   readonly posted: unknown[] = []
+  terminated = false
 
   on(event: 'message', fn: MsgListener): void
   on(event: 'error', fn: ErrListener): void
+  on(event: 'exit', fn: ExitListener): void
   on(event: string, fn: unknown): void {
     if (event === 'message') this.msgListeners.push(fn as MsgListener)
     else if (event === 'error') this.errListeners.push(fn as ErrListener)
+    else if (event === 'exit') this.exitListeners.push(fn as ExitListener)
   }
 
   postMessage(msg: unknown): void {
     this.posted.push(msg)
   }
 
+  terminate(): Promise<number> {
+    this.terminated = true
+    return Promise.resolve(1)
+  }
+
+  // All emit helpers snapshot the listener list before iterating, mirroring
+  // Node.js EventEmitter's behaviour where listeners added inside a handler
+  // don't fire in the same emission cycle.
+
   /** Simulate the worker posting { type:'done' } */
   emitDone(ms = 1): void {
-    // Snapshot before iterating — mirrors Node.js EventEmitter behaviour where
-    // listeners added inside a handler don't fire in the same emission cycle.
     for (const fn of this.msgListeners.slice()) fn({ type: 'done', ms })
   }
 
@@ -40,6 +52,11 @@ class MockWorker {
   /** Simulate the worker thread crashing (Worker 'error' event) */
   emitCrash(err: Error): void {
     for (const fn of this.errListeners.slice()) fn(err)
+  }
+
+  /** Simulate the worker thread exiting (Worker 'exit' event) */
+  emitExit(code = 1): void {
+    for (const fn of this.exitListeners.slice()) fn(code)
   }
 }
 
@@ -143,7 +160,7 @@ describe('KgWriteQueue', () => {
   })
 
   // -------------------------------------------------------------------------
-  // Error paths
+  // Error paths — protocol error
   // -------------------------------------------------------------------------
 
   it('rejects when the worker posts { type:"error" }', async () => {
@@ -162,7 +179,7 @@ describe('KgWriteQueue', () => {
     await expect(p).rejects.toThrow('SIGKILL')
   })
 
-  it('rejects all pending waiters when the worker thread crashes', async () => {
+  it('retries pending graph on a fresh worker after crash', async () => {
     const graphA = makeGraph('A')
     const graphB = makeGraph('B')
 
@@ -172,11 +189,7 @@ describe('KgWriteQueue', () => {
     worker.emitCrash(new Error('crash'))
     await expect(pA).rejects.toThrow('crash')
 
-    // B should be retried on a fresh worker; a new MockWorker is created
-    // via the factory — but our factory always returns the same instance here.
-    // The key assertion: pB should not be left hanging (it is either rejected
-    // or dispatched). Since flush() calls dispatch() which calls workerFactory()
-    // again and our mock doesn't throw, pB gets dispatched on the same worker.
+    // flush() re-dispatches B on the same MockWorker (factory returns same instance).
     worker.emitDone()
     await expect(pB).resolves.toBeUndefined()
   })
@@ -192,9 +205,88 @@ describe('KgWriteQueue', () => {
     const pA = throwingQueue.enqueue(graphA)
     const pB = throwingQueue.enqueue(graphB) // pending at time of dispatch failure
 
-    // Both should reject — factory throws clear the entire queue
+    // Both should reject — factory throws drain the entire queue
     await expect(pA).rejects.toThrow('kgWorker.js not found')
     await expect(pB).rejects.toThrow('kgWorker.js not found')
+  })
+
+  // -------------------------------------------------------------------------
+  // Error paths — exit event
+  // -------------------------------------------------------------------------
+
+  it('rejects active waiter when worker exits without an error event', async () => {
+    const graph = makeGraph('A')
+    const p = queue.enqueue(graph)
+
+    // Simulate native crash / OOM kill: exit fires, no 'error' event.
+    worker.emitExit(137)
+    await expect(p).rejects.toThrow('exited unexpectedly (code 137)')
+  })
+
+  it('retries pending graph after unexpected exit', async () => {
+    const graphA = makeGraph('A')
+    const graphB = makeGraph('B')
+
+    const pA = queue.enqueue(graphA)
+    const pB = queue.enqueue(graphB) // pending
+
+    worker.emitExit(1)
+    await expect(pA).rejects.toThrow('exited unexpectedly')
+
+    // flush() re-dispatches B; same MockWorker instance used by factory.
+    worker.emitDone()
+    await expect(pB).resolves.toBeUndefined()
+  })
+
+  it('does not double-reject when both error and exit fire for the same crash', async () => {
+    const graph = makeGraph('A')
+    const p = queue.enqueue(graph)
+
+    // Node.js worker_threads can emit 'error' then 'exit' for the same crash.
+    worker.emitCrash(new Error('crash'))
+    worker.emitExit(1) // should be a no-op — guard catches it
+
+    // Only one rejection, not two.
+    await expect(p).rejects.toThrow('crash')
+  })
+
+  // -------------------------------------------------------------------------
+  // Shutdown — terminate()
+  // -------------------------------------------------------------------------
+
+  it('terminate() rejects active waiter and calls worker.terminate()', async () => {
+    const graph = makeGraph('A')
+    const p = queue.enqueue(graph)
+    expect(worker.terminated).toBe(false)
+
+    queue.terminate()
+
+    await expect(p).rejects.toThrow('terminated')
+    expect(worker.terminated).toBe(true)
+  })
+
+  it('terminate() rejects both active and pending waiters', async () => {
+    const pA = queue.enqueue(makeGraph('A'))
+    const pB = queue.enqueue(makeGraph('B')) // pending
+
+    queue.terminate()
+
+    await expect(pA).rejects.toThrow('terminated')
+    await expect(pB).rejects.toThrow('terminated')
+  })
+
+  it("terminate() exit event does not re-reject after terminate() clears the worker ref", async () => {
+    const p = queue.enqueue(makeGraph('A'))
+    queue.terminate()
+    await expect(p).rejects.toThrow('terminated')
+
+    // Firing exit after terminate() should be a silent no-op via the guard.
+    expect(() => worker.emitExit(1)).not.toThrow()
+  })
+
+  it('terminate() is safe when no worker has been created', () => {
+    // Queue lazily creates the worker; terminate() before any enqueue is a no-op.
+    expect(() => queue.terminate()).not.toThrow()
   })
 
   // -------------------------------------------------------------------------

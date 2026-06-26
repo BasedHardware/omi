@@ -58,6 +58,13 @@ function getQueue(): KgWriteQueue {
 // ---------------------------------------------------------------------------
 
 export function registerKgHandlers(): void {
+  // Terminate the worker thread before Electron quits so the process does not
+  // hang waiting for the background thread and the SQLite connection it holds.
+  app.on('before-quit', () => {
+    writeQueue?.terminate()
+    writeQueue = null
+  })
+
   ipcMain.handle('kg:fileIndexDigest', async () => getFileIndexDigest())
 
   // Returns a Promise that resolves after the worker commits the write and
