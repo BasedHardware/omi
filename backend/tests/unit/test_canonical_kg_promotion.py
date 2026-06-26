@@ -76,6 +76,24 @@ def test_extract_kg_on_promotion():
         mock_flag.assert_called_once_with("uid-canonical", "mem_lt", db_client=db)
 
 
+def test_extract_kg_uses_subject_predicate_prefix():
+    item = _long_term_item(
+        subject_entity_id="ent_father",
+        predicate="has_condition",
+        content="has diabetes",
+    )
+    with (
+        patch(
+            "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
+            return_value={"nodes": [{}], "edges": []},
+        ) as mock_extract,
+        patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
+    ):
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is True
+        kg_content = mock_extract.call_args[0][1]
+        assert kg_content == "[ent_father] has_condition: has diabetes"
+
+
 def test_invalidate_kg_prunes_citations():
     with patch(
         "utils.memory.canonical_memory_adapter.kg_db.prune_memory_citations_from_kg", return_value=3
