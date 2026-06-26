@@ -325,3 +325,43 @@ class TestGetPlatformSettings:
         result = clone_db.get_platform_settings('uid-x', 'telegram')
 
         assert result is None
+
+
+# ── Tests: set_platform_field ────────────────────────────────────────────────
+
+
+class TestSetPlatformField:
+    def test_uses_deep_dot_notation_to_preserve_other_fields(self):
+        """platforms.telegram.active must not clobber bot_token or other fields."""
+        _reset_db()
+        ref = _settings_ref()
+
+        clone_db.set_platform_field('uid-x', 'telegram', 'active', True)
+
+        args, _ = ref.update.call_args
+        # Key must be the deep path, not just 'platforms.telegram'
+        assert 'platforms.telegram.active' in args[0]
+        assert args[0]['platforms.telegram.active'] is True
+
+    def test_does_not_use_shallow_path(self):
+        _reset_db()
+        ref = _settings_ref()
+
+        clone_db.set_platform_field('uid-x', 'imessage', 'active', False)
+
+        args, _ = ref.update.call_args
+        # Shallow path would clobber other fields — must NOT be present
+        assert 'platforms.imessage' not in args[0]
+
+    def test_falls_back_to_set_merge_on_first_write(self):
+        _reset_db()
+        ref = _settings_ref()
+        ref.update.side_effect = Exception('NOT_FOUND')
+
+        clone_db.set_platform_field('uid-new', 'whatsapp', 'active', True)
+
+        ref.set.assert_called_once()
+        call_args = ref.set.call_args
+        data = call_args[0][0]
+        assert data['platforms']['whatsapp']['active'] is True
+        assert call_args[1].get('merge') is True

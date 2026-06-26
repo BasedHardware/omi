@@ -84,6 +84,7 @@ _db_ai_clone.get_clone_messages = MagicMock(return_value=[])
 _db_ai_clone.update_clone_message = MagicMock()
 _db_ai_clone.get_platform_settings = MagicMock(return_value=None)
 _db_ai_clone.update_platform_settings = MagicMock()
+_db_ai_clone.set_platform_field = MagicMock()
 sys.modules.setdefault('database', types.ModuleType('database'))
 sys.modules['database.ai_clone'] = _db_ai_clone
 
@@ -145,6 +146,8 @@ _spec.loader.exec_module(_router_mod)
 # other test files (e.g. test_ai_clone_database.py importing the real module)
 # cannot stale-bind the router to the wrong objects.
 _router_mod.clone_db = _db_ai_clone
+# set_platform_field is called directly as clone_db.set_platform_field in the router
+
 _router_mod.generate_clone_reply = _clone_stub.generate_clone_reply
 _router_mod.run_blocking = _run_blocking
 _router_mod.db_executor = _exec_stub.db_executor
@@ -178,6 +181,7 @@ def _reset_mocks():
     _db_ai_clone.get_platform_settings.reset_mock()
     _db_ai_clone.get_platform_settings.return_value = None
     _db_ai_clone.update_platform_settings.reset_mock()
+    _db_ai_clone.set_platform_field.reset_mock()
     _clone_stub.generate_clone_reply.reset_mock()
     _clone_stub.generate_clone_reply.return_value = 'Mock reply from AI clone'
     _tg_stub.connect.reset_mock()
@@ -487,21 +491,25 @@ class TestSetPlatformActive:
         assert r.status_code == 200
         assert r.json()['status'] == 'ok'
 
-    def test_calls_update_platform_settings_with_active_flag(self):
+    def test_uses_set_platform_field_not_update_platform_settings(self):
+        """Must write only the active leaf — not replace the whole platform sub-doc."""
         _reset_mocks()
         client.patch('/v1/ai-clone/platforms/imessage', json={'active': True})
-        _db_ai_clone.update_platform_settings.assert_called_once()
-        args = _db_ai_clone.update_platform_settings.call_args[0]
+        _db_ai_clone.set_platform_field.assert_called_once()
+        args = _db_ai_clone.set_platform_field.call_args[0]
         assert args[1] == 'imessage'
-        assert args[2] == {'active': True}
+        assert args[2] == 'active'
+        assert args[3] is True
+        # update_platform_settings would overwrite bot_token etc — must NOT be called
+        _db_ai_clone.update_platform_settings.assert_not_called()
 
     def test_returns_400_for_unknown_platform(self):
         _reset_mocks()
         r = client.patch('/v1/ai-clone/platforms/discord', json={'active': True})
         assert r.status_code == 400
 
-    def test_deactivate_sets_active_false(self):
+    def test_deactivate_writes_false(self):
         _reset_mocks()
         client.patch('/v1/ai-clone/platforms/whatsapp', json={'active': False})
-        args = _db_ai_clone.update_platform_settings.call_args[0]
-        assert args[2] == {'active': False}
+        args = _db_ai_clone.set_platform_field.call_args[0]
+        assert args[3] is False

@@ -51,12 +51,19 @@ def get_platform_settings(uid: str, platform: str) -> Optional[dict]:
 
 
 def update_platform_settings(uid: str, platform: str, data: dict) -> None:
-    """Update a single platform's settings without clobbering other platforms."""
+    """Replace a platform's entire settings map without clobbering other platforms."""
     ref = db.collection('users').document(uid).collection('ai_clone').document('settings')
     try:
-        # Dot-notation path updates only this platform's sub-doc without clobbering others.
         ref.update({f'platforms.{platform}': data})
     except Exception:
-        # First write — document doesn't exist yet (Firestore NotFound).
-        # Create it via set+merge so subsequent updates work correctly.
         ref.set({'platforms': {platform: data}}, merge=True)
+
+
+def set_platform_field(uid: str, platform: str, field: str, value) -> None:
+    """Update a single field within a platform's settings without touching other fields."""
+    ref = db.collection('users').document(uid).collection('ai_clone').document('settings')
+    try:
+        # Deep dot-notation: platforms.telegram.active — only this leaf is written.
+        ref.update({f'platforms.{platform}.{field}': value})
+    except Exception:
+        ref.set({'platforms': {platform: {field: value}}}, merge=True)

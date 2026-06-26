@@ -135,7 +135,7 @@ async def set_platform_active(
     allowed = {'imessage', 'telegram', 'whatsapp'}
     if platform not in allowed:
         raise HTTPException(status_code=400, detail='Unknown platform')
-    await run_blocking(db_executor, clone_db.update_platform_settings, uid, platform, {'active': body.active})
+    await run_blocking(db_executor, clone_db.set_platform_field, uid, platform, 'active', body.active)
     return {'status': 'ok'}
 
 

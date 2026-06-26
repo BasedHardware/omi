@@ -49,7 +49,14 @@ final class AICloneService: ObservableObject {
         isEnabled = UserDefaults.standard.bool(forKey: "aiCloneEnabled")
         lastIMessageDate = UserDefaults.standard.double(forKey: "aiCloneLastIMessageDate")
         iMessageConnected = checkIMessagePermission()
-        iMessageActive = UserDefaults.standard.bool(forKey: "aiCloneIMessageActive")
+        // Migration: key absent means this is a first-run after the per-platform toggle was added.
+        // Default to active if AI Clone was already enabled and iMessage was connected.
+        if UserDefaults.standard.object(forKey: "aiCloneIMessageActive") == nil {
+            iMessageActive = isEnabled && iMessageConnected
+            UserDefaults.standard.set(iMessageActive, forKey: "aiCloneIMessageActive")
+        } else {
+            iMessageActive = UserDefaults.standard.bool(forKey: "aiCloneIMessageActive")
+        }
         telegramConnected = UserDefaults.standard.bool(forKey: "aiCloneTelegramConnected")
         telegramBotUsername = UserDefaults.standard.string(forKey: "aiCloneTelegramBotUsername") ?? ""
         telegramActive = UserDefaults.standard.bool(forKey: "aiCloneTelegramActive")
@@ -60,6 +67,19 @@ final class AICloneService: ObservableObject {
     }
 
     func setActive(platform: String, active: Bool) {
+        applyActive(platform: platform, active: active)
+        Task {
+            do {
+                try await APIClient.shared.setPlatformActive(platform: platform, active: active)
+            } catch {
+                // Revert optimistic update — backend rejected the change.
+                applyActive(platform: platform, active: !active)
+                log("AICloneService: failed to sync \(platform) active=\(active): \(error)")
+            }
+        }
+    }
+
+    private func applyActive(platform: String, active: Bool) {
         switch platform {
         case "imessage":
             iMessageActive = active
@@ -73,7 +93,6 @@ final class AICloneService: ObservableObject {
         default:
             break
         }
-        Task { try? await APIClient.shared.setPlatformActive(platform: platform, active: active) }
     }
 
     func configureWhatsApp(botPhone: String) {
