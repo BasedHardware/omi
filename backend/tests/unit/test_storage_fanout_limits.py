@@ -128,23 +128,23 @@ class TestPrecacheFileSemaphore:
 
 
 class TestPrecacheSyncImport:
-    """sync.py must import and use _PRECACHE_FILE_SEM from storage."""
+    """Playback sync service must import and use _PRECACHE_FILE_SEM from storage."""
 
     def test_sync_imports_precache_file_sem(self):
-        """routers/sync.py must import _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """utils/sync/playback.py must import _PRECACHE_FILE_SEM."""
+        src = _read_source('utils/sync/playback.py')
         assert '_PRECACHE_FILE_SEM' in src
 
     def test_sync_precache_all_uses_semaphore(self):
-        """_precache_all_parallel in sync.py must reference _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """_precache_all_parallel in utils/sync/playback.py must reference _PRECACHE_FILE_SEM."""
+        src = _read_source('utils/sync/playback.py')
         func_start = src.index('def _precache_all_parallel')
         func_body = src[func_start : func_start + 600]
         assert '_PRECACHE_FILE_SEM' in func_body
 
     def test_sync_cache_uncached_uses_semaphore(self):
-        """_cache_uncached_parallel in sync.py must reference _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """_cache_uncached_parallel in utils/sync/playback.py must reference _PRECACHE_FILE_SEM."""
+        src = _read_source('utils/sync/playback.py')
         func_start = src.index('def _cache_uncached_parallel')
         func_body = src[func_start : func_start + 600]
         assert '_PRECACHE_FILE_SEM' in func_body
