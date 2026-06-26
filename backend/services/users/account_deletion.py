@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import threading
 
 from database import users as users_db
 from database.action_items import get_action_item_ids
@@ -16,6 +15,7 @@ from database.vector_db import (
     delete_transcript_chunk_vectors_batch,
 )
 from utils import stripe as stripe_utils
+from utils.executors import postprocess_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_conversation_recordings
@@ -103,6 +103,6 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         else:
             raise
 
-    threading.Thread(target=background_wipe_user_data, args=(uid,), daemon=True).start()
+    submit_with_context(postprocess_executor, background_wipe_user_data, uid)
 
     return {'status': 'ok', 'message': 'Account deletion started'}

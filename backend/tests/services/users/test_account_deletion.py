@@ -49,10 +49,9 @@ sys.meta_path.insert(0, _StubFinder())
 from services.users import account_deletion  # noqa: E402
 
 
-def test_start_account_deletion_preserves_order_and_starts_background_thread(monkeypatch):
+def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(monkeypatch):
     calls = []
     sub = types.SimpleNamespace(stripe_subscription_id='sub_123')
-    thread = MagicMock()
 
     monkeypatch.setattr(
         account_deletion.users_db,
@@ -69,11 +68,11 @@ def test_start_account_deletion_preserves_order_and_starts_background_thread(mon
     )
     monkeypatch.setattr(account_deletion.auth, 'delete_account', lambda uid: calls.append(('auth', uid)))
 
-    def fake_thread(target, args, daemon):
-        calls.append(('thread', target, args, daemon))
-        return thread
-
-    monkeypatch.setattr(account_deletion.threading, 'Thread', fake_thread)
+    monkeypatch.setattr(
+        account_deletion,
+        'submit_with_context',
+        lambda executor, target, uid: calls.append(('enqueue', executor, target, uid)),
+    )
 
     result = account_deletion.start_account_deletion('uid1', reason='unused', reason_details='details')
 
@@ -83,13 +82,11 @@ def test_start_account_deletion_preserves_order_and_starts_background_thread(mon
         ('sub', 'uid1'),
         ('stripe', 'sub_123'),
         ('auth', 'uid1'),
-        ('thread', account_deletion.background_wipe_user_data, ('uid1',), True),
+        ('enqueue', account_deletion.postprocess_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
-    thread.start.assert_called_once_with()
 
 
 def test_start_account_deletion_tolerates_best_effort_failures_and_missing_firebase_user(monkeypatch):
-    thread = MagicMock()
     monkeypatch.setattr(
         account_deletion.users_db, 'set_user_deletion_feedback', MagicMock(side_effect=Exception('db down'))
     )
@@ -98,19 +95,23 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     )
     monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock())
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('USER_NOT_FOUND')))
-    monkeypatch.setattr(account_deletion.threading, 'Thread', MagicMock(return_value=thread))
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
 
     result = account_deletion.start_account_deletion('uid1', reason='reason')
 
     assert result['status'] == 'ok'
     account_deletion.stripe_utils.cancel_subscription.assert_not_called()
-    thread.start.assert_called_once_with()
+    submit.assert_called_once_with(
+        account_deletion.postprocess_executor, account_deletion.background_wipe_user_data, 'uid1'
+    )
 
 
 def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('permission denied')))
-    monkeypatch.setattr(account_deletion.threading, 'Thread', MagicMock())
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
 
     try:
         account_deletion.start_account_deletion('uid1')
@@ -119,7 +120,7 @@ def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
     else:
         raise AssertionError('expected firebase error to propagate')
 
-    account_deletion.threading.Thread.assert_not_called()
+    submit.assert_not_called()
 
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):

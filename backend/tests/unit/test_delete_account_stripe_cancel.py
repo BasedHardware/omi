@@ -125,29 +125,35 @@ def test_paid_user_subscription_is_canceled_before_wipe():
     ) as cancel, patch.object(
         users_service.auth, 'delete_account'
     ) as fb_delete, patch.object(
-        users_service.threading, 'Thread'
-    ) as thread:
+        users_service, 'submit_with_context'
+    ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
     get_sub.assert_called_once_with('uid1')
     cancel.assert_called_once_with('sub_123')
     fb_delete.assert_called_once()  # deletion still proceeds
-    thread.return_value.start.assert_called_once_with()
+    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
 def test_free_user_does_not_call_stripe():
     with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub(None)), patch.object(
         users_service.stripe_utils, 'cancel_subscription'
-    ) as cancel, patch.object(users_service.auth, 'delete_account'), patch.object(users_service.threading, 'Thread'):
+    ) as cancel, patch.object(users_service.auth, 'delete_account'), patch.object(
+        users_service, 'submit_with_context'
+    ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
     cancel.assert_not_called()
+    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
 def test_stripe_error_does_not_block_deletion():
     with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
         users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
-    ), patch.object(users_service.auth, 'delete_account') as fb_delete, patch.object(users_service.threading, 'Thread'):
+    ), patch.object(users_service.auth, 'delete_account') as fb_delete, patch.object(
+        users_service, 'submit_with_context'
+    ) as submit:
         resp = users_service.start_account_deletion(uid='uid1')
     fb_delete.assert_called_once()  # best-effort: Stripe failure must not abort deletion
+    submit.assert_called_once_with(users_service.postprocess_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'

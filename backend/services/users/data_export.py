@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Iterator
+from typing import Callable, Iterable, Iterator
 
 from database import chat as chat_db
 from database import conversations as conversations_db
@@ -17,13 +17,33 @@ def _json_default(obj):
     raise TypeError(f"Type {type(obj)} not serializable")
 
 
-def iter_user_data_export(uid: str) -> Iterator[str]:
-    profile = get_user_profile(uid)
-    memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
-    people = get_people(uid)
-    action_items = get_standalone_action_items(uid, limit=10000, offset=0)
+def _iter_paginated(fetch_page: Callable[[int, int], list[dict]], *, batch_size: int = 1000) -> Iterator[dict]:
+    offset = 0
+    while True:
+        page = fetch_page(batch_size, offset)
+        if not page:
+            break
+        yield from page
+        if len(page) < batch_size:
+            break
+        offset += batch_size
 
+
+def _yield_json_array(items: Iterable[dict]) -> Iterator[str]:
+    yield '[\n'
+    first = True
+    for item in items:
+        if not first:
+            yield ',\n'
+        first = False
+        yield '    ' + json.dumps(item, default=_json_default, indent=4)
+    yield '\n  ]'
+
+
+def iter_user_data_export(uid: str) -> Iterator[str]:
     yield '{\n'
+
+    profile = get_user_profile(uid)
     yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
 
     yield '  "conversations": [\n'
@@ -35,9 +55,20 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
         yield '    ' + json.dumps(conv, default=_json_default, indent=4)
     yield '\n  ],\n'
 
-    yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
+    yield '  "memories": '
+    yield from _yield_json_array(
+        _iter_paginated(lambda limit, offset: memories_db.get_non_filtered_memories(uid, limit=limit, offset=offset))
+    )
+    yield ',\n'
+
+    people = get_people(uid)
     yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
-    yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
+
+    yield '  "action_items": '
+    yield from _yield_json_array(
+        _iter_paginated(lambda limit, offset: get_standalone_action_items(uid, limit=limit, offset=offset))
+    )
+    yield ',\n'
 
     yield '  "chat_messages": [\n'
     first = True
