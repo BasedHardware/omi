@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Mic, Monitor, Send } from 'lucide-react'
+import { Mic, Monitor, Send, Square } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/AppStateProvider'
@@ -26,6 +26,7 @@ function ChatBar(props: {
   value: string
   onChange: (v: string) => void
   onSend: () => void
+  onStop: () => void
   sending: boolean
   micOn: boolean
   screenOn: boolean
@@ -79,13 +80,16 @@ function ChatBar(props: {
       {toolButton('Microphone', Mic, props.micOn, props.onToggleMic)}
       <div className="mx-1 h-8 w-px bg-white/10" />
       <button
-        disabled={props.sending}
-        onClick={props.onSend}
-        aria-label="Send"
-        title="Send"
+        onClick={props.sending ? props.onStop : props.onSend}
+        aria-label={props.sending ? 'Stop' : 'Send'}
+        title={props.sending ? 'Stop' : 'Send'}
         className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/[0.12] text-white/85 transition-colors hover:bg-white/[0.18] hover:text-white disabled:opacity-50"
       >
-        <Send className="h-5 w-5" strokeWidth={2} />
+        {props.sending ? (
+          <Square className="h-4 w-4 fill-current" strokeWidth={2} />
+        ) : (
+          <Send className="h-5 w-5" strokeWidth={2} />
+        )}
       </button>
     </div>
   )
@@ -265,6 +269,7 @@ export function Home(): React.JSX.Element {
             value={input}
             onChange={setInput}
             onSend={handleSend}
+            onStop={() => void chat.stop()}
             sending={chat.sending}
             micOn={micOn}
             screenOn={!!rewind?.captureEnabled}
