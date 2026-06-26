@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check } from 'lucide-react'
+import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check, Users } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
+import {
+  displaySpeakerName,
+  loadSpeakerNames,
+  saveSpeakerNames,
+  speakerKey,
+  type SpeakerNameMap
+} from '../lib/speakerNames'
 
 type ServerConversation = {
   id: string
@@ -101,13 +108,26 @@ function formatStart(seconds?: number): string {
   return `${m}:${r.toString().padStart(2, '0')}`
 }
 
-export function ConversationDetail({ conversationId }: { conversationId: string }): React.JSX.Element {
+function uniqueSpeakers(segments?: { speaker?: string }[]): string[] {
+  const labels = new Set<string>()
+  for (const segment of segments ?? []) labels.add(speakerKey(segment.speaker))
+  return [...labels]
+}
+
+export function ConversationDetail({
+  conversationId
+}: {
+  conversationId: string
+}): React.JSX.Element {
   const id = conversationId
   const navigate = useNavigate()
   const [display, setDisplay] = useState<Display | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
+  const [speakerNames, setSpeakerNames] = useState<SpeakerNameMap>(() =>
+    loadSpeakerNames(conversationId)
+  )
   const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const fetchServer = async (idStr: string): Promise<Display | null> => {
@@ -159,8 +179,11 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   useEffect(() => {
     if (!id) return
     const isLocal = id.startsWith('local-') || id.startsWith('chat-')
+    // Existing load reset: switching ids should immediately clear stale content.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null)
     setDisplay(null)
+    setSpeakerNames(loadSpeakerNames(id))
     load(id, isLocal)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -237,6 +260,16 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     }
   }
 
+  const setSpeakerName = (rawLabel: string, name: string): void => {
+    const key = speakerKey(rawLabel)
+    const next = { ...speakerNames }
+    const clean = name.trim()
+    if (clean) next[key] = clean
+    else delete next[key]
+    setSpeakerNames(next)
+    saveSpeakerNames(id, next)
+  }
+
   const onToggleActionItem = async (idx: number): Promise<void> => {
     if (!display?.actionItems) return
     const item = display.actionItems[idx]
@@ -266,9 +299,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
         d && d.actionItems
           ? {
               ...d,
-              actionItems: d.actionItems.map((a, i) =>
-                i === idx ? { ...a, completed: !next } : a
-              )
+              actionItems: d.actionItems.map((a, i) => (i === idx ? { ...a, completed: !next } : a))
             }
           : d
       )
@@ -309,6 +340,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       </div>
     )
   }
+  const speakers = uniqueSpeakers(display.segments)
 
   return (
     <div className="flex h-full flex-col">
@@ -413,70 +445,114 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 </ul>
               </div>
             )}
+            {!display.chatMessages && speakers.length > 0 && (
+              <div className="surface-card p-6 animate-fade-in">
+                <div className="mb-3 flex items-center gap-2">
+                  <Users className="h-4 w-4 text-white/55" />
+                  <h2 className="section-label">Speakers</h2>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {speakers.map((speaker) => (
+                    <div
+                      key={speaker}
+                      className="rounded-xl border border-white/[0.08] bg-black/15 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
+                            speaker
+                          )}`}
+                        >
+                          {speaker.replace(/^SPEAKER_/, 'S')}
+                        </span>
+                        <button
+                          onClick={() => setSpeakerName(speaker, 'You')}
+                          className="text-xs text-white/45 transition-colors hover:text-white/80"
+                        >
+                          Mark me
+                        </button>
+                      </div>
+                      <input
+                        value={speakerNames[speaker] ?? ''}
+                        onChange={(event) => setSpeakerName(speaker, event.target.value)}
+                        placeholder="Person name"
+                        className="w-full rounded-lg border border-white/[0.08] bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="surface-card p-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="section-label">{display.chatMessages ? 'Messages' : 'Transcript'}</h2>
+                <h2 className="section-label">
+                  {display.chatMessages ? 'Messages' : 'Transcript'}
+                </h2>
                 <CopyTranscriptButton
                   transcript={
                     display.segments
                       ? display.segments
-                          .map((s) => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`)
+                          .map(
+                            (s) =>
+                              `${s.speaker ? `[${displaySpeakerName(s.speaker, speakerNames)}] ` : ''}${s.text}`
+                          )
                           .join('\n\n')
                       : (display.transcript ?? '')
                   }
                 />
               </div>
               <div className="max-h-[60vh] overflow-y-auto pr-1 -mr-1">
-              {display.chatMessages ? (
-                <ul className="space-y-3">
-                  {display.chatMessages.map((m, i) => (
-                    <li
-                      key={i}
-                      className={
-                        m.role === 'user'
-                          ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
-                          : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
-                      }
-                    >
-                      <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
-                        {m.role === 'user' ? 'You' : 'Omi'}
-                      </div>
-                      <div className="whitespace-pre-wrap">{m.content}</div>
-                    </li>
-                  ))}
-                </ul>
-              ) : display.segments && display.segments.length > 0 ? (
-                <ul className="space-y-4">
-                  {display.segments.map((s, i) => {
-                    const label = s.speaker || 'speaker'
-                    return (
-                      <li key={i} className="flex gap-3 animate-fade-in">
-                        <span
-                          className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
-                            label
-                          )}`}
-                        >
-                          {label.replace(/^SPEAKER_/, 'S')}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          {s.start != null && (
-                            <div className="text-[10px] font-mono text-white/35">
-                              {formatStart(s.start)}
-                            </div>
-                          )}
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                            {s.text}
-                          </p>
+                {display.chatMessages ? (
+                  <ul className="space-y-3">
+                    {display.chatMessages.map((m, i) => (
+                      <li
+                        key={i}
+                        className={
+                          m.role === 'user'
+                            ? 'glass ml-auto max-w-[85%] rounded-2xl rounded-br-md px-4 py-3 text-sm leading-relaxed text-white'
+                            : 'glass-subtle mr-auto max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 text-sm leading-relaxed text-white/75'
+                        }
+                      >
+                        <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
+                          {m.role === 'user' ? 'You' : 'Omi'}
                         </div>
+                        <div className="whitespace-pre-wrap">{m.content}</div>
                       </li>
-                    )
-                  })}
-                </ul>
-              ) : (
-                <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
-                  {display.transcript || '(no transcript)'}
-                </pre>
-              )}
+                    ))}
+                  </ul>
+                ) : display.segments && display.segments.length > 0 ? (
+                  <ul className="space-y-4">
+                    {display.segments.map((s, i) => {
+                      const label = s.speaker || 'speaker'
+                      const displayLabel = displaySpeakerName(label, speakerNames)
+                      return (
+                        <li key={i} className="flex gap-3 animate-fade-in">
+                          <span
+                            className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
+                              label
+                            )}`}
+                          >
+                            {displayLabel.replace(/^SPEAKER_/, 'S')}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            {s.start != null && (
+                              <div className="text-[10px] font-mono text-white/35">
+                                {formatStart(s.start)}
+                              </div>
+                            )}
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                              {s.text}
+                            </p>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">
+                    {display.transcript || '(no transcript)'}
+                  </pre>
+                )}
               </div>
             </div>
           </div>
