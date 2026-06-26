@@ -108,15 +108,19 @@ final class AgentControlService {
       let agentRef = "agent_\(index + 1)"
       let session = summary["session"] as? [String: Any] ?? [:]
       let latestRun = summary["latestRun"] as? [String: Any] ?? [:]
+      let activeRun = summary["activeRun"] as? [String: Any] ?? [:]
+      let selectedRun = activeRun.isEmpty ? latestRun : activeRun
       let latestAttempt = summary["latestAttempt"] as? [String: Any] ?? [:]
+      let activeAttempt = summary["activeAttempt"] as? [String: Any] ?? [:]
+      let selectedAttempt = activeRun.isEmpty ? latestAttempt : activeAttempt
       let title = stringValue(session["title"]) ?? stringValue(session["surfaceKind"]) ?? "Untitled agent"
-      let status = stringValue(latestRun["status"]) ?? stringValue(session["status"]) ?? "unknown"
-      let mode = stringValue(latestRun["mode"])
-      let updatedAt = stringValue(session["updatedAt"]) ?? stringValue(latestRun["updatedAt"])
+      let status = stringValue(selectedRun["status"]) ?? stringValue(session["status"]) ?? "unknown"
+      let mode = stringValue(selectedRun["mode"])
+      let updatedAt = stringValue(session["updatedAt"]) ?? stringValue(selectedRun["updatedAt"])
       agentHandles[agentRef] = AgentHandle(
         sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
-        runId: stringValue(latestRun["runId"]),
-        attemptId: stringValue(latestAttempt["attemptId"])
+        runId: stringValue(selectedRun["runId"]),
+        attemptId: stringValue(selectedAttempt["attemptId"])
       )
 
       var parts = ["\(agentRef): \(title)", status]

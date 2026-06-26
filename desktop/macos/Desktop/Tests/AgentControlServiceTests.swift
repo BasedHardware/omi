@@ -18,6 +18,22 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertFalse(summary.contains("attempt_123"))
   }
 
+  func testSessionSummaryPrefersActiveRunForVoiceHandles() {
+    let service = AgentControlService()
+    let raw = """
+      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note","status":"open"},"latestRun":{"runId":"run_terminal","status":"completed","mode":"ask"},"activeRun":{"runId":"run_active","status":"running","mode":"act"},"latestAttempt":{"attemptId":"attempt_terminal"},"activeAttempt":{"attemptId":"attempt_active"}}]}
+      """
+
+    let summary = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: raw)
+    let resolved = service.resolveVoiceHandles(in: ["agentRef": "agent_1"])
+
+    XCTAssertTrue(summary.contains("running"))
+    XCTAssertTrue(summary.contains("mode act"))
+    XCTAssertFalse(summary.contains("completed"))
+    XCTAssertEqual(resolved["runId"] as? String, "run_active")
+    XCTAssertEqual(resolved["attemptId"] as? String, "attempt_active")
+  }
+
   func testCancellationSummaryDoesNotExposeRunId() {
     let service = AgentControlService()
     let raw = """
