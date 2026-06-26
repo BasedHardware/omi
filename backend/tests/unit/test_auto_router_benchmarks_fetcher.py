@@ -623,3 +623,77 @@ class TestDocCodeEnvVarConsistency:
                             f"This is the AssemblyAI STT key, not the AA "
                             f"benchmark key. Use 'AA_API_KEY' instead."
                         )
+
+
+# ---------------------------------------------------------------------------
+# CHANGELOG.json placeholder guard (maintainer review)
+# ---------------------------------------------------------------------------
+
+
+class TestChangelogPlaceholderGuard:
+    """Regression guard (maintainer review): when the auto-router branch
+    merges main and resolves the resulting CHANGELOG.json conflict, the
+    resolution must use the ACTUAL changelog entry from main — not a
+    placeholder string like 'Entry from main (other PR that landed first)'.
+
+    A previous maintainer test-merge used such a placeholder and a real
+    user-facing changelog entry was at risk of being lost. This test
+    fails if any unreleased entry matches a known placeholder pattern.
+
+    Why a placeholder is dangerous:
+    - The placeholder text reads as a valid changelog entry but carries
+      no information about what changed.
+    - It would be shipped to end users in the next release notes.
+    - The real entry from main is lost.
+
+    Patterns detected:
+    - 'Entry from main' — the exact placeholder the maintainer flagged.
+    - 'TODO' / 'FIXME' / 'placeholder' — generic placeholder markers.
+    - 'lorem ipsum' / 'xxx' / 'yyy' — obvious placeholder content.
+    """
+
+    PLACEHOLDER_PATTERNS = (
+        "entry from main",
+        "todo",
+        "fixme",
+        "placeholder",
+        "lorem ipsum",
+        "xxx",
+        "yyy",
+    )
+
+    def test_unreleased_has_no_placeholders(self):
+        """No entry in `unreleased` should match a known placeholder pattern."""
+        from pathlib import Path
+
+        changelog_path = Path(__file__).parent.parent.parent.parent / "desktop" / "macos" / "CHANGELOG.json"
+        data = json.loads(changelog_path.read_text())
+        unreleased = data.get("unreleased", [])
+        assert isinstance(unreleased, list)
+
+        for i, entry in enumerate(unreleased):
+            entry_lower = entry.lower().strip()
+            for pattern in self.PLACEHOLDER_PATTERNS:
+                # Match if pattern is the full entry or surrounded by
+                # whitespace/parens — exact word-ish match, not substring.
+                if pattern == entry_lower or (pattern in entry_lower and len(entry_lower) < len(pattern) + 20):
+                    pytest.fail(
+                        f"desktop/macos/CHANGELOG.json unreleased[{i}] "
+                        f"looks like a placeholder: {entry!r}. "
+                        f"Replace with the actual entry from main before merge."
+                    )
+
+    def test_unreleased_has_at_least_one_real_entry(self):
+        """Sanity check: there should be at least one substantive entry
+        (not just empty arrays or single placeholder)."""
+        from pathlib import Path
+
+        changelog_path = Path(__file__).parent.parent.parent.parent / "desktop" / "macos" / "CHANGELOG.json"
+        data = json.loads(changelog_path.read_text())
+        unreleased = data.get("unreleased", [])
+        # Real entries are at least 20 chars (any meaningful description).
+        real_entries = [e for e in unreleased if len(e) >= 20]
+        assert real_entries, (
+            f"unreleased has no substantive entries ({unreleased}). "
+            f"At least one entry should describe an actual change."
+        )

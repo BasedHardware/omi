@@ -1,6 +1,6 @@
 {
   "unreleased": [
-    "Entry from main (other PR that landed first)",
+    "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages",
     "New Settings → Auto-router page for tuning per-task weights (quality/latency/cost) with auto-balancing sliders and debounced save"
   ],
   "releases": [
