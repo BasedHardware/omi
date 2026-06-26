@@ -1,0 +1,1153 @@
+backend/tests/unit/test_create_persona_user_none.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-190
+backend/pusher/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 1-6,9-10,37,39-40,42
+app/lib/l10n/app_ta.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+web/admin/app/api/omi/stats/message-ratings/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,48
+app/lib/l10n/app_localizations_mk.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9354-9357,9395-9405
+  s_838ede91b21776::t_37796143735df2 9406
+app/lib/l10n/app_th.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/parakeet/transcribe.py
+  s_838ede91b21776::t_a05c0a3bc232da 33-34,86,95-96,98-99,229,302-303,311,317-318
+  s_838ede91b21776::t_3c8b768d001188 319
+desktop/macos/Desktop/Sources/MemoryExportExecutor.swift
+  s_838ede91b21776::t_a05c0a3bc232da 16,33-40
+backend/tests/container/voxconverse/neiye.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-3
+backend/parakeet/gpu_worker.py
+  s_838ede91b21776::t_a05c0a3bc232da 14-27,35,57,120-134,165-168,229-230,236-269
+  s_838ede91b21776::t_db1496c968a755 270
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  s_838ede91b21776::t_a05c0a3bc232da 15-18,20
+backend/utils/llm/external_integrations.py
+  s_838ede91b21776::t_a05c0a3bc232da 8,12,19,25-52,319,329-330,334-336,343,345,350-351,355-356,364-366,380-388
+desktop/macos/Desktop/Tests/FloatingBarUsageLimiterTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 165-178
+desktop/macos/Desktop/Tests/StagedTaskSyncIntegrityTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-77
+app/lib/l10n/app_localizations_ar.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9250-9253,9290-9300
+  s_838ede91b21776::t_6f8755da121cc2 9301
+backend/database/vector_db.py
+  s_838ede91b21776::t_a05c0a3bc232da 9,87-89,123,126,129
+web/admin/app/api/omi/stats/profitability/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 5-6,10,48,90-92,400-405,407-409,413,518,520-531,540,567,772-795
+backend/tests/container/parakeet-structure-test.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1-149
+docs/doc/developer/apps/Import.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 487,489
+backend/tests/unit/test_dev_api_conversations_poison.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-182
+backend/scripts/update-python-lock.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-47
+desktop/macos/agent/tests/pi-mono-adapter.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1,7-8,31,34,44-80,105-115,117-289,291,302,309,311,313-315,322-340,343-345,352,390-406,485-492,503-506,508-511,514-515,521
+backend/routers/fair_use_admin.py
+  s_838ede91b21776::t_a05c0a3bc232da 53-55
+backend/pusher/requirements.txt
+  s_838ede91b21776::t_a05c0a3bc232da 22
+backend/routers/conversations.py
+  s_838ede91b21776::t_a05c0a3bc232da 42,49,76-110,172-180,182-183,217-220,224-232,236-244,247-252,379-388,495-496,501,517,554
+app/lib/l10n/app_localizations_fa.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9307-9310,9348-9358
+  s_838ede91b21776::t_d3ddb6395b18a9 9359
+app/lib/pages/memories/widgets/memory_graph_page.dart
+  s_838ede91b21776::t_a05c0a3bc232da 268,330-335,551,553,560,826
+backend/database/users.py
+  s_838ede91b21776::t_a05c0a3bc232da 378-382,385-387,392,398-399,404,409-424
+  s_838ede91b21776::t_ac7946d4ad7f20 425-426
+backend/pylock.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-1611
+backend/tests/unit/test_user_usage.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-95
+desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-98
+app/lib/l10n/app_localizations_lt.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9319-9322,9360-9370
+  s_838ede91b21776::t_8d1a19260920bf 9371
+backend/utils/stt/speech_profile.py
+  s_838ede91b21776::t_a05c0a3bc232da 25-33
+desktop/macos/agent/tests/run-attempt-lifecycle.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-844
+desktop/macos/Desktop/Tests/RewindOCRQualityTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-31
+backend/utils/retrieval/tools/calendar_tools.py
+  s_838ede91b21776::t_a05c0a3bc232da 16-20,36,138-139,1081-1082,1094,1098,1100,1134,1137,1141-1145
+desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 783-792,794-802
+backend/tests/unit/twilio_stub.py
+  s_838ede91b21776::t_a05c0a3bc232da 37-38,41-44,48-60,62-65,182-191
+app/lib/l10n/app_fa.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+desktop/macos/Desktop/Tests/ActionItemStorageVisibilityReconciliationTests.swift
+  s_838ede91b21776::t_898790c402caba 69-70,72,81-82,84
+backend/models/conversation.py
+  s_838ede91b21776::t_a05c0a3bc232da 4,121-124,231-236,242-246
+  s_838ede91b21776::t_5448bb82b9560c 247
+backend/tests/container/voxconverse/wdvva.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-14
+desktop/macos/Desktop/Tests/GoalProgressTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-38
+app/lib/l10n/app_localizations_ur.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9319-9322,9360-9370
+  s_838ede91b21776::t_0e4a58f1a480c4 9371
+backend/pylock.windows.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-1610
+backend/tests/unit/test_apps_create_app_json.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-63
+desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-172
+backend/tests/unit/test_twilio_service.py
+  s_838ede91b21776::t_a05c0a3bc232da 1,3-4,20-21,31-109
+  s_838ede91b21776::t_1d6196e5566292 110-111
+app/lib/l10n/app_kn.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+app/lib/l10n/app_localizations_tl.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9390-9393,9431-9441
+  s_838ede91b21776::t_0df008c3be5239 9442
+backend/utils/listen_pusher_session.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-510
+desktop/macos/Desktop/Tests/StopReconciliationTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 216-342
+sdks/python-cli/README.md
+  s_838ede91b21776::t_a05c0a3bc232da 144-160
+web/admin/lib/payload-cache.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-47
+app/lib/l10n/app_localizations_fr.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9389-9392,9430-9440
+  s_838ede91b21776::t_32637346edd20a 9441
+app/lib/l10n/app_ur.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+backend/tests/container/test_parakeet_wer_gate.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-356
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarUsageLimiter.swift
+  s_838ede91b21776::t_a05c0a3bc232da 68-71
+app/lib/l10n/app_bn.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+.github/scripts/check-desktop-changelog.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-103
+app/lib/l10n/app_localizations_el.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9371-9374,9412-9422
+  s_838ede91b21776::t_c23e9dc26de5d5 9423
+app/lib/l10n/app_lv.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/tests/unit/test_hume_callback_malformed.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-67
+desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 12
+backend/tests/unit/test_location_maps_status_guard.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-110
+desktop/macos/Desktop/Tests/TaskChatLegacyAcpMigrationTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-52
+web/admin/app/api/omi/stats/floating-bar-usage/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,75-79
+backend/tests/unit/test_speech_profile_wav_decode.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-134
+app/lib/l10n/app_hr.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+app/lib/pages/home/page.dart
+  s_838ede91b21776::t_a05c0a3bc232da 74,1081-1092
+  s_838ede91b21776::t_d76260b8b51a98 1093-1095
+backend/utils/llm/notifications.py
+  s_838ede91b21776::t_a05c0a3bc232da 6,14
+desktop/macos/.gitignore
+  s_838ede91b21776::t_a05c0a3bc232da 89
+desktop/macos/agent/tests/runtime-adapter.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-578
+desktop/macos/Desktop/Tests/ShortcutSettingsTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-23
+app/lib/l10n/app_it.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+desktop/macos/e2e/flows/ask-omi-open-benchmark.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1-64
+backend/utils/app_integrations.py
+  s_838ede91b21776::t_a05c0a3bc232da 169,307,314-315,504-505,659,710-712
+backend/tests/unit/test_async_resource_correctness.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-229
+web/app/src/components/settings/SettingsPage.tsx
+  s_838ede91b21776::t_a05c0a3bc232da 95-106,137,143,150-156,165,187-189,232,239,245-251,264,268,333,339,356,369,433-435,474,477-481,490-492,509-511,529,539,576-578,642-643,674-683,698,705-706,715-717,738-751,763-770,785-792,797,806,814,822,825-826,866-868,964-972,1065,1076,1099-1101,1117-1119,1123-1128,1131-1134,1140-1142,1149-1151,1158-1161,1170-1171,1179-1180,1188-1189,1201-1206,1221-1223,1233,1241-1246,1248-1250,1278,1295-1297,1304-1306,1356,1368-1370,1380,1441-1445,1450,1504,1584,1643-1646,1673-1675,1677-1678,1685,1696,1710-1712,1754-1764,1768-1773,1778,1784-1787,1804,1813-1820,1828-1833,1838-1840,1843-1851,1855-1858,1867-1870,1877-1879,1883,1891-1893,1895-1916,1921,1925-1928,1932-1934,1937-1939,1941-1943,1945-1947,1950-1952,1954-1956,1962-1964,1974,2030-2037,2045-2050,2055-2057,2060-2068,2072-2075,2084-2087,2093-2095,2099,2111,2154-2165,2190-2193,2234-2258,2287-2289,2302-2305,2308-2310,2322-2323,2336-2338,2347-2355,2373-2376,2379-2381,2388-2389,2402-2404,2416-2418,2422-2424,2430-2432,2440,2448-2450,2456-2458,2463-2470,2475-2477,2480-2482,2487-2489,2497-2499,2505-2667,2673-2681,2702-2707,2712-2719,2727-2740,2749-2756,2773-2775,2781-2784,2795-2797,2799-2801,2817-2819,2829-2831,2843-2848,2864-2869,2885-2890,2907-2909,2951-2958,2963-2965,2968-2970,3038-3040,3050-3052,3071-3073,3081-3083,3115-3118,3134-3137,3146-3149,3211-3219,3229-3232,3239,3243,3247,3251,3358-3361,3431-3436,3440-3444,3458-3461,3607-3609,3616-3618,3633,3639-3641
+backend/database/_client.py
+  s_838ede91b21776::t_a05c0a3bc232da 6-7
+backend/tests/container/voxconverse/lubpm.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-9
+desktop/macos/Desktop/Tests/TranscriptionStorageRecoveryTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-95
+sdks/python-cli/examples/agent_quickstart.md
+  s_838ede91b21776::t_a05c0a3bc232da 91-97
+app/lib/l10n/app_ca.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3029-3034
+backend/routers/transcribe.py
+  s_838ede91b21776::t_a05c0a3bc232da 62,83-84,129,223-224,907,946,1484,1489,1854-1858,1860-1863,1877-1883,2088-2095,2203-2244
+backend/tests/unit/test_conversation_structure_timezone.py
+  s_838ede91b21776::t_a05c0a3bc232da 94-98
+desktop/macos/scripts/app-config.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-55
+docs/doc/developer/backend/Backend_Setup.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 250-251,255,259,261,270-275,281,287-289,292,294-296,301,303-305,307,309-310,444,515-516
+app/lib/l10n/app_cs.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3029-3034
+app/lib/l10n/app_es.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3061-3066
+backend/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 1-6,9-10,37,39-40,42
+app/lib/l10n/app_zh.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3082-3087
+app/lib/l10n/app_bs.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+backend/routers/focus_sessions.py
+  s_838ede91b21776::t_a05c0a3bc232da 8,53,71
+desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift
+  s_838ede91b21776::t_a05c0a3bc232da 896
+app/lib/pages/settings/daily_summary_settings_page.dart
+  s_838ede91b21776::t_a05c0a3bc232da 10,33-42,53,55-62,66,68-75
+desktop/macos/Desktop/Sources/MemoryExportService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 13-14,41-42,56-57,71-72,86-87,95,103,119,133,150,157,178,204-205,255-286,302-318,421
+backend/tests/unit/test_firestore_invariant_helpers.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-32
+app/lib/l10n/app_el.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+web/admin/app/api/internal/precompute/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-190
+desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 467,476-488,522-523,525-538,557-564,566-567,572,580-584,586-616,618-636,1979-2057,2094
+backend/AGENTS.md
+  s_838ede91b21776::t_a05c0a3bc232da 7,11-12,16-22
+  s_838ede91b21776::t_82eaa3cb028792 23
+app/lib/pages/settings/developer.dart
+  s_838ede91b21776::t_a05c0a3bc232da 374,376-377,433,711,808,810-811
+codemagic.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1159,1576,1979,2057,2374-2375,2388-2389,2477-2501,2573,2759-2762,2778,2785,2799
+app/lib/l10n/app_localizations_fi.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9305-9308,9346-9356
+  s_838ede91b21776::t_1ee3596138f47d 9357
+desktop/macos/agent/tests/event-stream.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-95
+app/lib/l10n/app_no.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+docs/doc/developer/apps/examples/OmiMentor.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 11,198
+app/lib/l10n/app_fi.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/parakeet/stream_handler.py
+  s_838ede91b21776::t_a05c0a3bc232da 23,27-40,45,69,159,167-168,697-698,703,709-710
+  s_838ede91b21776::t_a828f8a06ae4a0 711
+desktop/macos/agent/tests/compatibility-facade.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-1249
+backend/tests/container/voxconverse/jxydp.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1
+backend/models/conversation_metadata.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-34
+web/admin/app/api/omi/stats/notifications/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 4-5,8-14,40,50,378,388-407
+web/admin/app/api/omi/stats/subscriptions/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 4,6,8-10,12-17,23,28,75,77,83,94-111,113-115
+desktop/macos/Desktop/Tests/ConversationReconciliationPolicyTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-252
+backend/tests/unit/test_mcp_conversations_poison.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-186
+desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-32
+desktop/macos/agent/src/runtime/types.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-234
+backend/agent-proxy/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 1-2,4-10,12-18,20
+backend/routers/calendar_meetings.py
+  s_838ede91b21776::t_a05c0a3bc232da 10,100
+backend/routers/speech_profile.py
+  s_838ede91b21776::t_a05c0a3bc232da 55-58
+docs/doc/developer/AppSetup.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 197-198,200-201,203,205-208
+backend/routers/memories.py
+  s_838ede91b21776::t_a05c0a3bc232da 144-146,151
+backend/.python-version
+  s_838ede91b21776::t_a05c0a3bc232da 1
+app/lib/l10n/app_localizations_zh.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9140-9142,9176-9186
+  s_838ede91b21776::t_6e5bd4b57c8210 9187
+docs/doc/developer/apps/Integrations.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 230
+app/lib/l10n/app_he.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+backend/tests/container/test_parakeet_der_benchmark.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-422
+backend/utils/stt/vad_gate.py
+  s_838ede91b21776::t_a05c0a3bc232da 347
+desktop/macos/Desktop/Sources/AuthService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 342-344,468-470
+desktop/macos/Desktop/Sources/ResourceMonitor.swift
+  s_838ede91b21776::t_a05c0a3bc232da 154,157-162,166-168,180-185,370-372
+backend/tests/container/voxconverse/luobn.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-12
+web/admin/app/api/omi/stats/viral-metrics/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,11
+desktop/macos/agent/src/index.ts
+  s_838ede91b21776::t_a05c0a3bc232da 33,35,39,41,43,48,52-69,95-114,125-128,133-141,146-153,155-156,158-172,175-177,179-180,183-192,226-234,238-295,297-325,328-356,372-378,388,393,418,425,433,437-438,441-443,459,584-589,592-628,653-659,661-671,674-676,678-682,684-686,688,690-693,697-702,791,793-794,796-798,800,802,805-807,809-824,826-833,836,839-853,855-859,861,865-885,887-892,894-922,926,931,944-971,973-980,986,994-1150,1153-1155,1159,1162-1179,1194-1196,1208-1210
+desktop/macos/AGENTS.md
+  s_838ede91b21776::t_a05c0a3bc232da 30,38-44,51,145-150
+  s_838ede91b21776::t_b41b6d83d5fa23 151
+desktop/macos/agent/tests/worker-pool-pinned.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-400
+desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
+  s_838ede91b21776::t_a05c0a3bc232da 8-24,32,38-41,45,92-93,109,120,125,264-266,318,408,460-462,472-474,476-489,491-494,504,508-516,519-523,525,693-697,699-700,732-798,922,947
+desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 504,508,510-513,544-545,547-557,559,562-601,605-610,614
+backend/tests/container/voxconverse/manifest.json
+  s_838ede91b21776::t_a05c0a3bc232da 1-27
+backend/tests/unit/test_dev_api_action_items_poison.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-166
+backend/database/redis_db.py
+  s_838ede91b21776::t_a05c0a3bc232da 409
+backend/tests/unit/test_mcp_profile_contact.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-209
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
+  s_838ede91b21776::t_a05c0a3bc232da 6-7,26-29,70-71,83,86,248-253,256,266-271
+app/lib/l10n/app_localizations_et.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9302-9305,9343-9353
+  s_838ede91b21776::t_8fc8995998df2c 9354
+desktop/macos/agent/tests/cancellation.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-98
+app/lib/l10n/app_localizations_uk.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9323-9326,9364-9374
+  s_838ede91b21776::t_15a871f3933f9e 9375
+app/lib/services/sockets/pure_streaming_stt.dart
+  s_838ede91b21776::t_a05c0a3bc232da 529
+docs/onboarding/omi.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 22
+app/lib/l10n/app_localizations.dart
+  s_838ede91b21776::t_a05c0a3bc232da 17340-17345,17412-17434
+  s_838ede91b21776::t_6c9cce5302d2c3 17435
+app/lib/pages/conversations/widgets/processing_capture.dart
+  s_838ede91b21776::t_a05c0a3bc232da 552
+desktop/macos/Backend-Rust/src/services/firestore/chat_repository.rs
+  s_838ede91b21776::t_a05c0a3bc232da 1-1091
+backend/tests/container/voxconverse/cqfmj.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-18
+desktop/macos/Desktop/Tests/APIClientConversationCountTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-96
+app/lib/l10n/app_tl.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+desktop/macos/scripts/omi-settings-seed.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-155
+desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  s_838ede91b21776::t_a05c0a3bc232da 271-280,282-285,370-371,509,513,536,594,596,598,600
+desktop/macos/agent/src/runtime/control-tools.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-654
+app/lib/providers/phone_call_provider.dart
+  s_838ede91b21776::t_a05c0a3bc232da 196-197,240
+app/lib/l10n/app_localizations_mr.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9315-9318,9356-9366
+  s_838ede91b21776::t_8434cbd14a6ab6 9367
+backend/utils/other/notifications.py
+  s_838ede91b21776::t_a05c0a3bc232da 153-155
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentStatusRegistry.swift
+  s_838ede91b21776::t_a05c0a3bc232da 3,5-6,73-74,82,87,91-92,96-97,129,136-139,142,158-172,174,179,184-185,220-235
+  s_838ede91b21776::t_e4a85511471fff 236
+backend/tests/unit/test_trial_metadata.py
+  s_838ede91b21776::t_a05c0a3bc232da 134-136
+backend/tests/container/test_parakeet_high_concurrency.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-290
+app/lib/l10n/app_localizations_hr.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9337-9340,9378-9388
+  s_838ede91b21776::t_33e6fe3f93133a 9389
+app/lib/l10n/app_ko.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/tests/unit/test_folder_conversations_malformed.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-114
+desktop/macos/Desktop/Tests/PushToTalkStateMachineTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-29
+web/admin/app/api/omi/stats/retention/posthog/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,9-10,43
+app/lib/l10n/app_ja.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3061-3066
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/EmbeddingService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 271-272,329-358,361-384,386
+desktop/macos/Desktop/Sources/OnboardingTasksStepView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 87
+docs/doc/get_started/introduction.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 148
+docs/doc/hardware/DevKit1.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 56
+backend/models/calendar_mutation.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-39
+app/lib/l10n/app_localizations_sv.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9310-9313,9351-9361
+  s_838ede91b21776::t_d9f36f10398d83 9362
+backend/tests/unit/test_parakeet_builtin_embedding.py
+  s_838ede91b21776::t_a05c0a3bc232da 3-4,46-47,95-101,103-105,108-109,115-116,122-123,129-130,145-152,156,158-161,170,172,188-189,191-199,206,208,220-221,223-231,237-238,240-242,251-257,259,263-269,271,275-281,283,293,295-301,310,312
+desktop/macos/agent/tests/protocol-v2.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-57
+backend/parakeet/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 20-50,64-66,68-73,76
+backend/tests/container/voxconverse/msbyq.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-7
+desktop/macos/test.sh
+  s_838ede91b21776::t_a05c0a3bc232da 8-13
+backend/utils/conversations/datetime_utils.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-26
+desktop/macos/Desktop/Tests/ActionItemsFTSRepairTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-108
+desktop/macos/Desktop/Tests/RewindEncoderDiagnosticsSourceTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-38
+AGENTS.md
+  s_838ede91b21776::t_a05c0a3bc232da 123,130-132,148,160,164,251,261-264
+backend/routers/notifications.py
+  s_838ede91b21776::t_a05c0a3bc232da 100-101
+app/lib/l10n/app_localizations_ko.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9156-9159,9193-9203
+  s_838ede91b21776::t_113b6619afcd7d 9204
+desktop/macos/agent/tests/sqlite-store.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-385
+backend/tests/unit/test_voice_message_filename_none.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-138
+desktop/macos/scripts/omi-harness
+  s_838ede91b21776::t_a05c0a3bc232da 1-872
+desktop/macos/agent/src/runtime/control-tool-manifest.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-282
+desktop/macos/e2e/flows/ask-omi-animation-benchmark.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1-51
+backend/models/message_event.py
+  s_838ede91b21776::t_a05c0a3bc232da 94-105
+backend/tests/unit/test_mcp_search_conversations_poison.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-218
+desktop/macos/README.md
+  s_838ede91b21776::t_a05c0a3bc232da 23-25,32
+  s_838ede91b21776::t_2ddfdfeffb8be8 33
+web/admin/app/api/omi/stats/onboarding/posthog/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,5-18,104,110,162,209,215-234,236-241
+desktop/macos/agent/tests/tool-correlation.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-64
+backend/database/phone_calls.py
+  s_838ede91b21776::t_a05c0a3bc232da 157-166
+app/lib/l10n/app_localizations_no.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9302-9305,9343-9353
+  s_838ede91b21776::t_a51c307c50470c 9354
+desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 234,515-518,520-521,1031,1039-1041,7220,7258-7260,7262-7265,7267-7274,7278-7283,7287-7324,7485
+app/lib/l10n/app_da.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3069-3074
+backend/routers/chat.py
+  s_838ede91b21776::t_a05c0a3bc232da 605-608
+backend/utils/retrieval/tools/integration_base.py
+  s_838ede91b21776::t_a05c0a3bc232da 139-169
+desktop/macos/Desktop/Tests/AIBackendErrorNormalizationTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-65
+desktop/macos/run.sh
+  s_838ede91b21776::t_a05c0a3bc232da 22-23,83-84,106-112,115-116,124,128-130,132,169-178,207-214,291,329-338,347,470-471,477-480,484-485,706-714
+  s_838ede91b21776::t_19df16655400f3 715
+desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
+  s_838ede91b21776::t_a05c0a3bc232da 244-246,279-378,384,386-393,395,406-444,448-455,530,536-547,633
+backend/routers/agent_tools.py
+  s_838ede91b21776::t_a05c0a3bc232da 12
+backend/utils/log_sanitizer.py
+  s_838ede91b21776::t_a05c0a3bc232da 16,55-71
+  s_838ede91b21776::t_1a6d5bc1881646 72-73
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusAssistant.swift
+  s_838ede91b21776::t_a05c0a3bc232da 13-14,16
+app/lib/l10n/app_localizations_nl.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9331-9334,9372-9382
+  s_838ede91b21776::t_d5f64f8acde8bf 9383
+backend/scripts/dev-serve.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-47
+backend/tests/container/voxconverse/eucfa.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-18
+desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
+  s_838ede91b21776::t_a05c0a3bc232da 159
+desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 104-111,172,232-233
+backend/tests/unit/test_storage_fanout_limits.py
+  s_838ede91b21776::t_a05c0a3bc232da 22-29,139,142-143,147-153,155-156,159-165,167-168
+desktop/macos/agent/src/adapters/acp.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-489
+docs/doc/developer/firmware/Compile_firmware.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 13,16,38-39,49,68
+web/admin/app/api/omi/stats/daily-new-users/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 4,7-18,26-36
+web/admin/app/api/omi/stats/mrr-trends/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 5,7-16,42,48,101,186-205,207-209
+desktop/macos/Desktop/Sources/Logger.swift
+  s_838ede91b21776::t_a05c0a3bc232da 166-172
+docs/doc/developer/api/overview.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 245
+backend/models/daily_summary_payload.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-33
+backend/tests/unit/test_calendar_autolink_invalid_timestamp.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-112
+web/admin/app/api/omi/stats/revenue/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 5,7,9-11,13-18,24,73,120,124-141,143-145
+app/lib/l10n/app_localizations_lv.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9327-9330,9368-9378
+  s_838ede91b21776::t_8a6aa29e590af2 9379
+desktop/macos/Desktop/Package.swift
+  s_838ede91b21776::t_a05c0a3bc232da 52-55
+app/lib/models/stt_response_schema.dart
+  s_838ede91b21776::t_a05c0a3bc232da 1,8-11,21-24,127-130
+  s_838ede91b21776::t_423b131798deff 137-148
+app/lib/l10n/app_sk.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3065-3070
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 223,281-282,285-287,289,313,315-343,392,397,401,404
+backend/testing/e2e/listen_test_helpers.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-42
+app/lib/l10n/app_localizations_ja.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9154-9157,9192-9202
+  s_838ede91b21776::t_24c98544fe4c7f 9203
+backend/tests/unit/test_task_sharing.py
+  s_838ede91b21776::t_a05c0a3bc232da 672-684
+desktop/macos/Desktop/Sources/MemoryBankConnector.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-112
+backend/tests/container/voxconverse/xkmqx.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-7
+web/admin/app/api/omi/stats/app-subscriptions/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 5,7,9-11,13-19,24,80,85-102,104-106
+desktop/macos/Desktop/Sources/Rewind/Services/OCREmbeddingService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 147-152,197-200,237-238
+desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  s_838ede91b21776::t_a05c0a3bc232da 833,2733-2746,3124-3134,3138-3143
+backend/tests/container/test_parakeet_concurrency.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-247
+app/lib/l10n/app_ar.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3027-3032
+app/lib/l10n/app_localizations_kn.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9336-9339,9377-9387
+  s_838ede91b21776::t_5f27386dfcb878 9388
+backend/testing/e2e/run.sh
+  s_838ede91b21776::t_a05c0a3bc232da 43,51
+backend/utils/other/hume.py
+  s_838ede91b21776::t_a05c0a3bc232da 20-25,43,45-47,75-84,122
+docs/doc/developer/apps/Introduction.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 153,158,168
+web/admin/app/api/omi/stats/k-factor/posthog/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,5,7-13,15-22,24,34,36,38-40,42-45,47-54,56-58,60-79,81-82,84-90,93,95
+app/lib/l10n/app_localizations_sk.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9297-9300,9338-9348
+  s_838ede91b21776::t_2e32acbd793209 9349
+.github/workflows/backend-hermetic-e2e.yml
+  s_838ede91b21776::t_a05c0a3bc232da 24-31,35
+app/lib/pages/conversation_detail/maps_util.dart
+  s_838ede91b21776::t_a05c0a3bc232da 4,75-89
+app/test/unit/stt_result_test.dart
+  s_838ede91b21776::t_a05c0a3bc232da 1-112
+app/lib/l10n/app_localizations_tr.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9316-9319,9356-9366
+  s_838ede91b21776::t_0fdd6bb7b96b5d 9367
+app/lib/pages/home/widgets/capture_mode_chip.dart
+  s_838ede91b21776::t_a05c0a3bc232da 1-147,152-192
+  s_838ede91b21776::t_423b131798deff 148-151
+app/lib/l10n/app_ro.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+desktop/macos/Desktop/Tests/AgentArtifactProjectionTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-147
+docs/doc/developer/backend/chat_system.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 439,441-442,444-447
+app/lib/l10n/app_localizations_ru.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9338-9341,9379-9389
+  s_838ede91b21776::t_c5110f9d2cc455 9390
+app/lib/pages/settings/profile.dart
+  s_838ede91b21776::t_a05c0a3bc232da 246,248-255,270-273,288,300-303,318-340,362,379-382,409-412,431-434
+app/lib/providers/capture_provider.dart
+  s_838ede91b21776::t_a05c0a3bc232da 541-561,1030-1033,1036-1037,1062-1069,1089-1170
+  s_838ede91b21776::t_107f412bb6aaf2 1171
+backend/tests/unit/test_import_job_status_detail_enum.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-124
+backend/utils/subscription.py
+  s_838ede91b21776::t_a05c0a3bc232da 71-91,101-108,194-195,216-226
+docs/doc/developer/agent-grants-approval-ux.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 1-163
+web/admin/lib/posthog.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1,3-46,53,68,73-149
+.github/workflows/desktop_promote_prod.yml
+  s_838ede91b21776::t_a05c0a3bc232da 1-464
+backend/tests/container/test_parakeet_smoke.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-262
+omiGlass/README.md
+  s_838ede91b21776::t_a05c0a3bc232da 48
+app/lib/l10n/app_localizations_ta.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9371-9374,9412-9423
+  s_838ede91b21776::t_4e9ce44326478e 9424
+web/admin/app/api/omi/stats/macos-versions/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 4-5,8-14,43,91-94,96-98,100,128,133,159,164-181
+docs/docs.json
+  s_838ede91b21776::t_a05c0a3bc232da 30
+backend/utils/sync/playback.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-434
+app/lib/l10n/app_bg.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3029-3034
+backend/database/document_ids.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-29
+backend/database/user_usage.py
+  s_838ede91b21776::t_a05c0a3bc232da 36-46
+backend/tests/unit/test_announcement_malformed_type.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-36
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift
+  s_838ede91b21776::t_a05c0a3bc232da 14-15,17
+desktop/macos/Desktop/Tests/ServerConversationDecodingTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-96
+app/lib/l10n/app_mk.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+app/lib/l10n/app_pt.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3096-3101
+backend/tests/unit/test_sync_playback_service.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-341
+backend/routers/action_items.py
+  s_838ede91b21776::t_a05c0a3bc232da 3,33,37-54,125-126,200,202-203,210,519-527
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 5,46,57-60,65,72,85,92-98,100,102-109,136,139,235,239,245,247,254,256,264-267,270,359,406-412,421,439-449
+backend/routers/goals.py
+  s_838ede91b21776::t_a05c0a3bc232da 16,186
+docs/doc/developer/agent-cloud-directory-relay.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 1-162
+desktop/macos/Desktop/Sources/OnboardingBYOKStepView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 28,31-32,52-54,57,59-60,62-63,65-68
+backend/tests/unit/test_fair_use_flagged_limit_clamp.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-113
+desktop/macos/Backend-Rust/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 5,22,29
+backend/tests/unit/test_phone_verification_created_at.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-123
+docs/doc/developer/DevKit2Testing.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 57,67,70,76
+desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  s_838ede91b21776::t_a05c0a3bc232da 8,41-60,80-83,92,99-110,133-150,169,171,190-193,198-199,203-209,211-270,376-395,420-426,446-452,575-587,590,593,595-600,606-607,624-625,661-683,695-696,707-719,838-911
+  s_838ede91b21776::t_3f8e8af280c8c0 912
+desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 32-33,178-204,215,438,497-500,504-505,596-602,690-701,798-818
+  s_838ede91b21776::t_fca820ef3e2c88 819-820
+backend/tests/unit/test_action_items_conversation_list_malformed.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-123
+desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 292
+backend/routers/scores.py
+  s_838ede91b21776::t_a05c0a3bc232da 7,17,26
+backend/utils/sync/__init__.py
+  s_838ede91b21776::t_a05c0a3bc232da 1
+app/lib/l10n/app_localizations_cs.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9305-9308,9346-9356
+  s_838ede91b21776::t_daff4e0ad14372 9357
+desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
+  s_838ede91b21776::t_a05c0a3bc232da 518
+backend/database/conversations.py
+  s_838ede91b21776::t_a05c0a3bc232da 197,216,218,220-222,231-240,246-255,733-736
+app/lib/l10n/app_localizations_es.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9326-9329,9367-9377
+  s_838ede91b21776::t_629efbaa5ea4d9 9378
+backend/routers/developer.py
+  s_838ede91b21776::t_a05c0a3bc232da 47,541-560,919-935,1444
+backend/tests/unit/test_conversations_count.py
+  s_838ede91b21776::t_a05c0a3bc232da 73-82,89-98,120-123,200-225,294-301
+  s_838ede91b21776::t_6b158f9bd80ed3 302
+app/lib/l10n/app_localizations_ca.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9359-9362,9400-9410
+  s_838ede91b21776::t_4628fff1c1fa68 9411
+backend/tests/unit/test_users_webhook_url_validation.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-125
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 18,125,135,152-154,322,491-493,567-570,574,600,806,861,887,892,930,940,944,948,955,958,965,968,974
+backend/testing/e2e/test_boundary_contract_compatibility.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-104
+backend/requirements.txt
+  s_838ede91b21776::t_a05c0a3bc232da 165,230
+docs/doc/hardware/OmiConsumer.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 53
+sdks/python-cli/omi_cli/errors.py
+  s_838ede91b21776::t_a05c0a3bc232da 22,50,56,66,108,110
+app/lib/l10n/app_tr.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3095-3100
+backend/routers/apps.py
+  s_838ede91b21776::t_a05c0a3bc232da 119-123,475,503,532,558,566,568,604,724,743
+desktop/macos/scripts/prepare-agent-runtime.sh
+  s_838ede91b21776::t_a05c0a3bc232da 183
+.cursor/cloud-agent-environment.md
+  s_838ede91b21776::t_a05c0a3bc232da 1-38
+desktop/macos/CHANGELOG.json
+  s_838ede91b21776::t_a05c0a3bc232da 2-4,6-240
+backend/routers/integrations.py
+  s_838ede91b21776::t_a05c0a3bc232da 425-427
+app/lib/l10n/app_lt.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/tests/container/voxconverse/dohag.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-3
+backend/database/calendar_meetings.py
+  s_838ede91b21776::t_a05c0a3bc232da 1,5,8,16-26,29-30,34-38
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_838ede91b21776::t_a05c0a3bc232da 32-34,365,372,374,400-426,439,455,535-558,562-566,568-575,577-578,586,615-617,651,669,710-716,722-724,734,749-751,772,783,798,809,821-822,830,843,884-900,1468-1471,2827-2828
+desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
+  s_838ede91b21776::t_a05c0a3bc232da 206-277,283,286-287,364-369,371
+docs/onboarding/omi-devkit-2.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 38
+web/admin/app/api/omi/stats/infra-costs/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 4,7,48,250-265,267-272,274,352-373
+backend/pylock.macos.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-1608
+backend/tests/unit/test_resample_pcm_divzero.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-116
+app/lib/l10n/app_sr.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  s_838ede91b21776::t_a05c0a3bc232da 475
+backend/models/folder.py
+  s_838ede91b21776::t_a05c0a3bc232da 3,67-74
+desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
+  s_838ede91b21776::t_a05c0a3bc232da 3,9-13,18-20,31-34,39-42,46-48,50,52-55,57-64,66,68-71,73,81,86-87,91-98,104-111,115-116,121-132,137-138,142-150,156-160,174-178,198-226,230-233,237,243,250,275-276,289-290,317-320
+backend/tests/unit/test_audio_merge_tasks.py
+  s_838ede91b21776::t_a05c0a3bc232da 98-100,107-108,112-114,116-117,120-121,143-144
+backend/tests/unit/test_diarizer_dockerfile.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-17
+app/lib/l10n/app_localizations_da.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9290-9293,9331-9341
+  s_838ede91b21776::t_7ceb8f9bd1c079 9342
+app/lib/l10n/app_ru.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3095-3100
+.github/workflows/desktop_auto_release.yml
+  s_838ede91b21776::t_a05c0a3bc232da 9-11,13-21,28-35,40,42-44,46-47,49-51,53-61,63-64,67-68,70-72,86-87,90,97-99,102,160,176
+app/lib/l10n/app_be.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+app/lib/pages/settings/daily_summary_detail_page.dart
+  s_838ede91b21776::t_a05c0a3bc232da 150
+desktop/macos/pi-mono-extension/index.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 13,17,27-28,31,36,928-929,931-932,937-938,977-985,992-999,1025-1101,1162-1203,1210-1257,1299-1486,1512-1555
+  s_838ede91b21776::t_dcfe750f0f422f 1556
+web/admin/app/api/omi/stats/crash-rate/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,54-58
+web/admin/app/api/omi/stats/dau-trends/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 3,47-52
+desktop/macos/Backend-Rust/src/paywall.rs
+  s_838ede91b21776::t_a05c0a3bc232da 83-93,165-169,208-212,297,304,311,359-362,370-373
+app/lib/l10n/app_localizations_th.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9255-9258,9295-9305
+  s_838ede91b21776::t_6a5b9a3fb5cdfa 9306
+desktop/macos/e2e/flows/desktop-responsiveness-benchmark.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1-86
+app/lib/l10n/app_sl.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+desktop/macos/Desktop/Sources/Rewind/Core/StagedTaskStorage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 87-92,97-119,123-139,142-147
+sdks/python-cli/omi_cli/local_client.py
+  s_838ede91b21776::t_a05c0a3bc232da 12,113-114,116-138
+backend/tests/unit/test_chat_tool_parameters_json.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-59
+desktop/macos/Desktop/Sources/OnboardingExportsStepView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 187,245,257
+.github/workflows/gcp_admin.yml
+  s_838ede91b21776::t_a05c0a3bc232da 78-82,105
+app/lib/l10n/app_de.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3028-3033
+desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
+  s_838ede91b21776::t_a05c0a3bc232da 5,10-11,16,22,47-51,78,82,85
+desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1,21-52,69-71,159-172,185-195,201-213,275-276,314,405,407,412,419-422,461,620,629-636,639,682-684,686-703,741,786,798
+backend/tests/unit/test_process_conversation_usage_context.py
+  s_838ede91b21776::t_a05c0a3bc232da 162
+desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 73,82-83,99-122,177-178,206-207,242-243,844,857-859
+  s_838ede91b21776::t_9b9cdca9a68102 860
+backend/tests/unit/test_import_jobs_malformed.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-134
+backend/tests/unit/test_parakeet_stream_session.py
+  s_838ede91b21776::t_a05c0a3bc232da 29,31-41,101-118,286-355
+backend/utils/conversations/merge_conversations.py
+  s_838ede91b21776::t_a05c0a3bc232da 22,36,39-50,386-388
+docs/doc/developer/backend/listen_pusher_pipeline.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 29-39,52
+backend/tests/container/voxconverse/bvyvm.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-16
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift
+  s_838ede91b21776::t_a05c0a3bc232da 52-54,97-98,112-114
+  s_838ede91b21776::t_cb8b1dfd8d58f2 115
+app/lib/l10n/app_sv.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+app/lib/l10n/app_localizations_he.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9235-9238,9275-9285
+  s_838ede91b21776::t_a359dbce890eeb 9286
+app/lib/l10n/app_localizations_ro.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9350-9353,9391-9401
+  s_838ede91b21776::t_250fdd5321a66c 9402
+app/lib/l10n/app_localizations_hu.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9345-9348,9386-9396
+  s_838ede91b21776::t_d5ad795cf887fa 9397
+backend/tests/unit/test_paywall_reconnect_gate.py
+  s_838ede91b21776::t_a05c0a3bc232da 328-331,452-453
+  s_838ede91b21776::t_2dd253c2603e9e 454
+app/lib/l10n/app_localizations_it.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9360-9363,9401-9411
+  s_838ede91b21776::t_b79d4e5050e6f3 9412
+desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  s_838ede91b21776::t_a05c0a3bc232da 434-435,461-495,1212,1246,1483,1546,1568
+backend/database/folders.py
+  s_838ede91b21776::t_a05c0a3bc232da 9,229
+app/lib/l10n/app_id.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3102-3107
+backend/tests/unit/test_sync_file_paths_filename_none.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-124
+desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  s_838ede91b21776::t_a05c0a3bc232da 58,62,69-100,108-224,1545,2949,2954-2960,2962-2966,2968-2971,2973-2982,2984,2987-2991
+.github/scripts/check-desktop-release-promotion.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-115
+.gitignore
+  s_838ede91b21776::t_a05c0a3bc232da 224-226
+app/lib/l10n/app_localizations_be.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9333-9336,9374-9384
+  s_838ede91b21776::t_2991b40be4d8fc 9385
+desktop/macos/Backend-Rust/src/services/firestore.rs
+  s_838ede91b21776::t_a05c0a3bc232da 4-5,19-24,38-42,120-121,144-147,182-184,202-204,208-209,234-237,256-257,277-279,305-309,317-321,413-432,614,616-619,649-653,664,725-728,836,891-895,1168-1171,1185-1187,1189,1222-1223,1455-1460,1509,1573-1578,1589-1603,2116-2119,2153-2154,2160-2166,2265-2266,2401-2402,2451-2456,2501-2507,2729,2759-2762,2854-2866,2910-2916,3037-3039,3203,3264,3810-3813,3914,3924-3926,3933-3935,3939,3941,3982-3984,4013-4015,4046,4051-4052,4054-4055,4057-4058,4069-4070,4074-4075,4094-4095,4104-4112,4128-4130,4176-4177,4193-4194,4202-4204,4208,4226-4229,4242-4246,4262-4267,4276-4293,4298-4299,4308-4325,4344-4345,4401-4404,4418-4420,4430-4433,4438-4439,4445-4446,4450-4451,4455-4456,4458-4461,4464-4465,4468-4469,4472-4473,4489-4492,4504-4505,4509-4510,4514-4515,4517-4520,4523-4524,4527-4528,4531-4532,4538-4542,4546-4549,4562-4564,4599-4601,4624-4625,4640-4641,4650,4659-4660,4671-4693,4696-4708,4710,4712,4715-4729,4736-4763,4766-4769,4780-4783,4786-4789,4794-4797,4799-4802,4807-4835,4840-4863,4865-4868,4877-4899,4912-4919,4923-4928,4934-4937,4939-4942,4946-4949,4953-4956,4964-4968,4971-4975,5192-5197,5219-5224,5249-5251,5335-5342,5365-5374,5377-5386,5388-5392,5424-5429,5431-5433,5435-5440,5442-5444,5456-5458,5460-5462,5464-5469,5471-5473,5475-5477,5489-5491,5493-5495,5497-5499,5501-5503,5505-5507,5509-5511,5513-5515,5527-5529,5531-5533,5535-5537,5539-5541,5543-5545,5547-5549,5561-5563,5565-5567,5569-5571,5573-5575,5577-5579,5581-5583,5594-5596,5611-5612,5622-5623,5650-5652,5658-5659,5671-5672,5676-5677,5691-5693,5706-5707,5720-5722,5735-5736,5749-5754,5776-5782,5803-5804,5911-5912,6013-6014,6211,6214-6216,6219-6227,6235-6236,6239-6246,6248-6253,6256-6266,6283-6284,6286-6287,6290-6292,6297-6299,6305-6306,6309,6311,6316-6317,6320,6322,6343,6371,6373,6376,6379-6380,6383-6390,6392-6394,6397-6399,6402-6406,6409,6413-6415,6432-6433,6435-6436,6439-6440,6443,6450-6451,6455,6460,6462,6465,6469-6470,6473-6477,6479-6481,6484,6487-6488,6490-6494,6496-6505,6516-6518,6533-6535,6576-6581,6596-6604,6619,6622-6623,6644-6645,6649,6651,6657,6660-6661,6664-6666,6668-6671,6673-6677,6679-6681,6684-6693,6695,6698-6702,6704-6709,6711-6715,6718,6720,6726,6730-6733,6735-6736,6864-6866,6904-6908,6942-6944,6948-6952,7104-7108,7346-7350,7391-7393,7395-7397,7400-7402,7417-7421,7454-7459,7466-7471,7484-7488,7492-7497,7518-7523,7540,7609-7626,7632-7633,7662-7665,7669-7672,7676-7679,7771-7774,7779-7782,7784-7785,7815-7817,7831-7845,7848-7851,7857-7877,7890,7981-7987,8047-8054,8059-8063,8200-8205,8275-8280,8360-8365,8375-8377,8395-8400,8403-8406,8417-8425,8427-8428,8430-8432,8515,8648,8712,8765-8768,8789-8791,8795-8797,8801-8806,8811-8814,8823-8831,9009-9011,9017-9020,9023-9025,9148-9149,9154-9155,9160-9161,9210-9211,9246-9247,9286-9287,9363-9368,9373-9376,9379-9381,9398-9403,9408-9411,9420-9422,9434-9435,9543-9546,9634-9638
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarState.swift
+  s_838ede91b21776::t_a05c0a3bc232da 96
+desktop/macos/agent/src/protocol.ts
+  s_838ede91b21776::t_a05c0a3bc232da 6-26,28,31-37,50-58,65,69,87,99,105,115-126,131,136,143,147,155,158,163,170,175,200-212,223-229
+desktop/macos/agent/src/legacy-permission-policy.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-59
+desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-226
+app/lib/l10n/app_localizations_sl.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9332-9335,9373-9383
+  s_838ede91b21776::t_07e667d63dc66d 9384
+desktop/macos/pi-mono-extension/index.ts
+  s_838ede91b21776::t_a05c0a3bc232da 31,35-39,429,433,437-438,458,464,466-473,479-481,484-489,493-494,502,509-515,519-564,566-570,585-586,588-593,599,601,605-647,703,707,711,766-822,1097
+desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 4378
+app/lib/l10n/app_mr.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
+  s_838ede91b21776::t_a05c0a3bc232da 24,47-50,59-61,127,179-180,185-196,199,227,343-351,370,408,607,612,617,623,626-629,634,669,674-699
+backend/models/announcement.py
+  s_838ede91b21776::t_a05c0a3bc232da 162-169,172
+backend/routers/sync.py
+  s_838ede91b21776::t_a05c0a3bc232da 30,89-90,148,170,219,286,296-297,358-360,1251-1252,1262-1263,1899-1901
+desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+  s_838ede91b21776::t_a05c0a3bc232da 34,113,125,206,282,382,419-425,429-432,495,504
+backend/tests/unit/test_parakeet_gpu_worker.py
+  s_838ede91b21776::t_a05c0a3bc232da 37-45
+docs/doc/developer/agent-control-plane.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 1-1388
+backend/tests/unit/test_parakeet_batch_engine.py
+  s_838ede91b21776::t_a05c0a3bc232da 34-36
+desktop/macos/Backend-Rust/src/routes/health.rs
+  s_838ede91b21776::t_a05c0a3bc232da 3,13-18,22,27-29
+.github/workflows/lint.yml
+  s_838ede91b21776::t_a05c0a3bc232da 55-70,141-146,162,164-167
+app/lib/services/sockets/pure_polling.dart
+  s_838ede91b21776::t_423b131798deff 157-158
+backend/diarizer/Dockerfile
+  s_838ede91b21776::t_a05c0a3bc232da 14,17
+desktop/macos/tests/test-settings-seed.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-88
+docs/doc/developer/backend/backend_deepdive.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 288
+desktop/macos/agent/tests/control-tools.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-1394
+desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
+  s_838ede91b21776::t_a05c0a3bc232da 106,111-116,373-379,434,436-438,481,483-488,518-519,614-617,622,629-633,643,653,660-666,669,672-689,691,698-711
+desktop/macos/agent/src/runtime/adapter-registry.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-73
+app/lib/pages/apps/providers/add_app_provider.dart
+  s_838ede91b21776::t_a05c0a3bc232da 621-622,626-633,637
+desktop/macos/Desktop/Sources/AppBuild.swift
+  s_838ede91b21776::t_a05c0a3bc232da 5,23-29
+  s_838ede91b21776::t_8f2919d0800a56 30
+desktop/macos/Desktop/Tests/FloatingBarVoiceResponseSettingsTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 44,57
+backend/tests/container/voxconverse/eguui.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-15
+desktop/macos/Desktop/Sources/Chat/AgentRuntimeStatusStore.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-237
+desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  s_838ede91b21776::t_a05c0a3bc232da 212-213,248,257
+app/lib/l10n/app_fr.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3095-3100
+backend/database/mem_db.py
+  s_838ede91b21776::t_a05c0a3bc232da 6
+desktop/macos/Desktop/Sources/Chat/AgentArtifactProjection.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-224
+app/lib/l10n/app_localizations_en.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9300-9303,9341-9351
+  s_838ede91b21776::t_7e2f34aec5d388 9352
+desktop/macos/tests/test-app-config.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-56
+.github/workflows/parakeet_gpu_tests.yml
+  s_838ede91b21776::t_a05c0a3bc232da 1-324
+.github/scripts/check-desktop-prod-promotion-policy.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-123
+desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  s_838ede91b21776::t_a05c0a3bc232da 69
+backend/tests/unit/test_conversation_events_bounds.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-233
+backend/routers/imports.py
+  s_838ede91b21776::t_a05c0a3bc232da 6,23-24,106-125,155-160,163
+backend/utils/retrieval/tools/gmail_tools.py
+  s_838ede91b21776::t_a05c0a3bc232da 6-8,14,18,35,72,92,164,205-207,217-219,240,256
+desktop/macos/Backend-Rust/src/config.rs
+  s_838ede91b21776::t_a05c0a3bc232da 76-81,150-152,182-184,195-198
+app/lib/l10n/app_localizations_sr.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9317-9320,9358-9368
+  s_838ede91b21776::t_fca21d0e6204a0 9369
+backend/testing/e2e/test_listen_stt.py
+  s_838ede91b21776::t_a05c0a3bc232da 4,8-14,91,99-102,107,132,143-170
+backend/tests/container/test_parakeet_der_gate.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-323
+desktop/macos/Desktop/Sources/ProactiveAssistants/Core/GeminiClient.swift
+  s_838ede91b21776::t_a05c0a3bc232da 227-247,266-272
+backend/utils/llm/fair_use_classifier.py
+  s_838ede91b21776::t_a05c0a3bc232da 16,215
+app/lib/l10n/app_en.arb
+  s_838ede91b21776::t_a05c0a3bc232da 11013-11016,11046-11061
+docs/doc/hardware/DevKit2.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 63
+backend/utils/retrieval/tools/google_utils.py
+  s_838ede91b21776::t_a05c0a3bc232da 12,92-94,96
+desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  s_838ede91b21776::t_a05c0a3bc232da 49-50,63,78,242-254,256-260,291,331,353-356,561-567,884-895,897-913,923-924,926-945,947-961,963-966,968-1001,1003-1017,1020-1022,1024,1026-1029,1031,1033,1038-1042,1103,1106,1131-1133,1135,1173-1175,1204,1209-1223
+desktop/macos/agent/src/adapters/pi-mono.ts
+  s_838ede91b21776::t_a05c0a3bc232da 10-12,14-15,17-23,25-28,38-41,54-65,182-183,186,216-219,223,229,231,302-303,306,344,370,385,392-393,413-414,416-418,420-421,423,429,501-504,533-536,564,586,614,631,650-678,861-876,924-1046
+  s_838ede91b21776::t_00c3f8eefc8e99 1047
+app/lib/l10n/app_et.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/tests/unit/test_rate_limit_json_failopen.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-107
+app/lib/l10n/app_hi.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3061-3066
+backend/tests/unit/utils/test_listen_pusher_session.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-253
+app/lib/l10n/app_localizations_bn.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9312-9315,9353-9363
+  s_838ede91b21776::t_c2c0740034e382 9364
+app/lib/l10n/app_pl.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3095-3100
+backend/tests/container/voxconverse/gkiki.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-9
+backend/tests/unit/test_request_validation_contracts.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-147
+desktop/macos/Desktop/Tests/AgentRuntimeStatusStoreTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-123
+desktop/macos/Desktop/Sources/ConnectorBrandIcon.swift
+  s_838ede91b21776::t_a05c0a3bc232da 17-18,37,59-62,94-97
+desktop/macos/agent/src/runtime/tool-correlation.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-30
+app/lib/l10n/app_localizations_pt.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9310-9313,9351-9361
+  s_838ede91b21776::t_9da90672a21f69 9362
+docs/onboarding/omi-glass.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 26
+app/lib/l10n/app_localizations_de.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9381-9384,9423-9433
+  s_838ede91b21776::t_86fff540e933e6 9434
+app/lib/l10n/app_localizations_bs.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9330-9333,9371-9381
+  s_838ede91b21776::t_5b0ec3b06fe80b 9382
+backend/tests/unit/test_pusher_conversation_retry.py
+  s_838ede91b21776::t_a05c0a3bc232da 22-27,97,112,126,138,151,171,280,303
+docs/doc/hardware/omiGlass.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 84
+app/test/providers/capture_provider_test.dart
+  s_838ede91b21776::t_a05c0a3bc232da 2,6,11-12,66-68,73-80,89-92,578-958
+backend/tests/container/voxconverse/tnjoh.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-11
+backend/utils/llm/chat.py
+  s_838ede91b21776::t_a05c0a3bc232da 19,30-50,1114-1119,1220-1225
+desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-45
+backend/tests/unit/test_retrieval_semantics.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-145
+app/lib/l10n/app_localizations_vi.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9303-9306,9344-9354
+  s_838ede91b21776::t_f9aad144f926ca 9355
+desktop/macos/Desktop/Sources/OnboardingWelcomeStepView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 54-64
+app/lib/l10n/app_ms.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+backend/utils/retrieval/rag.py
+  s_838ede91b21776::t_a05c0a3bc232da 2,53-55,57-58,66-79
+desktop/macos/e2e/SKILL.md
+  s_838ede91b21776::t_a05c0a3bc232da 15-16,21,23,56
+app/lib/l10n/app_localizations_hi.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9282-9285,9323-9333
+  s_838ede91b21776::t_8fa382dc334dc4 9334
+backend/tests/unit/test_memories_pagination_clamp.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-133
+desktop/macos/e2e/harness.md
+  s_838ede91b21776::t_a05c0a3bc232da 1-84
+sdks/python-cli/omi_cli/output.py
+  s_838ede91b21776::t_a05c0a3bc232da 23,136,143-146,151-153
+desktop/macos/agent/tests/codemagic-pi-mono-extension-ci.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-49
+backend/tests/unit/test_integration_notification_validation.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-104
+backend/tests/container/test_parakeet_contract.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-171
+desktop/macos/Desktop/Tests/TranscriptSpeakerAssignmentTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 142
+desktop/macos/agent/tests/tool-relay.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 13,24-32,35,51,55,58,70-72,75-77,82-96,149-150,154,177-178,184,209
+desktop/macos/Desktop/Tests/ChatDiscoverabilityTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 132-139,162,169-199,214-297
+  s_838ede91b21776::t_8eb132c712cf4e 298
+backend/utils/conversations/process_conversation.py
+  s_838ede91b21776::t_a05c0a3bc232da 46,52,713-746,783-797
+  s_838ede91b21776::t_b08edade65c1f5 798
+desktop/macos/pi-mono-extension/package.json
+  s_838ede91b21776::t_a05c0a3bc232da 11-14
+desktop/macos/Desktop/Sources/OnboardingView.swift
+  s_838ede91b21776::t_a05c0a3bc232da 186-188,426,434,480-482,508-515
+backend/tests/container/librispeech/manifest.json
+  s_838ede91b21776::t_a05c0a3bc232da 1-20
+app/lib/l10n/app_localizations_pl.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9330-9333,9371-9381
+  s_838ede91b21776::t_6f139d040b7db9 9382
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  s_838ede91b21776::t_a05c0a3bc232da 11-19,30,36-38,68,337-338,353,390,393,395,398-399,402,408-411,418-419,441,455,465-467,469,484,509,567,572,575-581,596-610,619-629,631-654,671,681,685-687,691,713-722,742,756-762,807-820,831-837,913,949-963,997-1001,1231-1331,1503-1522,1605-1622,1626-1628,1639,1651-1652,1656-1664,1667-1694,1720,2049-2059,2068-2070,2072-2084,2086-2098,2200,2207,2257-2347,2440-2445
+backend/scripts/scan_async_blockers.py
+  s_838ede91b21776::t_a05c0a3bc232da 73,76-78,86-87
+desktop/macos/agent/src/runtime/sqlite-store.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-934
+web/admin/app/api/omi/stats/subscription-trends/route.ts
+  s_838ede91b21776::t_a05c0a3bc232da 5,7-16,43,49,102,155-174,176-178
+backend/scripts/sync-python-deps.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-40
+backend/utils/other/endpoints.py
+  s_838ede91b21776::t_a05c0a3bc232da 246-254
+backend/tests/unit/test_lazy_conversation_processing.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-139
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_838ede91b21776::t_a05c0a3bc232da 378-383
+backend/pusher/pylock.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-913
+backend/agent-proxy/pylock.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-342
+desktop/macos/Backend-Rust/rust-toolchain.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-3
+backend/tests/unit/test_auth_redirect_uri.py
+  s_838ede91b21776::t_a05c0a3bc232da 75-76,93-101
+  s_838ede91b21776::t_235f1505b20552 102
+backend/utils/request_validation.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-126
+desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
+  s_838ede91b21776::t_a05c0a3bc232da 346,416-417
+  s_838ede91b21776::t_7f3fd2e292875a 418-419
+backend/utils/conversations/location.py
+  s_838ede91b21776::t_a05c0a3bc232da 35,88
+desktop/macos/scripts/agent-logic-harness.sh
+  s_838ede91b21776::t_a05c0a3bc232da 1-238
+app/lib/l10n/app_hu.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3156-3161
+app/lib/models/stt_result.dart
+  s_838ede91b21776::t_423b131798deff 152-153
+  s_838ede91b21776::t_a05c0a3bc232da 29-64,70,72-98,150-151,154-172,193-221
+desktop/macos/Desktop/Tests/RealtimeHubCloseClassifierTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-42
+desktop/macos/Desktop/Sources/AppState.swift
+  s_838ede91b21776::t_a05c0a3bc232da 68-91,149-152,161-163,476-481,525-538,999-1005,1714-1716,1738-1753,2141,2164-2178,2188-2191,2195,2197-2200,2270-2274,2276-2296,2443-2446,2448-2452,2531-2546,2670-2684,2692-2702,2704-2723,2726-2728,2730-2734,2736-2743,2745-2747,2754,2771-2780,2785-2795,2797,2835-2840,2848-2850,2863-2873,2877,2894-2895,2898-2910,2935-2944,2951,2953-2956,3060-3063,3082,3084-3087,3267-3299,3307-3312
+  s_838ede91b21776::t_685aab7a9487fa 3313
+app/lib/l10n/app_localizations_ms.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9328-9331,9369-9379
+  s_838ede91b21776::t_e7556f103d2ce1 9380
+backend/database/action_items.py
+  s_838ede91b21776::t_a05c0a3bc232da 1,4,18-38,454,458-460,462,464,471,478-480,482-487,489,660,662,664-667,669,671,678,684-689,691
+app/lib/l10n/app_localizations_bg.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9340-9343,9381-9391
+  s_838ede91b21776::t_55ef726d04e20d 9392
+desktop/macos/agent/src/runtime/kernel.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-2538
+desktop/macos/agent/src/runtime/worker-pool.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-332
+backend/routers/folders.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-2,5,21-22,94-99,106-110,132-142
+app/lib/l10n/app_localizations_te.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9354-9357,9395-9405
+  s_838ede91b21776::t_839a227baf01b3 9406
+app/lib/l10n/app_uk.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+.github/scripts/plan-desktop-release.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-165
+desktop/macos/agent/tests/adapter-binding.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-94
+desktop/macos/agent/tests/kernel-fakes.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-214
+desktop/macos/Desktop/Tests/AgentRuntimeProcessTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-177
+backend/models/app.py
+  s_838ede91b21776::t_a05c0a3bc232da 2,9-10,112-116
+app/lib/l10n/app_localizations_id.dart
+  s_838ede91b21776::t_a05c0a3bc232da 9313-9316,9354-9364
+  s_838ede91b21776::t_859336c19dca1e 9365
+backend/tests/unit/test_clean_sweep_migrations.py
+  s_838ede91b21776::t_a05c0a3bc232da 46,49,285,293
+desktop/macos/Desktop/Sources/TranscriptionRetryService.swift
+  s_838ede91b21776::t_a05c0a3bc232da 217-243
+desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-1031
+desktop/macos/agent/src/adapters/interface.ts
+  s_838ede91b21776::t_a05c0a3bc232da 7,131-436
+backend/routers/mcp.py
+  s_838ede91b21776::t_a05c0a3bc232da 16-17,113-115,121-144,150,152-154,342-350,384-390
+desktop/macos/agent/src/runtime/compatibility-facade.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-685
+desktop/macos/Desktop/Tests/TranscriptionSessionRecordTests.swift
+  s_838ede91b21776::t_a05c0a3bc232da 54-83
+backend/tests/container/voxconverse/gyomp.rttm
+  s_838ede91b21776::t_a05c0a3bc232da 1-8
+desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
+  s_838ede91b21776::t_a05c0a3bc232da 13-14,16
+app/lib/l10n/app_te.arb
+  s_838ede91b21776::t_a05c0a3bc232da 10638-10643
+backend/test.sh
+  s_838ede91b21776::t_a05c0a3bc232da 10,17,35,39-40,45,52,55,59,64,66,69,71,73,77,79,84,90,105,109,111,119,130,132,151,154,157,159,161,164,166,179,188,208,210,215
+.github/scripts/mark-desktop-release-stable.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-73
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift
+  s_838ede91b21776::t_a05c0a3bc232da 1-79
+docs/quickstart.mdx
+  s_838ede91b21776::t_a05c0a3bc232da 2-5
+desktop/macos/agent/src/omi-tools-stdio.ts
+  s_838ede91b21776::t_a05c0a3bc232da 15,39-85,149-153,156-162,295,950-958
+  s_838ede91b21776::t_150c40bd71bdc6 959-960
+sdks/python-cli/tests/test_local.py
+  s_838ede91b21776::t_a05c0a3bc232da 10,14,17,337-446
+backend/tests/unit/test_oauth_callback_uid_guard.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-124
+desktop/macos/agent/tests/legacy-permission-policy.test.ts
+  s_838ede91b21776::t_a05c0a3bc232da 1-37
+sdks/python-cli/omi_cli/main.py
+  s_838ede91b21776::t_a05c0a3bc232da 41-42,140-141,174,195-196,201-204
+app/lib/l10n/app_vi.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3065-3070
+backend/pylock.macos-x86_64.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-1631
+backend/tests/unit/test_async_realtime_integrations_offload.py
+  s_838ede91b21776::t_a05c0a3bc232da 1-345
+backend/pylock.runtime.toml
+  s_838ede91b21776::t_a05c0a3bc232da 1-1557
+web/admin/package.json
+  s_838ede91b21776::t_a05c0a3bc232da 66
+app/lib/l10n/app_nl.arb
+  s_838ede91b21776::t_a05c0a3bc232da 3060-3065
+desktop/macos/e2e/flows/harness-smoke.yaml
+  s_838ede91b21776::t_a05c0a3bc232da 1-62
+backend/routers/users.py
+  s_838ede91b21776::t_a05c0a3bc232da 309-311,1354-1356,1506-1508
+desktop/macos/pi-mono-extension/package-lock.json
+  s_838ede91b21776::t_9762149dcb26a0 1-2679
+scripts/dev-instance.sh
+  s_838ede91b21776::t_6d3eba5c692545 1-52
+scripts/pre-commit
+  s_838ede91b21776::t_e1a065bff12d2d 115-119
+web/admin/package-lock.json
+  s_838ede91b21776::t_838abdd50a82fa 65,5863,6917-6920,10119-10122,10129-10130,10159,10205-10209,10214-10215,10224-10225,10236-10241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "fd8902a995cebcd77db87316f9cc2073a60a69c4",
+  "prompts": {},
+  "sessions": {
+    "s_838ede91b21776": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019edbef-bac9-7702-bb66-f7c1129ca6f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Drake Thomsen <drake@draket.xyz>"
+    }
+  }
+}
