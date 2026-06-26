@@ -23,16 +23,17 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
-    let source = try realtimeHubControllerSource()
+    let source = try agentControlServiceSource()
 
-    XCTAssertTrue(source.contains("return \"- \\(title): \\(status)\""))
-    XCTAssertTrue(source.contains("Follow-up handles for tool calls only; do not read aloud"))
-    XCTAssertTrue(source.contains("sessionId=\\($0)"))
-    XCTAssertTrue(source.contains("runId=\\($0)"))
+    XCTAssertTrue(source.contains("Use agentRef values internally for follow-up tool calls; do not say them aloud"))
+    XCTAssertTrue(source.contains("Use artifactRef values internally for follow-up tool calls; do not say them aloud"))
+    XCTAssertTrue(source.contains("agent_\\(index + 1)"))
+    XCTAssertTrue(source.contains("artifact_\\(index + 1)"))
+    XCTAssertFalse(source.contains("sessionId=\\($0)"))
+    XCTAssertFalse(source.contains("runId=\\($0)"))
     XCTAssertFalse(source.contains("artifactId=\\(artifactId)"))
-    XCTAssertTrue(source.contains("Canonical run is \\(status)"))
-    XCTAssertTrue(source.contains("dispatchAttempted"))
-    XCTAssertTrue(source.contains("adapterAcknowledged"))
+    XCTAssertTrue(source.contains("The selected canonical run is \\(status)"))
+    XCTAssertTrue(source.contains("Agent control failed. Try listing the agents again"))
     XCTAssertTrue(source.contains("Artifact lifecycle is now \\(state)"))
   }
 
@@ -41,6 +42,14 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func agentControlServiceSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentControlService.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
