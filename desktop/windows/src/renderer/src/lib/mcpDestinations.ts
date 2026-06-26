@@ -1,4 +1,11 @@
-export type McpDestinationId = 'chatgpt' | 'claude' | 'claude-code' | 'codex' | 'agents'
+export type McpDestinationId =
+  | 'chatgpt'
+  | 'claude'
+  | 'claude-code'
+  | 'codex'
+  | 'openclaw'
+  | 'hermes'
+  | 'agents'
 
 export type McpSetup = {
   serverURL: string
@@ -174,6 +181,40 @@ args = ["-y", "mcp-remote", "${mcpServerURL}", "--header", "Authorization: Beare
       steps: [
         'Add the block below to ~/.codex/config.toml.',
         'Restart Codex to load Omi memories over MCP.'
+      ]
+    })
+  },
+  {
+    id: 'openclaw',
+    title: 'OpenClaw',
+    subtitle: 'Memory bank',
+    description: 'Wire Omi memory into OpenClaw so it searches your memories first.',
+    setup: (key) => ({
+      serverURL: mcpServerURL,
+      copyTitle: 'Copy memory bank',
+      copyText: `## OMI memory (search FIRST)
+- MCP: ${mcpServerURL}  (Authorization: Bearer ${key})
+Before any task, search Omi memory for context; save durable new facts.`,
+      steps: [
+        "Paste the block below into your OpenClaw MEMORY.md. Add it to the file; don't replace your existing memory bank.",
+        'OpenClaw should search Omi memory first on every task and save durable new facts back to its normal memory path.'
+      ]
+    })
+  },
+  {
+    id: 'hermes',
+    title: 'Hermes',
+    subtitle: 'Config block',
+    description: 'Add Omi Memory to Hermes as a hosted MCP memory source.',
+    setup: (key) => ({
+      serverURL: mcpServerURL,
+      copyTitle: 'Copy config',
+      copyText: `omi-memory:
+  command: npx
+  args: ["-y", "mcp-remote", "${mcpServerURL}", "--header", "Authorization: Bearer ${key}"]`,
+      steps: [
+        'Add the block below under mcp_servers: in ~/.hermes/config.yaml.',
+        'Restart Hermes so it reads your Omi memories over MCP and searches them first.'
       ]
     })
   },
