@@ -60,6 +60,13 @@ finally:
     sys.meta_path.remove(_finder)
     for _name in list(_finder._created):
         sys.modules.pop(_name, None)
+    # The imported service module itself was loaded against the MagicMock
+    # stubs (its globals hold MagicMock objects for users_db, stripe_utils,
+    # etc.). Pop it — along with its parent packages — so a later test that
+    # imports the real service reloads it with production dependencies
+    # instead of reusing this mock-backed copy.
+    for _svc_name in ('services.users.account_deletion', 'services.users', 'services'):
+        sys.modules.pop(_svc_name, None)
 
 
 def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(monkeypatch):
