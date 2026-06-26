@@ -81,6 +81,7 @@ const playwrightCli = join(
 );
 
 const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
+const waToolsStdioScript = join(__dirname, "wa-tools-stdio.js");
 
 // --- Helpers ---
 
@@ -625,6 +626,13 @@ function buildMcpServers(
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
+    });
+
+    servers.push({
+      name: "wa-tools",
+      command: process.execPath,
+      args: [waToolsStdioScript],
+      env: [...omiToolsEnv],
     });
   }
 
