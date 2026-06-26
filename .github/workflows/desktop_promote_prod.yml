@@ -50,17 +50,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
       - name: Validate release promotion request
         id: plan
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
@@ -401,6 +394,13 @@ jobs:
             echo "Failed to promote Firestore release $FIRESTORE_DOC_ID (HTTP $HTTP_CODE)" >&2
             exit 1
           fi
+
+      - name: Generate Omi Bot token for release mutations
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
       - name: Mark GitHub Release stable
         env:

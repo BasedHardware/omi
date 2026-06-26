@@ -21,6 +21,13 @@ def require(needle: str, text: str, message: str) -> None:
         fail(message)
 
 
+def require_order(text: str, first: str, second: str, message: str) -> None:
+    first_index = text.find(first)
+    second_index = text.find(second)
+    if first_index == -1 or second_index == -1 or first_index >= second_index:
+        fail(message)
+
+
 def workflow_triggers(text: str) -> list[str]:
     lines = text.splitlines()
     try:
@@ -74,6 +81,7 @@ def main() -> int:
     require("Deploy Desktop Backend to Production", text, "guard should cover the prod deploy workflow")
     require("Verify prod backend release identity", text, "prod deploy must verify the backend release identity before release metadata changes")
     require("Promote Firestore release stable", text, "workflow must promote the Rust appcast Firestore release")
+    require("Generate Omi Bot token for release mutations", text, "workflow must mint the GitHub App token immediately before late release/tag mutations")
     require("mark-desktop-release-stable.py", text, "workflow must mark the release stable only after backend verification")
     require("Clear desktop update cache", text, "workflow should clear Python desktop update cache after stable metadata changes")
     require("Advance prod-tracking tag", text, "workflow must move the prod tracking tag after promotion succeeds")
@@ -83,6 +91,18 @@ def main() -> int:
     require("OMI_DESKTOP_RELEASE_SHA=", text, "prod deploy must stamp release sha into Cloud Run")
     require("OMI_DESKTOP_RELEASE_CHANNEL=stable", text, "prod deploy must stamp stable channel into Cloud Run")
     require("RELEASE_SECRET=RELEASE_SECRET:latest", text, "prod deploy must expose release secret for Firestore promotion")
+    require_order(
+        text,
+        "Promote Firestore release stable",
+        "Generate Omi Bot token for release mutations",
+        "GitHub App token should be generated after the long deploy path to avoid expiration before tag advancement",
+    )
+    require_order(
+        text,
+        "Generate Omi Bot token for release mutations",
+        "Advance prod-tracking tag",
+        "GitHub App token must be available for the final prod-tracking tag mutation",
+    )
 
     if "gh release list" in text:
         fail("prod promotion must not scan old releases; deploy only the event/manual target")
