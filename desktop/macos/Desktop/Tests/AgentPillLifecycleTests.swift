@@ -42,7 +42,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testNotchResponseGlowStaysBehindDockSurface() throws {
     let source = try floatingControlBarViewSource()
 
-    guard let dockRange = source.range(of: "NotchDockShape(bottomRadius: 22)") else {
+    guard let dockRange = source.range(of: "NotchDockShape(bottomRadius:") else {
       return XCTFail("Expected expanded notch dock surface")
     }
     guard let glowRange = source.range(of: "NotchResponseGlowView(") else {
@@ -59,19 +59,27 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("agentSwitcherPinned || agentSwitcherHovering"))
+    XCTAssertTrue(source.contains("state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering"))
+    XCTAssertTrue(source.contains("state.showingAIConversation || shouldShowAgentSwitcher"))
     XCTAssertTrue(source.contains("static let maxAgents = 8"))
+    XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
+    XCTAssertTrue(source.contains("static let ringRadiusRatio: CGFloat = 0.33"))
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentFanoutRow("))
     XCTAssertTrue(source.contains("HStack(spacing: NotchAgentStackMetrics.fanoutSpacing)"))
+    XCTAssertTrue(source.contains("Spacer(minLength: 0)"))
+    XCTAssertTrue(source.contains(".frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("group?.color ?? Color.white.opacity(0.94)"))
+    XCTAssertTrue(source.contains(".fanoutSlotAnimation(index: index, didFanOut: didFanOut)"))
     XCTAssertTrue(source.contains("state.activeAgentChatPillID = pill.id"))
     XCTAssertFalse(source.contains("NotchAgentSwitcherMenu("))
     XCTAssertFalse(source.contains("Text(\"Subagents\")"))
     XCTAssertFalse(source.contains(".fill(Color.white.opacity(0.025))"))
+    XCTAssertTrue(windowSource.contains("static let notchAgentFanoutRowHeight: CGFloat = 32"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
+    XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
   }
 
   func testFloatingBarExplicitSpawnCompletesParentTurn() throws {

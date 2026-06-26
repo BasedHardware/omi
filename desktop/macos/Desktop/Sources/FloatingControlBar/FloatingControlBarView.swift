@@ -42,7 +42,7 @@ struct FloatingControlBarView: View {
         notchHiddenCenterWidth + notchSideWidth * 2
     }
     private var notchChromeLayoutWidth: CGFloat {
-        state.showingAIConversation
+        state.showingAIConversation || shouldShowAgentSwitcher
             ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
             : notchChromeWidth
     }
@@ -75,12 +75,24 @@ struct FloatingControlBarView: View {
     }
 
     private var shouldShowAgentSwitcher: Bool {
-        !agentPills.pills.isEmpty && (agentSwitcherPinned || agentSwitcherHovering)
+        !agentPills.pills.isEmpty && (state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering)
     }
 
     private var notchModeBody: some View {
         VStack(spacing: 0) {
             notchChrome
+
+            if shouldShowAgentSwitcher {
+                NotchAgentFanoutRow(
+                    manager: agentPills,
+                    activePillID: state.activeAgentChatPillID,
+                    onSelect: openAgentInChat
+                )
+                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchAgentFanoutRowHeight)
+                .onHover { setAgentSwitcherHovering($0) }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(10)
+            }
 
             if state.showingAIConversation {
                 conversationView
@@ -105,8 +117,8 @@ struct FloatingControlBarView: View {
                     )
                 }
 
-                if state.showingAIConversation || state.currentNotification != nil {
-                    NotchDockShape(bottomRadius: 22)
+                if state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher {
+                    NotchDockShape(bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18)
                         .fill(Color.black)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -114,19 +126,6 @@ struct FloatingControlBarView: View {
                         .fill(Color.black)
                         .frame(height: notchChromeHeight)
                 }
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            if shouldShowAgentSwitcher {
-                NotchAgentFanoutRow(
-                    manager: agentPills,
-                    activePillID: state.activeAgentChatPillID,
-                    onSelect: openAgentInChat
-                )
-                .offset(x: 12, y: notchChromeHeight + 4)
-                .onHover { setAgentSwitcherHovering($0) }
-                .transition(.opacity.combined(with: .scale(scale: 0.92, anchor: .topLeading)))
-                .zIndex(10)
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -195,9 +194,8 @@ struct FloatingControlBarView: View {
                 .frame(width: 58, height: 27)
             } else {
                 NotchAgentPillsRowView(manager: agentPills, barWindow: window)
-                    .frame(width: notchSideWidth - 12, height: notchChromeHeight, alignment: .leading)
-                    .padding(.leading, 6)
-                    .padding(.trailing, 6)
+                    .frame(width: notchSideWidth - 8, height: notchChromeHeight, alignment: .trailing)
+                    .padding(.trailing, 8)
                     .onHover { setAgentSwitcherHovering($0) }
                     .simultaneousGesture(
                         TapGesture().onEnded {
@@ -211,7 +209,7 @@ struct FloatingControlBarView: View {
                     }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
     }
 
     private var notchControlLobe: some View {
@@ -227,8 +225,8 @@ struct FloatingControlBarView: View {
             .buttonStyle(.plain)
             .help("Floating Bar Settings")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-        .padding(.trailing, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(.leading, 8)
     }
 
     private var notchChromeHeight: CGFloat {
@@ -910,42 +908,30 @@ private struct NotchResponseGlowView: View {
 private struct NotchOmiMark: View {
     var dotColors: [Color] = []
 
-    private struct Dot: Identifiable {
-        let id: Int
-        let x: CGFloat
-        let y: CGFloat
-        let radius: CGFloat
-    }
-
-    private static let viewBox = CGRect(x: 237.360, y: 237.338, width: 549.318, height: 549.322)
-    private static let dots: [Dot] = [
-        Dot(id: 0, x: 282.523, y: 511.982, radius: 45.163),
-        Dot(id: 1, x: 339.909, y: 339.890, radius: 45.107),
-        Dot(id: 2, x: 512.014, y: 282.495, radius: 45.156),
-        Dot(id: 3, x: 684.096, y: 339.880, radius: 45.103),
-        Dot(id: 4, x: 741.511, y: 512.003, radius: 45.167),
-        Dot(id: 5, x: 684.096, y: 684.094, radius: 45.103),
-        Dot(id: 6, x: 511.981, y: 741.500, radius: 45.160),
-        Dot(id: 7, x: 339.902, y: 684.107, radius: 45.103)
-    ]
+    private static let dotCount = 8
+    private static let dotDiameterRatio: CGFloat = 0.18
+    private static let ringRadiusRatio: CGFloat = 0.33
 
     var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
-            let origin = CGPoint(
-                x: (geometry.size.width - size) / 2,
-                y: (geometry.size.height - size) / 2
+            let center = CGPoint(
+                x: geometry.size.width / 2,
+                y: geometry.size.height / 2
             )
+            let dotDiameter = size * Self.dotDiameterRatio
+            let ringRadius = size * Self.ringRadiusRatio
 
             ZStack {
-                ForEach(Self.dots) { dot in
-                    let x = origin.x + ((dot.x - Self.viewBox.minX) / Self.viewBox.width) * size
-                    let y = origin.y + ((dot.y - Self.viewBox.minY) / Self.viewBox.height) * size
-                    let radius = (dot.radius / Self.viewBox.width) * size
+                ForEach(0..<Self.dotCount, id: \.self) { index in
+                    let angle = Double(index) / Double(Self.dotCount) * Double.pi * 2 - Double.pi
                     Circle()
-                        .fill(dotColors.indices.contains(dot.id) ? dotColors[dot.id] : Color.white.opacity(0.96))
-                        .frame(width: radius * 2, height: radius * 2)
-                        .position(x: x, y: y)
+                        .fill(dotColors.indices.contains(index) ? dotColors[index] : Color.white.opacity(0.96))
+                        .frame(width: dotDiameter, height: dotDiameter)
+                        .position(
+                            x: center.x + CGFloat(cos(angle)) * ringRadius,
+                            y: center.y + CGFloat(sin(angle)) * ringRadius
+                        )
                 }
             }
         }
@@ -1245,7 +1231,7 @@ private struct NotchAgentPillsRowView: View {
         let _ = pillStatusChangeToken
         NotchAgentOmiIndicatorView(pills: stackedPills)
             .frame(width: 21, height: 21)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
             .accessibilityLabel("Subagent status")
             .accessibilityHint("Hover to fan out subagents, click to keep them open")
             .onAppear { syncPillStatusObservers() }
@@ -1270,8 +1256,8 @@ private struct NotchAgentPillsRowView: View {
 @MainActor
 private enum NotchAgentStackMetrics {
     static let maxAgents = 8
-    static let fanoutOrbSize: CGFloat = 13
-    static let fanoutSpacing: CGFloat = 5
+    static let fanoutOrbSize: CGFloat = 11
+    static let fanoutSpacing: CGFloat = 0
 
     static func sortedPills(_ pills: [AgentPill]) -> [AgentPill] {
         let newestIndex = Dictionary(uniqueKeysWithValues: pills.reversed().enumerated().map { ($0.element.id, $0.offset) })
@@ -1306,6 +1292,7 @@ private struct NotchAgentFanoutRow: View {
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
+    @State private var didFanOut = false
 
     private var sortedPills: [AgentPill] {
         let _ = pillStatusChangeToken
@@ -1315,6 +1302,10 @@ private struct NotchAgentFanoutRow: View {
     var body: some View {
         HStack(spacing: NotchAgentStackMetrics.fanoutSpacing) {
             ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
+                if index > 0 {
+                    Spacer(minLength: 0)
+                }
+
                 if sortedPills.indices.contains(index) {
                     let pill = sortedPills[index]
                     Button {
@@ -1325,6 +1316,7 @@ private struct NotchAgentFanoutRow: View {
                             isActive: pill.id == activePillID,
                             isOccupied: true
                         )
+                        .fanoutSlotAnimation(index: index, didFanOut: didFanOut)
                     }
                     .buttonStyle(.plain)
                     .help(pill.title)
@@ -1334,19 +1326,26 @@ private struct NotchAgentFanoutRow: View {
                         isActive: false,
                         isOccupied: false
                     )
+                    .fanoutSlotAnimation(index: index, didFanOut: didFanOut)
                     .allowsHitTesting(false)
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 38)
+        .frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)
         .background(Color.black)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.8)
-        )
-        .onAppear { syncPillStatusObservers() }
+        .onAppear {
+            syncPillStatusObservers()
+            didFanOut = false
+            DispatchQueue.main.async {
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.74)) {
+                    didFanOut = true
+                }
+            }
+        }
+        .onDisappear {
+            didFanOut = false
+        }
         .onChange(of: manager.pills.map(\.id)) { _, _ in
             syncPillStatusObservers()
         }
@@ -1362,6 +1361,23 @@ private struct NotchAgentFanoutRow: View {
                     pillStatusChangeToken &+= 1
                 }
         }
+    }
+}
+
+private extension View {
+    func fanoutSlotAnimation(index: Int, didFanOut: Bool) -> some View {
+        self
+            .offset(
+                x: didFanOut ? 0 : -CGFloat(index + 1) * 9,
+                y: didFanOut ? 0 : -13
+            )
+            .scaleEffect(didFanOut ? 1 : 0.72)
+            .opacity(didFanOut ? 1 : 0.2)
+            .animation(
+                .spring(response: 0.18, dampingFraction: 0.74)
+                    .delay(Double(index) * 0.018),
+                value: didFanOut
+            )
     }
 }
 

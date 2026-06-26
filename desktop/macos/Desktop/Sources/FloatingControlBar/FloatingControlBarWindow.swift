@@ -33,8 +33,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static var notchHiddenCenterWidth: CGFloat {
         fallbackNotchHiddenCenterWidth + notchHiddenCenterSafetyPadding
     }
-    static let notchCompactSideWidth: CGFloat = 48
-    static let notchActiveSideWidth: CGFloat = 76
+    static let notchCompactSideWidth: CGFloat = 36
+    static let notchActiveSideWidth: CGFloat = 62
     static let notchChromeHeight: CGFloat = 34
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
@@ -42,6 +42,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchInputPanelMinimumContentHeight: CGFloat = 40
     static let notchInputPanelHeight: CGFloat =
         notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
+    static let notchAgentFanoutRowHeight: CGFloat = 32
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
     static let notchCompactSize = NSSize(
@@ -161,7 +162,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
     private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
-    private var inputPanelHeight: CGFloat { notchModeEnabled ? Self.notchInputPanelHeight : 120 }
+    private var notchAgentFanoutHeightIfNeeded: CGFloat {
+        notchModeEnabled && !AgentPillsManager.shared.pills.isEmpty ? Self.notchAgentFanoutRowHeight : 0
+    }
+    private var inputPanelHeight: CGFloat {
+        notchModeEnabled ? Self.notchInputPanelHeight + notchAgentFanoutHeightIfNeeded : 120
+    }
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -427,7 +433,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     ) -> NSSize {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let panelHeight = usesNotchIsland
+                ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
+                : 120
             let hasBakedInGlow = usesNotchIsland && (frameIncludesVoiceGlow ?? previousVoiceResponseGlowActive)
             // Only subtract a glow inset that is already baked into the current
             // frame. On the first voice-response frame the glow does not exist
@@ -461,7 +469,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let panelHeight = usesNotchIsland
+                ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
+                : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -530,10 +540,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .sink { [weak self] _ in
                 guard let self,
                       self.notchModeEnabled,
-                      !self.state.showingAIConversation,
                       self.state.currentNotification == nil
                 else { return }
-                self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+
+                let targetSize = self.state.showingAIConversation
+                    ? self.currentSurfaceSizeForCurrentScreen()
+                    : self.collapsedBarSize
+                self.resizeAnchored(
+                    to: targetSize,
+                    makeResizable: self.styleMask.contains(.resizable),
+                    animated: true,
+                    anchorTop: true
+                )
             }
     }
 
@@ -1090,8 +1108,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
-    /// Gives the notch-mode subagent switcher enough vertical room when the user
-    /// opens it from the compact island. Chat-open mode owns its own height.
+    /// Gives the notch-mode subagent switcher enough room to fan out horizontally
+    /// from the compact island without opening the full chat surface.
     func resizeForAgentSwitcher(visible: Bool) {
         guard notchModeEnabled,
               !state.showingAIConversation,
@@ -1102,7 +1120,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         else { return }
 
         let targetSize = visible
-            ? NSSize(width: collapsedBarSize.width, height: Self.notchChromeHeight + 38)
+            ? NSSize(width: max(collapsedBarSize.width, Self.notchExpandedWidth), height: Self.notchChromeHeight + Self.notchAgentFanoutRowHeight)
             : collapsedBarSize
         resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
     }
