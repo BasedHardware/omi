@@ -71,12 +71,17 @@ class UserSpeechSamplesProvider extends BaseProvider {
         isPlaying = true;
       }
     } else {
-      _audioPlayer.stop();
-      await _audioPlayer.setUrl(samplesUrl[index]);
-      currentPlayingIndex = index;
-      isPlaying = true;
-      notifyListeners();
-      await _audioPlayer.play();
+      try {
+        await _audioPlayer.stop();
+        await _audioPlayer.setUrl(samplesUrl[index]);
+        currentPlayingIndex = index;
+        isPlaying = true;
+        notifyListeners();
+        await _audioPlayer.play();
+      } catch (e) {
+        currentPlayingIndex = null;
+        isPlaying = false;
+      }
     }
     notifyListeners();
   }
