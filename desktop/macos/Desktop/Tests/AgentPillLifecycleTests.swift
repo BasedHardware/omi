@@ -37,6 +37,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
+    XCTAssertTrue(source.contains("barWindow?.resizeToResponseHeightPublic(animated: true)"))
   }
 
   func testNotchResponseGlowStaysBehindDockSurface() throws {
@@ -154,12 +155,15 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testResizeGripKeepsNotchCentered() throws {
     let source = try resizeHandleSource()
+    let viewSource = try floatingControlBarViewSource()
 
     XCTAssertTrue(source.contains("initialWindowFrame.width + deltaX * 2"))
     XCTAssertTrue(source.contains("let newOriginX = initialWindowFrame.midX - newWidth / 2"))
     XCTAssertTrue(source.contains("NSRect(x: newOriginX, y: newOriginY, width: newWidth, height: newHeight)"))
     XCTAssertTrue(source.contains("finishUserResponseResize()"))
     XCTAssertFalse(source.contains("NSRect(x: initialWindowFrame.minX, y: newOriginY"))
+    XCTAssertTrue(viewSource.contains(".padding(.trailing, notchSurfaceHorizontalInset + 4)"))
+    XCTAssertTrue(viewSource.contains(".padding(.bottom, notchSurfaceBottomInset + 4)"))
   }
 
   func testResponseResizePreservesUserSurfaceSize() throws {

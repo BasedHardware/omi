@@ -23,6 +23,9 @@ struct FloatingControlBarView: View {
     @State private var agentSwitcherHovering = false
     @State private var agentSwitcherPinned = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
+    /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
+    /// continuously-animated value so the same dots morph both ways (and reverse exactly).
+    @State private var notchSwitcherProgress: CGFloat = 0
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
     private var notchHiddenCenterWidth: CGFloat {
         FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
@@ -88,17 +91,12 @@ struct FloatingControlBarView: View {
             notchChrome
 
             if shouldShowAgentSwitcher {
-                NotchAgentFanoutRow(
-                    manager: agentPills,
-                    activePillID: state.activeAgentChatPillID,
-                    notchHiddenCenterWidth: notchHiddenCenterWidth,
-                    notchSideWidth: notchSideWidth,
-                    onSelect: openAgentInChat
-                )
-                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchAgentFanoutRowHeight)
-                .onHover { setAgentSwitcherHovering($0) }
-                .transition(.identity)
-                .zIndex(10)
+                // Reserves the row's height; the dots themselves are drawn by the
+                // morph overlay so they can travel up into the logo's notch.
+                Color.clear
+                    .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchAgentFanoutRowHeight)
+                    .onHover { setAgentSwitcherHovering($0) }
+                    .transition(.identity)
             }
 
             if state.showingAIConversation {
@@ -116,6 +114,21 @@ struct FloatingControlBarView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .top) {
+            if !agentPills.pills.isEmpty {
+                NotchAgentMorphField(
+                    manager: agentPills,
+                    activePillID: state.activeAgentChatPillID,
+                    progress: notchSwitcherProgress,
+                    notchHiddenCenterWidth: notchHiddenCenterWidth,
+                    notchSideWidth: notchSideWidth,
+                    onSelect: openAgentInChat
+                )
+                .frame(height: FloatingControlBarWindow.notchChromeHeight + FloatingControlBarWindow.notchAgentFanoutRowHeight)
+                .allowsHitTesting(notchSwitcherProgress > 0.6)
+            }
+        }
+        .onAppear { notchSwitcherProgress = shouldShowAgentSwitcher ? 1 : 0 }
         .padding(.horizontal, notchSurfaceHorizontalInset)
         .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
@@ -152,7 +165,8 @@ struct FloatingControlBarView: View {
                         .frame(width: 14, height: 14)
                         .allowsHitTesting(false)
                 }
-                .padding(4)
+                .padding(.trailing, notchSurfaceHorizontalInset + 4)
+                .padding(.bottom, notchSurfaceBottomInset + 4)
             }
         }
         .scaleEffect(
@@ -166,6 +180,14 @@ struct FloatingControlBarView: View {
         .animation(.spring(response: 0.24, dampingFraction: 0.88), value: shouldShowAgentSwitcher)
         .onChange(of: shouldShowAgentSwitcher) { _, visible in
             (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
+            // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
+            // dots are back in the notch before the surface shrinks (no stranded dots).
+            let morphAnim: Animation = visible
+                ? .spring(response: 0.5, dampingFraction: 0.82)
+                : .spring(response: 0.26, dampingFraction: 0.9)
+            withAnimation(morphAnim) {
+                notchSwitcherProgress = visible ? 1 : 0
+            }
         }
         .onChange(of: agentPills.pills.isEmpty) { _, isEmpty in
             if isEmpty {
@@ -203,8 +225,10 @@ struct FloatingControlBarView: View {
                     .frame(width: 38, height: 27)
             } else {
                 NotchAgentPillsRowView(manager: agentPills, barWindow: window)
-                    .opacity(shouldShowAgentSwitcher ? 0 : 1)
-                    .scaleEffect(shouldShowAgentSwitcher ? 0.72 : 1, anchor: .center)
+                    // Once there are pills the morph field owns the ring (and unfurls it),
+                    // so the lobe logo only renders for the empty Ask-AI state — never
+                    // both at once. The hidden view still handles hover/tap to expand.
+                    .opacity(agentPills.pills.isEmpty ? 1 : 0)
                     .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
                     .padding(.trailing, 2)
                     .onHover { setAgentSwitcherHovering($0) }
@@ -400,7 +424,8 @@ struct FloatingControlBarView: View {
     private func openAgentInChat(_ pill: AgentPill) {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
         agentPills.markViewed(pillID: pill.id)
-        (window as? FloatingControlBarWindow)?.makeKeyAndOrderFront(nil)
+        let barWindow = window as? FloatingControlBarWindow
+        barWindow?.makeKeyAndOrderFront(nil)
         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
             state.activeAgentChatPillID = pill.id
             state.showingAIConversation = true
@@ -408,6 +433,7 @@ struct FloatingControlBarView: View {
             state.isAILoading = false
             state.aiInputText = ""
         }
+        barWindow?.resizeToResponseHeightPublic(animated: true)
         state.markConversationActivity()
     }
 
@@ -1334,6 +1360,10 @@ private enum NotchAgentStackMetrics {
             height: CGFloat(sin(angle)) * ringRadius
         )
     }
+
+    /// Scale that shrinks a fan-out orb down to a logo-ring dot, so the same dot view
+    /// reads as the small logo dot at progress 0 and the full orb at progress 1.
+    static let logoDotScale: CGFloat = (logoFrameSize * logoDotDiameterRatio) / fanoutOrbSize
 }
 
 private struct NotchAgentOmiIndicatorView: View {
@@ -1350,15 +1380,19 @@ private struct NotchAgentOmiIndicatorView: View {
     }
 }
 
-private struct NotchAgentFanoutRow: View {
+/// One field of dots that morphs between the logo ring (collapsed) and the fanned
+/// row (expanded). The *same* dots travel the whole way — driven by `progress` — so
+/// the logo literally unfurls into the row and furls back, with object permanence.
+/// No separate logo view fading out while a different row fades in.
+private struct NotchAgentMorphField: View {
     @ObservedObject var manager: AgentPillsManager
     let activePillID: UUID?
+    let progress: CGFloat
     let notchHiddenCenterWidth: CGFloat
     let notchSideWidth: CGFloat
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
-    @State private var didFanOut = false
 
     private var sortedPills: [AgentPill] {
         let _ = pillStatusChangeToken
@@ -1367,85 +1401,49 @@ private struct NotchAgentFanoutRow: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let rowWidth = geometry.size.width
-            let rowHeight = max(geometry.size.height, FloatingControlBarWindow.notchAgentFanoutRowHeight)
-            let logoCenterX = NotchAgentStackMetrics.logoCenterX(
-                rowWidth: rowWidth,
-                notchHiddenCenterWidth: notchHiddenCenterWidth,
-                notchSideWidth: notchSideWidth
+            let width = geometry.size.width
+            let chromeHeight = FloatingControlBarWindow.notchChromeHeight
+            let rowHeight = FloatingControlBarWindow.notchAgentFanoutRowHeight
+            let logoCenter = CGPoint(
+                x: NotchAgentStackMetrics.logoCenterX(
+                    rowWidth: width,
+                    notchHiddenCenterWidth: notchHiddenCenterWidth,
+                    notchSideWidth: notchSideWidth
+                ),
+                y: chromeHeight / 2
             )
-            let logoCenterY = -(FloatingControlBarWindow.notchChromeHeight / 2)
+            let pills = sortedPills
 
             ZStack {
                 ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
-                    let targetX = NotchAgentStackMetrics.fanoutX(for: index, width: rowWidth)
-                    let targetY = rowHeight / 2
-                    let sourceOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
-                    let sourceX = logoCenterX + sourceOffset.width
-                    let sourceY = logoCenterY + sourceOffset.height
-                    if sortedPills.indices.contains(index) {
-                        let pill = sortedPills[index]
-                        Button {
-                            onSelect(pill)
-                        } label: {
-                            NotchAgentFanoutDot(
-                                group: NotchAgentStatusGroup(status: pill.status),
-                                isActive: pill.id == activePillID,
-                                isOccupied: true
-                            )
-                            .fanoutSlotAnimation(
-                                index: index,
-                                didFanOut: didFanOut,
-                                initialOffset: CGSize(
-                                    width: sourceX - targetX,
-                                    height: sourceY - targetY
-                                )
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .help(pill.title)
-                        .position(x: targetX, y: targetY)
-                    } else {
-                        NotchAgentFanoutDot(
-                            group: nil,
-                            isActive: false,
-                            isOccupied: false
-                        )
-                        .fanoutSlotAnimation(
-                            index: index,
-                            didFanOut: didFanOut,
-                            initialOffset: CGSize(
-                                width: sourceX - targetX,
-                                height: sourceY - targetY
-                            )
-                        )
-                        .allowsHitTesting(false)
-                        .position(x: targetX, y: targetY)
-                    }
+                    let ringOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
+                    let ringPoint = CGPoint(x: logoCenter.x + ringOffset.width, y: logoCenter.y + ringOffset.height)
+                    let rowPoint = CGPoint(x: NotchAgentStackMetrics.fanoutX(for: index, width: width), y: chromeHeight + rowHeight / 2)
+                    // The same dot lerps from its ring slot to its row slot. `progress`
+                    // is animated, so SwiftUI tweens `.position` continuously both ways.
+                    let dotPoint = CGPoint(
+                        x: ringPoint.x + (rowPoint.x - ringPoint.x) * progress,
+                        y: ringPoint.y + (rowPoint.y - ringPoint.y) * progress
+                    )
+                    let pill = pills.indices.contains(index) ? pills[index] : nil
+                    let group = pill.map { NotchAgentStatusGroup(status: $0.status) }
+
+                    NotchMorphDot(
+                        color: group?.color ?? Color.white.opacity(0.94),
+                        isOccupied: pill != nil,
+                        isActive: pill != nil && pill?.id == activePillID,
+                        progress: progress
+                    )
+                    .position(dotPoint)
+                    .allowsHitTesting(pill != nil && progress > 0.6)
+                    .onTapGesture { if let pill { onSelect(pill) } }
+                    .help(pill?.title ?? "")
                 }
             }
-            .frame(width: rowWidth, height: rowHeight)
+            .frame(width: width, height: geometry.size.height, alignment: .top)
         }
-        .frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)
-        .background {
-            NotchDockShape(bottomRadius: 18)
-                .fill(Color.black)
-        }
-        .onAppear {
-            syncPillStatusObservers()
-            didFanOut = false
-            DispatchQueue.main.async {
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.74)) {
-                    didFanOut = true
-                }
-            }
-        }
-        .onDisappear {
-            didFanOut = false
-        }
-        .onChange(of: manager.pills.map(\.id)) { _, _ in
-            syncPillStatusObservers()
-        }
+        .onAppear { syncPillStatusObservers() }
+        .onChange(of: manager.pills.map(\.id)) { _, _ in syncPillStatusObservers() }
     }
 
     private func syncPillStatusObservers() {
@@ -1461,41 +1459,30 @@ private struct NotchAgentFanoutRow: View {
     }
 }
 
-private extension View {
-    func fanoutSlotAnimation(index: Int, didFanOut: Bool, initialOffset: CGSize) -> some View {
-        self
-            .offset(
-                x: didFanOut ? 0 : initialOffset.width,
-                y: didFanOut ? 0 : initialOffset.height
-            )
-            .scaleEffect(didFanOut ? 1 : 0.34)
-            .opacity(didFanOut ? 1 : 0.96)
-            .animation(
-                .spring(response: 0.46, dampingFraction: 0.82)
-                    .delay(Double(index) * 0.022),
-                value: didFanOut
-            )
-    }
-}
-
-private struct NotchAgentFanoutDot: View {
-    let group: NotchAgentStatusGroup?
-    let isActive: Bool
+/// A single dot that looks like a logo-ring dot at progress 0 (small, no stroke)
+/// and a fanned status orb at progress 1 (full size, ringed).
+private struct NotchMorphDot: View {
+    let color: Color
     let isOccupied: Bool
+    let isActive: Bool
+    let progress: CGFloat
 
     var body: some View {
+        let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
         Circle()
-            .fill(group?.color ?? Color.white.opacity(0.94))
+            .fill(color)
             .frame(width: NotchAgentStackMetrics.fanoutOrbSize, height: NotchAgentStackMetrics.fanoutOrbSize)
             .overlay(
                 Circle()
-                    .strokeBorder(Color.white.opacity(isOccupied ? 0.42 : 0.82), lineWidth: isOccupied ? 0.7 : 0.9)
+                    .strokeBorder(Color.white.opacity(Double(isOccupied ? 0.42 : 0.82) * Double(progress)), lineWidth: 0.8)
             )
-            .shadow(color: (group?.color ?? .clear).opacity(isOccupied ? 0.72 : 0), radius: isActive ? 9 : 5)
+            .shadow(color: color.opacity(isOccupied ? 0.6 : 0), radius: isActive ? 9 : 5)
+            .scaleEffect(scale)
             .frame(width: 18, height: 22)
             .contentShape(Circle())
     }
 }
+
 
 private enum NotchAgentStatusGroup: String, Identifiable {
     case running
