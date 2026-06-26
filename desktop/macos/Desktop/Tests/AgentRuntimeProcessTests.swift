@@ -59,6 +59,29 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"), "acp")
   }
 
+  func testPiMonoAliasUsesCanonicalAdapterForAuthGuards() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("let preferredAdapterId = Self.adapterId(forHarnessMode: preferredHarnessMode)"))
+    XCTAssertTrue(processSource.contains(#"preferredAdapterId == "pi-mono""#))
+    XCTAssertFalse(processSource.contains(#"preferredHarnessMode == "piMono""#))
+
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == \"pi-mono\""))
+    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 

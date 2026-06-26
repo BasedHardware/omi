@@ -404,6 +404,7 @@ actor AgentRuntimeProcess {
 
   private func startProcess(preferredHarnessMode: String) async throws {
     guard !isRunning else { return }
+    let preferredAdapterId = Self.adapterId(forHarnessMode: preferredHarnessMode)
 
     readTask?.cancel()
     readTask = nil
@@ -443,7 +444,7 @@ actor AgentRuntimeProcess {
     let rustBase = await APIClient.shared.rustBackendURL
     if !rustBase.isEmpty {
       env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredHarnessMode == "piMono" {
+    } else if preferredAdapterId == "pi-mono" {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -460,7 +461,7 @@ actor AgentRuntimeProcess {
     let authService = await MainActor.run { AuthService.shared }
     if let token = try? await authService.getIdToken(), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredHarnessMode == "piMono" {
+    } else if preferredAdapterId == "pi-mono" {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     }

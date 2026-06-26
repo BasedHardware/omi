@@ -436,7 +436,8 @@ export class JsonlCompatibilityFacade {
     }
     const clientId = message.clientId ?? this.defaultClientId;
     const mode = message.mode ?? "act";
-    const requestedModel = message.model ?? this.defaultModel();
+    const requestedAdapterId = message.adapterId ?? this.defaultAdapterId;
+    const requestedModel = message.model ?? this.defaultModel(requestedAdapterId);
     const legacySessionKey = message.legacySessionKey ?? message.sessionKey ?? requestedModel;
     const hint = legacySessionKey ? this.warmupHints.get(legacySessionKey) : undefined;
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
@@ -452,8 +453,8 @@ export class JsonlCompatibilityFacade {
       externalRefId: message.externalRefId,
       legacyClientScope: legacySessionKey ? this.legacyClientScope(message) : undefined,
       legacySessionKey,
-      defaultAdapterId: message.adapterId ?? this.defaultAdapterId,
-      adapterId: message.adapterId ?? this.defaultAdapterId,
+      defaultAdapterId: requestedAdapterId,
+      adapterId: requestedAdapterId,
       clientId,
       requestId,
       prompt: message.prompt,
@@ -468,7 +469,7 @@ export class JsonlCompatibilityFacade {
         clientId,
         protocolVersion: message.protocolVersion,
         sessionId,
-        adapterId: message.adapterId ?? this.defaultAdapterId,
+        adapterId: requestedAdapterId,
       }),
       legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
@@ -671,9 +672,9 @@ export class JsonlCompatibilityFacade {
     return message?.legacyClientScope ?? "default";
   }
 
-  private defaultModel(): string | undefined {
-    if (this.defaultAdapterId === "pi-mono") return "omi-sonnet";
-    if (this.defaultAdapterId === "acp") return "claude-sonnet-4-6";
+  private defaultModel(adapterId = this.defaultAdapterId): string | undefined {
+    if (adapterId === "pi-mono") return "omi-sonnet";
+    if (adapterId === "acp") return "claude-sonnet-4-6";
     return undefined;
   }
 

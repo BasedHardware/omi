@@ -1181,6 +1181,35 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("does not apply the process default model to per-query local adapters", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const piMonoAdapter = new FakeRuntimeAdapter("pi-mono");
+    const openclawAdapter = new FakeRuntimeAdapter("openclaw");
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => piMonoAdapter, 1);
+    registry.register("openclaw", () => openclawAdapter, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "pi-mono",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await facade.handleQuery(v1Query({
+      id: "request-openclaw",
+      adapterId: "openclaw",
+      sessionKey: undefined,
+      model: undefined,
+    }));
+
+    expect(openclawAdapter.opened[0].model).toBeUndefined();
+    expect(openclawAdapter.executed[0].model).toBeUndefined();
+    expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("openclaw");
+    expect(store.getRow("SELECT adapter_id FROM adapter_bindings").adapter_id).toBe("openclaw");
+    store.close();
+  });
+
   it("suppresses pi-mono tool_use events while preserving correlated tool activity", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
     adapter.deferResult();

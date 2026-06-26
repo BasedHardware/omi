@@ -54,6 +54,10 @@ actor AgentBridge {
     self.runtime = runtime
   }
 
+  private var isPiMonoHarness: Bool {
+    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == "pi-mono"
+  }
+
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?
@@ -70,7 +74,7 @@ actor AgentBridge {
     try await runtime.registerClient(clientId: clientId, harnessMode: harnessMode)
     registered = true
 
-    if harnessMode == "piMono", tokenRefreshTask == nil {
+    if isPiMonoHarness, tokenRefreshTask == nil {
       tokenRefreshTask = Task { [weak self] in
         while !Task.isCancelled {
           try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
@@ -234,7 +238,7 @@ actor AgentBridge {
   }
 
   func refreshAuthToken() async {
-    guard harnessMode == "piMono" else { return }
+    guard isPiMonoHarness else { return }
     let authService = await MainActor.run { AuthService.shared }
     let token: String
     do {
