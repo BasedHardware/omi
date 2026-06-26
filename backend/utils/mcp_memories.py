@@ -9,11 +9,15 @@ from utils.memory.default_read_rollout import (
     DefaultReadRolloutDecision,
     MemoryReadDecision,
     build_default_read_rollout_observability,
-    disabled_default_read_rollout_decision,
     read_default_read_rollout,
 )
+from utils.memory.default_read_surface import (
+    DefaultReadSearchResult,
+    fetch_default_read_list,
+    fetch_default_read_vector,
+    rollout_decision_from_legacy_args,
+)
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
 ACTIVITY_TAGS = {
     'activity',
@@ -90,6 +94,27 @@ class McpMemoryListResult:
     @property
     def should_use_legacy_fallback(self) -> bool:
         return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
+
+
+def _mcp_search_result(result: DefaultReadSearchResult) -> McpMemorySearchResult:
+    return McpMemorySearchResult(
+        memories=result.items,
+        read_decision=result.read_decision,
+        fallback_reason=result.fallback_reason,
+    )
+
+
+def _mcp_list_result(result: DefaultReadSearchResult) -> McpMemoryListResult:
+    return McpMemoryListResult(
+        memories=result.items,
+        read_decision=result.read_decision,
+        fallback_reason=result.fallback_reason,
+    )
+
+
+def _attach_mcp_vector_score(memory: dict, item: dict, scores_by_memory_id: dict[str, float]) -> dict:
+    memory['relevance_score'] = round(float(scores_by_memory_id.get(item['memory_id'], 0)), 4)
+    return memory
 
 
 def _format_memory_mcp_default_memory_item(item: dict, policy: MemoryAccessPolicy) -> dict:
@@ -424,62 +449,38 @@ def list_default_mcp_memories(
     USE_LEGACY_SAFE decision. Archive remains unavailable by default.
     """
 
-    if rollout_decision is None:
-        if rollout_capabilities is None:
-            rollout_decision = disabled_default_read_rollout_decision(
-                uid=uid,
-                source_path=f'users/{uid}/memory_control/state',
-                consumer='mcp',
-                reason='missing_rollout_state',
-            )
-        else:
-            rollout_decision = DefaultReadRolloutDecision(
-                uid=uid,
-                source_path=f'users/{uid}/memory_control/state',
-                consumer='mcp',
-                rollout_capabilities=rollout_capabilities,
-                app_has_default_memory_grant=app_has_default_memory_grant,
-                archive_capability=False,
-            )
-
-    if rollout_decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        return McpMemoryListResult(
-            memories=[],
-            read_decision=rollout_decision.read_decision,
-            fallback_reason=rollout_decision.fallback_reason,
-        )
-
-    bounded_limit = max(1, min(limit, 500))
-    bounded_offset = max(0, offset)
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.mcp,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_product_memory_search(
+    decision = rollout_decision_from_legacy_args(
         uid=uid,
-        query='',
-        db_client=db_client,
-        policy=policy,
-        now=now,
-        limit=bounded_limit,
-        offset=bounded_offset,
+        consumer='mcp',
+        rollout_decision=rollout_decision,
+        rollout_capabilities=rollout_capabilities,
+        app_has_default_memory_grant=app_has_default_memory_grant,
     )
+
     normalized_categories = {str(category) for category in categories or [] if str(category)}
-    formatted_memories = []
-    for item in response['items']:
-        formatted = _format_memory_mcp_default_memory_item(item, policy)
-        if normalized_categories and formatted['category'] not in normalized_categories:
-            continue
-        if reviewed is not None and formatted['reviewed'] != reviewed:
-            continue
-        if manually_added is not None and formatted['manually_added'] != manually_added:
-            continue
-        formatted_memories.append(formatted)
-    return McpMemoryListResult(
-        memories=formatted_memories,
-        read_decision=MemoryReadDecision.USE_MEMORY,
+
+    def _mcp_list_filter(memory: dict) -> bool:
+        if normalized_categories and memory['category'] not in normalized_categories:
+            return False
+        if reviewed is not None and memory['reviewed'] != reviewed:
+            return False
+        if manually_added is not None and memory['manually_added'] != manually_added:
+            return False
+        return True
+
+    return _mcp_list_result(
+        fetch_default_read_list(
+            uid=uid,
+            query='',
+            limit=limit,
+            offset=offset,
+            db_client=db_client,
+            decision=decision,
+            consumer=MemoryConsumer.mcp,
+            now=now,
+            item_filter=_mcp_list_filter,
+            item_formatter=_format_memory_mcp_default_memory_item,
+        )
     )
 
 
@@ -505,79 +506,24 @@ def search_default_mcp_memories_vector(
     separate and capability-gated.
     """
 
-    if rollout_decision is None:
-        if rollout_capabilities is None:
-            rollout_decision = disabled_default_read_rollout_decision(
-                uid=uid,
-                source_path=f'users/{uid}/memory_control/state',
-                consumer='mcp',
-                reason='missing_rollout_state',
-            )
-        else:
-            rollout_decision = DefaultReadRolloutDecision(
-                uid=uid,
-                source_path=f'users/{uid}/memory_control/state',
-                consumer='mcp',
-                rollout_capabilities=rollout_capabilities,
-                app_has_default_memory_grant=app_has_default_memory_grant,
-                archive_capability=False,
-            )
-
-    if rollout_decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        return McpMemorySearchResult(
-            memories=[],
-            read_decision=rollout_decision.read_decision,
-            fallback_reason=rollout_decision.fallback_reason,
-        )
-
-    bounded_limit = max(1, min(limit, 20))
-    projection_commit_id = required_projection_commit_id or rollout_decision.vector_projection_commit_id
-    if not projection_commit_id:
-        return McpMemorySearchResult(
-            memories=[],
-            read_decision=MemoryReadDecision.DENY_MEMORY,
-            fallback_reason='missing_vector_projection_commit_id',
-        )
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.mcp,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_vector_memory_search(
+    decision = rollout_decision_from_legacy_args(
         uid=uid,
-        query=query,
-        db_client=db_client,
-        policy=policy,
-        vector_query=vector_query,
-        limit=bounded_limit,
-        required_projection_commit_id=projection_commit_id,
-        required_account_generation=rollout_decision.rollout_capabilities.account_generation,
+        consumer='mcp',
+        rollout_decision=rollout_decision,
+        rollout_capabilities=rollout_capabilities,
+        app_has_default_memory_grant=app_has_default_memory_grant,
     )
-
-    scores_by_memory_id = response.get('scores_by_memory_id', {})
-    formatted = []
-    for item in response['items']:
-        memory_id = item['memory_id']
-        formatted.append(
-            {
-                'id': memory_id,
-                'content': item.get('content') or '',
-                'category': 'other',
-                'category_source': 'mcp_memory_compatibility_default_no_source_category',
-                'reviewed': False,
-                'reviewed_source': 'mcp_memory_compatibility_default_no_review_state',
-                'manually_added': False,
-                'manually_added_source': 'mcp_memory_compatibility_default_no_manual_state',
-                'relevance_score': round(float(scores_by_memory_id.get(memory_id, 0)), 4),
-                'memory_default_memory': True,
-                'archive_default_visible': False,
-                'policy': {
-                    'consumer': policy.consumer.value,
-                    'app_has_default_memory_grant': policy.app_has_default_memory_grant,
-                    'archive_capability': policy.archive_capability,
-                    'raw_provenance_capability': policy.raw_provenance_capability,
-                },
-            }
+    return _mcp_search_result(
+        fetch_default_read_vector(
+            uid=uid,
+            query=query,
+            limit=limit,
+            db_client=db_client,
+            decision=decision,
+            consumer=MemoryConsumer.mcp,
+            vector_query=vector_query,
+            required_projection_commit_id=required_projection_commit_id,
+            item_formatter=_format_memory_mcp_default_memory_item,
+            score_attacher=_attach_mcp_vector_score,
         )
-    return McpMemorySearchResult(memories=formatted, read_decision=MemoryReadDecision.USE_MEMORY)
+    )
