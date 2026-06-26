@@ -73,12 +73,21 @@ describe("protocol v2 compatibility", () => {
     expect(requestIdFor(message)).toBe("control-request");
   });
 
-  it("guards direct app control v2 messages with explicit correlation ids", () => {
+  it("keeps signed direct-control owner registration out of legacy control_tool dispatch", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+    const legacyStart = source.indexOf('case "control_tool"');
+    const directStart = source.indexOf('case "direct_control_tool"');
+    const legacyBlock = source.slice(legacyStart, directStart);
+    const directBlock = source.slice(directStart);
 
+    expect(legacyStart).toBeGreaterThanOrEqual(0);
+    expect(directStart).toBeGreaterThan(legacyStart);
     expect(source).toContain("protocol v2 direct control requires clientId");
     expect(source).toContain("protocol v2 direct control requires requestId");
-    expect(source).toContain("const requestId = control.protocolVersion === 2 ? control.requestId.trim() : requestIdFor(control)");
+    expect(source).toContain("const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control)");
+    expect(legacyBlock).not.toContain("registerSignedDirectControlOwner");
+    expect(directBlock).toContain("registerSignedDirectControlOwner");
+    expect(directBlock).toContain("releaseDirectControlOwner");
   });
 });
