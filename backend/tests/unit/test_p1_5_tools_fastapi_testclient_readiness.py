@@ -7,7 +7,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / 'backend' / 'scripts' / 'p1_5_tools_fastapi_testclient_readiness.py'
 TICKET_DOC = REPO_ROOT / 'docs' / 'epics' / 'memory_implementation_tickets.md'
-ORACLE_DOC = REPO_ROOT / 'docs' / 'epics' / 'archive' / 'memory_t20_oracle_milestone_review.md'
+EVIDENCE_MARKERS_DOC = REPO_ROOT / 'docs' / 'operational' / 'memory_readiness_evidence_markers.md'
 TEST_SH = REPO_ROOT / 'backend' / 'test.sh'
 
 
@@ -119,10 +119,10 @@ def test_tools_fastapi_testclient_readiness_pins_exact_dependency_and_install_bl
 def test_tools_fastapi_testclient_readiness_registered_and_documented():
     test_sh = TEST_SH.read_text()
     ticket_doc = TICKET_DOC.read_text()
-    oracle_doc = ORACLE_DOC.read_text()
+    evidence_markers_doc = EVIDENCE_MARKERS_DOC.read_text()
 
     assert 'test_p1_5_tools_fastapi_testclient_readiness.py' in test_sh
     assert 'p1_5_tools_fastapi_testclient_readiness.py' in ticket_doc
-    assert 'p1_5_tools_fastapi_testclient_readiness.py' in oracle_doc
+    assert 'p1_5_tools_fastapi_testclient_readiness.py' in evidence_markers_doc
     assert 'FastAPI `TestClient` production-dependency proof remains BLOCKED/NOT_RUN' in ticket_doc
-    assert 'FastAPI `TestClient` production-dependency proof remains BLOCKED/NOT_RUN' in oracle_doc
+    assert 'FastAPI `TestClient` production-dependency proof remains BLOCKED/NOT_RUN' in evidence_markers_doc
