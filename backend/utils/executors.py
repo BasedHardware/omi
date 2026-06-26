@@ -108,15 +108,23 @@ def get_executor_metrics() -> list:
     return metrics
 
 
-async def log_executor_health(interval_seconds: int = 60, utilization_threshold_pct: float = 70.0):
-    """Periodically log pool metrics when any pool exceeds the utilization threshold."""
+async def log_executor_health(
+    interval_seconds: int = 60,
+    utilization_threshold_pct: float = 70.0,
+    queue_depth_threshold: int = 100,
+):
+    """Periodically log pool metrics when any pool exceeds a health threshold."""
     while True:
         await asyncio.sleep(interval_seconds)
         try:
             metrics = get_executor_metrics()
-            saturated = [p for p in metrics if p['utilization_pct'] > utilization_threshold_pct]
-            if saturated:
-                logger.warning('executor_pool_health: %s', saturated)
+            unhealthy = [
+                p
+                for p in metrics
+                if p['utilization_pct'] > utilization_threshold_pct or p['queue_depth'] > queue_depth_threshold
+            ]
+            if unhealthy:
+                logger.warning('executor_pool_health: %s', unhealthy)
         except Exception:
             pass
 
