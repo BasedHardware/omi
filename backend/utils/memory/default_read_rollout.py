@@ -313,7 +313,6 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
     decision: DefaultReadRolloutDecision,
     *,
     operation: str,
-    allow_write_convergence: bool = False,
     write_convergence_policy: WriteConvergencePolicy | None = None,
 ) -> LegacyMemoryWriteGuardDecision:
     """Guard legacy external memory writes while default memory reads are enabled.
@@ -357,8 +356,6 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
     convergence_reason = None
     if write_convergence_policy is not None:
         convergence_reason = write_convergence_policy.reason
-    elif allow_write_convergence:
-        convergence_reason = 'legacy_boolean_convergence_override_ignored'
     return LegacyMemoryWriteGuardDecision(
         allowed=False,
         status_code=409,
@@ -371,6 +368,23 @@ def assert_legacy_memory_write_allowed_for_default_read_decision(
             'source_path': decision.source_path,
             'convergence_reason': convergence_reason,
         },
+    )
+
+
+def guard_legacy_memory_write(
+    uid: str,
+    db_client,
+    *,
+    consumer: str,
+    operation: str,
+) -> LegacyMemoryWriteGuardDecision:
+    """Read rollout state and evaluate legacy write guard for external memory mutations."""
+
+    rollout = read_default_read_rollout(uid=uid, db_client=db_client, consumer=consumer)
+    return assert_legacy_memory_write_allowed_for_default_read_decision(
+        rollout,
+        operation=operation,
+        write_convergence_policy=read_write_convergence_gate(db_client=db_client),
     )
 
 
@@ -561,16 +575,12 @@ def read_rollout_state_doc(*, uid: str, db_client):
     return source_path, data, None
 
 
-def _read_default_rollout_state_doc(*, uid: str, db_client):
-    return read_rollout_state_doc(uid=uid, db_client=db_client)
-
-
 def read_default_read_rollout_decisions(
     *, uid: str, db_client, consumers: Iterable[str] = DEFAULT_READ_OBSERVABILITY_CONSUMERS
 ) -> dict[str, DefaultReadRolloutDecision]:
     """Read one rollout state doc and derive per-consumer default-read decisions."""
 
-    source_path, data, read_error = _read_default_rollout_state_doc(uid=uid, db_client=db_client)
+    source_path, data, read_error = read_rollout_state_doc(uid=uid, db_client=db_client)
     decisions = {}
     for consumer in consumers:
         if read_error is not None:
