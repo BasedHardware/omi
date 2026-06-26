@@ -77,7 +77,9 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
 
 
 @pytest.fixture(autouse=True)
