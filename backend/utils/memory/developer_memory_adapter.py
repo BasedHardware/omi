@@ -12,11 +12,14 @@ from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
     DefaultReadRolloutDecision,
     MemoryReadDecision,
-    disabled_default_read_rollout_decision,
-    read_default_read_rollout,
 )
-from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_vector_memory_search
+from utils.memory.default_read_surface import (
+    DefaultReadSearchResult,
+    fetch_default_read_list,
+    fetch_default_read_vector,
+    parse_default_read_datetime,
+    rollout_decision_from_legacy_args,
+)
 
 
 @dataclass(frozen=True)
@@ -30,12 +33,12 @@ class DeveloperMemorySearchResult:
         return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
 
 
-def _parse_datetime(value) -> datetime:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    raise ValueError('missing memory memory timestamp')
+def _developer_result(result: DefaultReadSearchResult) -> DeveloperMemorySearchResult:
+    return DeveloperMemorySearchResult(
+        memories=result.items,
+        read_decision=result.read_decision,
+        fallback_reason=result.fallback_reason,
+    )
 
 
 def _developer_category(item: dict) -> str:
@@ -46,7 +49,7 @@ def _developer_category(item: dict) -> str:
 
 
 def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
-    updated_at = _parse_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
+    updated_at = parse_default_read_datetime(item.get('date') or item.get('updated_at') or item.get('captured_at'))
     raw_category = item.get('category')
     category_source = (
         'memory_item.category'
@@ -85,30 +88,11 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
     }
 
 
-def _rollout_decision_from_legacy_args(
-    *,
-    uid: str,
-    rollout_decision: Optional[DefaultReadRolloutDecision],
-    rollout_capabilities: Optional[MemoryRolloutCapabilities],
-    app_has_default_memory_grant: bool,
-) -> DefaultReadRolloutDecision:
-    if rollout_decision is not None:
-        return rollout_decision
-    if rollout_capabilities is None:
-        return disabled_default_read_rollout_decision(
-            uid=uid,
-            source_path=f'users/{uid}/memory_control/state',
-            consumer='developer_api',
-            reason='missing_rollout_state',
-        )
-    return DefaultReadRolloutDecision(
-        uid=uid,
-        source_path=f'users/{uid}/memory_control/state',
-        consumer='developer_api',
-        rollout_capabilities=rollout_capabilities,
-        app_has_default_memory_grant=app_has_default_memory_grant,
-        archive_capability=False,
-    )
+def _attach_developer_vector_score(memory: dict, item: dict, scores_by_memory_id: dict[str, float]) -> dict:
+    memory_id = item['memory_id']
+    memory['relevance_score'] = round(float(scores_by_memory_id.get(memory_id, 0)), 4)
+    memory['vector_search'] = True
+    return memory
 
 
 def search_memory_default_developer_memories(
@@ -133,41 +117,33 @@ def search_memory_default_developer_memories(
     only after USE_MEMORY.
     """
 
-    decision = _rollout_decision_from_legacy_args(
+    decision = rollout_decision_from_legacy_args(
         uid=uid,
+        consumer='developer_api',
         rollout_decision=rollout_decision,
         rollout_capabilities=rollout_capabilities,
         app_has_default_memory_grant=app_has_default_memory_grant,
     )
-    if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        return DeveloperMemorySearchResult(
-            memories=[], read_decision=decision.read_decision, fallback_reason=decision.fallback_reason
-        )
 
-    bounded_limit = max(1, min(limit, 500))
-    bounded_offset = max(0, offset)
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.developer_api,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_product_memory_search(
-        uid=uid,
-        query=query,
-        db_client=db_client,
-        policy=policy,
-        now=now,
-        limit=bounded_limit,
-        offset=bounded_offset,
-    )
-    formatted = [_format_developer_memory(item, policy) for item in response['items']]
-    if categories:
+    def _category_filter(memory: dict) -> bool:
+        if not categories:
+            return True
         allowed_categories = {category for category in categories if category}
-        formatted = [memory for memory in formatted if memory.get('category') in allowed_categories]
-    return DeveloperMemorySearchResult(
-        memories=formatted,
-        read_decision=MemoryReadDecision.USE_MEMORY,
+        return memory.get('category') in allowed_categories
+
+    return _developer_result(
+        fetch_default_read_list(
+            uid=uid,
+            query=query,
+            limit=limit,
+            offset=offset,
+            db_client=db_client,
+            decision=decision,
+            consumer=MemoryConsumer.developer_api,
+            now=now,
+            item_filter=_category_filter if categories else None,
+            item_formatter=_format_developer_memory,
+        )
     )
 
 
@@ -192,51 +168,27 @@ def search_memory_default_developer_memories_vector(
     separate and capability-gated.
     """
 
-    decision = _rollout_decision_from_legacy_args(
+    decision = rollout_decision_from_legacy_args(
         uid=uid,
+        consumer='developer_api',
         rollout_decision=rollout_decision,
         rollout_capabilities=rollout_capabilities,
         app_has_default_memory_grant=app_has_default_memory_grant,
     )
-    if decision.read_decision != MemoryReadDecision.USE_MEMORY:
-        return DeveloperMemorySearchResult(
-            memories=[], read_decision=decision.read_decision, fallback_reason=decision.fallback_reason
+    return _developer_result(
+        fetch_default_read_vector(
+            uid=uid,
+            query=query,
+            limit=limit,
+            db_client=db_client,
+            decision=decision,
+            consumer=MemoryConsumer.developer_api,
+            vector_query=vector_query,
+            required_projection_commit_id=required_projection_commit_id,
+            item_formatter=_format_developer_memory,
+            score_attacher=_attach_developer_vector_score,
         )
-
-    bounded_limit = max(1, min(limit, 100))
-    projection_commit_id = required_projection_commit_id or decision.vector_projection_commit_id
-    if not projection_commit_id:
-        return DeveloperMemorySearchResult(
-            memories=[],
-            read_decision=MemoryReadDecision.DENY_MEMORY,
-            fallback_reason='missing_vector_projection_commit_id',
-        )
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.developer_api,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
     )
-    response = fetch_default_vector_memory_search(
-        uid=uid,
-        query=query,
-        db_client=db_client,
-        policy=policy,
-        vector_query=vector_query,
-        limit=bounded_limit,
-        required_projection_commit_id=projection_commit_id,
-        required_account_generation=decision.rollout_capabilities.account_generation,
-    )
-
-    scores_by_memory_id = response.get('scores_by_memory_id', {})
-    formatted = []
-    for item in response['items']:
-        memory = _format_developer_memory(item, policy)
-        memory_id = item['memory_id']
-        memory['relevance_score'] = round(float(scores_by_memory_id.get(memory_id, 0)), 4)
-        memory['vector_search'] = True
-        formatted.append(memory)
-    return DeveloperMemorySearchResult(memories=formatted, read_decision=MemoryReadDecision.USE_MEMORY)
 
 
 # Neutral symbol aliases (memory names remain valid via shim)
