@@ -163,6 +163,13 @@ export interface ControlRequestContextInput extends ControlRequestKeyInput {
   requireOwnerGuard?: boolean;
 }
 
+export interface SignedDirectControlOwnerInput {
+  requestKey?: string;
+  ownerGuard?: string;
+  ownerIdForRequest: (requestKey: string) => string | undefined;
+  registerOwner: (requestKey: string, ownerId: string) => boolean;
+}
+
 export interface ResolvedControlRequestContext {
   requestKey?: string;
   activeOwnerId: string;
@@ -178,6 +185,17 @@ export function controlRequestKey(input: ControlRequestKeyInput): string | undef
 
 export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
+}
+
+export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
+  const ownerGuard = input.ownerGuard?.trim();
+  if (!input.requestKey || !ownerGuard || ownerGuard === DEFAULT_LOCAL_OWNER_ID) {
+    return false;
+  }
+  if (input.ownerIdForRequest(input.requestKey)) {
+    return false;
+  }
+  return input.registerOwner(input.requestKey, ownerGuard);
 }
 
 export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {

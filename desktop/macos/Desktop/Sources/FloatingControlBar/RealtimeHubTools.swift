@@ -363,6 +363,7 @@ enum RealtimeHubTools {
             ],
             "surfaceKind": [
               "type": "string",
+              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent"],
               "description": "Optional surface filter such as main_chat, task_chat, realtime, or delegated_agent.",
             ],
             "limit": [
@@ -417,6 +418,11 @@ enum RealtimeHubTools {
               "description": "Optional artifact role filter.",
             ],
             "limit": ["type": "number", "description": "Maximum artifacts to return. Default 50."],
+          ],
+          "anyOf": [
+            ["required": ["sessionId"]],
+            ["required": ["runId"]],
+            ["required": ["attemptId"]],
           ],
         ],
       ],

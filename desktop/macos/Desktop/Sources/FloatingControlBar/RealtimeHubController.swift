@@ -737,45 +737,49 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let session = summary["session"] as? [String: Any] ?? [:]
       let latestRun = summary["latestRun"] as? [String: Any] ?? [:]
       let title = (session["title"] as? String) ?? (session["surfaceKind"] as? String) ?? "Untitled agent"
-      let sessionId = (session["omiSessionId"] as? String) ?? (session["sessionId"] as? String) ?? "unknown-session"
-      let runId = (latestRun["runId"] as? String) ?? "no-run"
       let status = (latestRun["status"] as? String) ?? (session["status"] as? String) ?? "unknown"
-      return "- \(title): \(status), sessionId=\(sessionId), runId=\(runId)"
+      return "- \(title): \(status)"
+    }.joined(separator: "\n")
+    let handles = sessions.prefix(8).compactMap { summary -> String? in
+      let session = summary["session"] as? [String: Any] ?? [:]
+      let latestRun = summary["latestRun"] as? [String: Any] ?? [:]
+      let title = (session["title"] as? String) ?? (session["surfaceKind"] as? String) ?? "Untitled agent"
+      let sessionId = (session["omiSessionId"] as? String) ?? (session["sessionId"] as? String)
+      let runId = latestRun["runId"] as? String
+      let parts = [sessionId.map { "sessionId=\($0)" }, runId.map { "runId=\($0)" }].compactMap { $0 }
+      return parts.isEmpty ? nil : "- \(title): \(parts.joined(separator: ", "))"
     }.joined(separator: "\n")
     let suffix = sessions.count > 8 ? "\nShowing 8 of \(sessions.count)." : ""
-    return "Canonical Omi agent sessions:\n\(rows)\(suffix)"
+    let handleNote = handles.isEmpty ? "" : "\nFollow-up handles for tool calls only; do not read aloud:\n\(handles)"
+    return "Canonical Omi agent sessions:\n\(rows)\(suffix)\(handleNote)"
   }
 
   private static func summarizeAgentRun(_ object: [String: Any]) -> String {
     let run = object["run"] as? [String: Any] ?? [:]
     let attempts = object["attempts"] as? [[String: Any]] ?? []
-    let runId = (run["runId"] as? String) ?? "unknown-run"
-    let sessionId = (run["omiSessionId"] as? String) ?? (run["sessionId"] as? String) ?? "unknown-session"
     let status = (run["status"] as? String) ?? "unknown"
     let mode = (run["mode"] as? String) ?? "unknown"
     let events = object["events"] as? [[String: Any]] ?? []
-    return "Canonical run \(runId) is \(status) in session \(sessionId), mode \(mode). Attempts: \(attempts.count). Events returned: \(events.count)."
+    return "Canonical run is \(status), mode \(mode). Attempts: \(attempts.count). Events returned: \(events.count)."
   }
 
   private static func summarizeAgentCancellation(_ object: [String: Any]) -> String {
     let cancellation = object["cancellation"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
-    let runId = (run["runId"] as? String) ?? "unknown-run"
     let status = (run["status"] as? String) ?? "unknown"
     let accepted = cancellation["accepted"] as? Bool
-    let dispatched = cancellation["dispatched"] as? Bool
-    let acknowledged = cancellation["acknowledged"] as? Bool
-    return "Cancel request for run \(runId): accepted=\(accepted?.description ?? "unknown"), dispatched=\(dispatched?.description ?? "unknown"), acknowledged=\(acknowledged?.description ?? "unknown"). Current status: \(status)."
+    let dispatched = cancellation["dispatchAttempted"] as? Bool
+    let acknowledged = cancellation["adapterAcknowledged"] as? Bool
+    return "Cancel request: accepted=\(accepted?.description ?? "unknown"), dispatchAttempted=\(dispatched?.description ?? "unknown"), adapterAcknowledged=\(acknowledged?.description ?? "unknown"). Current status: \(status)."
   }
 
   private static func summarizeAgentArtifacts(_ object: [String: Any]) -> String {
     let artifacts = object["artifacts"] as? [[String: Any]] ?? []
     if artifacts.isEmpty { return "No canonical agent artifacts found for that scope." }
     let rows = artifacts.prefix(8).map { artifact -> String in
-      let artifactId = (artifact["artifactId"] as? String) ?? "unknown-artifact"
       let role = (artifact["role"] as? String) ?? "unknown"
       let state = (artifact["lifecycleState"] as? String) ?? (artifact["state"] as? String) ?? "unknown"
-      return "- artifactId=\(artifactId), role=\(role), state=\(state)"
+      return "- role=\(role), state=\(state)"
     }.joined(separator: "\n")
     let suffix = artifacts.count > 8 ? "\nShowing 8 of \(artifacts.count)." : ""
     return "Canonical agent artifacts:\n\(rows)\(suffix)"
@@ -783,10 +787,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private static func summarizeArtifactLifecycle(_ object: [String: Any]) -> String {
     let artifact = object["artifact"] as? [String: Any] ?? [:]
-    let artifactId = (artifact["artifactId"] as? String) ?? "unknown-artifact"
     let state = (artifact["lifecycleState"] as? String) ?? (artifact["state"] as? String) ?? "unknown"
     let changed = object["changed"] as? Bool
-    return "Artifact \(artifactId) lifecycle is now \(state). Changed: \(changed?.description ?? "unknown")."
+    return "Artifact lifecycle is now \(state). Changed: \(changed?.description ?? "unknown")."
   }
 
   func hubDidFinishTurn() {

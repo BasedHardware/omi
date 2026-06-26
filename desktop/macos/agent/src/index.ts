@@ -60,6 +60,7 @@ import {
   handleAgentControlToolCall,
   isAgentControlToolName,
   legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
@@ -995,6 +996,12 @@ async function main(): Promise<void> {
         const control = msg as ControlToolRequestMessage;
         const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
         const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
+        let directControlOwnerInserted = registerSignedDirectControlOwner({
+          requestKey,
+          ownerGuard: control.ownerId,
+          ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+          registerOwner: registerActiveControlOwner,
+        });
         const activeOwnerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
         let controlContext;
         try {
@@ -1007,6 +1014,9 @@ async function main(): Promise<void> {
             clientId: control.clientId,
           });
         } catch (error) {
+          if (requestKey && directControlOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(requestKey);
+          }
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1029,6 +1039,12 @@ async function main(): Promise<void> {
         let controlRunOwnerKey: string | undefined;
         let preserveControlRunOwner = false;
         let controlRunOwnerInserted = false;
+        const releaseDirectControlOwner = () => {
+          if (requestKey && directControlOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(requestKey);
+            directControlOwnerInserted = false;
+          }
+        };
         try {
           controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
           const correlated = withControlRunCorrelation(control.name, controlInput, control.clientId);
@@ -1055,6 +1071,7 @@ async function main(): Promise<void> {
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
             facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
+          releaseDirectControlOwner();
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1082,6 +1099,7 @@ async function main(): Promise<void> {
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
             facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
+          releaseDirectControlOwner();
           send({
             type: "control_tool_result",
             protocolVersion: control.protocolVersion,
@@ -1123,6 +1141,7 @@ async function main(): Promise<void> {
                 if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
                   facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
                 }
+                releaseDirectControlOwner();
               }
             })()
           : (() => {
@@ -1132,6 +1151,7 @@ async function main(): Promise<void> {
               if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
                 facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
+              releaseDirectControlOwner();
               return JSON.stringify({
                 ok: false,
                 error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },

@@ -10,6 +10,7 @@ import {
   handleAgentControlToolCall,
   isAgentControlToolName,
   legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   type AgentControlToolContext,
   withDefaultOwnerGuard,
@@ -247,6 +248,24 @@ describe("agent control tools", () => {
         clientId: "swift-client",
       }),
     ).toThrow("missing active control owner");
+  });
+
+  it("registers signed direct control envelopes when no request owner is active", () => {
+    const ownersByRequest = new Map<string, string>();
+    const requestKey = controlRequestKey({ requestId: "realtime-request", clientId: "realtime-hub" });
+
+    const inserted = registerSignedDirectControlOwner({
+      requestKey,
+      ownerGuard: " signed-in-owner ",
+      ownerIdForRequest: (key) => ownersByRequest.get(key),
+      registerOwner: (key, ownerId) => {
+        ownersByRequest.set(key, ownerId);
+        return true;
+      },
+    });
+
+    expect(inserted).toBe(true);
+    expect(requestKey ? ownersByRequest.get(requestKey) : undefined).toBe("signed-in-owner");
   });
 
   it("rejects cold direct control calls without active request context", async () => {
