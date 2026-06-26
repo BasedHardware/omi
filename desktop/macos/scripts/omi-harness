@@ -213,7 +213,10 @@ def process_matches(match: str) -> list[dict[str, typing.Any]]:
         if not parts or not parts[0].isdigit():
             continue
         command = parts[1] if len(parts) > 1 else ""
-        if str(os.getpid()) == parts[0] or "omi-harness" in command:
+        # Only skip the harness runner itself. Do NOT filter by the substring
+        # "omi-harness" because the target app may be launched as a named
+        # bundle like "omi-harness-test" that legitimately matches.
+        if str(os.getpid()) == parts[0]:
             continue
         matches.append({"pid": int(parts[0]), "command": command})
     return matches
