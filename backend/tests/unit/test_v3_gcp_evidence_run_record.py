@@ -2,8 +2,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from utils.memory.v3_gcp_evidence_config import DEFAULT_EVIDENCE_TARGETS, EvidenceTargetRegistry
-from utils.memory.v3_gcp_evidence_run_record import RunRecordValidationError, validate_run_record
+from testing.memory.v3_f6.config import EvidenceTargetRegistry
+from testing.memory.v3_f6.local_defaults import DEFAULT_EVIDENCE_TARGETS
+from testing.memory.v3_f6.run_record import RunRecordValidationError, validate_run_record
 
 
 def _concrete_registry():
