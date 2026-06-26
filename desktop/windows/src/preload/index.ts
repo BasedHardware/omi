@@ -15,6 +15,7 @@ import type {
   OnboardingGraphNode,
   OnboardingGraphEdge,
   UsageSettings,
+  FloatingBarSettings,
   RewindSettings,
   InsightPayload,
   WindowsNotificationSettingsPatch,
@@ -89,6 +90,10 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  floatingBarGetSettings: () => ipcRenderer.invoke('floatingBar:getSettings'),
+  floatingBarSetSettings: (next: FloatingBarSettings) =>
+    ipcRenderer.invoke('floatingBar:setSettings', next),
+  floatingBarStatus: () => ipcRenderer.invoke('floatingBar:status'),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
@@ -168,6 +173,11 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('rewind:cleared', listener)
     return () => ipcRenderer.removeListener('rewind:cleared', listener)
+  },
+  onFloatingBarSettings: (cb: (s: FloatingBarSettings) => void) => {
+    const listener = (_e: unknown, s: FloatingBarSettings): void => cb(s)
+    ipcRenderer.on('floatingBar:settings', listener)
+    return () => ipcRenderer.removeListener('floatingBar:settings', listener)
   },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
