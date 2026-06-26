@@ -30,6 +30,10 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Coding Guidelines
 
+### UI / Design (all platforms)
+
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
+
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.

@@ -1,6 +1,8 @@
 {
   "unreleased": [
-    "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages"
+    "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages",
+    "Hermes connect now also adds a 'search Omi first' note to its system prompt, like OpenClaw",
+    "Cleaner Apps page (removed list borders, renamed Featured to Other) and dashboard polish (white + icons, subtle Connected labels, no purple)"
   ],
   "releases": [
     {
