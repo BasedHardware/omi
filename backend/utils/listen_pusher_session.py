@@ -94,17 +94,9 @@ class ListenPusherSession:
     def transcript_send(self, segments):
         self.segment_buffers.extend(segments)
 
-    async def request_conversation_processing(self, conversation_id: str):
-        """Request pusher to process a conversation."""
-        if not self.pusher_connected or not self.pusher_ws:
-            logger.info(
-                f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
-            )
-            if conversation_id not in self.pending_conversation_requests:
-                self.pending_conversation_requests[conversation_id] = {'sent_at': self.deps.now(), 'retries': 0}
-                self.pending_request_event.set()
-            return False
-        if len(self.pending_conversation_requests) >= self.config.max_pending_requests:
+    def _buffer_pending_conversation_request(self, conversation_id: str):
+        existing = self.pending_conversation_requests.get(conversation_id)
+        if existing is None and len(self.pending_conversation_requests) >= self.config.max_pending_requests:
             oldest_id = min(
                 self.pending_conversation_requests,
                 key=lambda k: self.pending_conversation_requests[k]['sent_at'],
@@ -113,12 +105,23 @@ class ListenPusherSession:
                 f"Too many pending requests, dropping {oldest_id} to add {conversation_id} {self.uid} {self.session_id}"
             )
             del self.pending_conversation_requests[oldest_id]
+            existing = None
+        self.pending_conversation_requests[conversation_id] = {
+            'sent_at': self.deps.now(),
+            'retries': (existing or {}).get('retries', 0),
+        }
+        self.pending_request_event.set()
+
+    async def request_conversation_processing(self, conversation_id: str):
+        """Request pusher to process a conversation."""
+        if not self.pusher_connected or not self.pusher_ws:
+            logger.info(
+                f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
+            )
+            self._buffer_pending_conversation_request(conversation_id)
+            return False
         try:
-            self.pending_conversation_requests[conversation_id] = {
-                'sent_at': self.deps.now(),
-                'retries': self.pending_conversation_requests.get(conversation_id, {}).get('retries', 0),
-            }
-            self.pending_request_event.set()
+            self._buffer_pending_conversation_request(conversation_id)
             data = bytearray()
             data.extend(struct.pack("I", 104))
             payload = {

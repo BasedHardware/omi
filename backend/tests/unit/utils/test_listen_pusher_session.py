@@ -46,6 +46,11 @@ def response_201(conversation_id: str, success=True):
     return struct.pack("<I", 201) + payload
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 def make_session(
     *,
     ws=None,
@@ -101,7 +106,7 @@ def make_session(
     return session
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_frame_payloads_and_order():
     ws = FakePusherWebSocket()
     session = make_session(ws=ws)
@@ -144,7 +149,7 @@ async def test_frame_payloads_and_order():
     }
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_for_multi_channel():
     ws = FakePusherWebSocket()
     connect_calls = []
@@ -165,6 +170,23 @@ async def test_pending_conversation_and_speaker_sample_replay_uses_target_rate_f
     assert list(session.pending_speaker_sample_requests) == []
 
 
+@pytest.mark.anyio
+async def test_disconnected_conversation_buffer_respects_max_pending_requests():
+    now = {"value": 1000.0}
+    session = make_session(
+        config_overrides={"max_pending_requests": 2},
+        deps_overrides={"now": lambda: now["value"]},
+    )
+
+    assert await session.request_conversation_processing("conv-1") is False
+    now["value"] += 1
+    assert await session.request_conversation_processing("conv-2") is False
+    now["value"] += 1
+    assert await session.request_conversation_processing("conv-3") is False
+
+    assert list(session.pending_conversation_requests.keys()) == ["conv-2", "conv-3"]
+
+
 def test_bounded_audio_and_transcript_buffers():
     session = make_session(config_overrides={"max_segment_buffer_size": 2, "max_audio_buffer_size": 5})
 
@@ -181,7 +203,7 @@ def test_bounded_audio_and_transcript_buffers():
     assert session.audio_total_size == 5
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_incoming_201_invokes_callback_and_removes_pending_request():
     active_ref = {"active": True}
     ws = FakePusherWebSocket(incoming=[response_201("conv-1")])
@@ -196,7 +218,7 @@ async def test_incoming_201_invokes_callback_and_removes_pending_request():
     assert session.callbacks == ["conv-1"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mark_disconnected_starts_single_reconnect_loop():
     session = make_session()
     session.pusher_ws = FakePusherWebSocket()
@@ -212,7 +234,7 @@ async def test_mark_disconnected_starts_single_reconnect_loop():
         await first_task
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_close_cancels_reconnect_flushes_buffers_and_closes_socket():
     ws = FakePusherWebSocket()
     session = make_session(ws=ws)
