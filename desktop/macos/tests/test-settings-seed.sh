@@ -42,6 +42,8 @@ cleanup_domains+=("$source_domain" "$quiet_target" "$eager_target" "$missing_tar
 defaults write "$source_domain" screenAnalysisEnabled -bool true
 defaults write "$source_domain" transcriptionEnabled -bool true
 defaults write "$source_domain" shortcut_askOmiEnabled -bool true
+# Set the hidden kill switch in the source to verify it is NOT copied to targets.
+defaults write "$source_domain" disableSystemAudioCapture -bool true
 
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_target" "$source_domain" >/tmp/omi-settings-seed-quiet.out
 assert_defaults "$quiet_target" screenAnalysisEnabled 0

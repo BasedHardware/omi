@@ -57,7 +57,6 @@ KEYS = [
     "disabledSkillsJSON",
     "screenAnalysisEnabled",
     "transcriptionEnabled",
-    "disableSystemAudioCapture",
     "dashboardWidgetsCollapsed",
     "tasksChatPanelWidth",
 
@@ -121,6 +120,8 @@ if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
             "screenAnalysisAutoStartFixed_v2": True,
         }
     )
+    # Never carry over the hidden kill switch from a previous seed or the source.
+    target_data.pop("disableSystemAudioCapture", None)
 else:
     # Eager mode: fully undo quiet-permission defaults so permission-flow
     # parity testing can exercise the normal startup paths.
@@ -131,6 +132,7 @@ else:
         }
     )
     target_data.pop("screenAnalysisAutoStartFixed_v2", None)
+    target_data.pop("disableSystemAudioCapture", None)
 
 target_data.update(selected)
 with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
