@@ -42,6 +42,17 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "LC_CTYPE",
   "TZ",
   "TERM",
+  // Proxy/TLS — external adapters make outbound API calls and need these
+  // to function in proxied or custom-CA environments.
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "no_proxy",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "NODE_EXTRA_CA_CERTS",
 ] as const;
 
 export class AcpError extends Error {

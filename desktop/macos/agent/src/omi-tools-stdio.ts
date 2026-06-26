@@ -313,6 +313,11 @@ Calling this tool is the only way to start the circular floating-bar subagent. S
           type: "string" as const,
           description: "Short Title Case label for the agent pill.",
         },
+        provider: {
+          type: "string" as const,
+          enum: ["openclaw", "hermes"] as const,
+          description: "Optional local agent provider to run this pill through.",
+        },
       },
       required: ["brief"],
     },

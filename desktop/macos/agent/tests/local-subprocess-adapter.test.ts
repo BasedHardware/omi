@@ -544,6 +544,16 @@ describe("env-command local subprocess adapters", () => {
       expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
       // Allowlisted OS vars are forwarded.
       expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
+      // Proxy/TLS vars are forwarded when set.
+      process.env.HTTPS_PROXY = "http://proxy:3128";
+      try {
+        await adapter.stop();
+        await adapter.start();
+        const env2 = (vi.mocked(spawn).mock.calls[vi.mocked(spawn).mock.calls.length - 1] as readonly unknown[])[1] as { env: Record<string, string> };
+        expect(env2.env).toHaveProperty("HTTPS_PROXY", "http://proxy:3128");
+      } finally {
+        delete process.env.HTTPS_PROXY;
+      }
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {
