@@ -55,6 +55,19 @@ final class AgentPillLifecycleTests: XCTestCase {
       "The response glow must be drawn after the black dock fill so the straight left, right, and bottom strokes stay visible in expanded chat.")
   }
 
+  func testNotchAgentSwitcherUsesStackedPersistentList() throws {
+    let source = try floatingControlBarViewSource()
+    let windowSource = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering"))
+    XCTAssertTrue(source.contains("NotchAgentStackMetrics.overlapStep"))
+    XCTAssertTrue(source.contains(".offset(x: CGFloat(index) * NotchAgentStackMetrics.overlapStep)"))
+    XCTAssertTrue(source.contains("NotchAgentSwitcherMenu("))
+    XCTAssertTrue(source.contains("state.activeAgentChatPillID = pill.id"))
+    XCTAssertFalse(source.contains(".popover(isPresented: groupPopoverBinding"))
+    XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
+  }
+
   func testFloatingBarExplicitSpawnCompletesParentTurn() throws {
     let source = try floatingControlBarWindowSource()
 

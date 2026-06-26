@@ -1090,6 +1090,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
+    /// Gives the notch-mode subagent switcher enough vertical room when the user
+    /// opens it from the compact island. Chat-open mode owns its own height.
+    func resizeForAgentSwitcher(visible: Bool) {
+        guard notchModeEnabled,
+              !state.showingAIConversation,
+              !state.isVoiceListening,
+              !state.isVoiceResponseActive,
+              !state.isShowingNotification,
+              !suppressHoverResize
+        else { return }
+
+        let targetSize = visible
+            ? NSSize(width: collapsedBarSize.width, height: Self.notchChromeHeight + 318)
+            : collapsedBarSize
+        resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
+    }
+
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
         if notchModeEnabled {

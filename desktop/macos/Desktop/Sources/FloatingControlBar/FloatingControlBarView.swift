@@ -22,6 +22,9 @@ struct FloatingControlBarView: View {
     @State private var isHovering = false
     @State private var notchSettingsHoverReady = false
     @State private var notchHoverGeneration = 0
+    @State private var agentSwitcherHovering = false
+    @State private var agentSwitcherPinned = false
+    @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
     private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
     private var notchHiddenCenterWidth: CGFloat {
         FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
@@ -73,6 +76,10 @@ struct FloatingControlBarView: View {
         isHovering || state.showingAIConversation || state.isVoiceListening
     }
 
+    private var shouldShowAgentSwitcher: Bool {
+        !agentPills.pills.isEmpty && (state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering)
+    }
+
     private var notchModeBody: some View {
         VStack(spacing: 0) {
             notchChrome
@@ -83,19 +90,6 @@ struct FloatingControlBarView: View {
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(Color.white.opacity(0.025))
                     )
-                    .overlay(alignment: .topLeading) {
-                        if let pointerX = activeAgentChatPointerX {
-                            SubagentChatPointer()
-                                .fill(Color.black)
-                                .frame(width: 18, height: 10)
-                                .overlay(
-                                    SubagentChatPointer()
-                                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
-                                )
-                                .offset(x: pointerX - 9, y: -9)
-                                .transition(.opacity.combined(with: .scale(scale: 0.75, anchor: .bottom)))
-                        }
-                    }
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
                     .padding(.bottom, 9)
@@ -128,6 +122,20 @@ struct FloatingControlBarView: View {
                 }
             }
         }
+        .overlay(alignment: .topLeading) {
+            if shouldShowAgentSwitcher {
+                NotchAgentSwitcherMenu(
+                    manager: agentPills,
+                    activePillID: state.activeAgentChatPillID,
+                    onSelect: openAgentInChat
+                )
+                .frame(width: NotchAgentStackMetrics.switcherWidth, alignment: .topLeading)
+                .offset(x: 12, y: notchChromeHeight + 6)
+                .onHover { setAgentSwitcherHovering($0) }
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topLeading)))
+                .zIndex(10)
+            }
+        }
         .overlay(alignment: .bottomTrailing) {
             if state.showingAIConversation {
                 ZStack {
@@ -149,6 +157,16 @@ struct FloatingControlBarView: View {
         .opacity(min(1, max(0, state.notchRevealProgress * 1.4)))
         .contextMenu { barContextMenu }
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.showingAIConversation)
+        .animation(.spring(response: 0.24, dampingFraction: 0.88), value: shouldShowAgentSwitcher)
+        .onChange(of: shouldShowAgentSwitcher) { _, visible in
+            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
+        }
+        .onChange(of: agentPills.pills.isEmpty) { _, isEmpty in
+            if isEmpty {
+                agentSwitcherPinned = false
+                agentSwitcherHovering = false
+            }
+        }
     }
 
     private var notchChrome: some View {
@@ -180,6 +198,12 @@ struct FloatingControlBarView: View {
                     .frame(width: notchSideWidth - 12, height: notchChromeHeight, alignment: .trailing)
                     .padding(.leading, 6)
                     .padding(.trailing, 6)
+                    .onHover { setAgentSwitcherHovering($0) }
+                    .simultaneousGesture(
+                        TapGesture().onEnded {
+                            toggleAgentSwitcherPinned()
+                        }
+                    )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -399,38 +423,46 @@ struct FloatingControlBarView: View {
         return agentPills.pills.first { $0.id == id }
     }
 
-    private var activeAgentChatPointerX: CGFloat? {
-        guard state.usesNotchIsland, let pill = activeAgentChatPill else { return nil }
-        let newestFirst = Array(agentPills.pills.reversed())
-        let itemWidth: CGFloat = 17
-        let spacing: CGFloat = 2
-        let rowWidth = max(0, notchSideWidth - 12)
-        let panelInset: CGFloat = 12
-        let directAgentLimit = 3
-        let groupedStatusLimit = 3
-        let itemIndex: Int?
-        let itemCount: Int
+    private func setAgentSwitcherHovering(_ hovering: Bool) {
+        agentSwitcherCollapseWorkItem?.cancel()
+        agentSwitcherCollapseWorkItem = nil
 
-        if newestFirst.count <= directAgentLimit {
-            itemIndex = newestFirst.firstIndex { $0.id == pill.id }
-            itemCount = newestFirst.count
-        } else {
-            let groups = NotchAgentStatusGroup.displayOrder.filter { group in
-                newestFirst.contains { group.contains($0.status) }
-            }
-            let visibleGroups: [NotchAgentStatusGroup] = groups.count > groupedStatusLimit
-                ? Array(groups.prefix(groupedStatusLimit - 1)) + [.more]
-                : groups
-            let selectedGroup = NotchAgentStatusGroup(status: pill.status)
-            itemIndex = visibleGroups.firstIndex(of: selectedGroup) ?? visibleGroups.firstIndex(of: .more)
-            itemCount = visibleGroups.count
+        if hovering {
+            agentSwitcherHovering = true
+            return
         }
 
-        guard let itemIndex, itemCount > 0 else { return nil }
-        let totalWidth = CGFloat(itemCount) * itemWidth + CGFloat(max(0, itemCount - 1)) * spacing
-        let itemCenterInRow = max(0, rowWidth - totalWidth) + CGFloat(itemIndex) * (itemWidth + spacing) + itemWidth / 2
-        let itemCenterInExpandedChrome = itemCenterInRow + 6
-        return itemCenterInExpandedChrome - panelInset
+        guard !agentSwitcherPinned, !state.showingAIConversation else {
+            agentSwitcherHovering = false
+            return
+        }
+
+        let workItem = DispatchWorkItem {
+            agentSwitcherHovering = false
+        }
+        agentSwitcherCollapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: workItem)
+    }
+
+    private func toggleAgentSwitcherPinned() {
+        guard !agentPills.pills.isEmpty else { return }
+        agentSwitcherCollapseWorkItem?.cancel()
+        agentSwitcherCollapseWorkItem = nil
+        agentSwitcherPinned.toggle()
+        agentSwitcherHovering = agentSwitcherPinned
+    }
+
+    private func openAgentInChat(_ pill: AgentPill) {
+        guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        (window as? FloatingControlBarWindow)?.makeKeyAndOrderFront(nil)
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            state.activeAgentChatPillID = pill.id
+            state.showingAIConversation = true
+            state.showingAIResponse = true
+            state.isAILoading = false
+            state.aiInputText = ""
+        }
+        state.markConversationActivity()
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -1264,107 +1296,23 @@ private struct AgentMainChatView: View {
 private struct NotchAgentPillsRowView: View {
     @ObservedObject var manager: AgentPillsManager
     weak var barWindow: NSWindow?
-    @State private var presentedGroup: NotchAgentStatusGroup?
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
 
-    // A notched lobe has 64 pt of usable row width (76 - 12 padding); four
-    // direct 17 pt orbs plus gaps need 74 pt, so group before the fourth orb.
-    private let directAgentLimit = 3
-    private let groupedStatusLimit = 3
-
-    private var pillsNewestFirst: [AgentPill] {
-        Array(manager.pills.reversed())
-    }
-
-    private var groups: [NotchAgentStatusGroup] {
-        NotchAgentStatusGroup.displayOrder.filter { group in
-            !pills(for: group).isEmpty
-        }
-    }
-
-    private var visibleGroups: [NotchAgentStatusGroup] {
-        guard groups.count > groupedStatusLimit else { return groups }
-        return Array(groups.prefix(groupedStatusLimit - 1)) + [.more]
+    private var stackedPills: [AgentPill] {
+        NotchAgentStackMetrics.sortedPills(manager.pills)
     }
 
     var body: some View {
         let _ = pillStatusChangeToken
-        HStack(spacing: 2) {
-            if pillsNewestFirst.count <= directAgentLimit {
-                ForEach(pillsNewestFirst) { pill in
-                    NotchAgentPillOrbItem(
-                        pill: pill,
-                        manager: manager,
-                        barWindow: barWindow
-                    )
-                }
-            } else {
-                ForEach(visibleGroups) { group in
-                    NotchAgentOrbButton(
-                        group: group,
-                        count: pills(for: group).count,
-                        isPresented: presentedGroup == group
-                    ) {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            presentedGroup = presentedGroup == group ? nil : group
-                        }
-                    }
-                    .popover(isPresented: groupPopoverBinding(for: group), arrowEdge: .bottom) {
-                        NotchAgentStatusGroupPopover(
-                            group: group,
-                            pills: pills(for: group),
-                            onSelect: { pill in
-                                presentedGroup = nil
-                                DispatchQueue.main.async {
-                                    openPillInChat(pill)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        NotchAgentStackView(pills: stackedPills)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         .accessibilityLabel("Agent pills")
-        .accessibilityHint("Select a status to inspect agents")
+        .accessibilityHint("Hover to inspect agents, click to keep the list open")
         .onAppear { syncPillStatusObservers() }
         .onChange(of: manager.pills.map(\.id)) { _, _ in
             syncPillStatusObservers()
-            reconcilePresentedState()
         }
-        .onChange(of: pillStatusChangeToken) { _, _ in
-            reconcilePresentedState()
-        }
-    }
-
-    private func reconcilePresentedState() {
-        if let presentedGroup, pills(for: presentedGroup).isEmpty {
-            self.presentedGroup = nil
-        }
-        if let hoveredPillID = manager.hoveredPillID,
-           !manager.pills.contains(where: { $0.id == hoveredPillID }) {
-            manager.hoveredPillID = nil
-        }
-        if pillsNewestFirst.count <= directAgentLimit {
-            presentedGroup = nil
-        }
-    }
-
-    private func groupPopoverBinding(for group: NotchAgentStatusGroup) -> Binding<Bool> {
-        Binding(
-            get: { presentedGroup == group },
-            set: { isPresented in
-                presentedGroup = isPresented ? group : nil
-            }
-        )
-    }
-
-    private func pills(for group: NotchAgentStatusGroup) -> [AgentPill] {
-        if group == .more {
-            return groups.dropFirst(groupedStatusLimit - 1).flatMap { pills(for: $0) }
-        }
-        return pillsNewestFirst.filter { group.contains($0.status) }
     }
 
     private func syncPillStatusObservers() {
@@ -1378,52 +1326,192 @@ private struct NotchAgentPillsRowView: View {
                 }
         }
     }
+}
 
-    private func openPillInChat(_ pill: AgentPill) {
-        manager.hoveredPillID = nil
-        barWindow?.makeKeyAndOrderFront(nil)
-        NotificationCenter.default.post(
-            name: .agentPillRequestedChat,
-            object: nil,
-            userInfo: ["pillID": pill.id.uuidString]
-        )
+@MainActor
+private enum NotchAgentStackMetrics {
+    static let orbSize: CGFloat = 10
+    static let overlapStep: CGFloat = 2.2
+    static let switcherWidth: CGFloat = 250
+    static let switcherMaxVisibleRows = 6
+
+    static func sortedPills(_ pills: [AgentPill]) -> [AgentPill] {
+        let newestIndex = Dictionary(uniqueKeysWithValues: pills.reversed().enumerated().map { ($0.element.id, $0.offset) })
+        return pills.sorted { lhs, rhs in
+            let lhsGroup = NotchAgentStatusGroup(status: lhs.status)
+            let rhsGroup = NotchAgentStatusGroup(status: rhs.status)
+            if lhsGroup.sortRank != rhsGroup.sortRank {
+                return lhsGroup.sortRank < rhsGroup.sortRank
+            }
+            return (newestIndex[lhs.id] ?? 0) < (newestIndex[rhs.id] ?? 0)
+        }
     }
 }
 
-private struct NotchAgentPillOrbItem: View {
-    @ObservedObject var pill: AgentPill
-    @ObservedObject var manager: AgentPillsManager
-    weak var barWindow: NSWindow?
+private struct NotchAgentStackView: View {
+    let pills: [AgentPill]
+
+    private var visiblePills: [AgentPill] {
+        Array(pills.prefix(8))
+    }
+
+    private var stackWidth: CGFloat {
+        guard !visiblePills.isEmpty else { return 0 }
+        return NotchAgentStackMetrics.orbSize + CGFloat(visiblePills.count - 1) * NotchAgentStackMetrics.overlapStep
+    }
 
     var body: some View {
-        NotchAgentOrbButton(
-            group: NotchAgentStatusGroup(status: pill.status),
-            count: nil,
-            isPresented: manager.hoveredPillID == pill.id
-        ) {
-            openPillInChat()
+        ZStack(alignment: .leading) {
+            ForEach(Array(visiblePills.enumerated()), id: \.element.id) { index, pill in
+                NotchAgentStatusOrb(
+                    group: NotchAgentStatusGroup(status: pill.status),
+                    isActive: index == 0,
+                    size: NotchAgentStackMetrics.orbSize
+                )
+                .offset(x: CGFloat(index) * NotchAgentStackMetrics.overlapStep)
+                .zIndex(Double(visiblePills.count - index))
+            }
+
+            if pills.count > 1 {
+                Text("\(min(pills.count, 99))")
+                    .scaledFont(size: 6, weight: .bold)
+                    .foregroundColor(.white.opacity(0.96))
+                    .frame(width: 11, height: 11)
+                    .background(Color.black.opacity(0.84))
+                    .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.45), lineWidth: 0.6)
+                    )
+                    .offset(x: max(0, stackWidth - 6), y: -7)
+                    .zIndex(100)
+            }
+        }
+        .frame(width: max(stackWidth + 7, 18), height: 24, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+}
+
+private struct NotchAgentSwitcherMenu: View {
+    @ObservedObject var manager: AgentPillsManager
+    let activePillID: UUID?
+    let onSelect: (AgentPill) -> Void
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    private var sortedPills: [AgentPill] {
+        let _ = pillStatusChangeToken
+        return NotchAgentStackMetrics.sortedPills(manager.pills)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            SubagentChatPointer()
+                .fill(Color.black)
+                .frame(width: 18, height: 10)
+                .overlay(
+                    SubagentChatPointer()
+                        .stroke(Color.white.opacity(0.10), lineWidth: 0.8)
+                )
+                .padding(.leading, 26)
+                .padding(.bottom, -1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    NotchAgentStackView(pills: sortedPills)
+                        .frame(width: 34, alignment: .leading)
+                    Text("Subagents")
+                        .scaledFont(size: 12, weight: .bold)
+                        .foregroundColor(.white)
+                    Spacer(minLength: 8)
+                    Text("\(sortedPills.count)")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(.white.opacity(0.72))
+                }
+
+                ScrollView(showsIndicators: sortedPills.count > NotchAgentStackMetrics.switcherMaxVisibleRows) {
+                    VStack(spacing: 4) {
+                        ForEach(sortedPills) { pill in
+                            NotchAgentSwitcherRow(
+                                pill: pill,
+                                isActive: pill.id == activePillID,
+                                onSelect: onSelect
+                            )
+                        }
+                    }
+                }
+                .frame(maxHeight: CGFloat(NotchAgentStackMetrics.switcherMaxVisibleRows) * 47)
+            }
+            .padding(10)
+            .floatingBackground(cornerRadius: 13)
+        }
+        .onAppear { syncPillStatusObservers() }
+        .onChange(of: manager.pills.map(\.id)) { _, _ in
+            syncPillStatusObservers()
         }
     }
 
-    private var selectedPopoverBinding: Binding<Bool> {
-        Binding(
-            get: { manager.hoveredPillID == pill.id },
-            set: { isPresented in
-                if !isPresented, manager.hoveredPillID == pill.id {
-                    manager.hoveredPillID = nil
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
                 }
-            }
-        )
+        }
+    }
+}
+
+private struct NotchAgentSwitcherRow: View {
+    @ObservedObject var pill: AgentPill
+    let isActive: Bool
+    let onSelect: (AgentPill) -> Void
+
+    private var group: NotchAgentStatusGroup {
+        NotchAgentStatusGroup(status: pill.status)
     }
 
-    private func openPillInChat() {
-        manager.hoveredPillID = nil
-        barWindow?.makeKeyAndOrderFront(nil)
-        NotificationCenter.default.post(
-            name: .agentPillRequestedChat,
-            object: nil,
-            userInfo: ["pillID": pill.id.uuidString]
-        )
+    var body: some View {
+        Button {
+            onSelect(pill)
+        } label: {
+            HStack(spacing: 8) {
+                NotchAgentStatusOrb(group: group, isActive: isActive, size: 10)
+                    .frame(width: 14, height: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(pill.title)
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.94))
+                        .lineLimit(1)
+                    Text(pill.latestActivity.isEmpty ? group.title : pill.latestActivity)
+                        .scaledFont(size: 9.5)
+                        .foregroundColor(.white.opacity(0.56))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Text(group.title)
+                    .scaledFont(size: 8.5, weight: .bold)
+                    .foregroundColor(group.color.opacity(0.95))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(group.color.opacity(0.12))
+                    .clipShape(Capsule())
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(isActive ? Color.white.opacity(0.10) : Color.white.opacity(0.052))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(isActive ? group.color.opacity(0.34) : Color.clear, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1432,9 +1520,6 @@ private enum NotchAgentStatusGroup: String, Identifiable {
     case queued
     case failed
     case done
-    case more
-
-    static let displayOrder: [NotchAgentStatusGroup] = [.running, .queued, .failed, .done]
 
     var id: String { rawValue }
 
@@ -1457,7 +1542,6 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return "Queued"
         case .failed: return "Failed"
         case .done: return "Done"
-        case .more: return "More"
         }
     }
 
@@ -1467,7 +1551,6 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
         case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
-        case .more: return Color.white.opacity(0.70)
         }
     }
 
@@ -1477,7 +1560,6 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
         case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
         case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
-        case .more: return Color.white.opacity(0.80)
         }
     }
 
@@ -1487,24 +1569,15 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
         case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
         case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
-        case .more: return Color.black.opacity(0.45)
         }
     }
 
-    var symbolName: String {
+    var sortRank: Int {
         switch self {
-        case .running: return "sparkle"
-        case .queued: return "clock"
-        case .failed: return "exclamationmark"
-        case .done: return "checkmark"
-        case .more: return "ellipsis"
-        }
-    }
-
-    var breathes: Bool {
-        switch self {
-        case .running: return true
-        case .queued, .failed, .done, .more: return false
+        case .running: return 0
+        case .queued: return 1
+        case .failed: return 2
+        case .done: return 3
         }
     }
 
@@ -1514,80 +1587,22 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         case .queued: return 3.8
         case .failed: return 4.6
         case .done: return 5.2
-        case .more: return 5.8
         }
-    }
-
-    func contains(_ status: AgentPill.Status) -> Bool {
-        switch (self, status) {
-        case (.running, .starting), (.running, .running):
-            return true
-        case (.queued, .queued):
-            return true
-        case (.failed, .failed):
-            return true
-        case (.done, .done):
-            return true
-        default:
-            return false
-        }
-    }
-}
-
-private struct NotchAgentOrbButton: View {
-    let group: NotchAgentStatusGroup
-    let count: Int?
-    let isPresented: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack(alignment: .topTrailing) {
-                NotchAgentStatusOrb(
-                    group: group,
-                    isActive: isPresented
-                )
-
-                if let count, count > 1 {
-                    Text("\(min(count, 9))")
-                        .scaledFont(size: 7, weight: .bold)
-                        .foregroundColor(.white.opacity(0.94))
-                        .frame(width: 10, height: 10)
-                        .background(Color.black.opacity(0.82))
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .strokeBorder(group.highlightColor.opacity(0.75), lineWidth: 0.7)
-                        )
-                        .offset(x: 4, y: -4)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .frame(width: 17, height: 26)
-        .contentShape(Rectangle())
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var accessibilityLabel: String {
-        guard let count else {
-            return "\(group.title) agent"
-        }
-        return "\(count) \(group.title.lowercased()) agent\(count == 1 ? "" : "s")"
     }
 }
 
 private struct NotchAgentStatusOrb: View {
     let group: NotchAgentStatusGroup
     let isActive: Bool
+    var size: CGFloat = 16
 
     var body: some View {
         TimelineView(.animation) { timeline in
             let duration = group.swirlDuration
             let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration) / duration)
-            NotchAgentSwirlSphere(group: group, isActive: isActive, phase: phase)
+            NotchAgentSwirlSphere(group: group, isActive: isActive, phase: phase, size: size)
         }
-        .frame(width: 22, height: 22)
+        .frame(width: size + 6, height: size + 6)
     }
 }
 
@@ -1595,15 +1610,16 @@ private struct NotchAgentSwirlSphere: View {
     let group: NotchAgentStatusGroup
     let isActive: Bool
     let phase: CGFloat
+    let size: CGFloat
 
     var body: some View {
         Canvas { context, size in
             drawSwirl(context: &context, size: size)
         }
-        .frame(width: 16, height: 16)
+        .frame(width: size, height: size)
         .clipShape(Circle())
-        .shadow(color: group.color.opacity(isActive ? 0.94 : 0.74), radius: isActive ? 8 : 6)
-        .shadow(color: group.highlightColor.opacity(isActive ? 0.68 : 0.46), radius: isActive ? 14 : 10)
+        .shadow(color: group.color.opacity(isActive ? 0.94 : 0.74), radius: isActive ? size * 0.50 : size * 0.38)
+        .shadow(color: group.highlightColor.opacity(isActive ? 0.68 : 0.46), radius: isActive ? size * 0.88 : size * 0.62)
     }
 
     private func drawSwirl(context: inout GraphicsContext, size: CGSize) {
@@ -1674,80 +1690,5 @@ private struct NotchAgentSwirlSphere: View {
                 endRadius: liftRect.width * 0.72
             )
         )
-    }
-}
-
-private struct NotchAgentStatusGroupPopover: View {
-    let group: NotchAgentStatusGroup
-    let pills: [AgentPill]
-    let onSelect: (AgentPill) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(group.color)
-                    .frame(width: 8, height: 8)
-                Text("\(group.title) agents")
-                    .scaledFont(size: 12, weight: .bold)
-                    .foregroundColor(.white)
-                Spacer(minLength: 8)
-                Text("\(pills.count)")
-                    .scaledFont(size: 10, weight: .bold)
-                    .foregroundColor(group.color)
-            }
-
-            VStack(spacing: 3) {
-                ForEach(pills) { pill in
-                    NotchAgentStatusGroupPopoverRow(group: group, pill: pill, onSelect: onSelect)
-                }
-            }
-        }
-        .padding(10)
-        .frame(width: 240, alignment: .leading)
-        .floatingBackground(cornerRadius: 13)
-    }
-}
-
-private struct NotchAgentStatusGroupPopoverRow: View {
-    let group: NotchAgentStatusGroup
-    @ObservedObject var pill: AgentPill
-    let onSelect: (AgentPill) -> Void
-
-    var body: some View {
-        Button {
-            onSelect(pill)
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: group.symbolName)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(group.color)
-                    .frame(width: 16, height: 16)
-                    .background(group.color.opacity(0.12))
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(pill.title)
-                        .scaledFont(size: 11, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.92))
-                        .lineLimit(1)
-                    Text(pill.latestActivity)
-                        .scaledFont(size: 10)
-                        .foregroundColor(.white.opacity(0.55))
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.36))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(Color.white.opacity(0.055))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
     }
 }
