@@ -101,6 +101,19 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     });
 
     await adapter.start();
+    proc.stdout.write(`${JSON.stringify({
+      jsonrpc: "2.0",
+      id: 99,
+      method: "session/request_permission",
+      params: { options: [{ kind: "allow_always", optionId: "allow" }] },
+    })}\n`);
+    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "error" in request));
+    expect(requests.find((request) => request.id === 99)).toMatchObject({
+      error: {
+        code: -32001,
+        message: "hermes permission requests require adapter-owned approval policy",
+      },
+    });
     expect(spawn).toHaveBeenCalledWith(
       "/Users/dazheng/.local/bin/hermes acp --accept-hooks",
       expect.objectContaining({ shell: true, stdio: ["pipe", "pipe", "pipe"] })
@@ -130,7 +143,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       inputTokens: 1,
       outputTokens: 2,
     });
-    expect(requests.map((request) => request.method)).toEqual([
+    expect(requests.map((request) => request.method).filter(Boolean)).toEqual([
       "initialize",
       "session/new",
       "session/set_model",

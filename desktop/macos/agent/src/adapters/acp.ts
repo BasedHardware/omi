@@ -369,6 +369,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const method = msg.method as string;
 
     if (method === "session/request_permission") {
+      if (this.adapterId !== "acp") {
+        this.log(`Rejecting ${this.adapterId} ACP permission request without adapter-owned policy (id=${id})`);
+        this.stdinWriter?.(JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          error: {
+            code: -32001,
+            message: `${this.adapterId} permission requests require adapter-owned approval policy`,
+          },
+        }));
+        return;
+      }
       const params = msg.params as Record<string, unknown> | undefined;
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
