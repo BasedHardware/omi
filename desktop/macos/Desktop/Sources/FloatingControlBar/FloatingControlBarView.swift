@@ -106,7 +106,7 @@ struct FloatingControlBarView: View {
                     .padding(.horizontal, 12)
                     .padding(.top, 4)
                     .padding(.bottom, 9)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.opacity)
             }
 
             if let notification = state.currentNotification, !state.showingAIConversation {
@@ -254,7 +254,7 @@ struct FloatingControlBarView: View {
                 conversationView
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.opacity)
             }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)

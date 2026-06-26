@@ -43,6 +43,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchInputPanelHeight: CGFloat =
         notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     static let notchAgentFanoutRowHeight: CGFloat = 32
+    private static let responseStreamingResizeStep: CGFloat = 56
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
     static let notchCompactSize = NSSize(
@@ -143,14 +144,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
     }
-    private func currentResponseSurfaceHeight() -> CGFloat {
-        if notchModeEnabled {
+    private func currentResponseSurfaceHeight(usesNotchIsland: Bool? = nil) -> CGFloat {
+        if usesNotchIsland ?? notchModeEnabled {
             return max(0, frame.height - Self.notchGlowOutsetBottom)
         }
         return frame.height
     }
-    private func currentResponseSurfaceWidth() -> CGFloat {
-        if notchModeEnabled {
+    private func currentResponseSurfaceWidth(usesNotchIsland: Bool? = nil) -> CGFloat {
+        if usesNotchIsland ?? notchModeEnabled {
             return max(0, frame.width - Self.notchGlowOutsetX * 2)
         }
         return frame.width
@@ -431,7 +432,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         frameIncludesVoiceGlow: Bool? = nil
     ) -> NSSize {
         if state.showingAIConversation {
-            let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
+            let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
             let panelHeight = usesNotchIsland
                 ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
                 : 120
@@ -1098,7 +1100,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard notchModeEnabled,
               !state.showingAIConversation,
               !state.isVoiceListening,
-              !state.isVoiceResponseActive,
               !state.isShowingNotification,
               !suppressHoverResize
         else { return }
@@ -1202,17 +1203,18 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                       !self.isUserResizing,
                       contentHeight > 0
                 else { return }
-                let targetHeight = (contentHeight + Self.responseViewOverhead).rounded()
-                let clampedHeight = min(max(targetHeight, Self.minResponseHeight), maxHeight)
+                let targetHeight = (contentHeight + Self.responseViewOverhead).rounded(.up)
+                let steppedHeight = (targetHeight / Self.responseStreamingResizeStep).rounded(.up) * Self.responseStreamingResizeStep
+                let clampedHeight = min(max(steppedHeight, Self.minResponseHeight), maxHeight)
                 // Only expand, never auto-shrink. In notch mode an active voice
                 // response glow inflates the window frame, so compare content
                 // growth against the underlying response surface height rather
                 // than the glow-padded window height.
                 guard clampedHeight > self.currentResponseSurfaceHeight() + 2 else { return }
                 self.resizeAnchored(
-                    to: NSSize(width: self.expandedContentWidth, height: clampedHeight),
+                    to: NSSize(width: max(self.expandedContentWidth, self.currentResponseSurfaceWidth()), height: clampedHeight),
                     makeResizable: true,
-                    animated: true,
+                    animated: false,
                     anchorTop: true
                 )
             }

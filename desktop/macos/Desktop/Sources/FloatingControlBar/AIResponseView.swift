@@ -61,14 +61,10 @@ struct AIResponseView: View {
                     )
                 }
                 .onChange(of: currentMessage?.text) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: currentMessage?.contentBlocks.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: chatHistory.count) {
                     withAnimation(.easeOut(duration: 0.15)) {

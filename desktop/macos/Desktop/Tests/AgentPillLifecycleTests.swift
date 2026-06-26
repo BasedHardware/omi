@@ -79,6 +79,29 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(lobeSource.contains("Image(systemName: \"mic.fill\")"))
   }
 
+  func testNotchChatSizingPreservesSurfaceWidthAndGlowFanout() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))"))
+    XCTAssertTrue(source.contains("func resizeForAgentSwitcher(visible: Bool)"))
+    XCTAssertFalse(source.contains("!state.isVoiceResponseActive,\n              !state.isShowingNotification"))
+  }
+
+  func testStreamingResponseGrowthIsSteppedAndNonAnimated() throws {
+    let windowSource = try floatingControlBarWindowSource()
+    let viewSource = try floatingControlBarViewSource()
+    let responseSource = try aiResponseViewSource()
+
+    XCTAssertTrue(windowSource.contains("responseStreamingResizeStep"))
+    XCTAssertTrue(windowSource.contains("let steppedHeight = (targetHeight / Self.responseStreamingResizeStep).rounded(.up) * Self.responseStreamingResizeStep"))
+    XCTAssertTrue(windowSource.contains("to: NSSize(width: max(self.expandedContentWidth, self.currentResponseSurfaceWidth()), height: clampedHeight)"))
+    XCTAssertTrue(windowSource.contains("animated: false,\n                    anchorTop: true"))
+    XCTAssertTrue(viewSource.contains(".transition(.opacity)"))
+    XCTAssertFalse(viewSource.contains("conversationView\n                    .padding(.horizontal, 12)\n                    .padding(.top, 4)\n                    .padding(.bottom, 9)\n                    .transition(.move(edge: .top).combined(with: .opacity))"))
+    XCTAssertTrue(responseSource.contains(".onChange(of: currentMessage?.text) {\n                    proxy.scrollTo(\"bottom\", anchor: .bottom)\n                }"))
+    XCTAssertTrue(responseSource.contains(".onChange(of: currentMessage?.contentBlocks.count) {\n                    proxy.scrollTo(\"bottom\", anchor: .bottom)\n                }"))
+  }
+
   func testNotchAgentIndicatorUsesOmiDotsAndHorizontalFanout() throws {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
@@ -142,7 +165,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testResponseResizePreservesUserSurfaceSize() throws {
     let source = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("private func currentResponseSurfaceWidth() -> CGFloat"))
+    XCTAssertTrue(source.contains("private func currentResponseSurfaceWidth(usesNotchIsland: Bool? = nil) -> CGFloat"))
     XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.height }"))
     XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.width }"))
     XCTAssertTrue(source.contains("let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())"))
@@ -231,6 +254,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func aiResponseViewSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
