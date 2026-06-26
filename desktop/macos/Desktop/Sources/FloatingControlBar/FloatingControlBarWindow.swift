@@ -577,7 +577,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] isActive in
-                self?.previousVoiceResponseGlowActive = isActive
+                guard let self else { return }
+                self.previousVoiceResponseGlowActive = isActive
+                // On legacy (non-notch) displays the compact pill frame is only
+                // enlarged to fit the glow/stroke outset during an explicit
+                // resize. Without this, a PTT response that starts while the
+                // bar is collapsed keeps the 40×14 frame and clips the white
+                // glow for the entire spoken reply. Resize to the glow-adjusted
+                // collapsed size on the active/inactive transitions so the
+                // outset is applied/removed promptly.
+                guard !self.notchModeEnabled else { return }
+                guard !self.state.showingAIConversation,
+                      !self.state.isVoiceListening,
+                      self.state.currentNotification == nil
+                else { return }
+                self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)
             }
     }
 

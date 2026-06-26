@@ -236,6 +236,25 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(popoverSource.contains("Button(action: onDismiss)"))
   }
 
+  func testViewedExpirationReArmsWhenActiveChatBlocksExpiry() throws {
+    let source = try agentPillSource()
+
+    // The one-shot DispatchWorkItem must re-arm itself when it fires while the
+    // pill is the active chat — otherwise auto-expiration is permanently
+    // disabled for a viewed finished pill after the user navigates away.
+    XCTAssertTrue(source.contains("if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {"))
+    XCTAssertTrue(source.contains("self.scheduleViewedExpiration(for: pill)"))
+  }
+
+  func testVoiceResponseGlowTriggersCompactResizeOnLegacyDisplays() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // The glow observer must trigger a resize to the glow-adjusted collapsed
+    // size on legacy displays, not just record the boolean.
+    XCTAssertTrue(source.contains("guard !self.notchModeEnabled else { return }"))
+    XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
+  }
+
   func testFloatingPillDoesNotTreatMissingTerminalProjectionAsSuccess() throws {
     let source = try agentPillSource()
 

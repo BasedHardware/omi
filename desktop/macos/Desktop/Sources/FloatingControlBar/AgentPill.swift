@@ -620,8 +620,20 @@ final class AgentPillsManager: ObservableObject {
         let pillID = pill.id
         let workItem = DispatchWorkItem { [weak self] in
             Task { @MainActor [weak self] in
-                self?.expireViewedFinishedPills(now: Date())
-                self?.viewedExpirationWorkItemsByPill[pillID] = nil
+                guard let self else { return }
+                // If the pill is the one the user is actively viewing when the
+                // timer fires, the expiration is skipped this round but the
+                // timer must be re-armed — otherwise the one-shot DispatchWorkItem
+                // is consumed and auto-expiration is permanently disabled for a
+                // viewed finished pill even after the user navigates away.
+                if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {
+                    if let pill = self.pills.first(where: { $0.id == pillID }) {
+                        self.scheduleViewedExpiration(for: pill)
+                    }
+                    return
+                }
+                self.expireViewedFinishedPills(now: Date())
+                self.viewedExpirationWorkItemsByPill[pillID] = nil
             }
         }
         viewedExpirationWorkItemsByPill[pillID] = workItem
