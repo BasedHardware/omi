@@ -19,6 +19,7 @@ from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
     list_audio_chunks,
@@ -32,29 +33,21 @@ logger = logging.getLogger(__name__)
 
 
 def _coerce_dt(value):
-    """Coerce a timestamp (datetime or ISO 8601 string) to a tz-aware UTC datetime.
+    return coerce_utc_datetime(value)
 
-    Conversation docs can carry ``started_at`` / ``finished_at`` as either a
-    Firestore-deserialised ``datetime`` (tz-aware) or as an ISO string (older
-    write paths persisted ``.isoformat()`` instead of a native timestamp).
-    Subtracting two strings throws ``TypeError``; mixing tz-aware with
-    tz-naive also throws. Coercing both sides to a single tz-aware UTC
-    representation keeps the gap math safe regardless of source.
 
-    Returns ``None`` for unparseable input rather than raising — gap warnings
-    are best-effort and a malformed timestamp must not fail the merge call.
-    """
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    return None
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _photo_created_at_sort_key(photo: Dict) -> datetime:
+    created_at = coerce_utc_datetime(photo.get('created_at'))
+    if created_at is None:
+        logger.warning(
+            'conversation_merge_photo_missing_or_invalid_created_at',
+            extra={'photo_id': photo.get('id'), 'has_created_at': 'created_at' in photo},
+        )
+        return _UTC_MIN
+    return created_at
 
 
 # Timestamp fields touched by the merge pipeline. Coerced once at the entry
@@ -390,8 +383,9 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
         except Exception as e:
             logger.error(f"Error fetching photos for {conv['id']}: {e}")
 
-    # Sort by creation time
-    all_photos.sort(key=lambda p: p.get('created_at', datetime.min))
+    # Sort by creation time with a uniform tz-aware UTC key. Missing or malformed
+    # created_at values are retained and ordered first, with structured metrics.
+    all_photos.sort(key=_photo_created_at_sort_key)
     return all_photos
 
 
