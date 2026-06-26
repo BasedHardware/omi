@@ -526,29 +526,7 @@ class PureStreamingSttSocket implements IPureSocket {
         }
 
         // Aggregate words by speaker (matching backend TranscriptSegment format)
-        final segments = <Map<String, dynamic>>[];
-        for (final segment in result.segments) {
-          if (segment.text.trim().isEmpty) continue;
-
-          final speakerId = segment.speakerId;
-          final speaker = 'SPEAKER_$speakerId';
-
-          if (segments.isEmpty || segments.last['speaker'] != speaker) {
-            segments.add({
-              'text': segment.text.trim(),
-              'speaker': speaker,
-              'speaker_id': speakerId,
-              'is_user': false,
-              'start': segment.start,
-              'end': segment.end,
-              'person_id': null,
-            });
-          } else {
-            final last = segments.last;
-            last['text'] = '${last['text']} ${segment.text.trim()}';
-            last['end'] = segment.end;
-          }
-        }
+        final segments = mergeTranscriptSegmentsBySpeaker(result.segments);
 
         if (segments.isNotEmpty) {
           onMessage(jsonEncode(segments));

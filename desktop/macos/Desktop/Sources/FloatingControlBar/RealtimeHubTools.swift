@@ -472,7 +472,7 @@ enum RealtimeHubTools {
       ["role": "user", "content": userContent],
     ]
     return [
-      "model": "claude-sonnet-4-6",
+      "model": ModelQoS.Claude.defaultSelection,
       "max_tokens": 1024,
       "messages": messages,
       "stream": false,

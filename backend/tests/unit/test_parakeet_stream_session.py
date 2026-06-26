@@ -26,7 +26,19 @@ mock_transcribe.transcribe_file = MagicMock(return_value={"text": "", "segments"
 mock_transcribe._stream_model = None
 mock_transcribe._batch_model = None
 mock_transcribe._model = None
+mock_transcribe._gpu_worker = None
 mock_transcribe.INFERENCE_MODE = "nemo"
+mock_transcribe.has_builtin_embedding = MagicMock(return_value=False)
+
+
+def _mock_wav_bytes_to_waveform(wav_bytes):
+    result = MagicMock()
+    n_samples = max(len(wav_bytes) // 2, 16000)
+    result.shape = [1, n_samples]
+    return result, 16000
+
+
+mock_transcribe.wav_bytes_to_waveform = _mock_wav_bytes_to_waveform
 sys.modules['transcribe'] = mock_transcribe
 
 _langdetect = types.ModuleType('langdetect')
@@ -85,6 +97,24 @@ _torch.frombuffer = lambda buffer, dtype: _TorchArray(np.frombuffer(buffer, dtyp
 _torch.hub = MagicMock()
 _torch.hub.load.side_effect = RuntimeError("torch hub unavailable in unit tests")
 sys.modules.setdefault('torch', _torch)
+
+_nemo_rnnt_decoding = MagicMock()
+_nemo_rnnt_utils = MagicMock()
+_nemo_streaming_utils = MagicMock()
+_omegaconf = MagicMock()
+for _mod_name, _mod_obj in [
+    ('nemo', MagicMock()),
+    ('nemo.collections', MagicMock()),
+    ('nemo.collections.asr', MagicMock()),
+    ('nemo.collections.asr.parts', MagicMock()),
+    ('nemo.collections.asr.parts.submodules', MagicMock()),
+    ('nemo.collections.asr.parts.submodules.rnnt_decoding', _nemo_rnnt_decoding),
+    ('nemo.collections.asr.parts.utils', MagicMock()),
+    ('nemo.collections.asr.parts.utils.rnnt_utils', _nemo_rnnt_utils),
+    ('nemo.collections.asr.parts.utils.streaming_utils', _nemo_streaming_utils),
+    ('omegaconf', _omegaconf),
+]:
+    sys.modules.setdefault(_mod_name, _mod_obj)
 
 import stream_handler as sh
 
@@ -253,3 +283,73 @@ class TestStreamSessionVADParams:
         session = sh.StreamSession(sample_rate=16000)
         assert session._speech_threshold == 0.5
         assert session._hangover_s == 0.8
+
+
+class TestStreamSessionBuiltinEmbedding:
+
+    def test_get_embedding_routes_through_gpu_worker(self):
+        session = sh.StreamSession(sample_rate=16000)
+        fake_worker = MagicMock()
+        fake_worker.submit_embedding_sync.return_value = np.zeros(256, dtype=np.float32)
+
+        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
+            sh._transcribe_mod, '_gpu_worker', fake_worker
+        ):
+            result = session._get_embedding_builtin(_make_pcm(1.0))
+
+        fake_worker.submit_embedding_sync.assert_called_once()
+        assert result is not None
+        assert result.shape == (1, 256)
+
+    def test_get_embedding_reshapes_1d(self):
+        session = sh.StreamSession(sample_rate=16000)
+        fake_worker = MagicMock()
+        fake_worker.submit_embedding_sync.return_value = np.ones(128, dtype=np.float32)
+
+        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
+            sh._transcribe_mod, '_gpu_worker', fake_worker
+        ):
+            result = session._get_embedding_builtin(_make_pcm(1.0))
+
+        assert result.shape == (1, 128)
+
+    def test_get_embedding_short_audio_returns_none(self):
+        session = sh.StreamSession(sample_rate=16000)
+
+        short_waveform = MagicMock()
+        short_waveform.shape = [1, 4800]
+
+        with patch.object(sh, 'wav_bytes_to_waveform', return_value=(short_waveform, 16000)):
+            result = session._get_embedding_builtin(b'\x00' * 100)
+
+        assert result is None
+
+    def test_get_embedding_prefers_builtin_over_http(self):
+        session = sh.StreamSession(sample_rate=16000)
+        fake_worker = MagicMock()
+        fake_worker.submit_embedding_sync.return_value = np.zeros(256, dtype=np.float32)
+
+        with patch.object(sh, 'has_builtin_embedding', return_value=True), patch.object(
+            sh._transcribe_mod, '_gpu_worker', fake_worker
+        ), patch.object(session, '_get_embedding_http') as http_mock:
+            result = session._get_embedding(_make_pcm(1.0))
+
+        assert result is not None
+        http_mock.assert_not_called()
+
+    def test_get_embedding_falls_back_to_http_when_no_builtin(self):
+        session = sh.StreamSession(sample_rate=16000)
+        http_emb = np.ones((1, 256), dtype=np.float32)
+
+        with patch.object(sh, 'has_builtin_embedding', return_value=False), patch.object(
+            session, '_get_embedding_http', return_value=http_emb
+        ) as http_mock:
+            old_url = sh.SPEAKER_EMBEDDING_URL
+            sh.SPEAKER_EMBEDDING_URL = 'http://fake'
+            try:
+                result = session._get_embedding(_make_pcm(1.0))
+            finally:
+                sh.SPEAKER_EMBEDDING_URL = old_url
+
+        http_mock.assert_called_once()
+        np.testing.assert_array_equal(result, http_emb)

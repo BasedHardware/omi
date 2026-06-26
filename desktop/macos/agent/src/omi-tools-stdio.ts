@@ -12,6 +12,7 @@ import { createConnection } from "net";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { agentControlToolDefinitions, isAgentControlToolName } from "./runtime/control-tools.js";
 
 // Current query mode
 let currentMode: "ask" | "act" = process.env.OMI_QUERY_MODE === "ask" ? "ask" : "act";
@@ -33,6 +34,53 @@ function nextCallId(): string {
 
 function logErr(msg: string): void {
   process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
+}
+
+function envProtocolVersion(): 2 | undefined {
+  return process.env.OMI_PROTOCOL_VERSION === "2" ? 2 : undefined;
+}
+
+function activeOmiContext(): Record<string, unknown> {
+  const envBase = {
+    protocolVersion: envProtocolVersion(),
+    adapterId: process.env.OMI_ADAPTER_ID,
+  };
+  if (process.env.OMI_CONTEXT_FILE) {
+    try {
+      const parsed = JSON.parse(readFileSync(process.env.OMI_CONTEXT_FILE, "utf8"));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          ...envBase,
+          ...parsed,
+        };
+      }
+      return {
+        ...envBase,
+        contextError: "OMI context file did not contain an object",
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logErr(`Failed to read OMI context file: ${message}`);
+      return {
+        ...envBase,
+        contextError: message,
+      };
+    }
+  }
+  return {
+    ...envBase,
+    ...(envProtocolVersion() === 2
+      ? {}
+      : {
+          requestId: process.env.OMI_REQUEST_ID,
+          clientId: process.env.OMI_CLIENT_ID,
+          sessionId: process.env.OMI_SESSION_ID,
+          runId: process.env.OMI_RUN_ID,
+          attemptId: process.env.OMI_ATTEMPT_ID,
+          adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
+          legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
+        }),
+  };
 }
 
 // --- Communication with parent bridge ---
@@ -98,9 +146,20 @@ async function requestSwiftTool(
     return "Error: not connected to bridge";
   }
 
+  const context = activeOmiContext();
+  if (context.protocolVersion === 2 && (context.contextError || !context.requestId || !context.clientId)) {
+    return `Error: missing active Omi request context for v2 tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
+  }
+
   return new Promise<string>((resolve) => {
     pendingToolCalls.set(callId, { resolve });
-    const msg = JSON.stringify({ type: "tool_use", callId, name, input });
+    const msg = JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      ...context,
+    });
     pipeConnection!.write(msg + "\n");
   });
 }
@@ -116,7 +175,6 @@ const ONBOARDING_TOOL_NAMES = new Set([
   "set_user_preferences",
   "ask_followup",
   "complete_onboarding",
-  "save_knowledge_graph",
 ]);
 
 // Tool order: local tools first (always available), then backend RAG tools (require auth token).
@@ -234,6 +292,7 @@ Returns JSON with recent task_agents and floating_agent_pills. floating_agent_pi
       required: [],
     },
   },
+  ...agentControlToolDefinitions,
   {
     name: "spawn_agent",
     description: `Start a floating background agent pill.
@@ -886,6 +945,17 @@ async function handleJsonRpc(
                 text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
               }],
             },
+          });
+        }
+      } else if (isAgentControlToolName(toolName)) {
+        // Runtime control tools are handled by the Node parent/kernel. They
+        // still travel over the relay so MCP clients use the same tool path.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
           });
         }
       } else if (

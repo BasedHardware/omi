@@ -9253,6 +9253,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get backgroundModeNote => 'ขณะนี้ใช้ได้กับอุปกรณ์ Omi เท่านั้น และกำลังพัฒนาอย่างต่อเนื่อง';
 
   @override
+  String get backgroundModeUnavailable =>
+      'โหมดพื้นหลังไม่พร้อมใช้งานเนื่องจากไม่มีอุปกรณ์ที่รองรับเชื่อมต่ออยู่ เชื่อมต่ออุปกรณ์ Omi, OpenGlass หรือ Friend Pendant เพื่อใช้ฟีเจอร์นี้';
+
+  @override
   String get regenerateRecap => 'สร้างสรุปใหม่';
 
   @override
@@ -9287,6 +9291,18 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'พื้นที่จัดเก็บในเครื่องของคุณเหลือน้อย จึงหยุดการบันทึกชั่วคราว กรุณาเพิ่มพื้นที่ว่างหรืออัปโหลดไฟล์บันทึกของคุณ แล้วการบันทึกจะดำเนินต่อโดยอัตโนมัติ';
+
+  @override
+  String get recordingMode => 'โหมดการบันทึก';
+
+  @override
+  String get captureModeLater => 'ภายหลัง';
+
+  @override
+  String get captureModeLiveDescription => 'ถอดเสียงแบบเรียลไทม์ขณะที่คุณพูด';
+
+  @override
+  String get captureModeLaterDescription => 'บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ';
 
   @override
   String get unmute => 'เปิดเสียง';

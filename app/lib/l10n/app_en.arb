@@ -11010,6 +11010,10 @@
     "@backgroundModeNote": {
         "description": "Caveat note shown in the Background Mode sheet"
     },
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.",
+    "@backgroundModeUnavailable": {
+        "description": "Warning shown in Background Mode sheet when no device with a native BLE audio route is connected"
+    },
     "regenerateRecap": "Regenerate recap",
     "recapRegeneratedSnackbar": "Recap regenerated",
     "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
@@ -11038,6 +11042,22 @@
     "transcribeLaterStorageFull": "Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.",
     "@transcribeLaterStorageFull": {
         "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
+    },
+    "recordingMode": "Recording mode",
+    "@recordingMode": {
+        "description": "Title of the bottom sheet for choosing between Live and Transcribe Later recording modes"
+    },
+    "captureModeLater": "Later",
+    "@captureModeLater": {
+        "description": "Short label for the Transcribe Later mode shown on the home app-bar mode chip"
+    },
+    "captureModeLiveDescription": "Transcribe in real time as you speak.",
+    "@captureModeLiveDescription": {
+        "description": "Subtitle for the Live option in the recording mode picker"
+    },
+    "captureModeLaterDescription": "Save audio now and transcribe whenever you want.",
+    "@captureModeLaterDescription": {
+        "description": "Subtitle for the Transcribe Later option in the recording mode picker"
     },
     "unmute": "Unmute",
     "@unmute": {

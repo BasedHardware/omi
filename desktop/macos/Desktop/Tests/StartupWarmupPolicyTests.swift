@@ -363,6 +363,51 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
+    func testStartupResetClearsPerUserAppProviderState() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let containerURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/ViewModelContainer.swift")
+        let appProviderURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Providers/AppProvider.swift")
+        let containerSource = try String(contentsOf: containerURL, encoding: .utf8)
+        let appProviderSource = try String(contentsOf: appProviderURL, encoding: .utf8)
+
+        XCTAssertTrue(
+            containerSource.contains("appProvider.resetSessionState()"),
+            "Startup reset must clear AppProvider so account switches cannot show the previous user's app state"
+        )
+        XCTAssertTrue(
+            appProviderSource.contains("func resetSessionState()"),
+            "AppProvider must expose an explicit session reset hook"
+        )
+        for requiredReset in [
+            "apps = []",
+            "popularApps = []",
+            "integrationApps = []",
+            "chatApps = []",
+            "summaryApps = []",
+            "notificationApps = []",
+            "enabledApps = []",
+            "categories = []",
+            "capabilities = []",
+            "appLoadingStates = [:]",
+            "categoryFilteredApps = nil",
+            "categoryFilterOffset = 0",
+            "searchQuery = \"\"",
+            "selectedCategory = nil",
+            "selectedCapability = nil",
+            "showInstalledOnly = false",
+            "errorMessage = nil"
+        ] {
+            XCTAssertTrue(
+                appProviderSource.contains(requiredReset),
+                "AppProvider reset must include \(requiredReset)"
+            )
+        }
+    }
+
     func testAuthSignInFetchesFloatingBarPlanImmediately() throws {
         let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let authURL = testsURL

@@ -3093,5 +3093,10 @@
     "transcribeLaterStorageFull": "Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.",
     "unmute": "Reativar áudio",
     "newRecording": "Nova gravação",
-    "transcribeLaterPaused": "Em pausa — o áudio não está a ser gravado"
+    "transcribeLaterPaused": "Em pausa — o áudio não está a ser gravado",
+    "recordingMode": "Modo de gravação",
+    "captureModeLater": "Depois",
+    "captureModeLiveDescription": "Transcreva em tempo real enquanto fala.",
+    "captureModeLaterDescription": "Salve o áudio agora e transcreva quando quiser.",
+    "backgroundModeUnavailable": "O modo em segundo plano não está disponível porque nenhum dispositivo compatível está conectado. Conecte um dispositivo Omi, OpenGlass ou Friend Pendant para usar este recurso."
 }

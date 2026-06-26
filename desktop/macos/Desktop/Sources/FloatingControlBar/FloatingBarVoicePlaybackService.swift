@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 @MainActor
-final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
+final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
 
   // First chunk stays small so playback starts fast.
@@ -43,6 +43,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   // Carries each chunk's source text alongside its synthesized audio so playback can fall
   // back to the system voice (speaking the text) if AVAudioPlayer can't play the audio.
   private var audioQueue: [(audio: Data, text: String)] = []
+  private var isFillerSynthesizing = false
   private var isSynthesizing = false
   private var hasStartedRealPlayback = false
   private var hasEmittedFirstChunk = false
@@ -53,18 +54,22 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
   var tracer: QueryTracer?
   private let speechSynthesizer = AVSpeechSynthesizer()
 
-  private override init() {}
+  private override init() {
+    super.init()
+    speechSynthesizer.delegate = self
+  }
 
   var isSpeaking: Bool {
     if audioPlayer?.isPlaying == true { return true }
     if speechSynthesizer.isSpeaking { return true }
-    if fillerTask != nil || playbackTask != nil { return true }
+    if isFillerSynthesizing { return true }
     if isSynthesizing { return true }
     return !audioQueue.isEmpty || !synthesisQueue.isEmpty
   }
 
   func playFillerIfEnabled() {
     guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
+    setFloatingPillResponseGlow(true)
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -77,16 +82,31 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     case .systemVoice:
       enqueueSystemSpeech(phrase)
     case .openAI(let voiceID, let instructions):
+      isFillerSynthesizing = true
       fillerTask = Task { [weak self] in
         do {
           let audioData = try await Self.synthesizeOpenAISpeech(
             text: phrase, voiceID: voiceID, instructions: instructions)
           try Task.checkCancellation()
           await MainActor.run {
-            guard let self, !self.hasStartedRealPlayback else { return }
+            guard let self else { return }
+            self.isFillerSynthesizing = false
+            self.fillerTask = nil
+            guard !self.hasStartedRealPlayback else {
+              self.clearFloatingPillResponseGlowIfIdle()
+              return
+            }
             self.startPlayback(audioData)
+            self.clearFloatingPillResponseGlowIfIdle()
           }
-        } catch {}
+        } catch {
+          await MainActor.run {
+            guard let self else { return }
+            self.isFillerSynthesizing = false
+            self.fillerTask = nil
+            self.clearFloatingPillResponseGlowIfIdle()
+          }
+        }
       }
     }
   }
@@ -113,8 +133,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     if interruptedResponseID == message.id {
       streamedText = text
       bufferedText = ""
+      clearFloatingPillResponseGlowIfIdle()
       return
     }
+    setFloatingPillResponseGlow(true)
 
     if currentMode == nil {
       currentMode = resolvePlaybackMode()
@@ -210,22 +232,28 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
+          self.playbackTask = nil
           self.audioQueue.append((audio: audioData, text: text))
           self.startPlaybackIfNeeded()
           self.startSynthesisIfNeeded(mode: mode)
+          self.clearFloatingPillResponseGlowIfIdle()
         }
       } catch is CancellationError {
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
+          self.playbackTask = nil
           self.startSynthesisIfNeeded(mode: mode)
+          self.clearFloatingPillResponseGlowIfIdle()
         }
       } catch {
         if Self.isCancellation(error) {
           await MainActor.run {
             guard let self else { return }
             self.isSynthesizing = false
+            self.playbackTask = nil
             self.startSynthesisIfNeeded(mode: mode)
+            self.clearFloatingPillResponseGlowIfIdle()
           }
           return
         }
@@ -233,11 +261,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
         await MainActor.run {
           guard let self else { return }
           self.isSynthesizing = false
-        log(
-          "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
-        )
+          self.playbackTask = nil
+          log(
+            "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
+          )
           self.enqueueSystemSpeech(text)
           self.startSynthesisIfNeeded(mode: mode)
+          self.clearFloatingPillResponseGlowIfIdle()
         }
       }
     }
@@ -326,6 +356,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       shouldInterruptNextResponse = true
     }
     resetPlaybackPipeline(clearMode: false)
+    clearFloatingPillResponseGlowIfIdle()
   }
 
   private func startPlaybackIfNeeded() {
@@ -372,6 +403,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
       guard let self else { return }
       self.audioPlayer = nil
       self.startPlaybackIfNeeded()
+      self.clearFloatingPillResponseGlowIfIdle()
+    }
+  }
+
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      self?.clearFloatingPillResponseGlowIfIdle()
     }
   }
 
@@ -380,6 +418,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     playbackTask = nil
     fillerTask?.cancel()
     fillerTask = nil
+    isFillerSynthesizing = false
     if clearMode {
       currentMode = nil
       // Drop the tracer only on full teardown. interruptCurrentResponse uses
@@ -397,6 +436,17 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate {
     audioPlayer?.stop()
     audioPlayer = nil
     speechSynthesizer.stopSpeaking(at: .immediate)
+    setFloatingPillResponseGlow(false)
+  }
+
+  private func setFloatingPillResponseGlow(_ active: Bool) {
+    FloatingControlBarManager.shared.barState?.isVoiceResponseActive = active
+  }
+
+  private func clearFloatingPillResponseGlowIfIdle() {
+    if !isSpeaking {
+      setFloatingPillResponseGlow(false)
+    }
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {

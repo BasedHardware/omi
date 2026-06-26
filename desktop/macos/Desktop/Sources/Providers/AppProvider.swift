@@ -32,6 +32,35 @@ class AppProvider: ObservableObject {
 
     private let apiClient = APIClient.shared
 
+    // MARK: - Session Lifecycle
+
+    func resetSessionState() {
+        apps = []
+        popularApps = []
+        integrationApps = []
+        chatApps = []
+        summaryApps = []
+        notificationApps = []
+        enabledApps = []
+        categories = []
+        capabilities = []
+
+        isLoading = false
+        isSearching = false
+        appLoadingStates = [:]
+
+        searchQuery = ""
+        selectedCategory = nil
+        selectedCapability = nil
+        showInstalledOnly = false
+
+        errorMessage = nil
+        categoryFilteredApps = nil
+        hasMoreCategoryApps = false
+        isLoadingMore = false
+        categoryFilterOffset = 0
+    }
+
     // MARK: - Fetch Methods
 
     /// Fetch only chat-capable apps for startup chat picker warmup.

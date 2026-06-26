@@ -9305,6 +9305,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'حالت پس‌زمینه در دسترس نیست چون هیچ دستگاه سازگاری متصل نیست. برای استفاده از این ویژگی، یک دستگاه Omi، OpenGlass یا Friend Pendant وصل کنید.';
+
+  @override
   String get regenerateRecap => 'بازسازی خلاصه';
 
   @override
@@ -9340,6 +9344,18 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.';
+
+  @override
+  String get recordingMode => 'حالت ضبط';
+
+  @override
+  String get captureModeLater => 'بعداً';
+
+  @override
+  String get captureModeLiveDescription => 'رونویسی همزمان هنگام صحبت کردن.';
+
+  @override
+  String get captureModeLaterDescription => 'صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.';
 
   @override
   String get unmute => 'باصدا کردن';

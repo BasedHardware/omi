@@ -9303,6 +9303,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Režim na pozadí není k dispozici, protože není připojeno žádné kompatibilní zařízení. Pro použití této funkce připojte zařízení Omi, OpenGlass nebo Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Znovu vygenerovat shrnutí';
 
   @override
@@ -9338,6 +9342,18 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.';
+
+  @override
+  String get recordingMode => 'Režim nahrávání';
+
+  @override
+  String get captureModeLater => 'Později';
+
+  @override
+  String get captureModeLiveDescription => 'Přepis v reálném čase, jak mluvíte.';
+
+  @override
+  String get captureModeLaterDescription => 'Uložte zvuk nyní a přepište jej, kdykoli budete chtít.';
 
   @override
   String get unmute => 'Zapnout zvuk';

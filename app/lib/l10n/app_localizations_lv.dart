@@ -9325,6 +9325,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get backgroundModeNote => 'Pagaidām darbojas tikai ar Omi ierīcēm un tiek nepārtraukti uzlabota.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.';
+
+  @override
   String get regenerateRecap => 'Atjaunot kopsavilkumu';
 
   @override
@@ -9360,6 +9364,18 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.';
+
+  @override
+  String get recordingMode => 'Ierakstīšanas režīms';
+
+  @override
+  String get captureModeLater => 'Vēlāk';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribējiet reāllaikā, kamēr runājat.';
+
+  @override
+  String get captureModeLaterDescription => 'Saglabājiet audio tagad un transkribējiet, kad vēlaties.';
 
   @override
   String get unmute => 'Ieslēgt skaņu';

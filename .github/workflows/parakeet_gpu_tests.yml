@@ -1,0 +1,324 @@
+name: Parakeet GPU Tests (Smoke + DER + WER + Concurrency)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to test (e.g. abc1234)'
+        required: true
+      der_report_only:
+        description: 'DER benchmark report-only mode (true = no fail gate)'
+        required: false
+        default: 'false'
+      wer_report_only:
+        description: 'WER gate report-only mode (true = no fail gate)'
+        required: false
+        default: 'false'
+  schedule:
+    # Nightly at 03:00 UTC — tests latest dev image
+    - cron: '0 3 * * *'
+
+env:
+  SERVICE: parakeet
+  REGION: us-central1
+  NAMESPACE: dev-omi-backend
+  JOB_NAME: parakeet-gpu-test-${{ github.run_id }}
+
+jobs:
+  gpu-tests:
+    environment: development
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: dev-omi-gke
+          location: ${{ env.REGION }}
+          project_id: based-hardware-dev
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            # Nightly: use latest dev image tag from running deployment
+            TAG=$(kubectl -n ${{ env.NAMESPACE }} get deploy dev-omi-parakeet \
+              -o jsonpath='{.spec.template.spec.containers[0].image}' | cut -d: -f2)
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Using image tag: $(cat $GITHUB_OUTPUT | grep tag | cut -d= -f2)"
+
+      - name: Clean up previous test job
+        run: |
+          kubectl -n ${{ env.NAMESPACE }} delete job ${{ env.JOB_NAME }} --ignore-not-found=true
+          sleep 5
+
+      - name: Create GPU test job
+        run: |
+          cat <<'JOBEOF' | envsubst '$JOB_NAME $NAMESPACE $IMAGE_TAG $DER_REPORT_ONLY $WER_REPORT_ONLY' | kubectl apply -f -
+          apiVersion: batch/v1
+          kind: Job
+          metadata:
+            name: ${JOB_NAME}
+            namespace: ${NAMESPACE}
+          spec:
+            activeDeadlineSeconds: 1800
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: gpu-test
+                    image: gcr.io/based-hardware-dev/parakeet:${IMAGE_TAG}
+                    command:
+                      - bash
+                      - -c
+                      - |
+                        set -e
+                        echo "=== Parakeet GPU Test Suite ==="
+                        echo "Image: gcr.io/based-hardware-dev/parakeet:${IMAGE_TAG}"
+                        echo ""
+
+                        echo "--- Phase 1: Container Smoke Tests (CPU) ---"
+                        python -m pytest tests/container/test_parakeet_smoke.py -v \
+                          -k "not TestGPUInference" \
+                          --tb=short 2>&1
+                        echo ""
+
+                        echo "--- Phase 2: Contract Tests ---"
+                        python -m pytest tests/container/test_parakeet_contract.py -v \
+                          --tb=short 2>&1
+                        echo ""
+
+                        echo "--- Phase 3: GPU Smoke Tests ---"
+                        python -m pytest tests/container/test_parakeet_smoke.py -v \
+                          -k "TestGPUInference" \
+                          --tb=short 2>&1
+                        echo ""
+
+                        echo "--- Phase 4: DER Regression Gate (synthetic) ---"
+                        python -m pytest tests/container/test_parakeet_der_gate.py -v -s \
+                          --tb=short 2>&1
+                        echo ""
+
+                        echo "--- Phase 5: Real-speech DER Benchmark (VoxConverse) ---"
+                        echo "Starting uvicorn for benchmark..."
+                        uvicorn main:app --host 127.0.0.1 --port 8080 --loop uvloop &
+                        SERVER_PID=$!
+                        for i in $(seq 1 60); do
+                          if python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')" 2>/dev/null; then
+                            echo "Server ready after ${i}s"
+                            break
+                          fi
+                          sleep 1
+                        done
+
+                        set +e
+                        DER_REPORT_ONLY=${DER_REPORT_ONLY:-false} \
+                        DER_RESULTS_PATH=/tmp/parakeet-gpu-artifacts/der-benchmark-results.json \
+                        python -m pytest tests/container/test_parakeet_der_benchmark.py -v -s \
+                          --tb=short 2>&1
+                        BENCH_EXIT=$?
+                        echo "--- DER Diagnostics Artifact ---"
+                        if [ -f /tmp/parakeet-gpu-artifacts/der-benchmark-results.json ]; then
+                          echo "DER_DIAGNOSTICS_JSON_BEGIN"
+                          cat /tmp/parakeet-gpu-artifacts/der-benchmark-results.json
+                          echo "DER_DIAGNOSTICS_JSON_END"
+                        else
+                          echo "DER diagnostics artifact was not produced"
+                        fi
+                        set -e
+
+                        if [ $BENCH_EXIT -ne 0 ]; then
+                          echo "DER benchmark failed (exit=$BENCH_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $BENCH_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 6: Concurrency Stress Test ---"
+                        set +e
+                        CONCURRENCY_LEVEL=8 CONCURRENCY_ROUNDS=3 \
+                        python -m pytest tests/container/test_parakeet_concurrency.py -v -s \
+                          --tb=short 2>&1
+                        CONC_EXIT=$?
+                        set -e
+
+                        if [ $CONC_EXIT -ne 0 ]; then
+                          echo "Concurrency test failed (exit=$CONC_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $CONC_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 7: WER Regression Gate (LibriSpeech) ---"
+                        set +e
+                        WER_REPORT_ONLY=${WER_REPORT_ONLY:-false} \
+                        python -m pytest tests/container/test_parakeet_wer_gate.py -v -s \
+                          --tb=short 2>&1
+                        WER_EXIT=$?
+                        set -e
+
+                        if [ $WER_EXIT -ne 0 ]; then
+                          echo "WER gate failed (exit=$WER_EXIT)"
+                          kill $SERVER_PID 2>/dev/null || true
+                          wait $SERVER_PID 2>/dev/null || true
+                          exit $WER_EXIT
+                        fi
+                        echo ""
+
+                        echo "--- Phase 8: High-Concurrency Stress Test ---"
+                        set +e
+                        HIGH_CONCURRENCY_LEVEL=16 HIGH_CONCURRENCY_ROUNDS=5 \
+                        python -m pytest tests/container/test_parakeet_high_concurrency.py -v -s \
+                          --tb=short 2>&1
+                        HCONC_EXIT=$?
+                        set -e
+
+                        kill $SERVER_PID 2>/dev/null || true
+                        wait $SERVER_PID 2>/dev/null || true
+
+                        if [ $HCONC_EXIT -ne 0 ]; then
+                          echo "High-concurrency test failed (exit=$HCONC_EXIT)"
+                          exit $HCONC_EXIT
+                        fi
+                        echo ""
+
+                        echo "=== ALL TESTS PASSED ==="
+                    env:
+                      - name: HUGGINGFACE_TOKEN
+                        valueFrom:
+                          secretKeyRef:
+                            name: dev-omi-backend-secrets
+                            key: HUGGINGFACE_TOKEN
+                      - name: PARAKEET_MODEL
+                        value: "nvidia/parakeet-tdt-0.6b-v3"
+                      - name: PARAKEET_INFERENCE_MODE
+                        value: "nemo"
+                      - name: NVIDIA_VISIBLE_DEVICES
+                        value: "all"
+                      - name: DER_REPORT_ONLY
+                        value: "${DER_REPORT_ONLY}"
+                      - name: WER_REPORT_ONLY
+                        value: "${WER_REPORT_ONLY}"
+                    resources:
+                      requests:
+                        cpu: 1
+                        memory: 8Gi
+                        nvidia.com/gpu: 1
+                      limits:
+                        cpu: 2
+                        memory: 20Gi
+                        nvidia.com/gpu: 1
+                affinity:
+                  nodeAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                      nodeSelectorTerms:
+                        - matchExpressions:
+                            - key: service
+                              operator: In
+                              values:
+                                - parakeet
+                            - key: env
+                              operator: In
+                              values:
+                                - dev
+          JOBEOF
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
+          DER_REPORT_ONLY: ${{ github.event.inputs.der_report_only || 'false' }}
+          WER_REPORT_ONLY: ${{ github.event.inputs.wer_report_only || 'false' }}
+
+      - name: Wait for job completion
+        run: |
+          echo "Waiting for GPU test job to complete (timeout: 30 min)..."
+          kubectl -n ${{ env.NAMESPACE }} wait --for=condition=complete \
+            --timeout=1800s job/${{ env.JOB_NAME }} 2>&1 || true
+
+          # Check job status
+          STATUS=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
+            -o jsonpath='{.status.conditions[0].type}')
+          echo "Job status: $STATUS"
+
+      - name: Collect test logs
+        if: always()
+        run: |
+          mkdir -p artifacts/parakeet
+          echo "=== GPU Test Job Logs ==="
+          kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} 2>&1 | tee artifacts/parakeet/gpu-test.log || true
+          echo ""
+          echo "=== Job/Pod Details ==="
+          kubectl -n ${{ env.NAMESPACE }} describe job/${{ env.JOB_NAME }} 2>&1 || true
+          kubectl -n ${{ env.NAMESPACE }} get events --field-selector involvedObject.name=${{ env.JOB_NAME }} 2>&1 || true
+
+      - name: Extract DER diagnostics artifact
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          log_path = Path("artifacts/parakeet/gpu-test.log")
+          output_path = Path("artifacts/parakeet/der-benchmark-results.json")
+          text = log_path.read_text() if log_path.exists() else ""
+          start = "DER_DIAGNOSTICS_JSON_BEGIN"
+          end = "DER_DIAGNOSTICS_JSON_END"
+          start_index = text.find(start)
+          end_index = text.find(end, start_index + len(start)) if start_index != -1 else -1
+          if start_index == -1 or end_index == -1:
+              print("DER diagnostics JSON markers not found in order; skipping artifact extraction")
+              raise SystemExit(0)
+          json_text = text[start_index + len(start) : end_index].strip()
+          output_path.write_text(json_text + "\n")
+          print(f"Wrote {output_path}")
+          PY
+
+      - name: Upload DER diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parakeet-der-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/parakeet/der-benchmark-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Check job result
+        run: |
+          SUCCEEDED=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
+            -o jsonpath='{.status.succeeded}')
+          FAILED=$(kubectl -n ${{ env.NAMESPACE }} get job ${{ env.JOB_NAME }} \
+            -o jsonpath='{.status.failed}')
+
+          if [[ "$SUCCEEDED" == "1" ]]; then
+            echo "✅ All GPU tests passed"
+          else
+            echo "❌ GPU tests failed (succeeded=$SUCCEEDED, failed=$FAILED)"
+            # Print failure details
+            kubectl -n ${{ env.NAMESPACE }} logs job/${{ env.JOB_NAME }} --tail=50 2>&1 || true
+            exit 1
+          fi
+
+      - name: Clean up test job
+        if: always()
+        run: |
+          kubectl -n ${{ env.NAMESPACE }} delete job ${{ env.JOB_NAME }} --ignore-not-found=true

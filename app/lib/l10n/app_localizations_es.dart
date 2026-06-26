@@ -9324,6 +9324,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get backgroundModeNote => 'Por ahora solo funciona con dispositivos Omi y se mejora continuamente.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'El modo en segundo plano no está disponible porque no hay ningún dispositivo compatible conectado. Conecta un dispositivo Omi, OpenGlass o Friend Pendant para usar esta función.';
+
+  @override
   String get regenerateRecap => 'Regenerar resumen';
 
   @override
@@ -9359,6 +9363,18 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente.';
+
+  @override
+  String get recordingMode => 'Modo de grabación';
+
+  @override
+  String get captureModeLater => 'Después';
+
+  @override
+  String get captureModeLiveDescription => 'Transcribe en tiempo real mientras hablas.';
+
+  @override
+  String get captureModeLaterDescription => 'Guarda el audio ahora y transcríbelo cuando quieras.';
 
   @override
   String get unmute => 'Reactivar audio';

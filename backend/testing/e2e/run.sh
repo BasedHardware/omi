@@ -40,7 +40,7 @@ fi
 # ─── Verify fake dependencies are installed ───────────────────────────
 python -c "import fake_firestore; import fakeredis; import pytest_httpserver; import aioresponses" 2>/dev/null || {
     echo "ERROR: E2E test dependencies are not installed."
-    echo "Run: python -m pip install -r testing/e2e/requirements.txt"
+    echo "Run from backend/: ./scripts/sync-python-deps.sh"
     echo "Then retry: bash testing/e2e/run.sh"
     exit 1
 }
@@ -48,7 +48,7 @@ python -c "import fake_firestore; import fakeredis; import pytest_httpserver; im
 # ─── Verify core backend deps are installed ────────────────────────────
 python -c "import fastapi; import firebase_admin; import google.cloud.firestore" 2>/dev/null || {
     echo "ERROR: Backend dependencies not installed."
-    echo "Run: python -m pip install -r requirements.txt"
+    echo "Run from backend/: ./scripts/sync-python-deps.sh"
     exit 1
 }
 

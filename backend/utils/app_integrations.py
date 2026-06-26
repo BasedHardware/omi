@@ -166,7 +166,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     if conversation.is_locked:
         return []
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
@@ -304,15 +304,15 @@ def _hit_proactive_notification_rate_limits(uid: str, app: App):
         return False
     ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, app.id)
     if ttl > 0:
-        mem_db.set_proactive_noti_sent_at(uid, app.id, int(time.time() + ttl), ttl=ttl)
+        mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
 
 def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
-    mem_db.set_proactive_noti_sent_at(uid, app, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
@@ -501,8 +501,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # Update rate limit and daily count
     ts = int(time.time())
-    mem_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
     incr_daily_notification_count(uid)
 
     return notification_text
@@ -656,7 +656,7 @@ async def _async_trigger_realtime_integrations(
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
         # Return mentor results if any, even if no external apps
@@ -707,7 +707,9 @@ async def _async_trigger_realtime_integrations(
             await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
-                record_app_usage(
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
                     uid,
                     app.id,
                     UsageHistoryType.transcript_processed_external_integration,

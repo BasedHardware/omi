@@ -3058,5 +3058,10 @@
     "transcribeLaterStorageFull": "आपके फ़ोन में स्टोरेज कम है, इसलिए रिकॉर्डिंग रोक दी गई है। कुछ जगह खाली करें या अपनी रिकॉर्डिंग अपलोड करें, फिर यह अपने आप दोबारा शुरू हो जाएगी।",
     "unmute": "अनम्यूट",
     "newRecording": "नई रिकॉर्डिंग",
-    "transcribeLaterPaused": "रोका गया — ऑडियो रिकॉर्ड नहीं हो रहा है"
+    "transcribeLaterPaused": "रोका गया — ऑडियो रिकॉर्ड नहीं हो रहा है",
+    "recordingMode": "रिकॉर्डिंग मोड",
+    "captureModeLater": "बाद में",
+    "captureModeLiveDescription": "बोलते समय रीयल-टाइम में ट्रांसक्राइब करें।",
+    "captureModeLaterDescription": "अभी ऑडियो सहेजें और जब चाहें ट्रांसक्राइब करें।",
+    "backgroundModeUnavailable": "बैकग्राउंड मोड उपलब्ध नहीं है क्योंकि कोई संगत डिवाइस कनेक्ट नहीं है। इस सुविधा का उपयोग करने के लिए Omi, OpenGlass या Friend Pendant डिवाइस कनेक्ट करें।"
 }

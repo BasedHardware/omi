@@ -306,7 +306,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    url = data['url']
+    url = data.get('url')
+    if url is None:
+        raise HTTPException(status_code=400, detail='url is required')
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     set_user_webhook_db(uid, wtype, url)
@@ -1349,7 +1351,9 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
 
     # Get conversations for the date, excluding locked conversations
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if conversations_data:
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
@@ -1499,7 +1503,9 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
         start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
         end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
 
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if conversations_data:
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
     if not conversations_data:

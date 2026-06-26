@@ -9280,6 +9280,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get backgroundModeNote => 'फ़िलहाल केवल Omi डिवाइस के साथ काम करता है और इसे लगातार बेहतर बनाया जा रहा है।';
 
   @override
+  String get backgroundModeUnavailable =>
+      'बैकग्राउंड मोड उपलब्ध नहीं है क्योंकि कोई संगत डिवाइस कनेक्ट नहीं है। इस सुविधा का उपयोग करने के लिए Omi, OpenGlass या Friend Pendant डिवाइस कनेक्ट करें।';
+
+  @override
   String get regenerateRecap => 'रीकैप पुनः बनाएं';
 
   @override
@@ -9315,6 +9319,18 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'आपके फ़ोन में स्टोरेज कम है, इसलिए रिकॉर्डिंग रोक दी गई है। कुछ जगह खाली करें या अपनी रिकॉर्डिंग अपलोड करें, फिर यह अपने आप दोबारा शुरू हो जाएगी।';
+
+  @override
+  String get recordingMode => 'रिकॉर्डिंग मोड';
+
+  @override
+  String get captureModeLater => 'बाद में';
+
+  @override
+  String get captureModeLiveDescription => 'बोलते समय रीयल-टाइम में ट्रांसक्राइब करें।';
+
+  @override
+  String get captureModeLaterDescription => 'अभी ऑडियो सहेजें और जब चाहें ट्रांसक्राइब करें।';
 
   @override
   String get unmute => 'अनम्यूट';

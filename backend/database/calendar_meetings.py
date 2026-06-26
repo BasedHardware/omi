@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from google.cloud import firestore
+from google.cloud.firestore_v1 import transactional
 
 from ._client import db
+from database.document_ids import calendar_meeting_doc_id
 
 
 def _get_meetings_collection(uid: str):
@@ -11,25 +13,29 @@ def _get_meetings_collection(uid: str):
     return db.collection('users').document(uid).collection('meetings')
 
 
+@transactional
+def _upsert_meeting_transaction(transaction, doc_ref, meeting_data: Dict, now: datetime) -> None:
+    """Upsert a natural-key meeting while preserving first-created metadata."""
+    snapshot = doc_ref.get(transaction=transaction)
+    payload = dict(meeting_data)
+    payload['synced_at'] = now
+    if not snapshot.exists:
+        payload['created_at'] = now
+    transaction.set(doc_ref, payload, merge=True)
+
+
 def create_meeting(uid: str, meeting_data: Dict) -> str:
     """
-    Create a new calendar meeting in Firestore.
-    Returns the Firestore document ID.
+    Create or idempotently upsert a calendar meeting in Firestore.
+    Returns the deterministic Firestore document ID.
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    # Add timestamps (always in UTC for consistent querying)
-    from datetime import timezone
-
-    now = datetime.now(timezone.utc)
-    meeting_data['created_at'] = now
-    meeting_data['synced_at'] = now
-
-    # Create document
-    doc_ref = _get_meetings_collection(uid).document()
-    doc_ref.set(meeting_data)
-
-    return doc_ref.id
+    meeting_id = calendar_meeting_doc_id(uid, meeting_data['calendar_source'], meeting_data['calendar_event_id'])
+    doc_ref = _get_meetings_collection(uid).document(meeting_id)
+    transaction = db.transaction()
+    _upsert_meeting_transaction(transaction, doc_ref, meeting_data, datetime.now(timezone.utc))
+    return meeting_id
 
 
 def update_meeting(uid: str, meeting_id: str, meeting_data: Dict) -> None:
@@ -39,8 +45,6 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict) -> None:
     NOTE: Times should already be in UTC before calling this function.
     """
     # Update synced_at timestamp (always in UTC for consistent querying)
-    from datetime import timezone
-
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
     # Update document

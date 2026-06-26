@@ -618,17 +618,23 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    final successMsg = globalNavigatorKey.currentContext?.l10n.addAppUpdatedSuccess;
+    final failMsg = globalNavigatorKey.currentContext?.l10n.addAppUpdateFailed;
     var success = false;
     var res = await updateAppServer(imageFile, data);
     if (res) {
-      await appProvider!.getApps();
-      var app = await getAppDetailsServer(updateAppId!);
-      appProvider!.updateLocalApp(App.fromJson(app!));
-      AppSnackbar.showSnackbarSuccess(globalNavigatorKey.currentContext!.l10n.addAppUpdatedSuccess);
+      await appProvider?.getApps();
+      if (updateAppId != null) {
+        var app = await getAppDetailsServer(updateAppId!);
+        if (app != null) {
+          appProvider?.updateLocalApp(App.fromJson(app));
+        }
+      }
+      if (successMsg != null) AppSnackbar.showSnackbarSuccess(successMsg);
       clear();
       success = true;
     } else {
-      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppUpdateFailed);
+      if (failMsg != null) AppSnackbar.showSnackbarError(failMsg);
       success = false;
     }
     checkValidity();

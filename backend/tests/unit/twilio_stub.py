@@ -34,17 +34,35 @@ def prepare_twilio_service_import():
 
 def install_phone_calls_stub():
     database_module = restore_backend_package('database')
-    if 'database.phone_calls' not in sys.modules:
+    stub = sys.modules.get('database.phone_calls')
+    if stub is None:
         stub = types.ModuleType('database.phone_calls')
-        stub.get_phone_numbers = lambda uid: []
         sys.modules['database.phone_calls'] = stub
-        setattr(database_module, 'phone_calls', stub)
-    return sys.modules['database.phone_calls']
+    if 'get_phone_numbers' not in getattr(stub, '__dict__', {}):
+        stub.get_phone_numbers = lambda uid: []
+    setattr(database_module, 'phone_calls', stub)
+    return stub
 
 
 def install_twilio_stub():
-    if 'twilio' in sys.modules or importlib.util.find_spec('twilio') is not None:
+    existing_twilio = sys.modules.get('twilio')
+    required_stub_modules = (
+        'twilio',
+        'twilio.rest',
+        'twilio.jwt.access_token',
+        'twilio.jwt.access_token.grants',
+        'twilio.request_validator',
+        'twilio.base.exceptions',
+        'twilio.twiml.voice_response',
+    )
+    if all(name in sys.modules for name in required_stub_modules):
         return
+    if existing_twilio is None and importlib.util.find_spec('twilio') is not None:
+        return
+    if isinstance(existing_twilio, types.ModuleType):
+        existing_spec = getattr(existing_twilio, '__spec__', None)
+        if existing_spec is not None and getattr(existing_spec, 'origin', None):
+            return
 
     twilio_mod = types.ModuleType('twilio')
     rest_mod = types.ModuleType('twilio.rest')
@@ -161,13 +179,13 @@ def install_twilio_stub():
     twilio_mod.twiml = twiml_mod
     twiml_mod.voice_response = voice_response_mod
 
-    sys.modules.setdefault('twilio', twilio_mod)
-    sys.modules.setdefault('twilio.rest', rest_mod)
-    sys.modules.setdefault('twilio.jwt', jwt_mod)
-    sys.modules.setdefault('twilio.jwt.access_token', access_token_mod)
-    sys.modules.setdefault('twilio.jwt.access_token.grants', grants_mod)
-    sys.modules.setdefault('twilio.request_validator', request_validator_mod)
-    sys.modules.setdefault('twilio.base', base_mod)
-    sys.modules.setdefault('twilio.base.exceptions', exceptions_mod)
-    sys.modules.setdefault('twilio.twiml', twiml_mod)
-    sys.modules.setdefault('twilio.twiml.voice_response', voice_response_mod)
+    sys.modules['twilio'] = twilio_mod
+    sys.modules['twilio.rest'] = rest_mod
+    sys.modules['twilio.jwt'] = jwt_mod
+    sys.modules['twilio.jwt.access_token'] = access_token_mod
+    sys.modules['twilio.jwt.access_token.grants'] = grants_mod
+    sys.modules['twilio.request_validator'] = request_validator_mod
+    sys.modules['twilio.base'] = base_mod
+    sys.modules['twilio.base.exceptions'] = exceptions_mod
+    sys.modules['twilio.twiml'] = twiml_mod
+    sys.modules['twilio.twiml.voice_response'] = voice_response_mod

@@ -8,5 +8,9 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --test index.test.ts"
+  },
+  "dependencies": {
+    "@mariozechner/pi-ai": "^0.67.2",
+    "@mariozechner/pi-coding-agent": "^0.67.2"
   }
 }

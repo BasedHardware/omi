@@ -9308,6 +9308,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Bakgrundsläge är inte tillgängligt eftersom ingen kompatibel enhet är ansluten. Anslut en Omi-, OpenGlass- eller Friend Pendant-enhet för att använda den här funktionen.';
+
+  @override
   String get regenerateRecap => 'Återskapa sammanfattningen';
 
   @override
@@ -9343,6 +9347,18 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.';
+
+  @override
+  String get recordingMode => 'Inspelningsläge';
+
+  @override
+  String get captureModeLater => 'Senare';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribera i realtid medan du talar.';
+
+  @override
+  String get captureModeLaterDescription => 'Spara ljudet nu och transkribera när du vill.';
 
   @override
   String get unmute => 'Slå på ljud';

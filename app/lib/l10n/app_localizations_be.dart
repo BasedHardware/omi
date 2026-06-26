@@ -9331,6 +9331,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фонавы рэжым недаступны, бо не падключана сумяшчальная прылада. Падключыце Omi, OpenGlass або Friend Pendant, каб выкарыстоўваць гэту функцыю.';
+
+  @override
   String get regenerateRecap => 'Згенераваць рэзюмэ паўторна';
 
   @override
@@ -9366,6 +9370,18 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.';
+
+  @override
+  String get recordingMode => 'Рэжым запісу';
+
+  @override
+  String get captureModeLater => 'Пазней';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрыбаванне ў рэальным часе падчас размовы.';
+
+  @override
+  String get captureModeLaterDescription => 'Захавайце аўдыя зараз і транскрыбуйце калі заўгодна.';
 
   @override
   String get unmute => 'Уключыць гук';

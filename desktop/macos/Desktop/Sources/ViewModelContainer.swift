@@ -121,6 +121,7 @@ class ViewModelContainer: ObservableObject {
         tasksStore.resetSessionState()
         dashboardViewModel.resetSessionState()
         memoriesViewModel.resetSessionState()
+        appProvider.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false

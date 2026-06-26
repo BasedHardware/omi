@@ -343,6 +343,7 @@ class RewindSettings: ObservableObject {
     static let shared = RewindSettings()
 
     private let defaults = UserDefaults.standard
+    static let batteryCaptureIntervalMultiplier = 3.0
 
     /// Default apps that should be excluded from screen capture for privacy
     static let defaultExcludedApps: Set<String> = [
@@ -374,21 +375,6 @@ class RewindSettings: ObservableObject {
         }
     }
 
-    @Published var ocrRecognitionFast: Bool {
-        didSet {
-            defaults.set(ocrRecognitionFast, forKey: "rewindOCRFast")
-        }
-    }
-
-    /// When true, OCR is paused while on battery power to save energy.
-    /// Screenshots are still captured but stored without OCR text (isIndexed=false).
-    /// OCR backfill runs automatically when AC power is reconnected.
-    @Published var pauseOCROnBattery: Bool {
-        didSet {
-            defaults.set(pauseOCROnBattery, forKey: "rewindPauseOCROnBattery")
-        }
-    }
-
     @Published var excludedApps: Set<String> {
         didSet {
             let array = Array(excludedApps)
@@ -408,8 +394,6 @@ class RewindSettings: ObservableObject {
         // Load settings with defaults
         self.retentionDays = defaults.object(forKey: "rewindRetentionDays") as? Int ?? 7
         self.captureInterval = defaults.object(forKey: "rewindCaptureInterval") as? Double ?? 3.0
-        self.ocrRecognitionFast = defaults.object(forKey: "rewindOCRFast") as? Bool ?? true
-        self.pauseOCROnBattery = defaults.object(forKey: "rewindPauseOCROnBattery") as? Bool ?? true
         self.removedDefaults = Set(defaults.array(forKey: "rewindRemovedDefaultApps") as? [String] ?? [])
 
         // Load excluded apps, merging in any new defaults
@@ -427,6 +411,10 @@ class RewindSettings: ObservableObject {
     /// Check if an app is excluded from screen capture
     func isAppExcluded(_ appName: String) -> Bool {
         excludedApps.contains(appName)
+    }
+
+    func effectiveCaptureInterval(isOnBattery: Bool) -> Double {
+        isOnBattery ? captureInterval * Self.batteryCaptureIntervalMultiplier : captureInterval
     }
 
     /// Add an app to the exclusion list

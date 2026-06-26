@@ -9315,6 +9315,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String get backgroundModeNote => 'Засад ради само са Omi уређајима и непрекидно се побољшава.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Режим у позадини није доступан јер није повезан компатибилан уређај. Повежите Omi, OpenGlass или Friend Pendant уређај да бисте користили ову функцију.';
+
+  @override
   String get regenerateRecap => 'Поново генериши резиме';
 
   @override
@@ -9350,6 +9354,18 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.';
+
+  @override
+  String get recordingMode => 'Режим снимања';
+
+  @override
+  String get captureModeLater => 'Касније';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибујте у реалном времену док говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Сачувајте звук сада и транскрибујте кад год желите.';
 
   @override
   String get unmute => 'Uključi zvuk';

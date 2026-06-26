@@ -9314,6 +9314,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.';
+
+  @override
   String get regenerateRecap => 'Özeti yeniden oluştur';
 
   @override
@@ -9348,6 +9352,18 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get recordingMode => 'Kayıt modu';
+
+  @override
+  String get captureModeLater => 'Sonra';
+
+  @override
+  String get captureModeLiveDescription => 'Siz konuşurken gerçek zamanlı olarak yazıya dökün.';
+
+  @override
+  String get captureModeLaterDescription => 'Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.';
 
   @override
   String get unmute => 'Sesi aç';

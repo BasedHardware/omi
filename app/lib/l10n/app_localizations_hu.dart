@@ -9343,6 +9343,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.';
+
+  @override
   String get regenerateRecap => 'Összegzés újragenerálása';
 
   @override
@@ -9378,6 +9382,18 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.';
+
+  @override
+  String get recordingMode => 'Felvételi mód';
+
+  @override
+  String get captureModeLater => 'Később';
+
+  @override
+  String get captureModeLiveDescription => 'Átírás valós időben, miközben beszélsz.';
+
+  @override
+  String get captureModeLaterDescription => 'Mentsd el a hangot most, és írd át, amikor csak akarod.';
 
   @override
   String get unmute => 'Némítás feloldása';

@@ -9326,6 +9326,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Mod Latar Belakang tidak tersedia kerana tiada peranti serasi yang disambungkan. Sambungkan peranti Omi, OpenGlass atau Friend Pendant untuk menggunakan ciri ini.';
+
+  @override
   String get regenerateRecap => 'Jana semula ringkasan';
 
   @override
@@ -9361,6 +9365,18 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
+
+  @override
+  String get recordingMode => 'Mod rakaman';
+
+  @override
+  String get captureModeLater => 'Kemudian';
+
+  @override
+  String get captureModeLiveDescription => 'Transkripsi secara masa nyata semasa anda bercakap.';
+
+  @override
+  String get captureModeLaterDescription => 'Simpan audio sekarang dan transkripsi bila-bila masa.';
 
   @override
   String get unmute => 'Nyahsenyap';

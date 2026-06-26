@@ -17337,6 +17337,12 @@ abstract class AppLocalizations {
   /// **'Works with Omi devices only for now, and is being improved continuously.'**
   String get backgroundModeNote;
 
+  /// Warning shown in Background Mode sheet when no device with a native BLE audio route is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.'**
+  String get backgroundModeUnavailable;
+
   /// No description provided for @regenerateRecap.
   ///
   /// In en, this message translates to:
@@ -17402,6 +17408,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
   String get transcribeLaterStorageFull;
+
+  /// Title of the bottom sheet for choosing between Live and Transcribe Later recording modes
+  ///
+  /// In en, this message translates to:
+  /// **'Recording mode'**
+  String get recordingMode;
+
+  /// Short label for the Transcribe Later mode shown on the home app-bar mode chip
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get captureModeLater;
+
+  /// Subtitle for the Live option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe in real time as you speak.'**
+  String get captureModeLiveDescription;
+
+  /// Subtitle for the Transcribe Later option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio now and transcribe whenever you want.'**
+  String get captureModeLaterDescription;
 
   /// Button to resume Transcribe Later capture after muting
   ///

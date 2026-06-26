@@ -66,9 +66,10 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
             dueAt: serverDueAt
         )
         try await ActionItemStorage.shared.syncTaskActionItems([authoritativeServerItem])
-        let afterNormalSync = try XCTUnwrap(
-            try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "backend-task-1")
+        let afterNormalSyncItem = try await ActionItemStorage.shared.getLocalActionItem(
+            byBackendId: "backend-task-1"
         )
+        let afterNormalSync = try XCTUnwrap(afterNormalSyncItem)
         XCTAssertFalse(afterNormalSync.completed, "precondition: normal sync is still guarded")
         XCTAssertEqual(afterNormalSync.dueAt, originalDueAt, "precondition: due date is still guarded")
 
@@ -77,9 +78,10 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         ])
 
         XCTAssertEqual(reconciled, 1)
-        let refreshed = try XCTUnwrap(
-            try await ActionItemStorage.shared.getLocalActionItem(byBackendId: "backend-task-1")
+        let refreshedItem = try await ActionItemStorage.shared.getLocalActionItem(
+            byBackendId: "backend-task-1"
         )
+        let refreshed = try XCTUnwrap(refreshedItem)
         XCTAssertTrue(refreshed.completed)
         XCTAssertEqual(refreshed.deleted, true)
         XCTAssertEqual(refreshed.dueAt, originalDueAt)

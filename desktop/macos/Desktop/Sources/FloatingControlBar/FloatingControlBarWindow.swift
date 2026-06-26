@@ -8,6 +8,15 @@ private final class FloatingBarHostingView<Content: View>: NSHostingView<Content
     }
 }
 
+private extension Duration {
+    var millisecondsString: String {
+        let components = self.components
+        let milliseconds = Double(components.seconds) * 1000
+            + Double(components.attoseconds) / 1_000_000_000_000_000
+        return String(format: "%.1f", milliseconds)
+    }
+}
+
 /// NSPanel subclass for the floating control bar.
 ///
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
@@ -18,11 +27,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let defaultSize = NSSize(width: 40, height: 14)
     private static let minBarSize = NSSize(width: 40, height: 14)
     static let expandedBarSize = NSSize(width: 210, height: 50)
+    private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
     private static let expandedWidth: CGFloat = 430
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
+    private static let askOmiAnimationDuration: TimeInterval = 0.08
+    private static let askOmiSettleDelay: TimeInterval = 0.10
+    private static let topInset: CGFloat = 40
     /// Minimum window height when AI response first appears.
     private static let minResponseHeight: CGFloat = 250
     /// Base height used as the reference for 2× cap (same as current default response height).
@@ -52,6 +65,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
+    private var frameAnimationToken: Int = 0
 
     var onPlayPause: (() -> Void)?
     var onAskAI: (() -> Void)?
@@ -320,6 +334,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     func closeAIConversation() {
         AnalyticsManager.shared.floatingBarAskOmiClosed()
+        resignKeyAnimationToken += 1
+        let closeAnimationToken = resignKeyAnimationToken
 
         // Cancel any in-flight chat streaming to prevent re-expansion
         FloatingControlBarManager.shared.cancelChat()
@@ -334,7 +350,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             PushToTalkManager.shared.cancelListening()
         }
 
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+        withAnimation(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.aiInputText = ""
@@ -371,38 +387,36 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // Record the animation target so savePreChatCenterIfNeeded() can snap to it
         // if a new PTT query fires while this restore animation is still running.
         pendingRestoreOrigin = restoreOrigin
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = 0.3
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: restoreOrigin, size: size), display: true, animate: true)
-        NSAnimationContext.endGrouping()
+        animateFrame(to: NSRect(origin: restoreOrigin, size: size), duration: Self.askOmiAnimationDuration)
         let targetFrame = NSRect(origin: restoreOrigin, size: size)
         preChatCenter = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             guard let self = self else { return }
+            guard self.resignKeyAnimationToken == closeAnimationToken else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
-            // Safety net: only snap if no new AI session was opened while the animation ran.
-            // Without this guard, a rapid PTT query that fires within 0.35s gets collapsed
+            // Safety net: only snap if no new AI session was opened while the close settled.
+            // Without this guard, a rapid PTT query that fires while close settles gets collapsed
             // back to the pill position by this stale completion block.
             guard !self.state.showingAIConversation else { return }
-            if self.frame != targetFrame {
+            if !NSEqualRects(self.frame, targetFrame) {
                 self.setFrame(targetFrame, display: true, animate: false)
             }
         }
 
         // Allow hover resizes again after the animation settles.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
-            self?.suppressHoverResize = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
+            guard let self = self else { return }
+            guard self.resignKeyAnimationToken == closeAnimationToken else { return }
+            self.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
             // If the user has the bar disabled, hide it completely after closing the
             // AI conversation instead of leaving the compact pill visible — unless a
             // queued notification was just flushed; hiding now would swallow it, and
             // its dismissal re-hides the bar anyway.
-            if !FloatingControlBarManager.shared.isEnabled && self?.state.currentNotification == nil {
-                self?.orderOut(nil)
+            if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
+                self.orderOut(nil)
             }
         }
     }
@@ -424,6 +438,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func showAIConversation() {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
+        makeKeyAndOrderFront(nil)
 
         let shouldRestoreVisibleConversation = state.canRestoreVisibleConversation
         if !shouldRestoreVisibleConversation && state.hasVisibleConversation {
@@ -437,7 +452,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = true
                 state.isAILoading = false
@@ -447,9 +462,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: FloatingControlBarWindow.expandedWidth, height: 120)
-            resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: inputSize, makeResizable: false, animated: true,
+                animationDuration: Self.askOmiAnimationDuration, anchorTop: true)
 
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.easeOut(duration: Self.askOmiAnimationDuration)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = false
                 state.isAILoading = false
@@ -461,16 +478,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             setupInputHeightObserver()
         }
 
-        // Make the window key so the OmiTextEditor's focusOnAppear can take effect.
-        // The text editor itself handles focusing via updateNSView once it's in the window.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.makeKeyAndOrderFront(nil)
-        }
-
         // Fallback: explicitly focus the input after SwiftUI layout settles.
         // The AutoFocusScrollView.viewDidMoveToWindow() fires once and can miss
         // if the window isn't yet key at that moment.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             self?.focusInputField()
         }
 
@@ -495,7 +506,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
         setupInputHeightObserver()
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             self?.focusInputField()
         }
     }
@@ -553,22 +564,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Center-center: preserves midpoint (used by hover expand/collapse).
     private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
-        NSPoint(
-            x: frame.midX - newSize.width / 2,
-            y: frame.midY - newSize.height / 2
-        )
+        FloatingControlBarGeometry.centerAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
     /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        let top = frame.origin.y + frame.height
-        return NSPoint(
-            x: frame.midX - newSize.width / 2,
-            y: top - newSize.height
-        )
+        FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
-    private func resizeAnchored(to size: NSSize, makeResizable: Bool, animated: Bool = false, anchorTop: Bool = false) {
+    private func resizeAnchored(
+        to size: NSSize,
+        makeResizable: Bool,
+        animated: Bool = false,
+        animationDuration: TimeInterval = 0.3,
+        anchorTop: Bool = false
+    ) {
         // Cancel any pending resizeToFixedHeight work item to prevent stale resizes
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
@@ -583,6 +593,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
+        let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
+        resizeToFrame(
+            targetFrame,
+            makeResizable: makeResizable,
+            animated: animated,
+            animationDuration: animationDuration
+        )
+    }
+
+    private func resizeToFrame(
+        _ targetFrame: NSRect,
+        makeResizable: Bool,
+        animated: Bool = false,
+        animationDuration: TimeInterval = 0.3
+    ) {
         if makeResizable {
             styleMask.insert(.resizable)
         } else {
@@ -591,18 +616,42 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         isResizingProgrammatically = true
 
-        // On macOS 26+ (Tahoe), animated setFrame triggers NSHostingView.updateAnimatedWindowSize
-        // which invalidates safe area insets -> view graph -> requestUpdate -> setNeedsUpdateConstraints,
-        // causing an infinite constraint update loop (OMI-COMPUTER-1J). Disable implicit animations
-        // during the resize to prevent the updateAnimatedWindowSize code path.
-        NSAnimationContext.beginGrouping()
-        NSAnimationContext.current.duration = animated ? 0.3 : 0
-        NSAnimationContext.current.allowsImplicitAnimation = false
-        NSAnimationContext.current.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        self.setFrame(NSRect(origin: newOrigin, size: constrainedSize), display: true, animate: animated)
-        NSAnimationContext.endGrouping()
+        if animated {
+            // Keep windowDidResize from persisting transient animation frames as
+            // the user's saved response size until the final frame lands.
+            animateFrame(to: targetFrame, duration: animationDuration) { [weak self] in
+                self?.isResizingProgrammatically = false
+            }
+        } else {
+            self.setFrame(targetFrame, display: true, animate: false)
+            self.isResizingProgrammatically = false
+        }
+    }
 
-        self.isResizingProgrammatically = false
+    private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
+        frameAnimationToken += 1
+        let token = frameAnimationToken
+        let startFrame = self.frame
+        let steps = max(1, Int((duration * 120).rounded()))
+        for step in 1...steps {
+            let delay = duration * Double(step) / Double(steps)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.frameAnimationToken == token else { return }
+                let rawProgress = CGFloat(step) / CGFloat(steps)
+                let progress = 1 - pow(1 - rawProgress, 2)
+                let interpolated = NSRect(
+                    x: startFrame.origin.x + (frame.origin.x - startFrame.origin.x) * progress,
+                    y: startFrame.origin.y + (frame.origin.y - startFrame.origin.y) * progress,
+                    width: startFrame.width + (frame.width - startFrame.width) * progress,
+                    height: startFrame.height + (frame.height - startFrame.height) * progress
+                )
+                self.setFrame(interpolated, display: true, animate: false)
+                if step == steps {
+                    self.setFrame(frame, display: true, animate: false)
+                    completion?()
+                }
+            }
+        }
     }
 
     private func resizeToFixedHeight(_ height: CGFloat, animated: Bool = false) {
@@ -619,7 +668,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
-        guard !state.showingAIConversation, !state.isVoiceListening, !state.isShowingNotification, !suppressHoverResize else { return }
+        guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
 
@@ -629,16 +678,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             guard let self = self else { return }
             guard !self.state.showingAIConversation,
                   !self.state.isVoiceListening,
+                  !self.state.isVoiceResponseActive,
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
-            let newOrigin = NSPoint(
-                x: self.frame.midX - targetSize.width / 2,
-                y: self.frame.midY - targetSize.height / 2
+            let targetFrame = FloatingControlBarGeometry.centerAnchoredFrame(
+                currentFrame: self.frame,
+                targetSize: targetSize
             )
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
-            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            self.setFrame(targetFrame, display: true, animate: false)
             self.isResizingProgrammatically = false
         }
 
@@ -660,10 +710,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
-        let size = expanded
-            ? NSSize(width: FloatingControlBarWindow.expandedWidth, height: FloatingControlBarWindow.expandedBarSize.height)
-            : FloatingControlBarWindow.minBarSize
-        resizeAnchored(to: size, makeResizable: false, animated: true)
+        let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
+            currentFrame: frame,
+            expanded: expanded,
+            draggable: ShortcutSettings.shared.draggableBarEnabled,
+            visibleFrame: geometryScreenVisibleFrame(),
+            topInset: Self.topInset,
+            compactSize: Self.minBarSize,
+            voiceSize: Self.voiceBarSize
+        )
+        resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.3)
     }
 
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -683,7 +739,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         let targetSize: NSSize
         if state.isVoiceListening {
-            targetSize = NSSize(width: Self.expandedWidth, height: Self.expandedBarSize.height)
+            targetSize = Self.voiceBarSize
         } else {
             targetSize = state.isHoveringBar ? Self.expandedBarSize : Self.minBarSize
         }
@@ -695,6 +751,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     func normalizeForTemporaryShow() {
         guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
         resizeAnchored(to: Self.minBarSize, makeResizable: false, animated: false, anchorTop: true)
+    }
+
+    var hasSettledClosedForAutomation: Bool {
+        !state.showingAIConversation
+            && !suppressHoverResize
+            && pendingRestoreOrigin == nil
+            && NSEqualSizes(frame.size, Self.minBarSize)
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
@@ -741,13 +804,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Compute the default origin for the collapsed pill (top-center of the key screen).
     /// Used by closeAIConversation in non-draggable mode and centerOnMainScreen.
     private func defaultPillOrigin() -> NSPoint {
-        let size = FloatingControlBarWindow.minBarSize
-        let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen = targetScreen else { return .zero }
-        let visibleFrame = screen.visibleFrame
-        let x = visibleFrame.midX - size.width / 2
-        let y = visibleFrame.maxY - size.height - 20
-        return NSPoint(x: x, y: y)
+        defaultTopCenteredFrame(for: FloatingControlBarWindow.minBarSize).origin
+    }
+
+    private func defaultTopCenteredFrame(for size: NSSize) -> NSRect {
+        FloatingControlBarGeometry.defaultPillFrame(
+            size: size,
+            visibleFrame: geometryScreenVisibleFrame(),
+            topInset: Self.topInset
+        )
+    }
+
+    private func geometryScreenVisibleFrame() -> NSRect {
+        let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        return targetScreen?.visibleFrame ?? .zero
     }
 
     /// Center the bar near the top of the main screen.
@@ -758,11 +828,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        let visibleFrame = screen.visibleFrame
-        let x = visibleFrame.midX - frame.width / 2
-        let y = visibleFrame.maxY - frame.height - 20  // 20pt from top
-        self.setFrameOrigin(NSPoint(x: x, y: y))
-        log("FloatingControlBarWindow: centered at (\(x), \(y)) on screen \(visibleFrame)")
+        let origin = FloatingControlBarGeometry.defaultPillFrame(
+            size: frame.size,
+            visibleFrame: screen.visibleFrame,
+            topInset: Self.topInset
+        ).origin
+        self.setFrameOrigin(origin)
+        log("FloatingControlBarWindow: centered at \(origin) on screen \(screen.visibleFrame)")
     }
 
     func resetPosition() {
@@ -838,7 +910,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else if state.currentNotification != nil {
             minimumWidth = FloatingControlBarWindow.notificationWidth
         } else if state.isVoiceListening {
-            minimumWidth = FloatingControlBarWindow.expandedWidth
+            minimumWidth = FloatingControlBarWindow.voiceBarSize.width
         } else if state.isHoveringBar {
             minimumWidth = FloatingControlBarWindow.expandedBarSize.width
         } else {
@@ -874,7 +946,21 @@ class FloatingControlBarManager {
 
     private struct PendingFollowUpQuery {
         let text: String
-        let fromVoice: Bool
+        let presentation: QueryPresentation
+    }
+
+    private enum QueryPresentation {
+        case visible(fromVoice: Bool)
+        case voiceOnly
+
+        var fromVoice: Bool {
+            switch self {
+            case .visible(let fromVoice):
+                return fromVoice
+            case .voiceOnly:
+                return true
+            }
+        }
     }
 
     private struct StoredNotificationMessage {
@@ -908,6 +994,11 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
+
+    private var selectedFloatingModel: String {
+        let selected = ShortcutSettings.shared.selectedModel
+        return selected.isEmpty ? ModelQoS.Claude.defaultSelection : selected
+    }
     private var pendingFollowUpQuery: PendingFollowUpQuery?
 
     /// Whether the user has enabled the Ask Omi bar (persisted across launches).
@@ -1137,6 +1228,107 @@ class FloatingControlBarManager {
         window?.isVisible ?? false
     }
 
+    struct AutomationState {
+        let isVisible: Bool
+        let isAskOmiOpen: Bool
+        let isAskOmiFocused: Bool
+        let frame: String?
+    }
+
+    var automationState: AutomationState {
+        guard let window else {
+            return AutomationState(isVisible: false, isAskOmiOpen: false, isAskOmiFocused: false, frame: nil)
+        }
+        let focused = window.firstResponder is NSTextView
+        return AutomationState(
+            isVisible: window.isVisible,
+            isAskOmiOpen: window.state.showingAIConversation && !window.state.showingAIResponse,
+            isAskOmiFocused: focused,
+            frame: NSStringFromRect(window.frame)
+        )
+    }
+
+    func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        if reset, window.state.showingAIConversation {
+            window.closeAIConversation()
+            _ = await waitForAskOmiClosed(in: window)
+        }
+
+        let start = ContinuousClock.now
+        openAIInput()
+        guard wait else {
+            return [
+                "triggered": "true",
+                "frame": NSStringFromRect(window.frame),
+                "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+            ]
+        }
+        let openMs = await waitForAutomationCondition {
+            window.isVisible && window.state.showingAIConversation && !window.state.showingAIResponse
+        }
+        if !(window.firstResponder is NSTextView) {
+            _ = window.focusInputField()
+        }
+        let focusMs = await waitForAutomationCondition {
+            window.firstResponder is NSTextView
+        }
+        let elapsedMs = start.duration(to: .now).millisecondsString
+        return [
+            "openMs": openMs ?? "timeout",
+            "focusMs": focusMs ?? "timeout",
+            "elapsedMs": elapsedMs,
+            "frame": NSStringFromRect(window.frame),
+            "focused": (window.firstResponder is NSTextView) ? "true" : "false",
+        ]
+    }
+
+    func closeAskOmiForAutomation(wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        let start = ContinuousClock.now
+        if window.state.showingAIConversation {
+            window.closeAIConversation()
+        }
+        guard wait else {
+            return [
+                "triggered": "true",
+                "visible": window.isVisible ? "true" : "false",
+                "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+                "frame": NSStringFromRect(window.frame),
+            ]
+        }
+        let closeMs = await waitForAskOmiClosed(in: window)
+        let elapsedMs = start.duration(to: .now).millisecondsString
+        return [
+            "closeMs": closeMs ?? "timeout",
+            "elapsedMs": elapsedMs,
+            "visible": window.isVisible ? "true" : "false",
+            "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+            "frame": NSStringFromRect(window.frame),
+        ]
+    }
+
+    private func waitForAutomationCondition(_ condition: @MainActor @escaping () -> Bool) async -> String? {
+        let start = ContinuousClock.now
+        while start.duration(to: .now) < .milliseconds(500) {
+            if condition() {
+                return start.duration(to: .now).millisecondsString
+            }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return nil
+    }
+
+    private func waitForAskOmiClosed(in window: FloatingControlBarWindow) async -> String? {
+        await waitForAutomationCondition {
+            window.hasSettledClosedForAutomation
+        }
+    }
+
     /// Show the floating bar and persist the preference.
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
@@ -1308,6 +1500,26 @@ class FloatingControlBarManager {
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
     func openAIInputWithQuery(_ query: String, fromVoice: Bool = false) {
         guard let window = window else { return }
+        guard let provider = activeFloatingProvider() else { return }
+
+        if fromVoice {
+            chatCancellable?.cancel()
+            chatCancellable = nil
+            window.cancelInputHeightObserver()
+            window.state.currentQueryFromVoice = true
+            window.state.isVoiceResponseActive = true
+            if window.state.showingAIConversation {
+                window.closeAIConversation()
+            } else if !window.isVisible {
+                window.makeKeyAndOrderFront(nil)
+            }
+            Task { @MainActor in
+                await self.withQueryTracer(query: query, fromVoice: true) {
+                    await self.routeQuery(query, barWindow: window, provider: provider, presentation: .voiceOnly)
+                }
+            }
+            return
+        }
 
         // Cancel stale subscriptions immediately to prevent old data from flashing
         chatCancellable?.cancel()
@@ -1321,8 +1533,6 @@ class FloatingControlBarManager {
         window.state.currentQueryFromVoice = fromVoice
         pendingNotificationContext = nil
         floatingSessionKey = "floating"
-
-        guard let provider = activeFloatingProvider() else { return }
 
         // Re-wire the onSendQuery to use the isolated floating-bar provider.
         // Subsequent typed messages also go through the AI router. A message arriving
@@ -1392,10 +1602,30 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         fromVoice: Bool
     ) async {
+        await routeQuery(message, barWindow: barWindow, provider: provider, presentation: .visible(fromVoice: fromVoice))
+    }
+
+    private func routeQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation
+    ) async {
+        if provider.isSending {
+            pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
+            if case .visible(let fromVoice) = presentation {
+                prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+            }
+            provider.stopAgent()
+            return
+        }
+
         // Show the thinking state immediately so there's no perceptible lag
         // while the router thinks. If the router decides "agent" we'll tear
         // this down before the chat actually streams anything.
-        prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        if case .visible(let fromVoice) = presentation {
+            prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
+        }
 
         // Skip the Haiku router for obviously-conversational queries (short, no
         // task/agent signal): they're the common case, almost always route to "chat"
@@ -1406,7 +1636,7 @@ class FloatingControlBarManager {
         let routerTracer = QueryTracerContext.current
         if Self.routerCanSkipToChat(message) {
             routerTracer?.mark("router_classify", metadata: ["route": "chat"])
-            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+            await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
             return
         }
 
@@ -1416,24 +1646,52 @@ class FloatingControlBarManager {
         let decision = await AgentPillsManager.classify(message)
         routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
         if decision.route == .agent {
-            let model = ShortcutSettings.shared.selectedModel.isEmpty
-                ? "claude-sonnet-4-6"
-                : ShortcutSettings.shared.selectedModel
             _ = AgentPillsManager.shared.spawnFromUserQuery(
                 message,
-                model: model,
-                fromVoice: fromVoice,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
                 preFetchedTitle: decision.title,
                 preFetchedAck: decision.ack
             )
-            // Tear down the inline state we set up for the thinking spinner.
-            barWindow.state.aiInputText = ""
-            barWindow.closeAIConversation()
+            switch presentation {
+            case .visible:
+                // Tear down the inline state we set up for the thinking spinner.
+                barWindow.state.aiInputText = ""
+                barWindow.closeAIConversation()
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
             return
         }
-        // Chat route: continue with the normal inline flow. sendAIQuery will
-        // re-prepare the visible state, which is idempotent.
-        await sendAIQuery(message, barWindow: barWindow, provider: provider)
+
+        // Chat route: continue with the requested delivery surface.
+        await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func dispatchChatQuery(
+        _ message: String,
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider,
+        presentation: QueryPresentation
+    ) async {
+        switch presentation {
+        case .visible:
+            await sendAIQuery(message, barWindow: barWindow, provider: provider)
+        case .voiceOnly:
+            await sendVoiceOnlyQuery(message, barWindow: barWindow, provider: provider)
+        }
+    }
+
+    private func dispatchPendingQueryIfNeeded(
+        barWindow: FloatingControlBarWindow,
+        provider: ChatProvider
+    ) async -> Bool {
+        guard let pending = pendingFollowUpQuery else { return false }
+        pendingFollowUpQuery = nil
+        barWindow.state.currentQueryFromVoice = pending.presentation.fromVoice
+        await routeQuery(pending.text, barWindow: barWindow, provider: provider, presentation: pending.presentation)
+        return true
     }
 
     /// Send a follow-up query in the existing AI conversation (used by PTT follow-up).
@@ -1459,7 +1717,7 @@ class FloatingControlBarManager {
         }
 
         if provider.isSending {
-            pendingFollowUpQuery = PendingFollowUpQuery(text: query, fromVoice: fromVoice)
+            pendingFollowUpQuery = PendingFollowUpQuery(text: query, presentation: .visible(fromVoice: fromVoice))
             prepareVisibleQueryState(query, in: window, fromVoice: fromVoice)
             provider.stopAgent()
             return
@@ -1788,6 +2046,17 @@ class FloatingControlBarManager {
     }
 
     private func sendAIQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        // Defensive cancellation guard. `sendAIQuery` is a long async function
+        // (screenshot capture, limiter check, provider.sendMessage). If a parent
+        // task cancels us (e.g. closeAIConversation racing, the user firing a
+        // second query, a future refactor that runs the router in parallel),
+        // we should bail before doing setup work — especially before
+        // `limiter.recordQuery()` (which would consume a local quota slot)
+        // and before the screenshot capture. This matches the pattern used
+        // elsewhere in the codebase (OnboardingChatView, FileIndexingView,
+        // DesktopHomeView) and is cheap insurance against future refactors.
+        guard !Task.isCancelled else { return }
+
         // QueryTracer: `pre_llm` brackets everything between query submission and
         // the ChatProvider call (screenshot capture, usage checks, filler audio).
         let currentTracer = QueryTracerContext.current
@@ -1796,8 +2065,37 @@ class FloatingControlBarManager {
         prepareVisibleQueryState(message, in: barWindow, fromVoice: queryFromVoice)
         let generation = activeQueryGeneration
 
+        // Re-check after the await-free setup work above.
+        guard !Task.isCancelled else { return }
+
         // Check monthly usage limit for free users (shared with main chat page).
+        //
+        // `FloatingBarUsageLimiter.isLimitReached` returns `false` (fail-open)
+        // when `serverQuota == nil`. The optimistic check is fast and doesn't
+        // need a network round trip, but it relies on having a snapshot to
+        // check against. If app-launch `fetchPlan()` failed (network blip,
+        // first-run offline, etc.) and the user has been signing queries
+        // without ever refreshing the quota, a free user past their limit
+        // can keep chatting — the local limiter has no data to enforce.
+        //
+        // Fix: at the start of every floating-bar query, if `serverQuota`
+        // is nil, force a fresh `syncQuota()` before the limit check. This
+        // is one network round trip on cold start, zero on every subsequent
+        // query (serverQuota is populated for the session lifetime).
         let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider, limiter.serverQuota == nil {
+            await limiter.syncQuota()
+            // (cubic P2 on PR #8141, fixed)
+        // Race: the user may have cancelled or fired a new query while
+            // we were awaiting the network call. Re-check the query
+            // generation; if this query was superseded, bail before
+            // doing any more work (limiter.recordQuery() below would
+            // consume a local quota slot for a cancelled query; the
+            // screenshot + provider.sendMessage would spend CPU/tokens
+            // on a response the user no longer wants). Bug identified
+            // by cubic-dev-ai on PR #8141 — P2.
+            guard isActiveQueryGeneration(generation) else { return }
+        }
         if provider.isUsingOmiAccountProvider {
             if limiter.isLimitReached {
                 guard isActiveQueryGeneration(generation) else { return }
@@ -1895,24 +2193,18 @@ class FloatingControlBarManager {
                 }
             }
 
-        let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
-            ? ModelQoS.Claude.defaultSelection
-            : ShortcutSettings.shared.selectedModel
         let notificationContextSuffix = notificationContextSuffixIfNeeded(for: message)
         currentTracer?.end("pre_llm")
         await provider.sendMessage(
             message,
-            model: floatingModel,
+            model: selectedFloatingModel,
             systemPromptSuffix: notificationContextSuffix,
             systemPromptStyle: .floating,
             sessionKey: floatingSessionKey,
             imageData: screenshotData
         )
 
-        if let followUp = pendingFollowUpQuery {
-            pendingFollowUpQuery = nil
-            barWindow.state.currentQueryFromVoice = followUp.fromVoice
-            await sendAIQuery(followUp.text, barWindow: barWindow, provider: provider)
+        if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
             return
         }
 
@@ -1960,6 +2252,97 @@ class FloatingControlBarManager {
                 isFinal: true
             )
         }
+    }
+
+    private func sendVoiceOnlyQuery(_ message: String, barWindow: FloatingControlBarWindow, provider: ChatProvider) async {
+        let currentTracer = QueryTracerContext.current
+        currentTracer?.begin("pre_llm")
+        activeQueryGeneration += 1
+        let generation = activeQueryGeneration
+
+        barWindow.state.currentQueryFromVoice = true
+        barWindow.state.isVoiceListening = false
+        barWindow.state.isVoiceLocked = false
+        barWindow.state.isVoiceFollowUp = false
+        barWindow.state.voiceTranscript = ""
+        barWindow.state.voiceFollowUpTranscript = ""
+
+        let limiter = FloatingBarUsageLimiter.shared
+        if provider.isUsingOmiAccountProvider {
+            if limiter.isLimitReached {
+                currentTracer?.end("pre_llm", metadata: ["error": "usage_limit"])
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+                FloatingBarVoicePlaybackService.shared.speakOneShot(
+                    "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions."
+                )
+                return
+            }
+            limiter.recordQuery()
+        }
+
+        FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+        barWindow.state.isVoiceResponseActive = true
+        FloatingBarVoicePlaybackService.shared.tracer = currentTracer
+        FloatingBarVoicePlaybackService.shared.playFillerIfEnabled()
+
+        let needsScreenshot = Self.queryNeedsScreenshot(message)
+        let screenshotData: Data?
+        if needsScreenshot {
+            currentTracer?.begin("screenshot_capture")
+            screenshotData = await Task.detached { () -> Data? in
+                ScreenCaptureManager.captureScreenData()
+            }.value
+            currentTracer?.end("screenshot_capture")
+        } else {
+            screenshotData = nil
+            currentTracer?.mark("screenshot_capture")
+        }
+
+        AnalyticsManager.shared.floatingBarQuerySent(messageLength: message.count, hasScreenshot: screenshotData != nil)
+
+        let messageCountBefore = provider.messages.count
+        chatCancellable?.cancel()
+        chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
+                guard messages.count > messageCountBefore,
+                      let aiMessage = messages.last,
+                      aiMessage.sender == .ai
+                else { return }
+                FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                    aiMessage,
+                    isFinal: !aiMessage.isStreaming
+                )
+            }
+
+        currentTracer?.end("pre_llm")
+        await provider.sendMessage(
+            message,
+            model: selectedFloatingModel,
+            systemPromptStyle: .floating,
+            sessionKey: floatingSessionKey,
+            imageData: screenshotData
+        )
+
+        if await dispatchPendingQueryIfNeeded(barWindow: barWindow, provider: provider) {
+            return
+        }
+
+        guard isActiveQueryGeneration(generation) else { return }
+        let newMessages = Array(provider.messages.dropFirst(messageCountBefore))
+        if let finalAIMessage = newMessages.last(where: { $0.sender == .ai }) {
+            FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(finalAIMessage, isFinal: true)
+        } else if let errorText = provider.errorMessage, !errorText.isEmpty {
+            FloatingBarVoicePlaybackService.shared.speakOneShot(errorText)
+        } else {
+            FloatingBarVoicePlaybackService.shared.speakOneShot("I couldn't get a response. Please try again.")
+        }
+
+        chatCancellable?.cancel()
+        chatCancellable = nil
+        barWindow.state.currentQueryFromVoice = false
     }
 
     private func notificationContextSuffixIfNeeded(for message: String) -> String? {
@@ -2054,5 +2437,11 @@ extension FloatingControlBarWindow {
     /// query won't be immediately closed by a stale completion block.
     func cancelPendingDismiss() {
         resignKeyAnimationToken += 1
+        frameAnimationToken += 1
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            pendingRestoreOrigin = nil
+        }
+        suppressHoverResize = false
+        isResizingProgrammatically = false
     }
 }

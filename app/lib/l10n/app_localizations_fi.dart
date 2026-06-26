@@ -9303,6 +9303,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Taustatila ei ole käytettävissä, koska yhteensopivaa laitetta ei ole yhdistetty. Yhdistä Omi-, OpenGlass- tai Friend Pendant -laite käyttääksesi tätä ominaisuutta.';
+
+  @override
   String get regenerateRecap => 'Luo yhteenveto uudelleen';
 
   @override
@@ -9338,6 +9342,18 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
+
+  @override
+  String get recordingMode => 'Tallennustila';
+
+  @override
+  String get captureModeLater => 'Myöhemmin';
+
+  @override
+  String get captureModeLiveDescription => 'Litteroi reaaliajassa puhuessasi.';
+
+  @override
+  String get captureModeLaterDescription => 'Tallenna ääni nyt ja litteroi milloin haluat.';
 
   @override
   String get unmute => 'Poista mykistys';

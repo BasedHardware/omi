@@ -20,6 +20,7 @@ from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 
@@ -132,18 +133,24 @@ class Renderer:
             return
         self._stderr.print(f"[yellow]![/yellow] {message}")
 
-    def error(self, message: str, *, detail: Optional[str] = None) -> None:
+    def error(self, message: str, *, detail: Optional[str] = None, extra: Optional[Mapping[str, Any]] = None) -> None:
         # Errors are emitted in BOTH modes — JSON mode keeps stdout pristine,
         # but error messages still need to reach the user via stderr.
         if self.json_mode:
             payload: dict[str, Any] = {"error": message}
             if detail:
                 payload["detail"] = detail
-            self._stderr.print(json.dumps(payload))
+            if extra:
+                payload.update(dict(extra))
+            sys.stderr.write(json.dumps(payload) + "\n")
+            sys.stderr.flush()
         else:
             line = f"[red]✗[/red] {message}"
             if detail:
                 line += f"\n  [dim]{detail}[/dim]"
+            if extra:
+                for key, value in extra.items():
+                    line += f"\n  [dim]{escape(str(key))}: {escape(_stringify(value))}[/dim]"
             self._stderr.print(line)
 
     def debug(self, message: str) -> None:

@@ -9138,6 +9138,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 
   @override
+  String get backgroundModeUnavailable => '后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。';
+
+  @override
   String get regenerateRecap => '重新生成回顾';
 
   @override
@@ -9169,6 +9172,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
+
+  @override
+  String get recordingMode => '录制模式';
+
+  @override
+  String get captureModeLater => '稍后';
+
+  @override
+  String get captureModeLiveDescription => '在你说话时实时转写。';
+
+  @override
+  String get captureModeLaterDescription => '立即保存音频，随时转写。';
 
   @override
   String get unmute => '取消静音';

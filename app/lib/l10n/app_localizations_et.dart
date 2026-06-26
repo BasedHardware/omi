@@ -9300,6 +9300,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade.';
+
+  @override
   String get regenerateRecap => 'Loo kokkuvõte uuesti';
 
   @override
@@ -9335,6 +9339,18 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.';
+
+  @override
+  String get recordingMode => 'Salvestusrežiim';
+
+  @override
+  String get captureModeLater => 'Hiljem';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribeeri reaalajas, kui räägid.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvesta heli kohe ja transkribeeri, millal soovid.';
 
   @override
   String get unmute => 'Tühista vaigistus';

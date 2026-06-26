@@ -9369,6 +9369,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία.';
+
+  @override
   String get regenerateRecap => 'Αναδημιουργία ανακεφαλαίωσης';
 
   @override
@@ -9404,6 +9408,18 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Ο αποθηκευτικός χώρος του τηλεφώνου σας τελειώνει, γι\' αυτό η ηχογράφηση είναι σε παύση. Ελευθερώστε χώρο ή ανεβάστε τις ηχογραφήσεις σας και θα συνεχιστεί αυτόματα.';
+
+  @override
+  String get recordingMode => 'Λειτουργία εγγραφής';
+
+  @override
+  String get captureModeLater => 'Αργότερα';
+
+  @override
+  String get captureModeLiveDescription => 'Μεταγραφή σε πραγματικό χρόνο καθώς μιλάτε.';
+
+  @override
+  String get captureModeLaterDescription => 'Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε.';
 
   @override
   String get unmute => 'Άρση σίγασης';

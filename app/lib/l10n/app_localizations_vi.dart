@@ -9301,6 +9301,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Chế độ nền không khả dụng vì chưa có thiết bị tương thích nào được kết nối. Kết nối thiết bị Omi, OpenGlass hoặc Friend Pendant để sử dụng tính năng này.';
+
+  @override
   String get regenerateRecap => 'Tạo lại tóm tắt';
 
   @override
@@ -9336,6 +9340,18 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.';
+
+  @override
+  String get recordingMode => 'Chế độ ghi';
+
+  @override
+  String get captureModeLater => 'Sau';
+
+  @override
+  String get captureModeLiveDescription => 'Phiên âm theo thời gian thực khi bạn nói.';
+
+  @override
+  String get captureModeLaterDescription => 'Lưu âm thanh ngay bây giờ và phiên âm bất cứ khi nào bạn muốn.';
 
   @override
   String get unmute => 'Bật tiếng';

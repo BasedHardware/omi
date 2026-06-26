@@ -29,8 +29,9 @@ actor APIClient {
   // Short-lived caches to deduplicate simultaneous calls from multiple services
   private var goalsCacheTime: Date?
   private var goalsCache: [Goal]?
-  private var conversationsCountCacheTime: Date?
-  private var conversationsCountCache: Int?
+  // Keyed by the query parameters so a cached total for one filter set is never
+  // returned for a different one (e.g. includeDiscarded / statuses).
+  private var conversationsCountCache: [String: (count: Int, time: Date)] = [:]
 
   init() {
     let config = URLSessionConfiguration.default
@@ -361,21 +362,16 @@ extension APIClient {
 
 extension APIClient {
 
-  /// Fetches conversations from the API with optional filtering
-  func getConversations(
-    limit: Int = 50,
-    offset: Int = 0,
+  static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
     starred: Bool? = nil
-  ) async throws -> [ServerConversation] {
+  ) -> [String] {
     var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-      "include_discarded=\(includeDiscarded)",
+      "include_discarded=\(includeDiscarded)"
     ]
 
     if !statuses.isEmpty {
@@ -401,6 +397,33 @@ extension APIClient {
       queryItems.append("starred=\(starred)")
     }
 
+    return queryItems
+  }
+
+  /// Fetches conversations from the API with optional filtering
+  func getConversations(
+    limit: Int = 50,
+    offset: Int = 0,
+    statuses: [ConversationStatus] = [],
+    includeDiscarded: Bool = false,
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) async throws -> [ServerConversation] {
+    var queryItems: [String] = [
+      "limit=\(limit)",
+      "offset=\(offset)",
+    ]
+    queryItems += Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
     let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
   }
@@ -413,6 +436,7 @@ extension APIClient {
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
     try await delete("v1/conversations/\(id)")
+    invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation
@@ -428,6 +452,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -507,35 +532,58 @@ extension APIClient {
     return try await post("v1/conversations/search", body: body)
   }
 
+  static func conversationsCountEndpoint(
+    includeDiscarded: Bool = false,
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) -> String {
+    let queryItems = Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
+    return "v1/conversations/count?\(queryItems.joined(separator: "&"))"
+  }
+
+  func invalidateConversationsCountCache() {
+    conversationsCountCache.removeAll()
+  }
+
   /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
   func getConversationsCount(
     includeDiscarded: Bool = false,
-    statuses: [ConversationStatus] = [.completed, .processing]
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
   ) async throws -> Int {
-    if let cache = conversationsCountCache, let time = conversationsCountCacheTime,
-      Date().timeIntervalSince(time) < 5
-    {
-      return cache
+    let endpoint = Self.conversationsCountEndpoint(
+      includeDiscarded: includeDiscarded,
+      statuses: statuses,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
+    if let cache = conversationsCountCache[endpoint], Date().timeIntervalSince(cache.time) < 5 {
+      return cache.count
     }
-
-    var queryItems: [String] = [
-      "include_discarded=\(includeDiscarded)"
-    ]
-
-    if !statuses.isEmpty {
-      let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
-      queryItems.append("statuses=\(statusStrings)")
-    }
-
-    let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
 
     struct CountResponse: Decodable {
       let count: Int
     }
 
     let response: CountResponse = try await get(endpoint)
-    conversationsCountCache = response.count
-    conversationsCountCacheTime = Date()
+    conversationsCountCache[endpoint] = (count: response.count, time: Date())
     return response.count
   }
 
@@ -564,7 +612,9 @@ extension APIClient {
     }
 
     let body = MergeRequest(conversationIds: ids, reprocess: reprocess)
-    return try await post("v1/conversations/merge", body: body)
+    let response: MergeConversationsResponse = try await post("v1/conversations/merge", body: body)
+    invalidateConversationsCountCache()
+    return response
   }
 
   // MARK: - Folder API
@@ -598,6 +648,7 @@ extension APIClient {
       endpoint += "?move_to_folder_id=\(moveToId)"
     }
     try await delete(endpoint)
+    invalidateConversationsCountCache()
   }
 
   /// Moves a conversation to a folder
@@ -615,6 +666,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
 }
@@ -655,12 +707,21 @@ enum ConversationSource: String, Codable {
   }
 }
 
+enum TranscriptPresenceState: Equatable {
+  case omittedFromResponse
+  case lockedOrRedacted
+  case includedEmpty
+  case includedNonEmpty
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId && lhs.source == rhs.source
+      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.source == rhs.source
+      && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
   }
 
   let id: String
@@ -670,6 +731,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   var structured: Structured
   var transcriptSegments: [TranscriptSegment]
+  var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
   let photos: [ConversationPhoto]
 
@@ -684,6 +746,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
+  // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
+  // cleared once enriched on first open (get_conversation_by_id).
+  let deferred: Bool
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -704,6 +769,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
+    case deferred
   }
 
   init(from decoder: Decoder) throws {
@@ -714,6 +780,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
     finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
     structured = try container.decode(Structured.self, forKey: .structured)
+    transcriptSegmentsIncluded = container.contains(.transcriptSegments)
     transcriptSegments =
       try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments) ?? []
     geolocation = try container.decodeIfPresent(Geolocation.self, forKey: .geolocation)
@@ -728,6 +795,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
     folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
+    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
   }
 
   /// Memberwise initializer for creating from local storage
@@ -738,6 +806,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     finishedAt: Date?,
     structured: Structured,
     transcriptSegments: [TranscriptSegment],
+    transcriptSegmentsIncluded: Bool,
     geolocation: Geolocation?,
     photos: [ConversationPhoto],
     appsResults: [AppResponse],
@@ -749,7 +818,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     isLocked: Bool,
     starred: Bool,
     folderId: String?,
-    inputDeviceName: String?
+    inputDeviceName: String?,
+    deferred: Bool = false
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -757,6 +827,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.finishedAt = finishedAt
     self.structured = structured
     self.transcriptSegments = transcriptSegments
+    self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
     self.photos = photos
     self.appsResults = appsResults
@@ -769,6 +840,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
+    self.deferred = deferred
   }
 
   /// Returns the title from structured data, or a fallback
@@ -808,6 +880,23 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
       return "\(speaker): \(segment.text)"
     }.joined(separator: "\n\n")
+  }
+
+  var transcriptPresenceState: TranscriptPresenceState {
+    if isLocked {
+      return .lockedOrRedacted
+    }
+    if !transcriptSegmentsIncluded {
+      return .omittedFromResponse
+    }
+    if transcriptSegments.isEmpty {
+      return .includedEmpty
+    }
+    return .includedNonEmpty
+  }
+
+  var shouldFetchDetailForTranscript: Bool {
+    transcriptPresenceState == .omittedFromResponse
   }
 }
 
@@ -1376,7 +1465,10 @@ extension APIClient {
   func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
     async throws -> CreateConversationFromSegmentsResponse
   {
-    return try await post("v1/conversations/from-segments", body: request, customBaseURL: nil)
+    let response: CreateConversationFromSegmentsResponse = try await post(
+      "v1/conversations/from-segments", body: request, customBaseURL: nil)
+    invalidateConversationsCountCache()
+    return response
   }
 }
 
@@ -2732,7 +2824,8 @@ struct Goal: Codable, Identifiable {
   /// Progress as a percentage (0-100), based on targetValue
   var progress: Double {
     guard targetValue != minValue else { return 0 }
-    return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    let pct = ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    return min(max(pct, 0), 100)
   }
 
   /// Whether the goal is completed

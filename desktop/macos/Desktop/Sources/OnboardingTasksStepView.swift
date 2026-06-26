@@ -84,7 +84,7 @@ struct OnboardingTasksStepView: View {
 
             VStack(spacing: 12) {
                 Button(action: onComplete) {
-                    Text("Take me to my tasks")
+                    Text("Take me to Omi")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.black)
                         .frame(maxWidth: 280)

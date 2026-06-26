@@ -162,7 +162,7 @@ pydub==0.25.1
 Pygments==2.20.0
 PyJWT==2.12.0
 pynndescent==0.5.13
-PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a
+PyOgg @ git+https://github.com/TeamPyOgg/PyOgg@6871a4f234e8a3a346c4874a12509bfa02c4c63a ; sys_platform == "linux"
 pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
@@ -227,5 +227,5 @@ typesense==0.21.0
 pycountry==24.6.1
 google-cloud-translate==3.20.2
 langdetect==1.0.9
-lc3py==1.1.3
+lc3py==1.1.3; sys_platform == "linux" and platform_machine == "x86_64"
 twilio==9.5.0

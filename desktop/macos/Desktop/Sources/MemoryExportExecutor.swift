@@ -13,7 +13,7 @@ import Foundation
 ///   navigation of those UIs isn't reliable enough to promise to every user.
 @MainActor
 enum MemoryExportExecutor {
-  enum Mode: Sendable { case autonomous, assisted }
+  enum Mode: Sendable { case autonomous, assisted, completed }
   struct Outcome: Sendable {
     let taskTitle: String
     let mode: Mode
@@ -30,6 +30,14 @@ enum MemoryExportExecutor {
 
   static func run(_ destination: MemoryExportDestination) async throws -> Outcome {
     let key = try await MemoryExportService.shared.ensureMCPKey()
+
+    // OpenClaw / Hermes have no setup CLI; the agent doesn't reliably perform the
+    // file write. Do it deterministically ourselves (idempotent local write).
+    if MemoryBankConnector.handles(destination) {
+      let message = try MemoryBankConnector.connect(destination, key: key)
+      return Outcome(taskTitle: message, mode: .completed)
+    }
+
     guard let task = destination.omiExecutionTask(key: key) else {
       throw ExecutorError.unsupported(destination.title)
     }

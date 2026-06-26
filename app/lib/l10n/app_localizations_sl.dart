@@ -9330,6 +9330,10 @@ class AppLocalizationsSl extends AppLocalizations {
   String get backgroundModeNote => 'Zaenkrat deluje le z napravami Omi in se nenehno izboljšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Način v ozadju ni na voljo, ker ni povezana nobena združljiva naprava. Za uporabo te funkcije povežite napravo Omi, OpenGlass ali Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Ponovno ustvari povzetek';
 
   @override
@@ -9365,6 +9369,18 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'V telefonu primanjkuje prostora, zato je snemanje začasno ustavljeno. Sprostite prostor ali naložite posnetke in samodejno se bo nadaljevalo.';
+
+  @override
+  String get recordingMode => 'Način snemanja';
+
+  @override
+  String get captureModeLater => 'Pozneje';
+
+  @override
+  String get captureModeLiveDescription => 'Prepisujte v realnem času, medtem ko govorite.';
+
+  @override
+  String get captureModeLaterDescription => 'Shranite zvok zdaj in ga prepišite, kadar koli želite.';
 
   @override
   String get unmute => 'Vklopi zvok';

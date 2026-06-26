@@ -9348,6 +9348,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție.';
+
+  @override
   String get regenerateRecap => 'Regenerează rezumatul';
 
   @override
@@ -9383,6 +9387,18 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.';
+
+  @override
+  String get recordingMode => 'Mod de înregistrare';
+
+  @override
+  String get captureModeLater => 'Mai târziu';
+
+  @override
+  String get captureModeLiveDescription => 'Transcrie în timp real în timp ce vorbești.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvează audio acum și transcrie oricând dorești.';
 
   @override
   String get unmute => 'Reactivează sunetul';

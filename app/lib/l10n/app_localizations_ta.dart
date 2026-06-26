@@ -9369,6 +9369,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'இணக்கமான சாதனம் எதுவும் இணைக்கப்படாததால் பின்னணி முறை கிடைக்கவில்லை. இந்த அம்சத்தைப் பயன்படுத்த Omi, OpenGlass அல்லது Friend Pendant சாதனத்தை இணைக்கவும்.';
+
+  @override
   String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
 
   @override
@@ -9404,6 +9408,19 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.';
+
+  @override
+  String get recordingMode => 'பதிவு பயன்முறை';
+
+  @override
+  String get captureModeLater => 'பின்னர்';
+
+  @override
+  String get captureModeLiveDescription => 'நீங்கள் பேசும்போது நிகழ்நேரத்தில் எழுத்தாக்கம் செய்யுங்கள்.';
+
+  @override
+  String get captureModeLaterDescription =>
+      'இப்போது ஆடியோவை சேமித்து, நீங்கள் விரும்பும்போது எழுத்தாக்கம் செய்யுங்கள்.';
 
   @override
   String get unmute => 'ஒலியை இயக்கு';

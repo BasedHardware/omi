@@ -9334,6 +9334,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get backgroundModeNote => 'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಮಾತ್ರ ಕೆಲಸ ಮಾಡುತ್ತದೆ ಮತ್ತು ನಿರಂತರವಾಗಿ ಸುಧಾರಿಸಲಾಗುತ್ತಿದೆ.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'ಹೊಂದಾಣಿಕೆಯ ಸಾಧನ ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲದ ಕಾರಣ ಹಿನ್ನೆಲೆ ಮೋಡ್ ಲಭ್ಯವಿಲ್ಲ. ಈ ವೈಶಿಷ್ಟ್ಯವನ್ನು ಬಳಸಲು Omi, OpenGlass ಅಥವಾ Friend Pendant ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ.';
+
+  @override
   String get regenerateRecap => 'ಸಾರಾಂಶವನ್ನು ಪುನರುತ್ಪಾದಿಸಿ';
 
   @override
@@ -9369,6 +9373,18 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get recordingMode => 'ರೆಕಾರ್ಡಿಂಗ್ ಮೋಡ್';
+
+  @override
+  String get captureModeLater => 'ನಂತರ';
+
+  @override
+  String get captureModeLiveDescription => 'ನೀವು ಮಾತನಾಡುತ್ತಿರುವಾಗ ನೈಜ ಸಮಯದಲ್ಲಿ ಲಿಪ್ಯಂತರಿಸಿ.';
+
+  @override
+  String get captureModeLaterDescription => 'ಈಗ ಆಡಿಯೋ ಉಳಿಸಿ ಮತ್ತು ನಿಮಗೆ ಬೇಕಾದಾಗ ಲಿಪ್ಯಂತರಿಸಿ.';
 
   @override
   String get unmute => 'ಮ್ಯೂಟ್ ತೆಗೆ';

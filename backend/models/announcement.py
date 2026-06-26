@@ -159,9 +159,17 @@ class Announcement(BaseModel):
         targeting_data = data.get("targeting")
         display_data = data.get("display")
 
+        # Tolerate a missing or out-of-enum type so one malformed/legacy announcement document cannot
+        # 500 the whole (public) announcements list. Fall back to the generic ANNOUNCEMENT type.
+        raw_type = data.get("type")
+        try:
+            announcement_type = AnnouncementType(raw_type)
+        except ValueError:
+            announcement_type = AnnouncementType.ANNOUNCEMENT
+
         return Announcement(
             id=data.get("id"),
-            type=AnnouncementType(data.get("type")),
+            type=announcement_type,
             created_at=data.get("created_at"),
             active=data.get("active", True),
             app_version=data.get("app_version"),

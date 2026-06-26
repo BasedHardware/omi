@@ -9152,6 +9152,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
 
   @override
+  String get backgroundModeUnavailable =>
+      '互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。';
+
+  @override
   String get regenerateRecap => '要約を再生成';
 
   @override
@@ -9184,6 +9188,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
+
+  @override
+  String get recordingMode => '録音モード';
+
+  @override
+  String get captureModeLater => '後で';
+
+  @override
+  String get captureModeLiveDescription => '話しながらリアルタイムで文字起こしします。';
+
+  @override
+  String get captureModeLaterDescription => '今すぐ音声を保存して、好きなときに文字起こしできます。';
 
   @override
   String get unmute => 'ミュート解除';

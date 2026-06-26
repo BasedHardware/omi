@@ -9317,6 +9317,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Foninis režimas nepasiekiamas, nes neprijungtas suderinamas įrenginys. Prijunkite Omi, OpenGlass arba Friend Pendant įrenginį, kad galėtumėte naudoti šią funkciją.';
+
+  @override
   String get regenerateRecap => 'Sukurti santrauką iš naujo';
 
   @override
@@ -9352,6 +9356,18 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get transcribeLaterStorageFull =>
       'Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.';
+
+  @override
+  String get recordingMode => 'Įrašymo režimas';
+
+  @override
+  String get captureModeLater => 'Vėliau';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribuokite tikruoju laiku, kol kalbate.';
+
+  @override
+  String get captureModeLaterDescription => 'Išsaugokite garsą dabar ir transkribuokite kada panorėję.';
 
   @override
   String get unmute => 'Įjungti garsą';
