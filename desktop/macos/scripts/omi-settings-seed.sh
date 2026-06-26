@@ -8,6 +8,9 @@
 # Usage: omi-settings-seed.sh <target-bundle-id> [source-bundle-id]
 #   target-bundle-id  e.g. com.omi.omi-fix-rewind  (a named test bundle)
 #   source-bundle-id  default: com.omi.desktop-dev   (the "Omi Dev" build)
+#
+# Set OMI_DEV_EAGER_PERMISSIONS=1 to preserve eager post-onboarding behavior
+# for permission-flow parity testing.
 set -euo pipefail
 
 TARGET="${1:?usage: omi-settings-seed.sh <target-bundle-id> [source-bundle-id]}"
@@ -15,6 +18,7 @@ SRC="${2:-com.omi.desktop-dev}"
 
 python3 - "$SRC" "$TARGET" <<'PY'
 import plistlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -74,6 +78,10 @@ KEYS = [
 ]
 
 
+def env_truthy(name):
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def defaults_export(domain):
     proc = subprocess.run(
         ["defaults", "export", domain, "-"],
@@ -87,13 +95,29 @@ def defaults_export(domain):
 
 source = defaults_export(src)
 if not source:
-    sys.exit(f"No defaults found for {src}")
+    print(f"No defaults found for {src}; applying target-only dev defaults")
 
 target_data = defaults_export(target)
 selected = {key: source[key] for key in KEYS if key in source}
-if not selected:
-    print(f"Seeded 0 settings from {src} -> {target}")
-    sys.exit(0)
+
+if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
+    # Named dev bundles reuse auth/onboarding from Omi Dev, but macOS treats
+    # each bundle ID as a fresh TCC identity. Keep startup quiet until the
+    # developer explicitly enables a feature that needs a permission.
+    selected.update(
+        {
+            "devLazyPermissionsEnabled": True,
+            "screenAnalysisEnabled": False,
+            "transcriptionEnabled": False,
+            "disableSystemAudioCapture": True,
+            "systemAudioCaptureMode": "never",
+            # Prevent the main-window startup migration from re-enabling screen
+            # analysis immediately after the quiet default is seeded.
+            "screenAnalysisAutoStartFixed_v2": True,
+        }
+    )
+else:
+    selected["devLazyPermissionsEnabled"] = False
 
 target_data.update(selected)
 with tempfile.NamedTemporaryFile(suffix=".plist") as plist:

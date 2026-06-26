@@ -475,7 +475,9 @@ struct OnboardingView: View {
 
     // Navigate to Tasks page after transition
     UserDefaults.standard.set(true, forKey: "onboardingJustCompleted")
-    UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+    if !AppBuild.usesLazyDevPermissions {
+      UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+    }
     PostOnboardingPromptSuggestions.save(
       OnboardingPromptSuggestionBuilder.build(from: introCoordinator))
 
@@ -501,8 +503,14 @@ struct OnboardingView: View {
     if LaunchAtLoginManager.shared.setEnabled(true) {
       AnalyticsManager.shared.launchAtLoginChanged(enabled: true, source: "onboarding_complete")
     }
-    startMonitoringIfNeeded()
-    appState.startTranscription()
+    if AppBuild.usesLazyDevPermissions {
+      AssistantSettings.shared.screenAnalysisEnabled = false
+      AssistantSettings.shared.transcriptionEnabled = false
+      log("OnboardingView: Lazy dev permissions enabled, skipping monitoring/transcription autostart")
+    } else {
+      startMonitoringIfNeeded()
+      appState.startTranscription()
+    }
 
     // Create welcome task
     Task {
