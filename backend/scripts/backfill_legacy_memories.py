@@ -1,7 +1,7 @@
 """Admin entrypoint for WS-C legacy → canonical memory backfill (single uid).
 
 Non-destructive: reads legacy ``users/{uid}/memories`` only; writes canonical ``memory_items``.
-Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``--allow-admin-override`` and
+Requires ``uid`` in ``CANONICAL_MEMORY_USERS`` unless ``--allow-admin-override`` and
 ``--i-understand-uid-not-whitelisted`` are both passed.
 
 Usage:
@@ -30,12 +30,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-admin-override",
         action="store_true",
-        help="Bypass MEMORY_CANONICAL_USERS gate (requires --i-understand-uid-not-whitelisted)",
+        help="Bypass CANONICAL_MEMORY_USERS gate (requires --i-understand-uid-not-whitelisted)",
     )
     parser.add_argument(
         "--i-understand-uid-not-whitelisted",
         action="store_true",
-        help="Confirm uid may be outside MEMORY_CANONICAL_USERS (required with --allow-admin-override)",
+        help="Confirm uid may be outside CANONICAL_MEMORY_USERS (required with --allow-admin-override)",
     )
     parser.add_argument(
         "--operator-context",
