@@ -129,6 +129,11 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
     case .getTaskAgentStatus: stub = #"{"task_agents":[],"floating_agent_pills":[]}"#
     case .manageAgentPills: stub = "No floating agent pills are running or recently finished."
+    case .listAgentSessions: stub = "Canonical Omi agent sessions:\n- Example agent: running, sessionId=session_123, runId=run_123"
+    case .getAgentRun: stub = "Canonical run run_123 is running in session session_123, mode ask. Attempts: 1. Events returned: 3."
+    case .cancelAgentRun: stub = "Cancel request for run run_123: accepted=true, dispatched=true, acknowledged=true. Current status: cancelling."
+    case .inspectAgentArtifacts: stub = "Canonical agent artifacts:\n- artifactId=artifact_123, role=result, state=retained"
+    case .updateAgentArtifactLifecycle: stub = "Artifact artifact_123 lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
