@@ -65,6 +65,7 @@ class MemoryControlState(BaseModel):
     projection_watermark_sequence: int = 0
     vector_watermark_commit_id: Optional[str] = None
     last_promotion_run_at: Optional[datetime] = None
+    last_consolidation_run_at: Optional[datetime] = None
     legacy_backfill_processed_count: int = 0
     legacy_backfill_source_fingerprint: Optional[str] = None
     legacy_backfill_completed_at: Optional[datetime] = None
@@ -90,7 +91,7 @@ class MemoryControlState(BaseModel):
             raise ValueError("control counters must be nonnegative")
         return value
 
-    @field_validator("last_promotion_run_at", "legacy_backfill_completed_at", "updated_at")
+    @field_validator("last_promotion_run_at", "last_consolidation_run_at", "legacy_backfill_completed_at", "updated_at")
     @classmethod
     def coerce_timezone_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
         if value is None:
@@ -253,6 +254,9 @@ def _materialize_memory_item(
             "memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
         ),
         account_generation=account_generation,
+        subject_entity_id=patch.subject_entity_id,
+        predicate=patch.predicate,
+        arguments=dict(patch.arguments or {}),
     )
 
 
@@ -264,6 +268,7 @@ def _apply_update_memory_item(
     commit_id: str,
     sequence: int,
     promotion_audit: Optional[Dict[str, Any]] = None,
+    extra_updates: Optional[Dict[str, Any]] = None,
 ) -> MemoryItem:
     now = datetime.now(timezone.utc)
     if patch.target_tier is not None:
@@ -306,6 +311,14 @@ def _apply_update_memory_item(
     }
     if promotion_audit is not None:
         updates["promotion"] = promotion_audit
+    if patch.subject_entity_id is not None:
+        updates["subject_entity_id"] = patch.subject_entity_id
+    if patch.predicate is not None:
+        updates["predicate"] = patch.predicate
+    if patch.arguments:
+        updates["arguments"] = dict(patch.arguments)
+    if extra_updates:
+        updates.update(extra_updates)
     return existing.model_copy(update=updates)
 
 
@@ -359,6 +372,23 @@ def apply_long_term_patch_transaction(
     raw = dict(patch_payload)
     existing_item_raw = raw.pop("existing_item", None)
     promotion_audit = raw.pop("promotion_audit", None)
+    extra_item_updates: Dict[str, Any] = {}
+    for optional_key in (
+        "corroboration_count",
+        "last_corroborated_at",
+        "superseded_by",
+        "subject_entity_id",
+        "predicate",
+        "arguments",
+        "kg_extracted",
+        "confidence",
+    ):
+        if optional_key in raw:
+            extra_item_updates[optional_key] = raw.pop(optional_key)
+    if "last_corroborated_at" in extra_item_updates and isinstance(extra_item_updates["last_corroborated_at"], str):
+        extra_item_updates["last_corroborated_at"] = datetime.fromisoformat(
+            extra_item_updates["last_corroborated_at"].replace("Z", "+00:00")
+        )
     evidence = raw.pop("evidence", None) or [
         MemoryEvidence(
             evidence_id=evidence_id,
@@ -456,6 +486,7 @@ def apply_long_term_patch_transaction(
             commit_id=commit_id,
             sequence=next_control.commit_sequence,
             promotion_audit=promotion_audit,
+            extra_updates=extra_item_updates or None,
         )
     else:
         memory_item = _materialize_memory_item(
