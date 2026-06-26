@@ -197,6 +197,17 @@ class FloatingControlBarState: NSObject, ObservableObject {
         present(nextSurface)
     }
 
+    func hideConversationSurface() {
+        activeAgentChatPillID = nil
+        conversationSurface = .closed
+        showingAIConversation = false
+        showingAIResponse = false
+        isAILoading = false
+        isVoiceFollowUp = false
+        voiceFollowUpTranscript = ""
+        markConversationActivity()
+    }
+
     func reportContentHeight(_ height: CGFloat, for surface: FloatingConversationSurface) {
         guard height > 0, conversationSurface == surface else { return }
         let measuredHeight = (height * 2).rounded(.up) / 2

@@ -388,16 +388,52 @@ struct FloatingControlBarView: View {
                 .id(activeAgentChatPill.id)
                 .zIndex(1)
             } else if state.conversationSurface == .mainResponse || state.showingAIResponse {
-                aiResponseView
-                    .id("response")
-                    .zIndex(1)
+                mainConversationContainer {
+                    aiResponseView
+                        .id("response")
+                }
+                .zIndex(1)
             } else {
-                aiInputView
-                    .id("input")
-                    .zIndex(1)
+                mainConversationContainer {
+                    aiInputView
+                        .id("input")
+                }
+                .zIndex(1)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func mainConversationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if state.usesNotchIsland && !agentPills.pills.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Button(action: showAgentListFromConversation) {
+                        Image(systemName: "chevron.left")
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(.white.opacity(0.82))
+                            .frame(width: 36, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Back to subagents")
+
+                    Text("Omi Chat")
+                        .scaledFont(size: 13, weight: .bold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+                content()
+            }
+        } else {
+            content()
+        }
     }
 
     private var activeAgentChatPill: AgentPill? {
@@ -458,6 +494,8 @@ struct FloatingControlBarView: View {
         agentPills.markViewed(pillID: pill.id)
         let barWindow = window as? FloatingControlBarWindow
         let wasShowingConversation = state.showingAIConversation
+        state.agentSwitcherPinned = false
+        state.agentSwitcherHovering = false
         barWindow?.makeKeyAndOrderFront(nil)
         withAnimation(agentChatSwitchTransition) {
             state.present(.agent(pill.id))
@@ -465,6 +503,21 @@ struct FloatingControlBarView: View {
             state.aiInputText = ""
         }
         barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
+    }
+
+    private func showAgentListFromConversation() {
+        guard !agentPills.pills.isEmpty else {
+            onCloseAI()
+            return
+        }
+        withAnimation(agentChatSwitchTransition) {
+            state.hideConversationSurface()
+            state.agentSwitcherPinned = true
+            state.agentSwitcherHovering = true
+        }
+        DispatchQueue.main.async {
+            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
+        }
     }
 
     private func handleBarHover(_ hovering: Bool) {

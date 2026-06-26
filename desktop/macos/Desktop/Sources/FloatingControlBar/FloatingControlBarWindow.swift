@@ -172,11 +172,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
     private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
-    private var notchAgentListHeightIfNeeded: CGFloat {
-        notchModeEnabled ? Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count) : 0
-    }
     private var inputPanelHeight: CGFloat {
-        notchModeEnabled ? Self.notchInputPanelHeight + notchAgentListHeightIfNeeded : 120
+        notchModeEnabled ? Self.notchInputPanelHeight : 120
     }
 
     var onPlayPause: (() -> Void)?
@@ -444,9 +441,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
-            let panelHeight = usesNotchIsland
-                ? Self.notchInputPanelHeight + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
-                : 120
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
@@ -475,9 +470,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
-            let panelHeight = usesNotchIsland
-                ? Self.notchInputPanelHeight + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
-                : 120
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -836,8 +829,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
             withAnimation(.easeOut(duration: 0.08)) {
-                state.showingAIConversation = true
-                state.showingAIResponse = true
+                state.present(.mainResponse)
                 state.isAILoading = false
                 state.aiInputText = ""
             }
@@ -1107,6 +1099,24 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
+    private func defaultAutoResponseMaxHeight() -> CGFloat {
+        let screenHeight = (screenForPlacement ?? screen ?? NSScreen.main)?.visibleFrame.height
+            ?? NSScreen.screens.first?.visibleFrame.height
+            ?? Self.defaultBaseResponseHeight
+        return max(Self.minResponseHeight, floor(screenHeight / 3))
+    }
+
+    private func responseHeightConfiguration() -> (initialHeight: CGFloat, maxHeight: CGFloat) {
+        let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
+            .map(NSSizeFromString)
+        let defaultCap = defaultAutoResponseMaxHeight()
+        if let savedSize {
+            let savedHeight = max(Self.minResponseHeight, savedSize.height)
+            return (savedHeight, max(savedHeight, defaultCap))
+        }
+        return (min(Self.defaultBaseResponseHeight, defaultCap), defaultCap)
+    }
+
     /// Resize for hover expand/collapse — anchored from center so the circle grows outward.
     func resizeForHover(expanded: Bool) {
         guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseActive, !state.isShowingNotification, !suppressHoverResize else { return }
@@ -1249,21 +1259,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func resizeToResponseHeight(animated: Bool = false) {
-        // Determine the 2× cap from the user's saved (or default) preferred height.
-        let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
-            .map(NSSizeFromString)
-        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
-        let maxHeight = baseHeight * 2
+        let responseHeight = responseHeightConfiguration()
 
         // Preserve manual response sizing across follow-up sends. The window may
         // include glow padding, so compare and resize using the underlying black
         // response surface rather than the inflated NSWindow frame.
         let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())
-        let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())
+        let startHeight = max(responseHeight.initialHeight, currentResponseSurfaceHeight())
         let initialSize = NSSize(width: startWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
         state.present(.mainResponse)
-        setupResponseHeightObserver(for: .mainResponse, maxHeight: maxHeight)
+        setupResponseHeightObserver(for: .mainResponse, maxHeight: responseHeight.maxHeight)
     }
 
     /// Observes the active surface's measured content height and expands the
@@ -3096,10 +3102,7 @@ extension FloatingControlBarWindow {
     }
 
     func resizeForActiveAgentChatPublic(pillID: UUID? = nil, animated: Bool = false) {
-        let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
-            .map(NSSizeFromString)
-        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
-        let maxHeight = baseHeight * 2
+        let responseHeight = responseHeightConfiguration()
         let surface: FloatingConversationSurface
         if let pillID {
             surface = .agent(pillID)
@@ -3109,7 +3112,7 @@ extension FloatingControlBarWindow {
         }
         let targetSize = NSSize(
             width: max(expandedContentWidth, currentResponseSurfaceWidth()),
-            height: max(Self.defaultBaseResponseHeight, currentResponseSurfaceHeight())
+            height: max(responseHeight.initialHeight, currentResponseSurfaceHeight())
         )
         if targetSize.height > currentResponseSurfaceHeight() + 2 || targetSize.width > currentResponseSurfaceWidth() + 2 {
             resizeAnchored(
@@ -3120,7 +3123,7 @@ extension FloatingControlBarWindow {
                 anchorTop: true
             )
         }
-        setupResponseHeightObserver(for: surface, maxHeight: maxHeight)
+        setupResponseHeightObserver(for: surface, maxHeight: responseHeight.maxHeight)
     }
 
     /// Resize the window to the normal Ask Omi input height after exiting an

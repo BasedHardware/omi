@@ -116,7 +116,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
-    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"))
     XCTAssertTrue(source.contains("static let listHorizontalInset: CGFloat = 12"))
@@ -136,7 +136,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
     XCTAssertTrue(source.contains("if state.conversationSurface == .agent(pill.id)"))
-    XCTAssertTrue(source.contains("state.leaveAgentSurface()"))
+    XCTAssertTrue(source.contains("state.hideConversationSurface()"))
+    XCTAssertTrue(source.contains("Text(\"Omi Chat\")"))
     XCTAssertTrue(source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
@@ -190,7 +191,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.height }"))
     XCTAssertFalse(source.contains("guard state.isVoiceResponseActive else { return frame.width }"))
     XCTAssertTrue(source.contains("let startWidth = max(expandedContentWidth, currentResponseSurfaceWidth())"))
-    XCTAssertTrue(source.contains("let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())"))
+    XCTAssertTrue(source.contains("let responseHeight = responseHeightConfiguration()"))
+    XCTAssertTrue(source.contains("let startHeight = max(responseHeight.initialHeight, currentResponseSurfaceHeight())"))
+    XCTAssertTrue(source.contains("private func defaultAutoResponseMaxHeight() -> CGFloat"))
+    XCTAssertTrue(source.contains("floor(screenHeight / 3)"))
     XCTAssertTrue(source.contains("func finishUserResponseResize()"))
     XCTAssertTrue(source.contains("persistCurrentResponseSurfaceSize()"))
     XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
@@ -214,8 +218,8 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(viewSource.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(windowSource.contains("func resizeForActiveAgentChatPublic(pillID: UUID? = nil, animated: Bool = false)"))
-    XCTAssertTrue(windowSource.contains("height: max(Self.defaultBaseResponseHeight, currentResponseSurfaceHeight())"))
-    XCTAssertTrue(windowSource.contains("setupResponseHeightObserver(for: surface, maxHeight: maxHeight)"))
+    XCTAssertTrue(windowSource.contains("height: max(responseHeight.initialHeight, currentResponseSurfaceHeight())"))
+    XCTAssertTrue(windowSource.contains("setupResponseHeightObserver(for: surface, maxHeight: responseHeight.maxHeight)"))
   }
 
   func testSubagentDoneBadgeDismissesAndViewedAgentsExpire() throws {

@@ -10,7 +10,8 @@
     "Smoothed the notch logo-to-dots animation so the Omi logo unfurls into the agent dots when chat opens and furls back when it closes",
     "Made Notch Mode subagent chat independent from main chat content and reduced idle animation work",
     "Added an Ask Omi chat power benchmark harness for repeatable CPU and memory sampling",
-    "Added compact status summaries to Notch Mode subagent rows"
+    "Added compact status summaries to Notch Mode subagent rows",
+    "Made Notch Mode switch between subagent list and chat instead of stacking both"
   ],
   "releases": [
     {
