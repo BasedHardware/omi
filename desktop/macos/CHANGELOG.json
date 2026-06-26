@@ -7,7 +7,8 @@
     "Improved Notch Mode notch-safe layout measurement and subagent status refresh",
     "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
     "Improves update release safety checks",
-    "Smoothed the notch logo-to-dots animation so the Omi logo unfurls into the agent dots when chat opens and furls back when it closes"
+    "Smoothed the notch logo-to-dots animation so the Omi logo unfurls into the agent dots when chat opens and furls back when it closes",
+    "Made Notch Mode subagent chat independent from main chat content and reduced idle animation work"
   ],
   "releases": [
     {

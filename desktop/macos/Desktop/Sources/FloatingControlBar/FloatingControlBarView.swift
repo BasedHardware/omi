@@ -26,7 +26,8 @@ struct FloatingControlBarView: View {
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
     @State private var notchSwitcherProgress: CGFloat = 0
-    private let conversationTransition = Animation.spring(response: 0.32, dampingFraction: 0.86)
+    private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
+    private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
     private var notchHiddenCenterWidth: CGFloat {
         FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
     }
@@ -54,6 +55,9 @@ struct FloatingControlBarView: View {
     }
     private var notchSurfaceBottomInset: CGFloat {
         state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
+    }
+    private var notchAgentListHeight: CGFloat {
+        FloatingControlBarWindow.notchAgentListHeight(agentCount: agentPills.pills.count)
     }
     var body: some View {
         Group {
@@ -86,15 +90,19 @@ struct FloatingControlBarView: View {
         !agentPills.pills.isEmpty && (state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering)
     }
 
+    private var showingNotchWaveform: Bool {
+        state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
+    }
+
     private var notchModeBody: some View {
         VStack(spacing: 0) {
             notchChrome
 
             if shouldShowAgentSwitcher {
-                // Reserves the row's height; the dots themselves are drawn by the
-                // morph overlay so they can travel up into the logo's notch.
+                // Reserves the list's height; the subagent dots/text are drawn by
+                // the morph overlay so the same dots can travel up into the logo.
                 Color.clear
-                    .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchAgentFanoutRowHeight)
+                    .frame(width: notchChromeLayoutWidth, height: notchAgentListHeight)
                     .onHover { setAgentSwitcherHovering($0) }
                     .transition(.identity)
             }
@@ -102,7 +110,7 @@ struct FloatingControlBarView: View {
             if state.showingAIConversation {
                 conversationView
                     .padding(.horizontal, 12)
-                    .padding(.top, 4)
+                    .padding(.top, 0)
                     .padding(.bottom, 9)
                     .transition(.opacity)
             }
@@ -115,7 +123,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !agentPills.pills.isEmpty {
+            if !agentPills.pills.isEmpty && !showingNotchWaveform {
                 NotchAgentMorphField(
                     manager: agentPills,
                     activePillID: state.activeAgentChatPillID,
@@ -124,7 +132,8 @@ struct FloatingControlBarView: View {
                     notchSideWidth: notchSideWidth,
                     onSelect: openAgentInChat
                 )
-                .frame(height: FloatingControlBarWindow.notchChromeHeight + FloatingControlBarWindow.notchAgentFanoutRowHeight)
+                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchAgentListHeight)
+                .onHover { setAgentSwitcherHovering($0) }
                 .allowsHitTesting(notchSwitcherProgress > 0.6)
             }
         }
@@ -176,17 +185,24 @@ struct FloatingControlBarView: View {
         )
         .opacity(min(1, max(0, state.notchRevealProgress * 1.4)))
         .contextMenu { barContextMenu }
-        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: state.showingAIConversation)
-        .animation(.spring(response: 0.24, dampingFraction: 0.88), value: shouldShowAgentSwitcher)
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
+        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowAgentSwitcher)
         .onChange(of: shouldShowAgentSwitcher) { _, visible in
             (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
             // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
             // dots are back in the notch before the surface shrinks (no stranded dots).
             let morphAnim: Animation = visible
-                ? .spring(response: 0.5, dampingFraction: 0.82)
-                : .spring(response: 0.26, dampingFraction: 0.9)
+                ? .spring(response: 0.34, dampingFraction: 0.86)
+                : .spring(response: 0.18, dampingFraction: 0.92)
             withAnimation(morphAnim) {
                 notchSwitcherProgress = visible ? 1 : 0
+            }
+        }
+        .onChange(of: state.showingAIConversation) { _, isShowing in
+            guard !isShowing, shouldShowAgentSwitcher else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                guard shouldShowAgentSwitcher else { return }
+                (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
             }
         }
         .onChange(of: agentPills.pills.isEmpty) { _, isEmpty in
@@ -218,7 +234,7 @@ struct FloatingControlBarView: View {
 
     private var notchAgentLobe: some View {
         HStack(spacing: 0) {
-            if state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation {
+            if showingNotchWaveform {
                 VoiceWaveformBars(isActive: true)
                     .scaleEffect(0.72)
                     .frame(width: 28, height: 15)
@@ -282,7 +298,7 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
-        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: state.showingAIConversation)
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
         .animation(conversationTransition, value: state.showingAIResponse)
         .overlay(alignment: .topLeading) {
             if state.showingAIConversation {
@@ -358,23 +374,18 @@ struct FloatingControlBarView: View {
 
     private var conversationView: some View {
         ZStack(alignment: .top) {
-            if let activeAgentChatPill {
+            if case .agent = state.conversationSurface, let activeAgentChatPill {
                 AgentMainChatView(
                     pill: activeAgentChatPill,
                     manager: agentPills,
                     onBackToOmi: {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                            state.activeAgentChatPillID = nil
-                            if state.chatHistory.isEmpty && state.currentAIMessage == nil && state.displayedQuery.isEmpty {
-                                state.showingAIResponse = false
-                            }
-                        }
+                        state.leaveAgentSurface()
                     },
                     onEscape: onEscape
                 )
                 .id(activeAgentChatPill.id)
                 .zIndex(1)
-            } else if state.showingAIResponse {
+            } else if state.conversationSurface == .mainResponse || state.showingAIResponse {
                 aiResponseView
                     .id("response")
                     .zIndex(1)
@@ -423,18 +434,20 @@ struct FloatingControlBarView: View {
 
     private func openAgentInChat(_ pill: AgentPill) {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        if state.conversationSurface == .agent(pill.id) {
+            state.leaveAgentSurface()
+            return
+        }
         agentPills.markViewed(pillID: pill.id)
         let barWindow = window as? FloatingControlBarWindow
+        let wasShowingConversation = state.showingAIConversation
         barWindow?.makeKeyAndOrderFront(nil)
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-            state.activeAgentChatPillID = pill.id
-            state.showingAIConversation = true
-            state.showingAIResponse = true
+        withAnimation(agentChatSwitchTransition) {
+            state.present(.agent(pill.id))
             state.isAILoading = false
             state.aiInputText = ""
         }
-        barWindow?.resizeToResponseHeightPublic(animated: true)
-        state.markConversationActivity()
+        barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -449,7 +462,7 @@ struct FloatingControlBarView: View {
         if effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
         }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        withAnimation(.easeInOut(duration: 0.12)) {
             isHovering = effectiveHover
         }
         if !effectiveHover {
@@ -765,7 +778,7 @@ struct FloatingControlBarView: View {
             onSend: { message in
                 state.displayedQuery = message
                 state.markConversationActivity()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.showingAIResponse = true
                     state.isAILoading = true
                     state.currentAIMessage = nil
@@ -815,7 +828,7 @@ struct FloatingControlBarView: View {
                 state.displayedQuery = message
                 state.currentQuestionMessageId = nil
                 state.markConversationActivity()
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = true
                     state.currentAIMessage = nil
                 }
@@ -897,7 +910,7 @@ private struct NotchResponseGlowView: View {
     let bottomRadius: CGFloat
 
     var body: some View {
-        TimelineView(.animation) { timeline in
+        TimelineView(.periodic(from: .now, by: 1.0 / 24.0)) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             let phase = time.truncatingRemainder(dividingBy: 2.4) / 2.4
             let sweepStart = UnitPoint(x: -0.35 + phase * 1.7, y: 0.0)
@@ -937,7 +950,6 @@ private struct NotchResponseGlowView: View {
                         style: StrokeStyle(lineWidth: 4.8, lineCap: .round, lineJoin: .round)
                     )
             }
-            .animation(.linear(duration: 0.12), value: phase)
         }
         .allowsHitTesting(false)
     }
@@ -1019,7 +1031,11 @@ private struct AgentMainChatView: View {
                 return text
             }
         }
-        return pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ""
+    }
+
+    private var activityText: String {
+        pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var body: some View {
@@ -1041,11 +1057,12 @@ private struct AgentMainChatView: View {
 
                         Color.clear.frame(height: 1).id("agentBottom")
                     }
+                    .padding(.trailing, 30)
                     .background(
                         GeometryReader { geometry -> Color in
                             let height = geometry.size.height
                             DispatchQueue.main.async {
-                                state.responseContentHeight = height
+                                state.reportContentHeight(height, for: .agent(pill.id))
                             }
                             return Color.clear
                         }
@@ -1171,26 +1188,27 @@ private struct AgentMainChatView: View {
     @ViewBuilder
     private var responseContent: some View {
         if isRunning && outputText.isEmpty {
-            TypingIndicator()
-                .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
+            VStack(alignment: .leading, spacing: 8) {
+                TypingIndicator()
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                if !activityText.isEmpty {
+                    Text(activityText)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.62))
+                        .textSelection(.enabled)
+                }
+            }
         } else {
             VStack(alignment: .leading, spacing: 8) {
-                if isRunning {
-                    HStack(spacing: 7) {
-                        ProgressView()
-                            .scaleEffect(0.55)
-                            .frame(width: 14, height: 14)
-                        Text("working")
-                            .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(.white.opacity(0.48))
-                    }
+                if outputText.isEmpty {
+                    EmptyView()
+                } else {
+                    Markdown(outputText)
+                        .markdownTheme(.aiMessage(scale: 0.88))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-                Markdown(outputText.isEmpty ? "Working..." : outputText)
-                    .markdownTheme(.aiMessage(scale: 0.88))
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, 4)
             .contextMenu {
@@ -1264,7 +1282,7 @@ private struct AgentMainChatView: View {
         followUpText = ""
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
             let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
-            state.activeAgentChatPillID = sibling.id
+            state.present(.agent(sibling.id))
             return
         }
         manager.continueAgent(from: pill, text: trimmed)
@@ -1315,10 +1333,11 @@ private struct NotchAgentPillsRowView: View {
 
 @MainActor
 private enum NotchAgentStackMetrics {
-    static let maxAgents = 8
-    static let fanoutOrbSize: CGFloat = 11
-    static let fanoutSpacing: CGFloat = 0
-    static let fanoutHorizontalInset: CGFloat = 38
+    static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents
+    static let listOrbSize: CGFloat = 11
+    static let listHorizontalInset: CGFloat = 12
+    static let listRowLeadingPadding: CGFloat = 12
+    static let listOrbSlotWidth: CGFloat = 24
     static let logoFrameSize: CGFloat = 21
     static let logoTrailingInset: CGFloat = 2
     static let logoDotDiameterRatio: CGFloat = 0.18
@@ -1334,12 +1353,6 @@ private enum NotchAgentStackMetrics {
             }
             return (newestIndex[lhs.id] ?? 0) < (newestIndex[rhs.id] ?? 0)
         }
-    }
-
-    static func fanoutX(for index: Int, width: CGFloat) -> CGFloat {
-        guard maxAgents > 1 else { return width / 2 }
-        let usableWidth = max(0, width - fanoutHorizontalInset * 2)
-        return fanoutHorizontalInset + usableWidth * CGFloat(index) / CGFloat(maxAgents - 1)
     }
 
     static func logoCenterX(
@@ -1361,9 +1374,23 @@ private enum NotchAgentStackMetrics {
         )
     }
 
+    static func smoothStep(_ value: CGFloat) -> CGFloat {
+        let t = min(1, max(0, value))
+        return t * t * (3 - 2 * t)
+    }
+
+    static func quadraticBezier(from start: CGPoint, control: CGPoint, to end: CGPoint, progress: CGFloat) -> CGPoint {
+        let t = smoothStep(progress)
+        let inverse = 1 - t
+        return CGPoint(
+            x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+            y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
+        )
+    }
+
     /// Scale that shrinks a fan-out orb down to a logo-ring dot, so the same dot view
     /// reads as the small logo dot at progress 0 and the full orb at progress 1.
-    static let logoDotScale: CGFloat = (logoFrameSize * logoDotDiameterRatio) / fanoutOrbSize
+    static let logoDotScale: CGFloat = (logoFrameSize * logoDotDiameterRatio) / listOrbSize
 }
 
 private struct NotchAgentOmiIndicatorView: View {
@@ -1375,7 +1402,6 @@ private struct NotchAgentOmiIndicatorView: View {
 
     var body: some View {
         NotchOmiMark(dotColors: visiblePills.map { NotchAgentStatusGroup(status: $0.status).color })
-            .shadow(color: visiblePills.first.map { NotchAgentStatusGroup(status: $0.status).color.opacity(0.55) } ?? .clear, radius: 8)
             .contentShape(Rectangle())
     }
 }
@@ -1403,7 +1429,14 @@ private struct NotchAgentMorphField: View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let chromeHeight = FloatingControlBarWindow.notchChromeHeight
-            let rowHeight = FloatingControlBarWindow.notchAgentFanoutRowHeight
+            let rowHeight = FloatingControlBarWindow.notchAgentListRowHeight
+            let rowSpacing = FloatingControlBarWindow.notchAgentListRowSpacing
+            let verticalPadding = FloatingControlBarWindow.notchAgentListVerticalPadding
+            let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))
+            let rowMinX = (width - rowWidth) / 2
+            let dotTravelProgress = NotchAgentStackMetrics.smoothStep(progress)
+            let rowRevealProgress = NotchAgentStackMetrics.smoothStep((progress - 0.38) / 0.62)
+            let logoPlaceholderProgress = NotchAgentStackMetrics.smoothStep(progress / 0.42)
             let logoCenter = CGPoint(
                 x: NotchAgentStackMetrics.logoCenterX(
                     rowWidth: width,
@@ -1418,26 +1451,54 @@ private struct NotchAgentMorphField: View {
                 ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
                     let ringOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
                     let ringPoint = CGPoint(x: logoCenter.x + ringOffset.width, y: logoCenter.y + ringOffset.height)
-                    let rowPoint = CGPoint(x: NotchAgentStackMetrics.fanoutX(for: index, width: width), y: chromeHeight + rowHeight / 2)
-                    // The same dot lerps from its ring slot to its row slot. `progress`
-                    // is animated, so SwiftUI tweens `.position` continuously both ways.
-                    let dotPoint = CGPoint(
-                        x: ringPoint.x + (rowPoint.x - ringPoint.x) * progress,
-                        y: ringPoint.y + (rowPoint.y - ringPoint.y) * progress
+                    let rowMinY = chromeHeight + verticalPadding + CGFloat(index) * (rowHeight + rowSpacing)
+                    let rowCenter = CGPoint(x: width / 2, y: rowMinY + rowHeight / 2)
+                    let orbCenter = CGPoint(
+                        x: rowMinX + NotchAgentStackMetrics.listRowLeadingPadding + NotchAgentStackMetrics.listOrbSize / 2,
+                        y: rowCenter.y
                     )
-                    let pill = pills.indices.contains(index) ? pills[index] : nil
-                    let group = pill.map { NotchAgentStatusGroup(status: $0.status) }
+                    let controlPoint = CGPoint(
+                        x: logoCenter.x + (orbCenter.x - logoCenter.x) * 0.58,
+                        y: chromeHeight + verticalPadding + CGFloat(index) * 2
+                    )
+                    let dotPoint = NotchAgentStackMetrics.quadraticBezier(
+                        from: ringPoint,
+                        control: controlPoint,
+                        to: orbCenter,
+                        progress: dotTravelProgress
+                    )
+                    if pills.indices.contains(index) {
+                        let pill = pills[index]
+                        let group = NotchAgentStatusGroup(status: pill.status)
 
-                    NotchMorphDot(
-                        color: group?.color ?? Color.white.opacity(0.94),
-                        isOccupied: pill != nil,
-                        isActive: pill != nil && pill?.id == activePillID,
-                        progress: progress
-                    )
-                    .position(dotPoint)
-                    .allowsHitTesting(pill != nil && progress > 0.6)
-                    .onTapGesture { if let pill { onSelect(pill) } }
-                    .help(pill?.title ?? "")
+                        Button {
+                            onSelect(pill)
+                        } label: {
+                            NotchAgentListRow(
+                                title: pill.title,
+                                isSelected: pill.id == activePillID,
+                                progress: rowRevealProgress
+                            )
+                                .frame(width: rowWidth, height: rowHeight)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: rowWidth, height: rowHeight)
+                        .allowsHitTesting(progress > 0.6)
+                        .position(rowCenter)
+                        .help(pill.title)
+
+                        NotchMorphDot(
+                            color: group.color,
+                            isActive: pill.id == activePillID,
+                            progress: progress
+                        )
+                        .position(dotPoint)
+                        .allowsHitTesting(false)
+                    } else {
+                        NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)
+                            .position(ringPoint)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             .frame(width: width, height: geometry.size.height, alignment: .top)
@@ -1463,7 +1524,6 @@ private struct NotchAgentMorphField: View {
 /// and a fanned status orb at progress 1 (full size, ringed).
 private struct NotchMorphDot: View {
     let color: Color
-    let isOccupied: Bool
     let isActive: Bool
     let progress: CGFloat
 
@@ -1471,18 +1531,64 @@ private struct NotchMorphDot: View {
         let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
         Circle()
             .fill(color)
-            .frame(width: NotchAgentStackMetrics.fanoutOrbSize, height: NotchAgentStackMetrics.fanoutOrbSize)
+            .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
             .overlay(
                 Circle()
-                    .strokeBorder(Color.white.opacity(Double(isOccupied ? 0.42 : 0.82) * Double(progress)), lineWidth: 0.8)
+                    .strokeBorder(Color.white.opacity(0.42 * Double(progress)), lineWidth: 0.8)
             )
-            .shadow(color: color.opacity(isOccupied ? 0.6 : 0), radius: isActive ? 9 : 5)
+            .shadow(color: color.opacity(0.6), radius: isActive ? 9 : 5)
             .scaleEffect(scale)
             .frame(width: 18, height: 22)
             .contentShape(Circle())
     }
 }
 
+private struct NotchLogoPlaceholderDot: View {
+    let progress: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(Color.white.opacity(0.96 * Double(1 - progress)))
+            .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+            .scaleEffect(NotchAgentStackMetrics.logoDotScale)
+            .frame(width: 18, height: 22)
+    }
+}
+
+private struct NotchAgentListRow: View {
+    let title: String
+    let isSelected: Bool
+    let progress: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Color.clear
+                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 1)
+
+            Text(title)
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .opacity(progress)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.12 * Double(progress)) : .clear)
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.11 * Double(progress)))
+                .frame(height: 0.6)
+        }
+        .contentShape(Rectangle())
+    }
+}
 
 private enum NotchAgentStatusGroup: String, Identifiable {
     case running
@@ -1550,14 +1656,6 @@ private enum NotchAgentStatusGroup: String, Identifiable {
         }
     }
 
-    var swirlDuration: TimeInterval {
-        switch self {
-        case .running: return 0.9
-        case .queued: return 3.8
-        case .failed: return 4.6
-        case .done: return 5.2
-        }
-    }
 }
 
 private struct NotchAgentStatusOrb: View {
@@ -1566,98 +1664,13 @@ private struct NotchAgentStatusOrb: View {
     var size: CGFloat = 16
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let duration = group.swirlDuration
-            let phase = CGFloat(timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: duration) / duration)
-            NotchAgentSwirlSphere(group: group, isActive: isActive, phase: phase, size: size)
-        }
-        .frame(width: size + 6, height: size + 6)
-    }
-}
-
-private struct NotchAgentSwirlSphere: View {
-    let group: NotchAgentStatusGroup
-    let isActive: Bool
-    let phase: CGFloat
-    let size: CGFloat
-
-    var body: some View {
-        Canvas { context, size in
-            drawSwirl(context: &context, size: size)
-        }
-        .frame(width: size, height: size)
-        .clipShape(Circle())
-        .shadow(color: group.color.opacity(isActive ? 0.94 : 0.74), radius: isActive ? size * 0.50 : size * 0.38)
-        .shadow(color: group.highlightColor.opacity(isActive ? 0.68 : 0.46), radius: isActive ? size * 0.88 : size * 0.62)
-    }
-
-    private func drawSwirl(context: inout GraphicsContext, size: CGSize) {
-        let rect = CGRect(origin: .zero, size: size)
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) / 2
-        let circle = Path(ellipseIn: rect)
-        context.clip(to: circle)
-        context.fill(circle, with: .color(group.shadowColor.opacity(0.94)))
-
-        for index in 0..<3 {
-            drawBand(index: index, rect: rect, center: center, radius: radius, context: &context)
-        }
-
-        drawColorLift(size: size, context: &context)
-    }
-
-    private func drawBand(
-        index: Int,
-        rect: CGRect,
-        center: CGPoint,
-        radius: CGFloat,
-        context: inout GraphicsContext
-    ) {
-        let turn = phase * .pi * 2 + CGFloat(index) * (.pi * 2 / 3)
-        let sweepCenter = CGPoint(
-            x: center.x + cos(turn) * radius * 0.28,
-            y: center.y + sin(turn * 0.86) * radius * 0.24
-        )
-        let start = CGPoint(
-            x: sweepCenter.x - cos(turn) * radius * 1.35,
-            y: sweepCenter.y - sin(turn) * radius * 1.35
-        )
-        let end = CGPoint(
-            x: sweepCenter.x + cos(turn) * radius * 1.35,
-            y: sweepCenter.y + sin(turn) * radius * 1.35
-        )
-        let stops = [
-            Gradient.Stop(color: group.color.opacity(index == 1 ? 1.0 : 0.78), location: 0),
-            Gradient.Stop(color: group.highlightColor.opacity(index == 0 ? 1.0 : 0.90), location: 0.52),
-            Gradient.Stop(color: group.color.opacity(index == 2 ? 1.0 : 0.78), location: 1),
-        ]
-        let gradient = Gradient(stops: stops)
-        let bandRect = rect
-            .insetBy(dx: -radius * 0.35, dy: radius * (0.06 + CGFloat(index) * 0.04))
-            .offsetBy(dx: cos(turn) * radius * 0.20, dy: sin(turn) * radius * 0.18)
-        context.fill(Path(ellipseIn: bandRect), with: .linearGradient(gradient, startPoint: start, endPoint: end))
-    }
-
-    private func drawColorLift(size: CGSize, context: inout GraphicsContext) {
-        let liftRect = CGRect(
-            x: size.width * (0.18 + 0.08 * cos(phase * .pi * 2)),
-            y: size.height * 0.14,
-            width: size.width * 0.42,
-            height: size.height * 0.34
-        )
-        let gradient = Gradient(colors: [
-            group.highlightColor.opacity(0.48),
-            group.color.opacity(0.20),
-            .clear,
-        ])
-        context.fill(
-            Path(ellipseIn: liftRect),
-            with: .radialGradient(
-                gradient,
-                center: CGPoint(x: liftRect.midX, y: liftRect.midY),
-                startRadius: 0,
-                endRadius: liftRect.width * 0.72
+        Circle()
+            .fill(group.color)
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(isActive ? 0.34 : 0.20), lineWidth: 1)
             )
-        )
+        .frame(width: size, height: size)
+        .frame(width: size + 6, height: size + 6)
     }
 }

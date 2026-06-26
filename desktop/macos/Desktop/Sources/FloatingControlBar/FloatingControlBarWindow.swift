@@ -42,7 +42,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchInputPanelMinimumContentHeight: CGFloat = 40
     static let notchInputPanelHeight: CGFloat =
         notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
-    static let notchAgentFanoutRowHeight: CGFloat = 32
+    static let notchAgentListMaxVisibleAgents = 8
+    static let notchAgentListRowHeight: CGFloat = 44
+    static let notchAgentListRowSpacing: CGFloat = 0
+    static let notchAgentListVerticalPadding: CGFloat = 0
     private static let responseStreamingResizeStep: CGFloat = 56
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
@@ -54,6 +57,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         width: notchHiddenCenterWidth + notchActiveSideWidth * 2,
         height: notchChromeHeight
     )
+    static func notchAgentListHeight(agentCount: Int) -> CGFloat {
+        let visibleCount = min(max(0, agentCount), notchAgentListMaxVisibleAgents)
+        guard visibleCount > 0 else { return 0 }
+        return notchAgentListVerticalPadding * 2
+            + CGFloat(visibleCount) * notchAgentListRowHeight
+            + CGFloat(max(0, visibleCount - 1)) * notchAgentListRowSpacing
+    }
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let voiceBarSize = NSSize(width: 224, height: 42)
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
@@ -62,8 +72,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
-    private static let askOmiAnimationDuration: TimeInterval = 0.08
-    private static let askOmiSettleDelay: TimeInterval = 0.10
+    private static let askOmiAnimationDuration: TimeInterval = 0.055
+    private static let askOmiSettleDelay: TimeInterval = 0.065
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
     /// Minimum window height when AI response first appears.
@@ -162,11 +172,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
     private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
-    private var notchAgentFanoutHeightIfNeeded: CGFloat {
-        notchModeEnabled && !AgentPillsManager.shared.pills.isEmpty ? Self.notchAgentFanoutRowHeight : 0
+    private var notchAgentListHeightIfNeeded: CGFloat {
+        notchModeEnabled ? Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count) : 0
     }
     private var inputPanelHeight: CGFloat {
-        notchModeEnabled ? Self.notchInputPanelHeight + notchAgentFanoutHeightIfNeeded : 120
+        notchModeEnabled ? Self.notchInputPanelHeight + notchAgentListHeightIfNeeded : 120
     }
 
     var onPlayPause: (() -> Void)?
@@ -435,7 +445,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
             let panelHeight = usesNotchIsland
-                ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
+                ? Self.notchInputPanelHeight + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
                 : 120
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
@@ -466,7 +476,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
             let panelHeight = usesNotchIsland
-                ? Self.notchInputPanelHeight + (AgentPillsManager.shared.pills.isEmpty ? 0 : Self.notchAgentFanoutRowHeight)
+                ? Self.notchInputPanelHeight + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
                 : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
@@ -507,7 +517,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         animateGrowOutFromNotch(to: targetFrame)
     }
 
-    private func animateGrowOutFromNotch(to targetFrame: NSRect, duration: TimeInterval = 0.24) {
+    private func animateGrowOutFromNotch(to targetFrame: NSRect, duration: TimeInterval = 0.16) {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
         frameAnimationToken += 1
@@ -795,7 +805,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if shouldRestoreVisibleConversation {
             cancelInputHeightObserver()
-            withAnimation(.easeOut(duration: 0.12)) {
+            withAnimation(.easeOut(duration: 0.08)) {
                 state.showingAIConversation = true
                 state.showingAIResponse = true
                 state.isAILoading = false
@@ -806,9 +816,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
             if notchModeEnabled {
-                let revealStartSize = frame.size
-                resizeAnchored(to: inputSize, makeResizable: false, animated: false, anchorTop: true)
-                animateNotchReveal(from: revealStartSize, to: inputSize, duration: 0.22)
+                state.notchRevealProgress = 1
+                resizeAnchored(
+                    to: inputSize,
+                    makeResizable: false,
+                    animated: true,
+                    animationDuration: 0.14,
+                    anchorTop: true
+                )
             } else {
                 resizeAnchored(
                     to: inputSize, makeResizable: false, animated: true,
@@ -872,7 +887,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         responseHeightCancellable = nil
         cancelInputHeightObserver()
 
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.88)) {
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
             state.clearVisibleConversation()
             state.showingAIConversation = true
             state.inputViewHeight = inputPanelHeight
@@ -912,7 +927,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         switch type {
         case "data":
             if state.isAILoading {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = false
                     state.showingAIResponse = true
                 }
@@ -920,14 +935,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             }
             state.aiResponseText += text
         case "done":
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             if !text.isEmpty {
                 state.aiResponseText = text
             }
         case "error":
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             state.aiResponseText = text.isEmpty ? "An unknown error occurred." : text
@@ -988,7 +1003,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         _ targetFrame: NSRect,
         makeResizable: Bool,
         animated: Bool = false,
-        animationDuration: TimeInterval = 0.3
+        animationDuration: TimeInterval = 0.18
     ) {
         if makeResizable {
             styleMask.insert(.resizable)
@@ -1094,8 +1109,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
     }
 
-    /// Gives the notch-mode subagent switcher enough room to fan out horizontally
-    /// from the compact island without opening the full chat surface.
+    /// Gives the notch-mode subagent switcher enough room to unfurl into a
+    /// centered stacked list without opening the full chat surface.
     func resizeForAgentSwitcher(visible: Bool) {
         guard notchModeEnabled,
               !state.showingAIConversation,
@@ -1105,7 +1120,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         else { return }
 
         let targetSize = visible
-            ? NSSize(width: max(collapsedBarSize.width, Self.notchExpandedWidth), height: Self.notchChromeHeight + Self.notchAgentFanoutRowHeight)
+            ? NSSize(
+                width: max(collapsedBarSize.width, Self.notchExpandedWidth),
+                height: Self.notchChromeHeight + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
+            )
             : collapsedBarSize
         resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
     }
@@ -1117,7 +1135,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 return
             }
             let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
-            resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: targetSize,
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.askOmiAnimationDuration,
+                anchorTop: true
+            )
             return
         }
         let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
@@ -1129,7 +1153,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             compactSize: Self.minBarSize,
             voiceSize: Self.voiceBarSize
         )
-        resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.3)
+        resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.18)
     }
 
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -1187,19 +1211,25 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let startHeight = max(Self.minResponseHeight, currentResponseSurfaceHeight())
         let initialSize = NSSize(width: startWidth, height: startHeight)
         resizeAnchored(to: initialSize, makeResizable: true, animated: animated, anchorTop: true)
-        setupResponseHeightObserver(maxHeight: maxHeight)
+        state.present(.mainResponse)
+        setupResponseHeightObserver(for: .mainResponse, maxHeight: maxHeight)
     }
 
-    /// Observes `state.responseContentHeight` and expands the window to fit content,
-    /// capped at `maxHeight`. Never shrinks automatically.
-    private func setupResponseHeightObserver(maxHeight: CGFloat) {
+    /// Observes the active surface's measured content height and expands the
+    /// window to fit it, capped at `maxHeight`. Never shrinks automatically.
+    private func setupResponseHeightObserver(
+        for surface: FloatingConversationSurface,
+        maxHeight: CGFloat
+    ) {
         responseHeightCancellable?.cancel()
-        responseHeightCancellable = state.$responseContentHeight
+        let key = surface.measurementKey
+        responseHeightCancellable = state.$responseContentHeights
+            .map { $0[key] ?? 0 }
             .removeDuplicates()
             .debounce(for: .milliseconds(80), scheduler: DispatchQueue.main)
             .sink { [weak self] contentHeight in
                 guard let self = self,
-                      self.state.showingAIResponse,
+                      self.state.conversationSurface == surface,
                       !self.isUserResizing,
                       contentHeight > 0
                 else { return }
@@ -1671,12 +1701,12 @@ class FloatingControlBarManager {
                 barWindow.showAIConversation()
                 if let pillID,
                    AgentPillsManager.shared.pills.contains(where: { $0.id == pillID }) {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
-                        barWindow.state.activeAgentChatPillID = pillID
-                        barWindow.state.showingAIResponse = true
+                    withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+                        barWindow.state.present(.agent(pillID))
                         barWindow.state.isAILoading = false
                         barWindow.state.aiInputText = ""
                     }
+                    barWindow.resizeForActiveAgentChatPublic(pillID: pillID, animated: false)
                 }
             }
         }
@@ -1692,18 +1722,32 @@ class FloatingControlBarManager {
         let isAskOmiOpen: Bool
         let isAskOmiFocused: Bool
         let frame: String?
+        let isVoiceListening: Bool
+        let isVoiceResponseActive: Bool
+        let usesNotchIsland: Bool
     }
 
     var automationState: AutomationState {
         guard let window else {
-            return AutomationState(isVisible: false, isAskOmiOpen: false, isAskOmiFocused: false, frame: nil)
+            return AutomationState(
+                isVisible: false,
+                isAskOmiOpen: false,
+                isAskOmiFocused: false,
+                frame: nil,
+                isVoiceListening: false,
+                isVoiceResponseActive: false,
+                usesNotchIsland: false
+            )
         }
         let focused = window.firstResponder is NSTextView
         return AutomationState(
             isVisible: window.isVisible,
             isAskOmiOpen: window.state.showingAIConversation && !window.state.showingAIResponse,
             isAskOmiFocused: focused,
-            frame: NSStringFromRect(window.frame)
+            frame: NSStringFromRect(window.frame),
+            isVoiceListening: window.state.isVoiceListening,
+            isVoiceResponseActive: window.state.isVoiceResponseActive,
+            usesNotchIsland: window.state.usesNotchIsland
         )
     }
 
@@ -1767,6 +1811,76 @@ class FloatingControlBarManager {
             "elapsedMs": elapsedMs,
             "visible": window.isVisible ? "true" : "false",
             "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
+            "frame": NSStringFromRect(window.frame),
+        ]
+    }
+
+    func seedSubagentsForAutomation(count: Int) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        let pills = AgentPillsManager.shared.replaceWithAutomationPills(count: count)
+        if !window.state.showingAIConversation {
+            window.showAIConversation()
+        }
+        window.state.present(.mainInput)
+        window.state.isAILoading = false
+        window.state.aiInputText = ""
+        window.resizeToResponseHeightPublic(animated: false)
+        window.state.present(.mainInput)
+        return [
+            "count": "\(pills.count)",
+            "first": pills.first?.id.uuidString ?? "",
+            "frame": NSStringFromRect(window.frame),
+        ]
+    }
+
+    func openSeededSubagentForAutomation(index: Int, wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        let pills = AgentPillsManager.shared.pills
+        guard pills.indices.contains(index) else {
+            return ["error": "subagent_index_out_of_range"]
+        }
+        let pill = pills[index]
+        let start = ContinuousClock.now
+        AgentPillsManager.shared.markViewed(pillID: pill.id)
+        withAnimation(.easeOut(duration: 0.10)) {
+            window.state.present(.agent(pill.id))
+            window.state.isAILoading = false
+            window.state.aiInputText = ""
+        }
+        window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: false)
+        guard wait else {
+            return ["triggered": "true", "active": pill.id.uuidString]
+        }
+        let selectMs = await waitForAutomationCondition {
+            window.state.activeAgentChatPillID == pill.id && window.state.showingAIResponse
+        }
+        return [
+            "selectMs": selectMs ?? "timeout",
+            "elapsedMs": start.duration(to: .now).millisecondsString,
+            "active": pill.id.uuidString,
+            "frame": NSStringFromRect(window.frame),
+        ]
+    }
+
+    func backFromSubagentForAutomation(wait: Bool = true) async -> [String: String] {
+        guard let window else {
+            return ["error": "floating_bar_window_unavailable"]
+        }
+        let start = ContinuousClock.now
+        window.state.leaveAgentSurface()
+        guard wait else {
+            return ["triggered": "true", "active": window.state.activeAgentChatPillID?.uuidString ?? ""]
+        }
+        let backMs = await waitForAutomationCondition {
+            window.state.activeAgentChatPillID == nil
+        }
+        return [
+            "backMs": backMs ?? "timeout",
+            "elapsedMs": start.duration(to: .now).millisecondsString,
             "frame": NSStringFromRect(window.frame),
         ]
     }
@@ -2705,7 +2819,7 @@ class FloatingControlBarManager {
                     if let barWindow = barWindow, !hasSetUpResponseHeight {
                         hasSetUpResponseHeight = true
                         if !barWindow.state.showingAIResponse {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                                 barWindow.state.showingAIResponse = true
                             }
                         }
@@ -2763,7 +2877,7 @@ class FloatingControlBarManager {
         // Ensure the response view is visible and resized (handles the case where
         // the sink never fired because no streaming data arrived before the error)
         if !barWindow.state.showingAIResponse {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                 barWindow.state.showingAIResponse = true
             }
             barWindow.resizeToResponseHeightPublic(animated: true)
@@ -2923,6 +3037,34 @@ Assistant message:
 extension FloatingControlBarWindow {
     func resizeToResponseHeightPublic(animated: Bool = false) {
         resizeToResponseHeight(animated: animated)
+    }
+
+    func resizeForActiveAgentChatPublic(pillID: UUID? = nil, animated: Bool = false) {
+        let savedSize = UserDefaults.standard.string(forKey: FloatingControlBarWindow.sizeKey)
+            .map(NSSizeFromString)
+        let baseHeight = savedSize.map { max($0.height, Self.defaultBaseResponseHeight) } ?? Self.defaultBaseResponseHeight
+        let maxHeight = baseHeight * 2
+        let surface: FloatingConversationSurface
+        if let pillID {
+            surface = .agent(pillID)
+            state.present(surface)
+        } else {
+            surface = state.conversationSurface
+        }
+        let targetSize = NSSize(
+            width: max(expandedContentWidth, currentResponseSurfaceWidth()),
+            height: max(Self.defaultBaseResponseHeight, currentResponseSurfaceHeight())
+        )
+        if targetSize.height > currentResponseSurfaceHeight() + 2 || targetSize.width > currentResponseSurfaceWidth() + 2 {
+            resizeAnchored(
+                to: targetSize,
+                makeResizable: true,
+                animated: animated,
+                animationDuration: 0.10,
+                anchorTop: true
+            )
+        }
+        setupResponseHeightObserver(for: surface, maxHeight: maxHeight)
     }
 
     /// Save the current center point so closeAIConversation can restore position.

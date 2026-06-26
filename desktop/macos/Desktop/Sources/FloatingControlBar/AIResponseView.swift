@@ -50,11 +50,12 @@ struct AIResponseView: View {
                         // Anchor for auto-scroll
                         Color.clear.frame(height: 1).id("bottom")
                     }
+                    .padding(.trailing, 26)
                     .background(
                         GeometryReader { geo -> Color in
                             let h = geo.size.height
                             DispatchQueue.main.async {
-                                state.responseContentHeight = h
+                                state.reportContentHeight(h, for: .mainResponse)
                             }
                             return Color.clear
                         }
@@ -91,7 +92,9 @@ struct AIResponseView: View {
                 followUpInputView
             }
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.top, state.usesNotchIsland ? 6 : 16)
+        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {

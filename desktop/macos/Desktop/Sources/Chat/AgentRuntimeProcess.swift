@@ -109,7 +109,7 @@ actor AgentRuntimeProcess {
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
-  private var readTask: Task<Void, Never>?
+  private var stdoutLineBuffer = Data()
   private var isRunning = false
   private var processGeneration: UInt64 = 0
   private var lastExitWasOOM = false
@@ -392,8 +392,6 @@ actor AgentRuntimeProcess {
   private func startProcess(preferredHarnessMode: String) async throws {
     guard !isRunning else { return }
 
-    readTask?.cancel()
-    readTask = nil
     process = nil
     closePipes()
     lastExitWasOOM = false
@@ -537,8 +535,6 @@ actor AgentRuntimeProcess {
     if let currentProcess = process, currentProcess === failedProcess {
       process = nil
     }
-    readTask?.cancel()
-    readTask = nil
     closePipes()
     isRunning = false
     receivedInit = false
@@ -599,8 +595,6 @@ actor AgentRuntimeProcess {
       }
     }
 
-    readTask?.cancel()
-    readTask = nil
     process = nil
     closePipes()
     isRunning = false
@@ -612,31 +606,34 @@ actor AgentRuntimeProcess {
   private func startReadingStdout() {
     guard let stdoutPipe else { return }
 
-    readTask = Task.detached { [weak self] in
-      let handle = stdoutPipe.fileHandleForReading
-      var buffer = Data()
+    let handle = stdoutPipe.fileHandleForReading
+    handle.readabilityHandler = { [weak self] handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
+        return
+      }
+      Task { await self?.processStdoutData(data) }
+    }
+  }
 
-      while !Task.isCancelled {
-        let chunk = handle.availableData
-        if chunk.isEmpty { break }
-        buffer.append(chunk)
+  private func processStdoutData(_ data: Data) {
+    stdoutLineBuffer.append(data)
 
-        while let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
-          let lineData = buffer[buffer.startIndex..<newlineIndex]
-          buffer = Data(buffer[buffer.index(after: newlineIndex)...])
+    while let newlineIndex = stdoutLineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+      let lineData = stdoutLineBuffer[stdoutLineBuffer.startIndex..<newlineIndex]
+      stdoutLineBuffer = Data(stdoutLineBuffer[stdoutLineBuffer.index(after: newlineIndex)...])
 
-          guard let line = String(data: lineData, encoding: .utf8),
-            !line.trimmingCharacters(in: .whitespaces).isEmpty
-          else {
-            continue
-          }
+      guard let line = String(data: lineData, encoding: .utf8),
+        !line.trimmingCharacters(in: .whitespaces).isEmpty
+      else {
+        continue
+      }
 
-          if let message = RuntimeMessage.parse(line) {
-            await self?.handleMessage(message)
-          } else {
-            log("AgentRuntimeProcess: failed to parse message: \(line.prefix(200))")
-          }
-        }
+      if let message = RuntimeMessage.parse(line) {
+        handleMessage(message)
+      } else {
+        log("AgentRuntimeProcess: failed to parse message: \(line.prefix(200))")
       }
     }
   }
@@ -927,6 +924,7 @@ actor AgentRuntimeProcess {
     stdinPipe = nil
     stdoutPipe = nil
     stderrPipe = nil
+    stdoutLineBuffer.removeAll(keepingCapacity: false)
   }
 
   static func defaultStateDirectory(

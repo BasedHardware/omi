@@ -129,6 +129,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
   }
 
   func beginRequest(surface: AgentSurfaceReference, statusText: String? = "Starting...") {
+    clearTerminalProjectionForNewRun(surface: surface)
     update(surface: surface, status: .starting, statusText: statusText, terminal: false)
   }
 
@@ -145,6 +146,10 @@ final class AgentRuntimeStatusStore: ObservableObject {
 
   func recordLocalCancellation(surface: AgentSurfaceReference, message: String? = nil) {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
+  }
+
+  func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil) {
+    update(surface: surface, status: .succeeded, statusText: statusText, terminal: true)
   }
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
@@ -203,6 +208,10 @@ final class AgentRuntimeStatusStore: ObservableObject {
     terminal: Bool,
     payload: [String: Any] = [:]
   ) {
+    if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {
+      return
+    }
+
     var projection = projectionsBySurface[surface.key] ?? AgentRunProjection(
       surface: surface,
       sessionId: nil,
@@ -243,6 +252,20 @@ final class AgentRuntimeStatusStore: ObservableObject {
     if let runId = projection.runId {
       runIdBySurface[surface.key] = runId
       projectionByRunId[runId] = projection
+    }
+  }
+
+  private func clearTerminalProjectionForNewRun(surface: AgentSurfaceReference) {
+    guard let existing = projectionsBySurface[surface.key], existing.status.isTerminal else { return }
+    projectionsBySurface.removeValue(forKey: surface.key)
+    if let runId = existing.runId {
+      projectionByRunId.removeValue(forKey: runId)
+      if runIdBySurface[surface.key] == runId {
+        runIdBySurface.removeValue(forKey: surface.key)
+      }
+    }
+    if let sessionId = existing.sessionId {
+      projectionBySessionId.removeValue(forKey: sessionId)
     }
   }
 }

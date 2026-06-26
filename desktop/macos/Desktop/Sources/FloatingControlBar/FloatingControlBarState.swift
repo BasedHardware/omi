@@ -9,6 +9,41 @@ struct FloatingChatExchange: Identifiable {
     let aiMessage: ChatMessage
 }
 
+enum FloatingConversationSurface: Equatable {
+    case closed
+    case mainInput
+    case mainResponse
+    case agent(UUID)
+
+    var isOpen: Bool {
+        switch self {
+        case .closed: return false
+        case .mainInput, .mainResponse, .agent: return true
+        }
+    }
+
+    var isResponseLike: Bool {
+        switch self {
+        case .mainResponse, .agent: return true
+        case .closed, .mainInput: return false
+        }
+    }
+
+    var agentID: UUID? {
+        guard case .agent(let id) = self else { return nil }
+        return id
+    }
+
+    var measurementKey: String {
+        switch self {
+        case .closed: return "closed"
+        case .mainInput: return "mainInput"
+        case .mainResponse: return "mainResponse"
+        case .agent(let id): return "agent:\(id.uuidString)"
+        }
+    }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {
@@ -55,6 +90,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
 @MainActor
 class FloatingControlBarState: NSObject, ObservableObject {
     static let visibleConversationReuseInterval: TimeInterval = 10 * 60
+    static var voiceResponseWatchdogDelay: TimeInterval = 30
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
@@ -74,9 +110,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQuestionMessageId: String? = nil
     @Published var inputViewHeight: CGFloat = 120
     @Published var responseContentHeight: CGFloat = 0
+    @Published private(set) var responseContentHeights: [String: CGFloat] = [:]
     @Published var chatHistory: [FloatingChatExchange] = []
     @Published var lastConversationActivityAt: Date? = nil
     @Published var activeAgentChatPillID: UUID? = nil
+    @Published var conversationSurface: FloatingConversationSurface = .closed
 
     /// Convenience accessor for plain-text response (used by window geometry and error handling).
     var aiResponseText: String {
@@ -94,7 +132,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceListening: Bool = false
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
-    @Published var isVoiceResponseActive: Bool = false
+    @Published var isVoiceResponseActive: Bool = false {
+        didSet { updateVoiceResponseWatchdog() }
+    }
     /// True only when the notch-mode setting is enabled and the current display
     /// exposes a real camera housing safe area. External displays keep old pill UI.
     @Published var usesNotchIsland: Bool = false
@@ -108,6 +148,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// whether voice responses should play for this particular query.
     @Published var currentQueryFromVoice: Bool = false
 
+    private var voiceResponseWatchdogWorkItem: DispatchWorkItem?
+
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
 
@@ -118,8 +160,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
         currentNotification != nil
     }
 
+    var hasMainConversation: Bool {
+        !chatHistory.isEmpty || currentAIMessage != nil || !displayedQuery.isEmpty
+    }
+
     var hasVisibleConversation: Bool {
-        activeAgentChatPillID != nil || !chatHistory.isEmpty || currentAIMessage != nil || !displayedQuery.isEmpty
+        conversationSurface.isOpen || activeAgentChatPillID != nil || hasMainConversation
     }
 
     var canRestoreVisibleConversation: Bool {
@@ -131,18 +177,64 @@ class FloatingControlBarState: NSObject, ObservableObject {
         lastConversationActivityAt = date
     }
 
+    func present(_ surface: FloatingConversationSurface) {
+        conversationSurface = surface
+        activeAgentChatPillID = surface.agentID
+        showingAIConversation = surface.isOpen
+        showingAIResponse = surface.isResponseLike
+        markConversationActivity()
+    }
+
+    func leaveAgentSurface() {
+        activeAgentChatPillID = nil
+        let nextSurface: FloatingConversationSurface = hasMainConversation ? .mainResponse : .mainInput
+        present(nextSurface)
+    }
+
+    func reportContentHeight(_ height: CGFloat, for surface: FloatingConversationSurface) {
+        guard height > 0, conversationSurface == surface else { return }
+        responseContentHeights[surface.measurementKey] = height
+        if surface == .mainResponse {
+            responseContentHeight = height
+        }
+    }
+
+    func measuredContentHeight(for surface: FloatingConversationSurface) -> CGFloat? {
+        responseContentHeights[surface.measurementKey]
+    }
+
     func clearVisibleConversation() {
         activeAgentChatPillID = nil
+        conversationSurface = .closed
+        responseContentHeights = [:]
+        responseContentHeight = 0
         aiInputText = ""
         displayedQuery = ""
         currentAIMessage = nil
         currentQuestionMessageId = nil
         chatHistory = []
+        showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
+    }
+
+    private func updateVoiceResponseWatchdog() {
+        voiceResponseWatchdogWorkItem?.cancel()
+        voiceResponseWatchdogWorkItem = nil
+        guard isVoiceResponseActive else { return }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isVoiceResponseActive else { return }
+            self.isVoiceResponseActive = false
+        }
+        voiceResponseWatchdogWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.voiceResponseWatchdogDelay,
+            execute: workItem
+        )
     }
 }

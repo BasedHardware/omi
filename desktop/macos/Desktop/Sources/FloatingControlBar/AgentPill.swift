@@ -481,6 +481,7 @@ final class AgentPillsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak pill] projections in
                 guard let pill, let projection = projections[surfaceRef.key] else { return }
+                guard !pill.status.isFinished || projection.status.isTerminal else { return }
                 AgentPillsManager.apply(projection: projection, to: pill)
             }
 
@@ -665,6 +666,34 @@ final class AgentPillsManager: ObservableObject {
         return true
     }
 
+    func replaceWithAutomationPills(count requestedCount: Int) -> [AgentPill] {
+        let ids = pills.map(\.id)
+        for id in ids {
+            cleanup(pillID: id)
+        }
+
+        let count = min(max(requestedCount, 1), maxPills)
+        let seeded = (0..<count).map { index -> AgentPill in
+            let pill = AgentPill(query: "Automation subagent \(index + 1)", model: ModelQoS.Claude.defaultSelection)
+            pill.title = index == 0 ? "SLEEP FOR 5" : "Sleep Subagent"
+            if index == 0 {
+                pill.status = .done
+                pill.latestActivity = "Done — automation output."
+                pill.aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
+                pill.completedAt = Date()
+            } else {
+                pill.status = .running
+                pill.latestActivity = "Working…"
+                pill.aiMessage = nil
+                pill.completedAt = nil
+            }
+            pill.markContentChanged()
+            return pill
+        }
+        pills = seeded
+        return seeded
+    }
+
     private func cleanup(pillID: UUID) {
         if recordingPillID == pillID {
             recordingPillID = nil
@@ -823,6 +852,9 @@ final class AgentPillsManager: ObservableObject {
     private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                pill.aiMessage = ChatMessage(text: trimmedFinalText, sender: .ai)
+            }
             pill.latestActivity = String(trimmedFinalText.prefix(140))
             pill.markContentChanged()
         }
@@ -845,6 +877,10 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .done
             pill.completedAt = Date()
             pill.markContentChanged()
+            AgentRuntimeStatusStore.shared.recordLocalSuccess(
+                surface: .floatingPill(pillId: pill.id),
+                statusText: trimmedFinalText
+            )
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()

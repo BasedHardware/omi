@@ -1061,30 +1061,55 @@ private struct HomeCanvasBackground: View {
 }
 
 private struct HomeMemoryBridgeBackdrop: View {
+    @State private var isAppActive = NSApp.isActive
+
     var body: some View {
-        TimelineView(.animation) { timeline in
-            GeometryReader { proxy in
-                let width = proxy.size.width
-                let height = proxy.size.height
-                let progress = CGFloat(
-                    timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 7.0) / 7.0)
-
-                ZStack {
-                    ForEach(0..<5, id: \.self) { index in
-                        HomeFlowCloud(index: index, progress: progress, width: width, height: height)
-                    }
-
-                    ForEach(0..<14, id: \.self) { index in
-                        HomeFlowParticle(index: index, progress: progress, width: width, height: height)
-                    }
+        Group {
+            if isAppActive {
+                TimelineView(.periodic(from: .now, by: 1.0 / 10.0)) { timeline in
+                    HomeMemoryBridgeBackdropContent(
+                        progress: Self.progress(for: timeline.date)
+                    )
                 }
+            } else {
+                HomeMemoryBridgeBackdropContent(progress: 0.18)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isAppActive = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            isAppActive = false
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
+
+    private static func progress(for date: Date) -> CGFloat {
+        CGFloat(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 7.0) / 7.0)
+    }
 }
 
+private struct HomeMemoryBridgeBackdropContent: View {
+    let progress: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+
+            ZStack {
+                ForEach(0..<5, id: \.self) { index in
+                    HomeFlowCloud(index: index, progress: progress, width: width, height: height)
+                }
+
+                ForEach(0..<14, id: \.self) { index in
+                    HomeFlowParticle(index: index, progress: progress, width: width, height: height)
+                }
+            }
+        }
+    }
+}
 private struct HomeFlowCloud: View {
     let index: Int
     let progress: CGFloat
