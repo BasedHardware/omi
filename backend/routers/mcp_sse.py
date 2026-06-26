@@ -37,8 +37,8 @@ from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
-    assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_write_convergence_gate,
+    guard_legacy_memory_write,
+    read_default_read_rollout,
 )
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -58,7 +58,6 @@ from utils.mcp_memories import (
     parse_mcp_datetime,
     parse_mcp_int,
     parse_optional_mcp_bool,
-    read_mcp_default_memory_rollout,
     search_default_mcp_memories_vector,
 )
 
@@ -612,7 +611,7 @@ def execute_tool(
                 ]
             }
 
-        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
         memory_list_results = list_default_mcp_memories(
             uid=user_id,
             limit=limit,
@@ -664,12 +663,7 @@ def execute_tool(
                 memory_db = memory_item_to_memorydb(item)
             return {"success": True, "memory": memory_db.model_dump()}
 
-        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            memory_rollout,
-            operation="mcp_tool_memory_create",
-            write_convergence_policy=read_write_convergence_gate(db_client=db),
-        )
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_create")
         if not memory_write_guard.allowed:
             raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
@@ -690,12 +684,7 @@ def execute_tool(
             MemoryService(db_client=db).delete(user_id, memory_id)
             return {"success": True}
 
-        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            memory_rollout,
-            operation="mcp_tool_memory_delete",
-            write_convergence_policy=read_write_convergence_gate(db_client=db),
-        )
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_delete")
         if not memory_write_guard.allowed:
             raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
@@ -718,12 +707,7 @@ def execute_tool(
             MemoryService(db_client=db).update_content(user_id, memory_id, content)
             return {"success": True}
 
-        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
-        memory_write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-            memory_rollout,
-            operation="mcp_tool_memory_edit",
-            write_convergence_policy=read_write_convergence_gate(db_client=db),
-        )
+        memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_edit")
         if not memory_write_guard.allowed:
             raise ToolExecutionError(str(memory_write_guard.detail), code=-32009)
 
@@ -829,7 +813,7 @@ def execute_tool(
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
-        memory_rollout = read_mcp_default_memory_rollout(uid=user_id, db_client=db)
+        memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
         vector_search_results = search_default_mcp_memories_vector(
             uid=user_id,
             query=query,

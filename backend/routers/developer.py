@@ -55,7 +55,6 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from utils.memory.developer_memory_adapter import (
-    read_developer_default_memory_rollout,
     search_memory_default_developer_memories,
     search_memory_default_developer_memories_vector,
 )
@@ -65,8 +64,8 @@ from utils.memory.product_authorization import (
 )
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
-    assert_legacy_memory_write_allowed_for_default_read_decision,
-    read_write_convergence_gate,
+    guard_legacy_memory_write,
+    read_default_read_rollout,
 )
 import logging
 
@@ -295,7 +294,7 @@ def get_memories(
                 'key_id': auth_context.key_id,
             },
         )
-    memory_rollout = read_developer_default_memory_rollout(uid=uid, db_client=db)
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
         uid=uid,
         query='',
@@ -404,7 +403,7 @@ def search_memories_vector(
             },
         )
 
-    memory_rollout = read_developer_default_memory_rollout(uid=uid, db_client=db)
+    memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories_vector(
         uid=uid,
         query=query,
@@ -463,11 +462,7 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
-    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_developer_default_memory_rollout(uid=uid, db_client=db),
-        operation='create_memory',
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='create_memory')
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
@@ -545,11 +540,7 @@ def create_memories_batch(
     if len(request.memories) > 25:
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
-    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_developer_default_memory_rollout(uid=uid, db_client=db),
-        operation='batch_create_memories',
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='batch_create_memories')
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
@@ -671,11 +662,7 @@ def delete_memory(
 
     - **memory_id**: The ID of the memory to delete
     """
-    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_developer_default_memory_rollout(uid=uid, db_client=db),
-        operation='delete_memory',
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='delete_memory')
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
@@ -709,11 +696,7 @@ def update_memory(
     - **tags**: New tags for the memory (optional)
     - **category**: New category for the memory (optional)
     """
-    write_guard = assert_legacy_memory_write_allowed_for_default_read_decision(
-        read_developer_default_memory_rollout(uid=uid, db_client=db),
-        operation='update_memory',
-        write_convergence_policy=read_write_convergence_gate(db_client=db),
-    )
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
     if not write_guard.allowed:
         raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
