@@ -297,7 +297,7 @@ def _probe_code() -> str:
         memory_adapter_modules = [
             "utils.memory.v3_compatibility",
             "utils.memory.v3_request_adapter",
-            "utils.memory.v3_route_planner",
+            "testing.memory.v3_route_planner",
             "utils.memory.v3_memory_read_service",
             "utils.memory.v3_response_adapter",
         ]
