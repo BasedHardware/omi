@@ -53,6 +53,8 @@ final class AgentPillLifecycleTests: XCTestCase {
       glowRange.lowerBound,
       dockRange.lowerBound,
       "The response glow must be drawn behind the black dock fill so glow never cuts into the pure-black notch island.")
+    XCTAssertTrue(source.contains(".frame(width: notchSurfaceWidth)"))
+    XCTAssertTrue(source.contains(".frame(maxHeight: .infinity)"))
   }
 
   func testNotchAgentIndicatorUsesOmiDotsAndHorizontalFanout() throws {
@@ -67,12 +69,16 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentFanoutRow("))
-    XCTAssertTrue(source.contains("HStack(spacing: NotchAgentStackMetrics.fanoutSpacing)"))
-    XCTAssertTrue(source.contains("Spacer(minLength: 0)"))
+    XCTAssertFalse(source.contains("HStack(spacing: NotchAgentStackMetrics.fanoutSpacing)"))
+    XCTAssertTrue(source.contains("static let fanoutHorizontalInset: CGFloat = 42"))
+    XCTAssertTrue(source.contains("static func fanoutX(for index: Int, width: CGFloat) -> CGFloat"))
+    XCTAssertTrue(source.contains("GeometryReader { geometry in"))
+    XCTAssertTrue(source.contains("originX - targetX"))
     XCTAssertTrue(source.contains(".frame(maxWidth: .infinity, minHeight: FloatingControlBarWindow.notchAgentFanoutRowHeight)"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("group?.color ?? Color.white.opacity(0.94)"))
-    XCTAssertTrue(source.contains(".fanoutSlotAnimation(index: index, didFanOut: didFanOut)"))
+    XCTAssertTrue(source.contains(".fanoutSlotAnimation("))
+    XCTAssertTrue(source.contains("initialXOffset: originX - targetX"))
     XCTAssertTrue(source.contains("state.activeAgentChatPillID = pill.id"))
     XCTAssertFalse(source.contains("NotchAgentSwitcherMenu("))
     XCTAssertFalse(source.contains("Text(\"Subagents\")"))
@@ -80,6 +86,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("static let notchAgentFanoutRowHeight: CGFloat = 32"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
+    XCTAssertTrue(windowSource.contains("if state.showingAIConversation {\n                return\n            }"))
   }
 
   func testFloatingBarExplicitSpawnCompletesParentTurn() throws {

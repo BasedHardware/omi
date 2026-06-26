@@ -33,8 +33,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static var notchHiddenCenterWidth: CGFloat {
         fallbackNotchHiddenCenterWidth + notchHiddenCenterSafetyPadding
     }
-    static let notchCompactSideWidth: CGFloat = 36
-    static let notchActiveSideWidth: CGFloat = 62
+    static let notchCompactSideWidth: CGFloat = 30
+    static let notchActiveSideWidth: CGFloat = 54
     static let notchChromeHeight: CGFloat = 34
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
@@ -127,12 +127,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
         guard state.isVoiceResponseActive else { return size }
         if usesNotchIsland {
-            if state.showingAIConversation {
-                return NSSize(
-                    width: size.width,
-                    height: size.height + Self.notchGlowOutsetBottom
-                )
-            }
             return NSSize(
                 width: size.width + Self.notchGlowOutsetX * 2,
                 height: size.height + Self.notchGlowOutsetBottom
@@ -1128,6 +1122,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
         if notchModeEnabled {
+            if state.showingAIConversation {
+                return
+            }
             let targetSize = expanded ? notchSize(active: true) : notchCollapsedSize
             resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
             return
