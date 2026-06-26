@@ -3323,16 +3323,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageLength: responseLength
             )
 
-            // Skip client-side usage recording for piMono — the backend already
+            // Skip client-side usage recording for piMono (the backend already
             // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count. Use the actual harness, not @AppStorage
-            // bridgeMode, because directed Hermes/OpenClaw pills can override the
-            // harness without changing the user's global preference.
+            // here would double-count) and for local harnesses (Hermes/OpenClaw).
+            // The backend's record_llm_usage_bucket always increments the
+            // grand-total desktop_chat bucket regardless of the account
+            // parameter, and /usage-quota sums that bucket regardless of account,
+            // so any POST — even with account="local" — still depletes the user's
+            // Omi/pi-mono quota. The client-side quota gates already skip local
+            // providers, so skip the POST here too. Use the actual harness, not
+            // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
+            // override the harness without changing the user's global preference.
             let effectiveHarness = activeBridgeHarness
             let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
             let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
-            if !isPiMonoHarness {
-                let accountType = isUserClaudeHarness ? "personal" : "local"
+            if isUserClaudeHarness {
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -3342,7 +3347,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         cacheWriteTokens: r.cacheWriteTokens,
                         totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
                         costUsd: r.costUsd,
-                        account: accountType
+                        account: "personal"
                     )
                 }
             }
