@@ -43,6 +43,10 @@ class UpdateMessageRequest(BaseModel):
     edited_reply: Optional[str] = None
 
 
+class PlatformActiveRequest(BaseModel):
+    active: bool
+
+
 class TelegramConnectRequest(BaseModel):
     bot_token: str
 
@@ -121,6 +125,20 @@ async def get_messages(
     return messages
 
 
+@router.patch('/v1/ai-clone/platforms/{platform}')
+async def set_platform_active(
+    platform: str,
+    body: PlatformActiveRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Enable or disable Omi auto-reply for a specific platform."""
+    allowed = {'imessage', 'telegram', 'whatsapp'}
+    if platform not in allowed:
+        raise HTTPException(status_code=400, detail='Unknown platform')
+    await run_blocking(db_executor, clone_db.update_platform_settings, uid, platform, {'active': body.active})
+    return {'status': 'ok'}
+
+
 @router.patch('/v1/ai-clone/messages/{message_id}')
 async def update_message(
     message_id: str,
@@ -181,6 +199,10 @@ async def telegram_webhook_receive(uid: str, request: Request):
     returns 200 regardless to avoid Telegram retry storms.
     """
     try:
+        tg_settings = await run_blocking(db_executor, clone_db.get_platform_settings, uid, 'telegram')
+        if not (tg_settings or {}).get('active', False):
+            return {'ok': True}
+
         payload = await request.json()
         message = payload.get('message', {})
         text = (message.get('text') or '').strip()
@@ -249,6 +271,10 @@ async def whatsapp_webhook_receive(uid: str, request: Request):
     it immediately — no desktop approval step.
     """
     try:
+        wa_settings = await run_blocking(db_executor, clone_db.get_platform_settings, uid, 'whatsapp')
+        if not (wa_settings or {}).get('active', False):
+            return {'status': 'ok'}
+
         payload = await request.json()
         for entry in payload.get('entry', []):
             for change in entry.get('changes', []):

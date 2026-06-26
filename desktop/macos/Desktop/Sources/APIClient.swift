@@ -5348,6 +5348,11 @@ extension APIClient {
     let _: CloneSimpleOK = try await patch("/v1/ai-clone/messages/\(id)", body: Req(status: status, editedReply: editedReply))
   }
 
+  func setPlatformActive(platform: String, active: Bool) async throws {
+    struct Req: Encodable { let active: Bool }
+    let _: CloneSimpleOK = try await patch("/v1/ai-clone/platforms/\(platform)", body: Req(active: active))
+  }
+
   func telegramConnect(botToken: String) async throws -> CloneTelegramConnectResponse {
     struct Req: Encodable { let botToken: String
       enum CodingKeys: String, CodingKey { case botToken = "bot_token" }

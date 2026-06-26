@@ -175,6 +175,9 @@ def _reset_mocks():
     _db_ai_clone.save_clone_message.return_value = 'msg-id-123'
     _db_ai_clone.get_clone_messages.reset_mock()
     _db_ai_clone.update_clone_message.reset_mock()
+    _db_ai_clone.get_platform_settings.reset_mock()
+    _db_ai_clone.get_platform_settings.return_value = None
+    _db_ai_clone.update_platform_settings.reset_mock()
     _clone_stub.generate_clone_reply.reset_mock()
     _clone_stub.generate_clone_reply.return_value = 'Mock reply from AI clone'
     _tg_stub.connect.reset_mock()
@@ -389,6 +392,7 @@ class TestTelegramDisconnect:
 class TestTelegramWebhook:
     def test_returns_ok_for_valid_message(self):
         _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': True, 'bot_token': 'tok'}
         payload = {
             'message': {
                 'text': 'Hey!',
@@ -400,8 +404,17 @@ class TestTelegramWebhook:
         assert r.status_code == 200
         assert r.json()['ok'] is True
 
+    def test_silently_ignores_when_platform_not_active(self):
+        _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': False, 'bot_token': 'tok'}
+        payload = {'message': {'text': 'hi', 'chat': {'id': 1}, 'from': {'first_name': 'X'}}}
+        r = client.post('/v1/ai-clone/telegram/webhook/uid-inactive', json=payload)
+        assert r.status_code == 200
+        _clone_stub.generate_clone_reply.assert_not_called()
+
     def test_generates_reply_and_saves_to_db(self):
         _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': True, 'bot_token': 'tok'}
         payload = {
             'message': {
                 'text': 'What are you up to?',
@@ -418,6 +431,7 @@ class TestTelegramWebhook:
 
     def test_auto_sends_reply(self):
         _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': True}
         payload = {
             'message': {
                 'text': 'Hello',
@@ -430,12 +444,14 @@ class TestTelegramWebhook:
 
     def test_ignores_empty_text(self):
         _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': True}
         payload = {'message': {'text': '', 'chat': {'id': 1}, 'from': {'first_name': 'X'}}}
         client.post('/v1/ai-clone/telegram/webhook/uid-empty', json=payload)
         _clone_stub.generate_clone_reply.assert_not_called()
 
     def test_returns_ok_even_on_error(self):
         _reset_mocks()
+        _db_ai_clone.get_platform_settings.return_value = {'active': True}
         _clone_stub.generate_clone_reply.side_effect = Exception('LLM down')
         payload = {'message': {'text': 'hi', 'chat': {'id': 1}, 'from': {'first_name': 'X'}}}
         r = client.post('/v1/ai-clone/telegram/webhook/uid-err', json=payload)
@@ -459,3 +475,33 @@ class TestTelegramSend:
         _tg_stub.send_message.return_value = False
         r = client.post('/v1/ai-clone/telegram/send', json={'chat_id': 456, 'text': 'hey'})
         assert r.status_code == 503
+
+
+# ── PATCH /v1/ai-clone/platforms/{platform} ───────────────────────────────────
+
+
+class TestSetPlatformActive:
+    def test_returns_ok_for_valid_platform(self):
+        _reset_mocks()
+        r = client.patch('/v1/ai-clone/platforms/telegram', json={'active': True})
+        assert r.status_code == 200
+        assert r.json()['status'] == 'ok'
+
+    def test_calls_update_platform_settings_with_active_flag(self):
+        _reset_mocks()
+        client.patch('/v1/ai-clone/platforms/imessage', json={'active': True})
+        _db_ai_clone.update_platform_settings.assert_called_once()
+        args = _db_ai_clone.update_platform_settings.call_args[0]
+        assert args[1] == 'imessage'
+        assert args[2] == {'active': True}
+
+    def test_returns_400_for_unknown_platform(self):
+        _reset_mocks()
+        r = client.patch('/v1/ai-clone/platforms/discord', json={'active': True})
+        assert r.status_code == 400
+
+    def test_deactivate_sets_active_false(self):
+        _reset_mocks()
+        client.patch('/v1/ai-clone/platforms/whatsapp', json={'active': False})
+        args = _db_ai_clone.update_platform_settings.call_args[0]
+        assert args[2] == {'active': False}

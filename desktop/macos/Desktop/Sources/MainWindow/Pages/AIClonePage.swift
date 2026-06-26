@@ -126,7 +126,7 @@ struct AIClonePage: View {
 
   private var platformPanel: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 16) {
+      VStack(alignment: .leading, spacing: 8) {
         Text("Connected Platforms")
           .scaledFont(size: 12, weight: .semibold)
           .foregroundColor(OmiColors.textTertiary)
@@ -135,29 +135,35 @@ struct AIClonePage: View {
         platformRow(
           icon: "message.fill", color: .green, name: "iMessage",
           isConnected: service.iMessageConnected,
-          statusLabel: service.iMessageConnected ? "Auto-replies via Messages" : "Grant Automation access",
+          isActive: service.iMessageActive,
+          statusLabel: service.iMessageConnected ? "Messages.app" : "Grant Automation access",
           action: {
             if !service.iMessageConnected {
               NSWorkspace.shared.open(
                 URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")!)
             }
-          }
+          },
+          onToggle: service.iMessageConnected ? { v in service.setActive(platform: "imessage", active: v) } : nil
         )
 
         platformRow(
           icon: "paperplane.fill", color: Color(red: 0.2, green: 0.6, blue: 1.0), name: "Telegram",
           isConnected: service.telegramConnected,
+          isActive: service.telegramActive,
           statusLabel: service.telegramConnected
             ? (service.telegramBotUsername.isEmpty ? "Bot connected" : "@\(service.telegramBotUsername)")
             : "Tap to connect bot",
-          action: { showTelegramSetup = true }
+          action: { showTelegramSetup = true },
+          onToggle: service.telegramConnected ? { v in service.setActive(platform: "telegram", active: v) } : nil
         )
 
         platformRow(
           icon: "phone.fill", color: Color(red: 0.15, green: 0.7, blue: 0.3), name: "WhatsApp",
           isConnected: service.whatsAppConfigured,
+          isActive: service.whatsAppActive,
           statusLabel: service.whatsAppConfigured ? service.whatsAppBotPhone : "Tap to set up bot",
-          action: { showWhatsAppSetup = true }
+          action: { showWhatsAppSetup = true },
+          onToggle: service.whatsAppConfigured ? { v in service.setActive(platform: "whatsapp", active: v) } : nil
         )
 
         Spacer()
@@ -171,33 +177,49 @@ struct AIClonePage: View {
 
   private func platformRow(
     icon: String, color: Color, name: String,
-    isConnected: Bool, statusLabel: String,
-    isDisabled: Bool = false, action: @escaping () -> Void
+    isConnected: Bool, isActive: Bool, statusLabel: String,
+    isDisabled: Bool = false,
+    action: @escaping () -> Void,
+    onToggle: ((Bool) -> Void)?
   ) -> some View {
-    Button(action: action) {
-      HStack(spacing: 12) {
-        ZStack {
-          Circle().fill(color.opacity(isDisabled ? 0.15 : 0.18)).frame(width: 34, height: 34)
-          Image(systemName: icon).scaledFont(size: 14)
-            .foregroundColor(isDisabled ? OmiColors.textQuaternary : color)
+    VStack(spacing: 0) {
+      Button(action: action) {
+        HStack(spacing: 12) {
+          ZStack {
+            Circle().fill(color.opacity(isDisabled ? 0.15 : 0.18)).frame(width: 34, height: 34)
+            Image(systemName: icon).scaledFont(size: 14)
+              .foregroundColor(isDisabled ? OmiColors.textQuaternary : color)
+          }
+          VStack(alignment: .leading, spacing: 2) {
+            Text(name).scaledFont(size: 13, weight: .medium)
+              .foregroundColor(isDisabled ? OmiColors.textQuaternary : OmiColors.textPrimary)
+            Text(statusLabel).scaledFont(size: 11)
+              .foregroundColor(isConnected ? OmiColors.success : (isDisabled ? OmiColors.textQuaternary : OmiColors.textTertiary))
+          }
+          Spacer()
+          Circle()
+            .fill(isActive ? OmiColors.success : (isConnected ? OmiColors.warning.opacity(0.7) : OmiColors.textQuaternary.opacity(0.4)))
+            .frame(width: 8, height: 8)
         }
-        VStack(alignment: .leading, spacing: 2) {
-          Text(name).scaledFont(size: 13, weight: .medium)
-            .foregroundColor(isDisabled ? OmiColors.textQuaternary : OmiColors.textPrimary)
-          Text(statusLabel).scaledFont(size: 11)
-            .foregroundColor(isConnected ? OmiColors.success : (isDisabled ? OmiColors.textQuaternary : OmiColors.textTertiary))
-        }
-        Spacer()
-        Circle()
-          .fill(isConnected ? OmiColors.success : OmiColors.textQuaternary.opacity(0.4))
-          .frame(width: 8, height: 8)
+        .padding(.horizontal, 14).padding(.vertical, 10)
       }
-      .padding(.horizontal, 14).padding(.vertical, 10)
-      .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary.opacity(0.5)))
-      .padding(.horizontal, 12)
+      .buttonStyle(.plain)
+      .disabled(isDisabled)
+
+      if let toggle = onToggle {
+        Toggle(isOn: Binding(get: { isActive }, set: toggle)) {
+          Text(isActive ? "Omi is replying" : "Allow Omi to reply")
+            .scaledFont(size: 11)
+            .foregroundColor(isActive ? OmiColors.success : OmiColors.textTertiary)
+        }
+        .toggleStyle(.switch)
+        .tint(OmiColors.success)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+      }
     }
-    .buttonStyle(.plain)
-    .disabled(isDisabled)
+    .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary.opacity(0.5)))
+    .padding(.horizontal, 12)
   }
 
   // MARK: - Activity Log

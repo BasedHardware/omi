@@ -28,16 +28,19 @@ final class AICloneService: ObservableObject {
 
     // iMessage
     @Published var iMessageConnected: Bool = false
+    @Published var iMessageActive: Bool = false
 
     // Telegram — Bot API state
     @Published var telegramConnected: Bool = false
     @Published var telegramBotUsername: String = ""
     @Published var telegramConnecting: Bool = false
     @Published var telegramError: String = ""
+    @Published var telegramActive: Bool = false
 
     // WhatsApp — Cloud API bot state
     @Published var whatsAppConfigured: Bool = false
     @Published var whatsAppBotPhone: String = ""
+    @Published var whatsAppActive: Bool = false
 
     private var pollingTask: Task<Void, Never>?
     private var lastIMessageDate: Double = 0
@@ -45,12 +48,32 @@ final class AICloneService: ObservableObject {
     private init() {
         isEnabled = UserDefaults.standard.bool(forKey: "aiCloneEnabled")
         lastIMessageDate = UserDefaults.standard.double(forKey: "aiCloneLastIMessageDate")
+        iMessageConnected = checkIMessagePermission()
+        iMessageActive = UserDefaults.standard.bool(forKey: "aiCloneIMessageActive")
         telegramConnected = UserDefaults.standard.bool(forKey: "aiCloneTelegramConnected")
         telegramBotUsername = UserDefaults.standard.string(forKey: "aiCloneTelegramBotUsername") ?? ""
-        iMessageConnected = checkIMessagePermission()
+        telegramActive = UserDefaults.standard.bool(forKey: "aiCloneTelegramActive")
         whatsAppConfigured = UserDefaults.standard.bool(forKey: "aiCloneWhatsAppConfigured")
         whatsAppBotPhone = UserDefaults.standard.string(forKey: "aiCloneWhatsAppBotPhone") ?? ""
+        whatsAppActive = UserDefaults.standard.bool(forKey: "aiCloneWhatsAppActive")
         if isEnabled { startPolling() }
+    }
+
+    func setActive(platform: String, active: Bool) {
+        switch platform {
+        case "imessage":
+            iMessageActive = active
+            UserDefaults.standard.set(active, forKey: "aiCloneIMessageActive")
+        case "telegram":
+            telegramActive = active
+            UserDefaults.standard.set(active, forKey: "aiCloneTelegramActive")
+        case "whatsapp":
+            whatsAppActive = active
+            UserDefaults.standard.set(active, forKey: "aiCloneWhatsAppActive")
+        default:
+            break
+        }
+        Task { try? await APIClient.shared.setPlatformActive(platform: platform, active: active) }
     }
 
     func configureWhatsApp(botPhone: String) {
@@ -89,6 +112,7 @@ final class AICloneService: ObservableObject {
     }
 
     private func pollIMessage() async {
+        guard iMessageActive else { return }
         let cutoffInterval = max(lastIMessageDate, Date().timeIntervalSince1970 - 900)
         let script = """
         tell application "Messages"
@@ -174,8 +198,10 @@ final class AICloneService: ObservableObject {
         try? await APIClient.shared.telegramDisconnect()
         telegramConnected = false
         telegramBotUsername = ""
+        telegramActive = false
         UserDefaults.standard.set(false, forKey: "aiCloneTelegramConnected")
         UserDefaults.standard.removeObject(forKey: "aiCloneTelegramBotUsername")
+        UserDefaults.standard.set(false, forKey: "aiCloneTelegramActive")
     }
 
     // MARK: - Handle iMessage (auto-reply)
