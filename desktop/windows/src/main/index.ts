@@ -16,6 +16,7 @@ import iconIcoPath from '../../resources/icon.ico?asset'
 import { listCaptureSources } from './ipc/capture'
 import { registerOmiListenHandlers } from './ipc/omiListen'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
+import { registerFloatingBarHandlers } from './ipc/floatingBar'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
@@ -51,6 +52,7 @@ import { registerClaudeAcpHandlers } from './ipc/claudeAcp'
 import { registerByokHandlers } from './ipc/byok'
 import { registerSkillsHandlers } from './ipc/skills'
 import { registerLocalTtsHandlers } from './ipc/localTts'
+import { getFloatingBarSettings } from './floatingBar/settings'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -359,6 +361,7 @@ app.whenReady().then(async () => {
   )
   registerOmiListenHandlers()
   registerFileIndexHandlers()
+  registerFloatingBarHandlers()
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
@@ -437,7 +440,10 @@ app.whenReady().then(async () => {
     mainWindow.show()
     mainWindow.focus()
   })
-  const shortcutOk = registerOverlayShortcut(OVERLAY_ACCELERATOR, toggleOverlay)
+  const shortcutOk = registerOverlayShortcut(
+    getFloatingBarSettings().summonShortcut || OVERLAY_ACCELERATOR,
+    toggleOverlay
+  )
   if (!shortcutOk) {
     console.warn(
       '[overlay] summon shortcut unavailable; overlay can still be opened via a future rebind UI'
