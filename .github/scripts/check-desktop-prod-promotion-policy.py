@@ -73,6 +73,8 @@ def main() -> int:
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
     require('git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"', text, "workflow must reject tags that cannot consume release identity env vars")
     require('git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity")
+    require("Preflight Omi Bot token configuration", text, "workflow must verify GitHub App token secrets before prod mutations")
+    require("Preflight Omi Bot repository access", text, "workflow must verify GitHub App repository access before prod mutations")
     require("Preflight Firestore bridge release", text, "workflow must verify the Firestore bridge release before prod deploy")
     require("EXPECTED_VERSION: ${{ steps.plan.outputs.release_version }}", text, "workflow must compare Firestore bridge version to the release tag")
     require("EXPECTED_BUILD_NUMBER: ${{ steps.plan.outputs.release_build_number }}", text, "workflow must compare Firestore bridge build number to the release tag")
@@ -91,6 +93,12 @@ def main() -> int:
     require("OMI_DESKTOP_RELEASE_SHA=", text, "prod deploy must stamp release sha into Cloud Run")
     require("OMI_DESKTOP_RELEASE_CHANNEL=stable", text, "prod deploy must stamp stable channel into Cloud Run")
     require("RELEASE_SECRET=RELEASE_SECRET:latest", text, "prod deploy must expose release secret for Firestore promotion")
+    require_order(
+        text,
+        "Preflight Omi Bot repository access",
+        "Deploy Desktop Backend to Production",
+        "GitHub App token access must be verified before any prod deploy mutation",
+    )
     require_order(
         text,
         "Promote Firestore release stable",
