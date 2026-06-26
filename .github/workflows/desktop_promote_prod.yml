@@ -108,6 +108,19 @@ jobs:
 
           echo "Promotion target: $RELEASE_TAG ($TARGET_SHA)" >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Preflight Omi Bot token configuration
+        id: app-token-preflight
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Preflight Omi Bot repository access
+        env:
+          GH_TOKEN: ${{ steps.app-token-preflight.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: gh api "repos/${REPO}" --jq .full_name >/dev/null
+
       - name: Google Auth
         uses: google-github-actions/auth@v2
         with:
