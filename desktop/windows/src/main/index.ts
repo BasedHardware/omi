@@ -35,6 +35,7 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
+import { registerNotificationHandlers } from './ipc/notifications'
 import { createInsightToastWindow } from './insight/toastWindow'
 import { registerAutomationHandlers } from './ipc/automation'
 import { automationBridge } from './automation/bridge'
@@ -384,6 +385,7 @@ app.whenReady().then(async () => {
     }
   })
   registerInsightHandlers()
+  registerNotificationHandlers()
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
