@@ -138,6 +138,17 @@ class TaskChatState: ObservableObject {
             try await bridge.start()
             agentBridge = bridge
             bridgeStarted = true
+
+            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
+            // created them. Hermes and OpenClaw advertise native resume but would
+            // adopt a foreign session ID, causing session/resume on the wrong
+            // backend before falling back or failing. Clear it on adapter switch.
+            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
+            if !supportsLegacyResume, legacyAcpSessionId != nil {
+                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
+                legacyAcpSessionId = nil
+            }
+
             log("TaskChatState[\(taskId)]: agent bridge started")
             return true
         } catch {

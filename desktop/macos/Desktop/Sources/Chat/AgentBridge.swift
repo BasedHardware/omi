@@ -182,20 +182,22 @@ actor AgentBridge {
       throw BridgeError.requestAlreadyActive
     }
 
-    if let cached = lastKnownQuota, !cached.allowed {
-      QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
-      throw BridgeError.quotaExceeded(
-        plan: cached.plan,
-        unit: cached.unit,
-        used: cached.used,
-        limit: cached.limit,
-        resetAtUnix: cached.resetAt
-      )
-    }
-    QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
-    Task { [weak self] in
-      if let quota = await APIClient.shared.fetchChatUsageQuota() {
-        await self?.cacheQuota(quota)
+    if isPiMonoHarness {
+      if let cached = lastKnownQuota, !cached.allowed {
+        QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
+        throw BridgeError.quotaExceeded(
+          plan: cached.plan,
+          unit: cached.unit,
+          used: cached.used,
+          limit: cached.limit,
+          resetAtUnix: cached.resetAt
+        )
+      }
+      QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
+      Task { [weak self] in
+        if let quota = await APIClient.shared.fetchChatUsageQuota() {
+          await self?.cacheQuota(quota)
+        }
       }
     }
 
