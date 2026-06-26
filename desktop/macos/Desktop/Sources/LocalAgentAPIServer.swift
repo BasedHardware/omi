@@ -285,12 +285,19 @@ final class LocalAgentAPIServer {
     let start = now.addingTimeInterval(-Double(minutes) * 60)
     let formatter = ISO8601DateFormatter()
 
-    // 1) Screen now — most recent frame whose pixels are currently loadable
-    //    (skips frames still buffering in the unflushed active video chunk).
+    // 1) Screen now — most recent frame whose pixels are currently loadable.
+    //    Frames still buffering in the unflushed active video chunk can't be
+    //    decoded yet; skip them up front so we don't repeatedly attempt (and
+    //    fail) a load — each failed load re-inits storage, a real latency spike
+    //    since the newest frames are commonly in the active chunk.
     var screenNow: [String: Any] = ["available": false]
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
     if let recent = try? await RewindDatabase.shared.getRecentScreenshots(limit: 25) {
       for shot in recent {
         guard let sid = shot.id else { continue }
+        if shot.usesVideoStorage, let chunk = shot.videoChunkPath, chunk == activeChunk {
+          continue  // pending: still in the active, unflushed chunk
+        }
         if let data = try? await loadScreenshotDataEnsuringStorage(for: shot) {
           screenNow = [
             "available": true,
@@ -300,7 +307,8 @@ final class LocalAgentAPIServer {
             "window_title": shot.windowTitle ?? NSNull(),
             "ocr_preview": String((shot.ocrText ?? "").prefix(800)),
             "image_bytes": data.count,
-            "note": "Call get_screenshot with this screenshot_id to SEE the full-screen image.",
+            "note":
+              "Latest available finalized frame (may be up to ~1 min old, and can predate window_minutes). Call get_screenshot with this screenshot_id to SEE the full-screen image.",
           ]
           break
         }
