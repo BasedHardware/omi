@@ -190,13 +190,17 @@ def _seed_canonical_short_term(
     return write_canonical_extraction_memory(uid, payload, db_client=db)
 
 
-def _set_canonical_cohort(monkeypatch, uid: str) -> None:
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", uid)
+def _set_canonical_cohort(monkeypatch, *uids: str) -> None:
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+    set_canonical_cohort(monkeypatch, *uids)
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+def _clear_canonical_cohort_fixture(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
 
 
 def test_promotion_fires_on_batch_threshold_via_apply(monkeypatch):
