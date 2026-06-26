@@ -19,6 +19,12 @@ install_websockets_stub()
 
 from websockets.exceptions import ConnectionClosed
 
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 # ---------------------------------------------------------------------------
 # Helpers: mirror the real pending request tracking from transcribe.py
 # ---------------------------------------------------------------------------
@@ -88,7 +94,7 @@ def _handle_type_201_response(pending_requests: dict, conversation_id: str):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_tracks_pending_on_success():
     """Successful send adds conversation to pending with timestamp."""
     pending = {}
@@ -103,7 +109,7 @@ async def test_request_tracks_pending_on_success():
     assert pending["conv-1"]["sent_at"] > 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_tracks_pending_when_disconnected():
     """When pusher is disconnected, conversation is tracked for retry on reconnect."""
     pending = {}
@@ -117,7 +123,7 @@ async def test_request_tracks_pending_when_disconnected():
     assert event.is_set(), "Should signal the receiver"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_does_not_overwrite_retry_count_when_disconnected():
     """Re-requesting a conversation that's already pending doesn't reset retry count."""
     pending = {"conv-1": {"sent_at": time.time() - 100, "retries": 2}}
@@ -129,7 +135,7 @@ async def test_request_does_not_overwrite_retry_count_when_disconnected():
     assert pending["conv-1"]["retries"] == 2, "Should not reset retry count"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_preserves_retry_count_on_resend():
     """Re-sending a pending request preserves its retry count."""
     pending = {"conv-1": {"sent_at": time.time() - 200, "retries": 2}}
@@ -142,7 +148,7 @@ async def test_request_preserves_retry_count_on_resend():
     assert pending["conv-1"]["retries"] == 2, "Retry count should be preserved"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_drops_oldest_on_overflow():
     """When pending requests hit MAX, drops the oldest."""
     pending = {}
@@ -162,7 +168,7 @@ async def test_request_drops_oldest_on_overflow():
     assert len(pending) == MAX_PENDING_REQUESTS
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_request_send_failure_keeps_pending():
     """If WS send raises, conversation stays in pending for retry."""
     pending = {}
@@ -271,7 +277,7 @@ def test_type_201_unknown_id_is_safe():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_reconnect_resends_all_pending():
     """After reconnect, all pending requests are re-sent."""
     mock_ws = AsyncMock()
@@ -294,7 +300,7 @@ async def test_reconnect_resends_all_pending():
         assert header == 104
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_reconnect_preserves_retry_counts():
     """Re-sending on reconnect preserves existing retry counts."""
     mock_ws = AsyncMock()
