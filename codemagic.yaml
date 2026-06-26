@@ -2775,7 +2775,7 @@ workflows:
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['VERSION'],
+            'version':      os.environ['BUILD_NAME'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),

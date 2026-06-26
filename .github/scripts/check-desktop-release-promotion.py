@@ -104,7 +104,7 @@ def main() -> int:
             "release_channel": channel,
             "release_version": tag_match.group("version"),
             "release_build_number": tag_match.group("build"),
-            "firestore_doc_id": f"v{tag_match.group('version')}",
+            "firestore_doc_id": f"v{tag_match.group('version')}+{tag_match.group('build')}",
         },
     )
     print(f"desktop release promotion sanity OK: {tag_name} ({channel})")
