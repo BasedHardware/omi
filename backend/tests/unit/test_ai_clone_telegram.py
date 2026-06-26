@@ -97,12 +97,18 @@ tg = _ilu.module_from_spec(_spec)
 sys.modules['utils.integrations.telegram_client'] = tg
 _spec.loader.exec_module(tg)
 
+# Point tg's module-level references directly at our stubs so that even if
+# sys.modules is mutated by a co-running test file, tg still uses our mocks.
+tg.clone_db = _db_ai_clone
+tg.run_blocking = _executors_stub.run_blocking
+tg.db_executor = _executors_stub.db_executor
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
 def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 def _make_fake_client(*, connected=True, authorized=True):

@@ -136,6 +136,16 @@ _router_mod = _ilu.module_from_spec(_spec)
 sys.modules['routers.ai_clone'] = _router_mod
 _spec.loader.exec_module(_router_mod)
 
+# Patch module-level references directly so sys.modules contamination from
+# other test files (e.g. test_ai_clone_database.py importing the real module)
+# cannot stale-bind the router to the wrong objects.
+_router_mod.clone_db = _db_ai_clone
+_router_mod.generate_clone_reply = _clone_stub.generate_clone_reply
+_router_mod.run_blocking = _run_blocking
+_router_mod.db_executor = _exec_stub.db_executor
+_router_mod.llm_executor = _exec_stub.llm_executor
+_router_mod.tg = _tg_stub
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
