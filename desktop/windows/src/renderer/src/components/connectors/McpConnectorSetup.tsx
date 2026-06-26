@@ -285,8 +285,8 @@ export function McpConnectorSetup({
           </div>
           <h2 className="font-display text-lg font-semibold text-white">Connect Omi to AI apps</h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-white/55">
-            Give ChatGPT, Claude, Claude Code, Codex, or another agent live access to your Omi
-            memories through hosted MCP.
+            Give ChatGPT, Claude, Claude Code, Codex, OpenClaw, Hermes, or another agent live access
+            to your Omi memories through hosted MCP.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -332,7 +332,7 @@ export function McpConnectorSetup({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         {mcpDestinations.map((destination) => (
           <DestinationButton
             key={destination.id}
