@@ -172,6 +172,19 @@ class TestProfileContact:
     @patch('routers.mcp.phone_calls_db')
     @patch('routers.mcp.firebase_auth')
     @patch('routers.mcp.users_db')
+    def test_phone_fallback_prefers_primary(self, mock_users, mock_auth, mock_phone):
+        mock_users.get_ai_user_profile.return_value = {}
+        mock_auth.get_user.return_value = _firebase_user('Nik', 'nik@example.com', None)
+        mock_phone.get_phone_numbers.return_value = [
+            {'phone_number': '+15550000000', 'is_primary': False},
+            {'phone_number': '+15551111111', 'is_primary': True},
+        ]
+        result = rest.get_user_profile(uid=UID)
+        assert result.phone_number == '+15551111111'
+
+    @patch('routers.mcp.phone_calls_db')
+    @patch('routers.mcp.firebase_auth')
+    @patch('routers.mcp.users_db')
     def test_contact_failure_does_not_break_profile(self, mock_users, mock_auth, mock_phone):
         mock_users.get_ai_user_profile.return_value = {'profile_text': 'still here'}
         mock_auth.get_user.side_effect = RuntimeError("firebase down")
