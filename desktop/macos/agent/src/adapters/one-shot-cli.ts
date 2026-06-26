@@ -18,7 +18,10 @@ export interface OneShotCliRuntimeAdapterOptions {
   adapterId: ProductionAdapterId;
   envCommandName: string;
   command?: string;
+  fixedArgs?: string[];
   promptFlag: string;
+  sessionKeyFlag?: string;
+  parseJsonPayload?: boolean;
   log?: (message: string) => void;
 }
 
@@ -28,7 +31,10 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
 
   private readonly envCommandName: string;
   private readonly commandOverride?: string;
+  private readonly fixedArgs: string[];
   private readonly promptFlag: string;
+  private readonly sessionKeyFlag?: string;
+  private readonly parseJsonPayload: boolean;
   private readonly log: (message: string) => void;
   private activeProcess: ChildProcess | null = null;
 
@@ -37,7 +43,10 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
     this.capabilities = adapterCapabilitiesFor(options.adapterId);
     this.envCommandName = options.envCommandName;
     this.commandOverride = options.command;
+    this.fixedArgs = options.fixedArgs ?? [];
     this.promptFlag = options.promptFlag;
+    this.sessionKeyFlag = options.sessionKeyFlag;
+    this.parseJsonPayload = options.parseJsonPayload ?? false;
     this.log = options.log ?? (() => {});
   }
 
@@ -66,12 +75,17 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
     sink: AdapterEventSink,
     signal: AbortSignal
   ): Promise<AdapterAttemptResult> {
-    const text = await this.runPrompt(context, signal);
+    const result = await this.runPrompt(context, signal);
+    const text = result.text;
     if (text) sink({ type: "text_delta", text });
     return {
       text,
       adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: signal.aborted ? "cancelled" : "succeeded",
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      cacheReadTokens: result.cacheReadTokens,
+      cacheWriteTokens: result.cacheWriteTokens,
     };
   }
 
@@ -95,10 +109,21 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
   async closeBinding(_binding: AdapterBindingHandle): Promise<void> {
   }
 
-  private async runPrompt(context: AdapterAttemptContext, signal: AbortSignal): Promise<string> {
+  private async runPrompt(
+    context: AdapterAttemptContext,
+    signal: AbortSignal
+  ): Promise<{
+    text: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  }> {
     const command = this.command();
     const prompt = promptText(context.prompt);
     const args = [
+      ...this.fixedArgs,
+      ...(this.sessionKeyFlag ? [this.sessionKeyFlag, shellQuote(this.sessionKey(context))] : []),
       ...(context.model ? ["--model", shellQuote(context.model)] : []),
       this.promptFlag,
       shellQuote(prompt),
@@ -151,7 +176,7 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
       proc.on("error", (error) => settle(() => reject(error)));
       proc.on("exit", (code) => {
         if (code === 0) {
-          settle(() => resolve(cleanStdout(stdout)));
+          settle(() => resolve(this.resultFromStdout(stdout)));
         } else {
           settle(() => reject(new Error(`${this.adapterId} command exited with code ${code}: ${stderr.trim()}`)));
         }
@@ -179,6 +204,45 @@ export class OneShotCliRuntimeAdapter implements RuntimeAdapter {
       metadata: input.metadata,
     };
   }
+
+  private sessionKey(context: AdapterAttemptContext): string {
+    return context.binding.adapterNativeSessionId || `${this.adapterId}:${context.sessionId}`;
+  }
+
+  private resultFromStdout(stdout: string): {
+    text: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  } {
+    const clean = cleanStdout(stdout);
+    if (!this.parseJsonPayload) return { text: clean };
+    const parsed = parseJsonObject(clean);
+    const payloads = Array.isArray(parsed?.payloads) ? parsed.payloads : [];
+    const text = payloads
+      .map((payload) => isRecord(payload) && typeof payload.text === "string" ? payload.text : "")
+      .filter(Boolean)
+      .join("\n")
+      || clean;
+    const usage = isRecord(parsed?.meta)
+      && isRecord(parsed.meta.agentMeta)
+      && isRecord(parsed.meta.agentMeta.usage)
+      ? parsed.meta.agentMeta.usage
+      : undefined;
+    const lastCallUsage = isRecord(parsed?.meta)
+      && isRecord(parsed.meta.agentMeta)
+      && isRecord(parsed.meta.agentMeta.lastCallUsage)
+      ? parsed.meta.agentMeta.lastCallUsage
+      : undefined;
+    return {
+      text,
+      inputTokens: numberValue(lastCallUsage?.input ?? usage?.input),
+      outputTokens: numberValue(lastCallUsage?.output ?? usage?.output),
+      cacheReadTokens: numberValue(lastCallUsage?.cacheRead),
+      cacheWriteTokens: numberValue(lastCallUsage?.cacheWrite),
+    };
+  }
 }
 
 function promptText(prompt: AdapterAttemptContext["prompt"]): string {
@@ -195,4 +259,21 @@ function cleanStdout(stdout: string): string {
     .filter((line) => !/^\d{4}-\d{2}-\d{2}T.*\b(?:TRACE|DEBUG|INFO|WARN|ERROR)\b/.test(line))
     .join("\n")
     .trim();
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }

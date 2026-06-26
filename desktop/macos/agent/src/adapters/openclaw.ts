@@ -11,7 +11,10 @@ export class OpenClawRuntimeAdapter extends OneShotCliRuntimeAdapter {
       adapterId: "openclaw",
       envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND",
       command: options.command,
+      fixedArgs: ["--local", "--json"],
       promptFlag: "--message",
+      sessionKeyFlag: "--session-key",
+      parseJsonPayload: true,
       log: options.log,
     });
   }

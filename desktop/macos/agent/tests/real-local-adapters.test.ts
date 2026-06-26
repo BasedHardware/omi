@@ -155,7 +155,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
   it("runs OpenClaw through its real one-shot message command", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "/Users/dazheng/.local/bin/zeroclaw agent";
+    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw agent";
     const adapter = new OpenClawRuntimeAdapter();
 
     await adapter.start();
@@ -169,17 +169,30 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       () => {},
       new AbortController().signal
     );
-    proc.stdout.write("2026-06-26T04:10:23.585417Z  INFO zeroclaw::config::schema: Config loaded\n");
-    proc.stdout.write("OMI_OPENCLAW_DOGFOOD_OK\n");
+    proc.stdout.write("2026-06-26T04:10:23.585417Z  INFO openclaw: Config loaded\n");
+    proc.stdout.write(JSON.stringify({
+      payloads: [{ text: "OMI_OPENCLAW_DOGFOOD_OK" }],
+      meta: {
+        agentMeta: {
+          usage: { input: 11, output: 12 },
+          lastCallUsage: { input: 11, output: 12, cacheRead: 1, cacheWrite: 2 },
+        },
+      },
+    }));
+    proc.stdout.write("\n");
     proc.emit("exit", 0);
 
     await expect(execution).resolves.toMatchObject({
       text: "OMI_OPENCLAW_DOGFOOD_OK",
       adapterSessionId: "openclaw:omi-session",
       terminalStatus: "succeeded",
+      inputTokens: 11,
+      outputTokens: 12,
+      cacheReadTokens: 1,
+      cacheWriteTokens: 2,
     });
     expect(spawn).toHaveBeenCalledWith(
-      "/Users/dazheng/.local/bin/zeroclaw agent --model 'glm-5' --message 'Reply exactly: OMI_OPENCLAW_DOGFOOD_OK'",
+      "openclaw agent --local --json --session-key 'openclaw:omi-session' --model 'glm-5' --message 'Reply exactly: OMI_OPENCLAW_DOGFOOD_OK'",
       expect.objectContaining({
         shell: true,
         cwd: "/tmp/work",
