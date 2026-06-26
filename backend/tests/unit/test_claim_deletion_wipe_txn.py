@@ -184,13 +184,36 @@ def test_claim_txn_skips_fresh_retrying_claim():
     assert len(updates) == 0
 
 
-def test_claim_txn_reclaims_stale_retrying_claim():
-    """A retrying claim older than stale_after is re-claimed."""
+def test_claim_txn_skips_queued_retrying_claim():
+    """A retrying claim that is stale for ``stale_after`` (10 min) but fresh
+    for ``running_stale_after`` (30 min) is NOT re-claimed.
+
+    This is the review fix: a queued-but-not-yet-running retrying claim
+    should not be re-enqueued by the periodic reconciler.
+    """
     now = datetime.now(timezone.utc)
     data = {
         'uid': 'uid1',
         'wipe_status': 'retrying',
-        'wipe_claimed_at': now - timedelta(minutes=15),  # stale claim
+        'wipe_claimed_at': now - timedelta(minutes=15),  # stale for 10 min, fresh for 30 min
+    }
+    result, updates = _run_claim(data)
+    assert result is None
+    assert len(updates) == 0
+
+
+def test_claim_txn_reclaims_stale_retrying_claim():
+    """A retrying claim older than ``running_stale_after`` (30 min) is re-claimed.
+
+    The longer window is used because a retrying wipe was just claimed and
+    enqueued; if the executor backlog is full the future may sit queued
+    beyond the 10-min ``stale_after`` without transitioning to ``running``.
+    """
+    now = datetime.now(timezone.utc)
+    data = {
+        'uid': 'uid1',
+        'wipe_status': 'retrying',
+        'wipe_claimed_at': now - timedelta(minutes=45),  # stale: 45min > 30min running_stale_after
     }
     result, updates = _run_claim(data)
     assert result == 'uid1'

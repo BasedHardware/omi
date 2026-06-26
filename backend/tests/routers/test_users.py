@@ -84,6 +84,14 @@ for _module_name, _module in list(sys.modules.items()):
     if isinstance(_module, _AutoMockModule):
         del sys.modules[_module_name]
 
+# Pop ``routers.users`` and the service modules it transitively imported under
+# the stub finder. Without this, later test modules in a full ``pytest tests``
+# run reuse the mock-backed router/service symbols instead of the real module.
+_prior_routers_users = sys.modules.get('routers.users')
+sys.modules.pop('routers.users', None)
+for _svc_name in ('services.users', 'services.users.account_deletion'):
+    sys.modules.pop(_svc_name, None)
+
 
 @pytest.fixture(autouse=True, scope='module')
 def _restore_endpoints_shim():
@@ -92,6 +100,12 @@ def _restore_endpoints_shim():
         sys.modules.pop('utils.other.endpoints', None)
     else:
         sys.modules['utils.other.endpoints'] = _prior_endpoints
+    # Also restore or pop routers.users so the stub-loaded version doesn't
+    # leak into later test modules.
+    if _prior_routers_users is None:
+        sys.modules.pop('routers.users', None)
+    else:
+        sys.modules['routers.users'] = _prior_routers_users
 
 
 def _account_deletion_module(start_account_deletion):

@@ -224,13 +224,16 @@ def clear_byok_active(uid: str):
 
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
+    # Use merge=True so a retried delete request does not erase a durable wipe marker
+    # (pending/failed/retrying/deleting_auth) already written to the same document.
     db.collection('account_deletions').document(uid).set(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        }
+        },
+        merge=True,
     )
 
 
@@ -403,7 +406,10 @@ def get_pending_deletion_wipes(
                 break
             data = doc.to_dict()
             claimed_at = data.get('wipe_claimed_at')
-            if claimed_at and claimed_at < stale_cutoff:
+            # Use the longer ``running_stale_after`` window so a queued-but-
+            # not-yet-running retrying claim is not returned as a candidate
+            # before the executor future has had a chance to start.
+            if claimed_at and claimed_at < running_cutoff:
                 result.append(data | {'uid': doc.id})
 
     return result
@@ -464,7 +470,13 @@ def _claim_deletion_wipe_txn(
         return snapshot.id
     if status == 'retrying':
         claimed_at = data.get('wipe_claimed_at')
-        if claimed_at and claimed_at < now - stale_after:
+        # Use the longer ``running_stale_after`` window (not ``stale_after``)
+        # because a retrying wipe was just claimed by the reconciler and
+        # enqueued. If the executor backlog is full, the future may sit queued
+        # beyond ``stale_after`` (10 min) without transitioning to ``running``.
+        # Using the short window would let the periodic reconciler enqueue
+        # another copy every pass, causing duplicate wipes to race.
+        if claimed_at and claimed_at < now - running_stale_after:
             # Stale claim (worker probably crashed). Re-claim it.
             transaction.update(doc_ref, {'wipe_claimed_at': now})
             return snapshot.id
