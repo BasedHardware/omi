@@ -29,8 +29,12 @@ function createMockProcess() {
   return proc;
 }
 
-function writeResponse(proc: ReturnType<typeof createMockProcess>, requestId: string, message: Record<string, unknown>): void {
-  proc.stdout.write(`${JSON.stringify({ requestId, ...message })}\n`);
+function responseId(request: Record<string, unknown>): string {
+  return (request.adapterRequestId ?? request.requestId) as string;
+}
+
+function writeResponse(proc: ReturnType<typeof createMockProcess>, request: Record<string, unknown>, message: Record<string, unknown>): void {
+  proc.stdout.write(`${JSON.stringify({ adapterRequestId: responseId(request), ...message })}\n`);
 }
 
 function collectRequests(proc: ReturnType<typeof createMockProcess>, handler: (request: Record<string, unknown>) => void): void {
@@ -117,7 +121,7 @@ describe("env-command local subprocess adapters", () => {
           model: "model-a",
         });
         expect(request).not.toHaveProperty("sessionId");
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "opened",
           adapterNativeSessionId: "hermes-native-1",
         });
@@ -129,7 +133,7 @@ describe("env-command local subprocess adapters", () => {
           omiSessionId: "omi-session",
         });
         expect(request).not.toHaveProperty("sessionId");
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "resumed",
           adapterNativeSessionId: "hermes-native-1",
         });
@@ -140,21 +144,23 @@ describe("env-command local subprocess adapters", () => {
           adapterNativeSessionId: "hermes-native-1",
           omiSessionId: "omi-session",
           ownerId: "owner-runtime",
+          requestId: "omi-request",
+          clientId: "desktop",
           runId: "omi-run",
           attemptId: "omi-attempt",
           mode: "act",
           model: "model-b",
         });
         expect(request).not.toHaveProperty("sessionId");
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "event",
           event: { type: "text_delta", text: "hello " },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "event",
           event: { type: "thinking_delta", text: "thinking" },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "event",
           event: {
             type: "tool_activity",
@@ -164,7 +170,7 @@ describe("env-command local subprocess adapters", () => {
             input: { q: "memory" },
           },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "event",
           event: {
             type: "tool_result_display",
@@ -173,7 +179,7 @@ describe("env-command local subprocess adapters", () => {
             output: "tool output",
           },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "event",
           event: {
             type: "artifact",
@@ -189,7 +195,7 @@ describe("env-command local subprocess adapters", () => {
             },
           },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "result",
           text: "hello world",
           adapterSessionId: "hermes-native-1",
@@ -270,7 +276,7 @@ describe("env-command local subprocess adapters", () => {
 
     collectRequests(proc, (request) => {
       if (request.type === "open") {
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "opened",
           adapterNativeSessionId: "openclaw-native-1",
         });
@@ -281,18 +287,36 @@ describe("env-command local subprocess adapters", () => {
           adapterNativeSessionId: "openclaw-native-1",
           omiSessionId: "omi-session",
           ownerId: "owner-runtime",
+          requestId: "omi-request",
+          clientId: "desktop",
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "tool_use",
           callId: "tool-1",
           name: "omi_tool",
           input: { q: "memory" },
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
+          type: "event",
+          event: {
+            type: "artifact",
+            artifact: {
+              kind: "markdown",
+              role: "result",
+              uri: "adapter://openclaw/artifact-unsupported",
+            },
+          },
+        });
+        writeResponse(proc, request, {
           type: "result",
           text: "done",
           adapterSessionId: "openclaw-native-1",
           terminalStatus: "succeeded",
+          artifacts: [{
+            kind: "json",
+            role: "result",
+            uri: "adapter://openclaw/result-artifact-unsupported",
+          }],
         });
       }
       if (request.type === "cancel") {
@@ -301,7 +325,7 @@ describe("env-command local subprocess adapters", () => {
           adapterNativeSessionId: "openclaw-native-1",
           omiSessionId: "omi-session",
         });
-        writeResponse(proc, request.requestId as string, {
+        writeResponse(proc, request, {
           type: "cancelled",
           accepted: true,
           dispatchAttempted: true,
@@ -339,6 +363,7 @@ describe("env-command local subprocess adapters", () => {
       text: "done",
       adapterSessionId: "openclaw-native-1",
     });
+    expect(result.artifacts).toBeUndefined();
 
     await expect(adapter.cancelAttempt({ sessionId: "omi-session" })).resolves.toMatchObject({
       accepted: true,
@@ -365,6 +390,60 @@ describe("env-command local subprocess adapters", () => {
       dispatchAttempted: true,
       adapterAcknowledged: true,
     });
+    await adapter.stop();
+  });
+
+  it("does not dispatch a second native cancel when the attempt signal aborts", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new HermesRuntimeAdapter({ command: "hermes-adapter" });
+    let executeRequest: Record<string, unknown> | undefined;
+    let cancelRequests = 0;
+
+    collectRequests(proc, (request) => {
+      if (request.type === "open") {
+        writeResponse(proc, request, {
+          type: "opened",
+          adapterNativeSessionId: "hermes-native-1",
+        });
+      }
+      if (request.type === "execute") {
+        executeRequest = request;
+      }
+      if (request.type === "cancel") {
+        cancelRequests += 1;
+        writeResponse(proc, request, {
+          type: "cancelled",
+          accepted: true,
+          dispatchAttempted: true,
+          adapterAcknowledged: true,
+        });
+      }
+    });
+
+    await adapter.start();
+    const opened = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+    });
+    const controller = new AbortController();
+    const execution = adapter.executeAttempt(makeAttemptContext(opened), () => {}, controller.signal);
+    await vi.waitUntil(() => executeRequest !== undefined);
+
+    controller.abort();
+    expect(cancelRequests).toBe(0);
+    writeResponse(proc, executeRequest!, {
+      type: "result",
+      text: "partial",
+      adapterSessionId: "hermes-native-1",
+      terminalStatus: "succeeded",
+    });
+
+    await expect(execution).resolves.toMatchObject({
+      adapterSessionId: "hermes-native-1",
+      terminalStatus: "cancelled",
+    });
+    expect(cancelRequests).toBe(0);
     await adapter.stop();
   });
 

@@ -995,6 +995,7 @@ async function main(): Promise<void> {
           currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
+              await startAcpProcess();
               await initializeAcp();
             } else if (adapterId === "pi-mono") {
               await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);

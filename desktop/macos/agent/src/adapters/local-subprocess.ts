@@ -21,6 +21,8 @@ import type { OutboundMessage } from "../protocol.js";
 type LocalSubprocessRequest = {
   type: "open" | "resume" | "execute" | "cancel" | "close";
   requestId: string;
+  adapterRequestId?: string;
+  clientId?: string;
   adapterId: ProductionAdapterId;
   omiSessionId?: string;
   ownerId?: string;
@@ -40,6 +42,7 @@ type LocalSubprocessRequest = {
 type LocalSubprocessMessage = {
   type?: string;
   requestId?: string;
+  adapterRequestId?: string;
   ok?: boolean;
   error?: string | { message?: string };
   event?: unknown;
@@ -208,23 +211,9 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       textParts: streamState.textParts,
     });
 
-    const abortHandler = (): void => {
-      void this.cancelAttempt({
-        sessionId: context.sessionId,
-        runId: context.runId,
-        attemptId: context.attemptId,
-        binding: context.binding,
-      });
-    };
-    signal.addEventListener("abort", abortHandler, { once: true });
-
-    try {
-      const response = await responsePromise;
-      const result = this.resultFrom(response, context, streamState);
-      return signal.aborted ? { ...result, terminalStatus: "cancelled" } : result;
-    } finally {
-      signal.removeEventListener("abort", abortHandler);
-    }
+    const response = await responsePromise;
+    const result = this.resultFrom(response, context, streamState);
+    return signal.aborted ? { ...result, terminalStatus: "cancelled" } : result;
   }
 
   async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
@@ -243,6 +232,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       requestId: "",
       adapterId: this.adapterId,
       omiSessionId: context.sessionId,
+      clientId: context.clientId,
       adapterNativeSessionId,
       runId: context.runId,
       attemptId: context.attemptId,
@@ -270,10 +260,11 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
   private buildExecuteRequest(context: AdapterAttemptContext): LocalSubprocessRequest {
     return {
       type: "execute",
-      requestId: "",
+      requestId: context.requestId,
       adapterId: this.adapterId,
       omiSessionId: context.sessionId,
       ownerId: context.ownerId,
+      clientId: context.clientId,
       adapterNativeSessionId: context.binding.adapterNativeSessionId,
       runId: context.runId,
       attemptId: context.attemptId,
@@ -286,19 +277,24 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     };
   }
 
-  private request(
+  private async request(
     request: LocalSubprocessRequest,
     pendingOverrides: Partial<PendingRequest> = {}
   ): Promise<LocalSubprocessMessage> {
-    const requestId = `${this.adapterId}-${this.nextRequestId++}`;
-    const message = { ...request, requestId };
+    await this.start();
+    const adapterRequestId = `${this.adapterId}-${this.nextRequestId++}`;
+    const message = {
+      ...request,
+      adapterRequestId,
+      requestId: request.requestId || adapterRequestId,
+    };
 
     return new Promise((resolve, reject) => {
-      this.pending.set(requestId, { resolve, reject, ...pendingOverrides });
+      this.pending.set(adapterRequestId, { resolve, reject, ...pendingOverrides });
       try {
         this.write(message);
       } catch (error) {
-        this.pending.delete(requestId);
+        this.pending.delete(adapterRequestId);
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
@@ -322,7 +318,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       return;
     }
 
-    const requestId = message.requestId;
+    const requestId = message.adapterRequestId ?? message.requestId;
     if (!requestId) {
       this.log(`Ignoring ${this.adapterId} message without requestId`);
       return;
@@ -352,6 +348,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     if (!isRecord(event)) return;
 
     if (event.type === "artifact") {
+      if (!this.capabilities.supportsArtifactEmission) return;
       const artifact = this.artifactFrom(event.artifact ?? event);
       if (artifact) pending.artifacts?.push(artifact);
       return;
@@ -416,10 +413,12 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       result.terminalStatus === "failed" || result.terminalStatus === "cancelled"
         ? result.terminalStatus
         : "succeeded";
-    const artifacts = [
-      ...streamState.artifacts,
-      ...this.artifactsFrom(result.artifacts),
-    ];
+    const artifacts = this.capabilities.supportsArtifactEmission
+      ? [
+          ...streamState.artifacts,
+          ...this.artifactsFrom(result.artifacts),
+        ]
+      : [];
     const text = optionalString(result.text)
       ?? streamState.textParts.join("")
       ?? "";
