@@ -9,6 +9,7 @@ from utils.memory.device_scope_filter import (
     filter_items_by_device_scope,
     memory_matches_device,
 )
+from utils.client_device import DeviceScopeRequest
 from utils.memory.memory_service import DeviceScopeNotSupportedError, LegacyMemoryBackend
 
 
@@ -76,6 +77,13 @@ def test_device_scope_validation_error_messages():
 def test_legacy_backend_rejects_non_all_device_scope():
     backend = LegacyMemoryBackend()
     with pytest.raises(DeviceScopeNotSupportedError):
-        backend.read("uid-test", device_scope="current", client_device_id="macos_abc")
+        backend.read(
+            "uid-test",
+            device_scope_request=DeviceScopeRequest(device_scope="current", client_device_id="macos_abc"),
+        )
     with pytest.raises(DeviceScopeNotSupportedError):
-        backend.search("uid-test", "query", device_scope="explicit", client_device_id="ios_abcd")
+        backend.search(
+            "uid-test",
+            "query",
+            device_scope_request=DeviceScopeRequest(device_scope="explicit", client_device_id="ios_abcd"),
+        )

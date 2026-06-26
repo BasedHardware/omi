@@ -14,6 +14,7 @@ from utils.memory.atom_keyword_index import (
     purge_user_atom_keyword_index,
     sync_atom_keyword_index_for_item,
 )
+from utils.client_device import DeviceScopeRequest
 from utils.memory.device_scope_filter import filter_items_by_device_scope
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from database.memory_collections import MemoryCollections
@@ -166,11 +167,12 @@ def read_canonical_memories(
     limit: int = 100,
     offset: int = 0,
     db_client=None,
-    device_scope: str = "all",
-    client_device_id: Optional[str] = None,
+    device_scope_request: Optional[DeviceScopeRequest] = None,
 ) -> List[MemoryDB]:
     """Read default-visible canonical items using the shared product-memory filter."""
     client = db_client if db_client is not None else default_db_client
+    device_scope = device_scope_request.device_scope if device_scope_request else "all"
+    client_device_id = device_scope_request.client_device_id if device_scope_request else None
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
     now = datetime.now(timezone.utc)
     policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
@@ -191,11 +193,12 @@ def search_canonical_memories(
     limit: int = 5,
     db_client=None,
     vector_query=None,
-    device_scope: str = "all",
-    client_device_id: Optional[str] = None,
+    device_scope_request: Optional[DeviceScopeRequest] = None,
 ) -> List[Dict[str, Any]]:
     """Hybrid keyword (Typesense) + vector search over canonical long-term atoms."""
     client = db_client if db_client is not None else default_db_client
+    device_scope = device_scope_request.device_scope if device_scope_request else "all"
+    client_device_id = device_scope_request.client_device_id if device_scope_request else None
     capped_limit = max(1, min(limit, 20))
     fetch_limit = min(capped_limit * 3, 60)
     normalized_query = (query or "").strip()
