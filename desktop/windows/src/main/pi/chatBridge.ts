@@ -13,6 +13,7 @@ import {
   type Context,
   type Message,
   type Model,
+  type SimpleStreamOptions,
   type TextContent,
   type ToolCall,
   type ToolResultMessage,
@@ -26,6 +27,7 @@ import type {
   ByokChatProvider,
   ChatMessage,
   PiChatResponse,
+  PiChatStreamEvent,
   PiChatToolCall,
   PiChatUsage
 } from '../../shared/types'
@@ -39,6 +41,7 @@ const OMI_PI_API = 'omi-chat-completions'
 const OMI_PI_PROVIDER = 'omi'
 const BYOK_PI_API = 'byok-chat-completions'
 const MAX_TOOL_RESULT_CHARS = 24_000
+const MAX_STREAM_PREVIEW_CHARS = 2_400
 
 const EMPTY_USAGE: Usage = {
   input: 0,
@@ -71,6 +74,9 @@ type JsonRecord = Record<string, unknown>
 type FetchLike = typeof fetch
 type ActiveByokChatKey = { provider: ByokChatProvider; key: string } | null
 type LoadActiveByokChatKey = () => ActiveByokChatKey | Promise<ActiveByokChatKey>
+type WithoutSession<T> = T extends { sessionId: string } ? Omit<T, 'sessionId'> : never
+type PiChatBridgeStreamEvent = WithoutSession<PiChatStreamEvent>
+type PiChatRunController = { abort: () => void }
 
 type PiModelRoute =
   | {
@@ -143,6 +149,9 @@ export type PiChatBridgeOptions = {
   runtimeContext?: LocalAgentRuntimeContext
   loadSkillSections?: typeof loadSkillPromptSections
   loadActiveByokChatKey?: LoadActiveByokChatKey
+  signal?: AbortSignal
+  onController?: (controller: PiChatRunController) => void
+  onStreamEvent?: (event: PiChatBridgeStreamEvent) => void
 }
 
 export type PiChatSendRequest = {
@@ -260,6 +269,28 @@ function addResponseUsage(a: PiChatUsage, b: PiChatUsage): PiChatUsage {
     completionTokens: a.completionTokens + b.completionTokens,
     totalTokens: a.totalTokens + b.totalTokens
   }
+}
+
+function previewValue(value: unknown): string {
+  const text =
+    typeof value === 'string'
+      ? value
+      : (() => {
+          try {
+            return JSON.stringify(value)
+          } catch {
+            return String(value)
+          }
+        })()
+  if (text.length <= MAX_STREAM_PREVIEW_CHARS) return text
+  return `${text.slice(0, MAX_STREAM_PREVIEW_CHARS)}...`
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' || error.message.toLowerCase().includes('abort'))
+  )
 }
 
 function textBlocksToString(content: readonly { type: string }[]): string {
@@ -711,7 +742,7 @@ function errorAssistantMessage(error: unknown, route: PiModelRoute = omiRoute())
     content: [],
     ...assistantMetadata(route),
     usage: EMPTY_USAGE,
-    stopReason: 'error',
+    stopReason: isAbortError(error) ? 'aborted' : 'error',
     errorMessage: error instanceof Error ? error.message : String(error),
     timestamp: Date.now()
   }
@@ -806,7 +837,10 @@ async function callPiProvider(
   options: PiChatBridgeOptions
 ): Promise<AssistantMessage> {
   const request = buildPiProviderRequest(route, context, token)
-  const response = await (options.fetchImpl ?? fetch)(request.url, request.init)
+  const response = await (options.fetchImpl ?? fetch)(request.url, {
+    ...request.init,
+    ...(options.signal ? { signal: options.signal } : {})
+  })
   if (!response.ok) {
     throw routeError(route, response.status)
   }
@@ -814,15 +848,26 @@ async function callPiProvider(
 }
 
 function createPiStreamFn(token: string, route: PiModelRoute, options: PiChatBridgeOptions) {
-  return (_model: Model<string>, context: Context): AssistantMessageEventStream => {
+  return (
+    _model: Model<string>,
+    context: Context,
+    streamOptions?: SimpleStreamOptions
+  ): AssistantMessageEventStream => {
     const stream = createAssistantMessageEventStream()
     void (async () => {
       try {
-        const message = await callPiProvider(route, context, token, options)
+        const message = await callPiProvider(route, context, token, {
+          ...options,
+          signal: streamOptions?.signal ?? options.signal
+        })
         emitAssistantMessage(stream, message)
       } catch (error) {
         const message = errorAssistantMessage(error, route)
-        stream.push({ type: 'error', reason: 'error', error: message })
+        stream.push({
+          type: 'error',
+          reason: message.stopReason === 'aborted' ? 'aborted' : 'error',
+          error: message
+        })
         stream.end(message)
       }
     })()
@@ -960,6 +1005,7 @@ export async function sendPiChat(
   request: PiChatSendRequest,
   options: PiChatBridgeOptions = {}
 ): Promise<PiChatResponse> {
+  const emit = options.onStreamEvent ?? (() => undefined)
   const token = request.token.trim()
   if (!token) {
     throw new Error('Pi/Omi chat requires a Firebase ID token')
@@ -978,14 +1024,82 @@ export async function sendPiChat(
     toolExecution: 'sequential',
     transport: 'sse'
   })
+  let abortRequested = options.signal?.aborted ?? false
+
+  const abortAgent = (): void => {
+    abortRequested = true
+    agent.abort()
+  }
+  options.onController?.({ abort: abortAgent })
+  if (options.signal?.aborted) abortAgent()
+  options.signal?.addEventListener('abort', abortAgent, { once: true })
 
   let finalText = ''
   let usage: PiChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
   const toolCalls: PiChatToolCall[] = []
 
   agent.subscribe((event: AgentEvent) => {
+    if (event.type === 'agent_start') {
+      emit({ type: 'started' })
+      return
+    }
+    if (event.type === 'message_update') {
+      const assistantEvent = event.assistantMessageEvent
+      if (assistantEvent.type === 'text_delta') {
+        emit({ type: 'delta', text: assistantEvent.delta })
+        return
+      }
+      if (assistantEvent.type === 'thinking_delta') {
+        emit({ type: 'thinking', text: assistantEvent.delta })
+        return
+      }
+      if (assistantEvent.type === 'toolcall_delta') {
+        const block = assistantEvent.partial.content[assistantEvent.contentIndex]
+        if (block?.type === 'toolCall') {
+          emit({
+            type: 'tool_delta',
+            toolCall: { id: block.id, name: block.name },
+            preview: assistantEvent.delta
+          })
+        }
+        return
+      }
+      if (assistantEvent.type === 'error') {
+        if (assistantEvent.reason === 'aborted') {
+          emit({ type: 'aborted' })
+        } else {
+          emit({
+            type: 'error',
+            message: assistantEvent.error.errorMessage ?? 'Pi/Omi chat failed'
+          })
+        }
+      }
+      return
+    }
     if (event.type === 'tool_execution_start') {
       toolCalls.push({ id: event.toolCallId, name: event.toolName })
+      emit({
+        type: 'tool_start',
+        toolCall: { id: event.toolCallId, name: event.toolName },
+        preview: previewValue(event.args)
+      })
+      return
+    }
+    if (event.type === 'tool_execution_update') {
+      emit({
+        type: 'tool_delta',
+        toolCall: { id: event.toolCallId, name: event.toolName },
+        preview: previewValue(event.partialResult)
+      })
+      return
+    }
+    if (event.type === 'tool_execution_end') {
+      emit({
+        type: 'tool_result',
+        toolCall: { id: event.toolCallId, name: event.toolName },
+        ok: !event.isError,
+        preview: previewValue(event.result)
+      })
       return
     }
     if (event.type === 'message_end' && event.message.role === 'assistant') {
@@ -1010,15 +1124,28 @@ export async function sendPiChat(
   try {
     await agent.prompt(request.messages.map(chatMessageToAgentMessage))
   } catch (error) {
-    captureMainException('native_pi.send_failed', error, {
-      messageCount: request.messages.length,
-      toolCallCount: toolCalls.length
-    })
+    const aborted = isAbortError(error) || abortRequested || options.signal?.aborted
+    if (aborted) {
+      emit({ type: 'aborted' })
+    } else {
+      emit({ type: 'error', message: error instanceof Error ? error.message : String(error) })
+      captureMainException('native_pi.send_failed', error, {
+        messageCount: request.messages.length,
+        toolCallCount: toolCalls.length
+      })
+    }
     throw error
+  } finally {
+    options.signal?.removeEventListener('abort', abortAgent)
   }
 
   const errorMessage = agent.state.errorMessage
   if (errorMessage) {
+    if (abortRequested || options.signal?.aborted) {
+      emit({ type: 'aborted' })
+    } else {
+      emit({ type: 'error', message: errorMessage })
+    }
     throw new Error(errorMessage)
   }
 
@@ -1034,9 +1161,11 @@ export async function sendPiChat(
     { category: 'native_pi' }
   )
 
-  return {
+  const response = {
     text: finalText,
     usage,
     toolCalls
   }
+  emit({ type: 'done', response })
+  return response
 }
