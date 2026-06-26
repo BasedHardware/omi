@@ -608,6 +608,18 @@ describe("agent control tools", () => {
       }),
     ]);
 
+    const inspectedByArtifact = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "inspect_agent_artifacts", {
+        artifactId: "art_test",
+        ownerId: "owner",
+      }),
+    );
+    expect(inspectedByArtifact.artifacts).toHaveLength(1);
+    expect(inspectedByArtifact.artifacts[0]).toMatchObject({
+      artifactId: "art_test",
+      omiSessionId: result.session.sessionId,
+    });
+
     const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
     expect(events.find((event: any) => event.type === "artifact.created")).toMatchObject({
       sessionId: result.session.sessionId,
@@ -750,7 +762,7 @@ describe("agent control tools", () => {
   it("rejects unscoped direct kernel artifact inspection", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     expect(() => kernel.inspectArtifacts({ ownerId: "owner" })).toThrow(
-      "Inspecting artifacts requires sessionId, runId, or attemptId",
+      "Inspecting artifacts requires artifactId, sessionId, runId, or attemptId",
     );
     store.close();
   });

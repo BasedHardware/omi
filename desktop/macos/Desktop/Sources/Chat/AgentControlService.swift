@@ -2,8 +2,6 @@ import Foundation
 
 @MainActor
 final class AgentControlService {
-  static let shared = AgentControlService()
-
   private enum ToolName {
     static let listAgentSessions = "list_agent_sessions"
     static let getAgentRun = "get_agent_run"
@@ -142,8 +140,8 @@ final class AgentControlService {
     let run = object["run"] as? [String: Any] ?? [:]
     let status = stringValue(run["status"]) ?? "unknown"
     let accepted = cancellation["accepted"] as? Bool
-    let dispatched = cancellation["dispatched"] as? Bool
-    let acknowledged = cancellation["acknowledged"] as? Bool
+    let dispatched = (cancellation["dispatchAttempted"] as? Bool) ?? (cancellation["dispatched"] as? Bool)
+    let acknowledged = (cancellation["adapterAcknowledged"] as? Bool) ?? (cancellation["acknowledged"] as? Bool)
     return "Cancel request: accepted=\(accepted?.description ?? "unknown"), dispatched=\(dispatched?.description ?? "unknown"), acknowledged=\(acknowledged?.description ?? "unknown"). Current status: \(status)."
   }
 

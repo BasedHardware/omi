@@ -21,12 +21,14 @@ final class AgentControlServiceTests: XCTestCase {
   func testCancellationSummaryDoesNotExposeRunId() {
     let service = AgentControlService()
     let raw = """
-      {"ok":true,"cancellation":{"accepted":true,"dispatched":true,"acknowledged":false},"run":{"runId":"run_123","status":"cancelling"}}
+      {"ok":true,"cancellation":{"accepted":true,"dispatchAttempted":true,"adapterAcknowledged":false},"run":{"runId":"run_123","status":"cancelling"}}
       """
 
     let summary = service.summarizeVoiceResult(name: HubTool.cancelAgentRun.rawValue, raw: raw)
 
     XCTAssertTrue(summary.contains("accepted=true"))
+    XCTAssertTrue(summary.contains("dispatched=true"))
+    XCTAssertTrue(summary.contains("acknowledged=false"))
     XCTAssertTrue(summary.contains("cancelling"))
     XCTAssertFalse(summary.contains("run_123"))
   }

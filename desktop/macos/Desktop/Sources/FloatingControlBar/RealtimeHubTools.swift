@@ -421,6 +421,8 @@ enum RealtimeHubTools {
           "type": "object",
           "properties": [
             "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
+            "artifactRef": ["type": "string", "description": "Opaque artifact handle from inspect_agent_artifacts."],
+            "artifactId": ["type": "string", "description": "Canonical Omi artifact id."],
             "sessionId": ["type": "string", "description": "Canonical Omi session id."],
             "runId": ["type": "string", "description": "Canonical Omi run id."],
             "attemptId": ["type": "string", "description": "Canonical Omi attempt id."],
@@ -433,6 +435,8 @@ enum RealtimeHubTools {
           ],
           "anyOf": [
             ["required": ["agentRef"]],
+            ["required": ["artifactRef"]],
+            ["required": ["artifactId"]],
             ["required": ["sessionId"]],
             ["required": ["runId"]],
             ["required": ["attemptId"]],

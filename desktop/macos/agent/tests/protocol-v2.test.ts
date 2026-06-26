@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { CancelAckMessage, InboundMessage, OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { requestIdFor } from "../src/protocol.js";
 
@@ -68,5 +71,14 @@ describe("protocol v2 compatibility", () => {
 
     expect(message.type).toBe("direct_control_tool");
     expect(requestIdFor(message)).toBe("control-request");
+  });
+
+  it("guards direct app control v2 messages with explicit correlation ids", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const source = readFileSync(join(here, "../src/index.ts"), "utf8");
+
+    expect(source).toContain("protocol v2 direct control requires clientId");
+    expect(source).toContain("protocol v2 direct control requires requestId");
+    expect(source).toContain("const requestId = control.protocolVersion === 2 ? control.requestId.trim() : requestIdFor(control)");
   });
 });

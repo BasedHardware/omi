@@ -67,6 +67,9 @@ final class HubSystemInstructionTests: XCTestCase {
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
         let inspectParameters = inspectTool?["parameters"] as? [String: Any]
         let inspectAnyOf = inspectParameters?["anyOf"] as? [[String: Any]]
-        XCTAssertEqual(inspectAnyOf?.compactMap { $0["required"] as? [String] }, [["agentRef"], ["sessionId"], ["runId"], ["attemptId"]])
+        XCTAssertEqual(
+            inspectAnyOf?.compactMap { $0["required"] as? [String] },
+            [["agentRef"], ["artifactRef"], ["artifactId"], ["sessionId"], ["runId"], ["attemptId"]]
+        )
     }
 }

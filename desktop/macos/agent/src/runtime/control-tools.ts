@@ -33,6 +33,7 @@ const cancelAgentRunSchema = z.object({
 
 const inspectAgentArtifactsSchema = z
   .object({
+    artifactId: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
@@ -40,8 +41,8 @@ const inspectAgentArtifactsSchema = z
     role: artifactRoleSchema.optional(),
     limit: z.coerce.number().int().positive().max(200).default(50),
   })
-  .refine((value) => value.sessionId || value.runId || value.attemptId, {
-    message: "Provide sessionId, runId, or attemptId",
+  .refine((value) => value.artifactId || value.sessionId || value.runId || value.attemptId, {
+    message: "Provide artifactId, sessionId, runId, or attemptId",
   });
 
 const updateAgentArtifactLifecycleSchema = z.object({

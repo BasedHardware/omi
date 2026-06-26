@@ -1180,7 +1180,35 @@ async function main(): Promise<void> {
 
       case "direct_control_tool": {
         const control = msg as DirectControlToolRequestMessage;
-        const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
+        if (control.protocolVersion === 2 && !control.clientId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires clientId" },
+            }),
+          });
+          break;
+        }
+        if (control.protocolVersion === 2 && !control.requestId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires requestId" },
+            }),
+          });
+          break;
+        }
+        const requestId = control.protocolVersion === 2 ? control.requestId.trim() : requestIdFor(control);
         if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
           send({
             type: "control_tool_result",

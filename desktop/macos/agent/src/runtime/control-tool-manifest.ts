@@ -114,7 +114,7 @@ Use when the user asks to stop a running Omi agent/subagent. Returns whether can
   {
     name: "inspect_agent_artifacts",
     label: "Inspect Agent Artifacts",
-    description: `Inspect canonical artifact metadata for an Omi agent session, run, or attempt.
+    description: `Inspect canonical artifact metadata for an Omi agent artifact, session, run, or attempt.
 
 Returns metadata and references only. It does not read arbitrary artifact contents.`,
     promptSnippet: "inspect_agent_artifacts - Inspect Omi agent artifact metadata",
@@ -125,11 +125,12 @@ Returns metadata and references only. It does not read arbitrary artifact conten
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     runtimePreconditions: [
-      "Requires at least one of sessionId, runId, or attemptId.",
+      "Requires at least one of artifactId, sessionId, runId, or attemptId.",
       "Defaults ownerId to the active signed-in owner when omitted and rejects selectors outside that owner.",
     ],
     timeoutClass: "normal",
     properties: {
+      artifactId: { type: "string", description: "Canonical Omi artifact_id." },
       sessionId: { type: "string", description: "Canonical Omi session_id." },
       runId: { type: "string", description: "Canonical Omi run_id." },
       attemptId: { type: "string", description: "Canonical Omi attempt_id." },
@@ -140,6 +141,7 @@ Returns metadata and references only. It does not read arbitrary artifact conten
     required: [],
     jsonSchemaOptions: {
       anyOf: [
+        { required: ["artifactId"] },
         { required: ["sessionId"] },
         { required: ["runId"] },
         { required: ["attemptId"] },
