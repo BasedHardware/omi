@@ -673,7 +673,8 @@ impl FirestoreService {
                 .await?;
 
             if !response.status().is_success() {
-                break;
+                let error_text = response.text().await?;
+                return Err(format!("Failed to list chat sessions: {}", error_text).into());
             }
 
             let body: Value = response.json().await?;
