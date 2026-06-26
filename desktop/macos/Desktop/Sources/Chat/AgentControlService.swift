@@ -62,6 +62,7 @@ final class AgentControlService {
       return raw
     }
     if object["ok"] as? Bool == false {
+      clearVoiceHandles(for: name)
       return "Agent control failed. Try listing the agents again and retry with the matching item."
     }
     switch name {
@@ -80,7 +81,7 @@ final class AgentControlService {
     }
   }
 
-  private func resolveVoiceHandles(in arguments: [String: Any]) -> [String: Any] {
+  func resolveVoiceHandles(in arguments: [String: Any]) -> [String: Any] {
     var input = arguments
     if let agentRef = stringValue(input["agentRef"]), let handle = agentHandles[agentRef] {
       if input["sessionId"] == nil, let sessionId = handle.sessionId { input["sessionId"] = sessionId }
@@ -97,7 +98,10 @@ final class AgentControlService {
 
   private func summarizeAgentSessions(_ object: [String: Any]) -> String {
     let sessions = object["sessions"] as? [[String: Any]] ?? []
-    if sessions.isEmpty { return "No canonical Omi agent sessions found." }
+    if sessions.isEmpty {
+      agentHandles.removeAll()
+      return "No canonical Omi agent sessions found."
+    }
 
     agentHandles.removeAll()
     let rows = sessions.prefix(8).enumerated().map { index, summary -> String in
@@ -147,7 +151,10 @@ final class AgentControlService {
 
   private func summarizeAgentArtifacts(_ object: [String: Any]) -> String {
     let artifacts = object["artifacts"] as? [[String: Any]] ?? []
-    if artifacts.isEmpty { return "No canonical agent artifacts found for that scope." }
+    if artifacts.isEmpty {
+      artifactHandles.removeAll()
+      return "No canonical agent artifacts found for that scope."
+    }
 
     artifactHandles.removeAll()
     let rows = artifacts.prefix(8).enumerated().map { index, artifact -> String in
@@ -170,6 +177,17 @@ final class AgentControlService {
     let state = stringValue(artifact["lifecycleState"]) ?? stringValue(artifact["state"]) ?? "unknown"
     let changed = object["changed"] as? Bool
     return "Artifact lifecycle is now \(state). Changed: \(changed?.description ?? "unknown")."
+  }
+
+  private func clearVoiceHandles(for name: String) {
+    switch name {
+    case ToolName.listAgentSessions:
+      agentHandles.removeAll()
+    case ToolName.inspectAgentArtifacts:
+      artifactHandles.removeAll()
+    default:
+      break
+    }
   }
 
   private func hasCanonicalScope(_ arguments: [String: Any]) -> String {
