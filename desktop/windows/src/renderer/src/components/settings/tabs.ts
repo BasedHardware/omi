@@ -4,14 +4,17 @@ import {
   BotMessageSquare,
   CreditCard,
   History,
+  HelpCircle,
   Info,
   Keyboard,
   Layers,
+  Monitor,
   ShieldCheck,
   CircleUserRound,
   SlidersHorizontal,
   Brain,
   KeyRound,
+  Target,
   type LucideIcon
 } from 'lucide-react'
 
@@ -22,6 +25,9 @@ export type SettingsTabId =
   | 'transcription'
   | 'notifications'
   | 'floating-bar'
+  | 'focus-insights'
+  | 'permissions-help'
+  | 'system'
   | 'plan-usage'
   | 'about'
   | 'memories'
@@ -37,6 +43,9 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'transcription', label: 'Transcription', Icon: AudioLines },
   { id: 'notifications', label: 'Notifications', Icon: BellRing },
   { id: 'floating-bar', label: 'Floating Bar', Icon: Layers },
+  { id: 'focus-insights', label: 'Focus and Insights', Icon: Target },
+  { id: 'permissions-help', label: 'Permissions and Help', Icon: HelpCircle },
+  { id: 'system', label: 'System', Icon: Monitor },
   { id: 'plan-usage', label: 'Plan and Usage', Icon: CreditCard },
   { id: 'about', label: 'About', Icon: Info },
   { id: 'memories', label: 'Memories', Icon: Brain },
