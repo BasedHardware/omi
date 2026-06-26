@@ -170,11 +170,11 @@ def test_valid_write_targets_only_server_owned_grant_path_and_keeps_archive_not_
 def test_docs_reference_runner_non_claims_and_no_archive_default():
     root = Path(__file__).resolve().parents[2].parent
     readiness = (root / "docs" / "epics" / "memory_app_key_memory_grants_readiness.md").read_text()
-    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
+    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
 
     assert "app_key_memory_grant_assignment_readiness.py" in readiness
     assert "--execute --allow-write" in readiness
     assert "archive_default_visible" in readiness
     assert "not executed against production" in readiness
     assert "no app/key grants assigned" in readiness
-    assert "app_key_memory_grant_assignment_readiness.py" in oracle
+    assert "app_key_memory_grant_assignment_readiness.py" in evidence_markers
