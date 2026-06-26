@@ -309,7 +309,7 @@ class AnalyticsManager {
     }
     var retryLater = false;
     var flushAgain = false;
-    Duration? retryDelay;
+    var retryDelay = _retryDelays.last;
     _flushInProgress = true;
     try {
       final adapter = _adapter;
