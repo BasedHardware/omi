@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Added PTT access to inspect and stop canonical Omi agent runs created from chat or other Omi surfaces"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.541",
+      "date": "2026-06-26",
+      "changes": [
+        "Added PTT access to inspect and stop canonical Omi agent runs created from chat or other Omi surfaces"
+      ]
+    },
     {
       "version": "0.11.540",
       "date": "2026-06-26",
