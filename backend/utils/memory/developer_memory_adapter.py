@@ -18,8 +18,6 @@ from utils.memory.default_read_rollout import (
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
 from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
-DeveloperDefaultMemoryRolloutDecision = DefaultReadRolloutDecision
-
 
 @dataclass(frozen=True)
 class DeveloperMemorySearchResult:
@@ -30,18 +28,6 @@ class DeveloperMemorySearchResult:
     @property
     def should_use_legacy_fallback(self) -> bool:
         return self.read_decision == MemoryReadDecision.USE_LEGACY_SAFE
-
-
-def read_developer_default_memory_rollout(*, uid: str, db_client) -> DeveloperDefaultMemoryRolloutDecision:
-    """Read server-owned memory developer default-memory rollout state.
-
-    The authoritative per-user document is `users/{uid}/memory_control/state`.
-    Missing, malformed, uid-mismatched, or developer-grant-less docs fail closed
-    before any `users/{uid}/memory_items` read. Archive stays default-disabled on
-    this developer default-memory path regardless of persisted Archive fields.
-    """
-
-    return read_default_read_rollout(uid=uid, db_client=db_client, consumer='developer_api')
 
 
 def _parse_datetime(value) -> datetime:
@@ -102,10 +88,10 @@ def _format_developer_memory(item: dict, policy: MemoryAccessPolicy) -> dict:
 def _rollout_decision_from_legacy_args(
     *,
     uid: str,
-    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision],
+    rollout_decision: Optional[DefaultReadRolloutDecision],
     rollout_capabilities: Optional[MemoryRolloutCapabilities],
     app_has_default_memory_grant: bool,
-) -> DeveloperDefaultMemoryRolloutDecision:
+) -> DefaultReadRolloutDecision:
     if rollout_decision is not None:
         return rollout_decision
     if rollout_capabilities is None:
@@ -134,7 +120,7 @@ def search_memory_default_developer_memories(
     db_client,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     now: Optional[datetime] = None,
     categories: Optional[list[str]] = None,
 ) -> DeveloperMemorySearchResult:
@@ -193,7 +179,7 @@ def search_memory_default_developer_memories_vector(
     db_client,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[DeveloperDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
 ) -> DeveloperMemorySearchResult:
@@ -254,5 +240,4 @@ def search_memory_default_developer_memories_vector(
 
 
 # Neutral symbol aliases (memory names remain valid via shim)
-DeveloperDefaultMemoryRolloutDecision = DeveloperDefaultMemoryRolloutDecision
 DeveloperMemorySearchResult = DeveloperMemorySearchResult

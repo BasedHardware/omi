@@ -32,9 +32,6 @@ ACTIVITY_PREFIXES = (
 )
 
 
-McpDefaultMemoryRolloutDecision = DefaultReadRolloutDecision
-
-
 @dataclass(frozen=True)
 class McpVerifiedAuth:
     """Server-verified MCP identity/scope payload for future memory memory reads.
@@ -117,7 +114,7 @@ def _format_memory_mcp_default_memory_item(item: dict, policy: MemoryAccessPolic
 
 
 def build_mcp_default_memory_rollout_observability(
-    decision: McpDefaultMemoryRolloutDecision,
+    decision: DefaultReadRolloutDecision,
 ) -> dict:
     observability = build_default_read_rollout_observability(decision)
     return {
@@ -135,18 +132,6 @@ def build_mcp_default_memory_rollout_observability(
         'grants': {'mcp_default_memory': observability['default_memory_grant']},
         'capabilities': observability['capabilities'],
     }
-
-
-def read_mcp_default_memory_rollout(*, uid: str, db_client) -> McpDefaultMemoryRolloutDecision:
-    """Read server-owned memory MCP default-memory rollout state.
-
-    The authoritative per-user document is `users/{uid}/memory_control/state`.
-    Missing, malformed, or grant-less docs fail closed to legacy MCP search before
-    any `users/{uid}/memory_items` read. Archive is deliberately not derived here:
-    the MCP default search path always keeps `archive_capability=False`.
-    """
-
-    return read_default_read_rollout(uid=uid, db_client=db_client, consumer='mcp')
 
 
 def parse_mcp_datetime(value: Optional[str], field_name: str) -> Optional[datetime]:
@@ -423,7 +408,7 @@ def list_default_mcp_memories(
     limit: int,
     offset: int,
     db_client,
-    rollout_decision: Optional[McpDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
     categories: Optional[list[str]] = None,
@@ -506,7 +491,7 @@ def search_default_mcp_memories_vector(
     db_client,
     rollout_capabilities: Optional[MemoryRolloutCapabilities] = None,
     app_has_default_memory_grant: bool = True,
-    rollout_decision: Optional[McpDefaultMemoryRolloutDecision] = None,
+    rollout_decision: Optional[DefaultReadRolloutDecision] = None,
     vector_query: Optional[Callable[..., Any]] = None,
     required_projection_commit_id: Optional[str] = None,
 ) -> McpMemorySearchResult:
