@@ -229,3 +229,4 @@ google-cloud-translate==3.20.2
 langdetect==1.0.9
 lc3py==1.1.3; sys_platform == "linux" and platform_machine == "x86_64"
 twilio==9.5.0
+telethon==1.36.0
