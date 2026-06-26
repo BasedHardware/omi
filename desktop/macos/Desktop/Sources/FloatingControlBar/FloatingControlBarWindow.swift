@@ -1977,7 +1977,7 @@ class FloatingControlBarManager {
     }
 
     /// Screen / visual cues that, when present in a query, trigger a screenshot capture.
-    private static let screenshotCues = [
+    nonisolated private static let screenshotCues = [
         // explicit screen references
         "screen", "on my display", "what's on", "whats on", "on display",
         "look at", "looking at", "do you see", "can you see", "what do you see",
@@ -2003,7 +2003,7 @@ class FloatingControlBarManager {
 
     /// Action/command cues that force the Haiku router to run (never skip to chat).
     /// Missing one wrongly forces an agent task into inline chat, so this errs broad.
-    private static let routerActionCues = [
+    nonisolated private static let routerActionCues = [
         "open ", "close ", "send", "post ", "reply", "email", "e-mail", "message",
         "text ", " dm ", "write", "draft", "build", "create", "make ", "generate",
         "compile", "go to", "go through", "navigate", "browse", "browser", "tab ",
@@ -2015,7 +2015,7 @@ class FloatingControlBarManager {
     ]
 
     /// Leading words that mark an obviously-conversational query safe to skip the router.
-    private static let routerChatStarters: Set<String> = [
+    nonisolated private static let routerChatStarters: Set<String> = [
         "what", "what's", "whats", "who", "who's", "whos", "when", "where", "why",
         "how", "how's", "hows", "which", "whose", "is", "are", "am", "was", "were",
         "do", "does", "did", "can", "could", "should", "would", "will", "hey", "hi",

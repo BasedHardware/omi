@@ -6813,7 +6813,7 @@ struct SettingsContentView: View {
                   .textFieldStyle(.roundedBorder)
                   .scaledFont(size: 13)
                   .disabled(activeCheckoutPriceId != nil)
-                  .onChange(of: upgradePromotionCode) { _ in
+                  .onChange(of: upgradePromotionCode) { _, _ in
                     subscriptionError = nil
                   }
 

@@ -441,19 +441,87 @@ struct DashboardPage: View {
             HomeMemoryBridgeBackdrop()
                 .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
 
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceColumnHeader
-                    sourceConstellation
-                }
-                .frame(width: 320)
+            homeRoutingColumns
+                .padding(26)
+        }
+    }
 
                 centerMemoryColumn
 
-                destinationStack
-                    .frame(width: 300)
-            }
-            .padding(26)
+    private var homeSourceColumn: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sourceColumnHeader
+            sourceConstellation
+        }
+        .frame(width: 320)
+    }
+
+    private var homeCenterColumn: some View {
+        VStack(spacing: 18) {
+            centerMemoryHeader
+            homeMetricsStrip
+        }
+        .frame(width: 340, height: homeCenterColumnHeight, alignment: .center)
+    }
+
+    private var homeCenterColumnHeight: CGFloat {
+        62 + 12 + (6 * 48 + 5 * 12)
+    }
+
+    private var homeConversationsCountText: String {
+        let count = conversationCount
+            ?? appState.totalConversationsCount
+            ?? appState.conversations.count
+        return formattedCount(count)
+    }
+
+    private var homeTasksCountText: String {
+        formattedCount(taskCount ?? incompleteTaskCount)
+    }
+
+    private var homeMemoriesCountText: String {
+        let count = memoryCount
+            ?? (memoriesViewModel.totalMemoriesCount > 0
+                ? memoriesViewModel.totalMemoriesCount
+                : memoriesViewModel.memories.count)
+        return formattedCount(count)
+    }
+
+    private var homeScreenshotsCountText: String {
+        screenshotCount.map(formattedCount) ?? "—"
+    }
+
+    private var homeMetricsTopRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Conversations",
+                value: homeConversationsCountText,
+                systemImage: "text.bubble.fill",
+                action: { navigate(to: .conversations) }
+            )
+            HomeCenterMetricTile(
+                title: "Tasks",
+                value: homeTasksCountText,
+                systemImage: "checklist",
+                action: { navigate(to: .tasks) }
+            )
+        }
+    }
+
+    private var homeMetricsBottomRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Memories",
+                value: homeMemoriesCountText,
+                systemImage: "brain",
+                action: { navigate(to: .memories) }
+            )
+            HomeCenterMetricTile(
+                title: "Screenshots",
+                value: homeScreenshotsCountText,
+                systemImage: "photo.on.rectangle.angled",
+                action: { navigate(to: .rewind) }
+            )
         }
     }
 
