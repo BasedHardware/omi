@@ -101,14 +101,11 @@ def _mcp_search_import_isolation():
         return SimpleNamespace(allowed=True, status_code=200, detail={})
 
     mcp_router_mod.authorize_memory_external_default_memory_read = _allow_memory_auth
-    mcp_router_mod.read_mcp_default_memory_rollout = MagicMock(
+    mcp_router_mod.read_default_read_rollout = MagicMock(
         return_value=SimpleNamespace(read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE)
     )
     mcp_router_mod.search_default_mcp_memories_vector = MagicMock(side_effect=_legacy_safe_vector_result)
-    mcp_router_mod.read_write_convergence_gate = MagicMock(return_value=SimpleNamespace())
-    mcp_router_mod.assert_legacy_memory_write_allowed_for_default_read_decision = MagicMock(
-        side_effect=_allow_legacy_write
-    )
+    mcp_router_mod.guard_legacy_memory_write = MagicMock(side_effect=_allow_legacy_write)
 
     globals()['mcp_router'] = mcp_router_mod
     globals()['search_memories'] = search_memories_fn
@@ -368,10 +365,15 @@ class TestSearchMemoriesInvalidated:
 class TestEditMemoryVectorSync:
     """edit_memory must re-embed the new content so search finds the edited text."""
 
+    @patch('utils.memory.memory_service.pin_memory_system')
+    @patch('utils.memory.memory_service.memories_db')
     @patch('routers.mcp.upsert_memory_vector')
     @patch('routers.mcp.memories_db')
-    def test_edit_upserts_vector_with_new_content(self, mock_memories_db, mock_upsert_vector):
-        mock_memories_db.get_memory.return_value = {
+    def test_edit_upserts_vector_with_new_content(
+        self, mock_router_memories_db, mock_upsert_vector, mock_service_memories_db, mock_pin
+    ):
+        mock_pin.return_value = __import__('utils.memory.memory_system', fromlist=['MemorySystem']).MemorySystem.LEGACY
+        mock_service_memories_db.get_memory.return_value = {
             'id': 'mem-1',
             'content': 'old text',
             'category': 'hobbies',
@@ -379,13 +381,18 @@ class TestEditMemoryVectorSync:
         }
         result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
         assert result == {"status": "ok"}
-        mock_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
+        mock_router_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
         mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies", subject_entity_id=None)
 
+    @patch('utils.memory.memory_service.pin_memory_system')
+    @patch('utils.memory.memory_service.memories_db')
     @patch('routers.mcp.upsert_memory_vector')
     @patch('routers.mcp.memories_db')
-    def test_edit_succeeds_when_vector_upsert_fails(self, mock_memories_db, mock_upsert_vector):
-        mock_memories_db.get_memory.return_value = {
+    def test_edit_succeeds_when_vector_upsert_fails(
+        self, mock_router_memories_db, mock_upsert_vector, mock_service_memories_db, mock_pin
+    ):
+        mock_pin.return_value = __import__('utils.memory.memory_system', fromlist=['MemorySystem']).MemorySystem.LEGACY
+        mock_service_memories_db.get_memory.return_value = {
             'id': 'mem-1',
             'content': 'old text',
             'category': 'other',
@@ -394,27 +401,37 @@ class TestEditMemoryVectorSync:
         mock_upsert_vector.side_effect = Exception("pinecone down")
         result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
         assert result == {"status": "ok"}
-        mock_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
+        mock_router_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
 
 
 class TestDeleteMemoryVectorSync:
     """delete_memory must also remove the Pinecone vector so search_memories
     does not return stale top-K slots for deleted memories."""
 
+    @patch('utils.memory.memory_service.pin_memory_system')
+    @patch('utils.memory.memory_service.memories_db')
     @patch('routers.mcp.delete_memory_vector')
     @patch('routers.mcp.memories_db')
-    def test_delete_removes_vector(self, mock_memories_db, mock_delete_vector):
-        mock_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+    def test_delete_removes_vector(
+        self, mock_router_memories_db, mock_delete_vector, mock_service_memories_db, mock_pin
+    ):
+        mock_pin.return_value = __import__('utils.memory.memory_system', fromlist=['MemorySystem']).MemorySystem.LEGACY
+        mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         result = delete_memory(memory_id="mem-1", uid="user-1")
         assert result == {"status": "ok"}
-        mock_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
+        mock_router_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
         mock_delete_vector.assert_called_once_with("user-1", "mem-1")
 
+    @patch('utils.memory.memory_service.pin_memory_system')
+    @patch('utils.memory.memory_service.memories_db')
     @patch('routers.mcp.delete_memory_vector')
     @patch('routers.mcp.memories_db')
-    def test_delete_succeeds_when_vector_delete_fails(self, mock_memories_db, mock_delete_vector):
-        mock_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
+    def test_delete_succeeds_when_vector_delete_fails(
+        self, mock_router_memories_db, mock_delete_vector, mock_service_memories_db, mock_pin
+    ):
+        mock_pin.return_value = __import__('utils.memory.memory_system', fromlist=['MemorySystem']).MemorySystem.LEGACY
+        mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_delete_vector.side_effect = Exception("pinecone down")
         result = delete_memory(memory_id="mem-1", uid="user-1")
         assert result == {"status": "ok"}
-        mock_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
+        mock_router_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")

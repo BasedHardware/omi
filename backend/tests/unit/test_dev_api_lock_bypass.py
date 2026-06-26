@@ -102,36 +102,11 @@ def _install_legacy_safe_memory_developer_defaults(monkeypatch):
     ready_gate = rollout.WriteConvergencePolicy(source_path='test/dev-convergence', ready=True)
 
     monkeypatch.setattr(
-        developer_adapter,
-        'read_developer_default_memory_rollout',
-        MagicMock(side_effect=_legacy_rollout),
-        raising=False,
-    )
-    monkeypatch.setattr(rollout, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False)
-    monkeypatch.setattr(
         rollout,
-        'assert_legacy_memory_write_allowed_for_default_read_decision',
+        'guard_legacy_memory_write',
         MagicMock(return_value=allowed_write),
         raising=False,
     )
-
-    developer_module = sys.modules.get('routers.developer')
-    if developer_module is not None:
-        monkeypatch.setattr(
-            developer_module,
-            'read_developer_default_memory_rollout',
-            MagicMock(side_effect=_legacy_rollout),
-            raising=False,
-        )
-        monkeypatch.setattr(
-            developer_module, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False
-        )
-        monkeypatch.setattr(
-            developer_module,
-            'assert_legacy_memory_write_allowed_for_default_read_decision',
-            MagicMock(return_value=allowed_write),
-            raising=False,
-        )
 
 
 @pytest.fixture(autouse=True)

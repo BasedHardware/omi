@@ -235,7 +235,7 @@ class TestMcpSseLegacySearchParity:
         allowed_auth = SimpleNamespace(allowed=True, observability={})
 
         monkeypatch.setattr(mcp_sse, "db", firestore_fake)
-        monkeypatch.setattr(mcp_sse, "read_mcp_default_memory_rollout", lambda **_: legacy_rollout)
+        monkeypatch.setattr(mcp_sse, "read_default_read_rollout", lambda **_: legacy_rollout)
         monkeypatch.setattr(mcp_sse, "search_default_mcp_memories_vector", lambda **_: legacy_vector)
         monkeypatch.setattr(mcp_sse, "authorize_memory_external_default_memory_read", lambda *_, **__: allowed_auth)
 

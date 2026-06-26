@@ -134,7 +134,14 @@ def test_default_product_authorization_allows_enabled_granted_default_without_ar
 
 
 def test_archive_authorization_requires_explicit_request_and_persisted_archive_capability():
-    readers = _Readers(global_gate=_global_gate(), archive_rollout=_rollout(archive_capability=False))
+    readers = _Readers(
+        global_gate=_global_gate(),
+        archive_rollout=_rollout(
+            archive_capability=False,
+            read_decision=MemoryReadDecision.DENY_MEMORY,
+            reason='missing_chat_archive_capability',
+        ),
+    )
 
     explicit_without_capability = authorize_memory_product_memory_route(
         ProductAuthorizationContext(

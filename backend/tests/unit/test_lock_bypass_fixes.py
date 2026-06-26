@@ -250,9 +250,7 @@ def _install_legacy_safe_memory_defaults(monkeypatch):
                 value = legacy_text if attr.endswith('_text') else legacy_memories
                 monkeypatch.setattr(module, attr, MagicMock(return_value=value), raising=False)
 
-    monkeypatch.setattr(
-        default_mcp, 'read_mcp_default_memory_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
-    )
+    monkeypatch.setattr(default_mcp, 'read_default_read_rollout', MagicMock(side_effect=_legacy_rollout), raising=False)
     monkeypatch.setattr(
         product_auth,
         'authorize_memory_external_default_memory_read',
@@ -285,9 +283,13 @@ def _install_legacy_safe_memory_defaults(monkeypatch):
         for attr in ['list_default_mcp_memories', 'search_default_mcp_memories_vector']:
             if hasattr(module, attr):
                 monkeypatch.setattr(module, attr, MagicMock(return_value=legacy_memories), raising=False)
-        if hasattr(module, 'read_mcp_default_memory_rollout'):
+        if hasattr(module, 'read_default_read_rollout'):
             monkeypatch.setattr(
-                module, 'read_mcp_default_memory_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
+                module, 'read_default_read_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
+            )
+        if hasattr(module, 'guard_legacy_memory_write'):
+            monkeypatch.setattr(
+                module, 'guard_legacy_memory_write', MagicMock(return_value=allowed_write), raising=False
             )
         if hasattr(module, 'authorize_memory_external_default_memory_read'):
             monkeypatch.setattr(
