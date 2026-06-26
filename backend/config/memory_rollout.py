@@ -13,10 +13,6 @@ from typing import Iterable, Optional, Set
 
 MEMORY_MODE_ENV = "MEMORY_MODE"
 MEMORY_ENABLED_USERS_ENV = "MEMORY_ENABLED_USERS"
-
-MEMORY_BACKFILL_ENABLED_ENV = "MEMORY_BACKFILL_ENABLED"
-MEMORY_BACKFILL_DAILY_LIMIT_ENV = "MEMORY_BACKFILL_DAILY_LIMIT"
-MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV = "MEMORY_ARCHIVE_OPT_IN_ENABLED"
 MEMORY_V3_GET_ENABLED_ENV = "MEMORY_V3_GET_ENABLED"
 
 
@@ -117,20 +113,13 @@ MemoryRolloutState = MemoryRolloutState
 class MemoryRolloutConfig:
     enabled_users: Set[str] = field(default_factory=set)
     mode: MemoryRolloutMode = MemoryRolloutMode.off
-    backfill_enabled: bool = False
-    backfill_daily_limit: int = 0
-    archive_opt_in_enabled: bool = False
 
     @classmethod
     def from_env(cls) -> "MemoryRolloutConfig":
         mode = MemoryRolloutMode(rollout_mode_env_value())
-        limit = rollout_backfill_daily_limit_env_value()
         return cls(
             enabled_users=parse_enabled_users(rollout_enabled_users_env_raw()),
             mode=mode,
-            backfill_enabled=rollout_backfill_enabled_env_value(),
-            backfill_daily_limit=limit,
-            archive_opt_in_enabled=rollout_archive_opt_in_enabled_env_value(),
         )
 
     def for_user(self, uid: str, state: Optional[MemoryRolloutState] = None) -> MemoryRolloutCapabilities:
@@ -228,27 +217,6 @@ def rollout_enabled_users_env_raw(env: Mapping[str, str] | None = None) -> str:
     return _env_raw_value(env, key=MEMORY_ENABLED_USERS_ENV, default="")
 
 
-def rollout_backfill_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read backfill toggle from ``MEMORY_BACKFILL_ENABLED``."""
-    raw = _env_raw_value(env, key=MEMORY_BACKFILL_ENABLED_ENV, default="false")
-    return str(raw).lower() == "true"
-
-
-def rollout_backfill_daily_limit_env_value(env: Mapping[str, str] | None = None) -> int:
-    """Read backfill daily limit from ``MEMORY_BACKFILL_DAILY_LIMIT``."""
-    raw = _env_raw_value(env, key=MEMORY_BACKFILL_DAILY_LIMIT_ENV, default="0")
-    limit = int(raw or 0)
-    if limit < 0:
-        raise ValueError(f"{MEMORY_BACKFILL_DAILY_LIMIT_ENV} must be nonnegative")
-    return limit
-
-
-def rollout_archive_opt_in_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read archive opt-in from ``MEMORY_ARCHIVE_OPT_IN_ENABLED``."""
-    raw = _env_raw_value(env, key=MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV, default="false")
-    return str(raw).lower() == "true"
-
-
 def rollout_v3_get_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
     """Read v3 GET route toggle from ``MEMORY_V3_GET_ENABLED``."""
     raw = _env_raw_value(env, key=MEMORY_V3_GET_ENABLED_ENV, default="")
@@ -256,9 +224,6 @@ def rollout_v3_get_enabled_env_value(env: Mapping[str, str] | None = None) -> bo
 
 
 __all__ = [
-    "MEMORY_ARCHIVE_OPT_IN_ENABLED_ENV",
-    "MEMORY_BACKFILL_DAILY_LIMIT_ENV",
-    "MEMORY_BACKFILL_ENABLED_ENV",
     "MEMORY_ENABLED_USERS_ENV",
     "MEMORY_MODE_ENV",
     "MEMORY_V3_GET_ENABLED_ENV",
@@ -275,9 +240,6 @@ __all__ = [
     "MemoryRolloutStageGate",
     "decide_memory_rollout_capabilities",
     "parse_enabled_users",
-    "rollout_archive_opt_in_enabled_env_value",
-    "rollout_backfill_daily_limit_env_value",
-    "rollout_backfill_enabled_env_value",
     "rollout_enabled_users_env_raw",
     "rollout_mode_env_value",
     "rollout_v3_get_enabled_env_value",
