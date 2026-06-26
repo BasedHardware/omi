@@ -34,7 +34,8 @@ import type {
   ByokUseRequest,
   ByokChatRequest,
   ObservabilityBreadcrumb,
-  ObservabilityEvent
+  ObservabilityEvent,
+  WindowsExternalLinkKind
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -94,6 +95,13 @@ const omi: OmiBridgeApi = {
   floatingBarSetSettings: (next: FloatingBarSettings) =>
     ipcRenderer.invoke('floatingBar:setSettings', next),
   floatingBarStatus: () => ipcRenderer.invoke('floatingBar:status'),
+  systemGetStatus: () => ipcRenderer.invoke('system:getStatus'),
+  systemSetLaunchAtLogin: (enabled: boolean) =>
+    ipcRenderer.invoke('system:setLaunchAtLogin', enabled),
+  systemOpenExternal: (kind: WindowsExternalLinkKind) =>
+    ipcRenderer.invoke('system:openExternal', kind),
+  updaterGetStatus: () => ipcRenderer.invoke('updater:getStatus'),
+  updaterCheckNow: () => ipcRenderer.invoke('updater:checkNow'),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
