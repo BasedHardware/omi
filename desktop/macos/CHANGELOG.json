@@ -1,6 +1,7 @@
 {
   "unreleased": [
-    "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages"
+    "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages",
+    "Improved desktop startup stability by staging non-critical warmup work after the first usable window"
   ],
   "releases": [
     {
