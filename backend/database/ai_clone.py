@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 from database._client import db
+from google.api_core.exceptions import NotFound
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,7 @@ def update_platform_settings(uid: str, platform: str, data: dict) -> None:
     ref = db.collection('users').document(uid).collection('ai_clone').document('settings')
     try:
         ref.update({f'platforms.{platform}': data})
-    except Exception:
+    except NotFound:
         ref.set({'platforms': {platform: data}}, merge=True)
 
 
@@ -65,5 +66,5 @@ def set_platform_field(uid: str, platform: str, field: str, value) -> None:
     try:
         # Deep dot-notation: platforms.telegram.active — only this leaf is written.
         ref.update({f'platforms.{platform}.{field}': value})
-    except Exception:
+    except NotFound:
         ref.set({'platforms': {platform: {field: value}}}, merge=True)

@@ -67,15 +67,26 @@ final class AICloneService: ObservableObject {
     }
 
     func setActive(platform: String, active: Bool) {
+        let previous = currentActive(platform: platform)
         applyActive(platform: platform, active: active)
         Task {
             do {
                 try await APIClient.shared.setPlatformActive(platform: platform, active: active)
             } catch {
-                // Revert optimistic update — backend rejected the change.
-                applyActive(platform: platform, active: !active)
+                // Revert to the captured previous state, not !active, to avoid race conditions
+                // where a stale failed request flips the toggle to the wrong value.
+                applyActive(platform: platform, active: previous)
                 log("AICloneService: failed to sync \(platform) active=\(active): \(error)")
             }
+        }
+    }
+
+    private func currentActive(platform: String) -> Bool {
+        switch platform {
+        case "imessage": return iMessageActive
+        case "telegram": return telegramActive
+        case "whatsapp": return whatsAppActive
+        default: return false
         }
     }
 

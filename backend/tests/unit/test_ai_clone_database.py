@@ -37,6 +37,15 @@ for mod in ['google', 'google.cloud', 'google.cloud.firestore']:
         sys.modules[mod] = types.ModuleType(mod)
 sys.modules['google.cloud.firestore'] = _firestore_stub
 
+# Stub google.api_core.exceptions.NotFound so ai_clone.py can import it
+_NotFound = type('NotFound', (Exception,), {})
+_api_core_exceptions = types.ModuleType('google.api_core.exceptions')
+_api_core_exceptions.NotFound = _NotFound
+_api_core = types.ModuleType('google.api_core')
+_api_core.exceptions = _api_core_exceptions
+sys.modules['google.api_core'] = _api_core
+sys.modules['google.api_core.exceptions'] = _api_core_exceptions
+
 for mod in ['firebase_admin', 'firebase_admin.auth', 'firebase_admin.credentials']:
     if mod not in sys.modules:
         sys.modules[mod] = types.ModuleType(mod)
@@ -356,7 +365,7 @@ class TestSetPlatformField:
     def test_falls_back_to_set_merge_on_first_write(self):
         _reset_db()
         ref = _settings_ref()
-        ref.update.side_effect = Exception('NOT_FOUND')
+        ref.update.side_effect = _NotFound('document not found')
 
         clone_db.set_platform_field('uid-new', 'whatsapp', 'active', True)
 
@@ -365,3 +374,14 @@ class TestSetPlatformField:
         data = call_args[0][0]
         assert data['platforms']['whatsapp']['active'] is True
         assert call_args[1].get('merge') is True
+
+    def test_does_not_swallow_other_exceptions(self):
+        _reset_db()
+        ref = _settings_ref()
+        ref.update.side_effect = RuntimeError('network error')
+
+        try:
+            clone_db.set_platform_field('uid-x', 'telegram', 'active', True)
+            assert False, 'Expected RuntimeError to propagate'
+        except RuntimeError:
+            pass
