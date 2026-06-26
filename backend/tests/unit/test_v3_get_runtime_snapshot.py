@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from utils.memory.v3_get_runtime_snapshot import (
+from testing.memory.v3_get_runtime_snapshot import (
     LOW_CARDINALITY_RUNTIME_SNAPSHOT_REASONS,
     V3GetRuntimeSnapshotInput,
     build_v3_get_runtime_snapshot,
