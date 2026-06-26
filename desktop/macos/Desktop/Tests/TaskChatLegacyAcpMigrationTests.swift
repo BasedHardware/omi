@@ -31,6 +31,13 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("resume: legacyAcpSessionId"))
     XCTAssertTrue(source.contains("legacyAcpSessionId = adapterSessionId"))
     XCTAssertFalse(source.contains("legacyAcpSessionId = queryResult.omiSessionId"))
+
+    // Adapter-namespacing guard: adapterSessionId must only be stored into
+    // legacyAcpSessionId when the active harness supports legacy resume
+    // (ACP/pi-mono), preventing cross-adapter resume ID pollution.
+    XCTAssertTrue(source.contains("private var currentHarness: String?"))
+    XCTAssertTrue(source.contains("currentHarness = harness"))
+    XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
   }
 
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {
