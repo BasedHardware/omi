@@ -2014,7 +2014,7 @@ private struct HomeCenterMemoryColumn: View {
                 .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundStyle(HomePalette.ink)
                 .lineLimit(1)
-                .shadow(color: HomePalette.purple.opacity(0.42), radius: 20)
+                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
 
             Text("What omi knows")
                 .font(.system(size: 15, weight: .medium, design: .serif))
