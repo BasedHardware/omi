@@ -697,36 +697,38 @@ describe("OneShotCliRuntimeAdapter prompt serialization", () => {
     });
     process.env.OPENCLAW_COMMAND = "openclaw";
 
-    await adapter.executeAttempt(
-      {
-        sessionId: "omi-session",
-        ownerId: "owner",
-        requestId: "request",
-        clientId: "client",
-        runId: "run",
-        attemptId: "attempt",
-        binding: {
+    try {
+      await adapter.executeAttempt(
+        {
           sessionId: "omi-session",
-          adapterId: "openclaw",
-          adapterNativeSessionId: "openclaw:omi-session",
-          resumeFidelity: "none",
-          cwd: "/tmp",
-        },
-        prompt: [
-          { type: "text", text: "Hello" },
-          { type: "text", text: "world" },
-        ],
-        mode: "ask",
-      } as any,
-      () => {},
-      new AbortController().signal,
-    );
+          ownerId: "owner",
+          requestId: "request",
+          clientId: "client",
+          runId: "run",
+          attemptId: "attempt",
+          binding: {
+            sessionId: "omi-session",
+            adapterId: "openclaw",
+            adapterNativeSessionId: "openclaw:omi-session",
+            resumeFidelity: "none",
+            cwd: "/tmp",
+          },
+          prompt: [
+            { type: "text", text: "Hello" },
+            { type: "text", text: "world" },
+          ],
+          mode: "ask",
+        } as any,
+        () => {},
+        new AbortController().signal,
+      );
 
-    const spawnArg = vi.mocked(spawn).mock.calls[0][0] as string;
-    // The prompt text should be joined text, NOT a JSON array string
-    expect(spawnArg).toContain("'Hello\nworld'");
-    expect(spawnArg).not.toContain('[{"type":"text"');
-
-    delete process.env.OPENCLAW_COMMAND;
+      const spawnArg = vi.mocked(spawn).mock.calls[0][0] as string;
+      // The prompt text should be joined text, NOT a JSON array string
+      expect(spawnArg).toContain("'Hello\nworld'");
+      expect(spawnArg).not.toContain('[{"type":"text"');
+    } finally {
+      delete process.env.OPENCLAW_COMMAND;
+    }
   });
 });
