@@ -25,7 +25,6 @@ the lifecycle worker records audit transitions (reused semantics from
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
@@ -58,19 +57,14 @@ from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_sho
 
 logger = logging.getLogger(__name__)
 
+# Batch-or-daily promotion policy: promote when promotable count reaches this threshold.
 DEFAULT_PROMOTION_BATCH_THRESHOLD = 25
-PROMOTION_BATCH_THRESHOLD_ENV = "MEMORY_CANONICAL_PROMOTION_BATCH_THRESHOLD"
 PROMOTION_DAILY_INTERVAL = timedelta(hours=24)
 PROMOTION_BY = "canonical_short_term_promotion"
 
 
 def promotion_batch_threshold() -> int:
-    raw = os.getenv(PROMOTION_BATCH_THRESHOLD_ENV, str(DEFAULT_PROMOTION_BATCH_THRESHOLD))
-    try:
-        value = int(raw)
-    except ValueError:
-        value = DEFAULT_PROMOTION_BATCH_THRESHOLD
-    return max(1, value)
+    return DEFAULT_PROMOTION_BATCH_THRESHOLD
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
