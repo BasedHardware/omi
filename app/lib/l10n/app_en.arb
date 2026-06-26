@@ -11010,6 +11010,10 @@
     "@backgroundModeNote": {
         "description": "Caveat note shown in the Background Mode sheet"
     },
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.",
+    "@backgroundModeUnavailable": {
+        "description": "Warning shown in Background Mode sheet when no device with a native BLE audio route is connected"
+    },
     "regenerateRecap": "Regenerate recap",
     "recapRegeneratedSnackbar": "Recap regenerated",
     "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",

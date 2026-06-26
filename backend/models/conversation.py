@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -228,10 +228,22 @@ class SetConversationEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
 
+    @model_validator(mode='after')
+    def validate_parallel_arrays(self):
+        if len(self.events_idx) != len(self.values):
+            raise ValueError('events_idx and values must have the same length')
+        return self
+
 
 class SetConversationActionItemsStateRequest(BaseModel):
     items_idx: List[int]
     values: List[bool]
+
+    @model_validator(mode='after')
+    def validate_parallel_arrays(self):
+        if len(self.items_idx) != len(self.values):
+            raise ValueError('items_idx and values must have the same length')
+        return self
 
 
 class BulkAssignSegmentsRequest(BaseModel):

@@ -32,6 +32,11 @@ import { appendFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import {
+  agentControlCapabilityManifest,
+  type AgentControlManifestProperty,
+  type AgentControlManifestTool,
+} from "../agent/src/runtime/control-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -471,10 +476,17 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
-  if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
+async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
+  const connection: Socket | null = omiPipeConnection;
+  if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
+  const correlation = await omiRelayCorrelation();
+  if (correlation.disableSwiftBackedTools === true) {
+    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
+  }
+  if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
+  if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
@@ -487,21 +499,67 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
     };
     signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
-      connection: omiPipeConnection,
+      connection,
       resolve: (result: string) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cleanup);
         resolve(result);
       },
     });
-    omiPipeConnection!.write(JSON.stringify({
+    connection.write(JSON.stringify({
       type: "tool_use",
       callId,
       name,
       input,
-      adapterId: process.env.OMI_ADAPTER_ID,
+      ...correlation,
     }) + "\n");
   });
+}
+
+async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const correlation: Record<string, string | number | boolean> = {};
+  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
+  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
+  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
+  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
+  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
+  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
+  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
+  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
+    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
+  }
+  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
+  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  Object.assign(correlation, await omiContextFileCorrelation());
+  return correlation;
+}
+
+async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const path = process.env.OMI_CONTEXT_FILE;
+  if (!path) return {};
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const correlation: Record<string, string | number | boolean> = {};
+    for (const key of [
+      "adapterId",
+      "requestId",
+      "clientId",
+      "sessionId",
+      "runId",
+      "attemptId",
+      "adapterSessionId",
+      "legacyAdapterSessionId",
+    ]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.length > 0) correlation[key] = value;
+    }
+    const protocolVersion = parsed.protocolVersion;
+    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
+    return correlation;
+  } catch {
+    return {};
+  }
 }
 
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
@@ -532,7 +590,7 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
     { additionalProperties: false },
   );
   Object.assign(parameters, spec.schemaOptions);
-  return defineTool({
+  const tool = defineTool({
     name: spec.name,
     label: spec.label,
     description: spec.description,
@@ -543,6 +601,49 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
       const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal, spec.timeoutMs);
       return { content: [{ type: "text" as const, text: result }], details: undefined };
     },
+  });
+  Object.defineProperty(tool, "__omiTimeoutMsForTest", {
+    value: spec.timeoutMs ?? OMI_TOOL_TIMEOUT_MS,
+    enumerable: false,
+  });
+  return tool;
+}
+
+function typeBoxSchemaForManifestProperty(property: AgentControlManifestProperty): unknown {
+  const options: Record<string, unknown> = {};
+  if (property.description) options.description = property.description;
+  if (property.enum) options.enum = property.enum;
+  switch (property.type) {
+    case "string":
+      return Type.String(options);
+    case "number":
+      return Type.Number(options);
+    case "boolean":
+      return Type.Boolean(options);
+    case "object":
+      return Type.Object({}, { ...options, additionalProperties: property.additionalProperties ?? true });
+  }
+}
+
+function typeBoxPropertiesForManifestTool(tool: AgentControlManifestTool): Parameters<typeof Type.Object>[0] {
+  return Object.fromEntries(
+    Object.entries(tool.properties).map(([name, property]) => {
+      const schema = typeBoxSchemaForManifestProperty(property);
+      return [name, tool.required.includes(name) ? schema : Type.Optional(schema as never)];
+    })
+  ) as Parameters<typeof Type.Object>[0];
+}
+
+function omiControlTool(tool: AgentControlManifestTool) {
+  return omiTool({
+    name: tool.name,
+    label: tool.label,
+    description: tool.description,
+    promptSnippet: tool.promptSnippet,
+    promptGuidelines: tool.promptGuidelines,
+    properties: typeBoxPropertiesForManifestTool(tool),
+    required: tool.required,
+    timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
   });
 }
 
@@ -599,128 +700,15 @@ export const OMI_TOOLS = [
     properties: {},
     required: [],
   }),
-  omiTool({
-    name: "list_agent_sessions",
-    label: "List Agent Sessions",
-    description: "List canonical Omi-managed agent sessions, recent runs, active runs, and adapter bindings.",
-    promptSnippet: "list_agent_sessions - List Omi-managed agent sessions and active runs",
-    properties: {
-      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the active signed-in owner." })),
-      status: Type.Optional(Type.String({ enum: ["open", "archived", "closed"] })),
-      surfaceKind: Type.Optional(Type.String({ description: "Filter by surface kind such as main_chat, task_chat, or floating_pill." })),
-      limit: Type.Optional(Type.Number({ description: "Maximum sessions to return. Default 50, max 200." })),
-      beforeUpdatedAtMs: Type.Optional(Type.Number({ description: "Pagination cursor in epoch milliseconds." })),
-    },
-    required: [],
-  }),
-  omiTool({
-    name: "get_agent_run",
-    label: "Get Agent Run",
-    description: "Inspect one canonical Omi agent run, including session, attempts, bindings, artifacts, and events.",
-    promptSnippet: "get_agent_run - Inspect one Omi agent run",
-    properties: {
-      runId: Type.String({ description: "Canonical Omi run_id." }),
-      includeEvents: Type.Optional(Type.Boolean({ description: "Include ordered kernel events. Default true." })),
-      eventLimit: Type.Optional(Type.Number({ description: "Maximum events to return. Default 100, max 500." })),
-    },
-    required: ["runId"],
-  }),
-  omiTool({
-    name: "cancel_agent_run",
-    label: "Cancel Agent Run",
-    description: "Request cancellation for one canonical Omi agent run.",
-    promptSnippet: "cancel_agent_run - Stop a running Omi agent",
-    properties: {
-      runId: Type.String({ description: "Canonical Omi run_id to cancel." }),
-    },
-    required: ["runId"],
-  }),
-  omiTool({
-    name: "inspect_agent_artifacts",
-    label: "Inspect Agent Artifacts",
-    description: "Inspect artifact metadata for an Omi agent session, run, or attempt.",
-    promptSnippet: "inspect_agent_artifacts - Inspect Omi agent artifact metadata",
-    properties: {
-      sessionId: Type.Optional(Type.String({ description: "Canonical Omi session_id." })),
-      runId: Type.Optional(Type.String({ description: "Canonical Omi run_id." })),
-      attemptId: Type.Optional(Type.String({ description: "Canonical Omi attempt_id." })),
-      role: Type.Optional(Type.String({ enum: ["input", "result", "checkpoint", "tool_output", "log", "other"] })),
-      limit: Type.Optional(Type.Number({ description: "Maximum artifacts to return. Default 50, max 200." })),
-    },
-    required: [],
-    schemaOptions: {
-      anyOf: [
-        { required: ["sessionId"] },
-        { required: ["runId"] },
-        { required: ["attemptId"] },
-      ],
-    },
-  }),
-  omiTool({
-    name: "send_agent_message",
-    label: "Send Agent Message",
-    description: "Send a follow-up message to an existing canonical Omi agent session.",
-    promptSnippet: "send_agent_message - Continue an Omi-managed agent session",
-    properties: {
-      sessionId: Type.String({ description: "Canonical Omi session_id to continue." }),
-      ownerId: Type.Optional(Type.String({ description: "Owner id. Defaults to the active signed-in owner." })),
-      prompt: Type.String({ description: "The follow-up message." }),
-      mode: Type.Optional(Type.String({ enum: ["ask", "act"] })),
-      adapterId: Type.Optional(Type.String({ description: "Optional adapter override." })),
-      cwd: Type.Optional(Type.String({ description: "Optional working directory override." })),
-      model: Type.Optional(Type.String({ description: "Optional model override." })),
-      requestId: Type.Optional(Type.String({ description: "Optional idempotent request id." })),
-      clientId: Type.Optional(Type.String({ description: "Logical caller id." })),
-      metadata: Type.Optional(Type.Object({}, { additionalProperties: true })),
-    },
-    required: ["sessionId", "prompt"],
-    timeoutMs: OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
-  }),
-  omiTool({
-    name: "delegate_agent",
-    label: "Delegate Agent",
-    description: "Create or continue a distinct delegated child agent session linked to a parent run.",
-    promptSnippet: "delegate_agent - Create, spawn, or continue an Omi child agent",
-    properties: {
-      mode: Type.String({ enum: ["call", "spawn", "continue"] }),
-      parentRunId: Type.String({ description: "Canonical parent Omi run_id." }),
-      objective: Type.String({ description: "Delegated objective for the child agent." }),
-      context: Type.Optional(Type.String({ description: "Optional concise context." })),
-      ownerId: Type.Optional(Type.String()),
-      childSessionId: Type.Optional(Type.String({ description: "Required for continue mode." })),
-      childSurfaceKind: Type.Optional(Type.String()),
-      childExternalRefKind: Type.Optional(Type.String()),
-      childExternalRefId: Type.Optional(Type.String()),
-      childTitle: Type.Optional(Type.String()),
-      adapterId: Type.Optional(Type.String()),
-      defaultAdapterId: Type.Optional(Type.String()),
-      cwd: Type.Optional(Type.String()),
-      model: Type.Optional(Type.String()),
-      runMode: Type.Optional(Type.String({ enum: ["ask", "act"] })),
-      requestId: Type.Optional(Type.String()),
-      clientId: Type.Optional(Type.String()),
-      maxDepth: Type.Optional(Type.Number()),
-      maxBudgetUsd: Type.Optional(Type.Number()),
-      metadata: Type.Optional(Type.Object({}, { additionalProperties: true })),
-    },
-    required: ["mode", "parentRunId", "objective"],
-    timeoutMs: OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
-    schemaOptions: {
-      allOf: [
-        {
-          if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-          then: { required: ["childSessionId"] },
-        },
-      ],
-    },
-  }),
+  ...agentControlCapabilityManifest.map(omiControlTool),
   omiTool({
     name: "spawn_agent",
     label: "Spawn Agent",
-    description: "Start a floating background agent pill. Use when the user explicitly asks to run, start, spawn, or launch a subagent/background agent, or for multi-step work in other apps/browser/files.",
+    description: "Start a floating background agent pill through the legacy floating-bar UI workflow. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
     promptSnippet: "spawn_agent - Start a floating background agent pill",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
       "Return immediately after spawning; the pill keeps working in the background.",
     ],
     properties: {
@@ -1106,6 +1094,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __omiRelayCorrelationForTest = omiRelayCorrelation;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

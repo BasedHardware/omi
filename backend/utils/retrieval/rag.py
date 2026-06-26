@@ -1,5 +1,5 @@
 from collections import Counter, defaultdict
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import database.users as users_db
 from database.auth import get_user_name
@@ -50,10 +50,12 @@ def retrieve_memories_for_topics(uid: str, topics: List[str], dates_range: List)
     return memories_id, get_conversations_by_id(uid, memories_id.keys())
 
 
-def get_better_conversation_chunk(
-    memory: Conversation, topics: List[str], context_data: dict, people: List[Person] = None, user_name: str = None
-) -> str:
+def build_conversation_context(
+    memory: Conversation, topics: List[str], people: Optional[List[Person]] = None, user_name: Optional[str] = None
+) -> str | None:
     logger.info(f'get_better_memory_chunk {memory.id} {topics}')
+    people = people or []
+    user_name = user_name or ''
     conversation = TranscriptSegment.segments_as_string(
         memory.transcript_segments, include_timestamps=True, people=people, user_name=user_name
     )
@@ -61,8 +63,20 @@ def get_better_conversation_chunk(
         return conversations_to_string([memory], people=people, user_name=user_name)
     chunk = chunk_extraction(memory.transcript_segments, topics, people=people, user_name=user_name)
     if not chunk or len(chunk) < 10:
-        return
-    context_data[memory.id] = chunk
+        return None
+    return chunk
+
+
+def get_better_conversation_chunk(
+    memory: Conversation,
+    topics: List[str],
+    context_data: dict,
+    people: Optional[List[Person]] = None,
+    user_name: Optional[str] = None,
+) -> None:
+    chunk = build_conversation_context(memory, topics, people=people, user_name=user_name)
+    if chunk:
+        context_data[memory.id] = chunk
 
 
 def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[str, List[Conversation]]:

@@ -1,127 +1,63 @@
-"""POST /v1/apps (create_app) must return 400, not 500, on a malformed app_data JSON form field.
-
-routers/apps.py has a very heavy import graph, so we import it under a stub finder that auto-mocks those
-namespaces (keeping models/fastapi/pydantic real), then call the handler directly.
-"""
-
-import importlib.abc
-import importlib.machinery
-import importlib.util
-import os
-import sys
-import types
-from unittest.mock import MagicMock
+"""App/persona multipart JSON form contract tests."""
 
 import pytest
+from fastapi import HTTPException
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-_STUB = (
-    'database',
-    'utils',
-    'firebase_admin',
-    'google',
-    'pinecone',
-    'typesense',
-    'opuslib',
-    'pydub',
-    'pusher',
-    'modal',
-    'ulid',
-    'langchain',
-    'langchain_core',
-    'stripe',
-    'openai',
-    'anthropic',
-    'redis',
-    'sentry_sdk',
-    'requests',
+from utils.request_validation import (
+    backfill_app_home_url_from_auth_steps,
+    normalize_required_webhook_url,
+    parse_form_json,
 )
 
 
-def _is_stubbed_name(name):
-    return any(name == p or name.startswith(p + '.') for p in _STUB)
+def test_create_app_invalid_json_returns_422_before_handler_io():
+    with pytest.raises(HTTPException) as exc_info:
+        parse_form_json(dict, 'this is not json', 'app_data')
+
+    assert exc_info.value.status_code == 422
+    assert 'app_data' in exc_info.value.detail
 
 
-def _snapshot():
-    return {name: module for name, module in sys.modules.items() if _is_stubbed_name(name)}
+@pytest.mark.parametrize('payload', ['[1, 2, 3]', '"a string"', '42'])
+def test_create_app_non_object_json_returns_422_before_handler_io(payload):
+    with pytest.raises(HTTPException) as exc_info:
+        parse_form_json(dict, payload, 'app_data')
+
+    assert exc_info.value.status_code == 422
+    assert 'app_data' in exc_info.value.detail
 
 
-def _clear():
-    for name in list(sys.modules):
-        if _is_stubbed_name(name):
-            sys.modules.pop(name, None)
+@pytest.mark.parametrize('webhook_url', ['', '   ', None, 123])
+def test_trigger_webhook_url_must_be_nonblank_string(webhook_url):
+    external_integration = {'webhook_url': webhook_url}
+
+    with pytest.raises(HTTPException) as exc_info:
+        normalize_required_webhook_url(external_integration)
+
+    assert exc_info.value.status_code == 422
 
 
-def _restore(snapshot):
-    for name in list(sys.modules):
-        if _is_stubbed_name(name) and name not in snapshot:
-            sys.modules.pop(name, None)
-    sys.modules.update(snapshot)
+def test_trigger_webhook_url_is_trimmed_after_validation():
+    external_integration = {'webhook_url': '  https://example.com/webhook  '}
+
+    normalize_required_webhook_url(external_integration)
+
+    assert external_integration['webhook_url'] == 'https://example.com/webhook'
 
 
-def _install_python_multipart_stub():
-    if 'python_multipart' in sys.modules:
-        return False
-    if importlib.util.find_spec('python_multipart') is not None:
-        return False
-    mod = types.ModuleType('python_multipart')
-    mod.__version__ = '0.0.20'
-    sys.modules['python_multipart'] = mod
-    return True
+@pytest.mark.parametrize('auth_steps', ['not-a-list', {'url': 'https://example.com'}, [None], ['bad'], [{}]])
+def test_auth_steps_app_home_backfill_rejects_malformed_single_step(auth_steps):
+    external_integration = {'auth_steps': auth_steps}
+
+    with pytest.raises(HTTPException) as exc_info:
+        backfill_app_home_url_from_auth_steps(external_integration)
+
+    assert exc_info.value.status_code == 422
 
 
-class _AutoMock(types.ModuleType):
-    __path__ = []
+def test_auth_steps_app_home_backfill_accepts_single_url_step():
+    external_integration = {'auth_steps': [{'url': 'https://example.com/oauth'}]}
 
-    def __getattr__(self, name):
-        if name.startswith('__') and name.endswith('__'):
-            raise AttributeError(name)
-        m = MagicMock()
-        setattr(self, name, m)
-        return m
+    backfill_app_home_url_from_auth_steps(external_integration)
 
-
-class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
-    def find_spec(self, name, path=None, target=None):
-        if _is_stubbed_name(name):
-            return importlib.machinery.ModuleSpec(name, self, is_package=True)
-        return None
-
-    def create_module(self, spec):
-        return _AutoMock(spec.name)
-
-    def exec_module(self, module):
-        pass
-
-
-_finder = _Finder()
-_snap = _snapshot()
-_clear()
-_rm = _install_python_multipart_stub()
-sys.meta_path.insert(0, _finder)
-try:
-    from routers import apps as apps_mod
-finally:
-    sys.meta_path.remove(_finder)
-    _restore(_snap)
-    if _rm:
-        sys.modules.pop('python_multipart', None)
-
-from fastapi import HTTPException  # noqa: E402
-
-
-def test_create_app_invalid_json_returns_400_not_500():
-    with pytest.raises(HTTPException) as e:
-        apps_mod.create_app(app_data='this is not json', file=MagicMock(), uid='uid1')
-    assert e.value.status_code == 400
-
-
-def test_create_app_non_object_json_returns_400_not_500():
-    # Valid JSON that is not an object (array/scalar) must also be rejected with 400, not 500: the
-    # handler immediately does dict-style writes like data['approved'] = False.
-    for payload in ('[1, 2, 3]', '"a string"', '42'):
-        with pytest.raises(HTTPException) as e:
-            apps_mod.create_app(app_data=payload, file=MagicMock(), uid='uid1')
-        assert e.value.status_code == 400
+    assert external_integration['app_home_url'] == 'https://example.com/oauth'

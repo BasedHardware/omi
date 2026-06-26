@@ -9329,6 +9329,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Achtergrondmodus is niet beschikbaar omdat er geen compatibel apparaat is verbonden. Verbind een Omi-, OpenGlass- of Friend Pendant-apparaat om deze functie te gebruiken.';
+
+  @override
   String get regenerateRecap => 'Samenvatting opnieuw genereren';
 
   @override

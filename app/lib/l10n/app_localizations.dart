@@ -17337,6 +17337,12 @@ abstract class AppLocalizations {
   /// **'Works with Omi devices only for now, and is being improved continuously.'**
   String get backgroundModeNote;
 
+  /// Warning shown in Background Mode sheet when no device with a native BLE audio route is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.'**
+  String get backgroundModeUnavailable;
+
   /// No description provided for @regenerateRecap.
   ///
   /// In en, this message translates to:

@@ -2,7 +2,7 @@
 #    backend/scripts/update-python-lock.sh
 lock-version = "1.0"
 created-by = "uv"
-requires-python = ">=3.11.15"
+requires-python = ">=3.11,<3.12"
 
 [[packages]]
 name = "aenum"

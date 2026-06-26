@@ -2,6 +2,7 @@ import Foundation
 
 enum AppBuild {
   static let productionBundleIdentifier = "com.omi.computer-macos"
+  static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
   private static let updateChannelDefaultsKey = "update_channel"
   private static let betaOverwriteMigrationKey = "didMigrateBetaOverwrite_v1"
   private static let desktopAppcastURL = URL(
@@ -17,6 +18,14 @@ enum AppBuild {
 
   static var isProductionBundle: Bool {
     bundleIdentifier == productionBundleIdentifier
+  }
+
+  static var isNamedDevelopmentBundle: Bool {
+    isNonProduction && bundleIdentifier != desktopDevBundleIdentifier
+  }
+
+  static var usesLazyDevPermissions: Bool {
+    isNamedDevelopmentBundle && UserDefaults.standard.bool(forKey: "devLazyPermissionsEnabled")
   }
 
   static var displayName: String {

@@ -9,6 +9,7 @@ from typing import Optional
 import httpx
 
 import database.users as users_db
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.log_sanitizer import sanitize
 import logging
@@ -88,9 +89,11 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
             new_access_token = token_data.get('access_token')
 
             if new_access_token:
-                # Update stored token
+                # Update stored token — offload the sync Firestore write to the
+                # DB executor so it does not block the event loop during
+                # concurrent chat/tool streaming.
                 integration['access_token'] = new_access_token
-                users_db.set_integration(uid, 'google_calendar', integration)
+                await run_blocking(db_executor, users_db.set_integration, uid, 'google_calendar', integration)
                 logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
                 return new_access_token
 

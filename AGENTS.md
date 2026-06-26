@@ -120,6 +120,7 @@ Key rules:
 ### Desktop (macOS — Swift app + Rust backend)
 
 The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
+- For user-visible desktop changes, follow `desktop/macos/AGENTS.md` → Changelog Entries and add a one-line `desktop/macos/CHANGELOG.json` `unreleased` entry.
 
 #### Building & Running
 
@@ -247,7 +248,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance

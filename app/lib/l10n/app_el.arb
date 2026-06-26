@@ -3061,5 +3061,6 @@
     "recordingMode": "Λειτουργία εγγραφής",
     "captureModeLater": "Αργότερα",
     "captureModeLiveDescription": "Μεταγραφή σε πραγματικό χρόνο καθώς μιλάτε.",
-    "captureModeLaterDescription": "Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε."
+    "captureModeLaterDescription": "Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε.",
+    "backgroundModeUnavailable": "Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία."
 }

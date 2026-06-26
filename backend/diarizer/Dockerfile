@@ -11,10 +11,10 @@ FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 
 WORKDIR /app
 ENV PATH="/usr/local/nvidia/bin:/usr/local/cuda/bin:/opt/venv/bin:$PATH"
-ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64"
+ENV LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/lib/x86_64-linux-gnu"
 
 # Install CUDA Runtime 13.2 Update 1 only; the pod runs inference and does not need build tools like nvcc.
-RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget && \ 
+RUN apt-get update && apt-get -y install build-essential ffmpeg curl unzip wget && \
 wget https://developer.download.nvidia.com/compute/cuda/13.2.1/local_installers/cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
 dpkg -i cuda-repo-debian13-13-2-local_13.2.1-595.58.03-1_amd64.deb && \
 cp /var/cuda-repo-debian13-13-2-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \

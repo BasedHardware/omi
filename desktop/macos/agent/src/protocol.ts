@@ -47,6 +47,15 @@ export interface ToolResultMessage {
   type: "tool_result";
   callId: string;
   result: string;
+  requestId?: string;
+  clientId?: string;
+  protocolVersion?: ProtocolVersion;
+}
+
+export interface ControlToolRequestMessage extends ProtocolEnvelope {
+  type: "control_tool";
+  name: string;
+  input: Record<string, unknown>;
 }
 
 export interface StopMessage {
@@ -93,6 +102,7 @@ export interface RefreshTokenMessage {
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
+  | ControlToolRequestMessage
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
@@ -145,7 +155,7 @@ export interface ResultMessage extends QueryScopedOutbound {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed";
+  status: "started" | "completed" | "failed";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }
@@ -194,6 +204,12 @@ export interface CancelAckMessage extends QueryScopedOutbound {
   adapterAcknowledged: boolean;
 }
 
+export interface ControlToolResultMessage extends OutboundEnvelope {
+  type: "control_tool_result";
+  name: string;
+  result: string;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -205,7 +221,8 @@ export type OutboundMessage =
   | ErrorMessage
   | AuthRequiredMessage
   | AuthSuccessMessage
-  | CancelAckMessage;
+  | CancelAckMessage
+  | ControlToolResultMessage;
 
 export function requestIdFor(message: ProtocolEnvelope & { id?: string }): string | undefined {
   return message.requestId ?? message.id;

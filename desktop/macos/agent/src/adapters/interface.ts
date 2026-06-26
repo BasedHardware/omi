@@ -4,7 +4,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
 import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
-import type { ResumeFidelity, RunMode } from "../runtime/types.js";
+import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
 /**
  * Configuration for creating a harness adapter.
@@ -133,10 +133,152 @@ export interface AdapterCapabilities {
   readonly resumeFidelity: ResumeFidelity;
   readonly supportsNativeResume: boolean;
   readonly supportsCancellation: boolean;
-  readonly requiresPinnedWorker?: boolean;
+  readonly acknowledgesCancellation: boolean;
+  readonly requiresPinnedWorker: boolean;
+  readonly supportsModelSwitching: boolean;
+  readonly supportsArtifactEmission: boolean;
+  readonly supportsTools: boolean;
+  readonly restartBehavior: "native_bindings_survive" | "process_local_bindings_stale" | "attempts_orphaned";
+}
+
+export type AdapterCapabilityKey =
+  | "nativeResume"
+  | "cancellationDispatch"
+  | "cancellationAck"
+  | "pinnedWorker"
+  | "modelSwitching"
+  | "artifactEmission"
+  | "toolSupport"
+  | "restartOrphanSemantics";
+
+export type AdapterCapabilityExpectationStatus = "required" | "unsupported" | "known_limitation";
+
+export interface AdapterCapabilityExpectation {
+  readonly status: AdapterCapabilityExpectationStatus;
+  readonly reason: string;
+  readonly followUpTicket?: string;
+}
+
+export interface AdapterCapabilityMatrixEntry {
+  readonly adapterId: string;
+  readonly productionAdapter: boolean;
+  readonly expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>;
+}
+
+const required = (reason: string): AdapterCapabilityExpectation => ({ status: "required", reason });
+const unsupported = (reason: string): AdapterCapabilityExpectation => ({ status: "unsupported", reason });
+const knownLimitation = (reason: string, followUpTicket: string): AdapterCapabilityExpectation => ({
+  status: "known_limitation",
+  reason,
+  followUpTicket,
+});
+
+const placeholderExpectations = (
+  adapterName: string,
+  followUpTicket: string
+): Record<AdapterCapabilityKey, AdapterCapabilityExpectation> => {
+  const reason = `No production ${adapterName} adapter exists in this ticket.`;
+  return {
+    nativeResume: knownLimitation(reason, followUpTicket),
+    cancellationDispatch: knownLimitation(reason, followUpTicket),
+    cancellationAck: knownLimitation(reason, followUpTicket),
+    pinnedWorker: knownLimitation(reason, followUpTicket),
+    modelSwitching: knownLimitation(reason, followUpTicket),
+    artifactEmission: knownLimitation(reason, followUpTicket),
+    toolSupport: knownLimitation(reason, followUpTicket),
+    restartOrphanSemantics: knownLimitation(reason, followUpTicket),
+  };
+};
+
+export const ADAPTER_CAPABILITY_MATRIX = {
+  acp: {
+    adapterId: "acp",
+    productionAdapter: true,
+    // Production ACP: native session ids survive adapter process restarts.
+    expectations: {
+      nativeResume: required("ACP exposes native session ids and session/resume."),
+      cancellationDispatch: required("ACP exposes session/cancel dispatch."),
+      cancellationAck: knownLimitation("ACP cancellation is fire-and-forget; no terminal ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("ACP bindings are resumable by native session id and do not require process-local pinning."),
+      modelSwitching: required("ACP supports session/set_model during open and resume."),
+      artifactEmission: unsupported("ACP adapter does not emit artifact references yet."),
+      toolSupport: required("ACP session/update tool events are projected into canonical adapter events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable bindings."),
+    },
+  },
+  "pi-mono": {
+    adapterId: "pi-mono",
+    productionAdapter: true,
+    // Production pi-mono: native ids are process-local and require worker pinning.
+    expectations: {
+      nativeResume: unsupported("pi-mono session ids are process-local and are stale after daemon restart."),
+      cancellationDispatch: required("pi-mono supports abort dispatch for the active prompt."),
+      cancellationAck: knownLimitation("pi-mono abort resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("pi-mono keeps session state in the adapter process and must stay worker-pinned while active."),
+      modelSwitching: required("pi-mono maps desktop model ids and sends set_model."),
+      artifactEmission: unsupported("pi-mono runtime does not emit artifact references yet."),
+      toolSupport: required("pi-mono uses the Omi extension/tool relay path for tools."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks non-resumable bindings stale."),
+    },
+  },
+  hermes: {
+    adapterId: "hermes",
+    productionAdapter: false,
+    expectations: placeholderExpectations("Hermes", "TICKET-hermes-adapter"),
+  },
+  openclaw: {
+    adapterId: "openclaw",
+    productionAdapter: false,
+    expectations: placeholderExpectations("OpenClaw", "TICKET-openclaw-adapter"),
+  },
+  a2a: {
+    adapterId: "a2a",
+    productionAdapter: false,
+    expectations: placeholderExpectations("A2A", "TICKET-a2a-adapter"),
+  },
+} as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
+
+export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
+export type ProductionAdapterId = "acp" | "pi-mono";
+export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
+
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono"] as const satisfies readonly ProductionAdapterId[];
+export const PLACEHOLDER_ADAPTER_IDS = ["hermes", "openclaw", "a2a"] as const satisfies readonly PlaceholderAdapterId[];
+
+export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
+  return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId);
+}
+
+export function isProductionAdapterId(adapterId: string): adapterId is ProductionAdapterId {
+  return isKnownAdapterId(adapterId) && ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
+}
+
+export function isPlaceholderAdapterId(adapterId: string): adapterId is PlaceholderAdapterId {
+  return isKnownAdapterId(adapterId) && !ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
+}
+
+const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
+  acp: "native_bindings_survive",
+  "pi-mono": "process_local_bindings_stale",
+};
+
+export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {
+  const expectations = ADAPTER_CAPABILITY_MATRIX[adapterId].expectations;
+  return {
+    resumeFidelity: expectations.nativeResume.status === "required" ? "native" : "none",
+    supportsNativeResume: expectations.nativeResume.status === "required",
+    supportsCancellation: expectations.cancellationDispatch.status === "required",
+    acknowledgesCancellation: expectations.cancellationAck.status === "required",
+    requiresPinnedWorker: expectations.pinnedWorker.status === "required",
+    supportsModelSwitching: expectations.modelSwitching.status === "required",
+    supportsArtifactEmission: expectations.artifactEmission.status === "required",
+    supportsTools: expectations.toolSupport.status === "required",
+    restartBehavior: PRODUCTION_ADAPTER_RESTART_BEHAVIOR[adapterId],
+  };
 }
 
 export interface OpenBindingInput {
+  /** Omi-owned correlation id. Adapters must not treat this as their native session id. */
   sessionId: string;
   cwd: string;
   model?: string;
@@ -146,13 +288,16 @@ export interface OpenBindingInput {
 }
 
 export interface ResumeBindingInput extends OpenBindingInput {
+  /** Adapter-owned native session id recovered from the active binding. */
   adapterNativeSessionId: string;
 }
 
 export interface AdapterBindingHandle {
   bindingId?: string;
+  /** Omi-owned correlation id. Runtime state uses this to group runs and bindings. */
   sessionId: string;
   adapterId: string;
+  /** Adapter-owned native session id. This is the only id adapters should send back to native runtimes. */
   adapterNativeSessionId: string;
   resumeFidelity: ResumeFidelity;
   cwd: string;
@@ -163,7 +308,11 @@ export interface AdapterBindingHandle {
 export type OpenedBinding = AdapterBindingHandle;
 
 export interface AdapterAttemptContext {
+  /** Omi-owned correlation id for host/runtime bookkeeping only. */
   sessionId: string;
+  /** Compatibility transport correlation for request-scoped tool relays. */
+  requestId: string;
+  clientId: string;
   runId: string;
   attemptId: string;
   binding: AdapterBindingHandle;
@@ -176,9 +325,28 @@ export interface AdapterAttemptContext {
 
 export type AdapterEventSink = (event: OutboundMessage) => void;
 
-export interface AdapterAttemptResult extends PromptResult {
+export interface AdapterArtifactReference {
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName?: string | null;
+  mimeType?: string | null;
+  contentHash?: string | null;
+  sizeBytes?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AdapterAttemptResult {
+  text: string;
+  costUsd?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
+  artifacts?: AdapterArtifactReference[];
 }
 
 export interface CancelAttemptContext {
@@ -213,4 +381,56 @@ export interface RuntimeAdapter {
 
   cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult>;
   closeBinding?(binding: AdapterBindingHandle): Promise<void>;
+}
+
+export interface PlaceholderRuntimeAdapter {
+  readonly adapterId: PlaceholderAdapterId;
+  readonly productionAdapter: false;
+  readonly implementationFactory: null;
+  readonly followUpTicket: string;
+}
+
+export const PLACEHOLDER_RUNTIME_ADAPTERS = Object.fromEntries(
+  (Object.entries(ADAPTER_CAPABILITY_MATRIX) as [KnownAdapterId, AdapterCapabilityMatrixEntry][])
+    .filter(([, entry]) => !entry.productionAdapter)
+    .map(([adapterId, entry]) => [
+      adapterId,
+      {
+        adapterId,
+        productionAdapter: false,
+        implementationFactory: null,
+        followUpTicket: entry.expectations.nativeResume.followUpTicket ?? `TICKET-${adapterId}-adapter`,
+      },
+    ])
+) as Record<PlaceholderAdapterId, PlaceholderRuntimeAdapter>;
+
+export function assertAdapterBindingContract(binding: AdapterBindingHandle, operation: string): void {
+  if (!binding.adapterNativeSessionId) {
+    throw new Error(`${operation} returned an empty adapterNativeSessionId`);
+  }
+  if (binding.adapterNativeSessionId === binding.sessionId) {
+    throw new Error(
+      `${operation} conflated Omi sessionId ${binding.sessionId} with adapterNativeSessionId`
+    );
+  }
+}
+
+export function assertAdapterAttemptResultContract(
+  context: AdapterAttemptContext,
+  result: AdapterAttemptResult,
+  operation: string
+): void {
+  if (!result.adapterSessionId) {
+    throw new Error(`${operation} returned an empty adapterSessionId`);
+  }
+  if (result.adapterSessionId === context.sessionId) {
+    throw new Error(
+      `${operation} conflated Omi sessionId ${context.sessionId} with adapter native session id`
+    );
+  }
+  if (result.adapterSessionId !== context.binding.adapterNativeSessionId) {
+    throw new Error(
+      `${operation} returned adapterSessionId ${result.adapterSessionId} for binding ${context.binding.adapterNativeSessionId}`
+    );
+  }
 }

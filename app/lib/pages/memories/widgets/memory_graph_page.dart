@@ -265,7 +265,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
-  Set<String> _highlightedNodeIds = {};
+  final Set<String> _highlightedNodeIds = {};
   int _autoRebuildAttempts = 0;
 
   @override
@@ -326,6 +326,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
       final newEdges = data['edges'] as List<dynamic>? ?? [];
+
+      if (_error != null && mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
 
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
@@ -542,16 +548,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      final textSpan = TextSpan(
+      const textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
-      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
 
       textPainter.paint(canvas, Offset(xPos, yPos));
 
@@ -817,7 +823,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _highlightedNodeIds.clear();
 
       if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId!);
+        _highlightedNodeIds.add(hitNodeId);
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {

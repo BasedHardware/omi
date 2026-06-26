@@ -108,6 +108,12 @@ final class AgentPillsManager: ObservableObject {
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
+    private static let backgroundAgentSystemPromptSuffix = """
+    You are running inside a visible floating background agent pill. Do the requested work now; do not merely acknowledge, promise, or say that you are working on it. Use the available tools when the task requires local data, browser/app/file actions, or multi-step investigation. Finish only after you have either completed the task or hit a concrete blocker, then give a concise final summary of the outcome.
+
+    This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
+    """
+
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
     @Published var recordingPillID: UUID?
@@ -425,7 +431,7 @@ final class AgentPillsManager: ObservableObject {
             await provider.sendMessage(
                 pill.query,
                 model: pill.model,
-                systemPromptSuffix: systemPromptSuffix,
+                systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
@@ -474,7 +480,9 @@ final class AgentPillsManager: ObservableObject {
             guard let self, let pill, let provider else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             await provider.sendMessage(
-                text, model: pill.model, systemPromptStyle: .floating,
+                text, model: pill.model,
+                systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
+                systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
                 legacyClientScope: "floating-pill")
@@ -603,6 +611,10 @@ final class AgentPillsManager: ObservableObject {
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
 
+        if pill.status.isFinished {
+            return
+        }
+
         if pill.status == .starting {
             pill.status = .running
         }
@@ -654,9 +666,12 @@ final class AgentPillsManager: ObservableObject {
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
+            pill.completedAt = Date()
             pill.latestActivity = errorText
         } else {
-            pill.latestActivity = pill.latestActivity.isEmpty ? "Finished" : pill.latestActivity
+            pill.status = .failed("Agent ended before reporting a final result")
+            pill.completedAt = Date()
+            pill.latestActivity = "Agent ended before reporting a final result"
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         // Keep the provider + stream alive after completion so a voice/text follow-up
@@ -692,7 +707,7 @@ final class AgentPillsManager: ObservableObject {
         case .idle:
             break
         }
-        if let statusText = projection.statusText, !statusText.isEmpty {
+        if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
             pill.latestActivity = statusText
         }
     }

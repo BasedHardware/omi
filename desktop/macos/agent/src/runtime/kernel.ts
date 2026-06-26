@@ -18,8 +18,10 @@ import type {
   AgentRun,
   AgentSession,
   AgentStore,
+  ArtifactLifecycleState,
   ArtifactRole,
   AttemptStatus,
+  NewAgentArtifact,
   ResumeFidelity,
   RunAttempt,
   RunMode,
@@ -27,6 +29,9 @@ import type {
   DelegationMode,
   DelegationStatus,
 } from "./types.js";
+import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const ACTIVE_STATUSES: readonly RunStatus[] = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"];
 const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"];
@@ -34,6 +39,91 @@ const DEFAULT_DELEGATION_MAX_DEPTH = 3;
 const HARD_DELEGATION_MAX_DEPTH = 5;
 const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
 const HARD_DELEGATION_MAX_BUDGET_USD = 10;
+
+function stableHash(value: string | undefined): string {
+  return createHash("sha256").update(value ?? "").digest("hex");
+}
+
+const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
+  "OMI_BRIDGE_PIPE",
+  "OMI_CONTEXT_FILE",
+  "OMI_REQUEST_ID",
+  "OMI_CLIENT_ID",
+  "OMI_PROTOCOL_VERSION",
+  "OMI_SESSION_ID",
+  "OMI_RUN_ID",
+  "OMI_ATTEMPT_ID",
+  "OMI_ADAPTER_SESSION_ID",
+  "OMI_LEGACY_ADAPTER_SESSION_ID",
+]);
+
+function stableJsonStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJsonStringify(entry)).join(",")}]`;
+  }
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJsonStringify(object[key])}`)
+    .join(",")}}`;
+}
+
+function stableMcpServerConfig(value: unknown): unknown {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((server) => {
+    if (!server || typeof server !== "object" || Array.isArray(server)) {
+      return server;
+    }
+    const normalized: Record<string, unknown> = { ...(server as Record<string, unknown>) };
+    if (Array.isArray(normalized.env)) {
+      normalized.env = normalized.env
+        .filter((entry) => {
+          if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            return true;
+          }
+          const name = (entry as Record<string, unknown>).name;
+          return typeof name !== "string" || !REQUEST_SCOPED_MCP_ENV_KEYS.has(name);
+        })
+        .sort((left, right) => {
+          const leftName =
+            left && typeof left === "object" && !Array.isArray(left)
+              ? String((left as Record<string, unknown>).name ?? "")
+              : "";
+          const rightName =
+            right && typeof right === "object" && !Array.isArray(right)
+              ? String((right as Record<string, unknown>).name ?? "")
+              : "";
+          return leftName.localeCompare(rightName);
+        });
+    }
+    return normalized;
+  });
+}
+
+function stableJsonHash(value: unknown): string {
+  return stableHash(stableJsonStringify(value ?? null));
+}
+
+function parseJsonObject(value: string | null | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function bindingMetadata(input: ExecuteAgentRunInput): string {
+  return JSON.stringify({
+    mcpServersHash: stableJsonHash(stableMcpServerConfig(input.mcpServers ?? [])),
+  });
+}
 
 export interface KernelSessionResolutionInput {
   sessionId?: string;
@@ -100,6 +190,7 @@ export interface KernelSessionSummary {
 
 export interface GetRunInput {
   runId: string;
+  ownerId?: string;
   includeEvents?: boolean;
   eventLimit?: number;
 }
@@ -119,8 +210,43 @@ export interface InspectArtifactsInput {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  ownerId?: string;
   role?: ArtifactRole;
   limit?: number;
+}
+
+export interface UpdateArtifactLifecycleInput {
+  artifactId: string;
+  state: ArtifactLifecycleState;
+  ownerId?: string;
+  sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface UpdateArtifactLifecycleResult {
+  artifact: AgentArtifact;
+  changed: boolean;
+  event: AgentEvent | null;
+}
+
+export interface PersistArtifactInput {
+  sessionId?: string;
+  runId?: string | null;
+  attemptId?: string | null;
+  kind: string;
+  role: ArtifactRole;
+  uri: string;
+  displayName?: string | null;
+  mimeType?: string | null;
+  contentHash?: string | null;
+  sizeBytes?: number | null;
+  metadata?: Record<string, unknown>;
+  metadataJson?: string;
+  artifactId?: string;
+  createdAtMs?: number;
 }
 
 export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
@@ -131,6 +257,15 @@ export interface InvalidateBindingsInput extends KernelSessionResolutionInput {
 export interface InvalidateBindingsResult {
   sessionId?: string;
   invalidatedBindingIds: string[];
+}
+
+export interface StaleProcessLocalBindingsInput {
+  adapterId: string;
+  reason: string;
+}
+
+export interface StaleProcessLocalBindingsResult {
+  staleBindingIds: string[];
 }
 
 export interface SendAgentMessageInput {
@@ -144,6 +279,7 @@ export interface SendAgentMessageInput {
   adapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   metadata?: Record<string, unknown>;
 }
 
@@ -163,6 +299,7 @@ export interface DelegateAgentInput {
   defaultAdapterId?: string;
   cwd?: string;
   model?: string;
+  mcpServers?: Record<string, unknown>[];
   runMode?: RunMode;
   context?: string;
   maxDepth?: number;
@@ -256,6 +393,7 @@ export class AgentRuntimeKernel {
       adapterId: input.adapterId ?? session.defaultAdapterId,
       cwd: input.cwd ?? session.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       metadata: input.metadata,
     });
   }
@@ -284,6 +422,7 @@ export class AgentRuntimeKernel {
       mode: input.runMode ?? "ask",
       cwd: input.cwd ?? parentRun.cwd ?? parentSession.defaultCwd ?? undefined,
       model: input.model,
+      mcpServers: input.mcpServers,
       parentRunId: parentRun.runId,
       metadata: {
         ...(input.metadata ?? {}),
@@ -328,13 +467,13 @@ export class AgentRuntimeKernel {
         requestedModelId: input.model ?? null,
         cwd: input.cwd ?? session.defaultCwd,
       });
-      this.touchSession(session.sessionId);
       this.appendEvent({
         sessionId: session.sessionId,
         runId: run.runId,
-        type: "run.created",
-        payload: { runId: run.runId, requestId: run.requestId },
+        type: "run.queued",
+        payload: { runId: run.runId, requestId: run.requestId, clientId: run.clientId },
       });
+      this.touchSession(session.sessionId);
       return { session, run };
     });
   }
@@ -373,23 +512,48 @@ export class AgentRuntimeKernel {
 
       let binding: AdapterBinding;
       let handle: AdapterBindingHandle;
+      let bindingResolutionProtectedBindingId: string | null = null;
       try {
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
-          return pool.runExclusiveQueued(bindingQueueKey, `${attempt.attemptId}:binding`, (worker) =>
-            this.resolveBindingForAttempt({
-              input,
-              session: accepted.session,
-              adapter: worker.adapter,
-              attempt,
-              adapterId,
-            })
+          return pool.runExclusiveQueued(
+            bindingQueueKey,
+            `${attempt.attemptId}:binding`,
+            async (worker) => {
+              const resolved = await this.resolveBindingForAttempt({
+                input,
+                session: accepted.session,
+                adapter: worker.adapter,
+                attempt,
+                adapterId,
+              });
+              if (worker.adapter.capabilities.requiresPinnedWorker) {
+                if (resolved.replacesBindingId) {
+                  worker.replacePinnedBinding(resolved.replacesBindingId, resolved.handle);
+                } else {
+                  worker.pinBinding(resolved.handle);
+                }
+              }
+              return resolved;
+            },
+            {
+              ...(bindingQueueKey
+                ? {}
+                : {
+                    onIdlePinnedBindingEvicted: (evictedBindingId: string) => {
+                      this.markEvictedBindingStale(evictedBindingId, "pinned_worker_reassigned");
+                    },
+                  }),
+              protectPinnedBindingAfterWork: true,
+            },
           );
         });
         binding = resolved.binding;
         handle = resolved.handle;
+        bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
+        pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
         if (isStaleBindingError(error)) {
           this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
           retryReason = "stale_binding";
@@ -406,6 +570,8 @@ export class AgentRuntimeKernel {
       }
 
       const abortController = new AbortController();
+      const protectedPinnedBindingId = pool.requiresPinnedWorkers ? handle.bindingId : null;
+      pool.protectPinnedBinding(protectedPinnedBindingId);
 
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
@@ -419,10 +585,23 @@ export class AgentRuntimeKernel {
             attemptId: attempt.attemptId,
             sessionId: accepted.session.sessionId,
           });
+          refreshMcpAttemptContext(mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId), {
+            ownerId: input.ownerId,
+            requestId: accepted.run.requestId,
+            clientId: accepted.run.clientId,
+            protocolVersion: input.metadata?.protocolVersion,
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterSessionId: handle.adapterNativeSessionId,
+            legacyAdapterSessionId: input.legacyAdapterSessionId,
+          });
           this.markAttemptRunning(attempt, binding);
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
+              requestId: accepted.run.requestId,
+              clientId: accepted.run.clientId,
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
               binding: handle,
@@ -464,6 +643,8 @@ export class AgentRuntimeKernel {
           errorMessage: wasCancelling ? null : messageFrom(error),
         });
         break;
+      } finally {
+        pool.unprotectPinnedBinding(protectedPinnedBindingId);
       }
     }
 
@@ -479,9 +660,12 @@ export class AgentRuntimeKernel {
     };
   }
 
-  async cancelRun(runId: string): Promise<CancelRunResult> {
+  async cancelRun(runId: string, input: { ownerId?: string } = {}): Promise<CancelRunResult> {
     const active = this.activeExecutions.get(runId);
     const run = this.readRun(runId);
+    if (input.ownerId) {
+      this.assertRunOwner(run, input.ownerId);
+    }
     if (TERMINAL_STATUSES.includes(run.status)) {
       return {
         accepted: false,
@@ -560,18 +744,6 @@ export class AgentRuntimeKernel {
           type: "attempt.cancel_dispatch",
           payload: dispatch,
         });
-        this.appendEvent({
-          sessionId: run.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-          type: "run.cancel_ack",
-          payload: {
-            accepted: true,
-            dispatchAttempted,
-            adapterAcknowledged,
-            message: dispatch.message,
-          },
-        });
       });
     }
 
@@ -625,6 +797,9 @@ export class AgentRuntimeKernel {
   getRun(input: GetRunInput): KernelRunDetails {
     const run = this.readRun(input.runId);
     const session = this.readSession(run.sessionId);
+    if (input.ownerId) {
+      this.assertSessionOwner(session, input.ownerId);
+    }
     return {
       session,
       run,
@@ -638,7 +813,38 @@ export class AgentRuntimeKernel {
   }
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    if (!input.sessionId && !input.runId && !input.attemptId) {
+      throw new Error("Inspecting artifacts requires sessionId, runId, or attemptId");
+    }
+    if (input.ownerId) {
+      this.assertArtifactSelectorOwner(input, input.ownerId);
+    }
     return this.readArtifacts(input);
+  }
+
+  updateArtifactLifecycle(input: UpdateArtifactLifecycleInput): UpdateArtifactLifecycleResult {
+    return this.withTransaction(() => {
+      const artifact = this.readArtifact(input.artifactId);
+      this.assertArtifactScope(artifact, input);
+      if (input.ownerId) {
+        this.assertSessionOwner(this.readSession(artifact.sessionId), input.ownerId);
+      }
+      if (artifact.lifecycleState === input.state) {
+        return { artifact, changed: false, event: null };
+      }
+
+      const now = Date.now();
+      this.store.execute(
+        "UPDATE artifacts SET lifecycle_state = ?, lifecycle_updated_at_ms = ? WHERE artifact_id = ?",
+        [input.state, now, artifact.artifactId],
+      );
+      const updatedArtifact = this.readArtifact(artifact.artifactId);
+      return { artifact: updatedArtifact, changed: true, event: null };
+    });
+  }
+
+  persistArtifact(input: PersistArtifactInput): AgentArtifact {
+    return this.withTransaction(() => this.persistArtifactInTransaction(input));
   }
 
   hasActiveExecutionForAdapter(adapterId: string): boolean {
@@ -709,7 +915,7 @@ export class AgentRuntimeKernel {
           sessionId: String(rows.find((row) => String(row.binding_id) === bindingId)?.session_id),
           runId: null,
           attemptId: null,
-          type: "binding.invalidated",
+          type: "binding.stale",
           payload: {
             bindingId,
             adapterId: input.adapterId,
@@ -720,6 +926,46 @@ export class AgentRuntimeKernel {
     });
 
     return { sessionId: session?.sessionId, invalidatedBindingIds };
+  }
+
+  staleProcessLocalBindings(input: StaleProcessLocalBindingsInput): StaleProcessLocalBindingsResult {
+    const rows = this.store.allRows(
+      `SELECT binding_id, session_id
+       FROM adapter_bindings
+       WHERE adapter_id = ?
+         AND resume_fidelity = ?
+         AND status = ?`,
+      [input.adapterId, "none", "active"],
+    );
+    const staleBindingIds = rows.map((row) => String(row.binding_id));
+    if (staleBindingIds.length === 0) {
+      return { staleBindingIds };
+    }
+
+    const now = Date.now();
+    this.withTransaction(() => {
+      for (const row of rows) {
+        const bindingId = String(row.binding_id);
+        this.updateBinding(bindingId, {
+          status: "stale",
+          invalidatedAtMs: now,
+          updatedAtMs: now,
+        });
+        this.appendEvent({
+          sessionId: String(row.session_id),
+          runId: null,
+          attemptId: null,
+          type: "binding.stale",
+          payload: {
+            bindingId,
+            adapterId: input.adapterId,
+            reason: input.reason,
+          },
+        });
+      }
+    });
+
+    return { staleBindingIds };
   }
 
   private createDelegatedRun(
@@ -779,7 +1025,6 @@ export class AgentRuntimeKernel {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         delegationValues(delegation),
       );
-      this.touchSession(session.sessionId);
       this.appendEvent({
         sessionId: parentSession.sessionId,
         runId: parentRun.runId,
@@ -794,14 +1039,16 @@ export class AgentRuntimeKernel {
       this.appendEvent({
         sessionId: session.sessionId,
         runId: run.runId,
-        type: "run.created",
+        type: "run.queued",
         payload: {
           runId: run.runId,
           requestId: run.requestId,
+          clientId: run.clientId,
           parentRunId: parentRun.runId,
           delegationId: delegation.delegationId,
         },
       });
+      this.touchSession(session.sessionId);
       return { session, run, delegation };
     });
   }
@@ -853,18 +1100,20 @@ export class AgentRuntimeKernel {
          WHERE delegation_id = ?`,
         [status, status === "running" || status === "pending" ? null : now, delegation.delegationId],
       );
-      this.appendEvent({
-        sessionId: delegation.parentSessionId,
-        runId: delegation.parentRunId,
-        type: status === "running" ? "delegation.running" : "delegation.completed",
-        payload: {
-          delegationId: delegation.delegationId,
-          childSessionId: delegation.childSessionId,
-          childRunId: delegation.childRunId,
-          status,
-          errorMessage,
-        },
-      });
+      if (status !== "running") {
+        this.appendEvent({
+          sessionId: delegation.parentSessionId,
+          runId: delegation.parentRunId,
+          type: "delegation.completed",
+          payload: {
+            delegationId: delegation.delegationId,
+            childSessionId: delegation.childSessionId,
+            childRunId: delegation.childRunId,
+            status,
+            errorMessage,
+          },
+        });
+      }
     });
     return this.readDelegation(delegation.delegationId);
   }
@@ -888,7 +1137,7 @@ export class AgentRuntimeKernel {
     const existing = this.findExistingSession(input);
     if (existing) return existing;
     const shouldStoreLegacyAlias = !(input.externalRefKind && input.externalRefId);
-    return this.store.insertSession({
+    const session = this.store.insertSession({
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind,
       externalRefKind: input.externalRefKind ?? null,
@@ -898,6 +1147,12 @@ export class AgentRuntimeKernel {
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
     });
+    this.appendEvent({
+      sessionId: session.sessionId,
+      type: "session.created",
+      payload: { sessionId: session.sessionId, ownerId: session.ownerId, surfaceKind: session.surfaceKind },
+    });
+    return session;
   }
 
   private findExistingSession(input: KernelSessionResolutionInput): AgentSession | undefined {
@@ -967,6 +1222,12 @@ export class AgentRuntimeKernel {
       this.appendEvent({
         sessionId: run.sessionId,
         runId: input.runId,
+        type: "run.starting",
+        payload: { runId: input.runId, attemptNo: input.attemptNo },
+      });
+      this.appendEvent({
+        sessionId: run.sessionId,
+        runId: input.runId,
         attemptId: attempt.attemptId,
         type: "attempt.created",
         payload: {
@@ -986,11 +1247,11 @@ export class AgentRuntimeKernel {
     adapter: RuntimeAdapter;
     attempt: RunAttempt;
     adapterId: string;
-  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  }): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const active = this.readActiveBinding(input.session.sessionId, input.adapterId);
     if (active) {
       const handle = await this.resumeOrReplaceBinding(active, input);
-      return { binding: this.readBinding(handle.bindingId!), handle };
+      return { binding: this.readBinding(handle.bindingId!), handle, replacesBindingId: handle.replacesBindingId };
     }
 
     const nextGeneration = this.nextBindingGeneration(input.session.sessionId, input.adapterId);
@@ -1004,8 +1265,10 @@ export class AgentRuntimeKernel {
           adapterInstanceId: this.runtimeNodeId,
           resumeFidelity: "native",
           status: "active",
-          cwd: input.input.cwd ?? input.session.defaultCwd,
+          cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
           modelId: input.input.model ?? null,
+          systemPromptHash: stableHash(input.input.systemPrompt),
+          metadataJson: bindingMetadata(input.input),
         });
         this.appendEvent({
           sessionId: input.session.sessionId,
@@ -1041,6 +1304,33 @@ export class AgentRuntimeKernel {
     };
   }
 
+  private isBindingCompatible(
+    binding: AdapterBinding,
+    input: {
+      input: ExecuteAgentRunInput;
+      session: AgentSession;
+    }
+  ): boolean {
+    const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
+    const bindingCwd = binding.cwd ?? process.cwd();
+    if (bindingCwd !== requestedCwd) {
+      return false;
+    }
+    if (input.input.model !== undefined && binding.modelId !== input.input.model) {
+      return false;
+    }
+    const requestedSystemPromptHash = stableHash(input.input.systemPrompt);
+    if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
+      return false;
+    }
+    const metadata = parseJsonObject(binding.metadataJson);
+    const expectedMcpServersHash = stableJsonHash(stableMcpServerConfig(input.input.mcpServers ?? []));
+    if (metadata.mcpServersHash === undefined) {
+      return true;
+    }
+    return metadata.mcpServersHash === expectedMcpServersHash;
+  }
+
   private async resumeOrReplaceBinding(
     binding: AdapterBinding,
     input: {
@@ -1050,7 +1340,12 @@ export class AgentRuntimeKernel {
       attempt: RunAttempt;
       adapterId: string;
     }
-  ): Promise<AdapterBindingHandle> {
+  ): Promise<AdapterBindingHandle & { replacesBindingId?: string }> {
+    if (!this.isBindingCompatible(binding, input)) {
+      this.markBindingStale(binding, input.attempt, "binding_context_changed");
+      const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
+      return { ...opened.handle, replacesBindingId: opened.replacesBindingId };
+    }
     const canUseProcessLocalBinding =
       binding.adapterInstanceId === this.runtimeNodeId &&
       binding.adapterNativeSessionId &&
@@ -1058,7 +1353,7 @@ export class AgentRuntimeKernel {
     if (!binding.adapterNativeSessionId || (!input.adapter.capabilities.supportsNativeResume && !canUseProcessLocalBinding)) {
       this.markBindingStale(binding, input.attempt, "binding_not_resumable");
       const opened = await this.openNewBinding(input, binding.bindingGeneration + 1, binding.bindingId);
-      return opened.handle;
+      return { ...opened.handle, replacesBindingId: opened.replacesBindingId };
     }
     try {
       const resumed = await input.adapter.resumeBinding({
@@ -1067,11 +1362,15 @@ export class AgentRuntimeKernel {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: input.input.mcpServers,
+        mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
           adapterInstanceId: this.runtimeNodeId,
+          cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? null,
+          modelId: input.input.model ?? binding.modelId ?? null,
+          systemPromptHash: stableHash(input.input.systemPrompt),
+          metadataJson: bindingMetadata(input.input),
           lastUsedAtMs: Date.now(),
           updatedAtMs: Date.now(),
         });
@@ -1109,16 +1408,22 @@ export class AgentRuntimeKernel {
     },
     generation: number,
     replacesBindingId: string | null
-  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle }> {
+  ): Promise<{ binding: AdapterBinding; handle: AdapterBindingHandle; replacesBindingId?: string }> {
     const opened = await input.adapter.openBinding({
       sessionId: input.session.sessionId,
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
-      mcpServers: input.input.mcpServers,
+      mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
       metadata: input.input.metadata,
     });
     const binding = this.withTransaction(() => {
+      this.closeConflictingNativeBinding(
+        input.adapterId,
+        opened.adapterNativeSessionId,
+        input.attempt,
+        "native_session_reused"
+      );
       const created = this.store.insertAdapterBinding({
         sessionId: input.session.sessionId,
         adapterId: input.adapterId,
@@ -1129,6 +1434,8 @@ export class AgentRuntimeKernel {
         status: "active",
         cwd: opened.cwd,
         modelId: opened.model ?? input.input.model ?? null,
+        systemPromptHash: stableHash(input.input.systemPrompt),
+        metadataJson: bindingMetadata(input.input),
         lastUsedAtMs: Date.now(),
       });
       this.appendEvent({
@@ -1148,6 +1455,7 @@ export class AgentRuntimeKernel {
     });
     return {
       binding,
+      replacesBindingId: replacesBindingId ?? undefined,
       handle: {
         ...opened,
         bindingId: binding.bindingId,
@@ -1199,6 +1507,21 @@ export class AgentRuntimeKernel {
         lastUsedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
+      for (const artifact of result.artifacts ?? []) {
+        this.persistArtifactInTransaction({
+          sessionId: session.sessionId,
+          runId,
+          attemptId: attempt.attemptId,
+          kind: artifact.kind,
+          role: artifact.role,
+          uri: artifact.uri,
+          displayName: artifact.displayName,
+          mimeType: artifact.mimeType,
+          contentHash: artifact.contentHash,
+          sizeBytes: artifact.sizeBytes,
+          metadata: artifact.metadata,
+        });
+      }
       this.finishAttemptAndRun({
         sessionId: session.sessionId,
         runId,
@@ -1251,13 +1574,37 @@ export class AgentRuntimeKernel {
       completedAtMs: now,
       updatedAtMs: now,
     });
-    this.appendEvent({
-      sessionId: input.sessionId,
-      runId: input.runId,
-      attemptId: input.attemptId,
-      type: `attempt.${completedStatus}`,
-      payload: { attemptId: input.attemptId, status: completedStatus },
-    });
+    if (completedStatus === "failed" || completedStatus === "cancelled") {
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: completedStatus === "failed" ? "attempt.failed" : "attempt.cancelled",
+        payload: { attemptId: input.attemptId, status: completedStatus },
+      });
+    }
+    if (completedStatus === "succeeded") {
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: "message.completed",
+        payload: { text: input.finalText ?? "" },
+      });
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: "usage.updated",
+        payload: {
+          inputTokens: input.result?.inputTokens ?? null,
+          outputTokens: input.result?.outputTokens ?? null,
+          cacheReadTokens: input.result?.cacheReadTokens ?? null,
+          cacheWriteTokens: input.result?.cacheWriteTokens ?? null,
+          costUsd: input.result?.costUsd ?? null,
+        },
+      });
+    }
     this.appendEvent({
       sessionId: input.sessionId,
       runId: input.runId,
@@ -1331,6 +1678,10 @@ export class AgentRuntimeKernel {
     if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
       return;
     }
+    const eventType = canonicalAdapterEventType(event);
+    if (!eventType) {
+      return;
+    }
     this.withTransaction(() => {
       if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
         return;
@@ -1339,10 +1690,46 @@ export class AgentRuntimeKernel {
         sessionId,
         runId,
         attemptId,
-        type: `adapter.${event.type}`,
+        type: eventType,
         retentionClass: event.type === "text_delta" || event.type === "thinking_delta" ? "transient" : "core",
         payload: event,
       });
+    });
+  }
+
+  private closeConflictingNativeBinding(
+    adapterId: string,
+    adapterNativeSessionId: string | null | undefined,
+    attempt: RunAttempt,
+    reason: string
+  ): void {
+    if (!adapterNativeSessionId) {
+      return;
+    }
+    const row = this.store.getOptionalRow(
+      `SELECT binding_id, session_id, status
+       FROM adapter_bindings
+       WHERE adapter_id = ? AND adapter_native_session_id = ? AND status NOT IN ('active', 'closed')
+       ORDER BY updated_at_ms DESC
+       LIMIT 1`,
+      [adapterId, adapterNativeSessionId]
+    );
+    if (!row) {
+      return;
+    }
+    const now = Date.now();
+    const bindingId = String(row.binding_id);
+    this.updateBinding(bindingId, {
+      status: "closed",
+      invalidatedAtMs: now,
+      updatedAtMs: now,
+    });
+    this.appendEvent({
+      sessionId: String(row.session_id),
+      runId: attempt.runId,
+      attemptId: attempt.attemptId,
+      type: "binding.stale",
+      payload: { bindingId, adapterId, adapterNativeSessionId, reason },
     });
   }
 
@@ -1362,6 +1749,94 @@ export class AgentRuntimeKernel {
         payload: { bindingId: binding.bindingId, reason },
       });
     });
+  }
+
+  private markEvictedBindingStale(bindingId: string, reason: string): void {
+    const binding = this.readBinding(bindingId);
+    this.withTransaction(() => {
+      this.updateBinding(binding.bindingId, {
+        status: "stale",
+        invalidatedAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
+      this.appendEvent({
+        sessionId: binding.sessionId,
+        runId: null,
+        attemptId: null,
+        type: "binding.stale",
+        payload: { bindingId: binding.bindingId, reason },
+      });
+    });
+  }
+
+  private persistArtifactInTransaction(input: PersistArtifactInput): AgentArtifact {
+    const scope = this.resolveArtifactScope(input);
+    const artifactInput: NewAgentArtifact = {
+      artifactId: input.artifactId,
+      sessionId: scope.sessionId,
+      runId: scope.runId,
+      attemptId: scope.attemptId,
+      kind: input.kind,
+      role: input.role,
+      uri: input.uri,
+      displayName: input.displayName ?? null,
+      mimeType: input.mimeType ?? null,
+      contentHash: input.contentHash ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      metadataJson: input.metadataJson ?? JSON.stringify(input.metadata ?? {}),
+      createdAtMs: input.createdAtMs,
+    };
+    const artifact = this.store.insertArtifact(artifactInput);
+    this.appendEvent({
+      sessionId: artifact.sessionId,
+      runId: artifact.runId,
+      attemptId: artifact.attemptId,
+      type: "artifact.created",
+      payload: {
+        artifactId: artifact.artifactId,
+        kind: artifact.kind,
+        role: artifact.role,
+        uri: artifact.uri,
+        displayName: artifact.displayName,
+        mimeType: artifact.mimeType,
+        contentHash: artifact.contentHash,
+        sizeBytes: artifact.sizeBytes,
+        lifecycleState: artifact.lifecycleState,
+      },
+    });
+    return artifact;
+  }
+
+  private resolveArtifactScope(input: PersistArtifactInput): {
+    sessionId: string;
+    runId: string | null;
+    attemptId: string | null;
+  } {
+    let sessionId = input.sessionId ?? null;
+    let runId = input.runId ?? null;
+    const attemptId = input.attemptId ?? null;
+
+    if (attemptId) {
+      const attempt = this.readAttempt(attemptId);
+      if (runId && runId !== attempt.runId) {
+        throw new Error(`Artifact attempt ${attemptId} belongs to run ${attempt.runId}, not ${runId}`);
+      }
+      runId = attempt.runId;
+    }
+
+    if (runId) {
+      const run = this.readRun(runId);
+      if (sessionId && sessionId !== run.sessionId) {
+        throw new Error(`Artifact run ${runId} belongs to session ${run.sessionId}, not ${sessionId}`);
+      }
+      sessionId = run.sessionId;
+    }
+
+    if (!sessionId) {
+      throw new Error("Artifact persistence requires sessionId, runId, or attemptId");
+    }
+
+    return { sessionId, runId, attemptId };
   }
 
   private appendEvent(input: {
@@ -1456,6 +1931,32 @@ export class AgentRuntimeKernel {
 
   private readRun(runId: string): AgentRun {
     return runFromRow(this.store.getRow("SELECT * FROM runs WHERE run_id = ?", [runId]));
+  }
+
+  private assertSessionOwner(session: AgentSession, ownerId: string): void {
+    if (session.ownerId !== ownerId) {
+      throw new Error("Agent session is not visible to the active owner");
+    }
+  }
+
+  private assertRunOwner(run: AgentRun, ownerId: string): void {
+    this.assertSessionOwner(this.readSession(run.sessionId), ownerId);
+  }
+
+  private assertAttemptOwner(attempt: RunAttempt, ownerId: string): void {
+    this.assertRunOwner(this.readRun(attempt.runId), ownerId);
+  }
+
+  private assertArtifactSelectorOwner(input: InspectArtifactsInput, ownerId: string): void {
+    if (input.sessionId) {
+      this.assertSessionOwner(this.readSession(input.sessionId), ownerId);
+    }
+    if (input.runId) {
+      this.assertRunOwner(this.readRun(input.runId), ownerId);
+    }
+    if (input.attemptId) {
+      this.assertAttemptOwner(this.readAttempt(input.attemptId), ownerId);
+    }
   }
 
   private readLatestRunForSession(sessionId: string): AgentRun | undefined {
@@ -1554,6 +2055,25 @@ export class AgentRuntimeKernel {
       .map(artifactFromRow);
   }
 
+  private readArtifact(artifactId: string): AgentArtifact {
+    return artifactFromRow(this.store.getRow("SELECT * FROM artifacts WHERE artifact_id = ?", [artifactId]));
+  }
+
+  private assertArtifactScope(
+    artifact: AgentArtifact,
+    input: Pick<UpdateArtifactLifecycleInput, "sessionId" | "runId" | "attemptId">
+  ): void {
+    if (input.sessionId && input.sessionId !== artifact.sessionId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to session ${artifact.sessionId}, not ${input.sessionId}`);
+    }
+    if (input.runId && input.runId !== artifact.runId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to run ${artifact.runId ?? "none"}, not ${input.runId}`);
+    }
+    if (input.attemptId && input.attemptId !== artifact.attemptId) {
+      throw new Error(`Artifact ${artifact.artifactId} belongs to attempt ${artifact.attemptId ?? "none"}, not ${input.attemptId}`);
+    }
+  }
+
   private readDelegation(delegationId: string): AgentDelegation {
     return delegationFromRow(this.store.getRow("SELECT * FROM delegations WHERE delegation_id = ?", [delegationId]));
   }
@@ -1609,6 +2129,11 @@ export class AgentRuntimeKernel {
 
   private touchSession(sessionId: string): void {
     this.store.execute("UPDATE sessions SET updated_at_ms = ?, last_activity_at_ms = ? WHERE session_id = ?", [Date.now(), Date.now(), sessionId]);
+    this.appendEvent({
+      sessionId,
+      type: "session.updated",
+      payload: { sessionId },
+    });
   }
 
   private updateRun(runId: string, patch: Partial<AgentRun>): void {
@@ -1847,9 +2372,102 @@ function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
     mimeType: nullableText(row.mime_type),
     contentHash: nullableText(row.content_hash),
     sizeBytes: nullableNumber(row.size_bytes),
+    lifecycleState: text(row.lifecycle_state) as ArtifactLifecycleState,
+    lifecycleUpdatedAtMs: nullableNumber(row.lifecycle_updated_at_ms),
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
   };
+}
+
+function canonicalAdapterEventType(event: OutboundMessage): string | undefined {
+  switch (event.type) {
+    case "text_delta":
+      return "message.delta";
+    case "thinking_delta":
+      return "progress.updated";
+    case "tool_activity":
+      if (event.status === "started") return "tool.started";
+      if (event.status === "completed") return "tool.completed";
+      if (event.status === "failed") return "tool.failed";
+      return "tool.updated";
+    case "tool_use":
+      return "tool.started";
+    case "tool_result_display":
+      return "tool.completed";
+    case "error":
+      return "progress.updated";
+    default:
+      return undefined;
+  }
+}
+
+function refreshMcpAttemptContext(
+  mcpServers: Record<string, unknown>[],
+  context: {
+    ownerId: string;
+    requestId: string;
+    clientId: string;
+    protocolVersion?: unknown;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    adapterSessionId?: string;
+    legacyAdapterSessionId?: string;
+  }
+): void {
+  for (const server of mcpServers) {
+    const env = Array.isArray(server.env) ? server.env : [];
+    const contextFile = env.find((entry) =>
+      entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      (entry as Record<string, unknown>).name === "OMI_CONTEXT_FILE"
+    );
+    const contextFilePath =
+      contextFile && typeof contextFile === "object" && !Array.isArray(contextFile)
+        ? (contextFile as Record<string, unknown>).value
+        : undefined;
+    if (typeof contextFilePath !== "string" || !contextFilePath.trim()) {
+      continue;
+    }
+    writeFileSync(contextFilePath, JSON.stringify(context), { encoding: "utf8" });
+  }
+}
+
+function mcpServersForBinding(
+  mcpServers: Record<string, unknown>[],
+  sessionId: string,
+  adapterId: string,
+  runtimeNodeId: string
+): Record<string, unknown>[] {
+  return mcpServers.map((server) => {
+    if (!server || typeof server !== "object" || Array.isArray(server)) {
+      return server;
+    }
+    const normalized: Record<string, unknown> = { ...server };
+    const env = Array.isArray(normalized.env) ? normalized.env : [];
+    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    return normalized;
+  });
+}
+
+function upsertEnv(env: unknown[], name: string, value: string): unknown[] {
+  let replaced = false;
+  const next = env.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || (entry as Record<string, unknown>).name !== name) {
+      return entry;
+    }
+    replaced = true;
+    return { ...entry, value };
+  });
+  if (!replaced) {
+    next.push({ name, value });
+  }
+  return next;
+}
+
+function contextFileForBinding(sessionId: string, adapterId: string, runtimeNodeId: string): string {
+  return `${tmpdir()}/omi-tools-context-${process.pid}-${encodeURIComponent(runtimeNodeId)}-${encodeURIComponent(sessionId)}-${encodeURIComponent(adapterId)}.json`;
 }
 
 const runColumnMap: Record<string, string> = {

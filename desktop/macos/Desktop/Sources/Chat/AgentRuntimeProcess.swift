@@ -10,6 +10,11 @@ actor AgentRuntimeProcess {
   }
 
   struct RuntimeMessage {
+    struct RequestKey: Hashable, Equatable {
+      let clientId: String
+      let requestId: String
+    }
+
     enum Kind: Equatable {
       case initMessage
       case textDelta
@@ -22,6 +27,7 @@ actor AgentRuntimeProcess {
       case authRequired
       case authSuccess
       case cancelAck
+      case controlToolResult
       case unknown(String)
     }
 
@@ -31,7 +37,10 @@ actor AgentRuntimeProcess {
     let protocolVersion: Int?
     let payload: [String: Any]
 
-    var routingKey: String? { requestId }
+    var requestKey: RequestKey? {
+      guard let clientId, let requestId else { return nil }
+      return RequestKey(clientId: clientId, requestId: requestId)
+    }
 
     static func parse(_ json: String) -> RuntimeMessage? {
       guard let data = json.data(using: .utf8),
@@ -62,6 +71,7 @@ actor AgentRuntimeProcess {
       case "auth_required": return .authRequired
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
+      case "control_tool_result": return .controlToolResult
       default: return .unknown(type)
       }
     }
@@ -89,6 +99,12 @@ actor AgentRuntimeProcess {
     var cancelAck: RuntimeMessage?
   }
 
+  private struct ActiveControlRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<String, Error>
+  }
+
   private var process: Process?
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
@@ -98,7 +114,8 @@ actor AgentRuntimeProcess {
   private var processGeneration: UInt64 = 0
   private var lastExitWasOOM = false
   private var clients: [String: ClientRegistration] = [:]
-  private var activeRequests: [String: ActiveRequest] = [:]
+  private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
+  private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private var receivedInit = false
   private var isRestarting = false
@@ -123,8 +140,12 @@ actor AgentRuntimeProcess {
   func unregisterClient(clientId: String) async {
     clients.removeValue(forKey: clientId)
 
-    for (requestId, request) in activeRequests where request.clientId == clientId {
-      activeRequests.removeValue(forKey: requestId)
+    for (requestKey, request) in activeRequests where request.clientId == clientId {
+      activeRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeControlRequests where request.clientId == clientId {
+      activeControlRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
 
@@ -145,8 +166,10 @@ actor AgentRuntimeProcess {
   }
 
   func restart(harnessMode: String) async throws {
-    guard activeRequests.isEmpty else {
-      log("AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) are active")
+    guard activeRequests.isEmpty, activeControlRequests.isEmpty else {
+      log(
+        "AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) and \(activeControlRequests.count) control request(s) are active"
+      )
       throw BridgeError.requestAlreadyActive
     }
     isRestarting = true
@@ -211,10 +234,45 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
+  func controlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeControlRequests[requestKey] = ActiveControlRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "control_tool",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "name": name,
+        "input": input,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send control tool request"))
+      }
+    }
+  }
+
   func interrupt(clientId: String, requestId: String) {
-    guard var request = activeRequests[requestId], request.clientId == clientId else { return }
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    guard var request = activeRequests[requestKey] else { return }
     request.isInterrupted = true
-    activeRequests[requestId] = request
+    activeRequests[requestKey] = request
     var dict: [String: Any] = [
       "type": "interrupt",
       "protocolVersion": 2,
@@ -278,7 +336,7 @@ actor AgentRuntimeProcess {
         onAuthSuccess: onAuthSuccess,
         continuation: continuation
       )
-      activeRequests[requestId] = request
+      activeRequests[RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)] = request
       if let surfaceRef {
         Task { @MainActor in
           AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
@@ -641,10 +699,13 @@ actor AgentRuntimeProcess {
       handleToolUse(message)
 
     case .cancelAck:
-      if let requestId = message.routingKey, var request = activeRequests[requestId] {
+      if let requestKey = message.requestKey, var request = activeRequests[requestKey] {
         request.cancelAck = message
-        activeRequests[requestId] = request
+        activeRequests[requestKey] = request
       }
+
+    case .controlToolResult:
+      completeControlRequest(message)
 
     case .result:
       completeRequest(message)
@@ -658,17 +719,29 @@ actor AgentRuntimeProcess {
   }
 
   private func routedRequest(for message: RuntimeMessage) -> ActiveRequest? {
-    if let requestId = message.routingKey {
-      return activeRequests[requestId]
+    if let requestKey = message.requestKey {
+      return activeRequests[requestKey]
     }
-    if activeRequests.count == 1 {
+    if message.protocolVersion != 2 && activeRequests.count == 1 {
       return activeRequests.values.first
     }
     return nil
   }
 
   private func handleToolUse(_ message: RuntimeMessage) {
+    let callId = message.payload["callId"] as? String ?? ""
+    let name = message.payload["name"] as? String ?? ""
     guard let request = routedRequest(for: message) else {
+      if let requestKey = message.requestKey, activeControlRequests[requestKey] != nil {
+        log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
+        completeToolCall(
+          callId: callId,
+          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs",
+          requestId: message.requestId,
+          clientId: message.clientId
+        )
+        return
+      }
       log("AgentRuntimeProcess: dropping unroutable tool call")
       return
     }
@@ -676,25 +749,26 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: skipping tool call after interrupt")
       return
     }
-    let callId = message.payload["callId"] as? String ?? ""
-    let name = message.payload["name"] as? String ?? ""
     let input = message.payload["input"] as? [String: Any] ?? [:]
     Task {
       let result = await request.onToolCall(callId, name, input)
-      completeToolCall(callId: callId, result: result)
+      completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
   }
 
-  private func completeToolCall(callId: String, result: String) {
-    sendJson([
+  private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
+    var payload: [String: Any] = [
       "type": "tool_result",
       "callId": callId,
       "result": result,
-    ])
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    sendJson(payload)
   }
 
   private func completeRequest(_ message: RuntimeMessage) {
-    guard let requestId = message.routingKey, let request = activeRequests.removeValue(forKey: requestId) else {
+    guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
@@ -705,12 +779,29 @@ actor AgentRuntimeProcess {
     request.continuation.resume(returning: queryResult(from: message))
   }
 
+  private func completeControlRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeControlRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable control tool result")
+      return
+    }
+    request.continuation.resume(returning: message.payload["result"] as? String ?? "")
+  }
+
   private func failRequest(_ message: RuntimeMessage) {
-    guard let requestId = message.routingKey, let request = activeRequests.removeValue(forKey: requestId) else {
+    let raw = message.payload["message"] as? String ?? "Unknown error"
+    if let requestKey = message.requestKey,
+      let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
+    {
+      log("AgentRuntimeProcess: control tool error (raw): \(raw)")
+      controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))
+      return
+    }
+    guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
       log("AgentRuntimeProcess: dropping unroutable error")
       return
     }
-    let raw = message.payload["message"] as? String ?? "Unknown error"
     log("AgentRuntimeProcess: agent error (raw): \(raw)")
     request.continuation.resume(throwing: BridgeError.agentError(raw))
   }
@@ -736,14 +827,17 @@ actor AgentRuntimeProcess {
     )
   }
 
-  private func sendJson(_ dict: [String: Any]) {
-    guard let stdinPipe else { return }
+  @discardableResult
+  private func sendJson(_ dict: [String: Any]) -> Bool {
+    guard let stdinPipe else { return false }
     do {
       let data = try JSONSerialization.data(withJSONObject: dict)
-      guard let line = String(data: data, encoding: .utf8) else { return }
+      guard let line = String(data: data, encoding: .utf8) else { return false }
       try stdinPipe.fileHandleForWriting.write(contentsOf: Data((line + "\n").utf8))
+      return true
     } catch {
       log("AgentRuntimeProcess: failed to write stdin: \(error.localizedDescription)")
+      return false
     }
   }
 
@@ -798,6 +892,11 @@ actor AgentRuntimeProcess {
     let requests = activeRequests.values
     activeRequests.removeAll()
     for request in requests {
+      request.continuation.resume(throwing: error)
+    }
+    let controlRequests = activeControlRequests.values
+    activeControlRequests.removeAll()
+    for request in controlRequests {
       request.continuation.resume(throwing: error)
     }
   }

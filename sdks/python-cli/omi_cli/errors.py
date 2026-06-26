@@ -19,7 +19,7 @@ current Click context — falling back to plain stderr otherwise.
 from __future__ import annotations
 
 import sys
-from typing import Optional
+from typing import Any, Mapping, Optional
 
 import click
 
@@ -47,11 +47,13 @@ class CliError(click.ClickException):
         message: str,
         exit_code: Optional[int] = None,
         detail: Optional[str] = None,
+        extra: Optional[Mapping[str, Any]] = None,
     ) -> None:
         super().__init__(message)
         if exit_code is not None:
             self.exit_code = exit_code
         self.detail = detail
+        self.extra = dict(extra or {})
 
     # ``self.message`` is set by ClickException.__init__ — we don't override it
     # because ClickException assigns to ``self.message`` directly.
@@ -61,7 +63,7 @@ class CliError(click.ClickException):
         ctx = click.get_current_context(silent=True)
         renderer = getattr(ctx.obj, "renderer", None) if ctx is not None and ctx.obj is not None else None
         if renderer is not None:
-            renderer.error(self.message, detail=self.detail)
+            renderer.error(self.message, detail=self.detail, extra=self.extra)
             return
         # Fallback path — covers the rare case where the error fires before the
         # root callback finished initializing the Renderer.
@@ -103,8 +105,9 @@ class RateLimitError(CliError):
         detail: Optional[str] = None,
         retry_after_seconds: Optional[float] = None,
         policy: Optional[str] = None,
+        extra: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        super().__init__(message=message, detail=detail)
+        super().__init__(message=message, detail=detail, extra=extra)
         self.retry_after_seconds = retry_after_seconds
         self.policy = policy
 

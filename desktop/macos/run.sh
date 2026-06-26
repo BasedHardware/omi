@@ -20,6 +20,7 @@ Options (via environment variables):
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
+  OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
@@ -466,14 +467,22 @@ if [ -d "$AGENT_DIR/dist" ]; then
     cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
     cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
+    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
 PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
 if [ -d "$PI_MONO_EXT_DIR" ]; then
+    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
+        substep "Installing pi-mono-extension dependencies"
+        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
+    fi
     mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
@@ -698,6 +707,7 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; t
     step "Seeding shortcuts/settings from Omi Dev..."
     if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
         auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
+        auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
     else
         echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
     fi

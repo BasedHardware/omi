@@ -147,6 +147,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Dismiss loading
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
     }
   }
 
@@ -395,7 +396,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           ),
         ),
         IconButton(
-          tooltip: context.l10n.deleteRecap,
           icon: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
@@ -511,15 +511,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return parts.first.trim();
   }
 
-  // Get truly unique location count (by short name)
-  int _getUniqueLocationCount(List<LocationPin> locations) {
-    final uniqueNames = <String>{};
-    for (final loc in locations) {
-      uniqueNames.add(_getShortLocationName(loc.address));
-    }
-    return uniqueNames.length;
-  }
-
   // Parse time string to minutes for comparison (e.g., "14:42" -> 882)
   int _parseTimeToMinutes(String? timeStr) {
     if (timeStr == null || timeStr.isEmpty) return 0;
@@ -564,7 +555,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         // New location (different from previous)
         current = _TimelineLocation(
           shortName: shortName,
-          fullAddress: loc.address,
           latitude: loc.latitude,
           longitude: loc.longitude,
           startTime: loc.time,
@@ -780,17 +770,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         ),
       ),
     );
-  }
-
-  Color _getPriorityColor(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'high':
-        return const Color(0xFFFF6B6B);
-      case 'medium':
-        return const Color(0xFFFFB347);
-      default:
-        return const Color(0xFF6BCB77);
-    }
   }
 
   Widget _buildUnresolvedQuestionsSection(DailySummary summary) {
@@ -1030,7 +1009,6 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
 // Helper class for timeline locations
 class _TimelineLocation {
   final String shortName;
-  final String? fullAddress;
   final double latitude;
   final double longitude;
   final String? startTime;
@@ -1038,7 +1016,6 @@ class _TimelineLocation {
 
   _TimelineLocation({
     required this.shortName,
-    this.fullAddress,
     required this.latitude,
     required this.longitude,
     this.startTime,

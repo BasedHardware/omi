@@ -9303,6 +9303,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Režim na pozadí není k dispozici, protože není připojeno žádné kompatibilní zařízení. Pro použití této funkce připojte zařízení Omi, OpenGlass nebo Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Znovu vygenerovat shrnutí';
 
   @override

@@ -49,7 +49,9 @@ class SettingsSyncManager {
             if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
             if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
             if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
-            if let v = shared.screenAnalysisEnabled { AssistantSettings.shared.screenAnalysisEnabled = v }
+            if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
+                AssistantSettings.shared.screenAnalysisEnabled = v
+            }
         }
 
         // Focus settings
@@ -106,6 +108,10 @@ class SettingsSyncManager {
     }
 
     // MARK: - Build Local → Response
+
+    private var shouldKeepLocalScreenAnalysisDefault: Bool {
+        AppBuild.usesLazyDevPermissions
+    }
 
     private func buildFromLocal() -> AssistantSettingsResponse {
         let shared = SharedAssistantSettingsResponse(

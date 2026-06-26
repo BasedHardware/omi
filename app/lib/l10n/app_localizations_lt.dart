@@ -9317,6 +9317,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get backgroundModeNote => 'Kol kas veikia tik su Omi įrenginiais ir nuolat tobulinama.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Foninis režimas nepasiekiamas, nes neprijungtas suderinamas įrenginys. Prijunkite Omi, OpenGlass arba Friend Pendant įrenginį, kad galėtumėte naudoti šią funkciją.';
+
+  @override
   String get regenerateRecap => 'Sukurti santrauką iš naujo';
 
   @override

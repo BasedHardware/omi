@@ -25,6 +25,9 @@ export interface McpServerBuildContext {
   clientId: string;
   protocolVersion?: ProtocolVersion;
   sessionId?: string;
+  runId?: string;
+  attemptId?: string;
+  includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
   mode: RunMode,
@@ -75,6 +78,15 @@ export interface UnscopedToolCallContext {
   adapterSessionId?: string;
   legacyAdapterSessionId?: string;
   isRunning?: boolean;
+}
+
+export interface ExternalRequestContextInput {
+  protocolVersion?: ProtocolVersion;
+  requestId: string;
+  clientId: string;
+  ownerId: string;
+  adapterId: string;
+  sessionId?: string;
 }
 
 interface WarmupHint {
@@ -162,8 +174,36 @@ export class JsonlCompatibilityFacade {
     this.kernel.subscribe((event) => this.handleKernelEvent(event));
   }
 
+  registerExternalRequestContext(input: ExternalRequestContextInput): void {
+    const key = this.activeRequestKey(input.requestId, input.clientId);
+    if (this.activeByRequest.has(key)) {
+      throw new Error("Request context already active for clientId/requestId");
+    }
+    const context: ActiveRequestContext = {
+      protocolVersion: input.protocolVersion,
+      requestId: input.requestId,
+      clientId: input.clientId,
+      ownerId: input.ownerId,
+      adapterId: input.adapterId,
+      sessionId: input.sessionId,
+    };
+    this.activeByRequest.set(key, context);
+  }
+
+  releaseExternalRequestContext(requestId: string, clientId: string): void {
+    const key = this.activeRequestKey(requestId, clientId);
+    const context = this.activeByRequest.get(key);
+    if (context && !context.runId) {
+      this.activeByRequest.delete(key);
+    }
+  }
+
   async handleQuery(message: QueryMessage): Promise<void> {
     const input = this.buildRunInput(message);
+    const key = this.activeRequestKey(input.requestId, input.clientId);
+    if (this.activeByRequest.has(key)) {
+      throw new Error("Request context already active for clientId/requestId");
+    }
     const context: ActiveRequestContext = {
       protocolVersion: message.protocolVersion,
       requestId: input.requestId,
@@ -173,7 +213,7 @@ export class JsonlCompatibilityFacade {
       sessionId: input.sessionId,
       legacyAdapterSessionId: input.legacyAdapterSessionId,
     };
-    this.activeByRequest.set(context.requestId, context);
+    this.activeByRequest.set(key, context);
 
     try {
       const result = await this.kernel.executeRun(input);
@@ -210,7 +250,7 @@ export class JsonlCompatibilityFacade {
       const errorMessage: ErrorMessage = { type: "error", message: messageText };
       this.send(this.withCorrelation(errorMessage, context));
     } finally {
-      this.activeByRequest.delete(context.requestId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
       if (context.runId) {
         this.activeByRun.delete(context.runId);
         const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
@@ -225,20 +265,70 @@ export class JsonlCompatibilityFacade {
   }
 
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
-    const requestId = requestIdFor(message);
-    const clientId = message.clientId ?? this.defaultClientId;
-    const ownerId = message.ownerId ?? this.ownerId;
+    const requestId = message.protocolVersion === 2 ? message.requestId?.trim() : requestIdFor(message);
+    const clientId = message.protocolVersion === 2 ? message.clientId : message.clientId ?? this.defaultClientId;
+    const explicitRunId = message.runId?.trim();
+    if (message.protocolVersion === 2 && !clientId?.trim() && !explicitRunId) {
+      this.send({
+        type: "cancel_ack",
+        protocolVersion: 2,
+        ...(requestId ? { requestId } : {}),
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      } as CancelAckMessage & { protocolVersion: 2; requestId?: string });
+      return;
+    }
+    if (message.protocolVersion === 2 && !requestId?.trim() && !explicitRunId) {
+      this.send({
+        type: "cancel_ack",
+        protocolVersion: 2,
+        clientId,
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      } as CancelAckMessage & { protocolVersion: 2; clientId: string });
+      return;
+    }
+    const effectiveClientId = clientId ?? this.defaultClientId;
+    const hasExplicitClientId = message.clientId !== undefined;
+    const activeRequestContext = requestId
+      ? (hasExplicitClientId
+        ? this.activeByRequest.get(this.activeRequestKey(requestId, effectiveClientId))
+        : message.protocolVersion === 2
+          ? undefined
+          : this.legacyUnscopedActiveRequestContext(requestId))
+      : undefined;
+    const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
+    if (message.protocolVersion === 2 && requestId && !activeRequestContext && !message.runId && !message.attemptId) {
+      const cancelAck: CancelAckMessage = {
+        type: "cancel_ack",
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, {
+        protocolVersion: message.protocolVersion,
+        requestId,
+        clientId: effectiveClientId,
+        ownerId,
+        adapterId: this.defaultAdapterId,
+        sessionId: message.sessionId,
+        attemptId: message.attemptId,
+      }));
+      return;
+    }
     const runId =
-      message.runId ??
-      (requestId ? this.activeByRequest.get(requestId)?.runId : undefined) ??
-      this.latestRunByClient.get(this.latestRunByClientKey(ownerId, clientId)) ??
+      explicitRunId ??
+      activeRequestContext?.runId ??
+      this.latestRunByClient.get(this.latestRunByClientKey(ownerId, effectiveClientId)) ??
       this.latestRunByOwner.get(ownerId);
     const context =
-      (requestId ? this.activeByRequest.get(requestId) : undefined) ??
+      activeRequestContext ??
       (runId ? this.activeByRun.get(runId) : undefined) ?? {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
-        clientId,
+        clientId: effectiveClientId,
         ownerId,
         adapterId: this.defaultAdapterId,
         sessionId: message.sessionId,
@@ -259,9 +349,21 @@ export class JsonlCompatibilityFacade {
       return;
     }
 
-    const ack = await this.kernel.cancelRun(runId);
-    context.runId = ack.runId;
-    context.attemptId = ack.attemptId ?? context.attemptId;
+    const cancellationOwnerId = message.ownerId ?? activeRequestContext?.ownerId ?? context.ownerId ?? ownerId;
+    let ack: Awaited<ReturnType<AgentRuntimeKernel["cancelRun"]>>;
+    try {
+      ack = await this.kernel.cancelRun(runId, { ownerId: cancellationOwnerId });
+      context.runId = ack.runId;
+      context.attemptId = ack.attemptId ?? context.attemptId;
+    } catch (error) {
+      this.log(`Compatibility interrupt error: ${error instanceof Error ? error.message : String(error)}`);
+      ack = {
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+        runId,
+      };
+    }
     if (message.protocolVersion === 2) {
       const cancelAck: CancelAckMessage = {
         type: "cancel_ack",
@@ -304,7 +406,14 @@ export class JsonlCompatibilityFacade {
   }
 
   private buildRunInput(message: QueryMessage): ExecuteAgentRunInput {
-    const requestId = requestIdFor(message) ?? randomUUID();
+    const suppliedRequestId = message.protocolVersion === 2 ? message.requestId : requestIdFor(message);
+    if (message.protocolVersion === 2 && !suppliedRequestId?.trim()) {
+      throw new Error("protocol v2 query requires requestId");
+    }
+    const requestId = suppliedRequestId?.trim() || randomUUID();
+    if (message.protocolVersion === 2 && !message.clientId?.trim()) {
+      throw new Error("protocol v2 query requires clientId");
+    }
     const clientId = message.clientId ?? this.defaultClientId;
     const mode = message.mode ?? "act";
     const requestedModel = message.model ?? this.defaultModel();
@@ -345,6 +454,7 @@ export class JsonlCompatibilityFacade {
       recoverAfterError: this.recoverAfterError(),
       metadata: {
         protocolVersion: message.protocolVersion ?? 1,
+        legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
         source: "jsonl_compatibility_facade",
       },
     };
@@ -354,8 +464,17 @@ export class JsonlCompatibilityFacade {
     return selectUnscopedToolCallCorrelation(this.activeByRequest.values());
   }
 
-  toolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
-    const context = this.activeByRequest.get(requestId);
+  toolCallCorrelationForRequest(requestId: string, clientId: string): Partial<QueryScopedOutbound> {
+    const context = this.activeByRequest.get(this.activeRequestKey(requestId, clientId));
+    return context ? this.toolCallCorrelationForContext(context) : {};
+  }
+
+  legacyUnscopedToolCallCorrelationForRequest(requestId: string): Partial<QueryScopedOutbound> {
+    const context = this.legacyUnscopedActiveRequestContext(requestId);
+    return context ? this.toolCallCorrelationForContext(context) : {};
+  }
+
+  private toolCallCorrelationForContext(context: ActiveRequestContext): Partial<QueryScopedOutbound> {
     if (!context || context.protocolVersion !== 2) return {};
     return {
       protocolVersion: 2,
@@ -389,9 +508,15 @@ export class JsonlCompatibilityFacade {
   private handleKernelEvent(event: AgentEvent): void {
     if (!event.runId) return;
     const payload = parsePayload(event.payloadJson);
-    if (event.type === "run.created") {
+    if (event.type === "run.queued") {
       const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
-      const context = requestId ? this.activeByRequest.get(requestId) : undefined;
+      const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
+      const context =
+        requestId && clientId
+          ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
+          : requestId && payload.protocolVersion !== 2
+            ? this.legacyUnscopedActiveRequestContext(requestId)
+            : undefined;
       if (context) {
         context.sessionId = event.sessionId;
         context.runId = event.runId;
@@ -415,12 +540,22 @@ export class JsonlCompatibilityFacade {
       TERMINAL_RUN_EVENT_STATUSES.has(event.type.slice("run.".length))
     ) {
       context.isRunning = false;
+      this.activeByRun.delete(event.runId);
+      this.activeByRequest.delete(this.activeRequestKey(context.requestId, context.clientId));
+      const clientKey = this.latestRunByClientKey(context.ownerId, context.clientId);
+      if (this.latestRunByClient.get(clientKey) === event.runId) {
+        this.latestRunByClient.delete(clientKey);
+      }
+      if (this.latestRunByOwner.get(context.ownerId) === event.runId) {
+        this.latestRunByOwner.delete(context.ownerId);
+      }
     }
-    if (!event.type.startsWith("adapter.")) return;
+    if (!isAdapterPayloadEvent(event.type)) return;
 
-    const adapterEvent = payload as Partial<OutboundMessage> & { sessionId?: string; adapterSessionId?: string };
-    const type = event.type.slice("adapter.".length);
-    context.adapterSessionId = adapterEvent.adapterSessionId ?? adapterEvent.sessionId ?? context.adapterSessionId;
+    const adapterEvent = payload as Partial<OutboundMessage> & { adapterSessionId?: string };
+    const type = typeof adapterEvent.type === "string" ? adapterEvent.type : undefined;
+    if (!type) return;
+    context.adapterSessionId = adapterEvent.adapterSessionId ?? context.adapterSessionId;
 
     switch (type) {
       case "text_delta":
@@ -490,6 +625,15 @@ export class JsonlCompatibilityFacade {
     return JSON.stringify([ownerId, clientId]);
   }
 
+  private activeRequestKey(requestId: string, clientId: string): string {
+    return JSON.stringify([clientId, requestId]);
+  }
+
+  private legacyUnscopedActiveRequestContext(requestId: string): ActiveRequestContext | undefined {
+    const contexts = [...this.activeByRequest.values()].filter((context) => context.requestId === requestId);
+    return contexts.length === 1 ? contexts[0] : undefined;
+  }
+
   private warmupSessions(message: WarmupMessage): WarmupSessionConfig[] {
     if (message.sessions && message.sessions.length > 0) {
       return message.sessions;
@@ -529,4 +673,13 @@ function parsePayload(payloadJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function isAdapterPayloadEvent(type: string): boolean {
+  return type === "message.delta" ||
+    type === "progress.updated" ||
+    type === "tool.started" ||
+    type === "tool.updated" ||
+    type === "tool.completed" ||
+    type === "tool.failed";
 }
