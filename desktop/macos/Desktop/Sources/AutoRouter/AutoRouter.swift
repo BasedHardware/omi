@@ -113,9 +113,23 @@ final class AutoRouter {
         }
         inFlightRefreshes[task] = taskHandle
         // Clean up the dedup entry when the task completes (success or failure).
+        // Cubic review: also add a hard timeout via a parallel Task to avoid
+        // permanently locking out refreshes if the underlying Task never
+        // completes (e.g., a hung AuthService call with no explicit timeout).
+        // 30s matches URLSession's default timeout — the auth/network stack
+        // will have given up by then.
         Task {
             _ = await taskHandle.value
             inFlightRefreshes[task] = nil
+        }
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            // If the original task is STILL running, force-clear the dedup
+            // entry so subsequent calls can proceed. The original task will
+            // complete and update UserDefaults on its own.
+            if let self_ = self, self_.inFlightRefreshes[task] != nil {
+                self_.inFlightRefreshes[task] = nil
+            }
         }
     }
 

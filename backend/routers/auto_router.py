@@ -346,11 +346,18 @@ async def auto_router_metrics(
     matches the dev workflow + keeps tests simple. Production
     deployments should always set ADMIN_KEY.
     """
-    # Admin gate: required only when ADMIN_KEY is configured.
+    # Admin gate (cubic review P1 — second pass): pick_history is now
+    # ALWAYS admin-gated, even when ADMIN_KEY is unset. The previous
+    # fail-open behavior (open when ADMIN_KEY unset) is a configuration
+    # drift risk: if an operator forgets to set ADMIN_KEY in production,
+    # every authenticated user could see every other user's pick history.
+    # The new behavior: when ADMIN_KEY is unset, treat that as "auth not
+    # configured" and return empty pick_history (with a flag). Operators
+    # MUST set ADMIN_KEY to enable pick_history visibility.
     admin_key = os.environ.get("ADMIN_KEY", "").strip()
-    admin_required = bool(admin_key)
+    admin_configured = bool(admin_key)
     is_admin = (
-        admin_required
+        admin_configured
         and x_admin_key is not None
         and hmac.compare_digest(
             x_admin_key.strip().encode("utf-8"),
@@ -366,11 +373,18 @@ async def auto_router_metrics(
     # for admin callers (cubic review). When ADMIN_KEY is unset, pick_history
     # is open (dev-friendly). When set, non-admin callers get an empty list +
     # a flag indicating admin is required.
-    if is_admin or not admin_required:
+    if is_admin:
         state["pick_history"] = _metrics_collector.pick_history_snapshot()
     else:
+        # Admin-gated (cubic review P1): default-closed. Either the
+        # operator needs to configure ADMIN_KEY, or the caller needs to
+        # provide the correct key. Either way, we don't leak the global
+        # pick history to every authenticated caller.
         state["pick_history"] = []
-        state["pick_history_admin_required"] = True
+        if admin_configured:
+            state["pick_history_admin_required"] = True
+        else:
+            state["pick_history_admin_not_configured"] = True
     state["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     # v3: report where the benchmarks came from (AA live data vs example mock).

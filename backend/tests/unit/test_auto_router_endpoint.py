@@ -338,20 +338,23 @@ class TestMetricsEndpoint:
         # No auth override → 401 or 500 (auth fails or firebase not initialized).
         assert resp.status_code in (401, 500), f"expected 401 or 500, got {resp.status_code}"
 
-    def test_metrics_records_pick_after_pick_call(self, client):
+    def test_metrics_records_pick_after_pick_call(self, client, monkeypatch):
         from routers.auto_router import reset_metrics_collector_for_testing
 
+        # v5 admin gating (cubic P1): pick_history is default-closed.
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-key")
+        admin_headers = {"X-Admin-Key": "test-admin-key"}
         reset_metrics_collector_for_testing()
 
         # Empty initially.
-        resp = client.get("/v1/auto-router/metrics")
+        resp = client.get("/v1/auto-router/metrics", headers=admin_headers)
         assert resp.json()["pick_history"] == []
 
         # Make a pick call.
         client.get("/v1/auto-router/pick?task=ptt_response")
 
         # History should now have 1 entry.
-        resp = client.get("/v1/auto-router/metrics")
+        resp = client.get("/v1/auto-router/metrics", headers=admin_headers)
         history = resp.json()["pick_history"]
         assert len(history) == 1
         assert history[0]["task"] == "ptt_response"
@@ -359,9 +362,12 @@ class TestMetricsEndpoint:
         assert isinstance(history[0]["score"], float)
         assert history[0]["weights_used"] == {"quality": 0.4, "latency": 0.5, "cost": 0.1}
 
-    def test_metrics_picks_are_capped_at_100(self, client):
+    def test_metrics_picks_are_capped_at_100(self, client, monkeypatch):
         from routers.auto_router import reset_metrics_collector_for_testing
 
+        # v5 admin gating (cubic P1): pick_history is default-closed.
+        # Must set ADMIN_KEY env var AND provide matching X-Admin-Key.
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-key")
         reset_metrics_collector_for_testing()
 
         # Make 105 pick calls (capped at 100).
@@ -962,13 +968,15 @@ class TestPickUsesEffectiveWeights:
         body = r.json()
         assert body["detail"]["weights"] == {"quality": 0.0, "latency": 0.0, "cost": 1.0}
 
-    def test_pick_history_records_effective_weights(self, client):
+    def test_pick_history_records_effective_weights(self, client, monkeypatch):
         """When user prefs are set, pick_history should record the EFFECTIVE weights."""
         from routers.auto_router import (
             reset_user_prefs_store_for_endpoint_testing,
             reset_metrics_collector_for_testing,
         )
 
+        # v5 admin gating (cubic P1): pick_history is default-closed.
+        monkeypatch.setenv("ADMIN_KEY", "test-admin-key")
         reset_metrics_collector_for_testing()
         reset_user_prefs_store_for_endpoint_testing()
         # Set quality-biased prefs
@@ -979,7 +987,7 @@ class TestPickUsesEffectiveWeights:
         # Make a pick
         client.get("/v1/auto-router/pick?task=ptt_response")
         # Verify metrics recorded the EFFECTIVE weights
-        r = client.get("/v1/auto-router/metrics")
+        r = client.get("/v1/auto-router/metrics", headers={"X-Admin-Key": "test-admin-key"})
         body = r.json()
         pick_history = body["pick_history"]
         assert len(pick_history) >= 1
@@ -1196,18 +1204,24 @@ class TestAdminKeyTimingSafe:
 
 class TestMetricsAdminGating:
     """When ADMIN_KEY is configured, pick_history requires X-Admin-Key.
-    When ADMIN_KEY is unset (default), pick_history is open to all callers
-    (dev-friendly)."""
+    When ADMIN_KEY is unset, pick_history is DEFAULT-CLOSED (cubic review
+    P1 second pass). Earlier the endpoint was fail-open when ADMIN_KEY was
+    unset, but that leaked the global pick history to every authenticated
+    caller under configuration drift. Now: ADMIN_KEY MUST be set, and
+    the correct key MUST be presented, to see pick_history."""
 
-    def test_pick_history_open_when_admin_key_unset(self, client, monkeypatch):
-        """Default config (no ADMIN_KEY): pick_history is included for any caller."""
+    def test_pick_history_default_closed_when_admin_key_unset(self, client, monkeypatch):
+        """Cubic P1: even without ADMIN_KEY, pick_history is now closed.
+        Returns empty list + a flag indicating admin is not configured
+        (so operators can see why pick_history is empty)."""
         monkeypatch.delenv("ADMIN_KEY", raising=False)
         client.get("/v1/auto-router/pick?task=ptt_response")
         resp = client.get("/v1/auto-router/metrics")
         assert resp.status_code == 200
         body = resp.json()
-        assert "pick_history" in body
-        assert len(body["pick_history"]) >= 1
+        assert body["pick_history"] == []
+        assert body.get("pick_history_admin_not_configured") is True
+        # Old flag should NOT be set (admin IS required — we just don't have it configured).
         assert body.get("pick_history_admin_required", False) is False
 
     def test_pick_history_hidden_when_admin_key_set_and_no_header(self, client, monkeypatch):
@@ -1219,6 +1233,8 @@ class TestMetricsAdminGating:
         body = resp.json()
         assert body["pick_history"] == []
         assert body.get("pick_history_admin_required") is True
+        # New flag (cubic P1) should NOT be set — admin IS configured, just not provided.
+        assert body.get("pick_history_admin_not_configured", False) is False
 
     def test_pick_history_visible_when_admin_key_correct(self, client, monkeypatch):
         """ADMIN_KEY set + correct X-Admin-Key: pick_history is included."""
@@ -1232,6 +1248,7 @@ class TestMetricsAdminGating:
         body = resp.json()
         assert len(body["pick_history"]) >= 1
         assert body.get("pick_history_admin_required", False) is False
+        assert body.get("pick_history_admin_not_configured", False) is False
 
     def test_pick_history_hidden_when_admin_key_wrong(self, client, monkeypatch):
         """ADMIN_KEY set + wrong X-Admin-Key: pick_history is empty + flag is set."""

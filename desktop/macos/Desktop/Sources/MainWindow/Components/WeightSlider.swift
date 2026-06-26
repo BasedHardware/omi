@@ -150,8 +150,10 @@ struct WeightSlider: View {
     //
     // When the user moves one slider to `newValue`, the other two are
     // proportionally rebalanced to keep their ratio while absorbing the
-    // delta. If the other two are both zero, the cost gets the full delta
-    // (default fallback so the user can break out of a stuck state).
+    // delta. If the other two are both zero, the remaining mass is split
+    // 50/50 between the two non-edited axes (the fallback so the user
+    // can break out of a stuck state — e.g., all quality → move cost to
+    // zero → both latency and cost split 50/50 of the remaining).
     //
     // Sum after rebalance is always exactly 1.0 (modulo floating-point
     // error which is corrected by the `sum` getter's snap-to-1.0).
