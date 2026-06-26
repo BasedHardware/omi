@@ -757,7 +757,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
     """Best-effort purge of canonical Pinecone vectors before Firestore account wipe.
 
     Inert for legacy cohort users (immediate return). Canonical cohort is empty in production
-    until ``MEMORY_CANONICAL_USERS`` is populated.
+    until ``CANONICAL_MEMORY_USERS`` is populated.
     """
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return {"purged": False, "reason": "not_canonical_cohort", "vector_ids": [], "memory_ids": []}
