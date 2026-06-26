@@ -532,6 +532,9 @@ describe("env-command local subprocess adapters", () => {
       saved[key] = process.env[key];
       process.env[key] = "secret-value";
     }
+    // Save proxy var so it is restored even though it is set later.
+    saved["HTTPS_PROXY"] = process.env.HTTPS_PROXY;
+    delete process.env.HTTPS_PROXY;
     try {
       await adapter.start();
 
@@ -544,16 +547,12 @@ describe("env-command local subprocess adapters", () => {
       expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
       // Allowlisted OS vars are forwarded.
       expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
-      // Proxy/TLS vars are forwarded when set.
-      process.env.HTTPS_PROXY = "http://proxy:3128";
-      try {
-        await adapter.stop();
-        await adapter.start();
-        const env2 = (vi.mocked(spawn).mock.calls[vi.mocked(spawn).mock.calls.length - 1] as readonly unknown[])[1] as { env: Record<string, string> };
-        expect(env2.env).toHaveProperty("HTTPS_PROXY", "http://proxy:3128");
-      } finally {
-        delete process.env.HTTPS_PROXY;
-      }
+      // Proxy vars are forwarded (with credentials stripped) when set.
+      process.env.HTTPS_PROXY = "http://alice:s3cr3t@proxy:3128";
+      await adapter.stop();
+      await adapter.start();
+      const env2 = (vi.mocked(spawn).mock.calls[vi.mocked(spawn).mock.calls.length - 1] as readonly unknown[])[1] as { env: Record<string, string> };
+      expect(env2.env).toHaveProperty("HTTPS_PROXY", "http://proxy:3128/");
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {

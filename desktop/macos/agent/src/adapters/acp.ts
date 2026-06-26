@@ -55,6 +55,39 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "NODE_EXTRA_CA_CERTS",
 ] as const;
 
+/**
+ * Proxy environment variable names that may carry embedded credentials
+ * (e.g. `http://user:pass@proxy:3128`). Their values are sanitized before
+ * being forwarded to untrusted external adapter subprocesses.
+ */
+const PROXY_ENV_KEYS = new Set([
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "http_proxy",
+  "https_proxy",
+]);
+
+/**
+ * Strip embedded userinfo from a proxy URL before forwarding it to an
+ * untrusted external adapter subprocess. Returns the URL without the
+ * `user:pass@` component so the subprocess can route through the proxy
+ * without receiving proxy credentials.
+ *
+ *   "http://alice:s3cr3t@proxy:3128" -> "http://proxy:3128"
+ */
+function sanitizeProxyUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    return url.toString();
+  } catch {
+    // Not a valid URL — forward as-is so non-URL proxy configs (e.g.
+    // "proxy:3128") still work.
+    return value;
+  }
+}
+
 export class AcpError extends Error {
   code: number;
   data?: unknown;
@@ -139,7 +172,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       };
       for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
         if (process.env[key] !== undefined) {
-          externalEnv[key] = process.env[key];
+          // Proxy URLs may carry embedded credentials (user:pass@host).
+          // Strip them before forwarding to untrusted subprocesses.
+          externalEnv[key] = PROXY_ENV_KEYS.has(key)
+            ? sanitizeProxyUrl(process.env[key]!)
+            : process.env[key];
         }
       }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
