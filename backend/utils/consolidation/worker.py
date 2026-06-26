@@ -1,3 +1,10 @@
+"""Legacy consolidation worker — RETIRED by WS-O (O-W6).
+
+The batched LLM consolidation agent in ``utils.memory.canonical_consolidation`` replaces
+this module for the canonical cohort. Kept temporarily for legacy-cohort reference only;
+do not wire new canonical callers here.
+"""
+
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
