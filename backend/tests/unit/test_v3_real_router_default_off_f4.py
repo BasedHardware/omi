@@ -167,7 +167,9 @@ def _install_router_stubs(monkeypatch, counters):
 
 def _client(monkeypatch, runtime=None):
     counters = Counters(legacy_calls=[])
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     _install_router_stubs(monkeypatch, counters)
     module = importlib.import_module("routers.memories")
     from utils.memory.memory_system import MemorySystem
