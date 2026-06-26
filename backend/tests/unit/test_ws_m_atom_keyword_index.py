@@ -144,7 +144,9 @@ def _long_term_item(
 
 @pytest.fixture(autouse=True)
 def _canonical_cohort(monkeypatch):
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", CANONICAL_UID)
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+    set_canonical_cohort(monkeypatch, CANONICAL_UID)
 
 
 @pytest.fixture
@@ -232,7 +234,9 @@ class TestKeywordSearchAndHybrid:
     def test_legacy_user_indexes_nothing(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item(uid=LEGACY_UID, memory_id="mem_legacy")
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+        clear_canonical_cohort(monkeypatch)
         assert upsert_atom_keyword_doc(item) is False
         assert docs_store == {}
 
@@ -282,7 +286,9 @@ class TestKeywordSearchAndHybrid:
         assert matches[0].memory.id == item.memory_id
 
     def test_legacy_memory_service_search_unchanged(self, monkeypatch):
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+        clear_canonical_cohort(monkeypatch)
         import utils.memory.memory_service as service_mod
 
         vector_matches = [{"memory_id": "mem-legacy-1", "score": 0.9}]
