@@ -254,7 +254,7 @@ describe("adapter capability matrix", () => {
       pinnedWorker: { status: "unsupported" },
       modelSwitching: { status: "unsupported" },
       artifactEmission: { status: "required" },
-      toolSupport: { status: "required" },
+      toolSupport: { status: "unsupported" },
       restartOrphanSemantics: { status: "required" },
     });
 
@@ -347,7 +347,7 @@ describe("adapter capability matrix", () => {
       requiresPinnedWorker: false,
       supportsModelSwitching: false,
       supportsArtifactEmission: true,
-      supportsTools: true,
+      supportsTools: false,
       restartBehavior: "native_bindings_survive",
     });
   });

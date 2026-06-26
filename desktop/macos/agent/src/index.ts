@@ -1001,9 +1001,13 @@ async function main(): Promise<void> {
             } else if (adapterId === "pi-mono") {
               await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
             } else if (adapterId === "hermes") {
-              await ensureHermesAdapter();
+              if (!(await ensureHermesAdapter())) {
+                throw new Error("Hermes adapter is not configured; set OMI_HERMES_ADAPTER_COMMAND before routing a query to Hermes");
+              }
             } else if (adapterId === "openclaw") {
-              await ensureOpenClawAdapter();
+              if (!(await ensureOpenClawAdapter())) {
+                throw new Error("OpenClaw adapter is not configured; set OMI_OPENCLAW_ADAPTER_COMMAND before routing a query to OpenClaw");
+              }
             }
             await facade.handleQuery(query);
           } finally {

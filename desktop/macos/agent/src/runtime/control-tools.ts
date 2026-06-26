@@ -335,6 +335,8 @@ export async function handleAgentControlToolCall(
         const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
         const result = await context.kernel.delegateAgent({
           ...parsed,
+          adapterId,
+          defaultAdapterId: adapterId,
           ownerId,
           requestId,
           metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },

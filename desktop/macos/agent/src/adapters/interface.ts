@@ -245,7 +245,7 @@ export const ADAPTER_CAPABILITY_MATRIX = {
       pinnedWorker: unsupported("OpenClaw ACP sessions are native and do not require process-local pinned workers."),
       modelSwitching: unsupported("OpenClaw ACP does not currently expose session/set_model; model selection is configured in the OpenClaw gateway/agent."),
       artifactEmission: required("OpenClaw ACP projects artifacts through the canonical adapter event stream."),
-      toolSupport: required("OpenClaw ACP projects tool calls through canonical adapter tool events."),
+      toolSupport: unsupported("OpenClaw ACP rejects per-session MCP servers; Omi tools are unavailable until configured through the OpenClaw gateway/agent."),
       restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable OpenClaw bindings."),
     },
   },

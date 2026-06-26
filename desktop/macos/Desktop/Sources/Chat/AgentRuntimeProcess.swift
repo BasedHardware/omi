@@ -556,14 +556,18 @@ actor AgentRuntimeProcess {
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let openClaw = firstExecutable(named: "openclaw", in: localAgentDirs)
     {
-      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(openClaw) acp"
+      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
     }
 
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let hermes = firstExecutable(named: "hermes", in: localAgentDirs)
     {
-      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(hermes) acp"
+      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
     }
+  }
+
+  private func shellQuote(_ value: String) -> String {
+    "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
   private func firstExecutable(named name: String, in directories: [String]) -> String? {

@@ -344,7 +344,7 @@ describe("env-command local subprocess adapters", () => {
     expect(opened).toMatchObject({
       adapterId: "openclaw",
       adapterNativeSessionId: "openclaw-native-1",
-      resumeFidelity: "none",
+      resumeFidelity: "native",
     });
 
     const events: OutboundMessage[] = [];
@@ -365,7 +365,18 @@ describe("env-command local subprocess adapters", () => {
       text: "done",
       adapterSessionId: "openclaw-native-1",
     });
-    expect(result.artifacts).toBeUndefined();
+    expect(result.artifacts).toEqual([
+      expect.objectContaining({
+        kind: "markdown",
+        role: "result",
+        uri: "adapter://openclaw/artifact-unsupported",
+      }),
+      expect.objectContaining({
+        kind: "json",
+        role: "result",
+        uri: "adapter://openclaw/result-artifact-unsupported",
+      }),
+    ]);
 
     await expect(adapter.cancelAttempt({ sessionId: "omi-session" })).resolves.toMatchObject({
       accepted: true,
