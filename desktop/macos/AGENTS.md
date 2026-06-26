@@ -41,6 +41,7 @@ Stable/prod is manual:
 - Run GitHub Actions workflow `desktop_promote_prod.yml` with `release_tag=v*-macos` and `confirm=promote-stable`.
 - The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
 - Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
+- The promotion workflow is roll-forward only. Stable rollback needs a newer fixed release or a separate manual infrastructure rollback plan, because both desktop feeds choose the newest stable app release.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)

@@ -21,10 +21,6 @@ on:
       confirm:
         description: 'Type promote-stable to deploy prod and mark the release stable'
         required: true
-      force:
-        description: 'Allow rollback to an older release tag'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -68,7 +64,6 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
-          FORCE: ${{ inputs.force }}
         run: |
           set -euo pipefail
 
@@ -106,10 +101,10 @@ jobs:
           fi
 
           if [ -n "$CURRENT_SHA" ] && [ "$TARGET_SHA" != "$CURRENT_SHA" ] \
-            && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA" \
-            && [ "$FORCE" != "true" ]; then
+            && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA"; then
             echo "$RELEASE_TAG ($TARGET_SHA) is older than tracked prod ($CURRENT_SHA)." >&2
-            echo "Re-run with force=true only for an intentional rollback." >&2
+            echo "This promotion workflow is roll-forward only because both desktop update feeds choose the newest stable release." >&2
+            echo "Ship a newer fixed release for prod, or handle infrastructure rollback outside this stable-promotion path." >&2
             exit 1
           fi
 
