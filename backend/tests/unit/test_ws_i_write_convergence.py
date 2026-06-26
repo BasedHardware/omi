@@ -667,7 +667,6 @@ _WRITER_FILES = [
     BACKEND_DIR / "routers" / "developer.py",
     BACKEND_DIR / "utils" / "conversations" / "memories.py",
     BACKEND_DIR / "utils" / "x_connector.py",
-    BACKEND_DIR / "utils" / "consolidation" / "worker.py",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py",
 ]
 
