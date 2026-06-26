@@ -73,4 +73,22 @@ describe('hosted MCP health check', () => {
     expect(setup.steps.join(' ')).toContain('no CLI is required')
     expect(setup.steps.join(' ')).toContain('only if that agent already has one installed')
   })
+
+  it('includes OpenClaw and Hermes memory-bank destinations', () => {
+    const openclaw = mcpDestinations.find((destination) => destination.id === 'openclaw')
+    const hermes = mcpDestinations.find((destination) => destination.id === 'hermes')
+    if (!openclaw || !hermes) throw new Error('expected OpenClaw and Hermes destinations')
+
+    const openclawSetup = openclaw.setup('omi_secret')
+    const hermesSetup = hermes.setup('omi_secret')
+
+    expect(openclawSetup.copyTitle).toBe('Copy memory bank')
+    expect(openclawSetup.copyText).toContain('search FIRST')
+    expect(openclawSetup.copyText).toContain('Authorization: Bearer omi_secret')
+    expect(openclawSetup.steps.join(' ')).toContain('OpenClaw MEMORY.md')
+    expect(hermesSetup.copyTitle).toBe('Copy config')
+    expect(hermesSetup.copyText).toContain('mcp-remote')
+    expect(hermesSetup.copyText).toContain('Authorization: Bearer omi_secret')
+    expect(hermesSetup.steps.join(' ')).toContain('~/.hermes/config.yaml')
+  })
 })
