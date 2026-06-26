@@ -508,7 +508,7 @@ def _extract_memories_canonical(uid: str, conversation: Conversation):
 
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
     for memory_db_obj in parsed_memories:
-        memory_service.write(uid, memory_db_obj.dict())
+        memory_service.write(uid, memory_db_obj.model_dump(mode="json"))
 
     record_usage(uid, memories_created=len(parsed_memories))
 
