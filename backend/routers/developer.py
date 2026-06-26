@@ -462,13 +462,10 @@ def create_memory(
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
 
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='create_memory')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
-    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
         memory = Memory(
             content=request.content.strip(),
             category=category,
@@ -476,10 +473,14 @@ def create_memory(
             tags=request.tags,
         )
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        committed_id = MemoryService(db_client=db).write(uid, memory_db.dict())
-        item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db)
-        if item is not None:
-            memory_db = memory_item_to_memorydb(item)
+        memory_db = MemoryService(db_client=db).create_external_memory(
+            uid,
+            memory_db,
+            memory_system=memory_system,
+            consumer='developer_api',
+            operation='create_memory',
+            upsert_vector=False,
+        )
         if memory.visibility == 'public':
             postprocess_executor.submit(update_personas_async, uid)
         return MemoryResponse(
@@ -500,17 +501,17 @@ def create_memory(
         visibility=request.visibility,
         tags=request.tags,
     )
-
-    # Convert to MemoryDB object
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-
-    # Save to database
-    memories_db.create_memory(uid, memory_db.dict())
-
-    # Update personas asynchronously if visibility is public
+    memory_db = MemoryService(db_client=db).create_external_memory(
+        uid,
+        memory_db,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='create_memory',
+        upsert_vector=False,
+    )
     if memory.visibility == 'public':
         postprocess_executor.submit(update_personas_async, uid)
-
     return MemoryResponse(
         id=memory_db.id,
         content=memory_db.content,
@@ -540,100 +541,36 @@ def create_memories_batch(
     if len(request.memories) > 25:
         raise HTTPException(status_code=422, detail="Maximum 25 memories per batch request")
 
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='batch_create_memories')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
     memory_dbs = []
     has_public = False
-
-    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-        memory_service = MemoryService(db_client=db)
-        for mem_req in request.memories:
-            if not mem_req.content or len(mem_req.content.strip()) == 0:
-                raise HTTPException(status_code=422, detail="All memories must have non-empty content")
-            category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
-            memory = Memory(
-                content=mem_req.content.strip(),
-                category=category,
-                visibility=mem_req.visibility,
-                tags=mem_req.tags,
-            )
-            memory_db = MemoryDB.from_memory(memory, uid, None, True)
-            memory_dbs.append(memory_db)
-            if memory.visibility == 'public':
-                has_public = True
-        committed_ids = memory_service.write_batch(uid, [mem.dict() for mem in memory_dbs])
-        if has_public:
-            postprocess_executor.submit(update_personas_async, uid)
-        created_memories = []
-        for memory_id in committed_ids:
-            item = _read_canonical_memory_item(uid, memory_id, db_client=db)
-            if item is not None:
-                mem = memory_item_to_memorydb(item)
-            else:
-                mem = next(m for m in memory_dbs if m.id == memory_id)
-            created_memories.append(
-                MemoryResponse(
-                    id=mem.id,
-                    content=mem.content,
-                    category=mem.category,
-                    visibility=mem.visibility,
-                    tags=mem.tags,
-                    created_at=mem.created_at,
-                    updated_at=mem.updated_at,
-                    manually_added=mem.manually_added,
-                    scoring=mem.scoring,
-                )
-            )
-        return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
     for mem_req in request.memories:
         if not mem_req.content or len(mem_req.content.strip()) == 0:
             raise HTTPException(status_code=422, detail="All memories must have non-empty content")
-
-        # Auto-categorize if no category provided
         category = mem_req.category if mem_req.category else identify_category_for_memory(mem_req.content.strip())
-
-        # Create Memory object
         memory = Memory(
             content=mem_req.content.strip(),
             category=category,
             visibility=mem_req.visibility,
             tags=mem_req.tags,
         )
-
-        # Convert to MemoryDB object
         memory_db = MemoryDB.from_memory(memory, uid, None, True)
         memory_dbs.append(memory_db)
-
         if memory.visibility == 'public':
             has_public = True
 
-    # Save all memories to database
-    memories_db.save_memories(uid, [mem.dict() for mem in memory_dbs])
-
-    # Upsert vectors in a single Pinecone call so these memories show up in
-    # semantic search. Previously the dev batch endpoint skipped this step and
-    # batch-created memories were invisible to RAG retrieval.
-    upsert_memory_vectors_batch(
+    memory_system = pin_memory_system(uid, db_client=db)
+    created_dbs = MemoryService(db_client=db).create_external_memory_batch(
         uid,
-        [
-            {
-                "memory_id": mem.id,
-                "content": mem.content,
-                "category": mem.category.value,
-                "subject_entity_id": mem.subject_entity_id,
-            }
-            for mem in memory_dbs
-        ],
+        memory_dbs,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='batch_create_memories',
+        upsert_vectors=memory_system != MemorySystem.CANONICAL,
     )
-
-    # Update personas if any memory is public
     if has_public:
         postprocess_executor.submit(update_personas_async, uid)
 
-    # Prepare response
     created_memories = [
         MemoryResponse(
             id=mem.id,
@@ -646,9 +583,8 @@ def create_memories_batch(
             manually_added=mem.manually_added,
             scoring=mem.scoring,
         )
-        for mem in memory_dbs
+        for mem in created_dbs
     ]
-
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
@@ -662,23 +598,18 @@ def delete_memory(
 
     - **memory_id**: The ID of the memory to delete
     """
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='delete_memory')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
     memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        MemoryService(db_client=db).delete(uid, memory_id)
-        return
-
-    memory = memories_db.get_memory(uid, memory_id)
-    if not memory:
-        raise HTTPException(status_code=404, detail="Memory not found")
-    if memory.get('is_locked', False):
-        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
-
-    memories_db.delete_memory(uid, memory_id)
-    return {"success": True}
+    MemoryService(db_client=db).delete_external_memory(
+        uid,
+        memory_id,
+        memory_system=memory_system,
+        consumer='developer_api',
+        operation='delete_memory',
+        delete_vector=False,
+    )
+    if memory_system != MemorySystem.CANONICAL:
+        return {"success": True}
+    return
 
 
 @router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
@@ -696,17 +627,14 @@ def update_memory(
     - **tags**: New tags for the memory (optional)
     - **category**: New category for the memory (optional)
     """
-    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
-    if not write_guard.allowed:
-        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
-
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
         )
 
     memory_service = MemoryService(db_client=db)
-    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
         if request.content is not None:
             memory_service.update_content(uid, memory_id, request.content.strip())
         if request.visibility is not None:
@@ -724,6 +652,10 @@ def update_memory(
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
         return memory_item_to_memorydb(item).model_dump()
+
+    write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
 
     memory = memories_db.get_memory(uid, memory_id)
     if not memory:
