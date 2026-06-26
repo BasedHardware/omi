@@ -397,6 +397,7 @@ describe("AdapterRegistry", () => {
     await expect(badExecuteRegistry.get("bad-execute").acquire()!.adapter.executeAttempt(
       {
         sessionId: "omi-session",
+        ownerId: "owner",
         requestId: "request",
         clientId: "client",
         runId: "run",
@@ -428,6 +429,7 @@ describe("AdapterRegistry", () => {
     await expect(driftExecuteRegistry.get("drift-execute").acquire()!.adapter.executeAttempt(
       {
         sessionId: "omi-session",
+        ownerId: "owner",
         requestId: "request",
         clientId: "client",
         runId: "run",
@@ -481,6 +483,9 @@ describe("fake runtime adapter contract fixture", () => {
     const result = await adapter.executeAttempt(
       {
         sessionId: "omi-session",
+        ownerId: "owner",
+        requestId: "request",
+        clientId: "client",
         runId: "omi-run",
         attemptId: "omi-attempt",
         binding: resumed,

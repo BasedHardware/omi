@@ -330,6 +330,8 @@ export type OpenedBinding = AdapterBindingHandle;
 export interface AdapterAttemptContext {
   /** Omi-owned correlation id for host/runtime bookkeeping only. */
   sessionId: string;
+  /** Omi/Firebase owner from the active Omi request context. Adapter payloads must not override this. */
+  ownerId: string;
   /** Compatibility transport correlation for request-scoped tool relays. */
   requestId: string;
   clientId: string;
