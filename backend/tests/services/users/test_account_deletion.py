@@ -154,15 +154,16 @@ def test_background_wipe_user_data_swallows_failures(monkeypatch):
     monkeypatch.setattr(account_deletion, 'delete_user_caller_ids', MagicMock(side_effect=Exception('twilio down')))
     monkeypatch.setattr(account_deletion, 'purge_derived_user_data', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'delete_user_data', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_completed', MagicMock())
 
     account_deletion.background_wipe_user_data('uid1')
 
     account_deletion.purge_derived_user_data.assert_not_called()
     account_deletion.users_db.delete_user_data.assert_not_called()
-    # wipe-completed is persisted in finally even when the wipe itself fails,
-    # so a reconciliation worker doesn't re-enqueue a wipe that already ran.
-    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_called_once_with('uid1')
+    # On failure, mark as failed (not completed) so a reconciliation worker can retry.
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_completed.assert_not_called()
 
 
 def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(monkeypatch):
@@ -251,3 +252,52 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     account_deletion.delete_action_item_vectors_batch.assert_called_once_with('uid1', ['a1'])
     account_deletion.delete_screen_activity_vectors.assert_called_once_with('uid1', ['s1'])
     account_deletion.delete_all_conversation_recordings.assert_called_once_with('uid1')
+
+
+def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'pending'}, {'uid': 'uid2', 'wipe_status': 'failed'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    enqueued = []
+    monkeypatch.setattr(
+        account_deletion,
+        'submit_with_context',
+        lambda executor, target, uid: enqueued.append((executor, target, uid)),
+    )
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 2, 'skipped': 0}
+    assert len(enqueued) == 2
+    assert enqueued[0] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1')
+    assert enqueued[1] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid2')
+
+
+def test_reconcile_pending_deletion_wipes_skips_missing_uid(monkeypatch):
+    pending = [{'uid': 'uid1'}, {'wipe_status': 'pending'}]  # second record has no uid
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    enqueued = []
+    monkeypatch.setattr(
+        account_deletion,
+        'submit_with_context',
+        lambda executor, target, uid: enqueued.append(uid),
+    )
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 1, 'skipped': 1}
+    assert enqueued == ['uid1']
+
+
+def test_reconcile_pending_deletion_wipes_handles_query_error(monkeypatch):
+    monkeypatch.setattr(
+        account_deletion.users_db,
+        'get_pending_deletion_wipes',
+        MagicMock(side_effect=Exception('firestore down')),
+    )
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 0, 'error': 1}
+    submit.assert_not_called()

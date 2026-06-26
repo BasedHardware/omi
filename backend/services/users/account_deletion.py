@@ -76,9 +76,13 @@ def background_wipe_user_data(uid: str):
         logger.info(f'delete_account background wipe complete for {uid}')
     except Exception as e:
         logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-    finally:
-        # Persist final status so a reconciliation worker can distinguish completed
-        # wipes from those cancelled by a deploy/restart before they started.
+        # Mark the wipe as failed so a reconciliation worker can retry. Do NOT mark
+        # completed — that would hide a partial wipe from the recovery path.
+        try:
+            users_db.mark_user_deletion_wipe_failed(uid)
+        except Exception as persist_err:
+            logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(persist_err))}')
+    else:
         try:
             users_db.mark_user_deletion_wipe_completed(uid)
         except Exception as e:
@@ -121,3 +125,34 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
     return {'status': 'ok', 'message': 'Account deletion started'}
+
+
+def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
+    """Re-enqueue account-deletion wipes that were cancelled or failed.
+
+    Called by a periodic worker (cron, Cloud Scheduler, or startup hook) to drain
+    the ``wipe_status in ('pending', 'failed')`` backlog left behind when a deploy
+    or restart cancels in-process ``cleanup_executor`` futures before they start.
+
+    Returns a summary dict with counts of re-enqueued and skipped wipes.
+    """
+    requeued = 0
+    skipped = 0
+    try:
+        pending = users_db.get_pending_deletion_wipes(limit=limit)
+    except Exception as e:
+        logger.error(f'delete_account reconciliation query failed: {sanitize(str(e))}')
+        return {'requeued': 0, 'skipped': 0, 'error': 1}
+
+    for record in pending:
+        uid = record.get('uid')
+        if not uid:
+            skipped += 1
+            continue
+        submit_with_context(cleanup_executor, background_wipe_user_data, uid)
+        requeued += 1
+        logger.info(f'delete_account reconciliation re-enqueued wipe for {uid}')
+
+    if requeued:
+        logger.info(f'delete_account reconciliation: re-enqueued {requeued}, skipped {skipped}')
+    return {'requeued': requeued, 'skipped': skipped}

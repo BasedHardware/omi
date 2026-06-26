@@ -256,6 +256,25 @@ def mark_user_deletion_wipe_completed(uid: str):
     )
 
 
+def mark_user_deletion_wipe_failed(uid: str):
+    """Mark the background data wipe as failed so a reconciliation worker can retry."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def get_pending_deletion_wipes(limit: int = 100) -> list[dict]:
+    """Return account_deletions documents whose wipe is pending or failed (needs retry).
+
+    A reconciliation worker calls this to find wipes that were cancelled by a
+    deploy/restart before the in-process cleanup_executor future started, or that
+    failed and need re-enqueueing.
+    """
+    docs = db.collection('account_deletions').where('wipe_status', 'in', ['pending', 'failed']).limit(limit).stream()
+    return [doc.to_dict() | {'uid': doc.id} for doc in docs]
+
+
 def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
