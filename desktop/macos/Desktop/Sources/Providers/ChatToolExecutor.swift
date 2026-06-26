@@ -30,6 +30,7 @@ class ChatToolExecutor {
 
   private static var fileScanFileCount = 0
   private static var followupContinuation: CheckedContinuation<String, Never>?
+  private static var waSentClientMessageIDs = Set<String>()
 
   static func resumeFollowup(with reply: String) {
     followupContinuation?.resume(returning: reply)
@@ -161,6 +162,16 @@ class ChatToolExecutor {
       return await executeBackendTool(toolCall)
     case "update_action_item":
       return await executeBackendTool(toolCall)
+
+    // WhatsApp tools — native wacli execution through the bundled binary/store.
+    case "wa_list_chats":
+      return await executeWaListChats(toolCall.arguments)
+    case "wa_read_thread":
+      return await executeWaReadThread(toolCall.arguments)
+    case "wa_search_messages":
+      return await executeWaSearchMessages(toolCall.arguments)
+    case "wa_send_message":
+      return await executeWaSendMessage(toolCall.arguments)
 
     default:
       return "Unknown tool: \(toolCall.name)"
@@ -1520,6 +1531,198 @@ class ChatToolExecutor {
       nil,
       "Error: \(paramName) must be ISO format with timezone offset (e.g. 2024-01-19T15:00:00-08:00 or 2024-01-19T15:00:00+07:00). Got: \(dateStr)"
     )
+  }
+
+  // MARK: - WhatsApp Tools
+
+  private static func executeWaListChats(_ args: [String: Any]) async -> String {
+    var command = ["chats", "list", "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200))]
+    appendStringFlag("--query", from: args["query"], to: &command)
+    appendBoolFlag("--unread", from: args["unread"], to: &command)
+    appendBoolFlag("--archived", from: args["archived"], to: &command)
+    appendBoolFlag("--pinned", from: args["pinned"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaReadThread(_ args: [String: Any]) async -> String {
+    guard let chat = nonEmptyString(args["chat_jid"] ?? args["chat"] ?? args["to"]) else {
+      return "Error: chat_jid is required"
+    }
+
+    var command = [
+      "messages", "list",
+      "--chat", chat,
+      "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200)),
+    ]
+    appendStringFlag("--after", from: args["after"], to: &command)
+    appendStringFlag("--before", from: args["before"], to: &command)
+    appendStringFlag("--sender", from: args["sender_jid"] ?? args["sender"], to: &command)
+    appendBoolFlag("--asc", from: args["ascending"] ?? args["asc"], to: &command)
+    appendBoolFlag("--from-me", from: args["from_me"], to: &command)
+    appendBoolFlag("--from-them", from: args["from_them"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaSearchMessages(_ args: [String: Any]) async -> String {
+    guard let query = nonEmptyString(args["query"]) else {
+      return "Error: query is required"
+    }
+
+    var command = [
+      "messages", "search", query,
+      "--limit", String(intArg(args["limit"], defaultValue: 50, maxValue: 200)),
+    ]
+    appendStringFlag("--chat", from: args["chat_jid"] ?? args["chat"], to: &command)
+    appendStringFlag("--from", from: args["sender_jid"] ?? args["from"], to: &command)
+    appendStringFlag("--after", from: args["after"], to: &command)
+    appendStringFlag("--before", from: args["before"], to: &command)
+    appendStringFlag("--type", from: args["message_type"] ?? args["type"], to: &command)
+    appendBoolFlag("--has-media", from: args["has_media"], to: &command)
+
+    return await waToolResult(command, readOnly: true)
+  }
+
+  private static func executeWaSendMessage(_ args: [String: Any]) async -> String {
+    guard let recipient = nonEmptyString(args["to"] ?? args["chat_jid"] ?? args["recipient"]) else {
+      return waJSON([
+        "status": "error",
+        "error": "to is required",
+      ])
+    }
+    guard let message = nonEmptyString(args["message"] ?? args["text"]) else {
+      return waJSON([
+        "status": "error",
+        "error": "message is required",
+      ])
+    }
+
+    if let clientMessageID = nonEmptyString(args["client_message_id"] ?? args["dedupe_id"]) {
+      if waSentClientMessageIDs.contains(clientMessageID) {
+        return waJSON([
+          "status": "duplicate",
+          "client_message_id": clientMessageID,
+          "sent": false,
+        ])
+      }
+      waSentClientMessageIDs.insert(clientMessageID)
+    }
+
+    if (args["queue_for_approval"] as? Bool) == true {
+      return waJSON([
+        "status": "queued_for_approval",
+        "to": recipient,
+        "sent": false,
+      ])
+    }
+
+    var command = ["send", "text", "--to", recipient, "--message", message]
+    appendStringFlag("--reply-to", from: args["reply_to"], to: &command)
+    appendStringFlag("--reply-to-sender", from: args["reply_to_sender"], to: &command)
+    appendBoolFlag("--no-preview", from: args["no_preview"], to: &command)
+
+    let result = await runWacli(command, readOnly: false)
+    guard result.exitCode == 0 else {
+      return waJSON([
+        "status": "error",
+        "sent": false,
+        "exit_code": Int(result.exitCode),
+        "output": result.output,
+      ])
+    }
+
+    return waJSON([
+      "status": "sent",
+      "sent": true,
+      "to": recipient,
+      "output": result.output,
+    ])
+  }
+
+  private static func waToolResult(_ arguments: [String], readOnly: Bool) async -> String {
+    let result = await runWacli(arguments, readOnly: readOnly)
+    guard result.exitCode == 0 else {
+      return "Error: wacli exited with \(result.exitCode)\n\(result.output)"
+    }
+    return result.output.isEmpty ? "[]" : result.output
+  }
+
+  private static func runWacli(_ arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    guard let binary = WhatsAppService.findWacliBinary() else {
+      return ("wacli not installed", 127)
+    }
+
+    let storeDir = WhatsAppService.defaultStoreDirectory()
+    return await Task.detached(priority: .userInitiated) {
+      do {
+        try FileManager.default.createDirectory(atPath: storeDir, withIntermediateDirectories: true)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: binary)
+        process.arguments = ["--store", storeDir, "--json"] + (readOnly ? ["--read-only"] : []) + arguments
+
+        var env = ProcessInfo.processInfo.environment
+        let binaryDir = (binary as NSString).deletingLastPathComponent
+        let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+        if !existingPath.components(separatedBy: ":").contains(binaryDir) {
+          env["PATH"] = "\(binaryDir):\(existingPath)"
+        }
+        if readOnly {
+          env["WACLI_READONLY"] = "1"
+        }
+        process.environment = env
+
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+        try process.run()
+        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return (output, process.terminationStatus)
+      } catch {
+        return ("\(error)", 1)
+      }
+    }.value
+  }
+
+  private static func appendStringFlag(_ flag: String, from value: Any?, to command: inout [String]) {
+    guard let value = nonEmptyString(value) else { return }
+    command.append(contentsOf: [flag, value])
+  }
+
+  private static func appendBoolFlag(_ flag: String, from value: Any?, to command: inout [String]) {
+    guard (value as? Bool) == true else { return }
+    command.append(flag)
+  }
+
+  private static func nonEmptyString(_ value: Any?) -> String? {
+    guard let string = value as? String else { return nil }
+    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private static func intArg(_ value: Any?, defaultValue: Int, maxValue: Int) -> Int {
+    let parsed: Int?
+    if let intValue = value as? Int {
+      parsed = intValue
+    } else if let stringValue = value as? String {
+      parsed = Int(stringValue)
+    } else {
+      parsed = nil
+    }
+    return min(max(parsed ?? defaultValue, 1), maxValue)
+  }
+
+  private static func waJSON(_ object: [String: Any]) -> String {
+    guard JSONSerialization.isValidJSONObject(object),
+      let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+      let string = String(data: data, encoding: .utf8)
+    else {
+      return "\(object)"
+    }
+    return string
   }
 
   // MARK: - Backend RAG Tools
